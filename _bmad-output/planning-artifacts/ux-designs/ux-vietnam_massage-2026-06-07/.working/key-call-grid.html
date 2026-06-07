@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>콜/예약 입력 원장 — 로얄 골드</title>
+<style>
+  /* ============================================================================
+     SURFACE : KEY-CALL-GRID — 콜/예약 입력 원장 (COUNTER INPUT SURFACE)
+     ROLE    : Counter staff's editable spreadsheet-style ledger of the day's calls.
+               This is the data-ENTRY surface (the owner landing read-only screen is
+               key-live-status.html). Dense editable grid is the primary pattern here.
+     GOVERNING DECISIONS (canonical):
+       1) STATUS COLOR TOKENS are locked & identical on every surface:
+            사용중 #178A5A · 예약 #2F6FD0 · 청소중 #D9A526 · 종료확인 #F25C1F · 빈방 #B3A37D
+            (방문완료 reuses 사용중 emerald · 노쇼 reuses danger · 취소 reuses muted bronze)
+       2) PALETTE = "② 로얄 골드 / Royal Gold" (from color-themes-1.html theme 2):
+            brand #B57E12 / brand2 #D9A526 / bg #FBF3E1 / surface #FFFCF4 /
+            border #EAD7AE / text #3D3115 / muted #8E7C53 / danger #C8392B
+       3) EDITABLE-GRID pattern: input cells (white) vs computed read-only cells (tinted).
+            Canonical states shown: one OPEN 상태 dropdown w/ focus ring + one inline
+            validation error (D코스 + 마사지사2 빈칸 → danger token).
+     MODE    : Light mode only · offline · no JavaScript (dropdown/focus are static markup).
+     ============================================================================ */
+  :root{
+    --brand:#B57E12; --brand2:#D9A526; --on-brand:#fff;
+    --bg:#FBF3E1; --surface:#FFFCF4; --border:#EAD7AE;
+    --text:#3D3115; --muted:#8E7C53; --danger:#C8392B;
+    --st-use:#178A5A; --st-resv:#2F6FD0; --st-clean:#D9A526; --st-end:#F25C1F; --st-empty:#B3A37D;
+    --readonly:#f4ead2; /* computed-cell tint */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+                 "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", Arial, sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:#e9ddc6; color:var(--text); -webkit-font-smoothing:antialiased; padding:26px; }
+
+  .browser{ max-width:1280px; margin:0 auto; border-radius:14px; overflow:hidden;
+    box-shadow:0 18px 50px rgba(120,90,40,.20), 0 4px 12px rgba(120,90,40,.12);
+    border:1px solid rgba(0,0,0,.08); background:var(--bg); }
+  .chrome{ display:flex; align-items:center; gap:10px; padding:11px 16px;
+    background:#efe6d3; border-bottom:1px solid var(--border); }
+  .dots{ display:flex; gap:7px; }
+  .dots span{ width:12px; height:12px; border-radius:50%; }
+  .dots span:nth-child(1){ background:#ec6a5e; } .dots span:nth-child(2){ background:#f4bf4f; } .dots span:nth-child(3){ background:#61c554; }
+  .urlbar{ flex:1; background:var(--surface); border:1px solid var(--border); border-radius:8px;
+    font-size:12px; color:var(--muted); padding:6px 12px; }
+
+  .app{ display:flex; min-height:760px; }
+
+  /* sidebar */
+  .sidebar{ width:228px; flex:0 0 228px; background:#fbf6ea; border-right:1px solid var(--border);
+    padding:18px 14px; display:flex; flex-direction:column; }
+  .brand{ display:flex; align-items:center; gap:10px; padding:4px 8px 18px; }
+  .brand .logo{ width:34px; height:34px; border-radius:9px;
+    background:linear-gradient(135deg,var(--brand),var(--brand2)); color:#fff;
+    display:flex; align-items:center; justify-content:center; font-weight:900; font-size:16px;
+    box-shadow:0 2px 6px rgba(181,126,18,.4); }
+  .brand .name{ font-size:15px; font-weight:800; letter-spacing:-.3px; }
+  .brand .sub{ font-size:10.5px; color:var(--muted); font-weight:600; }
+  .nav-group{ font-size:10px; font-weight:800; letter-spacing:.7px; text-transform:uppercase;
+    color:var(--muted); margin:16px 8px 7px; }
+  .nav-item{ display:flex; align-items:center; gap:9px; padding:8px 11px; border-radius:8px;
+    font-size:13px; font-weight:600; color:var(--text); margin-bottom:2px; cursor:default; }
+  .nav-item .ico{ width:16px; text-align:center; opacity:.7; font-size:13px; }
+  .nav-item.active{ background:linear-gradient(135deg,var(--brand),var(--brand2)); color:#fff;
+    font-weight:800; box-shadow:0 2px 8px rgba(181,126,18,.35); }
+  .nav-item.active .ico{ opacity:1; }
+  .nav-item.sub{ font-size:12.5px; color:var(--muted); padding-left:30px; }
+  .nav-item.sub.sel{ color:var(--brand); font-weight:800; background:#fbeecb; }
+
+  .main{ flex:1; display:flex; flex-direction:column; }
+  .topbar{ display:flex; align-items:center; justify-content:space-between;
+    padding:15px 24px; border-bottom:1px solid var(--border); background:var(--bg); }
+  .topbar .title h1{ margin:0; font-size:19px; letter-spacing:-.4px; }
+  .topbar .title .sub{ font-size:11.5px; color:var(--muted); margin-top:2px; }
+  .topbar .right{ display:flex; align-items:center; gap:12px; }
+  .selector{ display:flex; align-items:center; gap:7px; background:var(--surface);
+    border:1px solid var(--border); border-radius:9px; padding:7px 13px; font-size:13px; font-weight:700; }
+  .selector .mo{ color:var(--brand); } .selector .cv{ font-size:11px; opacity:.5; }
+  .savehint{ display:flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--st-use); }
+  .savehint .sd{ width:8px; height:8px; border-radius:50%; background:var(--st-use); }
+
+  .content{ padding:18px 24px 28px; }
+
+  /* daily summary strip */
+  .summary{ display:flex; gap:10px; margin-bottom:16px; }
+  .sumcard{ flex:0 0 auto; background:var(--surface); border:1px solid var(--border);
+    border-radius:9px; padding:9px 16px; display:flex; align-items:center; gap:9px; }
+  .sumcard .k{ font-size:11.5px; font-weight:700; color:var(--muted); }
+  .sumcard .v{ font-size:17px; font-weight:800; letter-spacing:-.4px; font-variant-numeric:tabular-nums; }
+  .sumcard .v.money{ color:var(--brand); } .sumcard .v.ok{ color:var(--st-use); }
+  .sumcard .u{ font-size:11px; font-weight:700; color:var(--muted); }
+
+  .gridwrap{ border:1px solid var(--border); border-radius:11px; overflow:hidden; background:var(--surface);
+    box-shadow:0 1px 3px rgba(120,90,40,.06); }
+  table{ border-collapse:separate; border-spacing:0; width:100%; font-size:12.5px; }
+  thead th{ background:#f3e8cf; color:var(--text); font-weight:800; font-size:11.5px; letter-spacing:.2px;
+    text-align:left; padding:10px 10px; border-bottom:1px solid var(--border); white-space:nowrap; position:relative; }
+  thead th.num{ text-align:right; }
+  tbody td{ padding:0; border-bottom:1px solid #f0e6cf; border-right:1px solid #f3ebd8; vertical-align:middle; }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody td:last-child{ border-right:none; }
+
+  /* a "cell" — input style by default */
+  .cell{ padding:9px 10px; min-height:38px; display:flex; align-items:center; gap:6px; }
+  .cell.num{ justify-content:flex-end; font-variant-numeric:tabular-nums; }
+  .cell.center{ justify-content:center; }
+  .input{ display:inline-block; width:100%; }
+  td.editable .cell{ background:#fffdf8; }
+  td.editable:hover .cell{ background:#fff8e8; }
+
+  /* computed / read-only cells — tinted */
+  td.readonly{ background:var(--readonly); }
+  td.readonly .cell{ color:var(--text); font-weight:700; }
+  .ro-tag{ font-size:9px; font-weight:800; color:var(--muted); letter-spacing:.3px; opacity:.7; }
+  .strike{ color:var(--muted); text-decoration:line-through; font-weight:600; font-size:11px; }
+  .discount{ color:var(--st-use); font-weight:800; font-size:10.5px; }
+
+  /* status pills inside grid */
+  .pill{ font-size:11px; font-weight:800; padding:3px 9px; border-radius:999px; white-space:nowrap; }
+  .pill.use{ background:var(--st-use); color:#fff; }
+  .pill.resv{ background:var(--st-resv); color:#fff; }
+  .pill.clean{ background:var(--st-clean); color:var(--text); }
+  .pill.done{ background:#dcf1e6; color:#0f6b43; border:1px solid #b6ddc9; }
+  .pill.noshow{ background:#f8ddd9; color:#a72a1d; border:1px solid #edb7af; }
+  .pill.cancel{ background:#eee6d2; color:#73643f; border:1px solid #e2d4b3; }
+
+  .seltrigger{ display:inline-flex; align-items:center; justify-content:space-between; gap:8px;
+    width:100%; }
+  .caret{ color:var(--muted); font-size:10px; }
+  .callok{ display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    border-radius:6px; background:var(--st-use); color:#fff; font-weight:900; font-size:12px; }
+  .calldash{ color:var(--muted); }
+
+  /* ACTIVE EDIT — focused cell with open dropdown */
+  td.editing{ position:relative; }
+  td.editing .cell{ background:#fff; box-shadow:inset 0 0 0 2px var(--brand);
+    outline:3px solid rgba(181,126,18,.22); outline-offset:-1px; border-radius:5px; }
+  .dropdown{ position:absolute; top:42px; left:6px; z-index:20; width:140px;
+    background:#fff; border:1px solid var(--border); border-radius:9px;
+    box-shadow:0 12px 28px rgba(120,90,40,.25); padding:5px; }
+  .dropdown .opt{ display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:6px;
+    font-size:12.5px; font-weight:700; }
+  .dropdown .opt .sw{ width:9px; height:9px; border-radius:50%; }
+  .dropdown .opt.cur{ background:#fbeecb; }
+  .dropdown .opt.hi{ background:#f3e8cf; }
+
+  /* inline validation error row */
+  tr.err td{ background:#fcefec; }
+  td.errcell{ position:relative; }
+  td.errcell .cell{ box-shadow:inset 0 0 0 2px var(--danger); background:#fff; border-radius:5px; }
+  .placeholder{ color:var(--danger); font-weight:800; font-style:italic; }
+  .errmsg{ display:flex; align-items:center; gap:7px; padding:7px 10px 8px 14px;
+    color:var(--danger); font-size:11.5px; font-weight:700; background:#fcefec; }
+  .errmsg .x{ width:16px; height:16px; border-radius:50%; background:var(--danger); color:#fff;
+    display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; }
+  .rowsave{ font-size:10.5px; font-weight:700; color:var(--st-use); }
+  .rowsave.saving{ color:var(--brand); }
+  .rowsave.error{ color:var(--danger); }
+
+  /* add-row footer (pinned look) */
+  .addrow td{ background:#f6eeda; border-top:1px solid var(--border); }
+  .addbtn{ display:inline-flex; align-items:center; gap:8px; padding:8px 14px; margin:4px;
+    border:1px dashed var(--brand); border-radius:8px; color:var(--brand); font-size:12.5px; font-weight:800; }
+
+  /* keyboard-nav hint annotation */
+  .navhint{ margin-top:14px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    font-size:11.5px; color:var(--muted); }
+  .navhint .grp{ display:flex; align-items:center; gap:6px; }
+  .kbd{ font-size:11px; font-weight:800; color:var(--text); background:#fff;
+    border:1px solid var(--border); border-bottom-width:2px; border-radius:6px; padding:2px 7px; }
+  .navhint b{ color:var(--text); }
+</style>
+</head>
+<body>
+  <div class="browser">
+    <div class="chrome">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <div class="urlbar">https://erp.royalspa.kr/call-ledger</div>
+    </div>
+
+    <div class="app">
+      <!-- SIDEBAR -->
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="logo">로</div>
+          <div><div class="name">로얄 스파 ERP</div><div class="sub">강남 1호점</div></div>
+        </div>
+
+        <div class="nav-group">운영 현황</div>
+        <div class="nav-item"><span class="ico">●</span>운영 현황</div>
+
+        <div class="nav-group">콜 원장</div>
+        <div class="nav-item active"><span class="ico">▤</span>콜/예약 입력 원장</div>
+
+        <div class="nav-group">정산 · 마감</div>
+        <div class="nav-item"><span class="ico">₩</span>정산</div>
+        <div class="nav-item"><span class="ico">▦</span>월마감</div>
+        <div class="nav-item"><span class="ico">▣</span>대시보드</div>
+
+        <div class="nav-group">설정</div>
+        <div class="nav-item"><span class="ico">⚙</span>마스터 설정</div>
+        <div class="nav-item"><span class="ico">◷</span>감사 로그</div>
+      </aside>
+
+      <!-- MAIN -->
+      <div class="main">
+        <div class="topbar">
+          <div class="title"><h1>콜/예약 입력 원장</h1><div class="sub">카운터 입력 화면 · 셀 수정 즉시 자동저장</div></div>
+          <div class="right">
+            <div class="selector"><span class="mo">2026년 6월</span><span class="cv">운영월</span><span style="opacity:.3">|</span><span>06월 07일 (토)</span><span class="cv">▾</span></div>
+            <div class="savehint"><span class="sd"></span>모든 변경 저장됨</div>
+          </div>
+        </div>
+
+        <div class="content">
+          <!-- daily summary strip -->
+          <div class="summary">
+            <div class="sumcard"><span class="k">오늘 총 콜</span><span class="v">8<span class="u"> 건</span></span></div>
+            <div class="sumcard"><span class="k">방문완료</span><span class="v ok">4<span class="u"> 건</span></span></div>
+            <div class="sumcard"><span class="k">결제합계</span><span class="v money">₩530,000</span></div>
+          </div>
+
+          <div class="gridwrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>시간</th><th>객실</th><th>코스</th><th>마사지사1</th><th>마사지사2</th>
+                  <th>귀케어</th><th>상태</th><th>할인구분</th><th>결제수단</th>
+                  <th class="num">결제금액</th><th class="num">콜인정</th><th>비고</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- row 1: 방문완료 + computed payment w/ discount -->
+                <tr>
+                  <td class="editable"><div class="cell">13:10</div></td>
+                  <td class="editable"><div class="cell">101</div></td>
+                  <td class="editable"><div class="cell">A코스 60분</div></td>
+                  <td class="editable"><div class="cell">이수진</div></td>
+                  <td class="editable"><div class="cell calldash">—</div></td>
+                  <td class="editable center"><div class="cell center">○</div></td>
+                  <td class="editable center"><div class="cell center"><span class="pill done">방문완료</span></div></td>
+                  <td class="editable"><div class="cell">단골 ₩50,000</div></td>
+                  <td class="editable"><div class="cell">카드</div></td>
+                  <td class="readonly num"><div class="cell num"><span><span class="strike">₩150,000</span> <span class="discount">−₩50,000</span><br>₩100,000</span></div></td>
+                  <td class="readonly center"><div class="cell center"><span class="callok">1</span></div></td>
+                  <td class="editable"><div class="cell"></div></td>
+                </tr>
+
+                <!-- row 2: 방문완료 full price -->
+                <tr>
+                  <td class="editable"><div class="cell">14:05</div></td>
+                  <td class="editable"><div class="cell">203</div></td>
+                  <td class="editable"><div class="cell">B코스 70분</div></td>
+                  <td class="editable"><div class="cell">박지민</div></td>
+                  <td class="editable"><div class="cell calldash">—</div></td>
+                  <td class="editable center"><div class="cell center">○</div></td>
+                  <td class="editable center"><div class="cell center"><span class="pill done">방문완료</span></div></td>
+                  <td class="editable"><div class="cell">없음</div></td>
+                  <td class="editable"><div class="cell">현금</div></td>
+                  <td class="readonly num"><div class="cell num">₩180,000</div></td>
+                  <td class="readonly center"><div class="cell center"><span class="callok">1</span></div></td>
+                  <td class="editable"><div class="cell">귀케어 추가</div></td>
+                </tr>
+
+                <!-- row 3: 사용중 -->
+                <tr>
+                  <td class="editable"><div class="cell">15:20</div></td>
+                  <td class="editable"><div class="cell">103</div></td>
+                  <td class="editable"><div class="cell">D코스 90분</div></td>
+                  <td class="editable"><div class="cell">김민재</div></td>
+                  <td class="editable"><div class="cell">한소희</div></td>
+                  <td class="editable center"><div class="cell center calldash">—</div></td>
+                  <td class="editable center"><div class="cell center"><span class="pill use">사용중</span></div></td>
+                  <td class="editable"><div class="cell">없음</div></td>
+                  <td class="editable"><div class="cell calldash">—</div></td>
+                  <td class="readonly num"><div class="cell num" style="color:var(--muted);">진행중</div></td>
+                  <td class="readonly center"><div class="cell center calldash">—</div></td>
+                  <td class="editable"><div class="cell"></div></td>
+                </tr>
+
+                <!-- row 4: 청소중 -->
+                <tr>
+                  <td class="editable"><div class="cell">15:40</div></td>
+                  <td class="editable"><div class="cell">201</div></td>
+                  <td class="editable"><div class="cell">C코스 80분</div></td>
+                  <td class="editable"><div class="cell">최은영</div></td>
+                  <td class="editable"><div class="cell calldash">—</div></td>
+                  <td class="editable center"><div class="cell center">○</div></td>
+                  <td class="editable center"><div class="cell center"><span class="pill clean">청소중</span></div></td>
+                  <td class="editable"><div class="cell">없음</div></td>
+                  <td class="editable"><div class="cell">카드</div></td>
+                  <td class="readonly num"><div class="cell num">₩200,000</div></td>
+                  <td class="readonly center"><div class="cell center"><span class="callok">1</span></div></td>
+                  <td class="editable"><div class="cell"></div></td>
+                </tr>
+
+                <!-- row 5: ACTIVE EDIT — 상태 dropdown open w/ focus ring -->
+                <tr>
+                  <td class="editable"><div class="cell">16:00</div></td>
+                  <td class="editable"><div class="cell">202</div></td>
+                  <td class="editable"><div class="cell">A코스 60분</div></td>
+                  <td class="editable"><div class="cell">정유나</div></td>
+                  <td class="editable"><div class="cell calldash">—</div></td>
+                  <td class="editable center"><div class="cell center">○</div></td>
+                  <td class="editing center">
+                    <div class="cell center"><span class="seltrigger" style="justify-content:center;gap:6px;"><span class="pill resv">예약</span><span class="caret">▾</span></span></div>
+                    <div class="dropdown">
+                      <div class="opt cur"><span class="sw" style="background:var(--st-resv);"></span>예약</div>
+                      <div class="opt hi"><span class="sw" style="background:var(--st-use);"></span>사용중</div>
+                      <div class="opt"><span class="sw" style="background:var(--st-clean);"></span>청소중</div>
+                      <div class="opt"><span class="sw" style="background:var(--st-use);"></span>방문완료</div>
+                      <div class="opt"><span class="sw" style="background:var(--danger);"></span>노쇼</div>
+                      <div class="opt"><span class="sw" style="background:var(--muted);"></span>취소</div>
+                    </div>
+                  </td>
+                  <td class="editable"><div class="cell">없음</div></td>
+                  <td class="editable"><div class="cell calldash">—</div></td>
+                  <td class="readonly num"><div class="cell num" style="color:var(--muted);">—</div></td>
+                  <td class="readonly center"><div class="cell center calldash">—</div></td>
+                  <td class="editable"><div class="cell"><span class="rowsave saving">저장중…</span></div></td>
+                </tr>
+
+                <!-- row 6: 예약 -->
+                <tr>
+                  <td class="editable"><div class="cell">16:30</div></td>
+                  <td class="editable"><div class="cell">301</div></td>
+                  <td class="editable"><div class="cell">E코스 100분</div></td>
+                  <td class="editable"><div class="cell">이수진</div></td>
+                  <td class="editable"><div class="cell calldash">—</div></td>
+                  <td class="editable center"><div class="cell center">○</div></td>
+                  <td class="editable center"><div class="cell center"><span class="pill resv">예약</span></div></td>
+                  <td class="editable"><div class="cell">없음</div></td>
+                  <td class="editable"><div class="cell calldash">—</div></td>
+                  <td class="readonly num"><div class="cell num" style="color:var(--muted);">—</div></td>
+                  <td class="readonly center"><div class="cell center calldash">—</div></td>
+                  <td class="editable"><div class="cell"></div></td>
+                </tr>
+
+                <!-- row 7: 노쇼 -->
+                <tr>
+                  <td class="editable"><div class="cell">14:50</div></td>
+                  <td class="editable"><div class="cell">302</div></td>
+                  <td class="editable"><div class="cell">B코스 70분</div></td>
+                  <td class="editable"><div class="cell">송하림</div></td>
+                  <td class="editable"><div class="cell calldash">—</div></td>
+                  <td class="editable center"><div class="cell center calldash">—</div></td>
+                  <td class="editable center"><div class="cell center"><span class="pill noshow">노쇼</span></div></td>
+                  <td class="editable"><div class="cell">없음</div></td>
+                  <td class="editable"><div class="cell calldash">—</div></td>
+                  <td class="readonly num"><div class="cell num">₩0</div></td>
+                  <td class="readonly center"><div class="cell center calldash">—</div></td>
+                  <td class="editable"><div class="cell">연락두절</div></td>
+                </tr>
+
+                <!-- row 8: INLINE VALIDATION ERROR — D코스 + 마사지사2 빈칸 -->
+                <tr class="err">
+                  <td class="editable"><div class="cell">17:10</div></td>
+                  <td class="editable"><div class="cell">401</div></td>
+                  <td class="editable"><div class="cell">D코스 90분</div></td>
+                  <td class="editable"><div class="cell">박지민</div></td>
+                  <td class="errcell"><div class="cell"><span class="placeholder">필수 입력</span></div></td>
+                  <td class="editable center"><div class="cell center calldash">—</div></td>
+                  <td class="editable center"><div class="cell center"><span class="pill resv">예약</span></div></td>
+                  <td class="editable"><div class="cell">없음</div></td>
+                  <td class="editable"><div class="cell calldash">—</div></td>
+                  <td class="readonly num"><div class="cell num" style="color:var(--muted);">—</div></td>
+                  <td class="readonly center"><div class="cell center calldash">—</div></td>
+                  <td class="editable"><div class="cell"><span class="rowsave error">저장 보류</span></div></td>
+                </tr>
+                <!-- error message spanning under the row -->
+                <tr class="err">
+                  <td colspan="12"><div class="errmsg"><span class="x">!</span>D코스는 마사지사2 필수 — 401 호실 행의 마사지사2를 배정해야 저장됩니다.</div></td>
+                </tr>
+
+                <!-- pinned add-row -->
+                <tr class="addrow">
+                  <td colspan="12"><span class="addbtn">＋ 새 콜 행 추가</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- keyboard nav hint annotation -->
+          <div class="navhint">
+            <span class="grp"><b>키보드 이동</b></span>
+            <span class="grp"><span class="kbd">Tab</span> 다음 셀</span>
+            <span class="grp"><span class="kbd">Shift</span>+<span class="kbd">Tab</span> 이전 셀</span>
+            <span class="grp"><span class="kbd">Enter</span> 아래 행 이동 · 확정</span>
+            <span class="grp"><span class="kbd">Esc</span> 편집 취소</span>
+            <span class="grp" style="margin-left:auto;">셀 수정 시 행 단위 자동저장 · 상태 <b style="color:var(--st-use);">저장됨</b> / <b style="color:var(--brand);">저장중</b> 표시</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

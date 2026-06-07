@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<!--
+  UX Design Validation Report — vietnam_massage.
+  Consolidated from review-rubric.md + review-accessibility.md.
+  No overall letter grade; per-category verdicts + severity counts carry the picture.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UX Design Validation: vietnam_massage</title>
+<style>
+  :root {
+    --bg: #fafaf9;
+    --surface: #ffffff;
+    --border: #e7e5e4;
+    --text: #1c1917;
+    --muted: #78716c;
+
+    --verdict-strong: #16a34a;
+    --verdict-adequate: #65a30d;
+    --verdict-thin: #d97706;
+    --verdict-broken: #dc2626;
+
+    --sev-low: #64748b;
+    --sev-medium: #ca8a04;
+    --sev-high: #ea580c;
+    --sev-critical: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 32px 24px 64px; }
+
+  header.report-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .title h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .title .subtitle { color: var(--muted); font-size: 13px; margin-top: 4px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .sev-counts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .sev-count { font-size: 11px; padding: 4px 10px; border-radius: 999px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .sev-count-critical { background: rgba(220, 38, 38, 0.14); color: var(--sev-critical); }
+  .sev-count-high { background: rgba(234, 88, 12, 0.14); color: var(--sev-high); }
+  .sev-count-medium { background: rgba(202, 138, 4, 0.14); color: var(--sev-medium); }
+  .sev-count-low { background: rgba(100, 116, 139, 0.12); color: var(--sev-low); }
+
+  .synthesis {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--muted);
+    border-radius: 8px;
+    padding: 18px 22px;
+    margin-bottom: 24px;
+    font-size: 15.5px;
+  }
+  .synthesis p { margin: 0 0 10px; }
+  .synthesis p:last-child { margin-bottom: 0; }
+
+  .dimension-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .dim-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .dim-card .dim-name { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .dim-card .dim-verdict { font-size: 14px; font-weight: 600; }
+
+  section.dimension, section.reviewer-section { margin-bottom: 14px; }
+  section.dimension details, section.reviewer-section details {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  section summary {
+    padding: 14px 20px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  section summary::-webkit-details-marker { display: none; }
+  section summary::before {
+    content: "▸";
+    display: inline-block;
+    color: var(--muted);
+    transition: transform 0.15s ease;
+  }
+  section details[open] summary::before { transform: rotate(90deg); }
+  section summary h2 {
+    display: inline;
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    flex: 1;
+  }
+  .verdict-pill {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: white;
+  }
+  .verdict-strong { background: var(--verdict-strong); }
+  .verdict-adequate { background: var(--verdict-adequate); }
+  .verdict-thin { background: var(--verdict-thin); }
+  .verdict-broken { background: var(--verdict-broken); }
+
+  .dim-body { padding: 4px 20px 18px; }
+  .dim-judgment { color: var(--text); font-size: 14.5px; }
+  .dim-judgment p { margin: 0 0 10px; }
+
+  .findings-list { padding: 0 20px 4px; }
+  article.finding {
+    padding: 14px 0;
+    border-top: 1px solid var(--border);
+  }
+  article.finding:first-child { border-top: none; }
+  article.finding header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+  .badge {
+    font-size: 10.5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
+  }
+  .badge-sev-low { background: rgba(100, 116, 139, 0.12); color: var(--sev-low); }
+  .badge-sev-medium { background: rgba(202, 138, 4, 0.14); color: var(--sev-medium); }
+  .badge-sev-high { background: rgba(234, 88, 12, 0.14); color: var(--sev-high); }
+  .badge-sev-critical { background: rgba(220, 38, 38, 0.14); color: var(--sev-critical); }
+  .badge-concur { background: rgba(22, 163, 74, 0.12); color: var(--verdict-strong); }
+  .finding-title { margin: 0; font-size: 15px; font-weight: 500; flex: 1; min-width: 200px; }
+  .finding-location { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; color: var(--muted); }
+  .finding-note, .finding-fix { margin-top: 6px; font-size: 14px; }
+  .finding-fix strong { color: var(--muted); font-weight: 500; }
+
+  .reviewer-source {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  .mechanical {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-top: 24px;
+    font-size: 14px;
+  }
+  .mechanical h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .mechanical ul { margin: 0; padding-left: 20px; }
+  .mechanical li { margin-bottom: 4px; color: var(--text); }
+
+  footer.report-footer {
+    margin-top: 40px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  footer .meta { display: flex; gap: 24px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+  <div class="container">
+
+    <header class="report-header">
+      <div class="title">
+        <h1>vietnam_massage — UX Design Validation Report</h1>
+        <div class="subtitle">ux-vietnam_massage-2026-06-07/ · DESIGN.md + EXPERIENCE.md</div>
+      </div>
+      <div class="sev-counts">
+        <span class="sev-count sev-count-critical">2 Critical</span>
+        <span class="sev-count sev-count-high">6 High</span>
+        <span class="sev-count sev-count-medium">7 Medium</span>
+        <span class="sev-count sev-count-low">12 Low</span>
+      </div>
+    </header>
+
+    <div class="synthesis">
+      <p><strong>Adequate — ship after addressing the contrast and accessibility-behavior findings.</strong> The pair is a coherent, source-faithful contract. Every <code>{path.to.token}</code> reference in both spines resolves to a defined frontmatter token; the locked status-color system is committed identically in both spines and the decision log; all six PRD FR groups, the role-based IA, and the multi-surface (desktop + TV fullscreen) split are present. A downstream consumer (architect or story-dev) can source-extract cleanly for almost everything. Two gaps block a <em>clean</em> extraction: (1) UJ-3 (웨이터) has no Key Flow despite being a named core journey; and (2) DESIGN.md states no contrast targets for any load-bearing combination, and several locked status pairings are demonstrably below WCAG AA.</p>
+      <p>The accessibility reviewer shifts the picture decisively toward contrast: this is not just an uncommitted target but a set of <strong>active failures on money-critical surfaces</strong>. White-on-종료확인 orange (3.32:1) and white-on-빈방 bronze (2.48:1) fail normal-text AA on the very badges that carry payment/confirm meaning, white-on-사용중 emerald (4.36:1) fails by a hair on the most frequent badge, and brand-gold-as-body text (~3.2:1) plus muted taupe sit in the failing gray zone — all flagged independently by both reviewers, who concur. Beyond color, the accessibility pass surfaces under-specified behaviors the spine claims in spirit but never pins down: no <code>prefers-reduced-motion</code> / flash-rate ceiling for the 종료확인 pulse, no programmatic association (<code>aria-invalid</code>/<code>aria-describedby</code>/<code>role="alert"</code>) for the D코스 form error, and no explicit focus contract for the irreversible 월마감 modal. A color-blind glyph recommendation and a consolidated Responsive &amp; Platform section round out the picture. Treat the criticals/highs as blocking before build.</p>
+    </div>
+
+    <div class="dimension-summary">
+      <div class="dim-card">
+        <div class="dim-name">1. Flow coverage</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">Adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">2. Token completeness</div>
+        <div class="dim-verdict" style="color: var(--verdict-thin)">Thin (contrast)</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">3. Component coverage</div>
+        <div class="dim-verdict" style="color: var(--verdict-strong)">Strong</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">4. State coverage</div>
+        <div class="dim-verdict" style="color: var(--verdict-strong)">Strong</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">5. Visual reference coverage</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">Adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">6. Bloat &amp; overspecification</div>
+        <div class="dim-verdict" style="color: var(--verdict-strong)">Strong</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">7. Inheritance discipline</div>
+        <div class="dim-verdict" style="color: var(--verdict-strong)">Strong</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">8. Shape fit</div>
+        <div class="dim-verdict" style="color: var(--verdict-strong)">Strong</div>
+      </div>
+    </div>
+
+    <!-- 1. Flow coverage — open (UJ-3 gap) -->
+    <section class="dimension">
+      <details open>
+        <summary>
+          <h2>1. Flow coverage</h2>
+          <span class="verdict-pill verdict-adequate">Adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>PRD UJs extracted: UJ-1, UJ-2, UJ-3, UJ-4. EXPERIENCE.md Key Flows: Flow 1 → UJ-1 (noah), Flow 2 → UJ-2 (mina), Flow 3 → UJ-4 (seora). Each present flow has a named protagonist, numbered steps, a labeled 클라이맥스 beat, and an explicit 실패 path. Strong on the three covered — but UJ-3 (웨이터) is unmodeled, so the section is held open.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <h3 class="finding-title">UJ-3 (웨이터) has no Key Flow</h3>
+              <span class="finding-location">EXPERIENCE.md §Key Flows · PRD §2.3</span>
+            </header>
+            <div class="finding-note">UJ-3 (웨이터가 객실 상태와 안내 문구를 확인한다) has no Key Flow; §Key Flows covers only UJ-1/2/4. The 웨이터 role, 객실 현황 landing, and 안내 문구 (FR-18) are named in the IA and Component Patterns, but no flow walks a 웨이터 through a status-change → 안내-문구 read with a climax/failure path. A consumer extracting "every UJ → one flow" finds UJ-3 unmodeled.</div>
+            <div class="finding-fix"><strong>Fix:</strong> add Flow 4 — 웨이터 (e.g. 객실 현황 or TV판에서 사용중→종료확인 전환을 보고 청소/입실 안내를 판단), climax on the 안내 문구 + 종료확인 read, failure on stale/지연 갱신.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">FR-18 웨이터 안내 문구 never appears as a component/state</h3>
+              <span class="finding-location">IA row / FR map (both spines)</span>
+            </header>
+            <div class="finding-note">FR-18 웨이터 안내 문구 ("사용중/청소중/예약/종료확인/빈방별 안내 문구") is referenced in the IA row and FR map but never appears as a component or state treatment in either spine — it rides along with UJ-3's absence.</div>
+            <div class="finding-fix"><strong>Fix:</strong> fold into the Flow-4 addition and/or note 안내 문구 as a field on the room-status card pattern.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <!-- 2. Token completeness — open (contrast gap) -->
+    <section class="dimension">
+      <details open>
+        <summary>
+          <h2>2. Token completeness</h2>
+          <span class="verdict-pill verdict-thin">Thin (contrast)</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>Strong on definition, thin on contrast commitment. Every frontmatter token and every <code>{path.to.token}</code> reference across both spines resolves to a defined token (all 35 DESIGN.md refs + 7 EXPERIENCE.md refs map to frontmatter keys). No color token is missing a hex; status tokens carry matching <code>-foreground</code> tokens; call chips carry explicit bg/text hex. The gap is that no contrast targets are stated and several committed pairings fail WCAG AA — see the merged contrast findings below, where both reviewers concur.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <span class="badge badge-concur">both reviewers concur</span>
+              <h3 class="finding-title">No stated contrast targets for any load-bearing combination</h3>
+              <span class="finding-location">DESIGN.md §Colors / §잠긴 STATUS 토큰 · EXPERIENCE.md §Accessibility Floor</span>
+            </header>
+            <div class="finding-note">No contrast targets are stated anywhere in DESIGN.md. EXPERIENCE.md §Accessibility Floor asserts "shadcn AA 기본값 상속" and "라이트 캔버스 대비 AA 유지," but the verification is delegated to DESIGN.md, which commits no ratio — so the load-bearing accessibility floor is uncommitted and partly violated (see badge failures below). The spine never states which bar (AA-normal 4.5 vs AA-large 3.0) any combination targets. Both the rubric pass and the accessibility pass flag this independently.</div>
+            <div class="finding-fix"><strong>Fix:</strong> in DESIGN.md §잠긴 STATUS 토큰, state the contrast contract explicitly (e.g. "badge text ≥ AA-large 3.0 against its status fill; 빈방 foreground darkened to meet it") so architect/QA can test it.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-critical">critical</span>
+              <span class="badge badge-concur">both reviewers concur</span>
+              <h3 class="finding-title">White-on-종료확인 orange badge fails AA (~3.32:1)</h3>
+              <span class="finding-location">key-live-status.html L224/L255 · DESIGN.md status-종료확인-foreground L39</span>
+            </header>
+            <div class="finding-note">White text on 종료확인 #F25C1F computes to ~3.32:1 — fails AA normal text on the single most action-critical status in the product ("⚠ 결제·확인 필요", money on the table). The 11px/800 badge gets no large-text discount, so it must clear 4.5:1. The rubric ledger and the accessibility ledger report the same ~3.32 value.</div>
+            <div class="finding-fix"><strong>Fix:</strong> darken the badge fill for text-bearing surfaces (e.g. #D6440C ≈ 4.5:1 with white) while keeping #F25C1F for the glow ring/borders, OR switch badge text to #3D3115 (≈4.6:1). Do not rely on the pulse to excuse the contrast.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-critical">critical</span>
+              <span class="badge badge-concur">both reviewers concur</span>
+              <h3 class="finding-title">White-on-빈방 bronze badge fails badly (~2.48:1)</h3>
+              <span class="finding-location">key-live-status.html L243/L262 badge + L106 .room.empty .rname · DESIGN.md status-빈방-foreground L41, room-card-빈방 L118</span>
+            </header>
+            <div class="finding-note">White on 빈방 #B3A37D is ~2.48:1 and the empty-card room name #B3A37D-on-#F6EFE0 is ~2.17:1 — both fail badly. 빈방 is deliberately recessive, but recessive ≠ illegible; a counter glancing across 11 rooms still has to read it. Both reviewers report ~2.48.</div>
+            <div class="finding-fix"><strong>Fix:</strong> darken the badge fill to ~#8A7A4F (white reaches 4.5:1). For the dashed-card room name, use #3D3115 or a darker bronze; #B3A37D on the tinted card is unreadable.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <span class="badge badge-concur">both reviewers concur</span>
+              <h3 class="finding-title">White-on-사용중 emerald fails AA by a hair (~4.36:1)</h3>
+              <span class="finding-location">key-live-status.html L200 · key-call-grid.html .pill.use L121 · DESIGN.md L33</span>
+            </header>
+            <div class="finding-note">White on 사용중 #178A5A is ~4.36:1 — fails normal-text AA by a whisker on the most frequent badge in the app. Reported identically by both reviewers.</div>
+            <div class="finding-fix"><strong>Fix:</strong> nudge the emerald one step darker (#0F7A4E ≈ 4.7:1 with white) — preserves "the only green" semantics and clears AA; also fixes the dropdown swatch and TV mode.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <span class="badge badge-concur">both reviewers concur</span>
+              <h3 class="finding-title">Brand-gold-as-body text fails AA (~3.2:1)</h3>
+              <span class="finding-location">DESIGN.md brand #B57E12 L25-26, L189 · kpi-card.value-money-color · mocks .selector .mo / .nav-item.sub.sel / .addbtn</span>
+            </header>
+            <div class="finding-note">Brand gold #B57E12 as text is ~3.19:1 on bg / ~3.44:1 on surface — fails AA at body size. It passes for 22px KPI money values (large-text 3:1) and as a fill behind white, but it is also used for sub-18px text: selector "운영월" month, nav sub .sel, the discount relative, "저장중" hint, add-row button, and the focus ring (~3.47:1, only just clears the 3:1 UI threshold). Both reviewers flag the brand-gold-as-body case.</div>
+            <div class="finding-fix"><strong>Fix:</strong> restrict #B57E12 to ≥24px or ≥18.66px-bold contexts and fills; for sub-18px gold text use a darker gold (~#8A5E0A ≈ 4.7:1). Thicken the focus ring to ≥2px so it doesn't lean on the 3.47:1 margin alone.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">Status-color-as-text on cream is uncommitted and largely sub-3.0</h3>
+              <span class="finding-location">DESIGN.md §Colors · room-card 종료확인/빈방 name-color</span>
+            </header>
+            <div class="finding-note">Status hex used as label text on the cream background is largely sub-3.0 (청소중 #D9A526 = 2.03, 빈방 2.25, 종료확인 3.0 exactly at the graphical-object floor, brand 3.19). The room-card 빈방 variant uses raw status hex as name-color on a light card (2.25 — fails). Since the hard rule is "status conveyed by color + text label," the colored label text must itself be legible.</div>
+            <div class="finding-fix"><strong>Fix:</strong> state that status as foreground text on cream uses <code>text</code>/<code>muted</code>, not the raw status hex; reserve raw status hex for fills/borders/badges. Call out the 청소중 gold and 빈방 bronze as the two that cannot be used as text on cream.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">Brand-gold KPI numerals rely on AA-large size — unstated</h3>
+              <span class="finding-location">DESIGN.md kpi-card.value-money-color {colors.brand}</span>
+            </header>
+            <div class="finding-note">brand-gold #B57E12 (3.19 on surface) and section accents are below AA-normal but are large KPI numerals (22px/800 → AA-large 3.0, passes). Fine as-is, but unstated.</div>
+            <div class="finding-fix"><strong>Fix:</strong> one line noting brand-gold numerals rely on AA-large size.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <!-- 3. Component coverage — collapsed (strong) -->
+    <section class="dimension">
+      <details>
+        <summary>
+          <h2>3. Component coverage</h2>
+          <span class="verdict-pill verdict-strong">Strong</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>Every component named in either spine's prose/patterns has a row in DESIGN.md.Components, and every behavioral component in EXPERIENCE.md.Component Patterns maps to a DESIGN.md visual spec: 편집 그리드, 객실 상태 카드 (+ 종료확인/빈방 variants), 월마감 스테퍼, 정산 결과+근거 블록, status/call chips, 운영월/날짜 selector, KPI 카드, sidebar-nav-item. shadcn-inherited components declared as-is in both.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">운영월/날짜 selector has no dedicated Components row</h3>
+              <span class="finding-location">EXPERIENCE.md §Component Patterns · DESIGN.md §Layout</span>
+            </header>
+            <div class="finding-note">The selector has a behavioral row and §Layout prose mention but no dedicated DESIGN.md.Components row; it relies on the rounded.md "selector" mention in §Shapes. Minor — it's a shadcn Select composition.</div>
+            <div class="finding-fix"><strong>Fix:</strong> optional one-line component row or explicit "= shadcn Select" note.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">주인용 그래프/시각화 has no chart component or color-encoding rule</h3>
+              <span class="finding-location">FR-3/FR-33 · sidebar group 대시보드</span>
+            </header>
+            <div class="finding-note">The graph surface (FR-3/FR-33) has an IA row and is a named surface, but neither spine specifies a chart component, color-encoding rule, or state. Charts are load-bearing for SM-6.</div>
+            <div class="finding-fix"><strong>Fix:</strong> add a brief graph pattern (which palette tokens encode series; status colors must not be reused as arbitrary chart series colors or the locked semantics break).</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <!-- 4. State coverage — collapsed (strong) -->
+    <section class="dimension">
+      <details>
+        <summary>
+          <h2>4. State coverage</h2>
+          <span class="verdict-pill verdict-strong">Strong</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>EXPERIENCE.md §State Patterns walks loading (cold + 조회-change, split grid vs dashboard), empty (빈방 + no-data), error (autosave fail + D코스 검증), attention (종료확인), lock (월마감), and permission-denied (sidebar hide). Each cites the surface and FR/decision. Focus state covered in §Interaction Primitives + grid-cell-editing.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">No explicit error state for failed 조회/aggregation load</h3>
+              <span class="finding-location">EXPERIENCE.md §State Patterns</span>
+            </header>
+            <div class="finding-note">No explicit error state for a failed 조회/aggregation load on dashboard/정산 (server compute returns error, not just slow). Loading and stale are covered; hard-fail is not.</div>
+            <div class="finding-fix"><strong>Fix:</strong> one row — "조회 실패" → retry affordance, keep last value, never blank (parallels the autosave "절대 조용히 드롭하지 않음" discipline).</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">TV-mode connection-loss / stale-feed has no State Patterns row</h3>
+              <span class="finding-location">EXPERIENCE.md §State Patterns · Flow-1 failure</span>
+            </header>
+            <div class="finding-note">TV connection-loss / stale-feed is implied (Flow-1 failure: 스켈레톤 + "갱신 중") but not a TV-surface State Patterns row, despite TV being unattended/at-a-distance where a frozen board is a real failure.</div>
+            <div class="finding-fix"><strong>Fix:</strong> TV-mode row — show last-updated timestamp or "갱신 지연" so a stale board is self-evident from across the room.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <!-- 5. Visual reference coverage — open (color-themes-1 not linked at §Colors) -->
+    <section class="dimension">
+      <details open>
+        <summary>
+          <h2>5. Visual reference coverage</h2>
+          <span class="verdict-pill verdict-adequate">Adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p><code>.working/</code> contains exactly three files: color-themes-1.html, key-live-status.html, key-call-grid.html. Spines-win is stated once per spine. EXPERIENCE.md §IA links key-live-status.html and key-call-grid.html inline. Held open for the broken inline link below.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">color-themes-1.html not linked inline at §Colors</h3>
+              <span class="finding-location">DESIGN.md §Colors / frontmatter sources</span>
+            </header>
+            <div class="finding-note">color-themes-1.html is referenced only in DESIGN.md frontmatter <code>sources</code> and obliquely in §Brand &amp; Style, but is never linked inline at §Colors where it illustrates the chosen Royal Gold palette + the full call/danger hex set. It is the provenance artifact for every hex in the spine.</div>
+            <div class="finding-fix"><strong>Fix:</strong> add an inline link in DESIGN.md §Colors — "팔레트 출처/변주: <code>.working/color-themes-1.html</code> 변주 ②. 스파인이 충돌 시 우선." so the source-of-hex is traceable at the point of use.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">EXPERIENCE.md sources omits color-themes-1.html (asymmetry)</h3>
+              <span class="finding-location">EXPERIENCE.md vs DESIGN.md frontmatter sources</span>
+            </header>
+            <div class="finding-note">EXPERIENCE.md frontmatter sources omits color-themes-1.html while DESIGN.md lists all three mocks. Asymmetry is defensible (EXPERIENCE is behavior, not palette) but worth a glance.</div>
+            <div class="finding-fix"><strong>Fix:</strong> none required.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <!-- 6. Bloat & overspecification — collapsed (strong) -->
+    <section class="dimension">
+      <details>
+        <summary>
+          <h2>6. Bloat &amp; overspecification</h2>
+          <span class="verdict-pill verdict-strong">Strong</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>No source restatement of FR prose, persona bios, or scope lists; FRs are cited by number, not copied. Tables used where tables fit. EXPERIENCE.md carries microcopy only and pushes editorial voice to DESIGN.md. DESIGN.md uses tokens, not raw pixels, in component specs.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">A few literal hex values inside components instead of tokens</h3>
+              <span class="finding-location">DESIGN.md §components</span>
+            </header>
+            <div class="finding-note">A few literal hex values appear inside <code>components</code>: room-card-종료확인 #FFF3EC, room-card-빈방 #F6EFE0, grid-cell tints, rgba glow literals. These are one-off tints with no frontmatter token, so they can't be <code>{ref}</code>'d — acceptable, but they're load-bearing tints a consumer might want named.</div>
+            <div class="finding-fix"><strong>Fix (optional):</strong> promote the recurring warm-tint family (#FFF3EC/#F6EFE0/#FCEFEC) to named colors tokens (e.g. tint-attention, tint-idle, tint-error).</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">§Permissions &amp; Audit restates FR-34/35 fairly closely</h3>
+              <span class="finding-location">EXPERIENCE.md §권한·감사</span>
+            </header>
+            <div class="finding-note">The invented §Permissions &amp; Audit section restates FR-34/35 and §6.4 fairly closely in prose. It earns its place but trims would tighten it.</div>
+            <div class="finding-fix"><strong>Fix:</strong> compress to the behavioral deltas not already in State Patterns (lock) and IA (sidebar hide).</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <!-- 7. Inheritance discipline — collapsed (strong) -->
+    <section class="dimension">
+      <details>
+        <summary>
+          <h2>7. Inheritance discipline</h2>
+          <span class="verdict-pill verdict-strong">Strong</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>The token-path hazard is clean: both spines consistently use the <code>{colors.status-사용중}</code> form (hyphen-joined Korean), matching frontmatter keys verbatim — no dot/hyphen split, Korean-in-path internally consistent across DESIGN.md, EXPERIENCE.md, and every reference. Status values and call states are byte-identical across both spines, the PRD, and the decision log. <code>sources</code> frontmatter paths resolve.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">Korean characters in YAML token paths may break naive ASCII resolvers</h3>
+              <span class="finding-location">DESIGN.md status-사용중 / call-방문완료-bg / room-card-종료확인</span>
+            </header>
+            <div class="finding-note">Korean characters inside YAML token paths are spec-legal but will break naive <code>{path.to.token}</code> resolvers that assume ASCII/kebab-case, and complicate Tailwind/CSS-var generation downstream. Not a spine defect — an extraction-time heads-up.</div>
+            <div class="finding-fix"><strong>Fix:</strong> note for the architect that token codegen must map Korean keys to ASCII CSS-var names (e.g. status-사용중 → --status-occupied) with a stable mapping table.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">EXPERIENCE.md uses the glob {colors.status-*} shorthand</h3>
+              <span class="finding-location">EXPERIENCE.md §Component Patterns (room card row)</span>
+            </header>
+            <div class="finding-note">The glob <code>{colors.status-*}</code> is resolvable by a human, not by a literal resolver. Acceptable given the adjacent locked-token table.</div>
+            <div class="finding-fix"><strong>Fix:</strong> none required; the locked table disambiguates.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <!-- 8. Shape fit — open (missing Responsive & Platform section) -->
+    <section class="dimension">
+      <details open>
+        <summary>
+          <h2>8. Shape fit</h2>
+          <span class="verdict-pill verdict-strong">Strong</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>DESIGN.md follows the canonical section order exactly. EXPERIENCE.md has all expected defaults and the multi-surface split (desktop ERP + TV fullscreen) is handled throughout. The Responsive/Platform concern is met even though there's no single "Responsive &amp; Platform" heading — held open for the consolidation finding below.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">No consolidated "Responsive &amp; Platform" section</h3>
+              <span class="finding-location">EXPERIENCE.md (info scattered across Foundation/IA/State)</span>
+            </header>
+            <div class="finding-note">No section titled "Responsive &amp; Platform" in EXPERIENCE.md, unlike the shadcn shape example. This is a multi-surface product (desktop + TV fullscreen, per D2/D4), and surface-switching rules (when/how TV mode is entered/exited, viewport assumptions, desktop-only min width, TV refresh cadence) are scattered across Foundation/IA/State rather than consolidated. The information mostly exists but isn't where a consumer looks for it.</div>
+            <div class="finding-fix"><strong>Fix:</strong> add a short "Responsive &amp; Platform" (or "Surfaces") section consolidating: desktop-web target + min viewport, TV fullscreen entry/exit + auto-refresh + no-input, "no native mobile / no dark mode (v1)" — much of this is one-liners already scattered.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">Invented §권한·감사 section earns its place</h3>
+              <span class="finding-location">EXPERIENCE.md §권한·감사</span>
+            </header>
+            <div class="finding-note">The invented §권한·감사 section earns its place: permissions + audit + snapshot-immutability are load-bearing differentiators of the Excel→ERP migration (SM-4/SM-5) and don't fit cleanly in the default sections. Keep it; just trim per §6.</div>
+            <div class="finding-fix"><strong>Fix:</strong> keep; trim per Bloat finding.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <!-- Accessibility reviewer — adversarial voice preserved -->
+    <section class="reviewer-section">
+      <details open>
+        <summary>
+          <h2>Accessibility review — 베트남 에스테틱 ERP (Royal Gold)</h2>
+          <span class="reviewer-source">review-accessibility.md</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>This spine takes accessibility seriously where it counts most — status is consistently paired with a text label, the grid keyboard model is well specified, and the locked-token discipline prevents per-screen color drift. <strong>But the headline status colors do not survive WCAG math</strong>, and several "money read" combos (brand gold, muted taupe) sit in the 3.2–3.97:1 gray zone. Most fixes are small foreground/contrast tweaks plus three under-specified behaviors (reduced-motion, error <code>aria</code>, focus management on the 월마감 modal) that the spine claims in spirit but never pins down — treat those as blocking before build. <em>(The merged contrast failures this reviewer raised — 종료확인 3.32, 빈방 2.48, 사용중 4.36, brand gold ~3.2, no stated targets — are consolidated under Token completeness above, where both reviewers concur. The unique behavioral and color-blind findings live here.)</em></p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <h3 class="finding-title">No prefers-reduced-motion handling for the 종료확인 pulse</h3>
+              <span class="finding-location">EXPERIENCE.md §State Patterns L101 · Decision D6 · DESIGN.md room-card-종료확인 L112-117</span>
+            </header>
+            <div class="finding-note">No <code>prefers-reduced-motion</code> handling is specified for the 종료확인 gentle pulse/blink. D6 mandates the pulse on 첫화면 + TV현황판, but neither file nor the mocks (the mock uses a static glow) defines a motion-off path. Vestibular-sensitive and ADHD users, plus WCAG 2.3.3, require an opt-out. (Companion: seizure/flash safety is asserted nowhere — "blink" is a red-flag word; WCAG 2.3.1 requires &lt; 3 flashes/sec.)</div>
+            <div class="finding-fix"><strong>Fix:</strong> spec <code>@media (prefers-reduced-motion: reduce)</code> → replace the pulse with the static glow ring + ⚠ label (which already exist), no opacity/scale animation. Constrain the motion path to a slow opacity breathe (~0.5Hz, 1.5–2s), drop the word "blink", and state the max rate as a hard rule.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <h3 class="finding-title">D코스 inline error has no programmatic association / announcement</h3>
+              <span class="finding-location">key-call-grid.html L362, L372-374 · EXPERIENCE.md §Accessibility Floor L120-128</span>
+            </header>
+            <div class="finding-note">The D코스 inline error is visually strong but has no <code>aria-invalid</code>, <code>aria-describedby</code>, <code>aria-errormessage</code>, or live-region spec. A screen-reader user tabbing into 마사지사2 hears an empty cell, not the rule, and a counter who triggers the block via keyboard gets no announcement. §Accessibility Floor covers status-color and keyboard but is silent on form error semantics.</div>
+            <div class="finding-fix"><strong>Fix:</strong> require <code>aria-invalid="true"</code> + <code>aria-describedby</code> linking the cell to the message, and announce the block via <code>role="alert"</code>/<code>aria-live="assertive"</code> when 저장/방문완료 is attempted. Keep the existing <code>!</code> icon so the cue isn't color-only.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">Muted taupe #8E7C53 fails AA as body text everywhere</h3>
+              <span class="finding-location">DESIGN.md muted #8E7C53 L27 · throughout both mocks</span>
+            </header>
+            <div class="finding-note">Muted taupe fails AA as body text everywhere it lands: 3.69 on bg, 3.97 on surface, 3.40 on readonly tint, 3.78 in the sidebar. It carries real content — staff names, course meta, "진행중", "—", ro-tags, nav sub-items, KPI labels.</div>
+            <div class="finding-fix"><strong>Fix:</strong> darken muted to ~#756134 (≈4.6:1 on cream) for any text role. If the brand wants the lighter taupe for hairlines only, split the token: <code>muted-line</code> (decorative) vs <code>muted-text</code> (darkened, AA).</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">Color-blind glyph reinforcement recommended for gold/bronze/orange cluster</h3>
+              <span class="finding-location">DESIGN.md status table L198-204 · EXPERIENCE.md L86, L124 · key-call-grid.html L309-314</span>
+            </header>
+            <div class="finding-note">Color-blind risk cluster confirmed: 청소중 gold #D9A526 vs 빈방 bronze #B3A37D vs 종료확인 orange #F25C1F collapse toward a near-indistinguishable warm family under deuteranopia/protanopia. The always-on text labels (good) and shape cues (dashed 빈방, glow+⚠ 종료확인) mitigate well, but 청소중 has no non-color reinforcement beyond its label, and on TV현황판 at distance the label may be the only differentiator.</div>
+            <div class="finding-fix"><strong>Fix:</strong> keep the label-always hard rule. Additionally give each status a distinct glyph in the badge (e.g. ● 사용중 / ◷ 예약 / ⟳ 청소중 / ⚠ 종료확인 / ○ 빈방) so hue is never the sole differentiator, especially on TV mode and the color-only dropdown swatch dots.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">월마감 modal focus management never specified at a11y level</h3>
+              <span class="finding-location">EXPERIENCE.md L115 + Flow 3 L150-157 · DESIGN.md L181 (shadcn Dialog defaults)</span>
+            </header>
+            <div class="finding-note">The 월마감 two-step confirm modal is described behaviorally but never specified at the a11y level: no mention of focus moving into the dialog on open, focus trap, Esc-to-cancel, focus return to trigger on close, or <code>role="alertdialog"</code>. Because this is irreversible (snapshot lock) and money-critical, the focus contract matters; leaning on "shadcn Dialog defaults" should be explicit and verified.</div>
+            <div class="finding-fix"><strong>Fix:</strong> state in the spine: open → focus the dialog (heading or safe/cancel button, not the destructive confirm), trap focus, Esc cancels step 1, second confirm requires an explicit focus move; on close return focus to [마감 확정]. Confirm shadcn Dialog is used so the trap actually exists.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">No documented keyboard model for the type-ahead status dropdown</h3>
+              <span class="finding-location">key-call-grid.html L306-316 · EXPERIENCE.md L109-113</span>
+            </header>
+            <div class="finding-note">The cell navigation keyboard model is specified, but the open-dropdown state needs its own contract: arrow-key traversal, Enter to select, Esc to close without leaving the cell, roving focus. A dropdown that swallows Tab or doesn't close on Esc is a keyboard trap on the product's hottest surface.</div>
+            <div class="finding-fix"><strong>Fix:</strong> specify dropdown keyboard semantics and <code>aria-activedescendant</code>/<code>aria-expanded</code>; explicitly require Esc returns to the cell, not out of the grid.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">TV현황판 distance legibility inherits the failing contrasts at scale</h3>
+              <span class="finding-location">EXPERIENCE.md L126 · DESIGN.md L214</span>
+            </header>
+            <div class="finding-note">TV현황판 leans entirely on white-on-status-fill. Large type rescues the contrast threshold (≥24px → 3:1 UI bar) for the 28px tv-status text, but the small companion badges/labels and any sub-24px meta do not, and low-vision users at a distance are exactly the population that needs margin, not a pass-by-1-decimal. The color+label pairing here is correct (good — not color-only).</div>
+            <div class="finding-fix"><strong>Fix:</strong> apply the darkened status fills globally so TV mode inherits AA-not-just-large-text; verify the tv-meta 22px (just under 24px) hue/contrast for 빈방 and 청소중 specifically.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">방문완료 doc/token divergence (status-사용중 계열 vs darker hex)</h3>
+              <span class="finding-location">DESIGN.md L44 · call pill .done #0F6B43</span>
+            </header>
+            <div class="finding-note">DESIGN.md describes 방문완료 as "status-사용중 계열" while the actual hex #0F6B43 is darker than status-사용중 #178A5A. The pill itself passes (5.54:1) — harmless, but doc and token diverge.</div>
+            <div class="finding-fix"><strong>Fix:</strong> make sure implementers use the darker call-text hex, not the emerald, for text on the light chip.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">"남은 12분" urgency uses an undeclared off-palette #B8860B (fails)</h3>
+              <span class="finding-location">key-live-status.html L148</span>
+            </header>
+            <div class="finding-note">The "남은 12분" urgency uses an undeclared <code>#B8860B</code> ("warn", 3.20:1, fails) that isn't in the token set. Off-palette and sub-AA.</div>
+            <div class="finding-fix"><strong>Fix:</strong> drop the ad-hoc gold; use the darkened muted or danger token per its semantic.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">Color-only signaling otherwise clean — keep swatch dots paired with labels</h3>
+              <span class="finding-location">key-live-status.html L292-295 · key-call-grid.html L309-314 · EXPERIENCE.md L124</span>
+            </header>
+            <div class="finding-note">Color-only signaling is otherwise clean — every badge/pill/chip and the 종료확인 alert ships a text label, satisfying the "절대 색상만으로 전달하지 않는다" rule. The only color-only spots are decorative reinforcers next to a text label (alert-list .rdot, dropdown swatch dots) — acceptable.</div>
+            <div class="finding-fix"><strong>Fix:</strong> don't let the swatch dot ever stand alone.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <div class="mechanical">
+      <h3>Mechanical notes</h3>
+      <ul>
+        <li>Token resolution: 100% — all 35 DESIGN.md refs and all 7 EXPERIENCE.md refs resolve; no dot/hyphen mismatch; Korean-in-path consistent.</li>
+        <li>Color hex completeness: every <code>colors.*</code> token has a hex; every status token has a matching <code>-foreground</code>; call chips carry explicit bg+text hex.</li>
+        <li>Contrast (computed, sRGB WCAG 2.x): body text passes AAA; badge foregrounds white/사용중 4.36, white/종료확인 3.32, white/빈방 2.48 fail; status-as-text on cream mostly sub-3.0; call chips pass AA-normal. Spine states no contrast target.</li>
+        <li>UJ → Flow: UJ-1→Flow1, UJ-2→Flow2, UJ-4→Flow3, UJ-3→(none).</li>
+        <li>FR → IA: all FR-1..FR-37 appear in the IA/FR map; FR-18 (안내 문구) has no component/state treatment.</li>
+        <li><code>.working/</code> files: 3 total — all linked from a spine; color-themes-1.html only in frontmatter + oblique prose, not inline at §Colors.</li>
+        <li>Spines-win stated once per spine; status value / glossary parity identical across DESIGN.md, EXPERIENCE.md, PRD, decision log.</li>
+        <li>Severity totals: 2 Critical · 6 High · 7 Medium · 12 Low (27 findings).</li>
+      </ul>
+    </div>
+
+    <footer class="report-footer">
+      <div class="meta">
+        <span>DESIGN.md: ux-vietnam_massage-2026-06-07/DESIGN.md</span>
+        <span>EXPERIENCE.md: ux-vietnam_massage-2026-06-07/EXPERIENCE.md</span>
+        <span>Reviewers: review-rubric.md · review-accessibility.md</span>
+        <span>Generated: 2026-06-07</span>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

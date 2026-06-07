@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>따뜻한 스파 — 컬러 테마 5종 (Light Mode)</title>
+<!--
+  ============================================================================
+  PROJECT : Korean Massage / Esthetic Shop ERP
+  DIRECTION: "따뜻한 스파" — Warm Spa (gold / amber / earth-tone luxury)
+  MODE    : LIGHT MODE ONLY. No dark mode in scope.
+  GOAL    : 선명하고 고급스러운 (vivid AND refined/premium)
+  ============================================================================
+-->
+<style>
+  :root{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+                 "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", Arial, sans-serif;
+  }
+  *{ box-sizing: border-box; }
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 15% -10%, #fff8ee 0%, rgba(255,248,238,0) 60%),
+      radial-gradient(1000px 700px at 110% 0%, #fbf1e2 0%, rgba(251,241,226,0) 55%),
+      #f7f1e8;
+    color:#3a3026;
+    -webkit-font-smoothing:antialiased;
+    padding:36px 28px 80px;
+  }
+  .page-head{
+    max-width:1280px; margin:0 auto 30px;
+  }
+  .page-head h1{
+    font-size:30px; letter-spacing:-0.5px; margin:0 0 6px;
+    color:#7a5a1f;
+  }
+  .page-head p{
+    margin:0; font-size:15px; color:#8b7a63; line-height:1.55;
+  }
+  .page-head .mode-tag{
+    display:inline-block; margin-top:12px; font-size:12px; font-weight:700;
+    letter-spacing:.4px; color:#b6892f;
+    background:#fff6e6; border:1px solid #f0dcb0; border-radius:999px;
+    padding:5px 14px;
+  }
+
+  .themes{
+    max-width:1280px; margin:0 auto;
+    display:grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
+    gap:26px;
+  }
+
+  /* generic theme shell — actual colors injected per-theme via inline style vars */
+  .theme{
+    border-radius:20px;
+    overflow:hidden;
+    box-shadow: 0 10px 34px rgba(120,90,40,.12), 0 2px 6px rgba(120,90,40,.08);
+    border:1px solid rgba(0,0,0,.05);
+    background:var(--bg);
+    color:var(--text);
+    display:flex; flex-direction:column;
+  }
+  .theme__head{
+    padding:20px 22px 16px;
+    background:
+      linear-gradient(135deg, var(--brand) 0%, var(--brand2, var(--brand)) 100%);
+    color:var(--on-brand,#fff);
+  }
+  .theme__head h2{
+    margin:0 0 4px; font-size:21px; letter-spacing:-0.3px;
+  }
+  .theme__head .register{
+    margin:0; font-size:12.5px; opacity:.92; line-height:1.5; font-weight:500;
+  }
+
+  .theme__body{ padding:18px 20px 22px; }
+
+  .section-label{
+    font-size:11px; font-weight:800; letter-spacing:.8px;
+    text-transform:uppercase; color:var(--muted);
+    margin:4px 0 10px;
+  }
+
+  /* token chips */
+  .chips{
+    display:flex; flex-wrap:wrap; gap:7px; margin-bottom:18px;
+  }
+  .chip{
+    display:flex; align-items:center; gap:7px;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:6px 9px 6px 7px;
+    font-size:11px; line-height:1.1;
+  }
+  .chip .sw{
+    width:18px; height:18px; border-radius:5px;
+    border:1px solid rgba(0,0,0,.14);
+    flex:0 0 auto;
+  }
+  .chip .meta{ display:flex; flex-direction:column; gap:1px; }
+  .chip .role{ font-weight:700; color:var(--text); }
+  .chip .hex{ font-size:9.5px; color:var(--muted); letter-spacing:.3px; font-variant-numeric:tabular-nums; }
+
+  /* room grid */
+  .rooms{
+    display:grid; grid-template-columns: repeat(3, 1fr); gap:11px;
+    margin-bottom:16px;
+  }
+  .room{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:12px 12px 11px;
+    position:relative;
+    box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  }
+  .room .topline{
+    display:flex; align-items:center; justify-content:space-between; margin-bottom:9px;
+  }
+  .room .rname{ font-size:15px; font-weight:800; color:var(--text); letter-spacing:-0.3px; }
+  .badge{
+    font-size:11px; font-weight:800; letter-spacing:.3px;
+    padding:4px 9px; border-radius:999px; white-space:nowrap;
+  }
+  .room .course{ font-size:11.5px; color:var(--text); font-weight:600; margin-bottom:3px; }
+  .room .staff{ font-size:11px; color:var(--muted); margin-bottom:8px; }
+  .room .timeline{
+    font-size:11px; font-weight:700; padding-top:8px;
+    border-top:1px dashed var(--border);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .room .timeline .left{ color:var(--text); }
+  .room .timeline .right{ color:var(--muted); font-weight:600; }
+
+  /* call-state chips */
+  .calls{
+    display:flex; flex-wrap:wrap; gap:9px; align-items:center;
+    padding-top:6px; border-top:1px solid var(--border); margin-top:4px;
+  }
+  .calls .lbl{ font-size:11px; font-weight:700; color:var(--muted); margin-right:2px; }
+  .callchip{
+    font-size:11.5px; font-weight:800; letter-spacing:.3px;
+    padding:5px 12px; border-radius:999px;
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  .callchip .dot{ width:7px; height:7px; border-radius:50%; background:currentColor; opacity:.85; }
+
+  /* danger note */
+  .dangernote{
+    margin-top:14px; font-size:11.5px; font-weight:600;
+    padding:9px 12px; border-radius:10px; line-height:1.4;
+    display:flex; align-items:center; gap:8px;
+  }
+  .dangernote .x{
+    width:18px; height:18px; border-radius:50%;
+    display:inline-flex; align-items:center; justify-content:center;
+    color:#fff; font-size:12px; font-weight:900; flex:0 0 auto;
+  }
+
+  .swatch-note{ font-size:10px; color:var(--muted); margin-top:2px; }
+</style>
+</head>
+<body>
+
+  <div class="page-head">
+    <h1>따뜻한 스파 — 컬러 테마 5종</h1>
+    <p>골드 · 앰버 · 어스톤 럭셔리 방향. 모두 따뜻한 오프화이트/크림 캔버스 위에서 “선명하고 고급스럽게”.<br>
+       5가지 변주는 <strong>register(톤의 결)</strong>가 다릅니다 — 같은 가족, 다른 성격.</p>
+    <span class="mode-tag">LIGHT MODE ONLY · 다크모드 미포함</span>
+  </div>
+
+  <div class="themes">
+
+    <!-- ====================================================================
+         THEME 1 — "실크 스파" (Silk Spa) — soft & airy
+         --------------------------------------------------------------------
+         brand-primary  : #C99A4B   warm soft gold
+         brand-secondary: #E3BE7B   light champagne
+         background     : #FAF5EC   airy cream
+         surface/card   : #FFFFFF   clean white
+         border         : #ECE0CC   soft sand line
+         text-primary   : #4A3F30   warm graphite
+         text-muted     : #998B74   muted taupe
+         danger         : #C2543E   terracotta-red
+         ROOM STATES:
+           사용중   : #2E9E7A  fresh jade (active / money)
+           예약     : #4F86C6  calm blue
+           청소중   : #C99A4B  soft gold
+           종료확인 : #E8772E  bright tangerine (ATTENTION pop)
+           빈방     : #B9AE99  quiet sand (recessive)
+         CALL STATES:
+           방문완료 : #2E9E7A  jade success
+           노쇼     : #C2543E  terracotta
+           취소     : #998B74  muted taupe
+         ==================================================================== -->
+    <section class="theme" style="
+        --bg:#FAF5EC; --brand:#C99A4B; --brand2:#E3BE7B; --on-brand:#fff;
+        --surface:#FFFFFF; --border:#ECE0CC; --text:#4A3F30; --muted:#998B74;">
+      <div class="theme__head">
+        <h2>① 실크 스파 <span style="font-size:13px;font-weight:500;opacity:.85;">Silk Spa</span></h2>
+        <p class="register">부드럽고 공기 같은 — 화이트 여백 위 은은한 샴페인 골드. 호텔 스파의 첫인상.</p>
+      </div>
+      <div class="theme__body">
+        <div class="section-label">시맨틱 토큰</div>
+        <div class="chips">
+          <div class="chip"><span class="sw" style="background:#C99A4B"></span><span class="meta"><span class="role">brand</span><span class="hex">#C99A4B</span></span></div>
+          <div class="chip"><span class="sw" style="background:#FAF5EC"></span><span class="meta"><span class="role">background</span><span class="hex">#FAF5EC</span></span></div>
+          <div class="chip"><span class="sw" style="background:#FFFFFF"></span><span class="meta"><span class="role">surface</span><span class="hex">#FFFFFF</span></span></div>
+          <div class="chip"><span class="sw" style="background:#ECE0CC"></span><span class="meta"><span class="role">border</span><span class="hex">#ECE0CC</span></span></div>
+          <div class="chip"><span class="sw" style="background:#4A3F30"></span><span class="meta"><span class="role">text</span><span class="hex">#4A3F30</span></span></div>
+          <div class="chip"><span class="sw" style="background:#998B74"></span><span class="meta"><span class="role">text-muted</span><span class="hex">#998B74</span></span></div>
+          <div class="chip"><span class="sw" style="background:#C2543E"></span><span class="meta"><span class="role">danger</span><span class="hex">#C2543E</span></span></div>
+          <div class="chip"><span class="sw" style="background:#2E9E7A"></span><span class="meta"><span class="role">사용중</span><span class="hex">#2E9E7A</span></span></div>
+          <div class="chip"><span class="sw" style="background:#4F86C6"></span><span class="meta"><span class="role">예약</span><span class="hex">#4F86C6</span></span></div>
+          <div class="chip"><span class="sw" style="background:#C99A4B"></span><span class="meta"><span class="role">청소중</span><span class="hex">#C99A4B</span></span></div>
+          <div class="chip"><span class="sw" style="background:#E8772E"></span><span class="meta"><span class="role">종료확인</span><span class="hex">#E8772E</span></span></div>
+          <div class="chip"><span class="sw" style="background:#B9AE99"></span><span class="meta"><span class="role">빈방</span><span class="hex">#B9AE99</span></span></div>
+        </div>
+
+        <div class="section-label">룸 상태 카드</div>
+        <div class="rooms">
+          <div class="room">
+            <div class="topline"><span class="rname">101 호실</span><span class="badge" style="background:#2E9E7A;color:#fff;">사용중</span></div>
+            <div class="course">A코스 60분</div><div class="staff">담당 · 이수진</div>
+            <div class="timeline"><span class="left">남은 12분</span><span class="right">종료예정 23:40</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">102 호실</span><span class="badge" style="background:#4F86C6;color:#fff;">예약</span></div>
+            <div class="course">B코스 70분</div><div class="staff">담당 · 박지민</div>
+            <div class="timeline"><span class="left">시작 24:10</span><span class="right">예약 확정</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">201 호실</span><span class="badge" style="background:#C99A4B;color:#fff;">청소중</span></div>
+            <div class="course">직전 C코스 80분</div><div class="staff">정리 · 최은영</div>
+            <div class="timeline"><span class="left">청소 4분째</span><span class="right">곧 빈방</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">301 호실</span><span class="badge" style="background:#E8772E;color:#fff;">종료확인</span></div>
+            <div class="course">D코스 90분</div><div class="staff">담당 · 김민재 · 한소희</div>
+            <div class="timeline"><span class="left">시간 종료</span><span class="right">확인 필요</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">402 호실</span><span class="badge" style="background:#B9AE99;color:#fff;">빈방</span></div>
+            <div class="course">대기중</div><div class="staff">담당 · 미배정</div>
+            <div class="timeline"><span class="left">즉시 가능</span><span class="right">—</span></div>
+          </div>
+        </div>
+
+        <div class="calls">
+          <span class="lbl">콜 상태</span>
+          <span class="callchip" style="background:#E6F4EE;color:#1f7a5d;"><span class="dot"></span>방문완료</span>
+          <span class="callchip" style="background:#F8E4DF;color:#a8412e;"><span class="dot"></span>노쇼</span>
+          <span class="callchip" style="background:#EFE9DE;color:#7d7059;"><span class="dot"></span>취소</span>
+        </div>
+
+        <div class="dangernote" style="background:#FBEAE5;color:#9a3a28;border:1px solid #ECC3B9;">
+          <span class="x" style="background:#C2543E;">!</span>D코스는 마사지사 2명이 필요합니다. 마사지사2를 배정하세요.
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ====================================================================
+         THEME 2 — "로얄 골드" (Royal Gold) — rich & saturated gold
+         --------------------------------------------------------------------
+         brand-primary  : #B57E12   deep saturated gold
+         brand-secondary: #D9A526   bright amber-gold
+         background     : #FBF3E1   rich cream
+         surface/card   : #FFFCF4   warm ivory
+         border         : #EAD7AE   gold-sand line
+         text-primary   : #3D3115   espresso
+         text-muted     : #8E7C53   bronze taupe
+         danger         : #C8392B   vivid red
+         ROOM STATES:
+           사용중   : #178A5A  emerald (active / money)
+           예약     : #2F6FD0  royal blue
+           청소중   : #D9A526  bright gold
+           종료확인 : #F25C1F  electric orange (ATTENTION pop)
+           빈방     : #B3A37D  dim bronze (recessive)
+         CALL STATES:
+           방문완료 : #178A5A  emerald success
+           노쇼     : #C8392B  vivid red
+           취소     : #8E7C53  bronze taupe
+         ==================================================================== -->
+    <section class="theme" style="
+        --bg:#FBF3E1; --brand:#B57E12; --brand2:#D9A526; --on-brand:#fff;
+        --surface:#FFFCF4; --border:#EAD7AE; --text:#3D3115; --muted:#8E7C53;">
+      <div class="theme__head">
+        <h2>② 로얄 골드 <span style="font-size:13px;font-weight:500;opacity:.85;">Royal Gold</span></h2>
+        <p class="register">진하고 채도 높은 골드 — 또렷하고 화려한 럭셔리. 멀리서도 “돈 버는 집” 느낌.</p>
+      </div>
+      <div class="theme__body">
+        <div class="section-label">시맨틱 토큰</div>
+        <div class="chips">
+          <div class="chip"><span class="sw" style="background:#B57E12"></span><span class="meta"><span class="role">brand</span><span class="hex">#B57E12</span></span></div>
+          <div class="chip"><span class="sw" style="background:#FBF3E1"></span><span class="meta"><span class="role">background</span><span class="hex">#FBF3E1</span></span></div>
+          <div class="chip"><span class="sw" style="background:#FFFCF4"></span><span class="meta"><span class="role">surface</span><span class="hex">#FFFCF4</span></span></div>
+          <div class="chip"><span class="sw" style="background:#EAD7AE"></span><span class="meta"><span class="role">border</span><span class="hex">#EAD7AE</span></span></div>
+          <div class="chip"><span class="sw" style="background:#3D3115"></span><span class="meta"><span class="role">text</span><span class="hex">#3D3115</span></span></div>
+          <div class="chip"><span class="sw" style="background:#8E7C53"></span><span class="meta"><span class="role">text-muted</span><span class="hex">#8E7C53</span></span></div>
+          <div class="chip"><span class="sw" style="background:#C8392B"></span><span class="meta"><span class="role">danger</span><span class="hex">#C8392B</span></span></div>
+          <div class="chip"><span class="sw" style="background:#178A5A"></span><span class="meta"><span class="role">사용중</span><span class="hex">#178A5A</span></span></div>
+          <div class="chip"><span class="sw" style="background:#2F6FD0"></span><span class="meta"><span class="role">예약</span><span class="hex">#2F6FD0</span></span></div>
+          <div class="chip"><span class="sw" style="background:#D9A526"></span><span class="meta"><span class="role">청소중</span><span class="hex">#D9A526</span></span></div>
+          <div class="chip"><span class="sw" style="background:#F25C1F"></span><span class="meta"><span class="role">종료확인</span><span class="hex">#F25C1F</span></span></div>
+          <div class="chip"><span class="sw" style="background:#B3A37D"></span><span class="meta"><span class="role">빈방</span><span class="hex">#B3A37D</span></span></div>
+        </div>
+
+        <div class="section-label">룸 상태 카드</div>
+        <div class="rooms">
+          <div class="room">
+            <div class="topline"><span class="rname">101 호실</span><span class="badge" style="background:#178A5A;color:#fff;">사용중</span></div>
+            <div class="course">A코스 60분</div><div class="staff">담당 · 이수진</div>
+            <div class="timeline"><span class="left">남은 12분</span><span class="right">종료예정 23:40</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">102 호실</span><span class="badge" style="background:#2F6FD0;color:#fff;">예약</span></div>
+            <div class="course">B코스 70분</div><div class="staff">담당 · 박지민</div>
+            <div class="timeline"><span class="left">시작 24:10</span><span class="right">예약 확정</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">201 호실</span><span class="badge" style="background:#D9A526;color:#3D3115;">청소중</span></div>
+            <div class="course">직전 C코스 80분</div><div class="staff">정리 · 최은영</div>
+            <div class="timeline"><span class="left">청소 4분째</span><span class="right">곧 빈방</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">301 호실</span><span class="badge" style="background:#F25C1F;color:#fff;">종료확인</span></div>
+            <div class="course">D코스 90분</div><div class="staff">담당 · 김민재 · 한소희</div>
+            <div class="timeline"><span class="left">시간 종료</span><span class="right">확인 필요</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">402 호실</span><span class="badge" style="background:#B3A37D;color:#fff;">빈방</span></div>
+            <div class="course">대기중</div><div class="staff">담당 · 미배정</div>
+            <div class="timeline"><span class="left">즉시 가능</span><span class="right">—</span></div>
+          </div>
+        </div>
+
+        <div class="calls">
+          <span class="lbl">콜 상태</span>
+          <span class="callchip" style="background:#DCF1E6;color:#0f6b43;"><span class="dot"></span>방문완료</span>
+          <span class="callchip" style="background:#F8DDD9;color:#a72a1d;"><span class="dot"></span>노쇼</span>
+          <span class="callchip" style="background:#EEE6D2;color:#73643f;"><span class="dot"></span>취소</span>
+        </div>
+
+        <div class="dangernote" style="background:#FAE0DC;color:#9c2a1e;border:1px solid #EDB7AF;">
+          <span class="x" style="background:#C8392B;">!</span>D코스는 마사지사 2명이 필요합니다. 마사지사2를 배정하세요.
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ====================================================================
+         THEME 3 — "테라 클레이" (Terra Clay) — earthy / muted
+         --------------------------------------------------------------------
+         brand-primary  : #A9742E   burnt clay-gold
+         brand-secondary: #8C6A45   walnut brown
+         background     : #F4EDE2   oat / clay cream
+         surface/card   : #FCF7EF   bone
+         border         : #E0D2BD   clay-sand line
+         text-primary   : #3B3226   roasted brown
+         text-muted     : #8B7D67   stone taupe
+         danger         : #B24A38   brick red
+         ROOM STATES:
+           사용중   : #4F7E5B  sage / olive green (active, earthy)
+           예약     : #5B7E9A  slate blue
+           청소중   : #BE914A  ochre
+           종료확인 : #D9692C  burnt orange (ATTENTION pop)
+           빈방     : #ADA189  warm stone (recessive)
+         CALL STATES:
+           방문완료 : #4F7E5B  sage success
+           노쇼     : #B24A38  brick red
+           취소     : #8B7D67  stone taupe
+         ==================================================================== -->
+    <section class="theme" style="
+        --bg:#F4EDE2; --brand:#A9742E; --brand2:#8C6A45; --on-brand:#fff;
+        --surface:#FCF7EF; --border:#E0D2BD; --text:#3B3226; --muted:#8B7D67;">
+      <div class="theme__head">
+        <h2>③ 테라 클레이 <span style="font-size:13px;font-weight:500;opacity:.85;">Terra Clay</span></h2>
+        <p class="register">차분한 어스톤 — 점토·호두·세이지의 묵직한 고급감. 눈이 편한 자연 럭셔리.</p>
+      </div>
+      <div class="theme__body">
+        <div class="section-label">시맨틱 토큰</div>
+        <div class="chips">
+          <div class="chip"><span class="sw" style="background:#A9742E"></span><span class="meta"><span class="role">brand</span><span class="hex">#A9742E</span></span></div>
+          <div class="chip"><span class="sw" style="background:#F4EDE2"></span><span class="meta"><span class="role">background</span><span class="hex">#F4EDE2</span></span></div>
+          <div class="chip"><span class="sw" style="background:#FCF7EF"></span><span class="meta"><span class="role">surface</span><span class="hex">#FCF7EF</span></span></div>
+          <div class="chip"><span class="sw" style="background:#E0D2BD"></span><span class="meta"><span class="role">border</span><span class="hex">#E0D2BD</span></span></div>
+          <div class="chip"><span class="sw" style="background:#3B3226"></span><span class="meta"><span class="role">text</span><span class="hex">#3B3226</span></span></div>
+          <div class="chip"><span class="sw" style="background:#8B7D67"></span><span class="meta"><span class="role">text-muted</span><span class="hex">#8B7D67</span></span></div>
+          <div class="chip"><span class="sw" style="background:#B24A38"></span><span class="meta"><span class="role">danger</span><span class="hex">#B24A38</span></span></div>
+          <div class="chip"><span class="sw" style="background:#4F7E5B"></span><span class="meta"><span class="role">사용중</span><span class="hex">#4F7E5B</span></span></div>
+          <div class="chip"><span class="sw" style="background:#5B7E9A"></span><span class="meta"><span class="role">예약</span><span class="hex">#5B7E9A</span></span></div>
+          <div class="chip"><span class="sw" style="background:#BE914A"></span><span class="meta"><span class="role">청소중</span><span class="hex">#BE914A</span></span></div>
+          <div class="chip"><span class="sw" style="background:#D9692C"></span><span class="meta"><span class="role">종료확인</span><span class="hex">#D9692C</span></span></div>
+          <div class="chip"><span class="sw" style="background:#ADA189"></span><span class="meta"><span class="role">빈방</span><span class="hex">#ADA189</span></span></div>
+        </div>
+
+        <div class="section-label">룸 상태 카드</div>
+        <div class="rooms">
+          <div class="room">
+            <div class="topline"><span class="rname">101 호실</span><span class="badge" style="background:#4F7E5B;color:#fff;">사용중</span></div>
+            <div class="course">A코스 60분</div><div class="staff">담당 · 이수진</div>
+            <div class="timeline"><span class="left">남은 12분</span><span class="right">종료예정 23:40</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">102 호실</span><span class="badge" style="background:#5B7E9A;color:#fff;">예약</span></div>
+            <div class="course">B코스 70분</div><div class="staff">담당 · 박지민</div>
+            <div class="timeline"><span class="left">시작 24:10</span><span class="right">예약 확정</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">201 호실</span><span class="badge" style="background:#BE914A;color:#fff;">청소중</span></div>
+            <div class="course">직전 C코스 80분</div><div class="staff">정리 · 최은영</div>
+            <div class="timeline"><span class="left">청소 4분째</span><span class="right">곧 빈방</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">301 호실</span><span class="badge" style="background:#D9692C;color:#fff;">종료확인</span></div>
+            <div class="course">D코스 90분</div><div class="staff">담당 · 김민재 · 한소희</div>
+            <div class="timeline"><span class="left">시간 종료</span><span class="right">확인 필요</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">402 호실</span><span class="badge" style="background:#ADA189;color:#fff;">빈방</span></div>
+            <div class="course">대기중</div><div class="staff">담당 · 미배정</div>
+            <div class="timeline"><span class="left">즉시 가능</span><span class="right">—</span></div>
+          </div>
+        </div>
+
+        <div class="calls">
+          <span class="lbl">콜 상태</span>
+          <span class="callchip" style="background:#E1ECE2;color:#3a6044;"><span class="dot"></span>방문완료</span>
+          <span class="callchip" style="background:#F2DFDA;color:#90382a;"><span class="dot"></span>노쇼</span>
+          <span class="callchip" style="background:#EAE2D4;color:#736654;"><span class="dot"></span>취소</span>
+        </div>
+
+        <div class="dangernote" style="background:#F4DED9;color:#8c3526;border:1px solid #E5BCB2;">
+          <span class="x" style="background:#B24A38;">!</span>D코스는 마사지사 2명이 필요합니다. 마사지사2를 배정하세요.
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ====================================================================
+         THEME 4 — "허니 브라이트" (Honey Bright) — bright modern-warm
+         --------------------------------------------------------------------
+         brand-primary  : #E0A92E   bright honey-amber
+         brand-secondary: #F0C75A   sunny yellow-gold
+         background     : #FFFBF2   crisp warm white
+         surface/card   : #FFFFFF   pure white
+         border         : #F2E4C6   light honey line
+         text-primary   : #34302A   near-black warm
+         text-muted     : #9A8B6E   soft amber-grey
+         danger         : #E14338   bright coral-red
+         ROOM STATES:
+           사용중   : #12B07A  bright teal-green (active / money)
+           예약     : #3B82F6  modern blue
+           청소중   : #F0B429  bright amber
+           종료확인 : #FF6A1A  vivid orange (ATTENTION pop)
+           빈방     : #C2B79C  light greige (recessive)
+         CALL STATES:
+           방문완료 : #12B07A  teal-green success
+           노쇼     : #E14338  coral-red
+           취소     : #9A8B6E  soft amber-grey
+         ==================================================================== -->
+    <section class="theme" style="
+        --bg:#FFFBF2; --brand:#E0A92E; --brand2:#F0C75A; --on-brand:#5a4410;
+        --surface:#FFFFFF; --border:#F2E4C6; --text:#34302A; --muted:#9A8B6E;">
+      <div class="theme__head">
+        <h2>④ 허니 브라이트 <span style="font-size:13px;font-weight:500;opacity:.85;">Honey Bright</span></h2>
+        <p class="register">밝고 모던한 웜 — 맑은 화이트 위 꿀빛 앰버. 젊고 경쾌하면서도 정돈된 인상.</p>
+      </div>
+      <div class="theme__body">
+        <div class="section-label">시맨틱 토큰</div>
+        <div class="chips">
+          <div class="chip"><span class="sw" style="background:#E0A92E"></span><span class="meta"><span class="role">brand</span><span class="hex">#E0A92E</span></span></div>
+          <div class="chip"><span class="sw" style="background:#FFFBF2"></span><span class="meta"><span class="role">background</span><span class="hex">#FFFBF2</span></span></div>
+          <div class="chip"><span class="sw" style="background:#FFFFFF"></span><span class="meta"><span class="role">surface</span><span class="hex">#FFFFFF</span></span></div>
+          <div class="chip"><span class="sw" style="background:#F2E4C6"></span><span class="meta"><span class="role">border</span><span class="hex">#F2E4C6</span></span></div>
+          <div class="chip"><span class="sw" style="background:#34302A"></span><span class="meta"><span class="role">text</span><span class="hex">#34302A</span></span></div>
+          <div class="chip"><span class="sw" style="background:#9A8B6E"></span><span class="meta"><span class="role">text-muted</span><span class="hex">#9A8B6E</span></span></div>
+          <div class="chip"><span class="sw" style="background:#E14338"></span><span class="meta"><span class="role">danger</span><span class="hex">#E14338</span></span></div>
+          <div class="chip"><span class="sw" style="background:#12B07A"></span><span class="meta"><span class="role">사용중</span><span class="hex">#12B07A</span></span></div>
+          <div class="chip"><span class="sw" style="background:#3B82F6"></span><span class="meta"><span class="role">예약</span><span class="hex">#3B82F6</span></span></div>
+          <div class="chip"><span class="sw" style="background:#F0B429"></span><span class="meta"><span class="role">청소중</span><span class="hex">#F0B429</span></span></div>
+          <div class="chip"><span class="sw" style="background:#FF6A1A"></span><span class="meta"><span class="role">종료확인</span><span class="hex">#FF6A1A</span></span></div>
+          <div class="chip"><span class="sw" style="background:#C2B79C"></span><span class="meta"><span class="role">빈방</span><span class="hex">#C2B79C</span></span></div>
+        </div>
+
+        <div class="section-label">룸 상태 카드</div>
+        <div class="rooms">
+          <div class="room">
+            <div class="topline"><span class="rname">101 호실</span><span class="badge" style="background:#12B07A;color:#fff;">사용중</span></div>
+            <div class="course">A코스 60분</div><div class="staff">담당 · 이수진</div>
+            <div class="timeline"><span class="left">남은 12분</span><span class="right">종료예정 23:40</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">102 호실</span><span class="badge" style="background:#3B82F6;color:#fff;">예약</span></div>
+            <div class="course">B코스 70분</div><div class="staff">담당 · 박지민</div>
+            <div class="timeline"><span class="left">시작 24:10</span><span class="right">예약 확정</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">201 호실</span><span class="badge" style="background:#F0B429;color:#34302A;">청소중</span></div>
+            <div class="course">직전 C코스 80분</div><div class="staff">정리 · 최은영</div>
+            <div class="timeline"><span class="left">청소 4분째</span><span class="right">곧 빈방</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">301 호실</span><span class="badge" style="background:#FF6A1A;color:#fff;">종료확인</span></div>
+            <div class="course">D코스 90분</div><div class="staff">담당 · 김민재 · 한소희</div>
+            <div class="timeline"><span class="left">시간 종료</span><span class="right">확인 필요</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">402 호실</span><span class="badge" style="background:#C2B79C;color:#fff;">빈방</span></div>
+            <div class="course">대기중</div><div class="staff">담당 · 미배정</div>
+            <div class="timeline"><span class="left">즉시 가능</span><span class="right">—</span></div>
+          </div>
+        </div>
+
+        <div class="calls">
+          <span class="lbl">콜 상태</span>
+          <span class="callchip" style="background:#D6F4E9;color:#0a7a55;"><span class="dot"></span>방문완료</span>
+          <span class="callchip" style="background:#FBDDDA;color:#b32a21;"><span class="dot"></span>노쇼</span>
+          <span class="callchip" style="background:#EFE8D9;color:#7e7158;"><span class="dot"></span>취소</span>
+        </div>
+
+        <div class="dangernote" style="background:#FCE0DD;color:#b02b21;border:1px solid #F4B6B0;">
+          <span class="x" style="background:#E14338;">!</span>D코스는 마사지사 2명이 필요합니다. 마사지사2를 배정하세요.
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ====================================================================
+         THEME 5 — "딥 앰버 럭스" (Deep Amber Luxe) — deep-luxe amber
+         --------------------------------------------------------------------
+         brand-primary  : #9C6A1A   deep mahogany-amber
+         brand-secondary: #6E4A14   dark cognac
+         background     : #F3EADB   deep warm sand
+         surface/card   : #FBF4E8   toasted ivory
+         border         : #DBC8A6   amber-bronze line
+         text-primary   : #2E2614   dark espresso
+         text-muted     : #806B45   antique bronze
+         danger         : #B33A2B   deep brick-red
+         ROOM STATES:
+           사용중   : #0E7C57  deep emerald (active / money)
+           예약     : #2A5E96  deep teal-blue
+           청소중   : #C58A24  bronze-gold
+           종료확인 : #E2561B  deep blaze orange (ATTENTION pop)
+           빈방     : #A2906C  antique bronze-grey (recessive)
+         CALL STATES:
+           방문완료 : #0E7C57  emerald success
+           노쇼     : #B33A2B  brick-red
+           취소     : #806B45  antique bronze
+         ==================================================================== -->
+    <section class="theme" style="
+        --bg:#F3EADB; --brand:#9C6A1A; --brand2:#6E4A14; --on-brand:#fff;
+        --surface:#FBF4E8; --border:#DBC8A6; --text:#2E2614; --muted:#806B45;">
+      <div class="theme__head">
+        <h2>⑤ 딥 앰버 럭스 <span style="font-size:13px;font-weight:500;opacity:.85;">Deep Amber Luxe</span></h2>
+        <p class="register">깊고 진한 앰버 — 마호가니·코냑의 무게감. 프리미엄 멤버십 라운지의 농밀함.</p>
+      </div>
+      <div class="theme__body">
+        <div class="section-label">시맨틱 토큰</div>
+        <div class="chips">
+          <div class="chip"><span class="sw" style="background:#9C6A1A"></span><span class="meta"><span class="role">brand</span><span class="hex">#9C6A1A</span></span></div>
+          <div class="chip"><span class="sw" style="background:#F3EADB"></span><span class="meta"><span class="role">background</span><span class="hex">#F3EADB</span></span></div>
+          <div class="chip"><span class="sw" style="background:#FBF4E8"></span><span class="meta"><span class="role">surface</span><span class="hex">#FBF4E8</span></span></div>
+          <div class="chip"><span class="sw" style="background:#DBC8A6"></span><span class="meta"><span class="role">border</span><span class="hex">#DBC8A6</span></span></div>
+          <div class="chip"><span class="sw" style="background:#2E2614"></span><span class="meta"><span class="role">text</span><span class="hex">#2E2614</span></span></div>
+          <div class="chip"><span class="sw" style="background:#806B45"></span><span class="meta"><span class="role">text-muted</span><span class="hex">#806B45</span></span></div>
+          <div class="chip"><span class="sw" style="background:#B33A2B"></span><span class="meta"><span class="role">danger</span><span class="hex">#B33A2B</span></span></div>
+          <div class="chip"><span class="sw" style="background:#0E7C57"></span><span class="meta"><span class="role">사용중</span><span class="hex">#0E7C57</span></span></div>
+          <div class="chip"><span class="sw" style="background:#2A5E96"></span><span class="meta"><span class="role">예약</span><span class="hex">#2A5E96</span></span></div>
+          <div class="chip"><span class="sw" style="background:#C58A24"></span><span class="meta"><span class="role">청소중</span><span class="hex">#C58A24</span></span></div>
+          <div class="chip"><span class="sw" style="background:#E2561B"></span><span class="meta"><span class="role">종료확인</span><span class="hex">#E2561B</span></span></div>
+          <div class="chip"><span class="sw" style="background:#A2906C"></span><span class="meta"><span class="role">빈방</span><span class="hex">#A2906C</span></span></div>
+        </div>
+
+        <div class="section-label">룸 상태 카드</div>
+        <div class="rooms">
+          <div class="room">
+            <div class="topline"><span class="rname">101 호실</span><span class="badge" style="background:#0E7C57;color:#fff;">사용중</span></div>
+            <div class="course">A코스 60분</div><div class="staff">담당 · 이수진</div>
+            <div class="timeline"><span class="left">남은 12분</span><span class="right">종료예정 23:40</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">102 호실</span><span class="badge" style="background:#2A5E96;color:#fff;">예약</span></div>
+            <div class="course">B코스 70분</div><div class="staff">담당 · 박지민</div>
+            <div class="timeline"><span class="left">시작 24:10</span><span class="right">예약 확정</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">201 호실</span><span class="badge" style="background:#C58A24;color:#fff;">청소중</span></div>
+            <div class="course">직전 C코스 80분</div><div class="staff">정리 · 최은영</div>
+            <div class="timeline"><span class="left">청소 4분째</span><span class="right">곧 빈방</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">301 호실</span><span class="badge" style="background:#E2561B;color:#fff;">종료확인</span></div>
+            <div class="course">D코스 90분</div><div class="staff">담당 · 김민재 · 한소희</div>
+            <div class="timeline"><span class="left">시간 종료</span><span class="right">확인 필요</span></div>
+          </div>
+          <div class="room">
+            <div class="topline"><span class="rname">402 호실</span><span class="badge" style="background:#A2906C;color:#fff;">빈방</span></div>
+            <div class="course">대기중</div><div class="staff">담당 · 미배정</div>
+            <div class="timeline"><span class="left">즉시 가능</span><span class="right">—</span></div>
+          </div>
+        </div>
+
+        <div class="calls">
+          <span class="lbl">콜 상태</span>
+          <span class="callchip" style="background:#D7EDE3;color:#0a6044;"><span class="dot"></span>방문완료</span>
+          <span class="callchip" style="background:#F1DAD6;color:#8f2c20;"><span class="dot"></span>노쇼</span>
+          <span class="callchip" style="background:#EAE0CD;color:#6c5a3a;"><span class="dot"></span>취소</span>
+        </div>
+
+        <div class="dangernote" style="background:#F2DAD5;color:#8c2c1f;border:1px solid #E3B3AA;">
+          <span class="x" style="background:#B33A2B;">!</span>D코스는 마사지사 2명이 필요합니다. 마사지사2를 배정하세요.
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+</body>
+</html>

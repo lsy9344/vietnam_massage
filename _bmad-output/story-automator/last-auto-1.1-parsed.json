@@ -1,0 +1,2 @@
+{"status":"error","reason":"output file not found or empty"}
+{"next_action":"retry","confidence":0,"error_class":"parse_failed","reasons":["parse-output failed"]}

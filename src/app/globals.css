@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--text);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-danger: var(--danger);
+  --color-readonly: var(--readonly);
+  --color-brand: var(--brand);
+  --color-brand-secondary: var(--brand-secondary);
+  --color-status-active: var(--status-active);
+  --color-status-active-foreground: var(--status-active-foreground);
+  --color-status-reserved: var(--status-reserved);
+  --color-status-reserved-foreground: var(--status-reserved-foreground);
+  --color-status-cleaning: var(--status-cleaning);
+  --color-status-cleaning-foreground: var(--status-cleaning-foreground);
+  --color-status-complete-check: var(--status-complete-check);
+  --color-status-complete-check-foreground: var(--status-complete-check-foreground);
+  --color-status-complete-check-glow: var(--status-complete-check-glow);
+  --color-status-empty: var(--status-empty);
+  --color-status-empty-foreground: var(--status-empty-foreground);
+  --font-sans: var(--font-geist-sans);
+}
+
+:root {
+  --brand: #B57E12;
+  --brand-secondary: #D9A526;
+  --background: #FBF3E1;
+  --surface: #FFFCF4;
+  --text: #3D3115;
+  --border: #EAD7AE;
+  --muted: #6E5E38;
+  --muted-line: #B3A37D;
+  --danger: #C8392B;
+  --readonly: #F4EAD2;
+  --status-active: #0E7549;
+  --status-active-foreground: #FFFFFF;
+  --status-reserved: #2F6FD0;
+  --status-reserved-foreground: #FFFFFF;
+  --status-cleaning: #D9A526;
+  --status-cleaning-foreground: #3D3115;
+  --status-complete-check: #D2440E;
+  --status-complete-check-glow: #F25C1F;
+  --status-complete-check-foreground: #FFFFFF;
+  --status-empty: #B3A37D;
+  --status-empty-foreground: #3D3115;
+  --radius: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-width: 1280px;
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--text);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.erp-shell {
+  display: grid;
+  grid-template-columns: 260px minmax(1020px, 1fr);
+  min-height: 100vh;
+}
+
+.status-attention {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-complete-check-glow) 24%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .status-attention {
+    box-shadow: 0 0 0 2px var(--status-complete-check-glow);
+  }
+}
