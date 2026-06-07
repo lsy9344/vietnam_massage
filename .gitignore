@@ -1,0 +1,12 @@
+.DS_Store
+
+# Local agent/runtime caches
+.agents/
+.claude/
+.codegraph/
+
+# Common generated files
+node_modules/
+__pycache__/
+*.pyc
+
