@@ -8,7 +8,7 @@ Owns the reservation and service-call ledger.
 - `ServiceCallAssignment` stores 담당자 columns as normalized rows with stable roles: `THERAPIST_1`, `THERAPIST_2`, `EARCARE`.
 - `listServiceCallsForDate()` returns one selected operating-month/date ledger, ordered by Story 1.6 time-slot sort order and creation order.
 - `saveBasicServiceCallRow()` validates active masters, operating-month date range, locked-month blocking, stable code values, and writes the call row plus assignments in one transaction.
-- Payment, commission, earcare pool, and call-credit fields stay `null` display placeholders until Story 2.3.
+- Story 2.3 replaces the former payment, commission, earcare pool, and call-credit placeholders with server-derived readonly values.
 
 ## Story 2.2 Scope
 
@@ -16,6 +16,16 @@ Owns the reservation and service-call ledger.
 - row autosave uses the `idle`, `saving`, `saved`, and `error` state model and displays Korean row states: `저장중`, `저장됨`, and `저장 보류`.
 - Status changes record `service_call.status_changed`; sensitive row changes record `service_call.row_changed`.
 - Autosave retry must preserve the local draft instead of replacing failed input with the last server value.
+
+## Story 2.3 Scope
+
+- Completed-call calculation runs in the calls domain service, not in UI 계산 code.
+- Only completed rows calculate money, pool, and recognized-call values. The service accepts both the legacy Korean value `방문완료` and the Story 1.6 stable code `VISIT_COMPLETE`; non-completed rows return a `not_completed` calculation status and are excluded from downstream totals.
+- Discount is `0` when `discountTypeCode` is empty and fixed `100,000` VND when any discount type is selected.
+- Calculation source of truth is `CoursePolicy.basePrice`, `CoursePolicy.earcarePoolAmount`, `CoursePolicy.opsCallCredit`, and `TherapistCourseRate.amount` for the selected operating month.
+- Missing course policy or therapist rate is represented by an explicit calculation status and Korean error message rather than silently using zero.
+- `listCompletedServiceCallCalculationsForDate()` exposes only calculated completed rows for settlement/dashboard handoff, including separate `THERAPIST_1` and `THERAPIST_2` assignment records.
+- Calls do not add derived amount columns before monthly close snapshots; amounts are DTO/domain outputs.
 
 ## Includes
 
@@ -42,4 +52,4 @@ Owns the reservation and service-call ledger.
 - room display layout
 - attendance input
 - monthly close locking
-- payment, payout, earcare pool, and recognized-call calculations before Story 2.3
+- monthly-close snapshot persistence for derived amount columns

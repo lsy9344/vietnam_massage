@@ -39,6 +39,24 @@ type CoursePolicyRecord = {
   id: string;
   courseId: string;
   name: string;
+  durationMinutes: number;
+  basePrice: number;
+  opsCallCredit: number;
+  earcarePoolAmount: number;
+  requiresSecondTherapist: boolean;
+  tvDisplayName: string;
+  effectiveFromMonth: string;
+  effectiveToMonth: string | null;
+  isActive: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+};
+
+type TherapistCourseRateRecord = {
+  id: string;
+  therapistId: string;
+  courseId: string;
+  amount: number;
   effectiveFromMonth: string;
   effectiveToMonth: string | null;
   isActive: boolean;
@@ -122,6 +140,9 @@ type ServiceCallPrismaClient = {
   coursePolicy: {
     findMany(args?: unknown): Promise<CoursePolicyRecord[]>;
   };
+  therapistCourseRate: {
+    findMany(args?: unknown): Promise<TherapistCourseRateRecord[]>;
+  };
   employee: {
     findUnique(args: unknown): Promise<EmployeeRecord | null>;
     findMany(args?: unknown): Promise<EmployeeRecord[]>;
@@ -162,6 +183,8 @@ export type ServiceCallAssigneeDto = {
   staffCode: string;
 };
 
+export type ServiceCallCalculationStatus = "not_completed" | "calculated" | "course_policy_missing" | "therapist_rate_missing";
+
 export type ServiceCallRowDto = {
   id: string;
   operatingMonthId: string;
@@ -180,14 +203,33 @@ export type ServiceCallRowDto = {
   paymentMethodCode: string | null;
   note: string | null;
   confirmationCode: string | null;
-  paymentAmount: null;
-  therapist1Commission: null;
-  therapist2Commission: null;
-  earcarePoolAmount: null;
-  opsCallCredit: null;
+  paymentAmount: number;
+  discountAmount: number;
+  therapist1Commission: number;
+  therapist2Commission: number;
+  earcarePoolAmount: number;
+  opsCallCredit: number;
+  calculationStatus: ServiceCallCalculationStatus;
+  calculationErrorCode: string | null;
+  calculationErrorMessage: string | null;
   createdAt: string;
   updatedAt: string;
   savedAt: string;
+};
+
+export type CompletedServiceCallCalculationDto = {
+  serviceCallId: string;
+  serviceDate: string;
+  courseId: string;
+  paymentAmount: number;
+  discountAmount: number;
+  earcarePoolAmount: number;
+  opsCallCredit: number;
+  therapistAssignments: Array<{
+    role: "THERAPIST_1" | "THERAPIST_2";
+    employeeId: string;
+    commissionAmount: number;
+  }>;
 };
 
 export type ServiceCallStatusHistoryDto = {
@@ -222,6 +264,10 @@ export class ServiceCallDomainError extends Error {
     super(message);
     this.name = "ServiceCallDomainError";
   }
+}
+
+function isCompletedServiceCallStatus(status: string) {
+  return status === "방문완료" || status === "VISIT_COMPLETE";
 }
 
 function getClient(client?: ServiceCallPrismaClient) {
@@ -267,6 +313,121 @@ function firstCurrentPolicy(course: CourseRecord, monthKey: string) {
     .sort((a, b) => b.effectiveFromMonth.localeCompare(a.effectiveFromMonth))[0];
 }
 
+function firstCurrentRate(rates: TherapistCourseRateRecord[], monthKey: string) {
+  return [...rates]
+    .filter((rate) => effectiveForMonth(rate, monthKey))
+    .sort((a, b) => b.effectiveFromMonth.localeCompare(a.effectiveFromMonth))[0];
+}
+
+function emptyCalculation(status: ServiceCallCalculationStatus, error?: { code: string; message: string }) {
+  return {
+    paymentAmount: 0,
+    discountAmount: 0,
+    therapist1Commission: 0,
+    therapist2Commission: 0,
+    earcarePoolAmount: 0,
+    opsCallCredit: 0,
+    calculationStatus: status,
+    calculationErrorCode: error?.code ?? null,
+    calculationErrorMessage: error?.message ?? null
+  };
+}
+
+async function findCoursePolicyForCalculation(tx: ServiceCallPrismaClient, record: ServiceCallRecord, monthKey: string) {
+  const includedPolicy = record.course ? firstCurrentPolicy(record.course, monthKey) : null;
+  if (includedPolicy) {
+    return includedPolicy;
+  }
+
+  const policies = await tx.coursePolicy.findMany({ where: { courseId: record.courseId, isActive: true } });
+  return [...policies]
+    .filter((policy) => effectiveForMonth(policy, monthKey))
+    .sort((a, b) => b.effectiveFromMonth.localeCompare(a.effectiveFromMonth))[0] ?? null;
+}
+
+async function findTherapistCourseRateForCalculation(
+  tx: ServiceCallPrismaClient,
+  input: { therapistId: string; courseId: string; monthKey: string }
+) {
+  const rates = await tx.therapistCourseRate.findMany({
+    where: { therapistId: input.therapistId, courseId: input.courseId, isActive: true }
+  });
+  return firstCurrentRate(rates, input.monthKey) ?? null;
+}
+
+async function calculateServiceCallCompletion(tx: ServiceCallPrismaClient, record: ServiceCallRecord) {
+  if (!isCompletedServiceCallStatus(record.status)) {
+    return emptyCalculation("not_completed");
+  }
+
+  const monthKey = record.operatingMonth?.monthKey;
+  if (!monthKey) {
+    return emptyCalculation("course_policy_missing", {
+      code: "OPERATING_MONTH_NOT_FOUND",
+      message: "운영월을 찾을 수 없어 계산할 수 없습니다."
+    });
+  }
+
+  const policy = await findCoursePolicyForCalculation(tx, record, monthKey);
+  if (!policy) {
+    return emptyCalculation("course_policy_missing", {
+      code: "COURSE_POLICY_NOT_FOUND",
+      message: "선택 운영월에 적용되는 코스 정책이 없습니다."
+    });
+  }
+
+  const discountAmount = record.discountTypeCode === null ? 0 : 100000;
+  const baseCalculation = {
+    paymentAmount: Math.max(policy.basePrice - discountAmount, 0),
+    discountAmount,
+    therapist1Commission: 0,
+    therapist2Commission: 0,
+    earcarePoolAmount: policy.earcarePoolAmount,
+    opsCallCredit: policy.opsCallCredit,
+    calculationStatus: "calculated" as ServiceCallCalculationStatus,
+    calculationErrorCode: null,
+    calculationErrorMessage: null
+  };
+  const therapist1 = assignmentByRole(record, "THERAPIST_1");
+  const therapist2 = assignmentByRole(record, "THERAPIST_2");
+
+  if (therapist1) {
+    const rate = await findTherapistCourseRateForCalculation(tx, {
+      therapistId: therapist1.employeeId,
+      courseId: record.courseId,
+      monthKey
+    });
+    if (!rate) {
+      return {
+        ...baseCalculation,
+        calculationStatus: "therapist_rate_missing" as ServiceCallCalculationStatus,
+        calculationErrorCode: "THERAPIST_RATE_NOT_FOUND",
+        calculationErrorMessage: "마사지사1 수당 정책을 찾을 수 없습니다."
+      };
+    }
+    baseCalculation.therapist1Commission = rate.amount;
+  }
+
+  if (therapist2) {
+    const rate = await findTherapistCourseRateForCalculation(tx, {
+      therapistId: therapist2.employeeId,
+      courseId: record.courseId,
+      monthKey
+    });
+    if (!rate) {
+      return {
+        ...baseCalculation,
+        calculationStatus: "therapist_rate_missing" as ServiceCallCalculationStatus,
+        calculationErrorCode: "THERAPIST_RATE_NOT_FOUND",
+        calculationErrorMessage: "마사지사2 수당 정책을 찾을 수 없습니다."
+      };
+    }
+    baseCalculation.therapist2Commission = rate.amount;
+  }
+
+  return baseCalculation;
+}
+
 function toAssigneeDto(record: EmployeeRecord): ServiceCallAssigneeDto {
   return {
     id: record.id,
@@ -282,13 +443,14 @@ function assignmentByRole(record: ServiceCallRecord, role: ServiceCallAssignment
   });
 }
 
-function toRowDto(record: ServiceCallRecord): ServiceCallRowDto {
+async function toRowDto(tx: ServiceCallPrismaClient, record: ServiceCallRecord): Promise<ServiceCallRowDto> {
   const operatingMonth = record.operatingMonth;
   const course = record.course;
   const policy = operatingMonth && course ? firstCurrentPolicy(course, operatingMonth.monthKey) : null;
   const therapist1 = assignmentByRole(record, "THERAPIST_1")?.employee ?? null;
   const therapist2 = assignmentByRole(record, "THERAPIST_2")?.employee ?? null;
   const earcare = assignmentByRole(record, "EARCARE")?.employee ?? null;
+  const calculation = await calculateServiceCallCompletion(tx, record);
 
   return {
     id: record.id,
@@ -308,11 +470,7 @@ function toRowDto(record: ServiceCallRecord): ServiceCallRowDto {
     paymentMethodCode: record.paymentMethodCode,
     note: record.note,
     confirmationCode: record.confirmationCode,
-    paymentAmount: null,
-    therapist1Commission: null,
-    therapist2Commission: null,
-    earcarePoolAmount: null,
-    opsCallCredit: null,
+    ...calculation,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
     savedAt: record.updatedAt.toISOString()
@@ -534,13 +692,15 @@ export async function listServiceCallsForDate(input: {
   ]);
   const sortOrderByTime = new Map(timeSlots.map((slot) => [slot.value, slot.sortOrder]));
 
-  return records
-    .sort((a, b) => {
-      const leftOrder = sortOrderByTime.get(a.startTime) ?? 9999;
-      const rightOrder = sortOrderByTime.get(b.startTime) ?? 9999;
-      return leftOrder - rightOrder || a.createdAt.getTime() - b.createdAt.getTime();
-    })
-    .map(toRowDto);
+  return Promise.all(
+    records
+      .sort((a, b) => {
+        const leftOrder = sortOrderByTime.get(a.startTime) ?? 9999;
+        const rightOrder = sortOrderByTime.get(b.startTime) ?? 9999;
+        return leftOrder - rightOrder || a.createdAt.getTime() - b.createdAt.getTime();
+      })
+      .map((record) => toRowDto(client, record))
+  );
 }
 
 export async function saveBasicServiceCallRow(input: ServiceCallInput & { prismaClient?: ServiceCallPrismaClient }) {
@@ -616,7 +776,7 @@ export async function saveBasicServiceCallRow(input: ServiceCallInput & { prisma
       })
     ]);
 
-    return toRowDto(await findServiceCallWithRelations(tx, serviceCall.id));
+    return toRowDto(tx, await findServiceCallWithRelations(tx, serviceCall.id));
   });
 }
 
@@ -735,8 +895,48 @@ export async function autosaveServiceCallRow(
       );
     }
 
-    return toRowDto(after);
+    return toRowDto(tx, after);
   });
+}
+
+export async function listCompletedServiceCallCalculationsForDate(input: {
+  operatingMonthId: string;
+  serviceDate: string;
+  prismaClient?: ServiceCallPrismaClient;
+}): Promise<CompletedServiceCallCalculationDto[]> {
+  const rows = await listServiceCallsForDate(input);
+
+  return rows
+    .filter((row) => row.calculationStatus === "calculated")
+    .map((row) => ({
+      serviceCallId: row.id,
+      serviceDate: row.serviceDate,
+      courseId: row.courseId,
+      paymentAmount: row.paymentAmount,
+      discountAmount: row.discountAmount,
+      earcarePoolAmount: row.earcarePoolAmount,
+      opsCallCredit: row.opsCallCredit,
+      therapistAssignments: [
+        ...(row.therapist1
+          ? [
+              {
+                role: "THERAPIST_1" as const,
+                employeeId: row.therapist1.id,
+                commissionAmount: row.therapist1Commission
+              }
+            ]
+          : []),
+        ...(row.therapist2
+          ? [
+              {
+                role: "THERAPIST_2" as const,
+                employeeId: row.therapist2.id,
+                commissionAmount: row.therapist2Commission
+              }
+            ]
+          : [])
+      ]
+    }));
 }
 
 export async function listServiceCallStatusHistory(

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   autosaveServiceCallRow,
+  listCompletedServiceCallCalculationsForDate,
   listServiceCallStatusHistory,
   listServiceCallFormOptions,
   listServiceCallsForDate,
@@ -43,7 +44,8 @@ function createMemoryPrisma() {
     ["room-off", { id: "room-off", displayName: "비활성 호실", sortOrder: 20, isActive: false, createdAt: new Date("2026-06-01T00:01:00.000Z") }]
   ]);
   const courses = new Map<string, any>([
-    ["course-a", { id: "course-a", code: "A", isActive: true, createdAt: new Date("2026-06-01T00:00:00.000Z") }]
+    ["course-a", { id: "course-a", code: "A", isActive: true, createdAt: new Date("2026-06-01T00:00:00.000Z") }],
+    ["course-missing-rate", { id: "course-missing-rate", code: "B", isActive: true, createdAt: new Date("2026-06-01T00:00:00.000Z") }]
   ]);
   const coursePolicies = new Map<string, any>([
     [
@@ -52,9 +54,66 @@ function createMemoryPrisma() {
         id: "policy-a",
         courseId: "course-a",
         name: "A 누루60",
+        durationMinutes: 60,
+        basePrice: 1500000,
+        opsCallCredit: 1,
+        earcarePoolAmount: 100000,
+        requiresSecondTherapist: false,
+        tvDisplayName: "A60",
         effectiveFromMonth: "2026-06",
         effectiveToMonth: null,
-        isActive: true
+        isActive: true,
+        createdAt: new Date("2026-06-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-06-01T00:00:00.000Z")
+      }
+    ],
+    [
+      "policy-missing-rate",
+      {
+        id: "policy-missing-rate",
+        courseId: "course-missing-rate",
+        name: "B 귀청소90",
+        durationMinutes: 90,
+        basePrice: 1800000,
+        opsCallCredit: 1,
+        earcarePoolAmount: 200000,
+        requiresSecondTherapist: false,
+        tvDisplayName: "B90",
+        effectiveFromMonth: "2026-06",
+        effectiveToMonth: null,
+        isActive: true,
+        createdAt: new Date("2026-06-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-06-01T00:00:00.000Z")
+      }
+    ]
+  ]);
+  const therapistCourseRates = new Map<string, any>([
+    [
+      "rate-therapist-1-a",
+      {
+        id: "rate-therapist-1-a",
+        therapistId: "therapist-1",
+        courseId: "course-a",
+        amount: 700000,
+        effectiveFromMonth: "2026-06",
+        effectiveToMonth: null,
+        isActive: true,
+        createdAt: new Date("2026-06-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-06-01T00:00:00.000Z")
+      }
+    ],
+    [
+      "rate-therapist-2-a",
+      {
+        id: "rate-therapist-2-a",
+        therapistId: "therapist-2",
+        courseId: "course-a",
+        amount: 0,
+        effectiveFromMonth: "2026-06",
+        effectiveToMonth: null,
+        isActive: true,
+        createdAt: new Date("2026-06-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-06-01T00:00:00.000Z")
       }
     ]
   ]);
@@ -67,9 +126,18 @@ function createMemoryPrisma() {
   const codeItems = new Map<string, any>(
     [
       ["SERVICE_STATUS", "예약", "예약", 10, true],
+      ["SERVICE_STATUS", "방문완료", "방문완료", 20, true],
+      ["SERVICE_STATUS", "사용중", "사용중", 30, true],
+      ["SERVICE_STATUS", "청소중", "청소중", 40, true],
+      ["SERVICE_STATUS", "노쇼", "노쇼", 50, true],
       ["SERVICE_STATUS", "취소", "취소", 60, true],
+      ["SERVICE_STATUS", "RESERVED", "예약", 110, true],
+      ["SERVICE_STATUS", "VISIT_COMPLETE", "방문완료", 120, true],
+      ["SERVICE_STATUS", "CANCELED", "취소", 160, true],
       ["DISCOUNT_TYPE", "생일자", "생일자", 20, true],
+      ["DISCOUNT_TYPE", "BIRTHDAY", "생일자", 120, true],
       ["PAYMENT_METHOD", "현금", "현금", 10, true],
+      ["PAYMENT_METHOD", "CASH", "현금", 110, true],
       ["CONFIRMATION", "Y", "Y", 10, true],
       ["CONFIRMATION", "N", "N", 20, true],
       ["PAYMENT_METHOD", "비활성", "비활성", 99, false]
@@ -141,6 +209,16 @@ function createMemoryPrisma() {
       async findMany({ where }: any = {}) {
         return [...coursePolicies.values()].filter(
           (policy) => (where?.courseId === undefined || policy.courseId === where.courseId) && (where?.isActive === undefined || policy.isActive === where.isActive)
+        );
+      }
+    },
+    therapistCourseRate: {
+      async findMany({ where }: any = {}) {
+        return [...therapistCourseRates.values()].filter(
+          (rate) =>
+            (where?.therapistId === undefined || rate.therapistId === where.therapistId) &&
+            (where?.courseId === undefined || rate.courseId === where.courseId) &&
+            (where?.isActive === undefined || rate.isActive === where.isActive)
         );
       }
     },
@@ -326,7 +404,9 @@ describe("service call service", () => {
     assert.equal(row.therapist1?.id, "therapist-1");
     assert.equal(row.therapist2?.staffCode, "THR-002");
     assert.equal(row.earcare?.id, "earcare-1");
-    assert.equal(row.paymentAmount, null);
+    assert.equal(row.paymentAmount, 0);
+    assert.equal(row.discountAmount, 0);
+    assert.equal(row.calculationStatus, "not_completed");
     assert.equal(prismaClient.assignments.size, 3);
 
     const saved = [...prismaClient.serviceCalls.values()][0];
@@ -334,6 +414,132 @@ describe("service call service", () => {
     assert.equal(saved.courseId, "course-a");
     assert.equal(saved.status, "예약");
     assert.equal(saved.paymentMethodCode, "현금");
+  });
+
+  it("calculates completed-call payment, fixed discount, commissions, earcare pool, and ops call credit from policy sources", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const row = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      therapist2Id: "therapist-2",
+      earcareEmployeeId: "earcare-1",
+      status: "방문완료",
+      discountTypeCode: "생일자",
+      paymentMethodCode: "현금",
+      prismaClient
+    });
+
+    assert.equal(row.calculationStatus, "calculated");
+    assert.equal(row.discountAmount, 100000);
+    assert.equal(row.paymentAmount, 1400000);
+    assert.equal(row.therapist1Commission, 700000);
+    assert.equal(row.therapist2Commission, 0);
+    assert.equal(row.earcarePoolAmount, 100000);
+    assert.equal(row.opsCallCredit, 1);
+  });
+
+  it("calculates completed calls when status is the stable VISIT_COMPLETE code", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const row = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      status: "VISIT_COMPLETE",
+      discountTypeCode: "BIRTHDAY",
+      paymentMethodCode: "CASH",
+      prismaClient
+    });
+
+    assert.equal(row.calculationStatus, "calculated");
+    assert.equal(row.discountAmount, 100000);
+    assert.equal(row.paymentAmount, 1400000);
+    assert.equal(row.therapist1Commission, 700000);
+  });
+
+  it("keeps non-completed statuses out of completed-call calculations", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    for (const status of ["예약", "사용중", "청소중", "노쇼", "취소"]) {
+      const row = await saveBasicServiceCallRow({
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-06-10",
+        startTime: "11:00",
+        roomId: "room-101",
+        courseId: "course-a",
+        therapist1Id: "therapist-1",
+        status,
+        discountTypeCode: "생일자",
+        prismaClient
+      });
+
+      assert.equal(row.calculationStatus, "not_completed");
+      assert.equal(row.paymentAmount, 0);
+      assert.equal(row.therapist1Commission, 0);
+      assert.equal(row.earcarePoolAmount, 0);
+      assert.equal(row.opsCallCredit, 0);
+    }
+
+    const calculations = await listCompletedServiceCallCalculationsForDate({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient
+    });
+    assert.deepEqual(calculations, []);
+  });
+
+  it("uses zero discount when discount type is empty and returns the same calculation on listing", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const saved = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      status: "방문완료",
+      discountTypeCode: null,
+      prismaClient
+    });
+    const rows = await listServiceCallsForDate({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient
+    });
+
+    assert.equal(saved.discountAmount, 0);
+    assert.equal(saved.paymentAmount, 1500000);
+    assert.equal(rows[0].paymentAmount, 1500000);
+    assert.equal(rows[0].therapist1Commission, 700000);
+  });
+
+  it("returns an explicit missing-rate calculation status instead of silently using zero", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const row = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-missing-rate",
+      therapist1Id: "therapist-1",
+      status: "방문완료",
+      prismaClient
+    });
+
+    assert.equal(row.calculationStatus, "therapist_rate_missing");
+    assert.equal(row.calculationErrorCode, "THERAPIST_RATE_NOT_FOUND");
+    assert.equal(row.paymentAmount, 1800000);
+    assert.equal(row.therapist1Commission, 0);
   });
 
   it("orders rows by Story 1.6 time slot sort order instead of lexicographic time", async () => {
@@ -419,7 +625,8 @@ describe("service call service", () => {
 
     assert.deepEqual(options.rooms.map((room) => room.value), ["room-101"]);
     assert.deepEqual(options.courses.map((course) => course.value), ["course-a"]);
-    assert.deepEqual(options.paymentMethods.map((method) => method.value), ["현금"]);
+    assert.ok(options.paymentMethods.some((method) => method.value === "현금"));
+    assert.ok(options.paymentMethods.some((method) => method.value === "CASH"));
     assert.deepEqual(options.therapists.map((therapist) => therapist.value), ["therapist-1", "therapist-2"]);
     assert.deepEqual(options.earcareEmployees.map((employee) => employee.value), ["earcare-1"]);
   });
@@ -464,6 +671,72 @@ describe("service call service", () => {
       changedAt: new Date("2026-06-09T01:00:00.000Z"),
       createdAt: new Date("2026-06-09T01:00:00.000Z")
     });
+  });
+
+  it("autosave from 예약 to 방문완료 immediately returns computed readonly values", async () => {
+    const prismaClient = createMemoryPrisma();
+    const original = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      therapist2Id: "therapist-2",
+      status: "예약",
+      prismaClient
+    });
+
+    const saved = await autosaveServiceCallRow({
+      serviceCallId: original.id,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      therapist2Id: "therapist-2",
+      status: "방문완료",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(saved.calculationStatus, "calculated");
+    assert.equal(saved.paymentAmount, 1500000);
+    assert.equal(saved.therapist1Commission, 700000);
+    assert.equal(saved.therapist2Commission, 0);
+    assert.equal(saved.opsCallCredit, 1);
+  });
+
+  it("completed-call aggregate helper exposes both therapist roles as separate 담당 records", async () => {
+    const prismaClient = createMemoryPrisma();
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      therapist2Id: "therapist-1",
+      earcareEmployeeId: "earcare-1",
+      status: "방문완료",
+      discountTypeCode: "생일자",
+      prismaClient
+    });
+
+    const calculations = await listCompletedServiceCallCalculationsForDate({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient
+    });
+
+    assert.equal(calculations.length, 1);
+    assert.equal(calculations[0].paymentAmount, 1400000);
+    assert.equal(calculations[0].earcarePoolAmount, 100000);
+    assert.deepEqual(calculations[0].therapistAssignments, [
+      { role: "THERAPIST_1", employeeId: "therapist-1", commissionAmount: 700000 },
+      { role: "THERAPIST_2", employeeId: "therapist-1", commissionAmount: 700000 }
+    ]);
   });
 
   it("does not create status history for unchanged status and lists histories by changedAt asc", async () => {

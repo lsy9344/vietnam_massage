@@ -51,7 +51,7 @@ The `/calls` page keeps `operatingMonthId` and `serviceDate` in URL search param
 - confirmation flag
 - notes
 
-Story 2.1 displays payment amount, therapist commissions, earcare pool amount, and recognized call credit as read-only placeholders. The actual calculation contract belongs to Story 2.3.
+Story 2.3 displays payment amount, therapist commissions, earcare pool amount, and recognized call credit as server-derived readonly cells. The UI formats VND values but does not reimplement UI 계산 logic.
 
 ## Story 2.2 Autosave Contract
 
@@ -61,6 +61,17 @@ Story 2.1 displays payment amount, therapist commissions, earcare pool amount, a
 - Status transitions write `service_call.status_changed`; sensitive row changes such as payment method, discount type, assignments, and confirmation write `service_call.row_changed`.
 - Failed autosave keeps the draft on screen and exposes inline retry using the same draft payload.
 - Locked operating months and users without `call:write` are blocked by the Server Action/domain boundary and shown safe Korean errors.
+
+## Story 2.3 Completed-Call Calculation Contract
+
+- `calculateServiceCallCompletion()` is the calls service calculation boundary.
+- Only completed rows calculate payment, commission, `CoursePolicy.earcarePoolAmount`, and `CoursePolicy.opsCallCredit`; the service recognizes both legacy `방문완료` and stable code `VISIT_COMPLETE`. Other statuses are excluded as `not_completed`.
+- Empty discount is `0`; any selected discount type is fixed `100,000` VND.
+- Payment is `CoursePolicy.basePrice - discountAmount`, clamped at zero.
+- Therapist commissions use `TherapistCourseRate.amount` by therapist ID, course ID, and operating month. Massage therapist 1 and 2 are calculated independently.
+- Missing course policy or therapist rate returns an explicit calculation status and Korean error message.
+- `listCompletedServiceCallCalculationsForDate()` returns downstream aggregate inputs for completed rows only and exposes separate `THERAPIST_1` and `THERAPIST_2` assignment records.
+- No derived amount columns are stored on `ServiceCall`; monthly close stories own snapshot persistence.
 
 ## Rules
 

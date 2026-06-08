@@ -64,6 +64,7 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Story 2.2 기준 콜 행 자동저장은 기존 `ServiceCall.id`를 요구하는 row-level mutation이다. UI 저장 상태는 `idle`, `saving`, `saved`, `error`이며 화면 문구는 `저장중`, `저장됨`, `저장 보류`를 사용하고 실패 시 같은 draft payload로 inline retry를 제공한다.
 - Story 2.2 상태 변경 이력은 Prisma `ServiceCallStatusHistory`(`service_call_status_histories`)가 소유한다. 상태가 실제로 바뀔 때만 이전 상태, 새 상태, 변경자 계정 ID, 변경 시각을 저장한다.
 - Story 2.2 콜 autosave 감사 이벤트는 dot notation만 사용한다. 상태 변경은 `service_call.status_changed`, 결제수단/할인구분/담당자/확인값 등 민감 row 변경은 `service_call.row_changed`를 기록한다.
+- Story 2.3 기준 콜 계산은 calls domain service가 소유한다. 완료 상태는 레거시 값 `방문완료`와 Story 1.6 stable code `VISIT_COMPLETE`를 모두 인식하되, 비완료 상태는 `not_completed`로 제외한다. 빈 할인은 0, 선택된 할인구분은 고정 `100,000` VND이며, source of truth는 `CoursePolicy.basePrice`, `CoursePolicy.earcarePoolAmount`, `CoursePolicy.opsCallCredit`, `TherapistCourseRate.amount`다. UI 계산 재구현은 금지하고, autosave 실패 draft는 마지막 성공 계산값을 새 계산처럼 표시하지 않는다. `ServiceCall`에는 월마감 전 derived amount columns를 추가하지 않는다. `listCompletedServiceCallCalculationsForDate()`는 후속 정산/대시보드가 사용할 완료 콜 계산 결과를 반환한다.
 - 콜 저장은 운영월 범위 밖 날짜를 `OPERATING_MONTH_DATE_OUT_OF_RANGE` / `운영월 범위를 벗어난 날짜입니다.`로 차단하고, 운영월 `잠금` 상태는 `OPERATING_MONTH_LOCKED`로 차단한다.
 - `/calls`는 Server Action + domain service 경계로 구현한다. page는 `requireRouteAccess("/calls")`, action은 `requirePermission("call:write")`를 사용하고 `ActionResult<T>`를 반환한다.
 - Story 2.1 그리드는 별도 dependency 없이 semantic HTML table로 구현했다. TanStack Table은 Story 2.6 수준의 셀 편집/키보드/type-ahead 요구가 들어올 때 도입한다.

@@ -91,11 +91,11 @@ for (const required of [
   "listActiveCodeItems",
   "listActiveTimeSlots",
   "$transaction",
-  "paymentAmount: null",
-  "therapist1Commission: null",
-  "therapist2Commission: null",
-  "earcarePoolAmount: null",
-  "opsCallCredit: null"
+  "paymentAmount",
+  "therapist1Commission",
+  "therapist2Commission",
+  "earcarePoolAmount",
+  "opsCallCredit"
 ]) {
   if (!service.includes(required)) errors.push(`service-call-service.ts missing ${required}`);
 }
@@ -132,8 +132,7 @@ for (const required of [
   "이 날짜의 콜이 없습니다",
   "새 콜 행 추가",
   "잠긴 운영월입니다.",
-  "Skeleton",
-  "결제/수당/콜인정 -"
+  "Skeleton"
 ]) {
   if (!page.includes(required)) errors.push(`calls page/grid/loading missing ${required}`);
 }

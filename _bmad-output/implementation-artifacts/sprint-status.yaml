@@ -55,7 +55,7 @@ development_status:
   epic-2: in-progress
   2-1-날짜별-콜-원장-그리드-조회와-기본-입력: done
   2-2-콜-행-자동저장과-상태-변경-이력: done
-  2-3-방문완료-기준-결제-수당-콜인정-계산: backlog
+  2-3-방문완료-기준-결제-수당-콜인정-계산: done
   2-4-d코스-마사지사2-필수-검증: backlog
   2-5-일별-지출-입력과-요약-계산: backlog
   2-6-콜-원장-키보드-입력성과-type-ahead-완성: backlog

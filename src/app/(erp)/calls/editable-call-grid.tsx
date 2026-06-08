@@ -227,6 +227,23 @@ function saveStateClassName(state: RowSaveState) {
   return "text-muted";
 }
 
+function formatVnd(value: number) {
+  return new Intl.NumberFormat("ko-KR").format(value);
+}
+
+function ComputedCell({ label, row, saveStatus, value }: { label: string; row: ServiceCallRowDto; saveStatus: RowSaveState; value: number }) {
+  const isStaleFailedDraft = saveStatus === "error";
+  const displayValue = row.calculationStatus === "calculated" && !isStaleFailedDraft ? formatVnd(value) : "—";
+  return (
+    <td className="border-b border-border bg-readonly px-2 py-2 text-right text-xs font-medium text-foreground [font-variant-numeric:tabular-nums]">
+      <span className="sr-only">{label}</span>
+      <span title={isStaleFailedDraft ? "저장 보류 중인 draft는 재계산값으로 표시하지 않습니다." : row.calculationErrorMessage ?? undefined}>
+        {displayValue}
+      </span>
+    </td>
+  );
+}
+
 function EditableCallRow({
   isLocked,
   options,
@@ -237,6 +254,7 @@ function EditableCallRow({
   row: ServiceCallRowDto;
 }) {
   const [draft, setDraft] = useState<ServiceCallAutosaveInput>(() => draftFromRow(row));
+  const [serverRow, setServerRow] = useState<ServiceCallRowDto>(row);
   const [saveStatus, setSaveStatus] = useState<RowSaveState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState(row.savedAt);
@@ -258,6 +276,7 @@ function EditableCallRow({
         const result = await autosaveServiceCallRowAction(nextDraft);
         if (result.ok) {
           setDraft(draftFromRow(result.data));
+          setServerRow(result.data);
           setSavedAt(result.data.savedAt);
           setSaveStatus("saved");
           return;
@@ -421,9 +440,20 @@ function EditableCallRow({
           value={draft.confirmationCode ?? ""}
         />
       </td>
-      <td className="border-b border-border px-2 py-2 text-xs text-muted">
+      <ComputedCell label="결제금액" row={serverRow} saveStatus={saveStatus} value={serverRow.paymentAmount} />
+      <ComputedCell label="할인" row={serverRow} saveStatus={saveStatus} value={serverRow.discountAmount} />
+      <ComputedCell label="마사지사1수당" row={serverRow} saveStatus={saveStatus} value={serverRow.therapist1Commission} />
+      <ComputedCell label="마사지사2수당" row={serverRow} saveStatus={saveStatus} value={serverRow.therapist2Commission} />
+      <ComputedCell label="귀케어풀" row={serverRow} saveStatus={saveStatus} value={serverRow.earcarePoolAmount} />
+      <ComputedCell label="콜인정" row={serverRow} saveStatus={saveStatus} value={serverRow.opsCallCredit} />
+      <td className="border-b border-border bg-readonly px-2 py-2 text-xs text-foreground">
         <div className="grid min-w-40 gap-1">
-          <span>결제/수당/콜인정 -</span>
+          {saveStatus === "error" ? <span className="text-danger">저장 보류 계산 대기</span> : null}
+          {serverRow.calculationStatus === "calculated" && saveStatus !== "error" ? <span>계산됨</span> : null}
+          {serverRow.calculationStatus === "not_completed" && saveStatus !== "error" ? <span>비완료 제외</span> : null}
+          {(serverRow.calculationStatus === "course_policy_missing" || serverRow.calculationStatus === "therapist_rate_missing") && saveStatus !== "error" ? (
+            <span className="text-danger">{serverRow.calculationErrorMessage ?? "정책 없음"}</span>
+          ) : null}
           <span aria-live="polite" className={saveStateClassName(saveStatus)}>
             {saveStateLabel(saveStatus)}
             {saveStatus === "saved" ? ` ${new Date(savedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}` : ""}
@@ -474,8 +504,8 @@ export function EditableCallGrid({
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1540px] border-collapse text-left text-sm">
-            <thead className="bg-readonly text-xs font-semibold text-muted">
+          <table className="w-full min-w-[2140px] border-collapse text-left text-sm">
+            <thead className="bg-readonly text-xs font-semibold text-foreground">
               <tr>
                 {[
                   "날짜",
@@ -491,7 +521,13 @@ export function EditableCallGrid({
                   "결제수단",
                   "비고",
                   "확인값",
-                  "계산 필드"
+                  "결제금액",
+                  "할인",
+                  "마사지사1수당",
+                  "마사지사2수당",
+                  "귀케어풀",
+                  "콜인정",
+                  "저장상태"
                 ].map((header) => (
                   <th className="border-b border-border px-2 py-2" key={header}>
                     {header}

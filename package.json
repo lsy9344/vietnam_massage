@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "node scripts/validate-story-1-1.mjs && node scripts/validate-story-1-2.mjs && node scripts/validate-story-1-3.mjs && node scripts/validate-story-1-4.mjs && node scripts/validate-story-1-5.mjs && node scripts/validate-story-1-6.mjs && node scripts/validate-story-1-7.mjs && node scripts/validate-story-1-8.mjs && node scripts/validate-story-2-1.mjs && node scripts/validate-story-2-2.mjs",
+    "lint": "node scripts/validate-story-1-1.mjs && node scripts/validate-story-1-2.mjs && node scripts/validate-story-1-3.mjs && node scripts/validate-story-1-4.mjs && node scripts/validate-story-1-5.mjs && node scripts/validate-story-1-6.mjs && node scripts/validate-story-1-7.mjs && node scripts/validate-story-1-8.mjs && node scripts/validate-story-2-1.mjs && node scripts/validate-story-2-2.mjs && node scripts/validate-story-2-3.mjs",
     "test:unit": "node --import tsx --test src/**/*.test.ts",
     "test:e2e": "playwright test"
   },
