@@ -95,12 +95,14 @@ if (!css.includes("@media (prefers-reduced-motion: reduce)")) {
 }
 
 const page = read("src/app/page.tsx");
+const navigation = read("src/lib/navigation.ts");
+const emptyState = read("src/components/domain/erp-empty-state.tsx");
 const sidebarOrder = ["운영 현황", "콜 원장", "정산", "월마감", "대시보드", "마스터 설정", "감사 로그"];
 let previousIndex = -1;
 for (const label of sidebarOrder) {
-  const index = page.indexOf(label);
+  const index = navigation.indexOf(label);
   if (index === -1) {
-    errors.push(`page.tsx missing sidebar label: ${label}`);
+    errors.push(`navigation.ts missing sidebar label: ${label}`);
   }
   if (index !== -1 && index < previousIndex) {
     errors.push(`Sidebar label is out of order: ${label}`);
@@ -109,8 +111,9 @@ for (const label of sidebarOrder) {
 }
 
 for (const prohibited of ["fake", "dummy", "샘플 고객", "가짜"]) {
-  if (page.toLowerCase().includes(prohibited)) {
-    errors.push(`page.tsx contains placeholder-like text: ${prohibited}`);
+  const combined = `${page}\n${navigation}\n${emptyState}`.toLowerCase();
+  if (combined.includes(prohibited)) {
+    errors.push(`app shell contains placeholder-like text: ${prohibited}`);
   }
 }
 

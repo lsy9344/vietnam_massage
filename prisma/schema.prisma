@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model UserAccount {
+  id               String         @id @default(cuid())
+  email            String         @unique
+  accountId        String         @unique @map("account_id")
+  passwordHash     String         @map("password_hash")
+  role             String
+  employeeId       String?        @unique @map("employee_id")
+  employee         Employee?      @relation(fields: [employeeId], references: [id])
+  isActive         Boolean        @default(true) @map("is_active")
+  lockedUntil      DateTime?      @map("locked_until")
+  failedLoginCount Int            @default(0) @map("failed_login_count")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  loginAttempts    LoginAttempt[]
+
+  @@map("user_accounts")
+}
+
+model Employee {
+  id          String       @id @default(cuid())
+  displayName String       @map("display_name")
+  staffCode   String       @unique @map("staff_code")
+  isActive    Boolean      @default(true) @map("is_active")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  account     UserAccount?
+
+  @@map("employees")
+}
+
+model LoginAttempt {
+  id            String       @id @default(cuid())
+  userAccountId String?      @map("user_account_id")
+  userAccount   UserAccount? @relation(fields: [userAccountId], references: [id])
+  identity      String
+  success       Boolean
+  createdAt     DateTime     @default(now()) @map("created_at")
+
+  @@map("login_attempts")
+}

@@ -22,12 +22,20 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - 데이터베이스는 PostgreSQL을 사용한다.
 - ORM과 마이그레이션은 Prisma를 사용한다.
 - 인증은 NextAuth/Auth.js를 사용한다.
+- 직원 계정 로그인은 NextAuth v4 `next-auth@4.24.14` CredentialsProvider 기반이다. Public signup은 제공하지 않고, 직원 계정은 관리자/server-only provisioning 또는 local seed 스크립트로만 만든다.
+- 비밀번호 저장은 `@node-rs/argon2@2.0.2` Argon2id hash만 사용한다. `passwordHash` 외 plaintext 또는 복호화 가능 비밀번호 재료를 DB/fixture/log에 저장하지 않는다.
+- 로그인 실패 잠금 정책은 Story 1.2 기준 5회 실패 후 15분 잠금이다. 로그인 실패 문구는 계정 존재/잠금/비밀번호 오류를 구분하지 않는 한국어 문구로 통일한다.
+- RBAC 역할은 `administrator`, `counter`, `waiter`, `settlement_manager`, `read_only_viewer` 다섯 가지다. 역할별 landing은 관리자 `/live`, 카운터 `/calls`, 정산 담당 `/settlements`, 웨이터 `/rooms`, 조회 전용 `/rooms`이다.
+- Sidebar 그룹 순서는 운영 현황, 콜 원장, 정산, 월마감, 대시보드, 마스터 설정, 감사 로그로 고정한다. 권한 없는 그룹/항목은 disabled가 아니라 렌더링하지 않는다.
+- 권한 없는 direct route 접근은 page/layout/server boundary에서 `requireRouteAccess()`로 차단한다. 지급액, 수당, 마감, 직원 정보 등 민감 action은 `requirePermission()`으로 DB에서 현재 계정 상태와 권한을 재조회해야 한다.
 - 배포/운영은 프로젝트 표준과 같은 배포 방식, 같은 env 규칙, 같은 migration 절차를 따른다.
 - 패키지 매니저 baseline은 `package.json`에 `pnpm@10.12.1`로 기록했다. 현재 로컬에는 `pnpm`/`corepack`이 없어 npm 기반 동등 검증을 사용했다.
 - App Router baseline은 `next@16.2.7`, `react@19.2.7`, `react-dom@19.2.7`, `typescript@5.9.3`이다.
 - Tailwind/shadcn baseline은 `tailwindcss@4.3.0`, `@tailwindcss/postcss@4.3.0`, `shadcn@4.10.0`이다.
-- lint/static validation baseline은 `eslint@9.39.1`, `eslint-config-next@16.2.7`과 story 1.1 전용 `npm run lint` 정적 검증 스크립트다.
+- Prisma 7 기준으로 DB URL은 `prisma.config.ts`에서 관리하고, runtime PrismaClient는 `@prisma/adapter-pg`의 `PrismaPg` adapter를 사용한다.
+- lint/static validation baseline은 `eslint@9.39.1`, `eslint-config-next@16.2.7`과 story 1.1/1.2 정적 검증을 함께 실행하는 `npm run lint` 스크립트다.
 - E2E 테스트 baseline은 Playwright `@playwright/test@1.60.0`이며, 실행 스크립트는 `npm run test:e2e`다.
+- Story 1.2 E2E는 역할별 로그인, landing, sidebar 숨김, direct route 차단을 검증한다. 실행 전 `DATABASE_URL` 설정, Prisma migration/generate, `scripts/seed-dev-accounts.ts` 기반 local 계정 seed가 필요하다.
 - 현재 산출물은 Markdown 문서, 원본 Excel 파일 `sheet.xlsx`, 설계 이미지 PNG, 도메인 모듈 README 스캐폴드로 구성된다.
 - BMad 설정은 `6.8.0` installer 기반이며, 프로젝트명은 `vietnam_massage`, 문서 출력 언어는 Korean이다.
 - 코드 구현을 시작하기 전에는 새로 선택한 기술 스택의 버전 제약, package/config/test 파일, lint/format 규칙을 이 문서에 먼저 반영해야 한다.

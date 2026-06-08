@@ -7,11 +7,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "node scripts/validate-story-1-1.mjs",
+    "lint": "node scripts/validate-story-1-1.mjs && node scripts/validate-story-1-2.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {
     "@auth/prisma-adapter": "2.11.1",
+    "@node-rs/argon2": "2.0.2",
     "@prisma/adapter-pg": "7.8.0",
     "@prisma/client": "7.8.0",
     "class-variance-authority": "0.7.1",
