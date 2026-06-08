@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  autosaveServiceCallRow,
+  listServiceCallStatusHistory,
   listServiceCallFormOptions,
   listServiceCallsForDate,
   saveBasicServiceCallRow,
@@ -82,6 +84,8 @@ function createMemoryPrisma() {
   ]);
   const serviceCalls = new Map<string, any>();
   const assignments = new Map<string, any>();
+  const statusHistories: any[] = [];
+  const auditEvents: any[] = [];
 
   function sortByOrder(records: any[]) {
     return records.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0));
@@ -103,7 +107,7 @@ function createMemoryPrisma() {
         policies: [...coursePolicies.values()].filter((policy) => policy.courseId === call.courseId)
       },
       assignments: [...assignments.values()]
-        .filter((assignment) => assignment.serviceCallId === call.id)
+        .filter((assignment) => assignment.serviceCallId === call.id && assignment.isActive !== false)
         .map((assignment) => ({ ...assignment, employee: employees.get(assignment.employeeId) }))
     };
   }
@@ -212,6 +216,7 @@ function createMemoryPrisma() {
         const record = {
           id: `assignment-${assignments.size + 1}`,
           ...data,
+          isActive: data.isActive ?? true,
           createdAt: new Date("2026-06-09T00:00:00.000Z"),
           updatedAt: new Date("2026-06-09T00:00:00.000Z")
         };
@@ -222,7 +227,8 @@ function createMemoryPrisma() {
         return [...assignments.values()].filter(
           (assignment) =>
             (where?.serviceCallId === undefined || assignment.serviceCallId === where.serviceCallId) &&
-            (where?.assignmentRole === undefined || assignment.assignmentRole === where.assignmentRole)
+            (where?.assignmentRole === undefined || assignment.assignmentRole === where.assignmentRole) &&
+            (where?.isActive === undefined || assignment.isActive === where.isActive)
         );
       },
       async updateMany({ where, data }: any) {
@@ -232,11 +238,46 @@ function createMemoryPrisma() {
         return { count: 1 };
       }
     },
+    serviceCallStatusHistory: {
+      async create({ data }: any) {
+        const record = {
+          id: `history-${statusHistories.length + 1}`,
+          ...data,
+          changedAt: data.changedAt ?? new Date("2026-06-09T01:00:00.000Z"),
+          createdAt: new Date("2026-06-09T01:00:00.000Z")
+        };
+        statusHistories.push(record);
+        return record;
+      },
+      async findMany({ where, orderBy }: any = {}) {
+        const records = statusHistories.filter((history) => where?.serviceCallId === undefined || history.serviceCallId === where.serviceCallId);
+        if (orderBy?.changedAt === "asc") {
+          return records.sort((a, b) => a.changedAt.getTime() - b.changedAt.getTime());
+        }
+        return records;
+      }
+    },
+    auditLog: {
+      async create({ data }: any) {
+        const record = {
+          id: `audit-${auditEvents.length + 1}`,
+          ...data,
+          createdAt: new Date("2026-06-09T01:00:00.000Z")
+        };
+        auditEvents.push(record);
+        return record;
+      },
+      async findMany() {
+        return auditEvents;
+      }
+    },
     async $transaction(callback: (tx: any) => Promise<unknown>) {
       return callback(client);
     },
     serviceCalls,
-    assignments
+    assignments,
+    statusHistories,
+    auditEvents
   };
 
   return client;
@@ -381,5 +422,214 @@ describe("service call service", () => {
     assert.deepEqual(options.paymentMethods.map((method) => method.value), ["현금"]);
     assert.deepEqual(options.therapists.map((therapist) => therapist.value), ["therapist-1", "therapist-2"]);
     assert.deepEqual(options.earcareEmployees.map((employee) => employee.value), ["earcare-1"]);
+  });
+
+  it("autosaves one existing row, records status history, and returns saved timing DTO", async () => {
+    const prismaClient = createMemoryPrisma();
+    const original = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      status: "예약",
+      prismaClient
+    });
+
+    const saved = await autosaveServiceCallRow({
+      serviceCallId: original.id,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      customerMemo: "상태 변경",
+      therapist1Id: "therapist-1",
+      status: "취소",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(saved.id, original.id);
+    assert.equal(saved.status, "취소");
+    assert.equal(saved.savedAt, saved.updatedAt);
+    assert.equal(prismaClient.statusHistories.length, 1);
+    assert.deepEqual(prismaClient.statusHistories[0], {
+      id: "history-1",
+      serviceCallId: original.id,
+      previousStatus: "예약",
+      newStatus: "취소",
+      changedByAccountId: "counter-account",
+      changedAt: new Date("2026-06-09T01:00:00.000Z"),
+      createdAt: new Date("2026-06-09T01:00:00.000Z")
+    });
+  });
+
+  it("does not create status history for unchanged status and lists histories by changedAt asc", async () => {
+    const prismaClient = createMemoryPrisma();
+    const original = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "예약",
+      prismaClient
+    });
+
+    await autosaveServiceCallRow({
+      serviceCallId: original.id,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "예약",
+      actorId: "counter-account",
+      prismaClient
+    });
+    await autosaveServiceCallRow({
+      serviceCallId: original.id,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "취소",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    const histories = await listServiceCallStatusHistory(original.id, { prismaClient });
+
+    assert.equal(histories.length, 1);
+    assert.equal(histories[0].previousStatus, "예약");
+    assert.equal(histories[0].newStatus, "취소");
+  });
+
+  it("records plain JSON audit snapshots for status and sensitive row changes", async () => {
+    const prismaClient = createMemoryPrisma();
+    const original = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      status: "예약",
+      prismaClient
+    });
+
+    await autosaveServiceCallRow({
+      serviceCallId: original.id,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-2",
+      discountTypeCode: "생일자",
+      paymentMethodCode: "현금",
+      confirmationCode: "Y",
+      status: "취소",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.deepEqual(
+      prismaClient.auditEvents.map((event: any) => event.action),
+      ["service_call.status_changed", "service_call.row_changed"]
+    );
+    assert.equal(prismaClient.auditEvents[0].actorId, "counter-account");
+    assert.equal(prismaClient.auditEvents[0].targetType, "service_call");
+    assert.equal(prismaClient.auditEvents[0].targetId, original.id);
+    assert.equal(prismaClient.auditEvents[0].beforeValue.status, "예약");
+    assert.equal(prismaClient.auditEvents[0].afterValue.status, "취소");
+    assert.equal(prismaClient.auditEvents[1].beforeValue.assignments.therapist1Id, "therapist-1");
+    assert.equal(prismaClient.auditEvents[1].afterValue.assignments.therapist1Id, "therapist-2");
+    assert.equal(JSON.stringify(prismaClient.auditEvents[1].afterValue).includes("2026-06-10"), true);
+  });
+
+  it("clears optional assignments without physical delete during autosave", async () => {
+    const prismaClient = createMemoryPrisma();
+    const original = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      therapist2Id: "therapist-2",
+      earcareEmployeeId: "earcare-1",
+      status: "예약",
+      prismaClient
+    });
+
+    const saved = await autosaveServiceCallRow({
+      serviceCallId: original.id,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      therapist2Id: null,
+      earcareEmployeeId: null,
+      status: "예약",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(saved.therapist2, null);
+    assert.equal(saved.earcare, null);
+    assert.equal(prismaClient.assignments.size, 3);
+    assert.equal([...prismaClient.assignments.values()].filter((assignment: any) => assignment.isActive === false).length, 2);
+  });
+
+  it("blocks autosave for locked months and inactive employees", async () => {
+    const prismaClient = createMemoryPrisma();
+    const original = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "예약",
+      prismaClient
+    });
+
+    await assert.rejects(
+      () =>
+        autosaveServiceCallRow({
+          serviceCallId: original.id,
+          operatingMonthId: "month-locked",
+          serviceDate: "2026-07-10",
+          startTime: "11:00",
+          roomId: "room-101",
+          courseId: "course-a",
+          status: "예약",
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error) => error instanceof ServiceCallDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
+
+    await assert.rejects(
+      () =>
+        autosaveServiceCallRow({
+          serviceCallId: original.id,
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-06-10",
+          startTime: "11:00",
+          roomId: "room-101",
+          courseId: "course-a",
+          therapist1Id: "ops-1",
+          status: "예약",
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error) => error instanceof ServiceCallDomainError && error.code === "EMPLOYEE_NOT_ACTIVE_FOR_ROLE"
+    );
   });
 });

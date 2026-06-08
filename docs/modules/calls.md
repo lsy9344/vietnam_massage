@@ -53,6 +53,15 @@ The `/calls` page keeps `operatingMonthId` and `serviceDate` in URL search param
 
 Story 2.1 displays payment amount, therapist commissions, earcare pool amount, and recognized call credit as read-only placeholders. The actual calculation contract belongs to Story 2.3.
 
+## Story 2.2 Autosave Contract
+
+- Row autosave is scoped to one existing `ServiceCall` row and must require `serviceCallId`.
+- The status-history table is `service_call_status_histories` via `ServiceCallStatusHistory`.
+- The visible save state model is `idle`, `saving`, `saved`, and `error`; user-facing labels are `저장중`, `저장됨`, and `저장 보류`.
+- Status transitions write `service_call.status_changed`; sensitive row changes such as payment method, discount type, assignments, and confirmation write `service_call.row_changed`.
+- Failed autosave keeps the draft on screen and exposes inline retry using the same draft payload.
+- Locked operating months and users without `call:write` are blocked by the Server Action/domain boundary and shown safe Korean errors.
+
 ## Rules
 
 - Only `방문완료` calls count toward sales, commissions, earcare pool, and recognized calls.

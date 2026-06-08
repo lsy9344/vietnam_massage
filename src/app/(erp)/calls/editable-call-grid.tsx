@@ -1,9 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState, useTransition, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import type { ServiceCallFormOptions, ServiceCallOption, ServiceCallRowDto } from "@/modules/calls/service-call-service";
-import { saveBasicServiceCallRowAction, type ServiceCallActionState } from "@/app/(erp)/calls/actions";
+import type { ServiceCallAutosaveInput } from "@/modules/calls/service-call-schema";
+import { autosaveServiceCallRowAction, saveBasicServiceCallRowAction, type ServiceCallActionState } from "@/app/(erp)/calls/actions";
+
+type RowSaveState = "idle" | "saving" | "saved" | "error";
 
 function fieldError(state: ServiceCallActionState, field: string) {
   if (!state || state.ok) {
@@ -27,15 +30,21 @@ function InlineError({ state, field }: { state: ServiceCallActionState; field?: 
 
 function SelectCell({
   disabled,
+  defaultValue,
   label,
   name,
+  onBlur,
+  onChange,
   options,
   required,
   value
 }: {
   disabled: boolean;
+  defaultValue?: string;
   label: string;
   name: string;
+  onBlur?: () => void;
+  onChange?: (value: string) => void;
   options: ServiceCallOption[];
   required?: boolean;
   value?: string;
@@ -45,10 +54,12 @@ function SelectCell({
       <span className="sr-only">{label}</span>
       <select
         className="h-8 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
-        defaultValue={value ?? ""}
         disabled={disabled}
         name={name}
+        onBlur={onBlur}
+        onChange={(event) => onChange?.(event.target.value)}
         required={required}
+        {...(value === undefined ? { defaultValue: defaultValue ?? "" } : { value })}
       >
         <option value="">{required ? "선택" : "-"}</option>
         {options.map((option) => (
@@ -66,13 +77,21 @@ function TextCell({
   label,
   maxLength,
   name,
-  placeholder
+  onBlur,
+  onChange,
+  onKeyDown,
+  placeholder,
+  value
 }: {
   disabled: boolean;
   label: string;
   maxLength?: number;
   name: string;
+  onBlur?: () => void;
+  onChange?: (value: string) => void;
+  onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
   placeholder?: string;
+  value?: string;
 }) {
   return (
     <label className="grid min-w-36 gap-1">
@@ -82,17 +101,14 @@ function TextCell({
         disabled={disabled}
         maxLength={maxLength ?? 500}
         name={name}
+        onBlur={onBlur}
+        onChange={(event) => onChange?.(event.target.value)}
+        onKeyDown={onKeyDown}
         placeholder={placeholder}
+        {...(value === undefined ? {} : { value })}
       />
     </label>
   );
-}
-
-function labelFor(options: ServiceCallOption[], value: string | null) {
-  if (!value) {
-    return "-";
-  }
-  return options.find((option) => option.value === value)?.label ?? value;
 }
 
 function AddRowForm({
@@ -143,7 +159,7 @@ function AddRowForm({
                 <SelectCell disabled={disabled} label="귀케어 담당" name="earcareEmployeeId" options={options.earcareEmployees} />
               </td>
               <td className="border-b border-border px-2 py-2">
-                <SelectCell disabled={disabled} label="상태" name="status" options={options.statuses} required value="예약" />
+                <SelectCell disabled={disabled} defaultValue="예약" label="상태" name="status" options={options.statuses} required />
                 <InlineError field="status" state={state} />
               </td>
               <td className="border-b border-border px-2 py-2">
@@ -170,6 +186,259 @@ function AddRowForm({
         </table>
       </div>
     </form>
+  );
+}
+
+function draftFromRow(row: ServiceCallRowDto): ServiceCallAutosaveInput {
+  return {
+    serviceCallId: row.id,
+    operatingMonthId: row.operatingMonthId,
+    serviceDate: row.serviceDate,
+    startTime: row.startTime,
+    roomId: row.roomId,
+    courseId: row.courseId,
+    customerMemo: row.customerMemo ?? null,
+    therapist1Id: row.therapist1?.id ?? null,
+    therapist2Id: row.therapist2?.id ?? null,
+    earcareEmployeeId: row.earcare?.id ?? null,
+    status: row.status,
+    discountTypeCode: row.discountTypeCode ?? null,
+    paymentMethodCode: row.paymentMethodCode ?? null,
+    note: row.note ?? null,
+    confirmationCode: row.confirmationCode ?? null
+  };
+}
+
+function nullableValue(value: string) {
+  return value.trim() === "" ? null : value;
+}
+
+function saveStateLabel(state: RowSaveState) {
+  if (state === "saving") return "저장중";
+  if (state === "saved") return "저장됨";
+  if (state === "error") return "저장 보류";
+  return "idle";
+}
+
+function saveStateClassName(state: RowSaveState) {
+  if (state === "saving") return "text-brand";
+  if (state === "saved") return "text-muted";
+  if (state === "error") return "text-danger";
+  return "text-muted";
+}
+
+function EditableCallRow({
+  isLocked,
+  options,
+  row
+}: {
+  isLocked: boolean;
+  options: ServiceCallFormOptions;
+  row: ServiceCallRowDto;
+}) {
+  const [draft, setDraft] = useState<ServiceCallAutosaveInput>(() => draftFromRow(row));
+  const [saveStatus, setSaveStatus] = useState<RowSaveState>("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState(row.savedAt);
+  const [, startTransition] = useTransition();
+
+  function updateDraft<Key extends keyof ServiceCallAutosaveInput>(key: Key, value: ServiceCallAutosaveInput[Key]) {
+    setDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  function commit(nextDraft = draft) {
+    if (isLocked || saveStatus === "saving") {
+      return;
+    }
+
+    setSaveStatus("saving");
+    setErrorMessage(null);
+    startTransition(() => {
+      void (async () => {
+        const result = await autosaveServiceCallRowAction(nextDraft);
+        if (result.ok) {
+          setDraft(draftFromRow(result.data));
+          setSavedAt(result.data.savedAt);
+          setSaveStatus("saved");
+          return;
+        }
+
+        setErrorMessage(result.formError ?? "콜 행 자동저장에 실패했습니다.");
+        setSaveStatus("error");
+      })();
+    });
+  }
+
+  function commitOnEnter(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      event.currentTarget.blur();
+    }
+  }
+
+  return (
+    <tr className="align-top" data-service-call-id={row.id}>
+      <td className="border-b border-border px-2 py-2 text-xs">
+        {draft.serviceDate}
+        <input name="serviceCallId" type="hidden" value={draft.serviceCallId} />
+      </td>
+      <td className="border-b border-border px-2 py-2">
+        <SelectCell
+          disabled={isLocked || saveStatus === "saving"}
+          label="시간"
+          name="startTime"
+          onBlur={() => commit()}
+          onChange={(value) => updateDraft("startTime", value)}
+          options={options.timeSlots}
+          required
+          value={draft.startTime}
+        />
+      </td>
+      <td className="border-b border-border px-2 py-2">
+        <SelectCell
+          disabled={isLocked || saveStatus === "saving"}
+          label="객실"
+          name="roomId"
+          onBlur={() => commit()}
+          onChange={(value) => updateDraft("roomId", value)}
+          options={options.rooms}
+          required
+          value={draft.roomId}
+        />
+      </td>
+      <td className="border-b border-border px-2 py-2">
+        <SelectCell
+          disabled={isLocked || saveStatus === "saving"}
+          label="코스"
+          name="courseId"
+          onBlur={() => commit()}
+          onChange={(value) => updateDraft("courseId", value)}
+          options={options.courses}
+          required
+          value={draft.courseId}
+        />
+      </td>
+      <td className="border-b border-border px-2 py-2">
+        <TextCell
+          disabled={isLocked || saveStatus === "saving"}
+          label="고객/메모"
+          name="customerMemo"
+          onBlur={() => commit()}
+          onChange={(value) => updateDraft("customerMemo", nullableValue(value))}
+          onKeyDown={commitOnEnter}
+          placeholder="고객/메모"
+          value={draft.customerMemo ?? ""}
+        />
+        <span className="sr-only">{draft.customerMemo ?? ""}</span>
+      </td>
+      <td className="border-b border-border px-2 py-2">
+        <SelectCell
+          disabled={isLocked || saveStatus === "saving"}
+          label="마사지사1"
+          name="therapist1Id"
+          onBlur={() => commit()}
+          onChange={(value) => updateDraft("therapist1Id", nullableValue(value))}
+          options={options.therapists}
+          value={draft.therapist1Id ?? ""}
+        />
+      </td>
+      <td className="border-b border-border px-2 py-2">
+        <SelectCell
+          disabled={isLocked || saveStatus === "saving"}
+          label="마사지사2"
+          name="therapist2Id"
+          onBlur={() => commit()}
+          onChange={(value) => updateDraft("therapist2Id", nullableValue(value))}
+          options={options.therapists}
+          value={draft.therapist2Id ?? ""}
+        />
+      </td>
+      <td className="border-b border-border px-2 py-2">
+        <SelectCell
+          disabled={isLocked || saveStatus === "saving"}
+          label="귀케어 담당"
+          name="earcareEmployeeId"
+          onBlur={() => commit()}
+          onChange={(value) => updateDraft("earcareEmployeeId", nullableValue(value))}
+          options={options.earcareEmployees}
+          value={draft.earcareEmployeeId ?? ""}
+        />
+      </td>
+      <td className="border-b border-border px-2 py-2">
+        <SelectCell
+          disabled={isLocked || saveStatus === "saving"}
+          label="상태"
+          name="status"
+          onBlur={() => commit()}
+          onChange={(value) => updateDraft("status", value)}
+          options={options.statuses}
+          required
+          value={draft.status}
+        />
+      </td>
+      <td className="border-b border-border px-2 py-2">
+        <SelectCell
+          disabled={isLocked || saveStatus === "saving"}
+          label="할인구분"
+          name="discountTypeCode"
+          onBlur={() => commit()}
+          onChange={(value) => updateDraft("discountTypeCode", nullableValue(value))}
+          options={options.discountTypes}
+          value={draft.discountTypeCode ?? ""}
+        />
+      </td>
+      <td className="border-b border-border px-2 py-2">
+        <SelectCell
+          disabled={isLocked || saveStatus === "saving"}
+          label="결제수단"
+          name="paymentMethodCode"
+          onBlur={() => commit()}
+          onChange={(value) => updateDraft("paymentMethodCode", nullableValue(value))}
+          options={options.paymentMethods}
+          value={draft.paymentMethodCode ?? ""}
+        />
+      </td>
+      <td className="border-b border-border px-2 py-2">
+        <TextCell
+          disabled={isLocked || saveStatus === "saving"}
+          label="비고"
+          name="note"
+          onBlur={() => commit()}
+          onChange={(value) => updateDraft("note", nullableValue(value))}
+          onKeyDown={commitOnEnter}
+          placeholder="비고"
+          value={draft.note ?? ""}
+        />
+      </td>
+      <td className="border-b border-border px-2 py-2">
+        <SelectCell
+          disabled={isLocked || saveStatus === "saving"}
+          label="확인값"
+          name="confirmationCode"
+          onBlur={() => commit()}
+          onChange={(value) => updateDraft("confirmationCode", nullableValue(value))}
+          options={options.confirmationCodes}
+          value={draft.confirmationCode ?? ""}
+        />
+      </td>
+      <td className="border-b border-border px-2 py-2 text-xs text-muted">
+        <div className="grid min-w-40 gap-1">
+          <span>결제/수당/콜인정 -</span>
+          <span aria-live="polite" className={saveStateClassName(saveStatus)}>
+            {saveStateLabel(saveStatus)}
+            {saveStatus === "saved" ? ` ${new Date(savedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}` : ""}
+          </span>
+          {saveStatus === "error" ? (
+            <span className="grid gap-1">
+              <span className="text-danger">{errorMessage ?? "저장 보류"}</span>
+              <Button className="h-7 justify-self-start px-2 text-xs" onClick={() => commit()} type="button" variant="secondary">
+                재시도
+              </Button>
+            </span>
+          ) : null}
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -232,22 +501,7 @@ export function EditableCallGrid({
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr className="align-top" key={row.id}>
-                  <td className="border-b border-border px-2 py-2 text-xs">{row.serviceDate}</td>
-                  <td className="border-b border-border px-2 py-2 text-xs">{row.startTime}</td>
-                  <td className="border-b border-border px-2 py-2 text-xs">{row.roomLabel}</td>
-                  <td className="border-b border-border px-2 py-2 text-xs">{row.courseLabel}</td>
-                  <td className="border-b border-border px-2 py-2 text-xs">{row.customerMemo || "-"}</td>
-                  <td className="border-b border-border px-2 py-2 text-xs">{row.therapist1?.displayName ?? "-"}</td>
-                  <td className="border-b border-border px-2 py-2 text-xs">{row.therapist2?.displayName ?? "-"}</td>
-                  <td className="border-b border-border px-2 py-2 text-xs">{row.earcare?.displayName ?? "-"}</td>
-                  <td className="border-b border-border px-2 py-2 text-xs">{labelFor(options.statuses, row.status)}</td>
-                  <td className="border-b border-border px-2 py-2 text-xs">{labelFor(options.discountTypes, row.discountTypeCode)}</td>
-                  <td className="border-b border-border px-2 py-2 text-xs">{labelFor(options.paymentMethods, row.paymentMethodCode)}</td>
-                  <td className="border-b border-border px-2 py-2 text-xs">{row.note || "-"}</td>
-                  <td className="border-b border-border px-2 py-2 text-xs">{labelFor(options.confirmationCodes, row.confirmationCode)}</td>
-                  <td className="border-b border-border px-2 py-2 text-xs text-muted">결제/수당/콜인정 -</td>
-                </tr>
+                <EditableCallRow isLocked={isLocked} key={row.id} options={options} row={row} />
               ))}
             </tbody>
           </table>

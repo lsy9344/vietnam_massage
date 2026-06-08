@@ -61,6 +61,9 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Story 2.1 기준 콜 원장은 Prisma `ServiceCall`(`service_calls`)과 `ServiceCallAssignment`(`service_call_assignments`)가 소유한다. 날짜별 조회는 `operatingMonthId + serviceDate` 한 날짜만 렌더링하고, `serviceDate`는 DB `@db.Date`, DTO는 ISO `YYYY-MM-DD` 문자열이다.
 - 콜 기본 입력은 날짜, 시간, 객실, 코스, 고객/메모, 마사지사1, 마사지사2, 귀케어 담당, 상태, 할인구분, 결제수단, 비고, 확인값을 다룬다. 결제금액, 수당, 귀케어풀, 콜인정은 Story 2.3 전까지 `null`/표시 placeholder로만 둔다.
 - 콜 담당자는 화면에서 원본 A:S 컬럼처럼 보이지만 저장은 `ServiceCallAssignment.assignmentRole` `THERAPIST_1`, `THERAPIST_2`, `EARCARE`와 `Employee.id`를 사용한다.
+- Story 2.2 기준 콜 행 자동저장은 기존 `ServiceCall.id`를 요구하는 row-level mutation이다. UI 저장 상태는 `idle`, `saving`, `saved`, `error`이며 화면 문구는 `저장중`, `저장됨`, `저장 보류`를 사용하고 실패 시 같은 draft payload로 inline retry를 제공한다.
+- Story 2.2 상태 변경 이력은 Prisma `ServiceCallStatusHistory`(`service_call_status_histories`)가 소유한다. 상태가 실제로 바뀔 때만 이전 상태, 새 상태, 변경자 계정 ID, 변경 시각을 저장한다.
+- Story 2.2 콜 autosave 감사 이벤트는 dot notation만 사용한다. 상태 변경은 `service_call.status_changed`, 결제수단/할인구분/담당자/확인값 등 민감 row 변경은 `service_call.row_changed`를 기록한다.
 - 콜 저장은 운영월 범위 밖 날짜를 `OPERATING_MONTH_DATE_OUT_OF_RANGE` / `운영월 범위를 벗어난 날짜입니다.`로 차단하고, 운영월 `잠금` 상태는 `OPERATING_MONTH_LOCKED`로 차단한다.
 - `/calls`는 Server Action + domain service 경계로 구현한다. page는 `requireRouteAccess("/calls")`, action은 `requirePermission("call:write")`를 사용하고 `ActionResult<T>`를 반환한다.
 - Story 2.1 그리드는 별도 dependency 없이 semantic HTML table로 구현했다. TanStack Table은 Story 2.6 수준의 셀 편집/키보드/type-ahead 요구가 들어올 때 도입한다.

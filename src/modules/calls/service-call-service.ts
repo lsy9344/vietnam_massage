@@ -1,12 +1,16 @@
 import { prisma } from "@/lib/prisma";
+import { recordAuditEvent } from "@/modules/audit/audit-service";
+import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
 import { listActiveCodeItems, listActiveTimeSlots } from "@/modules/masters/code-service";
 import { listActiveCourses } from "@/modules/masters/course-service";
 import { listActiveEmployees } from "@/modules/masters/employee-service";
 import { listActiveRooms } from "@/modules/masters/room-service";
 import {
   assignmentRoles,
+  serviceCallAutosaveInputSchema,
   serviceCallInputSchema,
   type ServiceCallAssignmentRole,
+  type ServiceCallAutosaveInput,
   type ServiceCallInput
 } from "@/modules/calls/service-call-schema";
 
@@ -67,7 +71,18 @@ type ServiceCallAssignmentRecord = {
   serviceCallId: string;
   employeeId: string;
   assignmentRole: string;
+  isActive?: boolean;
   employee?: EmployeeRecord;
+};
+
+type ServiceCallStatusHistoryRecord = {
+  id: string;
+  serviceCallId: string;
+  previousStatus: string;
+  newStatus: string;
+  changedByAccountId: string;
+  changedAt: Date;
+  createdAt: Date;
 };
 
 type ServiceCallRecord = {
@@ -130,6 +145,14 @@ type ServiceCallPrismaClient = {
     findMany(args?: unknown): Promise<ServiceCallAssignmentRecord[]>;
     updateMany(args: unknown): Promise<{ count: number }>;
   };
+  serviceCallStatusHistory: {
+    create(args: unknown): Promise<ServiceCallStatusHistoryRecord>;
+    findMany(args?: unknown): Promise<ServiceCallStatusHistoryRecord[]>;
+  };
+  auditLog: {
+    create(args: unknown): Promise<unknown>;
+    findMany(args?: unknown): Promise<unknown[]>;
+  };
   $transaction?<T>(callback: (tx: ServiceCallPrismaClient) => Promise<T>): Promise<T>;
 };
 
@@ -164,6 +187,17 @@ export type ServiceCallRowDto = {
   opsCallCredit: null;
   createdAt: string;
   updatedAt: string;
+  savedAt: string;
+};
+
+export type ServiceCallStatusHistoryDto = {
+  id: string;
+  serviceCallId: string;
+  previousStatus: string;
+  newStatus: string;
+  changedByAccountId: string;
+  changedAt: string;
+  createdAt: string;
 };
 
 export type ServiceCallOption = {
@@ -244,7 +278,7 @@ function toAssigneeDto(record: EmployeeRecord): ServiceCallAssigneeDto {
 function assignmentByRole(record: ServiceCallRecord, role: ServiceCallAssignmentRole) {
   return (record.assignments ?? []).find((assignment) => {
     assertAssignmentRole(assignment.assignmentRole);
-    return assignment.assignmentRole === role;
+    return assignment.assignmentRole === role && assignment.isActive !== false;
   });
 }
 
@@ -280,7 +314,20 @@ function toRowDto(record: ServiceCallRecord): ServiceCallRowDto {
     earcarePoolAmount: null,
     opsCallCredit: null,
     createdAt: record.createdAt.toISOString(),
-    updatedAt: record.updatedAt.toISOString()
+    updatedAt: record.updatedAt.toISOString(),
+    savedAt: record.updatedAt.toISOString()
+  };
+}
+
+function toHistoryDto(record: ServiceCallStatusHistoryRecord): ServiceCallStatusHistoryDto {
+  return {
+    id: record.id,
+    serviceCallId: record.serviceCallId,
+    previousStatus: record.previousStatus,
+    newStatus: record.newStatus,
+    changedByAccountId: record.changedByAccountId,
+    changedAt: record.changedAt.toISOString(),
+    createdAt: record.createdAt.toISOString()
   };
 }
 
@@ -367,20 +414,26 @@ async function writeAssignment(
   tx: ServiceCallPrismaClient,
   input: { serviceCallId: string; assignmentRole: ServiceCallAssignmentRole; employeeId: string | null | undefined }
 ) {
-  if (!input.employeeId) {
-    return;
-  }
-
   const existing = (
     await tx.serviceCallAssignment.findMany({
       where: { serviceCallId: input.serviceCallId, assignmentRole: input.assignmentRole }
     })
   )[0];
 
+  if (!input.employeeId) {
+    if (existing && existing.isActive !== false) {
+      await tx.serviceCallAssignment.updateMany({
+        where: { id: existing.id },
+        data: { isActive: false }
+      });
+    }
+    return;
+  }
+
   if (existing) {
     await tx.serviceCallAssignment.updateMany({
       where: { id: existing.id },
-      data: { employeeId: input.employeeId }
+      data: { employeeId: input.employeeId, isActive: true }
     });
     return;
   }
@@ -389,7 +442,8 @@ async function writeAssignment(
     data: {
       serviceCallId: input.serviceCallId,
       assignmentRole: input.assignmentRole,
-      employeeId: input.employeeId
+      employeeId: input.employeeId,
+      isActive: true
     }
   });
 }
@@ -410,6 +464,45 @@ async function findServiceCallWithRelations(tx: ServiceCallPrismaClient, id: str
   }
 
   return record;
+}
+
+function assignmentEmployeeId(record: ServiceCallRecord, role: ServiceCallAssignmentRole) {
+  return assignmentByRole(record, role)?.employeeId ?? null;
+}
+
+function toAuditSnapshot(record: ServiceCallRecord): AuditJsonSnapshot {
+  return {
+    id: record.id,
+    operatingMonthId: record.operatingMonthId,
+    serviceDate: toIsoDateOnly(record.serviceDate),
+    startTime: record.startTime,
+    roomId: record.roomId,
+    courseId: record.courseId,
+    customerMemo: record.customerMemo,
+    status: record.status,
+    discountTypeCode: record.discountTypeCode,
+    paymentMethodCode: record.paymentMethodCode,
+    note: record.note,
+    confirmationCode: record.confirmationCode,
+    assignments: {
+      therapist1Id: assignmentEmployeeId(record, "THERAPIST_1"),
+      therapist2Id: assignmentEmployeeId(record, "THERAPIST_2"),
+      earcareEmployeeId: assignmentEmployeeId(record, "EARCARE")
+    },
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString()
+  };
+}
+
+function hasSensitiveRowChange(before: ServiceCallRecord, after: ServiceCallRecord) {
+  return (
+    before.discountTypeCode !== after.discountTypeCode ||
+    before.paymentMethodCode !== after.paymentMethodCode ||
+    before.confirmationCode !== after.confirmationCode ||
+    assignmentEmployeeId(before, "THERAPIST_1") !== assignmentEmployeeId(after, "THERAPIST_1") ||
+    assignmentEmployeeId(before, "THERAPIST_2") !== assignmentEmployeeId(after, "THERAPIST_2") ||
+    assignmentEmployeeId(before, "EARCARE") !== assignmentEmployeeId(after, "EARCARE")
+  );
 }
 
 export async function listServiceCallsForDate(input: {
@@ -525,6 +618,143 @@ export async function saveBasicServiceCallRow(input: ServiceCallInput & { prisma
 
     return toRowDto(await findServiceCallWithRelations(tx, serviceCall.id));
   });
+}
+
+export async function autosaveServiceCallRow(
+  input: ServiceCallAutosaveInput & { actorId: string; prismaClient?: ServiceCallPrismaClient }
+) {
+  const parsed = serviceCallAutosaveInputSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "콜 원장 입력값이 올바르지 않습니다.", "INVALID_SERVICE_CALL_INPUT");
+  }
+
+  const actorId = input.actorId?.trim();
+  if (!actorId) {
+    throw new ServiceCallDomainError("저장 행위자를 확인할 수 없습니다.", "ACTOR_REQUIRED");
+  }
+
+  const client = getClient(input.prismaClient);
+
+  return runInTransaction(client, async (tx) => {
+    const { month, serviceDate } = await assertWritableDate(tx, {
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate: parsed.data.serviceDate
+    });
+
+    await Promise.all([
+      assertActiveTimeSlot(tx, parsed.data.startTime),
+      assertActiveRoom(tx, parsed.data.roomId),
+      assertActiveCourse(tx, { courseId: parsed.data.courseId, monthKey: month.monthKey }),
+      assertActiveCode(tx, { codeType: "SERVICE_STATUS", code: parsed.data.status, required: true }),
+      assertActiveCode(tx, { codeType: "DISCOUNT_TYPE", code: parsed.data.discountTypeCode }),
+      assertActiveCode(tx, { codeType: "PAYMENT_METHOD", code: parsed.data.paymentMethodCode }),
+      assertActiveCode(tx, { codeType: "CONFIRMATION", code: parsed.data.confirmationCode }),
+      assertActiveEmployee(tx, { role: "THERAPIST_1", employeeId: parsed.data.therapist1Id }),
+      assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: parsed.data.therapist2Id }),
+      assertActiveEmployee(tx, { role: "EARCARE", employeeId: parsed.data.earcareEmployeeId })
+    ]);
+
+    const before = await findServiceCallWithRelations(tx, parsed.data.serviceCallId);
+    const data = {
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate,
+      startTime: parsed.data.startTime,
+      roomId: parsed.data.roomId,
+      courseId: parsed.data.courseId,
+      customerMemo: parsed.data.customerMemo ?? null,
+      status: parsed.data.status,
+      discountTypeCode: parsed.data.discountTypeCode ?? null,
+      paymentMethodCode: parsed.data.paymentMethodCode ?? null,
+      note: parsed.data.note ?? null,
+      confirmationCode: parsed.data.confirmationCode ?? null
+    };
+
+    const updateResult = await tx.serviceCall.updateMany({
+      where: { id: parsed.data.serviceCallId, operatingMonthId: parsed.data.operatingMonthId },
+      data
+    });
+    if (updateResult.count !== 1) {
+      throw new ServiceCallDomainError("콜 원장 행을 찾을 수 없습니다.", "SERVICE_CALL_NOT_FOUND");
+    }
+
+    await Promise.all([
+      writeAssignment(tx, {
+        serviceCallId: parsed.data.serviceCallId,
+        assignmentRole: "THERAPIST_1",
+        employeeId: parsed.data.therapist1Id
+      }),
+      writeAssignment(tx, {
+        serviceCallId: parsed.data.serviceCallId,
+        assignmentRole: "THERAPIST_2",
+        employeeId: parsed.data.therapist2Id
+      }),
+      writeAssignment(tx, {
+        serviceCallId: parsed.data.serviceCallId,
+        assignmentRole: "EARCARE",
+        employeeId: parsed.data.earcareEmployeeId
+      })
+    ]);
+
+    const after = await findServiceCallWithRelations(tx, parsed.data.serviceCallId);
+    const beforeSnapshot = toAuditSnapshot(before);
+    const afterSnapshot = toAuditSnapshot(after);
+
+    if (before.status !== after.status) {
+      await tx.serviceCallStatusHistory.create({
+        data: {
+          serviceCallId: after.id,
+          previousStatus: before.status,
+          newStatus: after.status,
+          changedByAccountId: actorId
+        }
+      });
+      await recordAuditEvent(
+        {
+          actorId,
+          action: "service_call.status_changed",
+          targetType: "service_call",
+          targetId: after.id,
+          beforeValue: beforeSnapshot,
+          afterValue: afterSnapshot
+        },
+        { prismaClient: tx }
+      );
+    }
+
+    if (hasSensitiveRowChange(before, after)) {
+      await recordAuditEvent(
+        {
+          actorId,
+          action: "service_call.row_changed",
+          targetType: "service_call",
+          targetId: after.id,
+          beforeValue: beforeSnapshot,
+          afterValue: afterSnapshot
+        },
+        { prismaClient: tx }
+      );
+    }
+
+    return toRowDto(after);
+  });
+}
+
+export async function listServiceCallStatusHistory(
+  serviceCallId: string,
+  input: { prismaClient?: ServiceCallPrismaClient } = {}
+) {
+  const id = serviceCallId.trim();
+  if (!id) {
+    throw new ServiceCallDomainError("콜 행 ID가 올바르지 않습니다.", "SERVICE_CALL_ID_REQUIRED");
+  }
+
+  const client = getClient(input.prismaClient);
+  const records = await client.serviceCallStatusHistory.findMany({
+    where: { serviceCallId: id },
+    orderBy: { changedAt: "asc" }
+  });
+
+  return records.map(toHistoryDto);
 }
 
 export async function listServiceCallFormOptions(input: { operatingMonthId?: string; prismaClient?: ServiceCallPrismaClient } = {}) {

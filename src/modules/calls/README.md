@@ -10,6 +10,13 @@ Owns the reservation and service-call ledger.
 - `saveBasicServiceCallRow()` validates active masters, operating-month date range, locked-month blocking, stable code values, and writes the call row plus assignments in one transaction.
 - Payment, commission, earcare pool, and call-credit fields stay `null` display placeholders until Story 2.3.
 
+## Story 2.2 Scope
+
+- `ServiceCallStatusHistory` stores call status transitions in `service_call_status_histories`.
+- row autosave uses the `idle`, `saving`, `saved`, and `error` state model and displays Korean row states: `저장중`, `저장됨`, and `저장 보류`.
+- Status changes record `service_call.status_changed`; sensitive row changes record `service_call.row_changed`.
+- Autosave retry must preserve the local draft instead of replacing failed input with the last server value.
+
 ## Includes
 
 - service calls
@@ -35,5 +42,4 @@ Owns the reservation and service-call ledger.
 - room display layout
 - attendance input
 - monthly close locking
-- row autosave/status history before Story 2.2
 - payment, payout, earcare pool, and recognized-call calculations before Story 2.3

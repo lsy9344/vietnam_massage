@@ -3,27 +3,33 @@
 ## Generated Tests
 
 ### API Tests
-- [x] N/A - Story 2.1 exposes Server Actions/domain services, not public API endpoints.
+- [x] N/A - Story 2.2 exposes Server Actions/domain services, not public API endpoints.
 
 ### E2E Tests
-- [x] `tests/e2e/story-2-1-call-ledger-basic.spec.ts` - 날짜별 콜 원장 조회, 빈 상태, 새 행 기본 입력, 운영월 범위 오류, 잠금 read-only, `/calls` RBAC direct access.
+- [x] `tests/e2e/story-2-2-call-ledger-autosave.spec.ts` - 기존 콜 행 blur autosave, 저장 상태 표시, 상태 변경 이력, 감사 로그, 실패 보류와 retry, 잠금 read-only, 권한 차단.
+
+### Static Regression Tests
+- [x] `scripts/validate-story-2-2.mjs` - status-history schema, autosave schema/service/action/UI, audit action names, E2E file, docs/project-context contract.
 
 ## Coverage
 - API endpoints: N/A
-- Server Action/domain boundary: covered through UI submit plus DB persistence assertions.
-- UI features: 5/5 Story 2.1 E2E targets covered.
-  - 운영월/조회날짜 URL 기반 조회
-  - 빈 상태와 `새 콜 행 추가`
-  - 기본 입력 필드 저장과 stable ID/code persistence
-  - 운영월 범위 차단 오류
-  - 잠금 운영월 read-only 차단
+- Server Action/domain boundary: covered through UI autosave scenarios plus DB assertions.
+- UI features: 5/5 Story 2.2 E2E targets specified.
+  - 기존 행 blur commit 저장과 `저장됨` 표시
+  - 상태 변경 이력 `ServiceCallStatusHistory` 저장
+  - `service_call.status_changed` / `service_call.row_changed` 감사 로그
+  - 검증 실패 시 `저장 보류`, 입력 유지, inline retry
+  - 잠금 운영월 read-only와 권한 상실 autosave 차단
 
 ## Validation Results
 
-- `npm run lint` passed, including `scripts/validate-story-2-1.mjs`.
-- `npm run test:unit -- src/modules/calls/service-call-service.test.ts` failed before test execution: `node_modules` is missing and package `tsx` was not found.
-- `npm run build` failed before compilation: `node_modules` is missing and `next` was not found.
-- `npm run test:e2e -- tests/e2e/story-2-1-call-ledger-basic.spec.ts` was not rerun after review because the same missing dependency state prevents Playwright from starting.
+- `node scripts/validate-story-2-2.mjs` failed by design against the current implementation, exposing non-test gaps:
+  - `src/app/(erp)/calls/actions.ts` does not yet export `autosaveServiceCallRowAction` wired to `serviceCallAutosaveInputSchema`, `autosaveServiceCallRow`, and `actorId: account.id`.
+  - `src/app/(erp)/calls/editable-call-grid.tsx` still renders existing rows read-only and does not yet expose autosave state (`idle/saving/saved/error`), `저장중`, `저장 보류`, retry, `onBlur`, `serviceCallId`, locked-row disabling, or `aria-live`.
+- `npm run lint` failed at the new Story 2.2 validator for the same implementation gaps. Story 1.1 through Story 2.1 validators passed before that point.
+- `npm run test:unit -- src/modules/calls/service-call-service.test.ts` failed before test execution because local dependencies are missing: package `tsx` could not be found.
+- `npm run build` failed before compilation because local dependencies are missing: `next: command not found`.
+- `npm run test:e2e -- tests/e2e/story-2-2-call-ledger-autosave.spec.ts` failed before Playwright startup because local dependencies are missing: `playwright: command not found`.
 
 ## Checklist Validation
 
@@ -31,19 +37,18 @@
 - [x] E2E tests generated if UI exists.
 - [x] Tests use standard Playwright APIs.
 - [x] Tests cover happy path.
-- [x] Tests cover critical error cases: out-of-range operating month date, locked operating month, non-write role access.
-- [ ] All generated tests run successfully: blocked by missing local dependencies.
+- [x] Tests cover critical error cases: failed autosave/retry, locked month, permission loss.
+- [ ] All generated tests run successfully: blocked by missing local dependencies and current autosave UI/action implementation gaps.
 - [x] Tests use semantic locators.
 - [x] Tests have clear descriptions.
 - [x] No hardcoded waits or sleeps.
-- [x] Tests are independent of order outside the file-level serial seed setup.
+- [x] Tests are independent outside file-level serial DB fixture setup.
 - [x] Test summary created.
-- [x] Tests saved to appropriate directory.
+- [x] Tests saved to appropriate directories.
 - [x] Summary includes coverage metrics.
 
 ## Next Steps
 
-- Install project dependencies from `pnpm-lock.yaml`.
-- Rerun: `npm run test:unit -- src/modules/calls/service-call-service.test.ts`.
-- Rerun: `npm run build`.
-- Rerun: `npm run test:e2e -- tests/e2e/story-2-1-call-ledger-basic.spec.ts`.
+- Implement the missing Story 2.2 autosave Server Action and editable grid state/retry UI.
+- Install project dependencies from the lockfile.
+- Rerun `npm run lint`, `npm run test:unit -- src/modules/calls/service-call-service.test.ts`, `npm run build`, and `npm run test:e2e -- tests/e2e/story-2-2-call-ledger-autosave.spec.ts`.

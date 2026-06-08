@@ -32,4 +32,9 @@ export const serviceCallInputSchema = z.object({
   confirmationCode: optionalCode
 });
 
+export const serviceCallAutosaveInputSchema = serviceCallInputSchema.extend({
+  serviceCallId: z.string().trim().min(1, "콜 행 ID가 올바르지 않습니다.")
+});
+
 export type ServiceCallInput = z.infer<typeof serviceCallInputSchema>;
+export type ServiceCallAutosaveInput = z.infer<typeof serviceCallAutosaveInputSchema>;

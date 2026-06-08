@@ -20,6 +20,7 @@ model UserAccount {
   createdAt        DateTime       @default(now()) @map("created_at")
   updatedAt        DateTime       @updatedAt @map("updated_at")
   loginAttempts    LoginAttempt[]
+  changedServiceCallStatusHistories ServiceCallStatusHistory[]
 
   @@map("user_accounts")
 }
@@ -161,6 +162,7 @@ model ServiceCall {
   createdAt         DateTime                @default(now()) @map("created_at")
   updatedAt         DateTime                @updatedAt @map("updated_at")
   assignments       ServiceCallAssignment[]
+  statusHistories   ServiceCallStatusHistory[]
 
   @@index([operatingMonthId, serviceDate], map: "idx_service_calls_month_date")
   @@index([roomId, serviceDate], map: "idx_service_calls_room_date")
@@ -175,12 +177,29 @@ model ServiceCallAssignment {
   employeeId    String      @map("employee_id")
   employee      Employee    @relation(fields: [employeeId], references: [id])
   assignmentRole String     @map("assignment_role")
+  isActive       Boolean    @default(true) @map("is_active")
   createdAt     DateTime   @default(now()) @map("created_at")
   updatedAt     DateTime   @updatedAt @map("updated_at")
 
   @@unique([serviceCallId, assignmentRole], map: "uq_service_call_assignments_call_role")
   @@index([employeeId, assignmentRole], map: "idx_service_call_assignments_employee_role")
   @@map("service_call_assignments")
+}
+
+model ServiceCallStatusHistory {
+  id                 String      @id @default(cuid())
+  serviceCallId      String      @map("service_call_id")
+  serviceCall        ServiceCall @relation(fields: [serviceCallId], references: [id])
+  previousStatus     String      @map("previous_status")
+  newStatus          String      @map("new_status")
+  changedByAccountId String      @map("changed_by_account_id")
+  changedByAccount   UserAccount @relation(fields: [changedByAccountId], references: [id])
+  changedAt          DateTime    @default(now()) @map("changed_at")
+  createdAt          DateTime    @default(now()) @map("created_at")
+
+  @@index([serviceCallId, changedAt], map: "idx_service_call_status_histories_call_changed_at")
+  @@index([changedByAccountId, changedAt], map: "idx_service_call_status_histories_actor_changed_at")
+  @@map("service_call_status_histories")
 }
 
 model CoursePolicy {
