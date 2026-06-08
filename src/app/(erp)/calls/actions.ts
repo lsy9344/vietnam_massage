@@ -6,13 +6,25 @@ import { AuthorizationError, requirePermission } from "@/lib/authorization";
 import { AuditDomainError } from "@/modules/audit/audit-event";
 import {
   autosaveServiceCallRow,
+  createDailyExpense,
+  deactivateDailyExpense,
+  updateDailyExpense,
   saveBasicServiceCallRow,
   ServiceCallDomainError,
+  type DailyExpenseDto,
   type ServiceCallRowDto
 } from "@/modules/calls/service-call-service";
-import { serviceCallAutosaveInputSchema, serviceCallInputSchema, type ServiceCallAutosaveInput } from "@/modules/calls/service-call-schema";
+import {
+  dailyExpenseDeactivateSchema,
+  dailyExpenseInputSchema,
+  dailyExpenseUpdateSchema,
+  serviceCallAutosaveInputSchema,
+  serviceCallInputSchema,
+  type ServiceCallAutosaveInput
+} from "@/modules/calls/service-call-schema";
 
 export type ServiceCallActionState = ActionResult<ServiceCallRowDto> | null;
+export type DailyExpenseActionState = ActionResult<DailyExpenseDto> | null;
 
 function toFieldErrors(fieldErrors: Partial<Record<string, string[]>>) {
   return Object.fromEntries(
@@ -24,12 +36,41 @@ function formValue(formData: FormData, key: string) {
   return formData.get(key);
 }
 
-function mapActionError(error: unknown): ActionResult<ServiceCallRowDto> {
+function mapActionError<T>(
+  error: unknown,
+  fieldMap: { dateField: "serviceDate" | "expenseDate"; handlerField?: "handledByEmployeeId" } = { dateField: "serviceDate" }
+): ActionResult<T> {
   if (error instanceof ServiceCallDomainError) {
     if (error.code === "D_COURSE_SECOND_THERAPIST_REQUIRED") {
       return {
         ok: false,
         fieldErrors: { therapist2Id: [error.message] },
+        formError: error.message,
+        domainErrorCode: error.code
+      };
+    }
+
+    if (error.code === "INVALID_DAILY_EXPENSE_INPUT") {
+      return {
+        ok: false,
+        formError: error.message,
+        domainErrorCode: error.code
+      };
+    }
+
+    if (error.code === "EMPLOYEE_NOT_ACTIVE" && fieldMap.handlerField) {
+      return {
+        ok: false,
+        fieldErrors: { [fieldMap.handlerField]: [error.message] },
+        formError: error.message,
+        domainErrorCode: error.code
+      };
+    }
+
+    if (error.code === "OPERATING_MONTH_DATE_OUT_OF_RANGE") {
+      return {
+        ok: false,
+        fieldErrors: { [fieldMap.dateField]: [error.message] },
         formError: error.message,
         domainErrorCode: error.code
       };
@@ -99,7 +140,7 @@ export async function saveBasicServiceCallRowAction(
     revalidatePath("/calls");
     return { ok: true, data };
   } catch (error) {
-    return mapActionError(error);
+    return mapActionError<ServiceCallRowDto>(error);
   }
 }
 
@@ -123,6 +164,95 @@ export async function autosaveServiceCallRowAction(input: ServiceCallAutosaveInp
     revalidatePath("/calls");
     return { ok: true, data };
   } catch (error) {
-    return mapActionError(error);
+    return mapActionError<ServiceCallRowDto>(error);
+  }
+}
+
+export async function createDailyExpenseAction(
+  _previousState: DailyExpenseActionState,
+  formData: FormData
+): Promise<DailyExpenseActionState> {
+  const parsed = dailyExpenseInputSchema.safeParse({
+    operatingMonthId: formValue(formData, "operatingMonthId"),
+    expenseDate: formValue(formData, "expenseDate"),
+    amount: formValue(formData, "amount"),
+    description: formValue(formData, "description"),
+    handledByEmployeeId: formValue(formData, "handledByEmployeeId"),
+    note: formValue(formData, "note")
+  });
+
+  if (!parsed.success) {
+    return {
+      ok: false,
+      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
+      formError: "입력값을 확인하세요."
+    };
+  }
+
+  try {
+    const account = await requirePermission("call:write");
+    const data = await createDailyExpense({ ...parsed.data, actorId: account.id });
+    revalidatePath("/calls");
+    return { ok: true, data };
+  } catch (error) {
+    return mapActionError<DailyExpenseDto>(error, { dateField: "expenseDate", handlerField: "handledByEmployeeId" });
+  }
+}
+
+export async function updateDailyExpenseAction(
+  _previousState: DailyExpenseActionState,
+  formData: FormData
+): Promise<DailyExpenseActionState> {
+  const parsed = dailyExpenseUpdateSchema.safeParse({
+    dailyExpenseId: formValue(formData, "dailyExpenseId"),
+    operatingMonthId: formValue(formData, "operatingMonthId"),
+    expenseDate: formValue(formData, "expenseDate"),
+    amount: formValue(formData, "amount"),
+    description: formValue(formData, "description"),
+    handledByEmployeeId: formValue(formData, "handledByEmployeeId"),
+    note: formValue(formData, "note")
+  });
+
+  if (!parsed.success) {
+    return {
+      ok: false,
+      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
+      formError: "입력값을 확인하세요."
+    };
+  }
+
+  try {
+    const account = await requirePermission("call:write");
+    const data = await updateDailyExpense({ ...parsed.data, actorId: account.id });
+    revalidatePath("/calls");
+    return { ok: true, data };
+  } catch (error) {
+    return mapActionError<DailyExpenseDto>(error, { dateField: "expenseDate", handlerField: "handledByEmployeeId" });
+  }
+}
+
+export async function deactivateDailyExpenseAction(
+  _previousState: DailyExpenseActionState,
+  formData: FormData
+): Promise<DailyExpenseActionState> {
+  const parsed = dailyExpenseDeactivateSchema.safeParse({
+    dailyExpenseId: formValue(formData, "dailyExpenseId")
+  });
+
+  if (!parsed.success) {
+    return {
+      ok: false,
+      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
+      formError: "입력값을 확인하세요."
+    };
+  }
+
+  try {
+    const account = await requirePermission("call:write");
+    const data = await deactivateDailyExpense({ ...parsed.data, actorId: account.id });
+    revalidatePath("/calls");
+    return { ok: true, data };
+  } catch (error) {
+    return mapActionError<DailyExpenseDto>(error, { dateField: "expenseDate", handlerField: "handledByEmployeeId" });
   }
 }

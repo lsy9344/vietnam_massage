@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { requireRouteAccess } from "@/lib/authorization";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
-import { listServiceCallFormOptions, listServiceCallsForDate } from "@/modules/calls/service-call-service";
+import {
+  getDailyCallLedgerSummary,
+  listDailyExpensesForDate,
+  listServiceCallFormOptions,
+  listServiceCallsForDate
+} from "@/modules/calls/service-call-service";
+import { DailyExpensePanel } from "@/app/(erp)/calls/daily-expense-panel";
+import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
 
 type CallsPageSearchParams = {
@@ -67,9 +74,11 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
   }
 
   const serviceDate = clampDateToMonth(params.serviceDate, selectedMonth);
-  const [rows, options] = await Promise.all([
+  const [rows, options, expenses, summary] = await Promise.all([
     listServiceCallsForDate({ operatingMonthId: selectedMonth.id, serviceDate }),
-    listServiceCallFormOptions({ operatingMonthId: selectedMonth.id })
+    listServiceCallFormOptions({ operatingMonthId: selectedMonth.id }),
+    listDailyExpensesForDate({ operatingMonthId: selectedMonth.id, expenseDate: serviceDate }),
+    getDailyCallLedgerSummary({ operatingMonthId: selectedMonth.id, serviceDate })
   ]);
   const isLocked = selectedMonth.status === "잠금";
 
@@ -121,6 +130,15 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
           조회
         </button>
       </form>
+
+      <DailySummaryStrip summary={summary} />
+      <DailyExpensePanel
+        expenses={expenses}
+        handlers={options.expenseHandlers}
+        isLocked={isLocked}
+        operatingMonthId={selectedMonth.id}
+        serviceDate={serviceDate}
+      />
 
       <EditableCallGrid
         isLocked={isLocked}

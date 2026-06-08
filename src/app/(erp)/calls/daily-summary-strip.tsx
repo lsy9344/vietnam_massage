@@ -1,0 +1,62 @@
+import type { DailyCallLedgerSummaryDto } from "@/modules/calls/service-call-service";
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("ko-KR").format(value);
+}
+
+function Kpi({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
+  return (
+    <div className="grid min-w-28 gap-1 border-r border-border px-3 py-2 last:border-r-0">
+      <span className="text-xs font-medium text-muted">{label}</span>
+      <span className={`text-sm font-semibold [font-variant-numeric:tabular-nums] ${danger ? "text-danger" : "text-foreground"}`}>{value}</span>
+    </div>
+  );
+}
+
+export function DailySummaryStrip({ summary }: { summary: DailyCallLedgerSummaryDto }) {
+  return (
+    <section className="mb-4 border border-border bg-surface" aria-label="일별 요약">
+      <div className="flex flex-wrap border-b border-border">
+        <Kpi label="예약건수" value={`${formatNumber(summary.reservationCount)}건`} />
+        <Kpi label="방문완료" value={`${formatNumber(summary.completedCount)}건`} />
+        <Kpi label="노쇼/취소" value={`${formatNumber(summary.noShowCount)} / ${formatNumber(summary.canceledCount)}`} />
+        <Kpi label="결제합계" value={`${formatNumber(summary.paymentTotal)} VND`} />
+        <Kpi label="마사지사정산" value={`${formatNumber(summary.therapistCommissionTotal)} VND`} />
+        <Kpi label="귀케어풀" value={`${formatNumber(summary.earcarePoolTotal)} VND`} />
+        <Kpi label="할인합계" value={`${formatNumber(summary.discountTotal)} VND`} />
+        <Kpi label="지출합계" value={`${formatNumber(summary.expenseTotal)} VND`} danger={summary.expenseTotal > 0} />
+        <Kpi label="순매출" value={`${formatNumber(summary.netSales)} VND`} danger={summary.netSales < 0} />
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] border-collapse text-left text-xs">
+          <thead className="bg-readonly text-foreground">
+            <tr>
+              <th className="border-b border-border px-3 py-2">코스</th>
+              <th className="border-b border-border px-3 py-2 text-right">방문완료</th>
+              <th className="border-b border-border px-3 py-2 text-right">할인건수</th>
+              <th className="border-b border-border px-3 py-2 text-right">마사지사 담당 수</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summary.courseSummaries.map((course) => (
+              <tr key={course.courseCode}>
+                <td className="border-b border-border px-3 py-2 font-semibold text-foreground">{course.courseCode}</td>
+                <td className="border-b border-border px-3 py-2 text-right [font-variant-numeric:tabular-nums]">{course.completedCount}</td>
+                <td className="border-b border-border px-3 py-2 text-right [font-variant-numeric:tabular-nums]">{course.discountCount}</td>
+                <td className="border-b border-border px-3 py-2 text-right [font-variant-numeric:tabular-nums]">
+                  {course.therapistAssignmentCount}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {summary.warningCounts.coursePolicyMissing + summary.warningCounts.therapistRateMissing + summary.warningCounts.secondTherapistRequired > 0 ? (
+        <p className="px-3 py-2 text-xs text-danger">
+          정책 누락 {summary.warningCounts.coursePolicyMissing}건, 수당 누락 {summary.warningCounts.therapistRateMissing}건, 마사지사2 필요{" "}
+          {summary.warningCounts.secondTherapistRequired}건은 금액/코스별 집계에서 제외됐다.
+        </p>
+      ) : null}
+    </section>
+  );
+}

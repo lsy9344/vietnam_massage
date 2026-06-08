@@ -7,8 +7,14 @@ import { listActiveEmployees } from "@/modules/masters/employee-service";
 import { listActiveRooms } from "@/modules/masters/room-service";
 import {
   assignmentRoles,
+  dailyExpenseDeactivateSchema,
+  dailyExpenseInputSchema,
+  dailyExpenseUpdateSchema,
   serviceCallAutosaveInputSchema,
   serviceCallInputSchema,
+  type DailyExpenseDeactivateInput,
+  type DailyExpenseInput,
+  type DailyExpenseUpdateInput,
   type ServiceCallAssignmentRole,
   type ServiceCallAutosaveInput,
   type ServiceCallInput
@@ -103,6 +109,21 @@ type ServiceCallStatusHistoryRecord = {
   createdAt: Date;
 };
 
+type DailyExpenseRecord = {
+  id: string;
+  operatingMonthId: string;
+  operatingMonth?: OperatingMonthRecord;
+  expenseDate: Date;
+  amount: number;
+  description: string;
+  handledByEmployeeId: string;
+  handledByEmployee?: EmployeeRecord;
+  note: string | null;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type ServiceCallRecord = {
   id: string;
   operatingMonthId: string;
@@ -170,6 +191,12 @@ type ServiceCallPrismaClient = {
     create(args: unknown): Promise<ServiceCallStatusHistoryRecord>;
     findMany(args?: unknown): Promise<ServiceCallStatusHistoryRecord[]>;
   };
+  dailyExpense: {
+    create(args: unknown): Promise<DailyExpenseRecord>;
+    findMany(args?: unknown): Promise<DailyExpenseRecord[]>;
+    findUnique(args: unknown): Promise<DailyExpenseRecord | null>;
+    updateMany(args: unknown): Promise<{ count: number }>;
+  };
   auditLog: {
     create(args: unknown): Promise<unknown>;
     findMany(args?: unknown): Promise<unknown[]>;
@@ -198,6 +225,7 @@ export type ServiceCallRowDto = {
   roomId: string;
   roomLabel: string;
   courseId: string;
+  courseCode: string;
   courseLabel: string;
   customerMemo: string | null;
   therapist1: ServiceCallAssigneeDto | null;
@@ -220,6 +248,45 @@ export type ServiceCallRowDto = {
   createdAt: string;
   updatedAt: string;
   savedAt: string;
+};
+
+export type DailyExpenseDto = {
+  id: string;
+  operatingMonthId: string;
+  expenseDate: string;
+  amount: number;
+  description: string;
+  handledByEmployee: ServiceCallAssigneeDto;
+  note: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DailyCourseSummaryDto = {
+  courseCode: "A" | "B" | "C" | "D" | "E";
+  completedCount: number;
+  discountCount: number;
+  therapistAssignmentCount: number;
+};
+
+export type DailyCallLedgerSummaryDto = {
+  reservationCount: number;
+  completedCount: number;
+  noShowCount: number;
+  canceledCount: number;
+  paymentTotal: number;
+  therapistCommissionTotal: number;
+  earcarePoolTotal: number;
+  discountTotal: number;
+  expenseTotal: number;
+  netSales: number;
+  courseSummaries: DailyCourseSummaryDto[];
+  warningCounts: {
+    coursePolicyMissing: number;
+    therapistRateMissing: number;
+    secondTherapistRequired: number;
+  };
 };
 
 export type CompletedServiceCallCalculationDto = {
@@ -262,6 +329,7 @@ export type ServiceCallFormOptions = {
   confirmationCodes: ServiceCallOption[];
   therapists: ServiceCallOption[];
   earcareEmployees: ServiceCallOption[];
+  expenseHandlers: ServiceCallOption[];
 };
 
 export class ServiceCallDomainError extends Error {
@@ -273,6 +341,18 @@ export class ServiceCallDomainError extends Error {
 
 function isCompletedServiceCallStatus(status: string) {
   return status === "방문완료" || status === "VISIT_COMPLETE";
+}
+
+function isReservationStatus(status: string) {
+  return status === "예약" || status === "RESERVED";
+}
+
+function isNoShowStatus(status: string) {
+  return status === "노쇼" || status === "NO_SHOW";
+}
+
+function isCanceledStatus(status: string) {
+  return status === "취소" || status === "CANCELED";
 }
 
 function getClient(client?: ServiceCallPrismaClient) {
@@ -472,6 +552,7 @@ async function toRowDto(tx: ServiceCallPrismaClient, record: ServiceCallRecord):
     roomId: record.roomId,
     roomLabel: record.room?.displayName ?? record.roomId,
     courseId: record.courseId,
+    courseCode: course?.code ?? "",
     courseLabel: policy ? `${course?.code ?? ""} ${policy.name}`.trim() : record.courseId,
     customerMemo: record.customerMemo,
     therapist1: therapist1 ? toAssigneeDto(therapist1) : null,
@@ -595,6 +676,13 @@ async function assertActiveEmployee(tx: ServiceCallPrismaClient, input: { employ
   }
 }
 
+async function assertActiveExpenseHandler(tx: ServiceCallPrismaClient, employeeId: string) {
+  const employee = await tx.employee.findUnique({ where: { id: employeeId } });
+  if (!employee || !employee.isActive) {
+    throw new ServiceCallDomainError("활성 담당 직원을 선택하세요.", "EMPLOYEE_NOT_ACTIVE");
+  }
+}
+
 async function writeAssignment(
   tx: ServiceCallPrismaClient,
   input: { serviceCallId: string; assignmentRole: ServiceCallAssignmentRole; employeeId: string | null | undefined }
@@ -674,6 +762,43 @@ function toAuditSnapshot(record: ServiceCallRecord): AuditJsonSnapshot {
       therapist2Id: assignmentEmployeeId(record, "THERAPIST_2"),
       earcareEmployeeId: assignmentEmployeeId(record, "EARCARE")
     },
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString()
+  };
+}
+
+function toDailyExpenseAuditSnapshot(record: DailyExpenseRecord): AuditJsonSnapshot {
+  return {
+    id: record.id,
+    operatingMonthId: record.operatingMonthId,
+    expenseDate: toIsoDateOnly(record.expenseDate),
+    amount: record.amount,
+    description: record.description,
+    handledByEmployeeId: record.handledByEmployeeId,
+    note: record.note,
+    isActive: record.isActive,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString()
+  };
+}
+
+function toDailyExpenseDto(record: DailyExpenseRecord): DailyExpenseDto {
+  const handledByEmployee = record.handledByEmployee;
+  return {
+    id: record.id,
+    operatingMonthId: record.operatingMonthId,
+    expenseDate: toIsoDateOnly(record.expenseDate),
+    amount: record.amount,
+    description: record.description,
+    handledByEmployee: handledByEmployee
+      ? toAssigneeDto(handledByEmployee)
+      : {
+          id: record.handledByEmployeeId,
+          displayName: record.handledByEmployeeId,
+          staffCode: record.handledByEmployeeId
+        },
+    note: record.note,
+    isActive: record.isActive,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString()
   };
@@ -928,6 +1053,269 @@ export async function autosaveServiceCallRow(
   });
 }
 
+async function findDailyExpenseWithRelations(tx: ServiceCallPrismaClient, id: string) {
+  const record = await tx.dailyExpense.findUnique({
+    where: { id },
+    include: { operatingMonth: true, handledByEmployee: true }
+  });
+
+  if (!record) {
+    throw new ServiceCallDomainError("일별 지출 항목을 찾을 수 없습니다.", "DAILY_EXPENSE_NOT_FOUND");
+  }
+
+  return record;
+}
+
+function assertActiveDailyExpense(record: DailyExpenseRecord) {
+  if (!record.isActive) {
+    throw new ServiceCallDomainError("비활성 지출 항목은 수정할 수 없습니다.", "DAILY_EXPENSE_NOT_ACTIVE");
+  }
+}
+
+function requireActor(actorId: string | null | undefined) {
+  const id = actorId?.trim();
+  if (!id) {
+    throw new ServiceCallDomainError("저장 행위자를 확인할 수 없습니다.", "ACTOR_REQUIRED");
+  }
+  return id;
+}
+
+export async function createDailyExpense(input: DailyExpenseInput & { actorId: string; prismaClient?: ServiceCallPrismaClient }) {
+  const parsed = dailyExpenseInputSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "일별 지출 입력값이 올바르지 않습니다.", "INVALID_DAILY_EXPENSE_INPUT");
+  }
+
+  const actorId = requireActor(input.actorId);
+  const client = getClient(input.prismaClient);
+
+  return runInTransaction(client, async (tx) => {
+    const { serviceDate } = await assertWritableDate(tx, {
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate: parsed.data.expenseDate
+    });
+    await assertActiveExpenseHandler(tx, parsed.data.handledByEmployeeId);
+
+    const record = await tx.dailyExpense.create({
+      data: {
+        operatingMonthId: parsed.data.operatingMonthId,
+        expenseDate: serviceDate,
+        amount: parsed.data.amount,
+        description: parsed.data.description,
+        handledByEmployeeId: parsed.data.handledByEmployeeId,
+        note: parsed.data.note ?? null,
+        isActive: true
+      },
+      include: { handledByEmployee: true }
+    });
+
+    await recordAuditEvent(
+      {
+        actorId,
+        action: "daily_expense.created",
+        targetType: "daily_expense",
+        targetId: record.id,
+        beforeValue: null,
+        afterValue: toDailyExpenseAuditSnapshot(record)
+      },
+      { prismaClient: tx }
+    );
+
+    return toDailyExpenseDto(record);
+  });
+}
+
+export async function updateDailyExpense(input: DailyExpenseUpdateInput & { actorId: string; prismaClient?: ServiceCallPrismaClient }) {
+  const parsed = dailyExpenseUpdateSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "일별 지출 입력값이 올바르지 않습니다.", "INVALID_DAILY_EXPENSE_INPUT");
+  }
+
+  const actorId = requireActor(input.actorId);
+  const client = getClient(input.prismaClient);
+
+  return runInTransaction(client, async (tx) => {
+    const before = await findDailyExpenseWithRelations(tx, parsed.data.dailyExpenseId);
+    assertActiveDailyExpense(before);
+    await assertWritableDate(tx, {
+      operatingMonthId: before.operatingMonthId,
+      serviceDate: toIsoDateOnly(before.expenseDate)
+    });
+    const { serviceDate } = await assertWritableDate(tx, {
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate: parsed.data.expenseDate
+    });
+    await assertActiveExpenseHandler(tx, parsed.data.handledByEmployeeId);
+
+    const updateResult = await tx.dailyExpense.updateMany({
+      where: { id: parsed.data.dailyExpenseId, operatingMonthId: parsed.data.operatingMonthId, isActive: true },
+      data: {
+        expenseDate: serviceDate,
+        amount: parsed.data.amount,
+        description: parsed.data.description,
+        handledByEmployeeId: parsed.data.handledByEmployeeId,
+        note: parsed.data.note ?? null
+      }
+    });
+    if (updateResult.count !== 1) {
+      throw new ServiceCallDomainError("일별 지출 항목을 찾을 수 없습니다.", "DAILY_EXPENSE_NOT_FOUND");
+    }
+
+    const after = await findDailyExpenseWithRelations(tx, parsed.data.dailyExpenseId);
+    await recordAuditEvent(
+      {
+        actorId,
+        action: "daily_expense.changed",
+        targetType: "daily_expense",
+        targetId: after.id,
+        beforeValue: toDailyExpenseAuditSnapshot(before),
+        afterValue: toDailyExpenseAuditSnapshot(after)
+      },
+      { prismaClient: tx }
+    );
+
+    return toDailyExpenseDto(after);
+  });
+}
+
+export async function deactivateDailyExpense(input: DailyExpenseDeactivateInput & { actorId: string; prismaClient?: ServiceCallPrismaClient }) {
+  const parsed = dailyExpenseDeactivateSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "일별 지출 입력값이 올바르지 않습니다.", "INVALID_DAILY_EXPENSE_INPUT");
+  }
+
+  const actorId = requireActor(input.actorId);
+  const client = getClient(input.prismaClient);
+
+  return runInTransaction(client, async (tx) => {
+    const before = await findDailyExpenseWithRelations(tx, parsed.data.dailyExpenseId);
+    assertActiveDailyExpense(before);
+    await assertWritableDate(tx, {
+      operatingMonthId: before.operatingMonthId,
+      serviceDate: toIsoDateOnly(before.expenseDate)
+    });
+
+    const updateResult = await tx.dailyExpense.updateMany({
+      where: { id: before.id, operatingMonthId: before.operatingMonthId, isActive: true },
+      data: { isActive: false }
+    });
+    if (updateResult.count !== 1) {
+      throw new ServiceCallDomainError("일별 지출 항목을 찾을 수 없습니다.", "DAILY_EXPENSE_NOT_FOUND");
+    }
+
+    const after = await findDailyExpenseWithRelations(tx, before.id);
+    await recordAuditEvent(
+      {
+        actorId,
+        action: "daily_expense.deactivated",
+        targetType: "daily_expense",
+        targetId: after.id,
+        beforeValue: toDailyExpenseAuditSnapshot(before),
+        afterValue: toDailyExpenseAuditSnapshot(after)
+      },
+      { prismaClient: tx }
+    );
+
+    return toDailyExpenseDto(after);
+  });
+}
+
+export async function listDailyExpensesForDate(input: {
+  operatingMonthId: string;
+  expenseDate: string;
+  prismaClient?: ServiceCallPrismaClient;
+}) {
+  const parsed = dailyExpenseInputSchema.pick({ operatingMonthId: true, expenseDate: true }).safeParse(input);
+  if (!parsed.success) {
+    throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "일별 지출 조회 조건이 올바르지 않습니다.", "INVALID_DAILY_EXPENSE_QUERY");
+  }
+
+  const client = getClient(input.prismaClient);
+  const records = await client.dailyExpense.findMany({
+    where: {
+      operatingMonthId: parsed.data.operatingMonthId,
+      expenseDate: toDateOnly(parsed.data.expenseDate),
+      isActive: true
+    },
+    include: { handledByEmployee: true },
+    orderBy: [{ createdAt: "asc" }]
+  });
+
+  return records.map(toDailyExpenseDto);
+}
+
+function emptyCourseSummaries(): DailyCourseSummaryDto[] {
+  return (["A", "B", "C", "D", "E"] as const).map((courseCode) => ({
+    courseCode,
+    completedCount: 0,
+    discountCount: 0,
+    therapistAssignmentCount: 0
+  }));
+}
+
+export async function getDailyCallLedgerSummary(input: {
+  operatingMonthId: string;
+  serviceDate: string;
+  prismaClient?: ServiceCallPrismaClient;
+}): Promise<DailyCallLedgerSummaryDto> {
+  const rows = await listServiceCallsForDate(input);
+  const expenses = await listDailyExpensesForDate({
+    operatingMonthId: input.operatingMonthId,
+    expenseDate: input.serviceDate,
+    prismaClient: input.prismaClient
+  });
+  const courseSummaries = emptyCourseSummaries();
+  const courseSummaryByCode = new Map(courseSummaries.map((summary) => [summary.courseCode, summary]));
+
+  let paymentTotal = 0;
+  let therapistCommissionTotal = 0;
+  let earcarePoolTotal = 0;
+  let discountTotal = 0;
+  const warningCounts = {
+    coursePolicyMissing: 0,
+    therapistRateMissing: 0,
+    secondTherapistRequired: 0
+  };
+
+  for (const row of rows) {
+    if (row.calculationStatus === "course_policy_missing") warningCounts.coursePolicyMissing += 1;
+    if (row.calculationStatus === "therapist_rate_missing") warningCounts.therapistRateMissing += 1;
+    if (row.calculationStatus === "second_therapist_required") warningCounts.secondTherapistRequired += 1;
+
+    if (row.calculationStatus !== "calculated") {
+      continue;
+    }
+
+    paymentTotal += row.paymentAmount;
+    therapistCommissionTotal += row.therapist1Commission + row.therapist2Commission;
+    earcarePoolTotal += row.earcarePoolAmount;
+    discountTotal += row.discountAmount;
+
+    const courseSummary = courseSummaryByCode.get(row.courseCode as DailyCourseSummaryDto["courseCode"]);
+    if (courseSummary) {
+      courseSummary.completedCount += 1;
+      courseSummary.discountCount += row.discountAmount > 0 ? 1 : 0;
+      courseSummary.therapistAssignmentCount += (row.therapist1 ? 1 : 0) + (row.therapist2 ? 1 : 0);
+    }
+  }
+
+  const expenseTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  return {
+    reservationCount: rows.filter((row) => isReservationStatus(row.status)).length,
+    completedCount: rows.filter((row) => isCompletedServiceCallStatus(row.status)).length,
+    noShowCount: rows.filter((row) => isNoShowStatus(row.status)).length,
+    canceledCount: rows.filter((row) => isCanceledStatus(row.status)).length,
+    paymentTotal,
+    therapistCommissionTotal,
+    earcarePoolTotal,
+    discountTotal,
+    expenseTotal,
+    netSales: paymentTotal - expenseTotal,
+    courseSummaries,
+    warningCounts
+  };
+}
+
 export async function listCompletedServiceCallCalculationsForDate(input: {
   operatingMonthId: string;
   serviceDate: string;
@@ -994,7 +1382,7 @@ export async function listServiceCallFormOptions(input: { operatingMonthId?: str
     : operatingMonths[0];
   const monthKey = selectedMonth?.monthKey;
 
-  const [rooms, timeSlots, courses, statuses, discountTypes, paymentMethods, confirmationCodes, therapists, earcareEmployees] = await Promise.all([
+  const [rooms, timeSlots, courses, statuses, discountTypes, paymentMethods, confirmationCodes, therapists, earcareEmployees, expenseHandlers] = await Promise.all([
     listActiveRooms({ prismaClient: client as any }),
     listActiveTimeSlots({ prismaClient: client as any }),
     monthKey ? listActiveCourses({ monthKey, prismaClient: client as any }) : Promise.resolve([]),
@@ -1003,7 +1391,8 @@ export async function listServiceCallFormOptions(input: { operatingMonthId?: str
     listActiveCodeItems({ codeType: "PAYMENT_METHOD", prismaClient: client as any }),
     listActiveCodeItems({ codeType: "CONFIRMATION", prismaClient: client as any }),
     listActiveEmployees({ employeeGroup: "THERAPIST", prismaClient: client as any }),
-    listActiveEmployees({ employeeGroup: "EARCARE", prismaClient: client as any })
+    listActiveEmployees({ employeeGroup: "EARCARE", prismaClient: client as any }),
+    listActiveEmployees({ prismaClient: client as any })
   ]);
 
   return {
@@ -1015,6 +1404,7 @@ export async function listServiceCallFormOptions(input: { operatingMonthId?: str
     paymentMethods: paymentMethods.map((code) => option(code.code, code.displayName)),
     confirmationCodes: confirmationCodes.map((code) => option(code.code, code.displayName)),
     therapists: therapists.map((employee) => option(employee.id, `${employee.displayName} (${employee.staffCode})`)),
-    earcareEmployees: earcareEmployees.map((employee) => option(employee.id, `${employee.displayName} (${employee.staffCode})`))
+    earcareEmployees: earcareEmployees.map((employee) => option(employee.id, `${employee.displayName} (${employee.staffCode})`)),
+    expenseHandlers: expenseHandlers.map((employee) => option(employee.id, `${employee.displayName} (${employee.staffCode})`))
   } satisfies ServiceCallFormOptions;
 }

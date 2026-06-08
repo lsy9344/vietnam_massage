@@ -19,6 +19,30 @@ export default function CallsLoading() {
         <Skeleton className="h-9 w-40" />
         <Skeleton className="h-9 w-16" />
       </div>
+      <section className="mb-4 border border-border bg-surface">
+        <div className="flex flex-wrap border-b border-border">
+          {Array.from({ length: 9 }).map((_, index) => (
+            <div className="grid min-w-28 gap-2 border-r border-border px-3 py-2 last:border-r-0" key={index}>
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+          ))}
+        </div>
+        <div className="grid gap-2 px-3 py-3">
+          <Skeleton className="h-7 w-full" />
+          <Skeleton className="h-7 w-full" />
+        </div>
+      </section>
+      <section className="mb-4 border border-border bg-surface">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="h-3 w-16" />
+        </div>
+        <div className="grid gap-2 px-3 py-3">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+        </div>
+      </section>
       <section className="border border-border bg-surface">
         <div className="border-b border-border px-4 py-3">
           <Skeleton className="h-5 w-32" />

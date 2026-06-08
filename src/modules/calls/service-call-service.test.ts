@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   autosaveServiceCallRow,
+  createDailyExpense,
+  deactivateDailyExpense,
+  getDailyCallLedgerSummary,
+  listDailyExpensesForDate,
   listCompletedServiceCallCalculationsForDate,
   listServiceCallStatusHistory,
   listServiceCallFormOptions,
   listServiceCallsForDate,
   saveBasicServiceCallRow,
-  ServiceCallDomainError
+  ServiceCallDomainError,
+  updateDailyExpense
 } from "@/modules/calls/service-call-service";
 
 function dbDate(value: string) {
@@ -199,6 +204,7 @@ function createMemoryPrisma() {
     ["01:00", { id: "slot-0100", value: "01:00", sortOrder: 290, isActive: true, createdAt: new Date("2026-06-01T00:01:00.000Z") }]
   ]);
   const serviceCalls = new Map<string, any>();
+  const dailyExpenses = new Map<string, any>();
   const assignments = new Map<string, any>();
   const statusHistories: any[] = [];
   const auditEvents: any[] = [];
@@ -383,6 +389,45 @@ function createMemoryPrisma() {
         return records;
       }
     },
+    dailyExpense: {
+      async create({ data }: any) {
+        const record = {
+          id: `expense-${dailyExpenses.size + 1}`,
+          ...data,
+          isActive: data.isActive ?? true,
+          createdAt: new Date(`2026-06-09T02:0${dailyExpenses.size}:00.000Z`),
+          updatedAt: new Date(`2026-06-09T02:0${dailyExpenses.size}:00.000Z`)
+        };
+        dailyExpenses.set(record.id, record);
+        return { ...record, handledByEmployee: employees.get(record.handledByEmployeeId) };
+      },
+      async findMany({ where }: any = {}) {
+        return [...dailyExpenses.values()]
+          .filter(
+            (expense) =>
+              (where?.operatingMonthId === undefined || expense.operatingMonthId === where.operatingMonthId) &&
+              (where?.expenseDate === undefined || sameDate(expense.expenseDate, where.expenseDate)) &&
+              (where?.isActive === undefined || expense.isActive === where.isActive)
+          )
+          .map((expense) => ({ ...expense, handledByEmployee: employees.get(expense.handledByEmployeeId) }));
+      },
+      async findUnique({ where }: any) {
+        const record = dailyExpenses.get(where.id);
+        return record ? { ...record, handledByEmployee: employees.get(record.handledByEmployeeId) } : null;
+      },
+      async updateMany({ where, data }: any) {
+        const record = dailyExpenses.get(where.id);
+        if (
+          !record ||
+          (where.operatingMonthId && record.operatingMonthId !== where.operatingMonthId) ||
+          (where.isActive !== undefined && record.isActive !== where.isActive)
+        ) {
+          return { count: 0 };
+        }
+        dailyExpenses.set(where.id, { ...record, ...data, updatedAt: new Date("2026-06-09T03:00:00.000Z") });
+        return { count: 1 };
+      }
+    },
     auditLog: {
       async create({ data }: any) {
         const record = {
@@ -401,6 +446,7 @@ function createMemoryPrisma() {
       return callback(client);
     },
     serviceCalls,
+    dailyExpenses,
     assignments,
     statusHistories,
     auditEvents
@@ -1096,5 +1142,272 @@ describe("service call service", () => {
         }),
       (error) => error instanceof ServiceCallDomainError && error.code === "EMPLOYEE_NOT_ACTIVE_FOR_ROLE"
     );
+  });
+
+  it("creates, lists, updates, and deactivates active daily expenses with audit snapshots", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const created = await createDailyExpense({
+      operatingMonthId: "month-2026-06",
+      expenseDate: "2026-06-10",
+      amount: 120000,
+      description: "식대",
+      handledByEmployeeId: "ops-1",
+      note: "저녁",
+      actorId: "counter-account",
+      prismaClient
+    });
+    const updated = await updateDailyExpense({
+      dailyExpenseId: created.id,
+      operatingMonthId: "month-2026-06",
+      expenseDate: "2026-06-10",
+      amount: 150000,
+      description: "식대 수정",
+      handledByEmployeeId: "ops-1",
+      note: null,
+      actorId: "counter-account",
+      prismaClient
+    });
+    await deactivateDailyExpense({
+      dailyExpenseId: created.id,
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    const expenses = await listDailyExpensesForDate({
+      operatingMonthId: "month-2026-06",
+      expenseDate: "2026-06-10",
+      prismaClient
+    });
+
+    assert.equal(created.amount, 120000);
+    assert.equal(created.handledByEmployee.id, "ops-1");
+    assert.equal(updated.amount, 150000);
+    assert.deepEqual(expenses, []);
+    assert.deepEqual(
+      prismaClient.auditEvents.map((event: any) => event.action),
+      ["daily_expense.created", "daily_expense.changed", "daily_expense.deactivated"]
+    );
+    assert.equal(prismaClient.auditEvents[1].beforeValue.expenseDate, "2026-06-10");
+    assert.equal(prismaClient.auditEvents[1].afterValue.amount, 150000);
+    assert.equal(prismaClient.auditEvents[2].afterValue.isActive, false);
+  });
+
+  it("blocks updates and duplicate deactivation for inactive daily expenses without extra audit events", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const created = await createDailyExpense({
+      operatingMonthId: "month-2026-06",
+      expenseDate: "2026-06-10",
+      amount: 120000,
+      description: "식대",
+      handledByEmployeeId: "ops-1",
+      note: "저녁",
+      actorId: "counter-account",
+      prismaClient
+    });
+    await deactivateDailyExpense({
+      dailyExpenseId: created.id,
+      actorId: "counter-account",
+      prismaClient
+    });
+    const auditCountAfterDeactivate = prismaClient.auditEvents.length;
+
+    await assert.rejects(
+      () =>
+        updateDailyExpense({
+          dailyExpenseId: created.id,
+          operatingMonthId: "month-2026-06",
+          expenseDate: "2026-06-10",
+          amount: 150000,
+          description: "비활성 수정",
+          handledByEmployeeId: "ops-1",
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error) => error instanceof ServiceCallDomainError && error.code === "DAILY_EXPENSE_NOT_ACTIVE"
+    );
+    await assert.rejects(
+      () =>
+        deactivateDailyExpense({
+          dailyExpenseId: created.id,
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error) => error instanceof ServiceCallDomainError && error.code === "DAILY_EXPENSE_NOT_ACTIVE"
+    );
+
+    assert.equal(prismaClient.auditEvents.length, auditCountAfterDeactivate);
+  });
+
+  it("blocks formatted string and invalid daily expense amounts, date range violations, locked months, and inactive handlers without side effects", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    for (const amount of ["1,000,000 VND", "", -1, 0, 1.5, Number.NaN]) {
+      await assert.rejects(
+        () =>
+          createDailyExpense({
+            operatingMonthId: "month-2026-06",
+            expenseDate: "2026-06-10",
+            amount,
+            description: "검증",
+            handledByEmployeeId: "ops-1",
+            actorId: "counter-account",
+            prismaClient
+          } as any),
+        (error) => error instanceof ServiceCallDomainError && error.code === "INVALID_DAILY_EXPENSE_INPUT"
+      );
+    }
+
+    await assert.rejects(
+      () =>
+        createDailyExpense({
+          operatingMonthId: "month-2026-06",
+          expenseDate: "2026-07-01",
+          amount: 1000,
+          description: "범위 밖",
+          handledByEmployeeId: "ops-1",
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error) => error instanceof ServiceCallDomainError && error.code === "OPERATING_MONTH_DATE_OUT_OF_RANGE"
+    );
+    await assert.rejects(
+      () =>
+        createDailyExpense({
+          operatingMonthId: "month-locked",
+          expenseDate: "2026-07-10",
+          amount: 1000,
+          description: "잠금",
+          handledByEmployeeId: "ops-1",
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error) => error instanceof ServiceCallDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
+    await assert.rejects(
+      () =>
+        createDailyExpense({
+          operatingMonthId: "month-2026-06",
+          expenseDate: "2026-06-10",
+          amount: 1000,
+          description: "담당자 오류",
+          handledByEmployeeId: "missing-employee",
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error) => error instanceof ServiceCallDomainError && error.code === "EMPLOYEE_NOT_ACTIVE"
+    );
+
+    assert.equal(prismaClient.dailyExpenses.size, 0);
+    assert.equal(prismaClient.auditEvents.length, 0);
+  });
+
+  it("summarizes a daily call ledger from calculated completed calls, active expenses, and course codes", async () => {
+    const prismaClient = createMemoryPrisma();
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      therapist2Id: "therapist-2",
+      earcareEmployeeId: "earcare-1",
+      status: "VISIT_COMPLETE",
+      discountTypeCode: "BIRTHDAY",
+      prismaClient
+    });
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "01:00",
+      roomId: "room-101",
+      courseId: "course-d",
+      therapist1Id: "therapist-1",
+      therapist2Id: "therapist-2",
+      status: "방문완료",
+      prismaClient
+    });
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "RESERVED",
+      prismaClient
+    });
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "01:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "CANCELED",
+      prismaClient
+    });
+    prismaClient.serviceCalls.set("invalid-d-call", {
+      id: "invalid-d-call",
+      operatingMonthId: "month-2026-06",
+      serviceDate: dbDate("2026-06-10"),
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-d",
+      customerMemo: null,
+      status: "방문완료",
+      discountTypeCode: null,
+      paymentMethodCode: null,
+      note: null,
+      confirmationCode: null,
+      createdAt: new Date("2026-06-09T00:00:00.000Z"),
+      updatedAt: new Date("2026-06-09T00:00:00.000Z")
+    });
+    prismaClient.assignments.set("invalid-d-therapist-1", {
+      id: "invalid-d-therapist-1",
+      serviceCallId: "invalid-d-call",
+      assignmentRole: "THERAPIST_1",
+      employeeId: "therapist-1",
+      isActive: true
+    });
+    await createDailyExpense({
+      operatingMonthId: "month-2026-06",
+      expenseDate: "2026-06-10",
+      amount: 250000,
+      description: "소모품",
+      handledByEmployeeId: "ops-1",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    const summary = await getDailyCallLedgerSummary({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient
+    });
+
+    assert.equal(summary.reservationCount, 1);
+    assert.equal(summary.completedCount, 3);
+    assert.equal(summary.noShowCount, 0);
+    assert.equal(summary.canceledCount, 1);
+    assert.equal(summary.paymentTotal, 4600000);
+    assert.equal(summary.therapistCommissionTotal, 2500000);
+    assert.equal(summary.earcarePoolTotal, 100000);
+    assert.equal(summary.discountTotal, 100000);
+    assert.equal(summary.expenseTotal, 250000);
+    assert.equal(summary.netSales, 4350000);
+    assert.equal(summary.warningCounts.secondTherapistRequired, 1);
+    assert.deepEqual(summary.courseSummaries.find((course) => course.courseCode === "A"), {
+      courseCode: "A",
+      completedCount: 1,
+      discountCount: 1,
+      therapistAssignmentCount: 2
+    });
+    assert.deepEqual(summary.courseSummaries.find((course) => course.courseCode === "D"), {
+      courseCode: "D",
+      completedCount: 1,
+      discountCount: 0,
+      therapistAssignmentCount: 2
+    });
   });
 });

@@ -66,6 +66,10 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Story 2.2 콜 autosave 감사 이벤트는 dot notation만 사용한다. 상태 변경은 `service_call.status_changed`, 결제수단/할인구분/담당자/확인값 등 민감 row 변경은 `service_call.row_changed`를 기록한다.
 - Story 2.3 기준 콜 계산은 calls domain service가 소유한다. 완료 상태는 레거시 값 `방문완료`와 Story 1.6 stable code `VISIT_COMPLETE`를 모두 인식하되, 비완료 상태는 `not_completed`로 제외한다. 빈 할인은 0, 선택된 할인구분은 고정 `100,000` VND이며, source of truth는 `CoursePolicy.basePrice`, `CoursePolicy.earcarePoolAmount`, `CoursePolicy.opsCallCredit`, `TherapistCourseRate.amount`다. UI 계산 재구현은 금지하고, autosave 실패 draft는 마지막 성공 계산값을 새 계산처럼 표시하지 않는다. `ServiceCall`에는 월마감 전 derived amount columns를 추가하지 않는다. `listCompletedServiceCallCalculationsForDate()`는 후속 정산/대시보드가 사용할 완료 콜 계산 결과를 반환한다.
 - Story 2.4 기준 D코스 마사지사2 필수 검증은 calls domain service에서 `CoursePolicy.requiresSecondTherapist`와 `therapist2Id`로 수행한다. 필수인데 마사지사2가 없으면 `D_COURSE_SECOND_THERAPIST_REQUIRED` / `D코스는 마사지사2 필수입니다. 마사지사2를 배정해야 저장됩니다.`로 저장과 `방문완료`/`VISIT_COMPLETE` 전환을 차단하고, Server Action은 `fieldErrors.therapist2Id`로 매핑한다. Grid는 마사지사2 셀에 `aria-invalid`, `aria-describedby`, `role="alert"`, danger ring, `!` 아이콘, 텍스트 메시지를 제공한다. 기존 invalid completed D-row는 `second_therapist_required`로 표시하고 `listCompletedServiceCallCalculationsForDate()` 집계에서 제외한다.
+- Story 2.5 기준 일별 지출은 calls domain의 Prisma `DailyExpense` 모델(`daily_expenses`)이 소유한다. `DailyExpense`는 `OperatingMonth.id`, `expenseDate @db.Date`, whole-number VND `amount`, `description`, stable `Employee.id` 담당자, `note`, `isActive`를 저장한다. 일반 운영 경로에서 물리 삭제하지 않고 `isActive=false` soft delete만 사용한다.
+- Story 2.5 지출 mutation은 `createDailyExpense()`, `updateDailyExpense()`, `deactivateDailyExpense()`가 소유하고 `/calls` Server Action은 `requirePermission("call:write")` 후 호출한다. 지출 생성/수정/비활성 감사 이벤트는 `daily_expense.created`, `daily_expense.changed`, `daily_expense.deactivated`이며 snapshot은 plain JSON, `expenseDate: "YYYY-MM-DD"`, 금액 number, 담당자 employee ID만 포함한다.
+- Story 2.5 일별 요약은 `getDailyCallLedgerSummary()`가 소유한다. 예약/노쇼/취소/완료 카운트는 날짜와 운영월 조건으로 계산하고, 결제합계/마사지사정산/귀케어풀/할인합계/코스별 요약은 `calculationStatus === "calculated"`인 완료 콜만 포함한다. `not_completed`, 정책/수당 누락, `second_therapist_required` row는 금액 및 코스별 요약에서 제외한다.
+- Story 2.5 순매출 공식은 `netSales = paymentTotal - expenseTotal`이다. 지출합계는 active `DailyExpense`만 포함하고, 지출은 콜 결제금액/수당/귀케어풀/할인 자체를 바꾸지 않는다. 코스별 요약은 mutable label이 아니라 stable `Course.code` A~E 기준으로 묶는다.
 - 콜 저장은 운영월 범위 밖 날짜를 `OPERATING_MONTH_DATE_OUT_OF_RANGE` / `운영월 범위를 벗어난 날짜입니다.`로 차단하고, 운영월 `잠금` 상태는 `OPERATING_MONTH_LOCKED`로 차단한다.
 - `/calls`는 Server Action + domain service 경계로 구현한다. page는 `requireRouteAccess("/calls")`, action은 `requirePermission("call:write")`를 사용하고 `ActionResult<T>`를 반환한다.
 - Story 2.1 그리드는 별도 dependency 없이 semantic HTML table로 구현했다. TanStack Table은 Story 2.6 수준의 셀 편집/키보드/type-ahead 요구가 들어올 때 도입한다.
@@ -110,6 +114,7 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - 할인구분이 있으면 현재 정책상 고정 `100000` 할인으로 계산되는지 검증한다.
 - D코스는 마사지사2 필수 검증 여부를 정책 확인 후 테스트에 반영한다.
 - Story 2.4 회귀 테스트는 D코스 마사지사2 누락 신규 저장/자동저장/방문완료 차단, 무부작용(row/history/audit 미변경), ARIA 연결, 비D코스 허용, D코스 2인 정상 계산, invalid completed D-row 집계 제외를 포함한다.
+- Story 2.5 회귀 테스트는 지출 생성/수정/비활성, active 지출만 요약 반영, `daily_expense.*` 감사 로그 plain JSON snapshot, 금액 입력 검증, 운영월 범위/잠금 차단 무부작용, 완료 calculated row만 금액/코스별 요약 반영, `netSales = paymentTotal - expenseTotal`, `Course.code` A~E 그룹핑을 포함한다.
 - 마사지사가 `마사지사1` 또는 `마사지사2` 어느 칸에 있어도 담당 콜로 인정되는지 검증한다.
 - 출퇴근 시간이 자정을 넘는 경우 대기시간 계산과 8시간 이상 만근 인정 테스트를 포함한다.
 - 정상 근무 귀케어사가 0명인 날의 귀케어 풀 처리는 정책 확정 전까지 지급액 `0` 또는 미확정 상태로 명시적으로 테스트한다.

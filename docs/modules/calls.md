@@ -82,13 +82,31 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 - The grid therapist2 cell exposes `aria-invalid`, `aria-describedby`, `role="alert"`, danger ring styling, a `!` icon, and visible text. Failed autosave still keeps the draft and retry button.
 - Historical invalid completed rows with `requiresSecondTherapist=true` and no therapist2 are not exposed as calculated downstream aggregates; row DTOs return `second_therapist_required` instead of silently calculating zero.
 
+## Story 2.5 Daily Expense and Summary Contract
+
+- Data model: `DailyExpense` in `daily_expenses`.
+- Mutation boundary: `/calls` Server Actions `createDailyExpenseAction`, `updateDailyExpenseAction`, and `deactivateDailyExpenseAction`.
+- Domain services: `createDailyExpense()`, `updateDailyExpense()`, `deactivateDailyExpense()`, `listDailyExpensesForDate()`, and `getDailyCallLedgerSummary()`.
+- Static validator: `scripts/validate-story-2-5.mjs`.
+- `DailyExpense` stores stable references: `OperatingMonth.id` and `Employee.id` for the handler. It does not store handler display names, account email, Excel row numbers, or formatted currency strings.
+- `amount` is an integer whole VND value. UI renders formatted values such as `1,000,000 VND`, but DB/service payloads use numbers.
+- Daily expense deactivation is soft delete via `isActive=false`. Active expenses only contribute to `expenseTotal`.
+- Expense create/update/deactivate are blocked outside the operating month date range and blocked for locked months, reusing the same call-ledger guardrails.
+- Audit events are `daily_expense.created`, `daily_expense.changed`, and `daily_expense.deactivated`. Snapshots are plain JSON with `expenseDate` as `YYYY-MM-DD`, `amount` as number, and handler as employee ID.
+- `getDailyCallLedgerSummary()` calculates reservation, completed, no-show, canceled, payment, therapist commission, earcare pool, discount, expense, net sales, and course summary values from the selected operating month/date.
+- `netSales = paymentTotal - expenseTotal`.
+- 완료 콜 monetary totals use only rows where `calculationStatus === "calculated"`. Non-completed rows, missing policy/rate rows, and invalid completed D rows with `second_therapist_required` are excluded from amount and course-code summaries.
+- Course summaries group by stable `Course.code` A-E and report completed count, discount count, and therapist assignment count.
+
 ## Rules
 
 - Only `방문완료` calls count toward sales, commissions, earcare pool, and recognized calls.
+- Story 2.5 daily summary uses `방문완료` and `VISIT_COMPLETE` for completed counts, and only `calculated` completed rows for payment and course-code summary totals.
 - Any discount type currently means a fixed 100,000 discount.
 - D course requires a second therapist in the ERP even though Excel does not enforce it.
 - D course requirement is enforced from `CoursePolicy.requiresSecondTherapist`, not from mutable display text.
 - Commission values should be derived from effective therapist course rates.
+- Daily expenses reduce net sales only; they do not alter call payment, commission, discount, or earcare pool calculations.
 - Status changes should be recorded.
 - Story 2.1 stores room/course/employee references as stable IDs and code selections as stable code values, never mutable display labels.
 - `ServiceCallAssignment.assignmentRole` is limited to `THERAPIST_1`, `THERAPIST_2`, and `EARCARE`.
