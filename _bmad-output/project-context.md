@@ -44,6 +44,12 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Story 1.6 기본 상태 코드는 `예약`, `사용중`, `청소중`, `방문완료`, `노쇼`, `취소`; 결제수단은 `현금`, `카드`, `계좌`, `기타`; 할인구분은 `일주일내방문`, `생일자`, `후기작성`; 근무상태는 `정상`, `휴무`, `지각`, `조퇴`, `결근`; 확인값은 `Y`, `N`이다. 빈 할인/확인값은 코드 row가 아니라 downstream `null` 선택 없음으로 표현한다.
 - 시간 슬롯 마스터는 Prisma `TimeSlot` 모델(`time_slots`)이 소유한다. 기본 ERP 입력 슬롯은 `11:00`부터 `01:00`까지 30분 간격 29개이며 `01:30`, `02:00`, `02:30`은 Story 1.6 기본 seed에 포함하지 않는다. 자정 넘김 정렬은 `TimeSlot.value`가 아니라 `TimeSlot.sortOrder`가 소유한다.
 - 코드와 시간 슬롯은 삭제 대신 `isActive=false` 비활성 처리를 사용한다. 생성/표시명 또는 값 변경/정렬 변경/비활성 처리는 `code_item.*`, `time_slot.*` 감사 이벤트를 기록하고 JSON snapshot에는 Date 객체 대신 문자열/숫자/boolean/plain object만 넣는다.
+- 직원 마스터는 Prisma `Employee` 모델(`employees`)이 소유한다. 기본 업무 직원 seed는 운영팀 5명, 귀케어팀 4명, 마사지사 50명이며 stable group code는 `OPERATIONS`, `EARCARE`, `THERAPIST`다.
+- 직원 stable reference는 `Employee.id`와 `staffCode`다. 표시명, 직책, 계정 ID, Excel 행 번호를 downstream 저장 키로 쓰지 않는다.
+- 직원 필드는 `employeeGroup`, `position`, `shiftType`, VND whole-number `baseSalary`, `phone`, `birthday`, `hireDate`, `employmentStatus`, `sortOrder`, `isActive`를 포함한다. `birthday`/`hireDate` DTO는 ISO `YYYY-MM-DD` 문자열 또는 `null`로 다룬다.
+- 직원 비활성 처리는 `Employee.isActive=false`만 사용하고 일반 운영 경로에서 물리 삭제하지 않는다. 퇴사/휴직 상태와 선택 목록 비활성 여부는 분리한다.
+- `UserAccount`와 `Employee`는 분리된 모델이며 optional unique `UserAccount.employeeId`로만 1:1 연결한다. 계정 비활성/잠금/실패 횟수는 로그인 접근 상태이고 직원 정산 이력 상태를 자동 변경하지 않는다.
+- 직원 생성/프로필 변경/정렬 변경/비활성 처리는 `employee.created`, `employee.profile_changed`, `employee.sort_order_changed`, `employee.deactivated` 감사 이벤트를 기록한다. 계정 연결/역할 변경/비활성/잠금 해제는 `user_account.linked_to_employee`, `user_account.role_changed`, `user_account.deactivated`, `user_account.lock_reset` 감사 이벤트를 기록한다.
 - 배포/운영은 프로젝트 표준과 같은 배포 방식, 같은 env 규칙, 같은 migration 절차를 따른다.
 - 패키지 매니저 baseline은 `package.json`에 `pnpm@10.12.1`로 기록했다. 현재 로컬에는 `pnpm`/`corepack`이 없어 npm 기반 동등 검증을 사용했다.
 - App Router baseline은 `next@16.2.7`, `react@19.2.7`, `react-dom@19.2.7`, `typescript@5.9.3`이다.

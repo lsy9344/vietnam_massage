@@ -25,14 +25,24 @@ model UserAccount {
 }
 
 model Employee {
-  id          String       @id @default(cuid())
-  displayName String       @map("display_name")
-  staffCode   String       @unique @map("staff_code")
-  isActive    Boolean      @default(true) @map("is_active")
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
-  account     UserAccount?
+  id               String       @id @default(cuid())
+  displayName      String       @map("display_name")
+  staffCode        String       @unique @map("staff_code")
+  employeeGroup    String       @map("employee_group")
+  position         String
+  shiftType        String?      @map("shift_type")
+  baseSalary       Int          @map("base_salary")
+  phone            String?
+  birthday         DateTime?    @db.Date
+  hireDate         DateTime?    @map("hire_date") @db.Date
+  employmentStatus String       @default("재직") @map("employment_status")
+  sortOrder        Int          @map("sort_order")
+  isActive         Boolean      @default(true) @map("is_active")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  account          UserAccount?
 
+  @@unique([employeeGroup, sortOrder], map: "uq_employees_employee_group_sort_order")
   @@map("employees")
 }
 

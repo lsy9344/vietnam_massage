@@ -28,7 +28,7 @@ const users = [
       "정산 화면",
       "월마감",
       "오늘 대시보드",
-      "직원 계정",
+      "직원",
       "감사 로그"
     ],
     hiddenLinks: []
@@ -41,7 +41,7 @@ const users = [
     visibleGroups: ["운영 현황", "콜 원장", "대시보드"],
     hiddenGroups: ["정산", "월마감", "마스터 설정", "감사 로그"],
     visibleLinks: ["첫화면 실시간 현황", "객실 현황", "콜/예약 입력 원장", "오늘 대시보드"],
-    hiddenLinks: ["TV 현황판", "정산 화면", "월마감", "직원 계정", "감사 로그"]
+    hiddenLinks: ["TV 현황판", "정산 화면", "월마감", "직원", "감사 로그"]
   },
   {
     accountId: "settlement_manager",
@@ -51,7 +51,7 @@ const users = [
     visibleGroups: ["정산", "월마감", "대시보드"],
     hiddenGroups: ["운영 현황", "콜 원장", "마스터 설정", "감사 로그"],
     visibleLinks: ["정산 화면", "월마감", "오늘 대시보드"],
-    hiddenLinks: ["첫화면 실시간 현황", "객실 현황", "TV 현황판", "콜/예약 입력 원장", "직원 계정", "감사 로그"]
+    hiddenLinks: ["첫화면 실시간 현황", "객실 현황", "TV 현황판", "콜/예약 입력 원장", "직원", "감사 로그"]
   },
   {
     accountId: "waiter",
@@ -61,7 +61,7 @@ const users = [
     visibleGroups: ["운영 현황"],
     hiddenGroups: ["콜 원장", "정산", "월마감", "대시보드", "마스터 설정", "감사 로그"],
     visibleLinks: ["객실 현황"],
-    hiddenLinks: ["첫화면 실시간 현황", "TV 현황판", "콜/예약 입력 원장", "정산 화면", "월마감", "오늘 대시보드", "직원 계정", "감사 로그"]
+    hiddenLinks: ["첫화면 실시간 현황", "TV 현황판", "콜/예약 입력 원장", "정산 화면", "월마감", "오늘 대시보드", "직원", "감사 로그"]
   },
   {
     accountId: "read_only_viewer",
@@ -71,7 +71,7 @@ const users = [
     visibleGroups: ["운영 현황", "대시보드"],
     hiddenGroups: ["콜 원장", "정산", "월마감", "마스터 설정", "감사 로그"],
     visibleLinks: ["객실 현황", "TV 현황판", "오늘 대시보드"],
-    hiddenLinks: ["첫화면 실시간 현황", "콜/예약 입력 원장", "정산 화면", "월마감", "직원 계정", "감사 로그"]
+    hiddenLinks: ["첫화면 실시간 현황", "콜/예약 입력 원장", "정산 화면", "월마감", "직원", "감사 로그"]
   }
 ];
 
@@ -92,15 +92,26 @@ async function seedAuthAccount(input: {
   lockedUntil: Date | null;
   secret: string;
 }) {
+  const sortOrder = 7000 + [...input.staffCode].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const employeeDefaults = {
+    employeeGroup: "OPERATIONS",
+    position: input.role === "waiter" ? "웨이터" : input.role === "counter" ? "카운터" : "팀장",
+    shiftType: input.role === "counter" || input.role === "waiter" ? "주간" : "전체",
+    baseSalary: 0,
+    employmentStatus: "재직",
+    sortOrder
+  };
   const employee = await (prisma as any).employee.upsert({
     where: { staffCode: input.staffCode },
     update: {
       displayName: input.displayName,
+      ...employeeDefaults,
       isActive: true
     },
     create: {
       staffCode: input.staffCode,
       displayName: input.displayName,
+      ...employeeDefaults,
       isActive: true
     }
   });

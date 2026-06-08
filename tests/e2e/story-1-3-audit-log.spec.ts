@@ -65,15 +65,26 @@ async function seedAuthAccount(input: {
   role: string;
   secret: string;
 }) {
+  const sortOrder = 7100 + [...input.staffCode].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const employeeDefaults = {
+    employeeGroup: "OPERATIONS",
+    position: input.role === "waiter" ? "웨이터" : input.role === "counter" ? "카운터" : "팀장",
+    shiftType: input.role === "counter" || input.role === "waiter" ? "주간" : "전체",
+    baseSalary: 0,
+    employmentStatus: "재직",
+    sortOrder
+  };
   const employee = await (prisma as any).employee.upsert({
     where: { staffCode: input.staffCode },
     update: {
       displayName: input.displayName,
+      ...employeeDefaults,
       isActive: true
     },
     create: {
       staffCode: input.staffCode,
       displayName: input.displayName,
+      ...employeeDefaults,
       isActive: true
     }
   });

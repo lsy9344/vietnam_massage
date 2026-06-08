@@ -53,17 +53,29 @@ const localAccounts: Array<{
   }
 ];
 
+const localEmployeeDefaults: Record<Role, { employeeGroup: string; position: string; shiftType: string | null; baseSalary: number; sortOrder: number }> = {
+  administrator: { employeeGroup: "OPERATIONS", position: "팀장", shiftType: "전체", baseSalary: 0, sortOrder: 9000 },
+  counter: { employeeGroup: "OPERATIONS", position: "카운터", shiftType: "주간", baseSalary: 0, sortOrder: 9010 },
+  settlement_manager: { employeeGroup: "OPERATIONS", position: "팀장", shiftType: "전체", baseSalary: 0, sortOrder: 9020 },
+  waiter: { employeeGroup: "OPERATIONS", position: "웨이터", shiftType: "주간", baseSalary: 0, sortOrder: 9030 },
+  read_only_viewer: { employeeGroup: "OPERATIONS", position: "팀장", shiftType: "전체", baseSalary: 0, sortOrder: 9040 }
+};
+
 async function main() {
   for (const account of localAccounts) {
     const employee = await (prisma as any).employee.upsert({
       where: { staffCode: account.staffCode },
       update: {
         displayName: account.displayName,
+        ...localEmployeeDefaults[account.role],
+        employmentStatus: "재직",
         isActive: true
       },
       create: {
         staffCode: account.staffCode,
         displayName: account.displayName,
+        ...localEmployeeDefaults[account.role],
+        employmentStatus: "재직",
         isActive: true
       }
     });

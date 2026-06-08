@@ -58,6 +58,17 @@ None. This module is the source of reference data for other modules.
 - `deactivateCodeItem()` and `deactivateTimeSlot()` set `isActive=false`; normal code/time-slot master flows do not physically remove rows.
 - Successful writes record `code_item.created`, `code_item.display_name_changed`, `code_item.sort_order_changed`, `code_item.deactivated`, `time_slot.created`, `time_slot.value_changed`, `time_slot.sort_order_changed`, or `time_slot.deactivated` with plain JSON snapshots.
 
+## Employee And Account Contract
+
+직원 마스터는 콜 원장, 정산, 월마감이 공유할 직원 고유 ID와 표시 정보를 소유한다. 로그인 계정은 `UserAccount`가 별도로 소유하고 필요할 때만 직원에 1:1로 연결한다.
+
+- `ensureDefaultEmployees()` prepares the default 59 business employees: 5 operations staff, 4 earcare staff, and 50 therapists. It keys idempotency by stable `staffCode`, not mutable display names.
+- `listEmployees()` returns active and inactive rows for administrator management; `listActiveEmployees()` returns active-only employee DTOs for call/settlement selection.
+- `createEmployee()`, `updateEmployeeProfile()`, `updateEmployeeSortOrder()`, and `deactivateEmployee()` mutate employees only by stable `Employee.id`.
+- `deactivateEmployee()` sets `isActive=false`; normal employee master flows do not physically remove employee rows because historical calls and settlements keep the employee reference.
+- `linkUserAccountToEmployee()` connects or updates a `UserAccount.employeeId` link and reuses account-service password hashing. It does not merge employment status with account active/lock state.
+- Successful employee writes record `employee.created`, `employee.profile_changed`, `employee.sort_order_changed`, or `employee.deactivated`; account-link writes record `user_account.linked_to_employee` or `user_account.role_changed` with plain JSON snapshots.
+
 ## Does Not Own
 
 - service-call transactions
