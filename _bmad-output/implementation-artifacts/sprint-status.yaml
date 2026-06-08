@@ -1,5 +1,5 @@
 # generated: 2026-06-08T01:33:23+0900
-# last_updated: 2026-06-09T00:00:00+0900
+# last_updated: 2026-06-09T01:55:39+0900
 # project: vietnam_massage
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-08T01:33:23+0900
-last_updated: 2026-06-09T00:00:00+0900
+last_updated: 2026-06-09T01:55:39+0900
 project: vietnam_massage
 project_key: NOKEY
 tracking_system: file-system
@@ -50,7 +50,7 @@ development_status:
   1-5-객실-마스터-관리: done
   1-6-코드와-시간-슬롯-관리: done
   1-7-직원-마스터와-계정-연결: done
-  1-8-코스-마스터와-수당-인센-정책-관리: backlog
+  1-8-코스-마스터와-수당-인센-정책-관리: done
   epic-1-retrospective: optional
   epic-2: backlog
   2-1-날짜별-콜-원장-그리드-조회와-기본-입력: backlog

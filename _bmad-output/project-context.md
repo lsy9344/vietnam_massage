@@ -50,6 +50,14 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - 직원 비활성 처리는 `Employee.isActive=false`만 사용하고 일반 운영 경로에서 물리 삭제하지 않는다. 퇴사/휴직 상태와 선택 목록 비활성 여부는 분리한다.
 - `UserAccount`와 `Employee`는 분리된 모델이며 optional unique `UserAccount.employeeId`로만 1:1 연결한다. 계정 비활성/잠금/실패 횟수는 로그인 접근 상태이고 직원 정산 이력 상태를 자동 변경하지 않는다.
 - 직원 생성/프로필 변경/정렬 변경/비활성 처리는 `employee.created`, `employee.profile_changed`, `employee.sort_order_changed`, `employee.deactivated` 감사 이벤트를 기록한다. 계정 연결/역할 변경/비활성/잠금 해제는 `user_account.linked_to_employee`, `user_account.role_changed`, `user_account.deactivated`, `user_account.lock_reset` 감사 이벤트를 기록한다.
+- 코스 마스터는 Prisma `Course` 모델(`courses`)과 적용월 이력 `CoursePolicy` 모델(`course_policies`)이 소유한다. `Course.id`가 downstream 저장 키이고 `Course.code`는 A~E stable reference이며, 코스명/TV 표시명/가격/시간/귀케어 풀/마사지사2 필요 여부는 정책 이력 값이다.
+- 기본 코스 seed는 A 60분 1,500,000 VND `A 누루60`, B 90분 1,800,000 VND `B 귀청소90`, C 90분 2,000,000 VND `C 때밀이90`, D 90분 3,200,000 VND `D 2:1 90`, E 120분 3,000,000 VND `E 풀코스120`이다. D코스만 `requiresSecondTherapist=true`다.
+- D코스 2인 필수 검증은 코스명 문자열이 아니라 `Course.id`와 `CoursePolicy.requiresSecondTherapist`를 조회해서 판단해야 한다.
+- 마사지사 개인별 코스 수당은 `TherapistCourseRate` 모델(`therapist_course_rates`)이 소유하며 `Employee.staffCode` `THR-001`~`THR-050` seed 기준으로 생성한 뒤 `Employee.id`와 `Course.id`를 저장한다. `THR-001`~`THR-004`는 A 700,000, B/C 900,000, D/E 0이고 `THR-005`~`THR-050`은 A~E 모두 명시적 0 VND다.
+- 운영팀 일일 인센은 30/40/50콜 기준 개인 50,000/100,000/200,000 VND이고, 월 인센은 1000/1100/1200/1300/1400/1500콜 기준 전체 3,000,000/5,000,000/8,000,000/12,000,000/18,000,000/25,000,000 VND와 팀장/카운터팀/웨이터팀 0.30/0.35/0.35 분배율이다.
+- 코스 정책, 마사지사 수당, 운영팀 인센 정책은 `YYYY-MM` 적용월 범위를 가지며 같은 course/therapist/threshold의 활성 범위는 겹치면 안 된다. 정책이 없을 때 downstream 계산은 조용히 0으로 가정하지 말고 domain error 또는 명시적 not-found 결과를 처리해야 한다.
+- 코스/정책 변경 감사 이벤트는 `course.created`, `course.policy_changed`, `course.deactivated`, `therapist_course_rate.created`, `therapist_course_rate.changed`, `therapist_course_rate.ended`, `ops_daily_incentive_rule.created`, `ops_daily_incentive_rule.changed`, `ops_monthly_incentive_rule.created`, `ops_monthly_incentive_rule.changed`를 사용하며 snapshot은 plain JSON만 허용한다.
+- 코스/수당/인센 정책 변경은 현재/미래 계산 기준을 바꾸지만 확정된 과거 월마감 스냅샷을 자동 재계산하지 않는다.
 - 배포/운영은 프로젝트 표준과 같은 배포 방식, 같은 env 규칙, 같은 migration 절차를 따른다.
 - 패키지 매니저 baseline은 `package.json`에 `pnpm@10.12.1`로 기록했다. 현재 로컬에는 `pnpm`/`corepack`이 없어 npm 기반 동등 검증을 사용했다.
 - App Router baseline은 `next@16.2.7`, `react@19.2.7`, `react-dom@19.2.7`, `typescript@5.9.3`이다.
