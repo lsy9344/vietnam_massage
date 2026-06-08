@@ -46,3 +46,20 @@ model LoginAttempt {
 
   @@map("login_attempts")
 }
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorId     String   @map("actor_id")
+  action      String
+  targetType  String   @map("target_type")
+  targetId    String   @map("target_id")
+  beforeValue Json?    @map("before_value")
+  afterValue  Json?    @map("after_value")
+  reason      String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt], map: "idx_audit_logs_created_at")
+  @@index([targetType, targetId], map: "idx_audit_logs_target_type_target_id")
+  @@index([action], map: "idx_audit_logs_action")
+  @@map("audit_logs")
+}

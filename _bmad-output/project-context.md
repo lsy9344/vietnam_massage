@@ -28,6 +28,10 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - RBAC 역할은 `administrator`, `counter`, `waiter`, `settlement_manager`, `read_only_viewer` 다섯 가지다. 역할별 landing은 관리자 `/live`, 카운터 `/calls`, 정산 담당 `/settlements`, 웨이터 `/rooms`, 조회 전용 `/rooms`이다.
 - Sidebar 그룹 순서는 운영 현황, 콜 원장, 정산, 월마감, 대시보드, 마스터 설정, 감사 로그로 고정한다. 권한 없는 그룹/항목은 disabled가 아니라 렌더링하지 않는다.
 - 권한 없는 direct route 접근은 page/layout/server boundary에서 `requireRouteAccess()`로 차단한다. 지급액, 수당, 마감, 직원 정보 등 민감 action은 `requirePermission()`으로 DB에서 현재 계정 상태와 권한을 재조회해야 한다.
+- 감사 로그는 `AuditLog` Prisma 모델과 `src/modules/audit/audit-service.ts`의 `recordAuditEvent()`/`listAuditLogs()`를 사용한다. DB table은 `audit_logs`, before/after snapshot은 Prisma `Json?`, action은 `service_call.status_changed` 같은 dot notation만 허용한다.
+- 감사 로그 `beforeValue`/`afterValue`는 JSON 직렬화 가능한 값만 허용한다. `NaN`, 함수, class instance, `Date` 객체는 `recordAuditEvent()`에서 domain error로 거부되므로 날짜/시간은 ISO 문자열로 넘긴다.
+- 감사 로그 조회 권한은 `audit:read`이며 관리자만 `/audit` 화면과 sidebar 감사 로그 그룹을 볼 수 있다. 화면/서버 경계는 `requirePermission("audit:read")`로 DB 재조회 기반 권한 검사를 수행한다.
+- 감사 로그는 append-only 불변 이력이다. 일반 운영 경로에 update/delete helper, Server Action, UI를 만들지 않는다. 정정은 후속 감사 이벤트를 추가하는 방식으로만 표현한다.
 - 배포/운영은 프로젝트 표준과 같은 배포 방식, 같은 env 규칙, 같은 migration 절차를 따른다.
 - 패키지 매니저 baseline은 `package.json`에 `pnpm@10.12.1`로 기록했다. 현재 로컬에는 `pnpm`/`corepack`이 없어 npm 기반 동등 검증을 사용했다.
 - App Router baseline은 `next@16.2.7`, `react@19.2.7`, `react-dom@19.2.7`, `typescript@5.9.3`이다.
