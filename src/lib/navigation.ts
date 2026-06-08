@@ -42,6 +42,7 @@ export const navigationGroups: NavigationGroup[] = [
     label: "마스터 설정",
     items: [
       { label: "운영월", href: "/masters/operating-months", allowedRoles: ["administrator"] },
+      { label: "객실", href: "/masters/rooms", allowedRoles: ["administrator"] },
       { label: "직원 계정", href: "/masters/employees", allowedRoles: ["administrator"] }
     ]
   },

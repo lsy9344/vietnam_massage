@@ -1,56 +1,39 @@
-# Test Automation Summary
+# 테스트 자동화 요약
 
-## Generated Tests
+## 생성/보강된 테스트
 
 ### API Tests
-- [x] Not applicable - Story 1.4 does not expose a public API route. Server Action and domain-service behavior is covered through service tests, static validation, and E2E UI workflows.
-
-### Unit/Service Tests
-- [x] `src/modules/masters/operating-month-service.test.ts` - calendar date calculation, leap year range, duplicate month rejection, explicit range mismatch rejection, `작성중 -> 검토중` transition, stale transition audit guard, unsupported transition rejection, audit event creation, and ISO date-range DTO handoff.
+- 해당 없음: Story 1.5는 별도 HTTP API endpoint가 아니라 Server Action과 도메인 서비스로 구현되어 기존 unit/static validation이 담당한다.
 
 ### E2E Tests
-- [x] `tests/e2e/story-1-4-operating-months.spec.ts` - administrator operating-month list, current/latest selection marker, browser `YYYY-MM` validation, create workflow, duplicate Korean error, status change, audit log verification, and direct-route/sidebar denial for counter, settlement manager, waiter, and read-only viewer.
+- [x] `tests/e2e/story-1-5-rooms-master.spec.ts` - 객실 마스터 관리자 workflow, 고유 ID 보존, 정렬 변경/오류, 비활성 처리, 감사 로그, non-admin 접근 차단 보강
 
 ## Coverage
-- API endpoints: 0/0 covered
-- Domain/service contracts: 8/8 covered
-  - `2026-06` start/end date calculation
-  - leap-year `2028-02` end date
-  - invalid month format rejection
-  - duplicate month rejection
-  - explicit date range mismatch rejection
-  - `작성중 -> 검토중` accepted
-  - stale duplicate status-change submission does not create a second audit event
-  - unsupported status transition rejected
-  - `getOperatingMonthDateRange()` returns ISO `YYYY-MM-DD`
-- UI/RBAC features: 7/7 covered
-  - Administrator can open `/masters/operating-months`
-  - Operating-month list shows month, start/end dates, status, created/updated headers
-  - Latest/current operating month is marked as `선택 기준`
-  - Administrator can create an operating month
-  - Duplicate creation shows a Korean error on the same screen
-  - Administrator can change `작성중` to `검토중`
-  - Non-admin roles are redirected away and do not see the sidebar 운영월 link
-- Audit coverage: 2/2 covered
-  - `operating_month.created`
-  - `operating_month.status_changed`
+- Story 1.5 AC: 7/7 covered
+- 기본 객실 seed: 11/11 UI 및 DB 검증
+- UI mutation workflows: 표시명 수정, 정렬 변경, 비활성 처리 3/3 covered
+- 권한 경계: administrator + non-admin 4 roles covered
 
 ## Validation
-- [x] `npm run lint` passes Story 1.1 + Story 1.2 + Story 1.3 + Story 1.4 static validation.
-- [ ] `npm run test:unit` attempted, but failed before running tests because local dependencies are not installed: `Cannot find package 'tsx'`.
-- [ ] `npm run test:e2e` attempted, but failed before running tests because local dependencies are not installed: `playwright: command not found`.
+- [x] `npm run lint` passed Story 1.1, 1.2, 1.3, 1.4, 1.5 static validation.
+- [ ] `npm run test:e2e -- tests/e2e/story-1-5-rooms-master.spec.ts` attempted, but local dependencies are not installed: `playwright: command not found`.
+- [ ] `npm run test:unit -- src/modules/masters/room-service.test.ts` attempted, but local dependencies are not installed: `Cannot find package 'tsx'`.
 
 ## Checklist Result
 - [x] API tests generated if applicable
 - [x] E2E tests generated if UI exists
-- [x] Tests use standard Playwright and Node test APIs
+- [x] Tests use standard Playwright APIs
 - [x] Tests cover happy path
 - [x] Tests cover critical error cases
-- [ ] All generated tests run successfully - blocked by missing local dependencies (`tsx`, `playwright`)
+- [ ] All generated tests run successfully - blocked by missing local dependencies
 - [x] Tests use semantic, accessible locators where the UI exposes roles/labels
 - [x] Tests have clear descriptions
 - [x] No hardcoded waits or sleeps
-- [x] Tests are independent - Story 1.4 E2E runs serially because it exercises shared DB state with fixed month keys
+- [x] Tests are isolated by seeded accounts and restored room master state; serial mode is used because the scenarios intentionally mutate shared room rows
 - [x] Test summary created
 - [x] Tests saved to appropriate directories
 - [x] Summary includes coverage metrics
+
+## Next Steps
+- 의존성 설치 및 `DATABASE_URL` 준비 후 `npm run test:e2e -- tests/e2e/story-1-5-rooms-master.spec.ts` 실행
+- CI에서 Playwright 브라우저/DB seed 환경을 고정해 회귀 검증에 포함

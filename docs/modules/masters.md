@@ -22,7 +22,7 @@ The masters module owns all configurable data used by operational modules:
 ## Core Entities
 
 - `OperatingMonth`
-- `Room`
+- `Room` with stable `id`, operational `displayName`, hidden-list `migrationReferenceName`, `sortOrder`, and `isActive`
 - `Employee`
 - `Course`
 - `CourseDisplayName`
@@ -34,6 +34,9 @@ The masters module owns all configurable data used by operational modules:
 ## Rules
 
 - Names are display values, not stable keys.
+- Room references use `Room.id`; `displayName` can change and `migrationReferenceName` such as `1번방` is migration/verification context only.
+- Room order is owned by `sortOrder`; duplicate order values are blocked before TV or room-status views consume the list.
+- Rooms that may be referenced by calls, settlements, or status history become 비활성 instead of being physically removed.
 - Rate and policy records need effective month ranges.
 - Deleted master values should usually become inactive, not removed.
 - Past monthly close results must not change when current master data changes.
@@ -44,4 +47,3 @@ The masters module owns all configurable data used by operational modules:
 - `rooms` reads room and course display configuration.
 - `settlements` reads attendance codes, course rates, and incentive rules.
 - `closing` reads frozen snapshots or effective policies.
-

@@ -36,6 +36,10 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - 운영월 상태값은 한국어 원문 `작성중`, `검토중`, `마감확정`, `잠금` 네 값만 허용한다. Story 1.4의 직접 상태 변경은 `작성중 -> 검토중`만 지원하며, `마감확정`/`잠금`/재오픈은 월마감 stories가 소유한다.
 - `getOperatingMonthDateRange()`는 `calls`, `settlements`, `dashboard`, `closing`이 Excel 행 범위 대신 운영월 날짜 조건을 재사용하기 위한 표준 handoff 함수다.
 - 운영월 생성과 상태 변경은 `operating_month.created`, `operating_month.status_changed` 감사 이벤트를 기록하며, before/after snapshot 날짜는 ISO 문자열로 넘긴다.
+- 객실 마스터는 Prisma `Room` 모델(`rooms`)이 소유한다. 운영 표준 표시명은 `101 호실`~`402 호실` 형식이고, 숨김 시트 이관 참조값 `1번방`~`11번방`은 `migrationReferenceName`으로만 보존한다.
+- 콜 원장, 객실 현황, TV 현황판 등 downstream 객실 참조는 `displayName`이나 `1번방` 문자열이 아니라 안정 키인 `Room.id`를 사용해야 한다.
+- 객실 표시 순서는 `Room.sortOrder`가 소유하며 중복 정렬값은 차단한다. 기본 sortOrder는 10 단위 간격으로 둔다.
+- 객실 비활성 처리는 `Room.isActive=false`만 사용하고 일반 운영 경로에서 물리 삭제하지 않는다. 생성/표시명 변경/정렬 변경/비활성 처리는 `room.created`, `room.display_name_changed`, `room.sort_order_changed`, `room.deactivated` 감사 이벤트를 기록한다.
 - 배포/운영은 프로젝트 표준과 같은 배포 방식, 같은 env 규칙, 같은 migration 절차를 따른다.
 - 패키지 매니저 baseline은 `package.json`에 `pnpm@10.12.1`로 기록했다. 현재 로컬에는 `pnpm`/`corepack`이 없어 npm 기반 동등 검증을 사용했다.
 - App Router baseline은 `next@16.2.7`, `react@19.2.7`, `react-dom@19.2.7`, `typescript@5.9.3`이다.
