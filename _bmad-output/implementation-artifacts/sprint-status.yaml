@@ -1,5 +1,5 @@
 # generated: 2026-06-08T01:33:23+0900
-# last_updated: 2026-06-09T01:55:39+0900
+# last_updated: 2026-06-09T02:14:47+0900
 # project: vietnam_massage
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-08T01:33:23+0900
-last_updated: 2026-06-09T01:55:39+0900
+last_updated: 2026-06-09T02:14:47+0900
 project: vietnam_massage
 project_key: NOKEY
 tracking_system: file-system
@@ -52,8 +52,8 @@ development_status:
   1-7-직원-마스터와-계정-연결: done
   1-8-코스-마스터와-수당-인센-정책-관리: done
   epic-1-retrospective: optional
-  epic-2: backlog
-  2-1-날짜별-콜-원장-그리드-조회와-기본-입력: backlog
+  epic-2: in-progress
+  2-1-날짜별-콜-원장-그리드-조회와-기본-입력: done
   2-2-콜-행-자동저장과-상태-변경-이력: backlog
   2-3-방문완료-기준-결제-수당-콜인정-계산: backlog
   2-4-d코스-마사지사2-필수-검증: backlog

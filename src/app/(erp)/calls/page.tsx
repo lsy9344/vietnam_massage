@@ -1,14 +1,134 @@
-import { ErpEmptyState } from "@/components/domain/erp-empty-state";
+import Link from "next/link";
 import { requireRouteAccess } from "@/lib/authorization";
+import { listOperatingMonths } from "@/modules/masters/operating-month-service";
+import { listServiceCallFormOptions, listServiceCallsForDate } from "@/modules/calls/service-call-service";
+import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
 
-export default async function CallsPage() {
-  await requireRouteAccess("/calls");
+type CallsPageSearchParams = {
+  operatingMonthId?: string;
+  serviceDate?: string;
+};
+
+function kstTodayIsoDate() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  return `${year}-${month}-${day}`;
+}
+
+function clampDateToMonth(date: string | undefined, month: { startDate: string; endDate: string }) {
+  if (!date || date < month.startDate || date > month.endDate) {
+    const today = kstTodayIsoDate();
+    return today >= month.startDate && today <= month.endDate ? today : month.startDate;
+  }
+
+  return date;
+}
+
+function selectedMonthFor(months: Awaited<ReturnType<typeof listOperatingMonths>>, operatingMonthId?: string) {
+  return months.find((month) => month.id === operatingMonthId) ?? months[0] ?? null;
+}
+
+export default async function CallsPage({ searchParams }: { searchParams: Promise<CallsPageSearchParams> }) {
+  const account = await requireRouteAccess("/calls");
+
+  const params = await searchParams;
+  const operatingMonths = await listOperatingMonths();
+  const selectedMonth = selectedMonthFor(operatingMonths, params.operatingMonthId);
+
+  if (!selectedMonth) {
+    return (
+      <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
+        <div className="mb-5 flex items-end justify-between gap-6">
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase text-muted">콜 원장</p>
+            <h1 className="text-2xl font-semibold text-foreground">콜/예약 입력 원장</h1>
+            <p className="mt-2 max-w-3xl text-sm text-muted">운영월과 날짜별로 실시간콜입력 A:S 의미의 기본 콜 정보를 기록한다.</p>
+          </div>
+        </div>
+        <section className="border border-border bg-surface px-4 py-8">
+          <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
+          <p className="mt-2 max-w-2xl text-sm text-muted">콜 원장은 운영월 날짜 범위 안에서만 조회하고 저장할 수 있다.</p>
+          {account.role === "administrator" ? (
+            <Link className="mt-4 inline-flex text-sm font-semibold text-brand underline-offset-4 hover:underline" href="/masters/operating-months">
+              운영월 관리로 이동
+            </Link>
+          ) : null}
+        </section>
+      </main>
+    );
+  }
+
+  const serviceDate = clampDateToMonth(params.serviceDate, selectedMonth);
+  const [rows, options] = await Promise.all([
+    listServiceCallsForDate({ operatingMonthId: selectedMonth.id, serviceDate }),
+    listServiceCallFormOptions({ operatingMonthId: selectedMonth.id })
+  ]);
+  const isLocked = selectedMonth.status === "잠금";
 
   return (
-    <ErpEmptyState
-      description="예약, 방문, 결제 흐름을 입력할 콜 원장 데이터 연결을 기다리고 있다."
-      eyebrow="콜 원장"
-      title="콜/예약 입력 원장"
-    />
+    <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
+      <div className="mb-5 flex items-end justify-between gap-6">
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase text-muted">콜 원장</p>
+          <h1 className="text-2xl font-semibold text-foreground">콜/예약 입력 원장</h1>
+          <p className="mt-2 max-w-3xl text-sm text-muted">운영월과 날짜별로 실시간콜입력 A:S 의미의 기본 콜 정보를 기록한다.</p>
+        </div>
+        <div className="text-right text-xs text-muted">
+          <div>운영월 상태: {selectedMonth.status}</div>
+          <div>
+            날짜 범위: {selectedMonth.startDate} ~ {selectedMonth.endDate}
+          </div>
+        </div>
+      </div>
+
+      <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
+        <label className="grid gap-1 text-xs font-medium text-muted">
+          운영월
+          <select
+            aria-label="운영월"
+            className="h-9 min-w-44 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
+            defaultValue={selectedMonth.id}
+            name="operatingMonthId"
+          >
+            {operatingMonths.map((month) => (
+              <option key={month.id} value={month.id}>
+                {month.monthKey} ({month.status})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs font-medium text-muted">
+          조회날짜
+          <input
+            aria-label="조회날짜"
+            className="h-9 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
+            defaultValue={serviceDate}
+            max={selectedMonth.endDate}
+            min={selectedMonth.startDate}
+            name="serviceDate"
+            type="date"
+          />
+        </label>
+        <button className="h-9 border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
+          조회
+        </button>
+      </form>
+
+      <EditableCallGrid
+        isLocked={isLocked}
+        operatingMonthId={selectedMonth.id}
+        options={options}
+        rows={rows}
+        serviceDate={serviceDate}
+      />
+    </main>
   );
 }

@@ -42,6 +42,7 @@ model Employee {
   updatedAt        DateTime     @updatedAt @map("updated_at")
   account          UserAccount?
   therapistRates   TherapistCourseRate[]
+  serviceCallAssignments ServiceCallAssignment[]
 
   @@unique([employeeGroup, sortOrder], map: "uq_employees_employee_group_sort_order")
   @@map("employees")
@@ -83,6 +84,7 @@ model OperatingMonth {
   status    String   @default("작성중")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  serviceCalls ServiceCall[]
 
   @@map("operating_months")
 }
@@ -95,6 +97,7 @@ model Room {
   isActive               Boolean  @default(true) @map("is_active")
   createdAt              DateTime @default(now()) @map("created_at")
   updatedAt              DateTime @updatedAt @map("updated_at")
+  serviceCalls           ServiceCall[]
 
   @@map("rooms")
 }
@@ -134,8 +137,50 @@ model Course {
   updatedAt      DateTime               @updatedAt @map("updated_at")
   policies       CoursePolicy[]
   therapistRates TherapistCourseRate[]
+  serviceCalls   ServiceCall[]
 
   @@map("courses")
+}
+
+model ServiceCall {
+  id                String                  @id @default(cuid())
+  operatingMonthId  String                  @map("operating_month_id")
+  operatingMonth    OperatingMonth          @relation(fields: [operatingMonthId], references: [id])
+  serviceDate       DateTime                @map("service_date") @db.Date
+  startTime         String                  @map("start_time")
+  roomId            String                  @map("room_id")
+  room              Room                    @relation(fields: [roomId], references: [id])
+  courseId          String                  @map("course_id")
+  course            Course                  @relation(fields: [courseId], references: [id])
+  customerMemo      String?                 @map("customer_memo")
+  status            String
+  discountTypeCode  String?                 @map("discount_type_code")
+  paymentMethodCode String?                 @map("payment_method_code")
+  note              String?
+  confirmationCode  String?                 @map("confirmation_code")
+  createdAt         DateTime                @default(now()) @map("created_at")
+  updatedAt         DateTime                @updatedAt @map("updated_at")
+  assignments       ServiceCallAssignment[]
+
+  @@index([operatingMonthId, serviceDate], map: "idx_service_calls_month_date")
+  @@index([roomId, serviceDate], map: "idx_service_calls_room_date")
+  @@index([status, serviceDate], map: "idx_service_calls_status_date")
+  @@map("service_calls")
+}
+
+model ServiceCallAssignment {
+  id            String      @id @default(cuid())
+  serviceCallId String      @map("service_call_id")
+  serviceCall   ServiceCall @relation(fields: [serviceCallId], references: [id])
+  employeeId    String      @map("employee_id")
+  employee      Employee    @relation(fields: [employeeId], references: [id])
+  assignmentRole String     @map("assignment_role")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  @@unique([serviceCallId, assignmentRole], map: "uq_service_call_assignments_call_role")
+  @@index([employeeId, assignmentRole], map: "idx_service_call_assignments_employee_role")
+  @@map("service_call_assignments")
 }
 
 model CoursePolicy {

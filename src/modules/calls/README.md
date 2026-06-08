@@ -2,6 +2,14 @@
 
 Owns the reservation and service-call ledger.
 
+## Story 2.1 Scope
+
+- `ServiceCall` stores the date-scoped call row using stable references: `OperatingMonth.id`, `Room.id`, `Course.id`, Story 1.6 time-slot `value`, and code `codeType + code` values.
+- `ServiceCallAssignment` stores 담당자 columns as normalized rows with stable roles: `THERAPIST_1`, `THERAPIST_2`, `EARCARE`.
+- `listServiceCallsForDate()` returns one selected operating-month/date ledger, ordered by Story 1.6 time-slot sort order and creation order.
+- `saveBasicServiceCallRow()` validates active masters, operating-month date range, locked-month blocking, stable code values, and writes the call row plus assignments in one transaction.
+- Payment, commission, earcare pool, and call-credit fields stay `null` display placeholders until Story 2.3.
+
 ## Includes
 
 - service calls
@@ -12,7 +20,7 @@ Owns the reservation and service-call ledger.
 
 ## Upstream
 
-- `masters` for rooms, courses, staff, rates, and code values
+- `masters` for operating months, rooms, courses, employees, time slots, and code values
 
 ## Downstream
 
@@ -27,4 +35,5 @@ Owns the reservation and service-call ledger.
 - room display layout
 - attendance input
 - monthly close locking
-
+- row autosave/status history before Story 2.2
+- payment, payout, earcare pool, and recognized-call calculations before Story 2.3

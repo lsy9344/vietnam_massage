@@ -58,6 +58,12 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - 코스 정책, 마사지사 수당, 운영팀 인센 정책은 `YYYY-MM` 적용월 범위를 가지며 같은 course/therapist/threshold의 활성 범위는 겹치면 안 된다. 정책이 없을 때 downstream 계산은 조용히 0으로 가정하지 말고 domain error 또는 명시적 not-found 결과를 처리해야 한다.
 - 코스/정책 변경 감사 이벤트는 `course.created`, `course.policy_changed`, `course.deactivated`, `therapist_course_rate.created`, `therapist_course_rate.changed`, `therapist_course_rate.ended`, `ops_daily_incentive_rule.created`, `ops_daily_incentive_rule.changed`, `ops_monthly_incentive_rule.created`, `ops_monthly_incentive_rule.changed`를 사용하며 snapshot은 plain JSON만 허용한다.
 - 코스/수당/인센 정책 변경은 현재/미래 계산 기준을 바꾸지만 확정된 과거 월마감 스냅샷을 자동 재계산하지 않는다.
+- Story 2.1 기준 콜 원장은 Prisma `ServiceCall`(`service_calls`)과 `ServiceCallAssignment`(`service_call_assignments`)가 소유한다. 날짜별 조회는 `operatingMonthId + serviceDate` 한 날짜만 렌더링하고, `serviceDate`는 DB `@db.Date`, DTO는 ISO `YYYY-MM-DD` 문자열이다.
+- 콜 기본 입력은 날짜, 시간, 객실, 코스, 고객/메모, 마사지사1, 마사지사2, 귀케어 담당, 상태, 할인구분, 결제수단, 비고, 확인값을 다룬다. 결제금액, 수당, 귀케어풀, 콜인정은 Story 2.3 전까지 `null`/표시 placeholder로만 둔다.
+- 콜 담당자는 화면에서 원본 A:S 컬럼처럼 보이지만 저장은 `ServiceCallAssignment.assignmentRole` `THERAPIST_1`, `THERAPIST_2`, `EARCARE`와 `Employee.id`를 사용한다.
+- 콜 저장은 운영월 범위 밖 날짜를 `OPERATING_MONTH_DATE_OUT_OF_RANGE` / `운영월 범위를 벗어난 날짜입니다.`로 차단하고, 운영월 `잠금` 상태는 `OPERATING_MONTH_LOCKED`로 차단한다.
+- `/calls`는 Server Action + domain service 경계로 구현한다. page는 `requireRouteAccess("/calls")`, action은 `requirePermission("call:write")`를 사용하고 `ActionResult<T>`를 반환한다.
+- Story 2.1 그리드는 별도 dependency 없이 semantic HTML table로 구현했다. TanStack Table은 Story 2.6 수준의 셀 편집/키보드/type-ahead 요구가 들어올 때 도입한다.
 - 배포/운영은 프로젝트 표준과 같은 배포 방식, 같은 env 규칙, 같은 migration 절차를 따른다.
 - 패키지 매니저 baseline은 `package.json`에 `pnpm@10.12.1`로 기록했다. 현재 로컬에는 `pnpm`/`corepack`이 없어 npm 기반 동등 검증을 사용했다.
 - App Router baseline은 `next@16.2.7`, `react@19.2.7`, `react-dom@19.2.7`, `typescript@5.9.3`이다.
