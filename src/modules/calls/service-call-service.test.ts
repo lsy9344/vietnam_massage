@@ -45,6 +45,7 @@ function createMemoryPrisma() {
   ]);
   const courses = new Map<string, any>([
     ["course-a", { id: "course-a", code: "A", isActive: true, createdAt: new Date("2026-06-01T00:00:00.000Z") }],
+    ["course-d", { id: "course-d", code: "D", isActive: true, createdAt: new Date("2026-06-01T00:00:00.000Z") }],
     ["course-missing-rate", { id: "course-missing-rate", code: "B", isActive: true, createdAt: new Date("2026-06-01T00:00:00.000Z") }]
   ]);
   const coursePolicies = new Map<string, any>([
@@ -60,6 +61,25 @@ function createMemoryPrisma() {
         earcarePoolAmount: 100000,
         requiresSecondTherapist: false,
         tvDisplayName: "A60",
+        effectiveFromMonth: "2026-06",
+        effectiveToMonth: null,
+        isActive: true,
+        createdAt: new Date("2026-06-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-06-01T00:00:00.000Z")
+      }
+    ],
+    [
+      "policy-d",
+      {
+        id: "policy-d",
+        courseId: "course-d",
+        name: "D 2:1 90",
+        durationMinutes: 90,
+        basePrice: 3200000,
+        opsCallCredit: 1,
+        earcarePoolAmount: 0,
+        requiresSecondTherapist: true,
+        tvDisplayName: "D90",
         effectiveFromMonth: "2026-06",
         effectiveToMonth: null,
         isActive: true,
@@ -95,6 +115,34 @@ function createMemoryPrisma() {
         therapistId: "therapist-1",
         courseId: "course-a",
         amount: 700000,
+        effectiveFromMonth: "2026-06",
+        effectiveToMonth: null,
+        isActive: true,
+        createdAt: new Date("2026-06-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-06-01T00:00:00.000Z")
+      }
+    ],
+    [
+      "rate-therapist-1-d",
+      {
+        id: "rate-therapist-1-d",
+        therapistId: "therapist-1",
+        courseId: "course-d",
+        amount: 900000,
+        effectiveFromMonth: "2026-06",
+        effectiveToMonth: null,
+        isActive: true,
+        createdAt: new Date("2026-06-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-06-01T00:00:00.000Z")
+      }
+    ],
+    [
+      "rate-therapist-2-d",
+      {
+        id: "rate-therapist-2-d",
+        therapistId: "therapist-2",
+        courseId: "course-d",
+        amount: 900000,
         effectiveFromMonth: "2026-06",
         effectiveToMonth: null,
         isActive: true,
@@ -624,11 +672,155 @@ describe("service call service", () => {
     });
 
     assert.deepEqual(options.rooms.map((room) => room.value), ["room-101"]);
-    assert.deepEqual(options.courses.map((course) => course.value), ["course-a"]);
+    assert.deepEqual(options.courses.map((course) => course.value), ["course-a", "course-d", "course-missing-rate"]);
     assert.ok(options.paymentMethods.some((method) => method.value === "현금"));
     assert.ok(options.paymentMethods.some((method) => method.value === "CASH"));
     assert.deepEqual(options.therapists.map((therapist) => therapist.value), ["therapist-1", "therapist-2"]);
     assert.deepEqual(options.earcareEmployees.map((employee) => employee.value), ["earcare-1"]);
+  });
+
+  it("rejects D-course saves without therapist2 before creating a row or assignments", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    await assert.rejects(
+      () =>
+        saveBasicServiceCallRow({
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-06-10",
+          startTime: "11:00",
+          roomId: "room-101",
+          courseId: "course-d",
+          therapist1Id: "therapist-1",
+          therapist2Id: null,
+          status: "예약",
+          prismaClient
+        }),
+      (error) =>
+        error instanceof ServiceCallDomainError &&
+        error.code === "D_COURSE_SECOND_THERAPIST_REQUIRED" &&
+        error.message === "D코스는 마사지사2 필수입니다. 마사지사2를 배정해야 저장됩니다."
+    );
+
+    assert.equal(prismaClient.serviceCalls.size, 0);
+    assert.equal(prismaClient.assignments.size, 0);
+  });
+
+  it("rejects D-course autosave without therapist2 before row, history, assignment, or audit writes", async () => {
+    const prismaClient = createMemoryPrisma();
+    const original = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      status: "예약",
+      prismaClient
+    });
+    const originalAssignmentsSize = prismaClient.assignments.size;
+
+    await assert.rejects(
+      () =>
+        autosaveServiceCallRow({
+          serviceCallId: original.id,
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-06-10",
+          startTime: "11:00",
+          roomId: "room-101",
+          courseId: "course-d",
+          therapist1Id: "therapist-1",
+          therapist2Id: null,
+          status: "VISIT_COMPLETE",
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error) => error instanceof ServiceCallDomainError && error.code === "D_COURSE_SECOND_THERAPIST_REQUIRED"
+    );
+
+    const stored = prismaClient.serviceCalls.get(original.id);
+    assert.equal(stored.courseId, "course-a");
+    assert.equal(stored.status, "예약");
+    assert.equal(prismaClient.assignments.size, originalAssignmentsSize);
+    assert.equal(prismaClient.statusHistories.length, 0);
+    assert.equal(prismaClient.auditEvents.length, 0);
+  });
+
+  it("allows non-required courses without therapist2 and allows D-course completion with two therapist commissions", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const nonRequired = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      therapist2Id: null,
+      status: "예약",
+      prismaClient
+    });
+    assert.equal(nonRequired.calculationStatus, "not_completed");
+    assert.equal(nonRequired.therapist2, null);
+
+    const completed = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-d",
+      therapist1Id: "therapist-1",
+      therapist2Id: "therapist-2",
+      status: "방문완료",
+      prismaClient
+    });
+
+    assert.equal(completed.calculationStatus, "calculated");
+    assert.equal(completed.paymentAmount, 3200000);
+    assert.equal(completed.therapist1Commission, 900000);
+    assert.equal(completed.therapist2Commission, 900000);
+    assert.equal(completed.opsCallCredit, 1);
+  });
+
+  it("keeps existing invalid completed D-course rows out of completed-call aggregates", async () => {
+    const prismaClient = createMemoryPrisma();
+    prismaClient.serviceCalls.set("invalid-d-call", {
+      id: "invalid-d-call",
+      operatingMonthId: "month-2026-06",
+      serviceDate: dbDate("2026-06-10"),
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-d",
+      customerMemo: null,
+      status: "방문완료",
+      discountTypeCode: null,
+      paymentMethodCode: null,
+      note: null,
+      confirmationCode: null,
+      createdAt: new Date("2026-06-09T00:00:00.000Z"),
+      updatedAt: new Date("2026-06-09T00:00:00.000Z")
+    });
+    prismaClient.assignments.set("invalid-d-therapist-1", {
+      id: "invalid-d-therapist-1",
+      serviceCallId: "invalid-d-call",
+      assignmentRole: "THERAPIST_1",
+      employeeId: "therapist-1",
+      isActive: true
+    });
+
+    const rows = await listServiceCallsForDate({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient
+    });
+    const calculations = await listCompletedServiceCallCalculationsForDate({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient
+    });
+
+    assert.equal(rows[0].calculationStatus, "second_therapist_required");
+    assert.equal(rows[0].calculationErrorCode, "D_COURSE_SECOND_THERAPIST_REQUIRED");
+    assert.deepEqual(calculations, []);
   });
 
   it("autosaves one existing row, records status history, and returns saved timing DTO", async () => {

@@ -7,6 +7,7 @@ import type { ServiceCallAutosaveInput } from "@/modules/calls/service-call-sche
 import { autosaveServiceCallRowAction, saveBasicServiceCallRowAction, type ServiceCallActionState } from "@/app/(erp)/calls/actions";
 
 type RowSaveState = "idle" | "saving" | "saved" | "error";
+type FieldErrors = Record<string, string[]>;
 
 function fieldError(state: ServiceCallActionState, field: string) {
   if (!state || state.ok) {
@@ -25,7 +26,26 @@ function InlineError({ state, field }: { state: ServiceCallActionState; field?: 
     return null;
   }
 
-  return <span className="text-xs text-danger">{message}</span>;
+  return (
+    <span className="text-xs text-danger" role="alert">
+      {message}
+    </span>
+  );
+}
+
+function FieldErrorMessage({ id, message }: { id: string; message: string | null }) {
+  if (!message) {
+    return null;
+  }
+
+  return (
+    <span className="flex items-start gap-1 text-xs font-medium text-danger" id={id} role="alert">
+      <span aria-hidden="true" className="font-bold">
+        !
+      </span>
+      <span>{message}</span>
+    </span>
+  );
 }
 
 function SelectCell({
@@ -37,10 +57,14 @@ function SelectCell({
   onChange,
   options,
   required,
-  value
+  value,
+  errorId,
+  errorMessage
 }: {
   disabled: boolean;
   defaultValue?: string;
+  errorId?: string;
+  errorMessage?: string | null;
   label: string;
   name: string;
   onBlur?: () => void;
@@ -49,11 +73,16 @@ function SelectCell({
   required?: boolean;
   value?: string;
 }) {
+  const invalid = Boolean(errorMessage);
   return (
     <label className="grid min-w-28 gap-1">
       <span className="sr-only">{label}</span>
       <select
-        className="h-8 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
+        aria-describedby={invalid && errorId ? errorId : undefined}
+        aria-invalid={invalid ? "true" : undefined}
+        className={`h-8 border bg-background px-2 text-xs text-foreground outline-none disabled:bg-readonly ${
+          invalid ? "border-danger ring-1 ring-danger focus:border-danger" : "border-border focus:border-brand"
+        }`}
         disabled={disabled}
         name={name}
         onBlur={onBlur}
@@ -68,6 +97,7 @@ function SelectCell({
           </option>
         ))}
       </select>
+      {errorId ? <FieldErrorMessage id={errorId} message={errorMessage ?? null} /> : null}
     </label>
   );
 }
@@ -153,7 +183,14 @@ function AddRowForm({
                 <SelectCell disabled={disabled} label="마사지사1" name="therapist1Id" options={options.therapists} />
               </td>
               <td className="border-b border-border px-2 py-2">
-                <SelectCell disabled={disabled} label="마사지사2" name="therapist2Id" options={options.therapists} />
+                <SelectCell
+                  disabled={disabled}
+                  errorId="add-call-therapist2-error"
+                  errorMessage={fieldError(state, "therapist2Id")}
+                  label="마사지사2"
+                  name="therapist2Id"
+                  options={options.therapists}
+                />
               </td>
               <td className="border-b border-border px-2 py-2">
                 <SelectCell disabled={disabled} label="귀케어 담당" name="earcareEmployeeId" options={options.earcareEmployees} />
@@ -227,6 +264,10 @@ function saveStateClassName(state: RowSaveState) {
   return "text-muted";
 }
 
+function firstFieldError(fieldErrors: FieldErrors, field: string) {
+  return fieldErrors[field]?.[0] ?? null;
+}
+
 function formatVnd(value: number) {
   return new Intl.NumberFormat("ko-KR").format(value);
 }
@@ -257,6 +298,7 @@ function EditableCallRow({
   const [serverRow, setServerRow] = useState<ServiceCallRowDto>(row);
   const [saveStatus, setSaveStatus] = useState<RowSaveState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [savedAt, setSavedAt] = useState(row.savedAt);
   const [, startTransition] = useTransition();
 
@@ -271,6 +313,7 @@ function EditableCallRow({
 
     setSaveStatus("saving");
     setErrorMessage(null);
+    setFieldErrors({});
     startTransition(() => {
       void (async () => {
         const result = await autosaveServiceCallRowAction(nextDraft);
@@ -279,10 +322,12 @@ function EditableCallRow({
           setServerRow(result.data);
           setSavedAt(result.data.savedAt);
           setSaveStatus("saved");
+          setFieldErrors({});
           return;
         }
 
         setErrorMessage(result.formError ?? "콜 행 자동저장에 실패했습니다.");
+        setFieldErrors(result.fieldErrors ?? {});
         setSaveStatus("error");
       })();
     });
@@ -364,6 +409,8 @@ function EditableCallRow({
       <td className="border-b border-border px-2 py-2">
         <SelectCell
           disabled={isLocked || saveStatus === "saving"}
+          errorId={`call-${row.id}-therapist2-error`}
+          errorMessage={firstFieldError(fieldErrors, "therapist2Id")}
           label="마사지사2"
           name="therapist2Id"
           onBlur={() => commit()}
@@ -451,7 +498,10 @@ function EditableCallRow({
           {saveStatus === "error" ? <span className="text-danger">저장 보류 계산 대기</span> : null}
           {serverRow.calculationStatus === "calculated" && saveStatus !== "error" ? <span>계산됨</span> : null}
           {serverRow.calculationStatus === "not_completed" && saveStatus !== "error" ? <span>비완료 제외</span> : null}
-          {(serverRow.calculationStatus === "course_policy_missing" || serverRow.calculationStatus === "therapist_rate_missing") && saveStatus !== "error" ? (
+          {(serverRow.calculationStatus === "course_policy_missing" ||
+            serverRow.calculationStatus === "therapist_rate_missing" ||
+            serverRow.calculationStatus === "second_therapist_required") &&
+          saveStatus !== "error" ? (
             <span className="text-danger">{serverRow.calculationErrorMessage ?? "정책 없음"}</span>
           ) : null}
           <span aria-live="polite" className={saveStateClassName(saveStatus)}>

@@ -26,6 +26,15 @@ function formValue(formData: FormData, key: string) {
 
 function mapActionError(error: unknown): ActionResult<ServiceCallRowDto> {
   if (error instanceof ServiceCallDomainError) {
+    if (error.code === "D_COURSE_SECOND_THERAPIST_REQUIRED") {
+      return {
+        ok: false,
+        fieldErrors: { therapist2Id: [error.message] },
+        formError: error.message,
+        domainErrorCode: error.code
+      };
+    }
+
     return {
       ok: false,
       formError: error.message,

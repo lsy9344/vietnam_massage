@@ -183,7 +183,12 @@ export type ServiceCallAssigneeDto = {
   staffCode: string;
 };
 
-export type ServiceCallCalculationStatus = "not_completed" | "calculated" | "course_policy_missing" | "therapist_rate_missing";
+export type ServiceCallCalculationStatus =
+  | "not_completed"
+  | "calculated"
+  | "course_policy_missing"
+  | "therapist_rate_missing"
+  | "second_therapist_required";
 
 export type ServiceCallRowDto = {
   id: string;
@@ -391,6 +396,13 @@ async function calculateServiceCallCompletion(tx: ServiceCallPrismaClient, recor
   const therapist1 = assignmentByRole(record, "THERAPIST_1");
   const therapist2 = assignmentByRole(record, "THERAPIST_2");
 
+  if (policy.requiresSecondTherapist && !therapist2) {
+    return emptyCalculation("second_therapist_required", {
+      code: "D_COURSE_SECOND_THERAPIST_REQUIRED",
+      message: "D코스는 마사지사2 필수입니다. 마사지사2를 배정해야 저장됩니다."
+    });
+  }
+
   if (therapist1) {
     const rate = await findTherapistCourseRateForCalculation(tx, {
       therapistId: therapist1.employeeId,
@@ -535,9 +547,24 @@ async function assertActiveCourse(tx: ServiceCallPrismaClient, input: { courseId
     throw new ServiceCallDomainError("활성 코스를 선택하세요.", "COURSE_NOT_ACTIVE");
   }
   const policies = await tx.coursePolicy.findMany({ where: { courseId: input.courseId, isActive: true } });
-  if (!policies.some((policy) => effectiveForMonth(policy, input.monthKey))) {
+  const policy = [...policies]
+    .filter((record) => effectiveForMonth(record, input.monthKey))
+    .sort((a, b) => b.effectiveFromMonth.localeCompare(a.effectiveFromMonth))[0];
+  if (!policy) {
     throw new ServiceCallDomainError("선택 운영월에 적용되는 코스 정책이 없습니다.", "COURSE_POLICY_NOT_FOUND");
   }
+  return policy;
+}
+
+function assertSecondTherapistRequirement(input: { policy: CoursePolicyRecord; therapist2Id: string | null | undefined }) {
+  if (!input.policy.requiresSecondTherapist || input.therapist2Id) {
+    return;
+  }
+
+  throw new ServiceCallDomainError(
+    "D코스는 마사지사2 필수입니다. 마사지사2를 배정해야 저장됩니다.",
+    "D_COURSE_SECOND_THERAPIST_REQUIRED"
+  );
 }
 
 async function assertActiveCode(tx: ServiceCallPrismaClient, input: { codeType: string; code: string | null | undefined; required?: boolean }) {
@@ -717,7 +744,7 @@ export async function saveBasicServiceCallRow(input: ServiceCallInput & { prisma
       serviceDate: parsed.data.serviceDate
     });
 
-    await Promise.all([
+    const [, , coursePolicy] = await Promise.all([
       assertActiveTimeSlot(tx, parsed.data.startTime),
       assertActiveRoom(tx, parsed.data.roomId),
       assertActiveCourse(tx, { courseId: parsed.data.courseId, monthKey: month.monthKey }),
@@ -729,6 +756,7 @@ export async function saveBasicServiceCallRow(input: ServiceCallInput & { prisma
       assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: parsed.data.therapist2Id }),
       assertActiveEmployee(tx, { role: "EARCARE", employeeId: parsed.data.earcareEmployeeId })
     ]);
+    assertSecondTherapistRequirement({ policy: coursePolicy, therapist2Id: parsed.data.therapist2Id });
 
     const data = {
       operatingMonthId: parsed.data.operatingMonthId,
@@ -801,7 +829,7 @@ export async function autosaveServiceCallRow(
       serviceDate: parsed.data.serviceDate
     });
 
-    await Promise.all([
+    const [, , coursePolicy] = await Promise.all([
       assertActiveTimeSlot(tx, parsed.data.startTime),
       assertActiveRoom(tx, parsed.data.roomId),
       assertActiveCourse(tx, { courseId: parsed.data.courseId, monthKey: month.monthKey }),
@@ -813,6 +841,7 @@ export async function autosaveServiceCallRow(
       assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: parsed.data.therapist2Id }),
       assertActiveEmployee(tx, { role: "EARCARE", employeeId: parsed.data.earcareEmployeeId })
     ]);
+    assertSecondTherapistRequirement({ policy: coursePolicy, therapist2Id: parsed.data.therapist2Id });
 
     const before = await findServiceCallWithRelations(tx, parsed.data.serviceCallId);
     const data = {

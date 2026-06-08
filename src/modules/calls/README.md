@@ -27,6 +27,14 @@ Owns the reservation and service-call ledger.
 - `listCompletedServiceCallCalculationsForDate()` exposes only calculated completed rows for settlement/dashboard handoff, including separate `THERAPIST_1` and `THERAPIST_2` assignment records.
 - Calls do not add derived amount columns before monthly close snapshots; amounts are DTO/domain outputs.
 
+## Story 2.4 Scope
+
+- D코스 마사지사2 필수 여부는 course label or code text가 아니라 selected operating month의 `CoursePolicy.requiresSecondTherapist`로 판단한다.
+- `saveBasicServiceCallRow()` and `autosaveServiceCallRow()` block required-second-therapist rows before any `ServiceCall`, assignment, status history, or audit write when `therapist2Id` is empty.
+- The domain error code is `D_COURSE_SECOND_THERAPIST_REQUIRED`, and Server Actions map it to `fieldErrors.therapist2Id` plus a Korean form error.
+- Completed invalid historical rows with `requiresSecondTherapist=true` and no therapist2 return `second_therapist_required` and are excluded from `listCompletedServiceCallCalculationsForDate()`.
+- The call grid connects the therapist2 field error with `aria-invalid`, `aria-describedby`, `role="alert"`, a danger ring, a `!` icon, visible text, and the existing retry/draft-preservation flow.
+
 ## Includes
 
 - service calls
@@ -34,6 +42,7 @@ Owns the reservation and service-call ledger.
 - status history
 - daily expenses
 - completed-call payment and commission derivation
+- D-course second-therapist validation
 
 ## Upstream
 

@@ -73,11 +73,21 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 - `listCompletedServiceCallCalculationsForDate()` returns downstream aggregate inputs for completed rows only and exposes separate `THERAPIST_1` and `THERAPIST_2` assignment records.
 - No derived amount columns are stored on `ServiceCall`; monthly close stories own snapshot persistence.
 
+## Story 2.4 D-Course Second-Therapist Contract
+
+- D-course enforcement is policy-based: the calls domain service reads the selected operating month's `CoursePolicy.requiresSecondTherapist` for `courseId`. It must not rely on course name, TV label, or a UI label.
+- If `requiresSecondTherapist=true` and `therapist2Id` is empty, both new row save and existing row autosave fail with `D_COURSE_SECOND_THERAPIST_REQUIRED` before row, assignment, status history, or audit writes.
+- The user-facing Korean message is `D코스는 마사지사2 필수입니다. 마사지사2를 배정해야 저장됩니다.`
+- Server Actions map this domain error to `fieldErrors.therapist2Id`, `formError`, and `domainErrorCode` so the grid can render field-level feedback.
+- The grid therapist2 cell exposes `aria-invalid`, `aria-describedby`, `role="alert"`, danger ring styling, a `!` icon, and visible text. Failed autosave still keeps the draft and retry button.
+- Historical invalid completed rows with `requiresSecondTherapist=true` and no therapist2 are not exposed as calculated downstream aggregates; row DTOs return `second_therapist_required` instead of silently calculating zero.
+
 ## Rules
 
 - Only `방문완료` calls count toward sales, commissions, earcare pool, and recognized calls.
 - Any discount type currently means a fixed 100,000 discount.
 - D course requires a second therapist in the ERP even though Excel does not enforce it.
+- D course requirement is enforced from `CoursePolicy.requiresSecondTherapist`, not from mutable display text.
 - Commission values should be derived from effective therapist course rates.
 - Status changes should be recorded.
 - Story 2.1 stores room/course/employee references as stable IDs and code selections as stable code values, never mutable display labels.

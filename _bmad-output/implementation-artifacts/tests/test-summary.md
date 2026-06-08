@@ -4,28 +4,28 @@
 
 ### API / Domain Tests
 
-- [x] `src/modules/calls/service-call-service.test.ts` - Existing Story 2.3 domain coverage for completed/non-completed calls, fixed discount, therapist 1/2 commission, explicit zero commission, missing rate status, listing, autosave, and aggregate helper.
+- [x] `src/modules/calls/service-call-service.test.ts` - Story 2.4 domain coverage for policy-based second-therapist validation, blocked create/autosave side effects, non-required course allowance, D-course two-therapist calculation, and invalid completed D-row aggregate exclusion.
 
 ### E2E Tests
 
-- [x] `tests/e2e/story-2-3-completed-call-calculation.spec.ts` - Counter workflow for completed-call calculation display, discount recalculation, non-completed exclusion, and missing therapist-rate display.
+- [x] `tests/e2e/story-2-4-d-course-second-therapist.spec.ts` - Counter workflow for D-course missing therapist2 field error, alert/ARIA connection, blocked visit-complete calculation, retry draft preservation, non-required A-course allowance, D-course success calculation, and AddRowForm field error rendering.
 
 ### Static Validation
 
-- [x] `scripts/validate-story-2-3.mjs` - Story 2.3 static guard for calculation service, readonly grid display, E2E coverage, docs, and project context.
+- [x] `scripts/validate-story-2-4.mjs` - Story 2.4 static guard for domain code, Server Action field-error mapping, grid ARIA/error UI, unit/E2E coverage markers, docs, project context, and lint wiring.
 
 ## Coverage
 
-- API/domain calculation requirements: 9/9 covered by existing unit tests.
-- UI/E2E calculation requirements: 4/4 critical user-visible paths covered.
+- API/domain Story 2.4 requirements: 6/6 covered by unit tests.
+- UI/E2E Story 2.4 requirements: 5/5 critical user-visible paths covered.
 - Static validation: linked into `npm run lint`.
 
 ## Validation Results
 
-- `node scripts/validate-story-2-3.mjs`: passed.
-- `npm run lint`: passed, including Story 2.3 static validation.
-- `npm run test:unit -- src/modules/calls/service-call-service.test.ts`: blocked before test execution because local `node_modules` is missing package `tsx`.
-- `npm run test:e2e -- --list tests/e2e/story-2-3-completed-call-calculation.spec.ts`: blocked before Playwright startup because local `node_modules` is missing the `playwright` binary.
+- `node scripts/validate-story-2-4.mjs`: passed.
+- `npm run lint`: passed, including Story 2.4 static validation.
+- `npm run test:unit`: blocked before test execution because local `node_modules` is missing package `tsx`.
+- `npm run test:e2e -- tests/e2e/story-2-4-d-course-second-therapist.spec.ts`: not executable in the current dependency state; local `node_modules` and Playwright binaries are absent.
 
 ## Checklist Validation
 
@@ -45,6 +45,6 @@
 
 ## Next Steps
 
-- Install project dependencies from the lockfile/package manager.
+- Install project dependencies from `pnpm-lock.yaml`.
 - Run `npm run test:unit`.
-- Run `npm run test:e2e -- tests/e2e/story-2-3-completed-call-calculation.spec.ts` with a reachable PostgreSQL `DATABASE_URL`.
+- Run `npm run test:e2e -- tests/e2e/story-2-4-d-course-second-therapist.spec.ts` with a reachable PostgreSQL `DATABASE_URL`.
