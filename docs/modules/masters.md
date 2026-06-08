@@ -23,13 +23,13 @@ The masters module owns all configurable data used by operational modules:
 
 - `OperatingMonth`
 - `Room` with stable `id`, operational `displayName`, hidden-list `migrationReferenceName`, `sortOrder`, and `isActive`
+- `CodeItem` with stable `id`, `codeType`, immutable-style `code`, operational `displayName`, `sortOrder`, `isSystemDefault`, and `isActive`
+- `TimeSlot` with stable `id`, canonical `value` in `HH:mm`, `sortOrder`, and `isActive`
 - `Employee`
 - `Course`
 - `CourseDisplayName`
 - `TherapistCourseRate`
 - `OpsIncentiveRule`
-- `CodeItem`
-- `TimeSlot`
 
 ## Rules
 
@@ -37,6 +37,10 @@ The masters module owns all configurable data used by operational modules:
 - Room references use `Room.id`; `displayName` can change and `migrationReferenceName` such as `1번방` is migration/verification context only.
 - Room order is owned by `sortOrder`; duplicate order values are blocked before TV or room-status views consume the list.
 - Rooms that may be referenced by calls, settlements, or status history become 비활성 instead of being physically removed.
+- Code references use stable `CodeItem.id` or `codeType + code`, not mutable Korean `displayName`.
+- Time slot ordering is owned by `sortOrder`; the canonical `HH:mm` value does not determine cross-midnight order.
+- Story 1.6 default time slots are exactly 29 values from `11:00` through `01:00`; workbook values after `01:00` are not ERP input defaults.
+- Code items and time slots that may be referenced by operational rows become 비활성 instead of being physically removed.
 - Rate and policy records need effective month ranges.
 - Deleted master values should usually become inactive, not removed.
 - Past monthly close results must not change when current master data changes.

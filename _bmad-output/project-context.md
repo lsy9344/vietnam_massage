@@ -40,6 +40,10 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - 콜 원장, 객실 현황, TV 현황판 등 downstream 객실 참조는 `displayName`이나 `1번방` 문자열이 아니라 안정 키인 `Room.id`를 사용해야 한다.
 - 객실 표시 순서는 `Room.sortOrder`가 소유하며 중복 정렬값은 차단한다. 기본 sortOrder는 10 단위 간격으로 둔다.
 - 객실 비활성 처리는 `Room.isActive=false`만 사용하고 일반 운영 경로에서 물리 삭제하지 않는다. 생성/표시명 변경/정렬 변경/비활성 처리는 `room.created`, `room.display_name_changed`, `room.sort_order_changed`, `room.deactivated` 감사 이벤트를 기록한다.
+- 코드 마스터는 Prisma `CodeItem` 모델(`code_items`)이 소유한다. 기본 `codeType`은 `SERVICE_STATUS`, `PAYMENT_METHOD`, `DISCOUNT_TYPE`, `ATTENDANCE_STATUS`, `CONFIRMATION`이며 stable reference는 `CodeItem.id` 또는 `codeType + code`를 사용하고 mutable `displayName`을 downstream 저장 키로 쓰지 않는다.
+- Story 1.6 기본 상태 코드는 `예약`, `사용중`, `청소중`, `방문완료`, `노쇼`, `취소`; 결제수단은 `현금`, `카드`, `계좌`, `기타`; 할인구분은 `일주일내방문`, `생일자`, `후기작성`; 근무상태는 `정상`, `휴무`, `지각`, `조퇴`, `결근`; 확인값은 `Y`, `N`이다. 빈 할인/확인값은 코드 row가 아니라 downstream `null` 선택 없음으로 표현한다.
+- 시간 슬롯 마스터는 Prisma `TimeSlot` 모델(`time_slots`)이 소유한다. 기본 ERP 입력 슬롯은 `11:00`부터 `01:00`까지 30분 간격 29개이며 `01:30`, `02:00`, `02:30`은 Story 1.6 기본 seed에 포함하지 않는다. 자정 넘김 정렬은 `TimeSlot.value`가 아니라 `TimeSlot.sortOrder`가 소유한다.
+- 코드와 시간 슬롯은 삭제 대신 `isActive=false` 비활성 처리를 사용한다. 생성/표시명 또는 값 변경/정렬 변경/비활성 처리는 `code_item.*`, `time_slot.*` 감사 이벤트를 기록하고 JSON snapshot에는 Date 객체 대신 문자열/숫자/boolean/plain object만 넣는다.
 - 배포/운영은 프로젝트 표준과 같은 배포 방식, 같은 env 규칙, 같은 migration 절차를 따른다.
 - 패키지 매니저 baseline은 `package.json`에 `pnpm@10.12.1`로 기록했다. 현재 로컬에는 `pnpm`/`corepack`이 없어 npm 기반 동등 검증을 사용했다.
 - App Router baseline은 `next@16.2.7`, `react@19.2.7`, `react-dom@19.2.7`, `typescript@5.9.3`이다.

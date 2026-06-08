@@ -47,6 +47,17 @@ None. This module is the source of reference data for other modules.
 - `deactivateRoom()` sets `isActive=false`; normal room master flows do not physically remove room rows.
 - Successful room writes record `room.created`, `room.display_name_changed`, `room.sort_order_changed`, or `room.deactivated` with plain JSON snapshots.
 
+## Code And Time Slot Contract
+
+코드와 시간 슬롯은 콜 원장, 정산, 객실 현황이 공유하는 드롭다운 기준 데이터다.
+
+- `ensureDefaultCodeItems()` prepares `SERVICE_STATUS`, `PAYMENT_METHOD`, `DISCOUNT_TYPE`, `ATTENDANCE_STATUS`, and `CONFIRMATION` defaults. Empty discount/confirmation choices are represented by downstream `null`, not blank code rows.
+- `ensureDefaultTimeSlots()` prepares exactly 29 input slots from `11:00` through `01:00`; workbook-only later values such as `01:30`, `02:00`, and `02:30` are not seeded for Story 1.6.
+- `listCodeItems()` and `listTimeSlots()` return active and inactive rows for administrator management; `listActiveCodeItems()` and `listActiveTimeSlots()` return active-only dropdown DTOs for downstream modules.
+- `CodeItem.codeType + code` and `TimeSlot.id`/`CodeItem.id` are stable references. `displayName` and `value` are operational labels that can change.
+- `deactivateCodeItem()` and `deactivateTimeSlot()` set `isActive=false`; normal code/time-slot master flows do not physically remove rows.
+- Successful writes record `code_item.created`, `code_item.display_name_changed`, `code_item.sort_order_changed`, `code_item.deactivated`, `time_slot.created`, `time_slot.value_changed`, `time_slot.sort_order_changed`, or `time_slot.deactivated` with plain JSON snapshots.
+
 ## Does Not Own
 
 - service-call transactions

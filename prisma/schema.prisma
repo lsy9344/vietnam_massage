@@ -87,3 +87,30 @@ model Room {
 
   @@map("rooms")
 }
+
+model CodeItem {
+  id              String   @id @default(cuid())
+  codeType        String   @map("code_type")
+  code            String
+  displayName     String   @map("display_name")
+  sortOrder       Int      @map("sort_order")
+  isSystemDefault Boolean  @default(false) @map("is_system_default")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([codeType, code], map: "uq_code_items_code_type_code")
+  @@unique([codeType, sortOrder], map: "uq_code_items_code_type_sort_order")
+  @@map("code_items")
+}
+
+model TimeSlot {
+  id        String   @id @default(cuid())
+  value     String   @unique
+  sortOrder Int      @unique @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("time_slots")
+}
