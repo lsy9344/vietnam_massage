@@ -63,3 +63,15 @@ model AuditLog {
   @@index([action], map: "idx_audit_logs_action")
   @@map("audit_logs")
 }
+
+model OperatingMonth {
+  id        String   @id @default(cuid())
+  monthKey  String   @unique @map("month_key")
+  startDate DateTime @map("start_date") @db.Date
+  endDate   DateTime @map("end_date") @db.Date
+  status    String   @default("작성중")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("operating_months")
+}

@@ -32,6 +32,10 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - 감사 로그 `beforeValue`/`afterValue`는 JSON 직렬화 가능한 값만 허용한다. `NaN`, 함수, class instance, `Date` 객체는 `recordAuditEvent()`에서 domain error로 거부되므로 날짜/시간은 ISO 문자열로 넘긴다.
 - 감사 로그 조회 권한은 `audit:read`이며 관리자만 `/audit` 화면과 sidebar 감사 로그 그룹을 볼 수 있다. 화면/서버 경계는 `requirePermission("audit:read")`로 DB 재조회 기반 권한 검사를 수행한다.
 - 감사 로그는 append-only 불변 이력이다. 일반 운영 경로에 update/delete helper, Server Action, UI를 만들지 않는다. 정정은 후속 감사 이벤트를 추가하는 방식으로만 표현한다.
+- 운영월 기준 데이터는 Prisma `OperatingMonth` 모델(`operating_months`)이 소유한다. `monthKey`는 unique `YYYY-MM`, `startDate`/`endDate`는 DB `@db.Date`, 서비스 DTO는 ISO `YYYY-MM-DD` 문자열이다.
+- 운영월 상태값은 한국어 원문 `작성중`, `검토중`, `마감확정`, `잠금` 네 값만 허용한다. Story 1.4의 직접 상태 변경은 `작성중 -> 검토중`만 지원하며, `마감확정`/`잠금`/재오픈은 월마감 stories가 소유한다.
+- `getOperatingMonthDateRange()`는 `calls`, `settlements`, `dashboard`, `closing`이 Excel 행 범위 대신 운영월 날짜 조건을 재사용하기 위한 표준 handoff 함수다.
+- 운영월 생성과 상태 변경은 `operating_month.created`, `operating_month.status_changed` 감사 이벤트를 기록하며, before/after snapshot 날짜는 ISO 문자열로 넘긴다.
 - 배포/운영은 프로젝트 표준과 같은 배포 방식, 같은 env 규칙, 같은 migration 절차를 따른다.
 - 패키지 매니저 baseline은 `package.json`에 `pnpm@10.12.1`로 기록했다. 현재 로컬에는 `pnpm`/`corepack`이 없어 npm 기반 동등 검증을 사용했다.
 - App Router baseline은 `next@16.2.7`, `react@19.2.7`, `react-dom@19.2.7`, `typescript@5.9.3`이다.
