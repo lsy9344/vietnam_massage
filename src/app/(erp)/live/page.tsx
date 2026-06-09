@@ -5,7 +5,7 @@ import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/oper
 import { getDailyCallLedgerSummary } from "@/modules/calls/service-call-service";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import { listRoomStatuses } from "@/modules/rooms/room-status-service";
-import { LiveRefreshController } from "@/app/(erp)/live/live-refresh-controller";
+import { RoomStatusRefreshController } from "@/components/domain/room-status-refresh-controller";
 
 type LivePageSearchParams = {
   operatingMonthId?: string;
@@ -86,7 +86,7 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
           <h1 className="text-2xl font-semibold text-foreground">첫화면 실시간 현황</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted">객실 상태와 오늘 콜/매출 요약을 조회한다.</p>
         </div>
-        <LiveRefreshController lastUpdatedAt={lastUpdatedAt} />
+        <RoomStatusRefreshController lastUpdatedAt={lastUpdatedAt} />
       </div>
 
       <form className="mb-4 flex flex-wrap items-end gap-3" method="get">

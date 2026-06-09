@@ -17,7 +17,7 @@ function formatLastUpdated(value: string) {
   }).format(new Date(value));
 }
 
-export function LiveRefreshController({ lastUpdatedAt }: { lastUpdatedAt: string }) {
+export function RoomStatusRefreshController({ lastUpdatedAt }: { lastUpdatedAt: string }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [now, setNow] = useState(() => Date.now());
@@ -42,7 +42,9 @@ export function LiveRefreshController({ lastUpdatedAt }: { lastUpdatedAt: string
 
   return (
     <div className="flex items-center justify-end gap-3 text-xs text-muted" aria-label="실시간 갱신 상태">
-      <span>{isPending ? "갱신 중" : isStale ? "갱신 지연" : "마지막 갱신"}: {formatLastUpdated(lastUpdatedAt)}</span>
+      <span>
+        {isPending ? "갱신 중" : isStale ? "갱신 지연" : "마지막 갱신"}: {formatLastUpdated(lastUpdatedAt)}
+      </span>
       <Button className="h-8 px-2 text-xs" onClick={refresh} variant="secondary">
         새로고침
       </Button>

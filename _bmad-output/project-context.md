@@ -161,6 +161,11 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Story 3.2 기준 `/live` 첫 화면은 읽기 전용 운영 현황 route다. `RoomStatusDto`는 `listRoomStatuses()`에서만 받고, 오늘 상태/매출 KPI는 `getDailyCallLedgerSummary()`를 재사용한다. UI 계산 재구현 금지: `/live` component는 객실 상태, `inUseCount`, `cleaningCount`, 결제합계, 순매출, 코스별 방문완료 수를 다시 계산하지 않는다.
 - Story 3.2 기준 `getDailyCallLedgerSummary()`는 `reservationCount`, `inUseCount`, `cleaningCount`, `completedCount`, `noShowCount`, `canceledCount`를 콜 원장 상태 기준으로 제공한다. `사용중`은 `사용중`/`IN_USE`/`USING`, `청소중`은 `청소중`/`CLEANING`을 포함한다.
 - Story 3.2 기준 `/live`는 `router.refresh()` 기반 15초 자동 갱신과 수동 새로고침을 제공하며, 마지막 갱신 시각과 `갱신 지연` 상태를 표시해야 한다. 새 React Query dependency 없이 route-local Client Component에서 처리한다.
+- Story 3.3 기준 `/rooms`는 웨이터와 조회 전용 사용자의 객실 현황 landing이며 읽기 전용 화면이다. `requireRouteAccess("/rooms")`를 유지하고 웨이터는 `/rooms` 외 route에 접근하면 `/rooms`로 redirect한다.
+- Story 3.3 기준 `/rooms`는 `listRoomStatuses()`의 `RoomStatusDto`와 `RoomStatusCard`를 그대로 재사용한다. 화면에서 활성 콜, `remainingMinutes`, `expectedEndAt`, `종료확인`, 안내 문구를 다시 계산하지 않는다.
+- Story 3.3 기준 상태별 안내 문구 source of truth는 `src/modules/rooms/room-status-service.ts`의 `ROOM_STATUS_GUIDANCE_TEXT`다. `/rooms`에서 문구를 별도 상수로 복제하지 않는다.
+- Story 3.3 기준 `/rooms`는 콜 원장 grid, autosave, 지출, 정산, 월마감 mutation UI를 포함하지 않는다. 운영월/조회날짜 form은 read-only 조회 조건 변경만 수행한다.
+- Story 3.3 기준 `/rooms`는 공용 `RoomStatusRefreshController`로 15초 `router.refresh()` 자동 갱신, 수동 새로고침, 마지막 갱신 시각, `갱신 중`, `갱신 지연`을 표시한다. 새 React Query dependency 없이 직전 렌더 값을 유지한다.
 - 신규 CRM, 마케팅 자동화, 회계 연동, 모바일 앱, 멤버십은 1차 범위가 아니다.
 - 지급액에 영향을 주는 상태 변경, 결제/할인 변경, 담당자 변경, 출퇴근 변경, 수당표 변경, 직원 변경, 월마감 확정/취소/재오픈은 감사 로그 대상이다.
 

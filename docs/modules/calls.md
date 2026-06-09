@@ -106,6 +106,12 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 - `/live` uses summary fields for 결제합계, 순매출, 코스별 방문완료, warning counts, `inUseCount`, and `cleaningCount`; UI 계산 재구현 금지.
 - `/live` does not include call ledger input, autosave, row mutation, or daily expense mutation.
 
+## Story 3.3 Rooms Read-Only Consumer
+
+- `/rooms` reads active call occupancy indirectly through the rooms module and `listRoomStatuses()`.
+- `/rooms` is a 웨이터 and 조회 전용 read-only / 읽기 전용 downstream screen. It does not call call-ledger Server Actions, autosave, daily expense mutation, settlement mutation, or closing mutation.
+- Room cards render `RoomStatusDto` through `RoomStatusCard` and use `ROOM_STATUS_GUIDANCE_TEXT`; UI 계산 재구현 금지.
+
 ## Story 2.6 Keyboard and Type-Ahead Contract
 
 - The call ledger uses `@tanstack/react-table` `8.21.3` as the headless table model through `useReactTable` and `getCoreRowModel`; it does not replace the semantic table with a div grid.

@@ -18,6 +18,14 @@ Owns room-status views for waiters and TV display.
 - The shared room-status card receives `RoomStatusDto` as-is and must not recalculate active-call selection, remaining minutes, expected end, or `종료확인`; UI 계산 재구현 금지.
 - `/live` exposes last refresh and 갱신 지연 affordances while keeping the previous rendered values visible during refresh.
 
+## Story 3.3 Contract
+
+- `/rooms` is the 웨이터 and 조회 전용 landing for 객실 현황.
+- `/rooms` is read-only / 읽기 전용 and does not expose call ledger grid, autosave, daily expense, settlement, or closing mutations.
+- `/rooms` consumes `RoomStatusDto` from `listRoomStatuses()` and renders `RoomStatusCard`; it must not recalculate active-call selection, remaining minutes, expected end, `종료확인`, or guidance text. UI 계산 재구현 금지.
+- `ROOM_STATUS_GUIDANCE_TEXT` is the source of truth for status-specific waiter guidance.
+- `/rooms` uses shared 15초 refresh affordance with last refresh, `갱신 중`, and `갱신 지연`.
+
 ## Includes
 
 - room status view
@@ -36,6 +44,7 @@ Owns room-status views for waiters and TV display.
 
 - dashboard and room-display screens
 - `/live` first-screen room cards
+- `/rooms` waiter room-status cards
 
 ## Does Not Own
 

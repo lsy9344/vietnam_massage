@@ -41,6 +41,14 @@ The rooms module owns room-status presentation for operational use:
 - `/live` must not recalculate active calls, remaining minutes, expected end, or `종료확인`; UI 계산 재구현 금지.
 - The screen displays the last room-status update and 갱신 지연 state so operators do not mistake stale data for current state.
 
+## Story 3.3 Waiter Room Status Screen
+
+- `/rooms` is the 웨이터 and 조회 전용 landing for room status. It is read-only / 읽기 전용.
+- `/rooms` consumes `RoomStatusDto` from `listRoomStatuses()` and renders `RoomStatusCard`; it must not recalculate active calls, remaining minutes, expected end, `종료확인`, or guidance text. UI 계산 재구현 금지.
+- Status guidance comes from `ROOM_STATUS_GUIDANCE_TEXT` in `src/modules/rooms/room-status-service.ts`. `/rooms` does not own a separate guidance copy.
+- `/rooms` may change only lookup conditions through operating-month/date query params. It does not include call ledger grid, autosave, daily expense, settlement, or closing mutation affordances.
+- `/rooms` uses the shared `RoomStatusRefreshController` with 15초 polling, manual refresh, last refresh time, `갱신 중`, and `갱신 지연`.
+
 ## Rules
 
 - Find the latest active call by room where status is `사용중`, `청소중`, or `예약`.
@@ -54,4 +62,5 @@ The rooms module owns room-status presentation for operational use:
 - Reads `calls` and `masters`.
 - Feeds room display screens and dashboard summaries.
 - Feeds `/live` first-screen room cards.
+- Feeds `/rooms` waiter room-status cards and guidance text.
 - Does not mutate settlement or closing records.

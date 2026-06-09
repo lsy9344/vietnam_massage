@@ -3,24 +3,23 @@
 ## Generated Tests
 
 ### API Tests
-- [x] `src/modules/calls/service-call-service.test.ts` - `getDailyCallLedgerSummary()` includes `inUseCount` and `cleaningCount` from call-ledger statuses, while preserving visit-complete-only financial summaries.
+- [x] Not applicable for Story 3.3. `/rooms` is a read-only UI surface over the existing `listRoomStatuses()` domain service; no new API endpoint was introduced.
 
 ### E2E Tests
-- [x] `tests/e2e/story-3-2-live-status.spec.ts` - Administrator login lands on `/live`, and `/live` renders 11 room cards, status badges with glyphs, `종료확인` action labeling, exact status summary counts, exact VND KPIs, course completion count, refresh state, and read-only guardrails.
+- [x] `tests/e2e/story-3-3-rooms-waiter-guidance.spec.ts` - Waiter `/rooms` landing, unauthorized sidebar hiding, 11 room status cards, status label + glyph coverage, guidance text, `사용중` remaining time and expected end, `종료확인` action guidance, `빈방` fallback values, refresh state, read-only guardrails, read-only user access, and waiter direct-route redirects.
 
 ## Coverage
-- API/domain service paths: Story 3.2 summary DTO extension covered for reservation, in-use, cleaning, completed, no-show, canceled, payment total, net sales, warning counts, and course summaries.
-- UI features: `/live` first screen covered for login landing, room card grid, `RoomStatusDto` card output, status label + glyph, `결제·확인 필요`, today status summary, payment/net-sales KPIs, course completion summary, last-refresh state, and absence of call-ledger mutation UI.
-- Critical cases: active `사용중` and expired `사용중 -> 종료확인` are both seeded; read-only UI is checked by asserting no call grid/autosave affordances appear.
-- Review fix: Story 3.2 E2E now reuses the default 11 room master rows instead of creating 11 extra active rooms, so the 11-card assertion matches the `/live` active-room contract.
+- API endpoints: 0/0 applicable for this story.
+- UI features: 8/8 Story 3.3 acceptance areas covered by E2E assertions: role landing, sidebar authorization, 11-card room grid, state guidance text, active room timing, `종료확인`, empty room fallback, refresh/stale affordance, and read-only mutation absence.
+- Critical error/negative cases: waiter direct access to `/calls`, `/settlements`, and `/masters/rooms` redirects to `/rooms`; call-ledger grid/autosave affordances are absent after clicking a room card.
+- Discovered gaps fixed: Story 3.3 E2E fixture no longer depends on fixed `2026-06-09` start times, and fixture employee/code seeds now reserve unique sort orders idempotently instead of assuming fixed Story 3.3 sort orders are always free.
 
 ## Validation
-- [x] `node scripts/validate-story-3-2.mjs` - passed.
-- [x] `npm run test:unit` - passed with the repository's configured unit command.
-- [x] `npm run lint` - passed all story validators through Story 3.2.
-- [x] `npx playwright test --list tests/e2e/story-3-2-live-status.spec.ts` - listed 2 tests successfully.
-- [ ] `npm run test:e2e -- tests/e2e/story-3-2-live-status.spec.ts` - blocked in this sandbox because Next dev server cannot bind `127.0.0.1:3000` (`listen EPERM`).
-- [x] Review rerun: `node --import tsx --test $(find src -name '*.test.ts' -print | sort)` - passed 81 tests after review fixes.
+- [x] `node scripts/validate-story-3-3.mjs` - passed.
+- [x] `npm run test:unit` - passed with 3/3 unit tests.
+- [x] `npm run lint` - passed all story validators through Story 3.3.
+- [x] `npx playwright test --list tests/e2e/story-3-3-rooms-waiter-guidance.spec.ts` - listed 3 Story 3.3 tests successfully.
+- [ ] `npm run test:e2e -- tests/e2e/story-3-3-rooms-waiter-guidance.spec.ts` - not completed in this local environment. Earlier reruns were blocked by Next dev server bind (`listen EPERM`); the final rerun reached Playwright but failed before assertions because Prisma could not connect to the E2E database (`ECONNREFUSED`).
 
 ## Next Steps
-- Run the focused Playwright command in an environment where the dev server can listen on `127.0.0.1:3000` and `DATABASE_URL` points to the E2E database.
+- Run the focused Playwright command in an environment where the dev server can listen on `127.0.0.1:3000` and `DATABASE_URL` points to a reachable E2E database.

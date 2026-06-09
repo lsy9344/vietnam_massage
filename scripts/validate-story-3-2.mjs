@@ -22,7 +22,7 @@ function readJson(path) {
   "package.json",
   "src/app/(erp)/live/page.tsx",
   "src/app/(erp)/live/loading.tsx",
-  "src/app/(erp)/live/live-refresh-controller.tsx",
+  "src/components/domain/room-status-refresh-controller.tsx",
   "src/app/(erp)/calls/page.tsx",
   "src/app/(erp)/calls/daily-summary-strip.tsx",
   "src/components/domain/room-status-card.tsx",
@@ -53,7 +53,7 @@ for (const required of [
   "listRoomStatuses",
   "getDailyCallLedgerSummary",
   "RoomStatusCard",
-  "LiveRefreshController",
+  "RoomStatusRefreshController",
   "운영월 관리로 이동",
   "grid grid-cols-4",
   "오늘 상태 요약",
@@ -75,9 +75,9 @@ for (const required of ["Skeleton", "객실 상태 로딩", "오늘 요약 로�
   if (!loading.includes(required)) errors.push(`live/loading.tsx missing ${required}`);
 }
 
-const refresh = read("src/app/(erp)/live/live-refresh-controller.tsx");
+const refresh = read("src/components/domain/room-status-refresh-controller.tsx");
 for (const required of ["useRouter", "router.refresh", "setInterval", "15_000", "45_000", "마지막 갱신", "갱신 중", "갱신 지연", "새로고침"]) {
-  if (!refresh.includes(required)) errors.push(`live-refresh-controller.tsx missing ${required}`);
+  if (!refresh.includes(required)) errors.push(`room-status-refresh-controller.tsx missing ${required}`);
 }
 if (refresh.includes("@tanstack/react-query")) {
   errors.push("live refresh must not import @tanstack/react-query");
