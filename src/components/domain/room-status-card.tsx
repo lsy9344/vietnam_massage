@@ -40,7 +40,7 @@ export function RoomStatusCard({ status, variant = "default" }: { status: RoomSt
       className={cn(
         "grid min-h-56 gap-3 border border-border bg-surface p-4",
         "rounded-md",
-        isEmpty && "border-dashed bg-background",
+        isEmpty && "border-dashed border-status-empty bg-surface",
         isAttention && "status-attention border-status-complete-check",
         isTv && "min-h-[270px] gap-5 p-6"
       )}

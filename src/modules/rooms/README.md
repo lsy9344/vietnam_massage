@@ -34,6 +34,17 @@ Owns room-status views for waiters and TV display.
 - `/tv` uses shared 15초 refresh affordance through `RoomStatusRefreshController variant="tv"` with last refresh, `갱신 중`, and `갱신 지연`.
 - TV status presentation combines color, text label, and glyph; `종료확인` shows short attention copy such as `결제·확인 필요`.
 
+## Story 3.5 Contract
+
+- `src/app/globals.css` and `src/components/domain/status-badge.tsx` are the status token source of truth.
+- `StatusBadge` always renders 색상, 텍스트 라벨, 글리프 together: `사용중 ●`, `예약 ◷`, `청소중 ◐`, `종료확인 ⚠`, `빈방 ○`.
+- `청소중` uses `text-status-cleaning-foreground`, never white foreground, on the gold fill.
+- `빈방` uses outline/ghost styling with `border-status-empty`, `bg-surface`, and dark foreground.
+- `종료확인` separates dark text badge fill from bright `status-complete-check-glow` card ring/accent; the badge itself does not animate.
+- `prefers-reduced-motion` disables attention animation and keeps the static ring plus `⚠` label.
+- TV typography keeps `text-[40px]`, `text-[28px]`, and `text-[22px]` ramp; status cannot collapse to a swatch 단독.
+- Route UI must not create local status color maps or recalculate `종료확인`; UI 계산 재구현 금지.
+
 ## Includes
 
 - room status view

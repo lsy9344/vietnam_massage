@@ -171,6 +171,14 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Story 3.4 기준 `/tv`는 `listRoomStatuses()`의 `RoomStatusDto`와 `RoomStatusCard variant="tv"`를 재사용한다. 화면에서 활성 콜, 남은 시간, 종료예정, `종료확인`, 코스/담당자 표시를 다시 계산하지 않는다. UI 계산 재구현 금지.
 - Story 3.4 기준 `/tv`는 공유 `RoomStatusRefreshController variant="tv"`로 15초 polling, 수동 새로고침, 마지막 갱신, `갱신 중`, `갱신 지연`을 표시하고 갱신 중/지연 시 직전 렌더 값을 유지한다.
 - Story 3.4 기준 TV 카드는 상태별 색상과 텍스트 라벨과 글리프를 함께 표시하며, `종료확인`은 `결제·확인 필요` 같은 짧은 주의 문구를 보여준다.
+- Story 3.5 기준 객실 상태 presentation의 status token source of truth는 `src/app/globals.css`와 `src/components/domain/status-badge.tsx`다. `/live`, `/rooms`, `/tv`는 `RoomStatusCard`/`StatusBadge`를 재사용하고 화면별 inline status color map을 만들지 않는다.
+- Story 3.5 기준 상태 의미는 항상 색상, 텍스트 라벨, 글리프를 함께 사용해 전달한다. 글리프는 사용중 `●`, 예약 `◷`, 청소중 `◐`, 종료확인 `⚠`, 빈방 `○`로 고정한다.
+- Story 3.5 기준 `청소중` badge는 `bg-status-cleaning text-status-cleaning-foreground`만 사용한다. gold fill 위 white foreground와 brand gold body text는 금지한다.
+- Story 3.5 기준 `빈방` badge/card는 `border-status-empty bg-surface text-status-empty-foreground` 계열의 outline/ghost 표현을 사용하고 filled bronze badge로 표시하지 않는다.
+- Story 3.5 기준 `종료확인` 텍스트 badge는 dark orange `status-complete-check`를 사용하고 bright orange `status-complete-check-glow`는 card ring/accent 전용이다. Badge 자체에는 attention animation을 적용하지 않는다.
+- Story 3.5 기준 `.status-attention` motion은 text-bearing content가 아니라 non-text ring pseudo-element에만 2초 opacity breathe 수준의 느린 pulse를 적용한다. `prefers-reduced-motion: reduce`에서는 animation을 끄고 정적 ring과 `⚠` 라벨로 주의 상태를 전달한다.
+- Story 3.5 기준 TV typography는 객실명 `text-[40px]`, status badge `text-[28px]`, meta `text-[22px]` 이상 ramp를 유지하고 작은 swatch 단독으로 상태 의미를 전달하지 않는다.
+- Story 3.5 기준 상태 presentation polish는 UI 계산 재구현 금지 원칙을 유지한다. `종료확인` 판단, 남은분, 종료예정, course/assignee 표시는 `RoomStatusDto`와 rooms domain service가 소유한다.
 - 신규 CRM, 마케팅 자동화, 회계 연동, 모바일 앱, 멤버십은 1차 범위가 아니다.
 - 지급액에 영향을 주는 상태 변경, 결제/할인 변경, 담당자 변경, 출퇴근 변경, 수당표 변경, 직원 변경, 월마감 확정/취소/재오픈은 감사 로그 대상이다.
 

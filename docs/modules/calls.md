@@ -119,6 +119,12 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 - `/tv` renders `RoomStatusDto` through `RoomStatusCard variant="tv"` and uses shared 15초 refresh with `갱신 지연`; UI 계산 재구현 금지.
 - `/tv` does not call call-ledger Server Actions, autosave, daily expense mutation, settlement mutation, closing mutation, or any write path. It is a consumer only and mutation을 수행하지 않는다.
 
+## Story 3.5 Status Token Handoff
+
+- Calls may expose status chips or dropdown swatches, but `StatusBadge` and the shared status token source of truth own the canonical presentation.
+- A swatch 단독 must not carry status meaning. When call-ledger or dashboard status UI adopts these tokens, it must pair color with a text label and the matching glyph.
+- `청소중` uses `text-status-cleaning-foreground`; `빈방` uses outline styling; `종료확인` separates dark text badge fill from bright `status-complete-check-glow` card ring/accent.
+
 ## Story 2.6 Keyboard and Type-Ahead Contract
 
 - The call ledger uses `@tanstack/react-table` `8.21.3` as the headless table model through `useReactTable` and `getCoreRowModel`; it does not replace the semantic table with a div grid.

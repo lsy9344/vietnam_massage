@@ -80,7 +80,28 @@ select {
 }
 
 .status-attention {
+  position: relative;
+}
+
+.status-attention::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: status-attention-breathe 2s ease-in-out infinite;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-complete-check-glow) 24%, transparent);
+}
+
+@keyframes status-attention-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.88;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -93,7 +114,9 @@ select {
     transition-duration: 0.01ms !important;
   }
 
-  .status-attention {
+  .status-attention::after {
+    animation: none !important;
+    opacity: 1;
     box-shadow: 0 0 0 2px var(--status-complete-check-glow);
   }
 }

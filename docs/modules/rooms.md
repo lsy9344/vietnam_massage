@@ -58,6 +58,17 @@ The rooms module owns room-status presentation for operational use:
 - TV cards always show status color, text label, and glyph. `종료확인` uses a strong attention treatment and short copy such as `결제·확인 필요`.
 - `/tv` keeps `requireRouteAccess("/tv")`; administrator and read_only_viewer can access it, while waiter/counter/settlement_manager redirect to their role landing.
 
+## Story 3.5 Status Presentation Contract
+
+- The status token source of truth is `src/app/globals.css` plus `src/components/domain/status-badge.tsx`; room status surfaces must consume `RoomStatusCard` and `StatusBadge` instead of route-local status color maps.
+- Every badge combines 색상, 텍스트 라벨, 글리프. Fixed glyphs are `사용중 ●`, `예약 ◷`, `청소중 ◐`, `종료확인 ⚠`, and `빈방 ○`.
+- `청소중` uses `bg-status-cleaning text-status-cleaning-foreground`; white foreground on the gold fill is forbidden.
+- `빈방` uses an outline/ghost treatment with `border-status-empty`, `bg-surface`, and `text-status-empty-foreground`; filled bronze badges are forbidden.
+- `종료확인` uses dark `status-complete-check` for text-bearing badges. Bright `status-complete-check-glow` is limited to glow/ring/accent treatment.
+- `.status-attention` may use only a slow opacity breathe on the non-text ring pseudo-element. Under `prefers-reduced-motion: reduce`, animation is disabled and the static ring plus `⚠` label remain.
+- TV typography keeps the large-distance ramp: room name `text-[40px]`, status badge `text-[28px]`, and meta text `text-[22px]`. A small swatch 단독 must never carry status meaning.
+- This polish does not change domain calculation ownership. `RoomStatusDto` still owns `displayStatus`, remaining minutes, expected end, course labels, and assignees; UI 계산 재구현 금지.
+
 ## Rules
 
 - Find the latest active call by room where status is `사용중`, `청소중`, or `예약`.

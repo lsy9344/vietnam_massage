@@ -25,7 +25,7 @@ const statusBadgeConfig: Record<
   },
   종료확인: {
     glyph: "⚠",
-    className: "status-attention bg-status-complete-check text-status-complete-check-foreground"
+    className: "bg-status-complete-check text-status-complete-check-foreground"
   },
   빈방: {
     glyph: "○",
@@ -46,7 +46,7 @@ export function StatusBadge({
     <span
       aria-label={`상태: ${state}`}
       className={cn(
-        "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-semibold",
+        "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-sm font-semibold",
         config.className,
         className
       )}
