@@ -46,6 +46,16 @@ Owns the reservation and service-call ledger.
 - Money totals and course summaries include only rows with `calculationStatus === "calculated"`. `not_completed`, missing policy/rate, and `second_therapist_required` rows are excluded from amount and course summary totals.
 - Course summaries are grouped by stable `Course.code` A-E, never by course label or policy name text.
 
+## Story 2.6 Scope
+
+- `EditableCallGrid` uses TanStack Table as a headless row/column model while preserving the semantic `<table>` ledger markup.
+- Keyboard movement is route-local in `call-ledger-keyboard.ts`: `Tab`/`Shift+Tab` move through editable fields, `Enter` commits and moves below, arrow keys move adjacent cells, and `Esc` restores the last server draft without autosave.
+- Option cells use type-ahead combobox inputs for time, room, course, therapists, earcare, status, discount type, payment method, and confirmation code.
+- Comboboxes persist stable value IDs/codes through hidden inputs and draft payloads. Display labels are never sent as downstream keys.
+- Combobox accessibility uses `aria-expanded`, `aria-controls`, and `aria-activedescendant` with a listbox popup. Dropdown options always include visible text labels; swatches are decorative only.
+- Computed readonly cells remain server-derived, `bg-readonly`, tabular, and visually distinct from editable cells.
+- D-course therapist2 errors keep `aria-invalid`, `aria-describedby`, visible Korean copy, and the existing autosave retry/draft-preservation behavior.
+
 ## Includes
 
 - service calls
@@ -55,6 +65,7 @@ Owns the reservation and service-call ledger.
 - completed-call payment and commission derivation
 - D-course second-therapist validation
 - daily ledger summary and course-code summary
+- keyboard-first call ledger and type-ahead cell behavior
 
 ## Upstream
 

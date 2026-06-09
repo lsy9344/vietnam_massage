@@ -98,6 +98,19 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 - 완료 콜 monetary totals use only rows where `calculationStatus === "calculated"`. Non-completed rows, missing policy/rate rows, and invalid completed D rows with `second_therapist_required` are excluded from amount and course-code summaries.
 - Course summaries group by stable `Course.code` A-E and report completed count, discount count, and therapist assignment count.
 
+## Story 2.6 Keyboard and Type-Ahead Contract
+
+- The call ledger uses `@tanstack/react-table` `8.21.3` as the headless table model through `useReactTable` and `getCoreRowModel`; it does not replace the semantic table with a div grid.
+- Editable field order is fixed: `startTime`, `roomId`, `courseId`, `customerMemo`, `therapist1Id`, `therapist2Id`, `earcareEmployeeId`, `status`, `discountTypeCode`, `paymentMethodCode`, `note`, and `confirmationCode`.
+- `Tab` and `Shift+Tab` move through editable cells and wrap between rows. Computed readonly cells are skipped in tab order.
+- `Enter` commits the current row draft through the existing autosave action and moves to the same field on the next row.
+- Arrow keys move to adjacent ledger cells. Readonly computed cells can be focus targets for navigation semantics, but they do not open edit mode.
+- `Esc` cancels the active draft back to the last server row and must not call autosave.
+- Type-ahead combobox cells filter by visible label and stable value. Hidden form/draft values remain stable IDs/codes such as `Room.id`, `Course.id`, `Employee.id`, code values, and `TimeSlot.value`.
+- Combobox accessibility uses a visible/sr-only label, `aria-expanded`, `aria-controls`, and `aria-activedescendant`. Dropdown options expose text labels even when a decorative swatch is shown.
+- Computed readonly cells keep `bg-readonly`, right-aligned tabular numbers, server-derived values, and stale-failed-draft handling (`저장 보류 계산 대기`).
+- Story 2.6 validation is wired through `scripts/validate-story-2-6.mjs`; the behavior-level E2E target is `tests/e2e/story-2-6-call-ledger-keyboard-typeahead.spec.ts`.
+
 ## Rules
 
 - Only `방문완료` calls count toward sales, commissions, earcare pool, and recognized calls.
@@ -107,6 +120,8 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 - D course requirement is enforced from `CoursePolicy.requiresSecondTherapist`, not from mutable display text.
 - Commission values should be derived from effective therapist course rates.
 - Daily expenses reduce net sales only; they do not alter call payment, commission, discount, or earcare pool calculations.
+- Story 2.6 keyboard/type-ahead behavior must not persist display labels as downstream keys.
+- `Esc` in an existing call row is a cancel operation, not a save operation.
 - Status changes should be recorded.
 - Story 2.1 stores room/course/employee references as stable IDs and code selections as stable code values, never mutable display labels.
 - `ServiceCallAssignment.assignmentRole` is limited to `THERAPIST_1`, `THERAPIST_2`, and `EARCARE`.

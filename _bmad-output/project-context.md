@@ -70,9 +70,14 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Story 2.5 지출 mutation은 `createDailyExpense()`, `updateDailyExpense()`, `deactivateDailyExpense()`가 소유하고 `/calls` Server Action은 `requirePermission("call:write")` 후 호출한다. 지출 생성/수정/비활성 감사 이벤트는 `daily_expense.created`, `daily_expense.changed`, `daily_expense.deactivated`이며 snapshot은 plain JSON, `expenseDate: "YYYY-MM-DD"`, 금액 number, 담당자 employee ID만 포함한다.
 - Story 2.5 일별 요약은 `getDailyCallLedgerSummary()`가 소유한다. 예약/노쇼/취소/완료 카운트는 날짜와 운영월 조건으로 계산하고, 결제합계/마사지사정산/귀케어풀/할인합계/코스별 요약은 `calculationStatus === "calculated"`인 완료 콜만 포함한다. `not_completed`, 정책/수당 누락, `second_therapist_required` row는 금액 및 코스별 요약에서 제외한다.
 - Story 2.5 순매출 공식은 `netSales = paymentTotal - expenseTotal`이다. 지출합계는 active `DailyExpense`만 포함하고, 지출은 콜 결제금액/수당/귀케어풀/할인 자체를 바꾸지 않는다. 코스별 요약은 mutable label이 아니라 stable `Course.code` A~E 기준으로 묶는다.
+- Story 2.6 기준 콜 원장은 `@tanstack/react-table`을 headless row/column model로만 사용하고 기존 semantic `<table>` 구조를 유지한다. 키보드 이동, edit/draft/autosave, type-ahead, D코스 오류, computed readonly 표시는 프로젝트 코드가 소유한다.
+- Story 2.6 키보드 모델은 route-local `call-ledger-keyboard.ts`가 소유한다. `Tab`/`Shift+Tab`은 편집 가능 셀을 이동하고, `Enter`는 현재 row draft를 autosave한 뒤 아래 행 같은 field로 이동하며, 방향키는 인접 셀 이동을 수행하고, `Esc`는 마지막 server draft로 되돌리며 autosave를 호출하지 않는다.
+- Story 2.6 type-ahead combobox는 시간, 객실, 코스, 마사지사1/2, 귀케어 담당, 상태, 할인구분, 결제수단, 확인값에 적용한다. 필터는 label과 stable value를 대상으로 하지만 저장 payload는 반드시 `Room.id`, `Course.id`, `Employee.id`, code value, `TimeSlot.value` 같은 stable value만 보낸다.
+- Story 2.6 combobox 접근성은 visible/sr-only label, `aria-expanded`, `aria-controls`, `aria-activedescendant`, listbox/option role을 제공한다. Dropdown option은 swatch만으로 의미를 전달하지 않고 텍스트 라벨을 포함해야 한다.
+- Story 2.6 computed readonly cell은 `bg-readonly`, tabular number, right alignment, read-only tint를 유지하고 UI에서 계산을 재구현하지 않는다. 저장 실패 draft에서는 `저장 보류 계산 대기` 의미를 유지한다.
 - 콜 저장은 운영월 범위 밖 날짜를 `OPERATING_MONTH_DATE_OUT_OF_RANGE` / `운영월 범위를 벗어난 날짜입니다.`로 차단하고, 운영월 `잠금` 상태는 `OPERATING_MONTH_LOCKED`로 차단한다.
 - `/calls`는 Server Action + domain service 경계로 구현한다. page는 `requireRouteAccess("/calls")`, action은 `requirePermission("call:write")`를 사용하고 `ActionResult<T>`를 반환한다.
-- Story 2.1 그리드는 별도 dependency 없이 semantic HTML table로 구현했다. TanStack Table은 Story 2.6 수준의 셀 편집/키보드/type-ahead 요구가 들어올 때 도입한다.
+- Story 2.1 그리드는 별도 dependency 없이 semantic HTML table로 구현했다. Story 2.6부터 TanStack Table은 정확히 `@tanstack/react-table@8.21.3`으로 도입하며 floating range를 쓰지 않는다.
 - 배포/운영은 프로젝트 표준과 같은 배포 방식, 같은 env 규칙, 같은 migration 절차를 따른다.
 - 패키지 매니저 baseline은 `package.json`에 `pnpm@10.12.1`로 기록했다. 현재 로컬에는 `pnpm`/`corepack`이 없어 npm 기반 동등 검증을 사용했다.
 - App Router baseline은 `next@16.2.7`, `react@19.2.7`, `react-dom@19.2.7`, `typescript@5.9.3`이다.
