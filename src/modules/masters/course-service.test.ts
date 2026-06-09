@@ -322,6 +322,20 @@ describe("course service", () => {
     const before = (await listCourses({ monthKey: "2026-06", prismaClient })).find((course) => course.code === "A");
     assert.ok(before?.currentPolicy);
 
+    await updateCoursePolicy({
+      actorId: "admin-1",
+      policyId: before.currentPolicy.id,
+      name: before.currentPolicy.name,
+      durationMinutes: before.currentPolicy.durationMinutes,
+      basePrice: before.currentPolicy.basePrice,
+      opsCallCredit: before.currentPolicy.opsCallCredit,
+      earcarePoolAmount: before.currentPolicy.earcarePoolAmount,
+      requiresSecondTherapist: before.currentPolicy.requiresSecondTherapist,
+      tvDisplayName: before.currentPolicy.tvDisplayName,
+      effectiveFromMonth: before.currentPolicy.effectiveFromMonth,
+      effectiveToMonth: "2026-06",
+      prismaClient
+    });
     const nextPolicy = await createCoursePolicy({
       actorId: "admin-1",
       courseId: before.id,

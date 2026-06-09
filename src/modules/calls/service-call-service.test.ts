@@ -20,6 +20,8 @@ function dbDate(value: string) {
 }
 
 function createMemoryPrisma() {
+  const createdAt = new Date("2026-06-01T00:00:00.000Z");
+  const updatedAt = new Date("2026-06-01T00:10:00.000Z");
   const operatingMonths = new Map<string, any>([
     [
       "month-2026-06",
@@ -29,7 +31,8 @@ function createMemoryPrisma() {
         startDate: dbDate("2026-06-01"),
         endDate: dbDate("2026-06-30"),
         status: "작성중",
-        createdAt: new Date("2026-06-01T00:00:00.000Z")
+        createdAt,
+        updatedAt
       }
     ],
     [
@@ -40,18 +43,19 @@ function createMemoryPrisma() {
         startDate: dbDate("2026-07-01"),
         endDate: dbDate("2026-07-31"),
         status: "잠금",
-        createdAt: new Date("2026-07-01T00:00:00.000Z")
+        createdAt: new Date("2026-07-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-07-01T00:10:00.000Z")
       }
     ]
   ]);
   const rooms = new Map<string, any>([
-    ["room-101", { id: "room-101", displayName: "101 호실", sortOrder: 10, isActive: true, createdAt: new Date("2026-06-01T00:00:00.000Z") }],
-    ["room-off", { id: "room-off", displayName: "비활성 호실", sortOrder: 20, isActive: false, createdAt: new Date("2026-06-01T00:01:00.000Z") }]
+    ["room-101", { id: "room-101", displayName: "101 호실", migrationReferenceName: "1번방", sortOrder: 10, isActive: true, createdAt, updatedAt }],
+    ["room-off", { id: "room-off", displayName: "비활성 호실", migrationReferenceName: "비활성", sortOrder: 20, isActive: false, createdAt, updatedAt }]
   ]);
   const courses = new Map<string, any>([
-    ["course-a", { id: "course-a", code: "A", isActive: true, createdAt: new Date("2026-06-01T00:00:00.000Z") }],
-    ["course-d", { id: "course-d", code: "D", isActive: true, createdAt: new Date("2026-06-01T00:00:00.000Z") }],
-    ["course-missing-rate", { id: "course-missing-rate", code: "B", isActive: true, createdAt: new Date("2026-06-01T00:00:00.000Z") }]
+    ["course-a", { id: "course-a", code: "A", isActive: true, createdAt, updatedAt }],
+    ["course-d", { id: "course-d", code: "D", isActive: true, createdAt, updatedAt }],
+    ["course-missing-rate", { id: "course-missing-rate", code: "B", isActive: true, createdAt, updatedAt }]
   ]);
   const coursePolicies = new Map<string, any>([
     [
@@ -171,10 +175,86 @@ function createMemoryPrisma() {
     ]
   ]);
   const employees = new Map<string, any>([
-    ["therapist-1", { id: "therapist-1", displayName: "마사지사1", staffCode: "THR-001", employeeGroup: "THERAPIST", sortOrder: 1, isActive: true }],
-    ["therapist-2", { id: "therapist-2", displayName: "마사지사2", staffCode: "THR-002", employeeGroup: "THERAPIST", sortOrder: 2, isActive: true }],
-    ["earcare-1", { id: "earcare-1", displayName: "귀케어1", staffCode: "EAR-001", employeeGroup: "EARCARE", sortOrder: 1, isActive: true }],
-    ["ops-1", { id: "ops-1", displayName: "운영1", staffCode: "OPS-001", employeeGroup: "OPERATIONS", sortOrder: 1, isActive: true }]
+    [
+      "therapist-1",
+      {
+        id: "therapist-1",
+        displayName: "마사지사1",
+        staffCode: "THR-001",
+        employeeGroup: "THERAPIST",
+        position: "마사지사",
+        shiftType: "전체",
+        baseSalary: 0,
+        phone: null,
+        birthday: null,
+        hireDate: null,
+        employmentStatus: "재직",
+        sortOrder: 1,
+        isActive: true,
+        createdAt,
+        updatedAt
+      }
+    ],
+    [
+      "therapist-2",
+      {
+        id: "therapist-2",
+        displayName: "마사지사2",
+        staffCode: "THR-002",
+        employeeGroup: "THERAPIST",
+        position: "마사지사",
+        shiftType: "전체",
+        baseSalary: 0,
+        phone: null,
+        birthday: null,
+        hireDate: null,
+        employmentStatus: "재직",
+        sortOrder: 2,
+        isActive: true,
+        createdAt,
+        updatedAt
+      }
+    ],
+    [
+      "earcare-1",
+      {
+        id: "earcare-1",
+        displayName: "귀케어1",
+        staffCode: "EAR-001",
+        employeeGroup: "EARCARE",
+        position: "귀케어",
+        shiftType: "전체",
+        baseSalary: 0,
+        phone: null,
+        birthday: null,
+        hireDate: null,
+        employmentStatus: "재직",
+        sortOrder: 1,
+        isActive: true,
+        createdAt,
+        updatedAt
+      }
+    ],
+    [
+      "ops-1",
+      {
+        id: "ops-1",
+        displayName: "운영1",
+        staffCode: "OPS-001",
+        employeeGroup: "OPERATIONS",
+        position: "운영",
+        shiftType: "전체",
+        baseSalary: 0,
+        phone: null,
+        birthday: null,
+        hireDate: null,
+        employmentStatus: "재직",
+        sortOrder: 1,
+        isActive: true,
+        createdAt,
+        updatedAt
+      }
+    ]
   ]);
   const codeItems = new Map<string, any>(
     [
@@ -196,12 +276,12 @@ function createMemoryPrisma() {
       ["PAYMENT_METHOD", "비활성", "비활성", 99, false]
     ].map(([codeType, code, displayName, sortOrder, isActive]) => [
       `${codeType}:${code}`,
-      { codeType, code, displayName, sortOrder, isActive, createdAt: new Date("2026-06-01T00:00:00.000Z") }
+      { id: `${codeType}:${code}`, codeType, code, displayName, sortOrder, isSystemDefault: true, isActive, createdAt, updatedAt }
     ])
   );
   const timeSlots = new Map<string, any>([
-    ["11:00", { id: "slot-1100", value: "11:00", sortOrder: 10, isActive: true, createdAt: new Date("2026-06-01T00:00:00.000Z") }],
-    ["01:00", { id: "slot-0100", value: "01:00", sortOrder: 290, isActive: true, createdAt: new Date("2026-06-01T00:01:00.000Z") }]
+    ["11:00", { id: "slot-1100", value: "11:00", sortOrder: 10, isActive: true, createdAt, updatedAt }],
+    ["01:00", { id: "slot-0100", value: "01:00", sortOrder: 290, isActive: true, createdAt, updatedAt }]
   ]);
   const serviceCalls = new Map<string, any>();
   const dailyExpenses = new Map<string, any>();
@@ -718,7 +798,7 @@ describe("service call service", () => {
     });
 
     assert.deepEqual(options.rooms.map((room) => room.value), ["room-101"]);
-    assert.deepEqual(options.courses.map((course) => course.value), ["course-a", "course-d", "course-missing-rate"]);
+    assert.deepEqual(options.courses.map((course) => course.value), ["course-a", "course-missing-rate", "course-d"]);
     assert.ok(options.paymentMethods.some((method) => method.value === "현금"));
     assert.ok(options.paymentMethods.some((method) => method.value === "CASH"));
     assert.deepEqual(options.therapists.map((therapist) => therapist.value), ["therapist-1", "therapist-2"]);

@@ -20,7 +20,7 @@ function createMemoryPrisma() {
   let accountSeq = 1;
 
   function timestamp(offset: number) {
-    return new Date(`2026-06-08T00:${String(offset).padStart(2, "0")}:00.000Z`);
+    return new Date(Date.UTC(2026, 5, 8, 0, offset, 0, 0));
   }
 
   function matchesWhere(record: any, where: any = {}) {

@@ -7,7 +7,17 @@
 
 # Common generated files
 node_modules/
+.next/
+playwright-report/
+test-results/
+tsconfig.tsbuildinfo
 __pycache__/
 *.pyc
+
+# Local secrets and package-manager artifacts
+.env
+.env.local
+.env.*.local
+package-lock.json
 
 .agents/.story-automator-active

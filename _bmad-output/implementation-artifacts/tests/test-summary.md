@@ -2,49 +2,16 @@
 
 ## Generated Tests
 
-### API / Domain Tests
-
-- [x] `src/modules/calls/service-call-service.test.ts` - Story 2.5 domain coverage for daily expense create/update/deactivate, active-only expense listing, amount validation, date/lock/handler failure side effects, audit snapshots, completed-call-only summary totals, active expense totals, net sales, warning counts, and `Course.code` A-E grouping.
+### API Tests
+- [x] `tests/e2e/story-3-1-room-status-service.spec.ts` - Playwright runner에서 injected `prismaClient` fixture로 `listRoomStatuses()` DTO 계약, 활성/제외 상태, 최신 활성 콜, 자정 넘김, 정책 누락 fallback, 담당자 mapping, read-only 무부작용을 검증한다.
 
 ### E2E Tests
-
-- [x] `tests/e2e/story-2-5-daily-expense-summary.spec.ts` - Counter workflow for daily expense add/update/deactivate, expense total and net sales refresh, audit log creation, amount field error, locked operating month read-only behavior, and explicit UI assertions that daily KPI/course summaries only include completed calculated calls.
-
-### Static Validation
-
-- [x] `scripts/validate-story-2-5.mjs` - Story 2.5 static guard for `DailyExpense`, expense mutations, audit events, summary service, calls page wiring, E2E file, docs, project context, and lint wiring.
+- [x] `tests/e2e/story-3-1-room-status-service.spec.ts` - Story 3.1의 transport-neutral service workflow를 자동화한다. 현재 `/live`, `/rooms`, `/tv`는 placeholder라 UI interaction E2E는 후속 Story 3.2~3.4 범위다.
 
 ## Coverage
-
-- API/domain Story 2.5 requirements: 8/8 acceptance criteria covered by unit/domain tests and static validation markers.
-- UI/E2E Story 2.5 requirements: critical user-visible paths covered for expense CRUD, audit log creation, summary refresh, course summary display, validation error, and locked read-only state.
-- Static validation: linked into `npm run lint`.
-
-## Validation Results
-
-- `node scripts/validate-story-2-5.mjs`: passed.
-- `npm run lint`: passed, including Story 2.5 static validation.
-- `npm run test:unit -- src/modules/calls/service-call-service.test.ts`: blocked before test execution because local `node_modules` is missing package `tsx`.
-- `npm run test:e2e -- tests/e2e/story-2-5-daily-expense-summary.spec.ts`: blocked because the local `playwright` binary is not installed.
-
-## Checklist Validation
-
-- [x] API/domain tests generated if applicable.
-- [x] E2E tests generated for the UI workflow.
-- [x] Tests use standard framework APIs.
-- [x] Tests cover happy path.
-- [x] Tests cover critical error cases.
-- [ ] All generated tests run successfully: blocked by missing local dependencies.
-- [x] Tests use semantic locators.
-- [x] Tests have clear descriptions.
-- [x] No hardcoded waits or sleeps.
-- [x] Tests are independent within serial DB fixture setup; Story 2.5 E2E now cleans prior seeded calls and expenses before reseeding.
-- [x] Test summary created.
-- [x] Tests saved to appropriate directories.
-- [x] Summary includes coverage metrics.
+- API/domain service paths: 1/1 Story 3.1 service covered.
+- UI features: 0/0 implemented Story 3.1 UI surfaces covered; UI surfaces are not yet implemented.
+- Critical cases: 활성 콜 없음, 예약, 청소중, 사용중, 종료확인, 방문완료/노쇼/취소 제외, 최신 활성 콜, 자정 넘김, 정책 누락, 입력 날짜/시간 검증, read-only guard covered.
 
 ## Next Steps
-
-- Install project dependencies from `pnpm-lock.yaml`.
-- Run `npm run test:unit -- src/modules/calls/service-call-service.test.ts`.
-- Run `npm run test:e2e -- tests/e2e/story-2-5-daily-expense-summary.spec.ts` with a reachable PostgreSQL `DATABASE_URL`.
+- Story 3.2~3.4에서 `/live`, `/rooms`, `/tv` UI가 구현되면 같은 `RoomStatusDto` fixture를 재사용해 화면별 rendering/polling E2E를 추가한다.
