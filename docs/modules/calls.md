@@ -98,6 +98,14 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 - 완료 콜 monetary totals use only rows where `calculationStatus === "calculated"`. Non-completed rows, missing policy/rate rows, and invalid completed D rows with `second_therapist_required` are excluded from amount and course-code summaries.
 - Course summaries group by stable `Course.code` A-E and report completed count, discount count, and therapist assignment count.
 
+## Story 3.2 Live Summary Extension
+
+- `getDailyCallLedgerSummary()` is reused by `/live` for read-only / 읽기 전용 first-screen status and KPI display.
+- The summary DTO now includes `inUseCount` and `cleaningCount` in addition to reservation, completed, no-show, and canceled counts.
+- `inUseCount` counts `사용중`/`IN_USE`/`USING`; `cleaningCount` counts `청소중`/`CLEANING`.
+- `/live` uses summary fields for 결제합계, 순매출, 코스별 방문완료, warning counts, `inUseCount`, and `cleaningCount`; UI 계산 재구현 금지.
+- `/live` does not include call ledger input, autosave, row mutation, or daily expense mutation.
+
 ## Story 2.6 Keyboard and Type-Ahead Contract
 
 - The call ledger uses `@tanstack/react-table` `8.21.3` as the headless table model through `useReactTable` and `getCoreRowModel`; it does not replace the semantic table with a div grid.

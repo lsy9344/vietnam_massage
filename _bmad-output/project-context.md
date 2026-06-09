@@ -158,6 +158,9 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - 상태별 색상/표시값은 `사용중`, `청소중`, `예약`, `종료확인`, `빈방` 기준을 보존한다.
 - Story 3.1 기준 객실 현재 상태는 `src/modules/rooms/room-status-service.ts`의 `listRoomStatuses()`가 소유하고, 첫 화면/객실 현황/TV 현황판은 같은 `RoomStatusDto`를 재사용해야 한다. 활성 active call 상태는 `예약`/`RESERVED`, `사용중`/`IN_USE`/`USING`, `청소중`/`CLEANING`이고, `방문완료`/`VISIT_COMPLETE`, `노쇼`/`NO_SHOW`, `취소`/`CANCELED`는 객실을 점유하지 않는다.
 - Story 3.1 객실 상태 계산은 조회 전용 read-only domain service다. 최신 활성 콜은 객실별 serviceDate, 자정 넘김 정규화 startTime, deterministic tie-breaker로 선택하고, `사용중` 남은분이 0이면 `displayStatus`만 `종료확인`으로 바꾸며 `sourceCallStatus`는 원본 상태를 보존한다.
+- Story 3.2 기준 `/live` 첫 화면은 읽기 전용 운영 현황 route다. `RoomStatusDto`는 `listRoomStatuses()`에서만 받고, 오늘 상태/매출 KPI는 `getDailyCallLedgerSummary()`를 재사용한다. UI 계산 재구현 금지: `/live` component는 객실 상태, `inUseCount`, `cleaningCount`, 결제합계, 순매출, 코스별 방문완료 수를 다시 계산하지 않는다.
+- Story 3.2 기준 `getDailyCallLedgerSummary()`는 `reservationCount`, `inUseCount`, `cleaningCount`, `completedCount`, `noShowCount`, `canceledCount`를 콜 원장 상태 기준으로 제공한다. `사용중`은 `사용중`/`IN_USE`/`USING`, `청소중`은 `청소중`/`CLEANING`을 포함한다.
+- Story 3.2 기준 `/live`는 `router.refresh()` 기반 15초 자동 갱신과 수동 새로고침을 제공하며, 마지막 갱신 시각과 `갱신 지연` 상태를 표시해야 한다. 새 React Query dependency 없이 route-local Client Component에서 처리한다.
 - 신규 CRM, 마케팅 자동화, 회계 연동, 모바일 앱, 멤버십은 1차 범위가 아니다.
 - 지급액에 영향을 주는 상태 변경, 결제/할인 변경, 담당자 변경, 출퇴근 변경, 수당표 변경, 직원 변경, 월마감 확정/취소/재오픈은 감사 로그 대상이다.
 

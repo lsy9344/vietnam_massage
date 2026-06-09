@@ -266,6 +266,8 @@ function createMemoryPrisma() {
       ["SERVICE_STATUS", "취소", "취소", 60, true],
       ["SERVICE_STATUS", "RESERVED", "예약", 110, true],
       ["SERVICE_STATUS", "VISIT_COMPLETE", "방문완료", 120, true],
+      ["SERVICE_STATUS", "IN_USE", "사용중", 130, true],
+      ["SERVICE_STATUS", "CLEANING", "청소중", 140, true],
       ["SERVICE_STATUS", "CANCELED", "취소", 160, true],
       ["DISCOUNT_TYPE", "생일자", "생일자", 20, true],
       ["DISCOUNT_TYPE", "BIRTHDAY", "생일자", 120, true],
@@ -1421,6 +1423,42 @@ describe("service call service", () => {
     await saveBasicServiceCallRow({
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "사용중",
+      prismaClient
+    });
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "IN_USE",
+      prismaClient
+    });
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "청소중",
+      prismaClient
+    });
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "CLEANING",
+      prismaClient
+    });
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
       startTime: "01:00",
       roomId: "room-101",
       courseId: "course-a",
@@ -1467,6 +1505,8 @@ describe("service call service", () => {
     });
 
     assert.equal(summary.reservationCount, 1);
+    assert.equal(summary.inUseCount, 2);
+    assert.equal(summary.cleaningCount, 2);
     assert.equal(summary.completedCount, 3);
     assert.equal(summary.noShowCount, 0);
     assert.equal(summary.canceledCount, 1);

@@ -46,6 +46,13 @@ Owns the reservation and service-call ledger.
 - Money totals and course summaries include only rows with `calculationStatus === "calculated"`. `not_completed`, missing policy/rate, and `second_therapist_required` rows are excluded from amount and course summary totals.
 - Course summaries are grouped by stable `Course.code` A-E, never by course label or policy name text.
 
+## Story 3.2 Scope
+
+- `/live` reuses `getDailyCallLedgerSummary()` for read-only / 읽기 전용 first-screen status and KPI display.
+- The summary DTO includes `inUseCount` and `cleaningCount` so the first screen does not infer call-ledger status from room cards.
+- `inUseCount` recognizes `사용중`/`IN_USE`/`USING`; `cleaningCount` recognizes `청소중`/`CLEANING`.
+- UI 계산 재구현 금지: `/live` reads 결제합계, 순매출, 코스별 방문완료, warning counts, `inUseCount`, and `cleaningCount` from the service.
+
 ## Story 2.6 Scope
 
 - `EditableCallGrid` uses TanStack Table as a headless row/column model while preserving the semantic `<table>` ledger markup.
@@ -76,6 +83,7 @@ Owns the reservation and service-call ledger.
 - `rooms` for active room status
 - `settlements` for completed-call payouts
 - `dashboard` for operational KPIs
+- `/live` for first-screen status and KPI summaries
 - `closing` for monthly totals
 - `audit` for sensitive changes
 

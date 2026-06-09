@@ -10,45 +10,19 @@ import {
 import { DailyExpensePanel } from "@/app/(erp)/calls/daily-expense-panel";
 import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
+import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 
 type CallsPageSearchParams = {
   operatingMonthId?: string;
   serviceDate?: string;
 };
 
-function kstTodayIsoDate() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(new Date());
-
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-  return `${year}-${month}-${day}`;
-}
-
-function clampDateToMonth(date: string | undefined, month: { startDate: string; endDate: string }) {
-  if (!date || date < month.startDate || date > month.endDate) {
-    const today = kstTodayIsoDate();
-    return today >= month.startDate && today <= month.endDate ? today : month.startDate;
-  }
-
-  return date;
-}
-
-function selectedMonthFor(months: Awaited<ReturnType<typeof listOperatingMonths>>, operatingMonthId?: string) {
-  return months.find((month) => month.id === operatingMonthId) ?? months[0] ?? null;
-}
-
 export default async function CallsPage({ searchParams }: { searchParams: Promise<CallsPageSearchParams> }) {
   const account = await requireRouteAccess("/calls");
 
   const params = await searchParams;
   const operatingMonths = await listOperatingMonths();
-  const selectedMonth = selectedMonthFor(operatingMonths, params.operatingMonthId);
+  const selectedMonth = selectedOperatingMonthFor(operatingMonths, params.operatingMonthId);
 
   if (!selectedMonth) {
     return (
@@ -73,7 +47,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
     );
   }
 
-  const serviceDate = clampDateToMonth(params.serviceDate, selectedMonth);
+  const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
   const [rows, options, expenses, summary] = await Promise.all([
     listServiceCallsForDate({ operatingMonthId: selectedMonth.id, serviceDate }),
     listServiceCallFormOptions({ operatingMonthId: selectedMonth.id }),

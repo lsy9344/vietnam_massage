@@ -272,6 +272,8 @@ export type DailyCourseSummaryDto = {
 
 export type DailyCallLedgerSummaryDto = {
   reservationCount: number;
+  inUseCount: number;
+  cleaningCount: number;
   completedCount: number;
   noShowCount: number;
   canceledCount: number;
@@ -345,6 +347,14 @@ function isCompletedServiceCallStatus(status: string) {
 
 function isReservationStatus(status: string) {
   return status === "예약" || status === "RESERVED";
+}
+
+function isInUseStatus(status: string) {
+  return status === "사용중" || status === "IN_USE" || status === "USING";
+}
+
+function isCleaningStatus(status: string) {
+  return status === "청소중" || status === "CLEANING";
 }
 
 function isNoShowStatus(status: string) {
@@ -1302,6 +1312,8 @@ export async function getDailyCallLedgerSummary(input: {
   const expenseTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0);
   return {
     reservationCount: rows.filter((row) => isReservationStatus(row.status)).length,
+    inUseCount: rows.filter((row) => isInUseStatus(row.status)).length,
+    cleaningCount: rows.filter((row) => isCleaningStatus(row.status)).length,
     completedCount: rows.filter((row) => isCompletedServiceCallStatus(row.status)).length,
     noShowCount: rows.filter((row) => isNoShowStatus(row.status)).length,
     canceledCount: rows.filter((row) => isCanceledStatus(row.status)).length,

@@ -18,6 +18,8 @@ export function DailySummaryStrip({ summary }: { summary: DailyCallLedgerSummary
     <section className="mb-4 border border-border bg-surface" aria-label="일별 요약">
       <div className="flex flex-wrap border-b border-border">
         <Kpi label="예약건수" value={`${formatNumber(summary.reservationCount)}건`} />
+        <Kpi label="사용중" value={`${formatNumber(summary.inUseCount)}건`} />
+        <Kpi label="청소중" value={`${formatNumber(summary.cleaningCount)}건`} />
         <Kpi label="방문완료" value={`${formatNumber(summary.completedCount)}건`} />
         <Kpi label="노쇼/취소" value={`${formatNumber(summary.noShowCount)} / ${formatNumber(summary.canceledCount)}`} />
         <Kpi label="결제합계" value={`${formatNumber(summary.paymentTotal)} VND`} />

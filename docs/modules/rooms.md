@@ -34,6 +34,13 @@ The rooms module owns room-status presentation for operational use:
 - Missing course policy keeps the room occupied but returns `course`, `expectedEndAt`, and `remainingMinutes` as `null`.
 - The service is read-only / 조회 전용 and does not mutate calls, status history, settlement, closing, or audit records.
 
+## Story 3.2 First Screen Handoff
+
+- `/live` is a read-only / 읽기 전용 downstream screen that consumes `RoomStatusDto` from `listRoomStatuses()`.
+- The first screen, waiter room status, and future TV board must reuse the same DTO and shared room-status card surface.
+- `/live` must not recalculate active calls, remaining minutes, expected end, or `종료확인`; UI 계산 재구현 금지.
+- The screen displays the last room-status update and 갱신 지연 state so operators do not mistake stale data for current state.
+
 ## Rules
 
 - Find the latest active call by room where status is `사용중`, `청소중`, or `예약`.
@@ -46,4 +53,5 @@ The rooms module owns room-status presentation for operational use:
 
 - Reads `calls` and `masters`.
 - Feeds room display screens and dashboard summaries.
+- Feeds `/live` first-screen room cards.
 - Does not mutate settlement or closing records.
