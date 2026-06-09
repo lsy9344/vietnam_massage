@@ -1,6 +1,6 @@
 # Source Modules
 
-This folder contains the planned ERP domain modules. The current project has no selected application framework, so each module starts with a README that defines the boundary and expected responsibilities.
+This folder contains the ERP domain modules used by the Next.js App Router application. Each module README defines the boundary, source-of-truth services, and handoffs expected by the route adapters and domain components.
 
 ## Module Flow
 
@@ -22,4 +22,3 @@ audit observes important changes across the flow
 - `audit`: immutable change history
 
 Use `src/shared` only for cross-module primitives that do not belong to one domain.
-

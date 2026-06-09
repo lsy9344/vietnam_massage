@@ -276,7 +276,7 @@ Project initialization using this selected starter should be the first implement
 
 **Call ledger autosave:** Implement call-ledger editing as row-level Server Actions. On success, return saved row state, computed read-only fields, and row save status so the grid can update without duplicating calculation logic in the client.
 
-**Room/TV refresh:** Use polling/auto-refresh for v1 live room and TV status. Start with a small interval appropriate for operations, such as 5-10 seconds, and always display last updated time or refresh delay state so stale boards are visible.
+**Room/TV refresh:** Use polling/auto-refresh for v1 live room and TV status. The implemented shared controller uses a 15-second polling interval with a refresh-delay state, and always displays last updated time or refresh delay state so stale boards are visible.
 
 **Realtime extension path:** Defer WebSocket/SSE for the first implementation. Keep room/TV query and DTO design independent from transport so polling can be replaced or supplemented with SSE/websocket later if measured latency or operator feedback requires it.
 

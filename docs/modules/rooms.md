@@ -17,12 +17,12 @@ The rooms module owns room-status presentation for operational use:
 - display status and display color mapping
 - waiter guidance text
 
-## Core Models
+## Core Models and Components
 
 - `RoomStatusDto`
 - `RoomStatusCourseDto`
 - `RoomStatusAssigneeDto`
-- `RoomDisplayCard`
+- `RoomStatusCard`
 
 ## Story 3.1 Contract
 
