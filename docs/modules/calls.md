@@ -112,6 +112,13 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 - `/rooms` is a 웨이터 and 조회 전용 read-only / 읽기 전용 downstream screen. It does not call call-ledger Server Actions, autosave, daily expense mutation, settlement mutation, or closing mutation.
 - Room cards render `RoomStatusDto` through `RoomStatusCard` and use `ROOM_STATUS_GUIDANCE_TEXT`; UI 계산 재구현 금지.
 
+## Story 3.4 TV Read-Only Consumer
+
+- `/tv` reads active call occupancy indirectly through the rooms module and `listRoomStatuses()`.
+- `/tv` is a fullscreen 조회 전용 / 읽기 전용 downstream board with ERP chrome 없음.
+- `/tv` renders `RoomStatusDto` through `RoomStatusCard variant="tv"` and uses shared 15초 refresh with `갱신 지연`; UI 계산 재구현 금지.
+- `/tv` does not call call-ledger Server Actions, autosave, daily expense mutation, settlement mutation, closing mutation, or any write path. It is a consumer only and mutation을 수행하지 않는다.
+
 ## Story 2.6 Keyboard and Type-Ahead Contract
 
 - The call ledger uses `@tanstack/react-table` `8.21.3` as the headless table model through `useReactTable` and `getCoreRowModel`; it does not replace the semantic table with a div grid.

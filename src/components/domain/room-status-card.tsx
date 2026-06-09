@@ -32,6 +32,7 @@ function remainingLabel(status: RoomStatusDto) {
 export function RoomStatusCard({ status, variant = "default" }: { status: RoomStatusDto; variant?: "default" | "tv" }) {
   const isAttention = status.displayStatus === "종료확인";
   const isEmpty = status.displayStatus === "빈방";
+  const isTv = variant === "tv";
 
   return (
     <article
@@ -41,40 +42,42 @@ export function RoomStatusCard({ status, variant = "default" }: { status: RoomSt
         "rounded-md",
         isEmpty && "border-dashed bg-background",
         isAttention && "status-attention border-status-complete-check",
-        variant === "tv" && "min-h-64 p-5"
+        isTv && "min-h-[270px] gap-5 p-6"
       )}
       data-testid="room-status-card"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="truncate text-xl font-semibold text-foreground">{status.roomDisplayName}</h2>
-          <p className="mt-1 text-xs text-muted">{isAttention ? "결제·확인 필요" : isEmpty ? "즉시 가능" : status.guidanceText}</p>
+          <h2 className={cn("truncate text-xl font-semibold text-foreground", isTv && "text-[40px] font-black leading-none")}>{status.roomDisplayName}</h2>
+          <p className={cn("mt-1 text-xs text-muted", isTv && "mt-3 text-[22px] font-bold leading-tight")}>
+            {isAttention ? "결제·확인 필요" : isEmpty ? "즉시 가능" : status.guidanceText}
+          </p>
         </div>
-        <StatusBadge state={status.displayStatus} />
+        <StatusBadge className={cn(isTv && "h-12 gap-2 px-4 text-[28px] font-black")} state={status.displayStatus} />
       </div>
 
-      <div className="grid grid-cols-2 gap-2 text-sm">
+      <div className={cn("grid grid-cols-2 gap-2 text-sm", isTv && "gap-4 text-[22px]")}>
         <div className="min-w-0">
-          <p className="text-xs font-medium text-muted">코스</p>
-          <p className="truncate font-semibold text-foreground">{courseLabel(status)}</p>
+          <p className={cn("text-xs font-medium text-muted", isTv && "text-base font-bold")}>코스</p>
+          <p className={cn("truncate font-semibold text-foreground", isTv && "text-[22px] font-bold leading-tight")}>{courseLabel(status)}</p>
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-medium text-muted">시작</p>
-          <p className="font-semibold text-foreground [font-variant-numeric:tabular-nums]">{status.startTime ?? "-"}</p>
+          <p className={cn("text-xs font-medium text-muted", isTv && "text-base font-bold")}>시작</p>
+          <p className={cn("font-semibold text-foreground [font-variant-numeric:tabular-nums]", isTv && "text-[22px] font-bold")}>{status.startTime ?? "-"}</p>
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-medium text-muted">남은분</p>
-          <p className="font-semibold text-foreground [font-variant-numeric:tabular-nums]">{remainingLabel(status)}</p>
+          <p className={cn("text-xs font-medium text-muted", isTv && "text-base font-bold")}>남은분</p>
+          <p className={cn("font-semibold text-foreground [font-variant-numeric:tabular-nums]", isTv && "text-[22px] font-bold")}>{remainingLabel(status)}</p>
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-medium text-muted">종료예정</p>
-          <p className="font-semibold text-foreground [font-variant-numeric:tabular-nums]">{formatKstTime(status.expectedEndAt)}</p>
+          <p className={cn("text-xs font-medium text-muted", isTv && "text-base font-bold")}>종료예정</p>
+          <p className={cn("font-semibold text-foreground [font-variant-numeric:tabular-nums]", isTv && "text-[22px] font-bold")}>{formatKstTime(status.expectedEndAt)}</p>
         </div>
       </div>
 
-      <div className="min-w-0 border-t border-border pt-3">
-        <p className="text-xs font-medium text-muted">담당자</p>
-        <p className="truncate text-sm font-semibold text-foreground">{assigneeLine(status)}</p>
+      <div className={cn("min-w-0 border-t border-border pt-3", isTv && "pt-4")}>
+        <p className={cn("text-xs font-medium text-muted", isTv && "text-base font-bold")}>담당자</p>
+        <p className={cn("truncate text-sm font-semibold text-foreground", isTv && "text-[22px] font-bold leading-tight")}>{assigneeLine(status)}</p>
       </div>
     </article>
   );

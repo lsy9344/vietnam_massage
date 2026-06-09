@@ -32,7 +32,7 @@ function readJson(path) {
   "src/app/(erp)/settlements/page.tsx",
   "src/app/(erp)/closing/page.tsx",
   "src/app/(erp)/dashboard/today/page.tsx",
-  "src/app/(erp)/tv/page.tsx",
+  "src/app/tv/page.tsx",
   "src/components/domain/role-aware-sidebar.tsx",
   "src/components/domain/erp-empty-state.tsx",
   "src/lib/action-result.ts",

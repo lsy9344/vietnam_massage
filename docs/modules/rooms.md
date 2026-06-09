@@ -49,6 +49,15 @@ The rooms module owns room-status presentation for operational use:
 - `/rooms` may change only lookup conditions through operating-month/date query params. It does not include call ledger grid, autosave, daily expense, settlement, or closing mutation affordances.
 - `/rooms` uses the shared `RoomStatusRefreshController` with 15초 polling, manual refresh, last refresh time, `갱신 중`, and `갱신 지연`.
 
+## Story 3.4 TV Fullscreen Board
+
+- `/tv` is a fullscreen route outside the ERP shell. ERP chrome 없음: no sidebar, topbar, account badge, call-ledger grid, or edit controls render on the TV board.
+- `/tv` is 조회 전용 / 읽기 전용 and consumes `RoomStatusDto` from `listRoomStatuses()` through `RoomStatusCard variant="tv"`.
+- `/tv` must not recalculate active calls, remaining minutes, expected end, `종료확인`, course TV labels, or assignee display. UI 계산 재구현 금지.
+- `/tv` uses the shared `RoomStatusRefreshController variant="tv"` with 15초 polling, manual refresh, last refresh time, `갱신 중`, and `갱신 지연`.
+- TV cards always show status color, text label, and glyph. `종료확인` uses a strong attention treatment and short copy such as `결제·확인 필요`.
+- `/tv` keeps `requireRouteAccess("/tv")`; administrator and read_only_viewer can access it, while waiter/counter/settlement_manager redirect to their role landing.
+
 ## Rules
 
 - Find the latest active call by room where status is `사용중`, `청소중`, or `예약`.
@@ -63,4 +72,5 @@ The rooms module owns room-status presentation for operational use:
 - Feeds room display screens and dashboard summaries.
 - Feeds `/live` first-screen room cards.
 - Feeds `/rooms` waiter room-status cards and guidance text.
+- Feeds `/tv` fullscreen room-status board.
 - Does not mutate settlement or closing records.

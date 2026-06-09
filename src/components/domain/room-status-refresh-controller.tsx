@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const REFRESH_INTERVAL_MS = 15_000;
 const STALE_AFTER_MS = 45_000;
@@ -17,7 +18,7 @@ function formatLastUpdated(value: string) {
   }).format(new Date(value));
 }
 
-export function RoomStatusRefreshController({ lastUpdatedAt }: { lastUpdatedAt: string }) {
+export function RoomStatusRefreshController({ lastUpdatedAt, variant = "default" }: { lastUpdatedAt: string; variant?: "default" | "tv" }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [now, setNow] = useState(() => Date.now());
@@ -41,11 +42,17 @@ export function RoomStatusRefreshController({ lastUpdatedAt }: { lastUpdatedAt: 
   }, [refresh]);
 
   return (
-    <div className="flex items-center justify-end gap-3 text-xs text-muted" aria-label="실시간 갱신 상태">
-      <span>
+    <div
+      className={cn(
+        "flex items-center justify-end gap-3 text-xs text-muted",
+        variant === "tv" && "gap-5 text-lg font-semibold text-foreground"
+      )}
+      aria-label="실시간 갱신 상태"
+    >
+      <span className={cn(variant === "tv" && isStale && "text-status-complete-check")}>
         {isPending ? "갱신 중" : isStale ? "갱신 지연" : "마지막 갱신"}: {formatLastUpdated(lastUpdatedAt)}
       </span>
-      <Button className="h-8 px-2 text-xs" onClick={refresh} variant="secondary">
+      <Button className={cn("h-8 px-2 text-xs", variant === "tv" && "h-12 px-5 text-lg font-bold")} onClick={refresh} variant="secondary">
         새로고침
       </Button>
     </div>

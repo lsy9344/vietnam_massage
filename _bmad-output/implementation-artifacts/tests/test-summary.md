@@ -3,23 +3,23 @@
 ## Generated Tests
 
 ### API Tests
-- [x] Not applicable for Story 3.3. `/rooms` is a read-only UI surface over the existing `listRoomStatuses()` domain service; no new API endpoint was introduced.
+- [x] Not applicable for Story 3.4. `/tv` is a read-only fullscreen UI route over the existing `listRoomStatuses()` domain service; no new API endpoint was introduced.
 
 ### E2E Tests
-- [x] `tests/e2e/story-3-3-rooms-waiter-guidance.spec.ts` - Waiter `/rooms` landing, unauthorized sidebar hiding, 11 room status cards, status label + glyph coverage, guidance text, `사용중` remaining time and expected end, `종료확인` action guidance, `빈방` fallback values, refresh state, read-only guardrails, read-only user access, and waiter direct-route redirects.
+- [x] `tests/e2e/story-3-4-tv-fullscreen-board.spec.ts` - TV fullscreen board access for `read_only_viewer` and `administrator`, redirects for `waiter`, `counter`, and `settlement_manager`, ERP chrome absence, 11 large room cards, status labels + glyphs, TV typography class, `종료확인` attention copy, course/assignee display, refresh controls, forced `갱신 지연` transition, and read-only mutation guardrails.
 
 ## Coverage
 - API endpoints: 0/0 applicable for this story.
-- UI features: 8/8 Story 3.3 acceptance areas covered by E2E assertions: role landing, sidebar authorization, 11-card room grid, state guidance text, active room timing, `종료확인`, empty room fallback, refresh/stale affordance, and read-only mutation absence.
-- Critical error/negative cases: waiter direct access to `/calls`, `/settlements`, and `/masters/rooms` redirects to `/rooms`; call-ledger grid/autosave affordances are absent after clicking a room card.
-- Discovered gaps fixed: Story 3.3 E2E fixture no longer depends on fixed `2026-06-09` start times, and fixture employee/code seeds now reserve unique sort orders idempotently instead of assuming fixed Story 3.3 sort orders are always free.
+- UI features: 9/9 Story 3.4 acceptance areas covered by E2E assertions: fullscreen route access, ERP chrome hiding, 11-card `RoomStatusDto` board, TV-readable card structure, status color + label + glyph, `종료확인` warning copy, refresh/last-updated/stale affordance, read-only interaction guardrails, and unauthorized role redirects.
+- Critical error/negative cases: `waiter` redirects to `/rooms`, `counter` redirects to `/calls`, and `settlement_manager` redirects to `/settlements`; clicking a TV card does not expose call-ledger, autosave, save, edit, settlement, or closing UI.
+- Discovered gaps fixed: E2E now explicitly verifies `settlement_manager` is blocked from `/tv`, and it uses Playwright clock control to force the refresh controller into the actual `갱신 지연` state instead of only accepting the label as an optional text variant.
 
 ## Validation
-- [x] `node scripts/validate-story-3-3.mjs` - passed.
+- [x] `node scripts/validate-story-3-4.mjs` - passed.
 - [x] `npm run test:unit` - passed with 3/3 unit tests.
-- [x] `npm run lint` - passed all story validators through Story 3.3.
-- [x] `npx playwright test --list tests/e2e/story-3-3-rooms-waiter-guidance.spec.ts` - listed 3 Story 3.3 tests successfully.
-- [ ] `npm run test:e2e -- tests/e2e/story-3-3-rooms-waiter-guidance.spec.ts` - not completed in this local environment. Earlier reruns were blocked by Next dev server bind (`listen EPERM`); the final rerun reached Playwright but failed before assertions because Prisma could not connect to the E2E database (`ECONNREFUSED`).
+- [x] `npm run lint` - passed all story validators through Story 3.4.
+- [x] `PLAYWRIGHT_SKIP_WEBSERVER=1 npx playwright test --list tests/e2e/story-3-4-tv-fullscreen-board.spec.ts` - listed 2 Story 3.4 tests successfully.
+- [ ] `npm run test:e2e -- tests/e2e/story-3-4-tv-fullscreen-board.spec.ts` - not completed in this local environment because Playwright's configured Next dev server could not bind to `127.0.0.1:3000` (`listen EPERM`), so browser assertions did not run.
 
 ## Next Steps
-- Run the focused Playwright command in an environment where the dev server can listen on `127.0.0.1:3000` and `DATABASE_URL` points to a reachable E2E database.
+- Run the focused Playwright command in an environment where the Next dev server can listen on `127.0.0.1:3000` and `DATABASE_URL` points to a reachable E2E database.
