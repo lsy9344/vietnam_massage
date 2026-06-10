@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
 import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
+import { assertOperatingMonthPayoutWritable } from "@/modules/closing/month-lock-guard";
 import { listActiveCodeItems, listActiveTimeSlots } from "@/modules/masters/code-service";
 import { listActiveCourses } from "@/modules/masters/course-service";
 import { listActiveEmployees } from "@/modules/masters/employee-service";
@@ -606,8 +607,13 @@ async function requireOperatingMonth(tx: ServiceCallPrismaClient, operatingMonth
 
 async function assertWritableDate(tx: ServiceCallPrismaClient, input: { operatingMonthId: string; serviceDate: string }) {
   const month = await requireOperatingMonth(tx, input.operatingMonthId);
-  if (month.status === "잠금") {
-    throw new ServiceCallDomainError("잠긴 운영월입니다. 콜 원장을 수정할 수 없습니다.", "OPERATING_MONTH_LOCKED");
+  try {
+    assertOperatingMonthPayoutWritable(month, "마감확정 또는 잠금 운영월입니다. 콜 원장을 수정할 수 없습니다.");
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "OPERATING_MONTH_LOCKED") {
+      throw new ServiceCallDomainError(error.message, "OPERATING_MONTH_LOCKED");
+    }
+    throw error;
   }
 
   const serviceDate = toDateOnly(input.serviceDate);

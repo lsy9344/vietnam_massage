@@ -1022,7 +1022,12 @@ export function EditableCallGrid({
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div>
           <h2 className="text-base font-semibold text-foreground">콜 원장 그리드</h2>
-          {isLocked ? <p className="mt-1 text-xs text-danger">잠긴 운영월입니다. 새 콜 행 추가와 수정이 차단됩니다.</p> : null}
+          {isLocked ? (
+            <div className="mt-1 text-xs text-danger">
+              <p className="font-medium">잠긴 운영월입니다.</p>
+              <p>마감확정 또는 잠금 운영월입니다. 새 콜 행 추가와 수정이 차단됩니다.</p>
+            </div>
+          ) : null}
         </div>
         <span className="text-xs text-muted">{rows.length}개 행</span>
       </div>

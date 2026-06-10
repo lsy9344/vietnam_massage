@@ -233,7 +233,12 @@ export function DailyExpensePanel({
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div>
           <h2 className="text-sm font-semibold text-foreground">일별 지출</h2>
-          {isLocked ? <p className="mt-1 text-xs text-danger">잠긴 운영월입니다. 지출 입력과 수정이 차단됩니다.</p> : null}
+          {isLocked ? (
+            <div className="mt-1 text-xs text-danger">
+              <p className="font-medium">잠긴 운영월입니다.</p>
+              <p>마감확정 또는 잠금 운영월입니다. 지출 입력과 수정이 차단됩니다.</p>
+            </div>
+          ) : null}
         </div>
         <span className="text-xs text-muted">{expenses.length}개 항목</span>
       </div>

@@ -47,7 +47,19 @@ Owns monthly close and payout snapshots.
 - Confirmation uses a transaction across conditional `OperatingMonth.updateMany`, `MonthlyClosing.create`, and audit logging. Duplicate confirm is blocked by both domain status checks and the DB unique constraint.
 - `monthly_close.confirmed` uses `targetType: "monthly_close"`; operating-month review status changes use `targetType: "operating_month"`.
 - The UI separates preview and snapshot: current recalculating values are labeled `현재 기준 미리보기`, while persisted historical values are labeled `확정 스냅샷`.
-- Story 5.4 will add lock-state write blocking, Story 5.5 will own reopen/cancel policy with reason, and Story 5.6 will own the double-confirmation dialog/focus contract.
+- Story 5.5 will own reopen/cancel policy with reason, and Story 5.6 will own the double-confirmation dialog/focus contract.
+
+## Story 5.4 Lock And Payout Write Blocking
+
+`lockMonthlyClose()` owns the `마감확정 -> 잠금` transition. It does not create or overwrite a `MonthlyClosing` snapshot; it requires the existing snapshot row and records `monthly_close.locked` with `targetType: "monthly_close"`, `lockedAt`, `lockedByAccountId`, and operating-month before/after state as plain JSON.
+
+- Only `마감확정` can be locked. `작성중` and `검토중` return `MONTHLY_CLOSE_NOT_CONFIRMED`; duplicate `잠금` returns `MONTHLY_CLOSE_ALREADY_LOCKED` without a new audit event.
+- `마감확정` and `잠금` are both read-only states for payout-impacting writes. The shared `month-lock-guard` helpers define this rule for calls, daily expenses, earcare attendance, ops attendance, course policies, therapist rates, and ops incentive policy ranges.
+- `/closing` actions call `requirePermission("closing:write")` and delegate transition/audit work to the closing domain service. UI components only render forms and status copy.
+- `getMonthlyClosingSnapshot()` remains the historical source for closed or locked months and must return stored `snapshotJson`. Preview/current recalculation is labeled separately as `현재 기준 미리보기`.
+- Monthly payout views such as `/settlements/operations/monthly` must show the persisted snapshot in a distinct `확정 스냅샷` section for `마감확정` or `잠금` months before showing any `현재 기준 미리보기` recalculation.
+- Employee/profile/course active flag changes are not a second historical source. Closed-month payout/KPI display must prefer the saved snapshot display values.
+- Story 5.5 may add reopen semantics, but until then payout-impacting writes stay blocked for both `마감확정` and `잠금`.
 
 ## Downstream
 

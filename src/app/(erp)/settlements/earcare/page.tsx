@@ -267,7 +267,7 @@ export default async function EarcareAttendancePage({ searchParams }: { searchPa
 
       {result?.isLocked ? (
         <section className="mb-4 border border-danger bg-surface px-4 py-3" role="status">
-          <h2 className="text-sm font-semibold text-danger">잠긴 운영월입니다</h2>
+          <h2 className="text-sm font-semibold text-danger">잠긴 운영월입니다. 마감확정 또는 잠금 운영월입니다</h2>
           <p className="mt-1 text-sm text-muted">이 운영월의 귀케어 근무상태는 수정할 수 없습니다. 입력 항목은 읽기 전용으로 표시됩니다.</p>
         </section>
       ) : null}

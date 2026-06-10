@@ -39,7 +39,7 @@ Owns the reservation and service-call ledger.
 
 - `DailyExpense` owns date-scoped U:X daily expense rows in `daily_expenses`. It stores `OperatingMonth.id`, `expenseDate`, whole-number VND `amount`, `description`, stable `Employee.id` handler, optional `note`, and `isActive`.
 - Daily expenses are never physically deleted in normal operation. `deactivateDailyExpense()` soft-deletes with `isActive=false`, and only active expenses contribute to summaries.
-- Expense create/update/deactivate reuse the operating-month date-range and locked-month guardrails. Range failures use `OPERATING_MONTH_DATE_OUT_OF_RANGE`; locked months use `OPERATING_MONTH_LOCKED`.
+- Expense create/update/deactivate reuse the operating-month date-range and payout lock guardrails. Range failures use `OPERATING_MONTH_DATE_OUT_OF_RANGE`; `마감확정` and `잠금` months use `OPERATING_MONTH_LOCKED`.
 - Expense mutations record `daily_expense.created`, `daily_expense.changed`, and `daily_expense.deactivated` audit events with plain JSON snapshots. Snapshot dates use `YYYY-MM-DD`, amount is number, and handler is employee ID.
 - `getDailyCallLedgerSummary()` returns the daily strip DTO: reservation, completed, no-show, canceled, payment, therapist commission, earcare pool, discount, expense, `netSales`, course summaries, and warning counts.
 - `netSales = paymentTotal - expenseTotal`. Expenses do not change call payment, commission, discount, or earcare pool values.

@@ -10,7 +10,7 @@ function dbDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
-function createMemoryPrisma(options: { locked?: boolean; failAudit?: boolean; lockInsideTransaction?: boolean } = {}) {
+function createMemoryPrisma(options: { locked?: boolean; monthStatus?: string; failAudit?: boolean; lockInsideTransaction?: boolean } = {}) {
   const createdAt = new Date("2026-06-10T00:00:00.000Z");
   const updatedAt = new Date("2026-06-10T00:10:00.000Z");
   let transactionActive = false;
@@ -19,7 +19,7 @@ function createMemoryPrisma(options: { locked?: boolean; failAudit?: boolean; lo
     monthKey: "2026-06",
     startDate: dbDate("2026-06-01"),
     endDate: dbDate("2026-06-30"),
-    status: options.locked ? "잠금" : "작성중",
+    status: options.monthStatus ?? (options.locked ? "잠금" : "작성중"),
     createdAt,
     updatedAt
   };
@@ -92,7 +92,7 @@ function createMemoryPrisma(options: { locked?: boolean; failAudit?: boolean; lo
     operatingMonth: {
       async findUnique({ where }: any) {
         if (where.id !== operatingMonth.id) return null;
-        if (options.lockInsideTransaction && transactionActive) return { ...operatingMonth, status: "잠금" };
+        if (options.lockInsideTransaction && transactionActive) return { ...operatingMonth, status: options.monthStatus ?? "잠금" };
         return operatingMonth;
       }
     },
@@ -294,6 +294,27 @@ describe("ops attendance service", () => {
       (error) => error instanceof OpsAttendanceDomainError && error.code === "OPERATING_MONTH_LOCKED"
     );
     assert.equal(lockedClient.auditEvents.length, 0);
+
+    const confirmedClient = createMemoryPrisma({ monthStatus: "마감확정" });
+    const result = await listOpsAttendanceForDate({
+      operatingMonthId: "month-2026-06",
+      attendanceDate: "2026-06-10",
+      prismaClient: confirmedClient
+    });
+    assert.equal(result.isLocked, true);
+
+    await assert.rejects(
+      upsertOpsAttendance({
+        operatingMonthId: "month-2026-06",
+        attendanceDate: "2026-06-10",
+        employeeId: "ops-lead",
+        statusCode: "NORMAL",
+        actorId: "account-1",
+        prismaClient: confirmedClient
+      }),
+      (error) => error instanceof OpsAttendanceDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
+    assert.equal(confirmedClient.auditEvents.length, 0);
   });
 
   it("rechecks locks inside the transaction and rolls back attendance when audit logging fails", async () => {

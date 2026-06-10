@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import {
   confirmMonthlyCloseAction,
+  lockMonthlyCloseAction,
   startMonthlyCloseReviewAction,
   type MonthlyClosingActionState
 } from "@/app/(erp)/closing/actions";
@@ -27,8 +28,9 @@ function InlineResult({ state }: { state: MonthlyClosingActionState }) {
 
 function disabledReason(status: string, canWrite: boolean) {
   if (!canWrite) return "월마감 처리 권한이 없습니다.";
-  if (status === "마감확정") return "이미 마감확정된 운영월입니다.";
-  if (status === "잠금") return "잠금 상태에서는 처리할 수 없습니다.";
+  if (status === "작성중" || status === "검토중") return "잠금은 먼저 마감확정이 필요합니다.";
+  // Story 5.3 terminal copy was "이미 마감확정된 운영월입니다."; Story 5.4 replaces that state with the lock action.
+  if (status === "잠금") return "잠금 상태입니다. 확정 스냅샷 조회는 계속 가능합니다.";
   return "현재 상태에서 실행 가능한 월마감 action이 없습니다.";
 }
 
@@ -43,8 +45,10 @@ export function ClosingActionPanel({
 }) {
   const [reviewState, reviewAction, reviewPending] = useActionState<MonthlyClosingActionState, FormData>(startMonthlyCloseReviewAction, null);
   const [confirmState, confirmAction, confirmPending] = useActionState<MonthlyClosingActionState, FormData>(confirmMonthlyCloseAction, null);
+  const [lockState, lockAction, lockPending] = useActionState<MonthlyClosingActionState, FormData>(lockMonthlyCloseAction, null);
   const canStartReview = canWrite && status === "작성중";
   const canConfirm = canWrite && status === "검토중";
+  const canLock = canWrite && status === "마감확정";
   const reason = disabledReason(status, canWrite);
 
   return (
@@ -79,9 +83,25 @@ export function ClosingActionPanel({
             </button>
             <InlineResult state={confirmState} />
           </form>
+          {status === "마감확정" ? (
+            <form action={lockAction} className="grid gap-1">
+              <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
+              {/* Story 5.6 owns the double-confirmation dialog and focus contract. */}
+              <button
+                className="h-9 border border-danger bg-danger px-3 text-sm font-semibold text-danger-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!canLock || lockPending}
+                type="submit"
+              >
+                {lockPending ? "잠금중" : "잠금"}
+              </button>
+              <InlineResult state={lockState} />
+            </form>
+          ) : null}
         </div>
       </div>
-      {!canStartReview && !canConfirm ? <p className="mt-3 text-sm text-muted">{reason}</p> : null}
+      {status === "작성중" || status === "검토중" || (!canStartReview && !canConfirm && !canLock) ? (
+        <p className="mt-3 text-sm text-muted">{reason}</p>
+      ) : null}
     </section>
   );
 }

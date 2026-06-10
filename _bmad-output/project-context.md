@@ -128,6 +128,10 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Story 5.3 기준 월마감 확정은 Prisma `MonthlyClosing` 모델(`monthly_closings`)이 소유하며 운영월당 하나의 확정 스냅샷만 허용한다. `snapshotJson`은 확정 시점의 `listMonthlyClosingPreview()` 결과를 confirmation DTO로 정규화해 저장하고, 이후 현재 미리보기 재계산값과 섞지 않는다.
 - Story 5.3 기준 closing domain service contract는 `startMonthlyCloseReview()`, `confirmMonthlyClose()`, `getMonthlyClosingSnapshot()`이다. 검토 시작은 `작성중 -> 검토중`과 `operating_month.status_changed`를 기록하고, 확정은 `검토중 -> 마감확정`, `MonthlyClosing.create`, `monthly_close.confirmed`를 하나의 transaction으로 처리한다.
 - Story 5.3 기준 `monthly_close.confirmed` 감사 로그 `targetType`은 `monthly_close`이며 afterValue에는 operating month, before/after state, snapshot id, confirmedAt을 plain JSON으로 포함한다. 스냅샷 조회는 저장된 `snapshotJson`을 반환해야 하며 `listMonthlyClosingPreview()`를 다시 호출해 과거값처럼 보여주면 안 된다.
+- Story 5.4 기준 월마감 잠금은 closing domain service `lockMonthlyClose()`가 소유한다. 허용 전이는 `마감확정 -> 잠금`뿐이며, `monthly_close.locked` 감사 로그에는 `lockedAt`, `lockedByAccountId`, snapshot id, operating month before/after state를 plain JSON으로 기록한다.
+- Story 5.4 기준 `마감확정` 또는 `잠금` 운영월의 지급 영향 데이터 write는 서버 domain/service boundary에서 차단한다. 공용 guard는 `src/modules/closing/month-lock-guard.ts`의 `isOperatingMonthPayoutLocked()`와 `assertOperatingMonthPayoutWritable()`이며, calls, daily expenses, 귀케어/운영팀 근무상태, 코스 정책, 마사지사 수당, 운영팀 인센 정책 range mutation은 이 규칙을 따라야 한다.
+- Story 5.4 기준 `마감확정`/`잠금` 월 조회 UI는 read-only 보조 신호를 제공하지만 source of truth는 server-side guard다. 확정/잠금 월의 월마감 및 월간 KPI 조회는 `getMonthlyClosingSnapshot()`의 저장 스냅샷을 우선 사용하고 현재 기준 미리보기와 섞지 않는다.
+- Story 5.4 기준 `/settlements/operations/monthly` 같은 월간 지급 화면은 `마감확정`/`잠금` 월에서 `확정 스냅샷` 섹션을 먼저 표시하고, 현재 재계산 값은 `현재 기준 미리보기`로 분리 표시한다.
 
 ### 코드 품질 및 스타일 규칙
 

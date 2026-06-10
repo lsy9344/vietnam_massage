@@ -106,6 +106,13 @@ export type ConfirmMonthlyCloseInput = {
   idFactory?: () => string;
 };
 
+export type LockMonthlyCloseInput = {
+  operatingMonthId: string;
+  actorId: string;
+  prismaClient?: MonthlyClosingPrismaClient;
+  clock?: () => Date;
+};
+
 export type GetMonthlyClosingSnapshotInput = {
   operatingMonthId: string;
   prismaClient?: MonthlyClosingPrismaClient;
@@ -397,6 +404,80 @@ export async function confirmMonthlyClose(input: ConfirmMonthlyCloseInput): Prom
 
     throw error;
   }
+}
+
+export async function lockMonthlyClose(input: LockMonthlyCloseInput): Promise<MonthlyCloseReviewDto> {
+  const parsed = monthlyClosingInputSchema.safeParse(input);
+  if (!parsed.success) {
+    throw normalizeParseError(parsed.error.issues[0]?.message ?? "월마감 잠금 입력값이 올바르지 않습니다.");
+  }
+
+  const client = getClient(input.prismaClient);
+  const now = input.clock?.() ?? new Date();
+  const lockedAt = now.toISOString();
+
+  return runInTransaction(client, async (tx) => {
+    const current = await tx.operatingMonth.findUnique({
+      where: { id: parsed.data.operatingMonthId }
+    });
+    if (!current) {
+      throw new MonthlyClosingDomainError("운영월을 찾을 수 없습니다.", "OPERATING_MONTH_NOT_FOUND");
+    }
+    if (current.status === "잠금") {
+      throw new MonthlyClosingDomainError("이미 잠금 상태인 운영월입니다.", "MONTHLY_CLOSE_ALREADY_LOCKED");
+    }
+    if (current.status !== "마감확정") {
+      throw new MonthlyClosingDomainError("먼저 마감확정이 필요합니다.", "MONTHLY_CLOSE_NOT_CONFIRMED");
+    }
+
+    const updateResult = await tx.operatingMonth.updateMany({
+      where: { id: current.id, status: "마감확정" },
+      data: { status: "잠금" }
+    });
+    if (updateResult.count !== 1) {
+      throw new MonthlyClosingDomainError("현재 상태에서는 잠금 처리할 수 없습니다.", "INVALID_MONTHLY_CLOSE_TRANSITION");
+    }
+
+    const closing = await tx.monthlyClosing.findUnique({
+      where: { operatingMonthId: current.id }
+    });
+    if (!closing) {
+      throw new MonthlyClosingDomainError("확정 스냅샷을 찾을 수 없습니다.", "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND");
+    }
+
+    const updated = await tx.operatingMonth.findUnique({
+      where: { id: current.id }
+    });
+    if (!updated) {
+      throw new MonthlyClosingDomainError("운영월을 찾을 수 없습니다.", "OPERATING_MONTH_NOT_FOUND");
+    }
+
+    await recordAuditEvent(
+      {
+        actorId: parsed.data.actorId,
+        action: "monthly_close.locked",
+        targetType: "monthly_close",
+        targetId: closing.id,
+        beforeValue: {
+          operatingMonthId: current.id,
+          monthKey: current.monthKey,
+          status: current.status,
+          snapshotId: closing.id
+        },
+        afterValue: {
+          operatingMonthId: updated.id,
+          monthKey: updated.monthKey,
+          status: updated.status,
+          snapshotId: closing.id,
+          lockedAt,
+          lockedByAccountId: parsed.data.actorId
+        }
+      },
+      { prismaClient: tx as any }
+    );
+
+    return toReviewDto(updated);
+  });
 }
 
 export async function getMonthlyClosingSnapshot(input: GetMonthlyClosingSnapshotInput): Promise<MonthlyClosingDto> {

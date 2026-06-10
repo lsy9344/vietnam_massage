@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { requireRouteAccess } from "@/lib/authorization";
 import { selectedOperatingMonthFor } from "@/lib/operating-date";
+import {
+  getMonthlyClosingSnapshot,
+  MonthlyClosingDomainError,
+  type MonthlyClosingDto
+} from "@/modules/closing/monthly-closing-service";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import {
   listOpsMonthlyIncentivePreview,
@@ -68,6 +73,41 @@ function PreviewNotice({ selectedMonth, result }: { selectedMonth: { status: str
           ? "마감확정/잠금 운영월의 확정값은 월마감 스냅샷 기준이며, 이 화면은 현재 콜 원장과 현재 정책 기준의 재계산 미리보기입니다."
           : "작성중/검토중 운영월의 현재 콜 원장과 현재 정책 기준 미확정 미리보기입니다."}
       </p>
+    </section>
+  );
+}
+
+function SnapshotSummary({ closing }: { closing: MonthlyClosingDto }) {
+  const operations = closing.snapshot.operations;
+  return (
+    <section className="mb-4 border border-border bg-surface px-4 py-3" aria-label="운영팀 월인센 확정 스냅샷">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="inline-flex border border-success bg-success/10 px-2 py-1 text-xs font-semibold text-success">확정 스냅샷</div>
+          <h2 className="mt-2 text-base font-semibold text-foreground">{closing.snapshot.month.monthKey} 운영팀 확정 지급값</h2>
+          <p className="mt-1 text-sm text-muted">
+            snapshot id {closing.snapshot.id} / 확정시각 {closing.confirmedAt}
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-xs font-medium text-muted">운영팀 확정 지급 합계</div>
+          <div className="text-lg font-semibold text-foreground tabular-nums">{formatVnd(operations.totalOpsPayoutAmount)}</div>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 text-sm md:grid-cols-3">
+        <div className="border border-border bg-background px-3 py-2">
+          <div className="text-xs text-muted">일일인센</div>
+          <div className="font-semibold tabular-nums">{formatVnd(operations.dailyIncentiveAmount)}</div>
+        </div>
+        <div className="border border-border bg-background px-3 py-2">
+          <div className="text-xs text-muted">월인센</div>
+          <div className="font-semibold tabular-nums">{formatVnd(operations.monthlyIncentiveAmount)}</div>
+        </div>
+        <div className="border border-border bg-background px-3 py-2">
+          <div className="text-xs text-muted">월 총콜</div>
+          <div className="font-semibold tabular-nums">{operations.monthlyOpsCallCredit}콜</div>
+        </div>
+      </div>
     </section>
   );
 }
@@ -250,12 +290,27 @@ export default async function OperationsMonthlyIncentivePage({
   }
 
   let result: OpsMonthlyIncentiveResultDto | null = null;
+  let closingSnapshot: MonthlyClosingDto | null = null;
+  let snapshotErrorMessage: string | null = null;
   let errorMessage: string | null = null;
 
   try {
     result = await listOpsMonthlyIncentivePreview({
       operatingMonthId: selectedMonth.id
     });
+    if (result.isClosedOrLocked) {
+      try {
+        closingSnapshot = await getMonthlyClosingSnapshot({
+          operatingMonthId: selectedMonth.id
+        });
+      } catch (error) {
+        if (error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND") {
+          snapshotErrorMessage = "확정 스냅샷을 찾을 수 없습니다. 현재 기준 미리보기와 확정값을 혼동하지 마세요.";
+        } else {
+          throw error;
+        }
+      }
+    }
   } catch (error) {
     errorMessage = error instanceof Error ? error.message : "운영팀 월 인센을 조회하지 못했습니다.";
   }
@@ -312,6 +367,13 @@ export default async function OperationsMonthlyIncentivePage({
         </section>
       ) : result ? (
         <>
+          {closingSnapshot ? <SnapshotSummary closing={closingSnapshot} /> : null}
+          {snapshotErrorMessage ? (
+            <section className="mb-4 border border-warning bg-surface px-4 py-3" role="status">
+              <h2 className="text-sm font-semibold text-warning">확정 스냅샷 없음</h2>
+              <p className="mt-1 text-sm text-muted">{snapshotErrorMessage}</p>
+            </section>
+          ) : null}
           <PreviewNotice result={result} selectedMonth={selectedMonth} />
           {result.warningMessage ? (
             <section className="mb-4 border border-warning bg-surface px-4 py-3" role="status">

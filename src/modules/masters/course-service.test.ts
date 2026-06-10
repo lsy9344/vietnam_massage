@@ -10,6 +10,7 @@ import {
 import {
   CourseDomainError,
   createCoursePolicy,
+  createOpsDailyIncentiveRule,
   createTherapistCourseRate,
   deactivateCourse,
   endTherapistCourseRate,
@@ -66,13 +67,13 @@ function createMemoryPrisma() {
     }
   }
 
-  function seedOperatingMonth(monthKey = "2026-06") {
+  function seedOperatingMonth(monthKey = "2026-06", status = "작성중") {
     operatingMonths.set(monthKey, {
       id: `om-${monthKey}`,
       monthKey,
       startDate: new Date(`${monthKey}-01T00:00:00.000Z`),
       endDate: new Date(`${monthKey}-30T00:00:00.000Z`),
-      status: "작성중",
+      status,
       createdAt: timestamp(),
       updatedAt: timestamp()
     });
@@ -417,6 +418,76 @@ describe("course service", () => {
         }),
       /적용월 범위가 겹칩니다/
     );
+  });
+
+  it("blocks policy, therapist rate, and ops incentive ranges that overlap confirmed or locked months", async () => {
+    const prismaClient = createMemoryPrisma();
+    prismaClient.seedTherapists();
+    prismaClient.seedOperatingMonth("2026-06", "마감확정");
+    prismaClient.seedOperatingMonth("2026-07", "작성중");
+    const course = await prismaClient.course.create({ data: { code: "A", isActive: true } });
+
+    await assert.rejects(
+      () =>
+        createCoursePolicy({
+          actorId: "admin-1",
+          courseId: course.id,
+          name: "확정월 변경",
+          durationMinutes: 60,
+          basePrice: 1500000,
+          opsCallCredit: 1,
+          earcarePoolAmount: 0,
+          requiresSecondTherapist: false,
+          tvDisplayName: "A60",
+          effectiveFromMonth: "2026-06",
+          effectiveToMonth: "2026-06",
+          prismaClient
+        }),
+      (error) => error instanceof CourseDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
+    await assert.rejects(
+      () =>
+        createTherapistCourseRate({
+          actorId: "admin-1",
+          therapistId: "thr-001",
+          courseId: course.id,
+          amount: 700000,
+          effectiveFromMonth: "2026-06",
+          effectiveToMonth: null,
+          prismaClient
+        }),
+      (error) => error instanceof CourseDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
+    await assert.rejects(
+      () =>
+        createOpsDailyIncentiveRule({
+          actorId: "admin-1",
+          thresholdCallCount: 60,
+          personalAmount: 300000,
+          effectiveFromMonth: "2026-06",
+          effectiveToMonth: null,
+          prismaClient
+        }),
+      (error) => error instanceof CourseDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
+
+    const future = await createCoursePolicy({
+      actorId: "admin-1",
+      courseId: course.id,
+      name: "미래월 정책",
+      durationMinutes: 60,
+      basePrice: 1600000,
+      opsCallCredit: 1,
+      earcarePoolAmount: 0,
+      requiresSecondTherapist: false,
+      tvDisplayName: "A 미래",
+      effectiveFromMonth: "2026-07",
+      effectiveToMonth: null,
+      prismaClient
+    });
+
+    assert.equal(future.effectiveFromMonth, "2026-07");
+    assert.equal(prismaClient.auditEvents.filter((event: any) => event.action === "course.policy_changed").length, 1);
   });
 
   it("seeds therapist rates by Employee.id from THR staffCode and does not hide zero rates", async () => {

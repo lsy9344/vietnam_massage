@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireRouteAccess } from "@/lib/authorization";
+import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import {
   getDailyCallLedgerSummary,
@@ -54,7 +55,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
     listDailyExpensesForDate({ operatingMonthId: selectedMonth.id, expenseDate: serviceDate }),
     getDailyCallLedgerSummary({ operatingMonthId: selectedMonth.id, serviceDate })
   ]);
-  const isLocked = selectedMonth.status === "잠금";
+  const isLocked = isOperatingMonthPayoutLocked(selectedMonth.status);
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">

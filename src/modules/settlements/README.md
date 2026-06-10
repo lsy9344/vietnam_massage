@@ -32,7 +32,7 @@ Owns daily settlement calculations.
 - Uses active `CodeItem` rows where `codeType === "ATTENDANCE_STATUS"` for status options and stores only the stable `statusCode`.
 - `NORMAL` or a status code whose display name is `정상` is payout eligible; `DAY_OFF`, `LATE`, `EARLY_LEAVE`, `ABSENT`, and equivalent non-normal codes expose `exclusionReason`.
 - The DTO returned by `listEarcareAttendanceForDate()` is reusable by Story 4.4 and includes `employeeId`, `staffCode`, `displayName`, `statusCode`, `statusDisplayName`, `isPayoutEligible`, `exclusionReason`, and `attendanceDate`.
-- `upsertEarcareAttendance()` blocks `잠금` operating months and out-of-range dates before any write.
+- `upsertEarcareAttendance()` blocks `마감확정` and `잠금` operating months plus out-of-range dates before any write.
 - Attendance writes and audit logs are one transaction. Audit actions are `earcare_attendance.created` and `earcare_attendance.changed` with plain JSON snapshots, `payoutImpact: true`, and `reason: "payout_affecting"`.
 
 ## Earcare Daily Settlement Service
@@ -56,7 +56,7 @@ Owns daily settlement calculations.
 - Uses active `CodeItem` rows where `codeType === "ATTENDANCE_STATUS"` for status options and stores only the stable `statusCode`.
 - The active operations-team 대상 source is `Employee.employeeGroup === "OPERATIONS"` ordered by `sortOrder`, then `staffCode`.
 - `NORMAL` or a status code whose display name is `정상` is payout eligible; non-normal codes expose `exclusionReason`.
-- `upsertOpsAttendance()` blocks `잠금` operating months and out-of-range dates before any write, then rechecks the operating month inside the transaction.
+- `upsertOpsAttendance()` blocks `마감확정` and `잠금` operating months plus out-of-range dates before any write, then rechecks the operating month inside the transaction.
 - Attendance writes and audit logs are one transaction. Audit actions are `ops_attendance.created` and `ops_attendance.changed` with plain JSON snapshots, `payoutImpact: true`, and `reason: "payout_affecting"`.
 
 ## Ops Daily Incentive Service
@@ -64,6 +64,11 @@ Owns daily settlement calculations.
 `listOpsDailyIncentives()` owns the read-only daily incentive calculation for operations-team staff.
 
 - Uses `listOpsAttendanceForDate()` as the payout 대상 source; the daily incentive service does not recalculate employee identity, status labels, or payout eligibility.
+
+## Ops Monthly Incentive Page
+
+- For `마감확정` or `잠금` months, `/settlements/operations/monthly` shows the closing domain `getMonthlyClosingSnapshot()` value as `확정 스냅샷` before the current recalculation preview.
+- The monthly incentive preview remains useful for drift inspection, but it is labeled `현재 기준 미리보기` and is not the historical payout source.
 - Uses `listCompletedServiceCallCalculationsForDate()` as the 일 총콜 source and sums only `opsCallCredit` from `calculationStatus === "calculated"` completed calls.
 - Warning counts expose excluded service-call rows: `notCompleted`, `coursePolicyMissing`, `therapistRateMissing`, and `secondTherapistRequired`.
 - Uses active `OpsDailyIncentiveRule` rows effective for `OperatingMonth.monthKey`; the highest satisfied `thresholdCallCount` wins.

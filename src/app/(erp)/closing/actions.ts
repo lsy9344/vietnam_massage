@@ -8,6 +8,7 @@ import { AuthorizationError, requirePermission } from "@/lib/authorization";
 import {
   MonthlyClosingDomainError,
   confirmMonthlyClose,
+  lockMonthlyClose,
   startMonthlyCloseReview,
   type MonthlyCloseReviewDto,
   type MonthlyClosingDto
@@ -95,6 +96,35 @@ export async function confirmMonthlyCloseAction(
   try {
     const account = await requirePermission("closing:write");
     const data = await confirmMonthlyClose({
+      actorId: account.id,
+      operatingMonthId: parsed.data.operatingMonthId
+    });
+    revalidatePath("/closing");
+    return { ok: true, data };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function lockMonthlyCloseAction(
+  _previousState: MonthlyClosingActionState,
+  formData: FormData
+): Promise<MonthlyClosingActionState> {
+  const parsed = monthlyClosingActionSchema.safeParse({
+    operatingMonthId: formData.get("operatingMonthId")
+  });
+
+  if (!parsed.success) {
+    return {
+      ok: false,
+      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
+      formError: "잠금 입력값을 확인하세요."
+    };
+  }
+
+  try {
+    const account = await requirePermission("closing:write");
+    const data = await lockMonthlyClose({
       actorId: account.id,
       operatingMonthId: parsed.data.operatingMonthId
     });

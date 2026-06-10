@@ -46,6 +46,18 @@ function createMemoryPrisma() {
         createdAt: new Date("2026-07-01T00:00:00.000Z"),
         updatedAt: new Date("2026-07-01T00:10:00.000Z")
       }
+    ],
+    [
+      "month-confirmed",
+      {
+        id: "month-confirmed",
+        monthKey: "2026-08",
+        startDate: dbDate("2026-08-01"),
+        endDate: dbDate("2026-08-31"),
+        status: "마감확정",
+        createdAt: new Date("2026-08-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-08-01T00:10:00.000Z")
+      }
     ]
   ]);
   const rooms = new Map<string, any>([
@@ -791,6 +803,24 @@ describe("service call service", () => {
     );
   });
 
+  it("blocks saving into a confirmed operating month", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    await assert.rejects(
+      () =>
+        saveBasicServiceCallRow({
+          operatingMonthId: "month-confirmed",
+          serviceDate: "2026-08-10",
+          startTime: "11:00",
+          roomId: "room-101",
+          courseId: "course-a",
+          status: "예약",
+          prismaClient
+        }),
+      (error) => error instanceof ServiceCallDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
+  });
+
   it("uses only active masters for select options and filters staff by assignment role", async () => {
     const prismaClient = createMemoryPrisma();
 
@@ -1212,6 +1242,22 @@ describe("service call service", () => {
       () =>
         autosaveServiceCallRow({
           serviceCallId: original.id,
+          operatingMonthId: "month-confirmed",
+          serviceDate: "2026-08-10",
+          startTime: "11:00",
+          roomId: "room-101",
+          courseId: "course-a",
+          status: "예약",
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error) => error instanceof ServiceCallDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
+
+    await assert.rejects(
+      () =>
+        autosaveServiceCallRow({
+          serviceCallId: original.id,
           operatingMonthId: "month-2026-06",
           serviceDate: "2026-06-10",
           startTime: "11:00",
@@ -1361,6 +1407,19 @@ describe("service call service", () => {
           expenseDate: "2026-07-10",
           amount: 1000,
           description: "잠금",
+          handledByEmployeeId: "ops-1",
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error) => error instanceof ServiceCallDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
+    await assert.rejects(
+      () =>
+        createDailyExpense({
+          operatingMonthId: "month-confirmed",
+          expenseDate: "2026-08-10",
+          amount: 1000,
+          description: "마감확정",
           handledByEmployeeId: "ops-1",
           actorId: "counter-account",
           prismaClient

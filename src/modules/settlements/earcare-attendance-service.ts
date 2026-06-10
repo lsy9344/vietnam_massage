@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
 import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
+import { assertOperatingMonthPayoutWritable, isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 
 type OperatingMonthRecord = {
   id: string;
@@ -135,8 +136,13 @@ function assertDateInOperatingMonth(operatingMonth: OperatingMonthRecord, attend
 }
 
 function assertUnlocked(operatingMonth: OperatingMonthRecord) {
-  if (operatingMonth.status === "잠금") {
-    throw new EarcareAttendanceDomainError("잠긴 운영월의 귀케어 근무상태는 수정할 수 없습니다.", "OPERATING_MONTH_LOCKED");
+  try {
+    assertOperatingMonthPayoutWritable(operatingMonth, "마감확정 또는 잠금 운영월의 귀케어 근무상태는 수정할 수 없습니다.");
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "OPERATING_MONTH_LOCKED") {
+      throw new EarcareAttendanceDomainError(error.message, "OPERATING_MONTH_LOCKED");
+    }
+    throw error;
   }
 }
 
@@ -259,7 +265,7 @@ export async function listEarcareAttendanceForDate(input: {
   return {
     operatingMonthId: parsed.data.operatingMonthId,
     attendanceDate: parsed.data.attendanceDate,
-    isLocked: operatingMonth.status === "잠금",
+    isLocked: isOperatingMonthPayoutLocked(operatingMonth.status),
     statusOptions: statuses.map((status) => ({ code: status.code, displayName: status.displayName })),
     rows: employees.map((employee) => {
       const attendance = attendanceByEmployeeId.get(employee.id) ?? null;

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import {
   listCompletedServiceCallCalculationsForDate,
   listServiceCallsForDate
@@ -245,7 +246,7 @@ export async function listOpsDailyIncentives(input: {
   return {
     operatingMonthId: parsed.data.operatingMonthId,
     serviceDate: parsed.data.serviceDate,
-    isLocked: operatingMonth.status === "잠금",
+    isLocked: isOperatingMonthPayoutLocked(operatingMonth.status),
     dailyOpsCallCredit,
     sourceCallCount: completedCalculations.length,
     appliedThresholdCallCount: ruleSelection.appliedThresholdCallCount,

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
 import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
+import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import {
   createCoursePolicySchema,
   createOpsDailyIncentiveRuleSchema,
@@ -89,6 +90,7 @@ type EmployeeRecord = {
 
 type OperatingMonthRecord = {
   monthKey: string;
+  status: string;
 };
 
 type CoursePrismaClient = {
@@ -368,6 +370,21 @@ function effectiveForMonth<T extends { effectiveFromMonth: string; effectiveToMo
 async function getDefaultEffectiveMonth(tx: CoursePrismaClient) {
   const months = await tx.operatingMonth.findMany({ orderBy: [{ monthKey: "asc" }] });
   return months[0]?.monthKey ?? "2026-06";
+}
+
+async function assertNoClosedOperatingMonthOverlap(
+  tx: CoursePrismaClient,
+  input: { effectiveFromMonth: string; effectiveToMonth: string | null }
+) {
+  const months = await tx.operatingMonth.findMany({});
+  const conflict = months.find(
+    (month) =>
+      isOperatingMonthPayoutLocked(month.status) &&
+      rangesOverlap(month.monthKey, month.monthKey, input.effectiveFromMonth, input.effectiveToMonth)
+  );
+  if (conflict) {
+    throw new CourseDomainError("마감확정 또는 잠금 운영월과 겹치는 정책 범위는 수정할 수 없습니다.", "OPERATING_MONTH_LOCKED");
+  }
 }
 
 async function findCourseOrThrow(tx: CoursePrismaClient, courseId: string) {
@@ -749,6 +766,7 @@ export async function createCoursePolicy(input: CreateCoursePolicyInput) {
 
   return runInTransaction(client, async (tx) => {
     await findCourseOrThrow(tx, parsed.data.courseId);
+    await assertNoClosedOperatingMonthOverlap(tx, parsed.data);
     await assertNoCoursePolicyOverlap(tx, parsed.data);
     const record = await tx.coursePolicy.create({ data: { ...parsed.data, isActive: true } });
     const dto = toCoursePolicyDto(record);
@@ -772,6 +790,7 @@ export async function updateCoursePolicy(input: UpdateCoursePolicyInput) {
   return runInTransaction(client, async (tx) => {
     const current = toCoursePolicyDto(await findPolicyOrThrow(tx, parsed.data.policyId));
     if (policyValuesEqual(current, parsed.data)) return current;
+    await assertNoClosedOperatingMonthOverlap(tx, parsed.data);
     await assertNoCoursePolicyOverlap(tx, { ...parsed.data, courseId: current.courseId, excludeId: current.id });
     await tx.coursePolicy.updateMany({
       where: { id: current.id },
@@ -835,6 +854,7 @@ export async function createTherapistCourseRate(input: CreateTherapistCourseRate
   return runInTransaction(client, async (tx) => {
     await findCourseOrThrow(tx, parsed.data.courseId);
     await findTherapistOrThrow(tx, parsed.data.therapistId);
+    await assertNoClosedOperatingMonthOverlap(tx, parsed.data);
     await assertNoTherapistRateOverlap(tx, parsed.data);
     const record = await tx.therapistCourseRate.create({ data: { ...parsed.data, isActive: true } });
     const dto = toTherapistCourseRateDto(record);
@@ -858,6 +878,7 @@ export async function updateTherapistCourseRate(input: UpdateTherapistCourseRate
   return runInTransaction(client, async (tx) => {
     const current = toTherapistCourseRateDto(await findRateOrThrow(tx, parsed.data.rateId));
     if (rateValuesEqual(current, parsed.data)) return current;
+    await assertNoClosedOperatingMonthOverlap(tx, parsed.data);
     await assertNoTherapistRateOverlap(tx, {
       therapistId: current.therapistId,
       courseId: current.courseId,
@@ -897,6 +918,10 @@ export async function endTherapistCourseRate(input: { actorId: string; rateId: s
       throw new CourseDomainError("정책 종료월은 시작월보다 빠를 수 없습니다.", "THERAPIST_RATE_INVALID_END_MONTH");
     }
     if (current.effectiveToMonth === parsed.data.effectiveToMonth) return current;
+    await assertNoClosedOperatingMonthOverlap(tx, {
+      effectiveFromMonth: current.effectiveFromMonth,
+      effectiveToMonth: parsed.data.effectiveToMonth
+    });
     await tx.therapistCourseRate.updateMany({
       where: { id: current.id },
       data: { effectiveToMonth: parsed.data.effectiveToMonth }
@@ -919,6 +944,7 @@ export async function createOpsDailyIncentiveRule(input: MutationBase & Omit<Ops
   if (!parsed.success) throw normalizeParseError(parsed.error.issues[0]?.message ?? "일일 인센 정책 입력값이 올바르지 않습니다.");
   const client = getClient(input.prismaClient);
   return runInTransaction(client, async (tx) => {
+    await assertNoClosedOperatingMonthOverlap(tx, parsed.data);
     await assertNoDailyRuleOverlap(tx, parsed.data);
     const dto = toDailyRuleDto(await tx.opsDailyIncentiveRule.create({ data: { ...parsed.data, isActive: true } }));
     await recordAudit(tx, {
@@ -942,6 +968,7 @@ export async function updateOpsDailyIncentiveRule(input: MutationBase & Omit<Ops
     if (!currentRecord) throw new CourseDomainError("일일 인센 정책을 찾을 수 없습니다.", "OPS_DAILY_RULE_NOT_FOUND");
     const current = toDailyRuleDto(currentRecord);
     if (dailyRuleValuesEqual(current, parsed.data)) return current;
+    await assertNoClosedOperatingMonthOverlap(tx, parsed.data);
     await assertNoDailyRuleOverlap(tx, { ...parsed.data, excludeId: current.id });
     await tx.opsDailyIncentiveRule.updateMany({
       where: { id: current.id },
@@ -972,6 +999,7 @@ export async function createOpsMonthlyIncentiveRule(input: MutationBase & Omit<O
   if (!parsed.success) throw normalizeParseError(parsed.error.issues[0]?.message ?? "월 인센 정책 입력값이 올바르지 않습니다.");
   const client = getClient(input.prismaClient);
   return runInTransaction(client, async (tx) => {
+    await assertNoClosedOperatingMonthOverlap(tx, parsed.data);
     await assertNoMonthlyRuleOverlap(tx, parsed.data);
     const dto = toMonthlyRuleDto(await tx.opsMonthlyIncentiveRule.create({ data: { ...parsed.data, isActive: true } }));
     await recordAudit(tx, {
@@ -995,6 +1023,7 @@ export async function updateOpsMonthlyIncentiveRule(input: MutationBase & Omit<O
     if (!currentRecord) throw new CourseDomainError("월 인센 정책을 찾을 수 없습니다.", "OPS_MONTHLY_RULE_NOT_FOUND");
     const current = toMonthlyRuleDto(currentRecord);
     if (monthlyRuleValuesEqual(current, parsed.data)) return current;
+    await assertNoClosedOperatingMonthOverlap(tx, parsed.data);
     await assertNoMonthlyRuleOverlap(tx, { ...parsed.data, excludeId: current.id });
     await tx.opsMonthlyIncentiveRule.updateMany({
       where: { id: current.id },

@@ -10,7 +10,7 @@ function dbDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
-function createMemoryPrisma(options: { locked?: boolean; failAudit?: boolean; lockInsideTransaction?: boolean } = {}) {
+function createMemoryPrisma(options: { locked?: boolean; monthStatus?: string; failAudit?: boolean; lockInsideTransaction?: boolean } = {}) {
   const createdAt = new Date("2026-06-10T00:00:00.000Z");
   const updatedAt = new Date("2026-06-10T00:10:00.000Z");
   let transactionActive = false;
@@ -19,7 +19,7 @@ function createMemoryPrisma(options: { locked?: boolean; failAudit?: boolean; lo
     monthKey: "2026-06",
     startDate: dbDate("2026-06-01"),
     endDate: dbDate("2026-06-30"),
-    status: options.locked ? "잠금" : "작성중",
+    status: options.monthStatus ?? (options.locked ? "잠금" : "작성중"),
     createdAt,
     updatedAt
   };
@@ -92,7 +92,7 @@ function createMemoryPrisma(options: { locked?: boolean; failAudit?: boolean; lo
       async findUnique({ where }: any) {
         if (where.id !== operatingMonth.id) return null;
         if (options.lockInsideTransaction && transactionActive) {
-          return { ...operatingMonth, status: "잠금" };
+          return { ...operatingMonth, status: options.monthStatus ?? "잠금" };
         }
         return operatingMonth;
       }
@@ -291,6 +291,31 @@ describe("earcare attendance service", () => {
 
   it("blocks locked operating month mutation with no attendance or audit side effects", async () => {
     const prismaClient = createMemoryPrisma({ locked: true });
+    await assert.rejects(
+      upsertEarcareAttendance({
+        operatingMonthId: "month-2026-06",
+        attendanceDate: "2026-06-10",
+        employeeId: "ear-1",
+        statusCode: "NORMAL",
+        actorId: "account-1",
+        prismaClient
+      }),
+      (error) => error instanceof EarcareAttendanceDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
+    assert.equal(prismaClient.auditEvents.length, 0);
+    assert.equal(prismaClient.attendances.has(attendanceKey("month-2026-06", "2026-06-10", "ear-1")), false);
+  });
+
+  it("marks confirmed operating month read-only and blocks mutation with no side effects", async () => {
+    const prismaClient = createMemoryPrisma({ monthStatus: "마감확정" });
+
+    const result = await listEarcareAttendanceForDate({
+      operatingMonthId: "month-2026-06",
+      attendanceDate: "2026-06-10",
+      prismaClient
+    });
+    assert.equal(result.isLocked, true);
+
     await assert.rejects(
       upsertEarcareAttendance({
         operatingMonthId: "month-2026-06",

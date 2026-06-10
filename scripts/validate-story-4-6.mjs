@@ -125,7 +125,7 @@ for (const required of [
 ]) {
   if (!page.includes(required)) errors.push(`monthly page.tsx missing ${required}`);
 }
-for (const forbidden of ["use server", "action=", "saveOps", "revalidatePath", "recordAuditEvent", "closing", "snapshot 생성"]) {
+for (const forbidden of ["use server", "action=", "saveOps", "revalidatePath", "recordAuditEvent", "snapshot 생성"]) {
   if (page.includes(forbidden)) errors.push(`monthly page.tsx must not add write/closing behavior: ${forbidden}`);
 }
 
