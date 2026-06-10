@@ -58,6 +58,10 @@ export type MonthlyClosingPreviewWarningCounts = {
   therapistSecondTherapistRequired: number;
   therapistZeroPolicy: number;
   therapistExcludedCallCount: number;
+  fullAttendanceSourceMissing: number;
+  fullAttendanceSourceDayCount: number;
+  countKingEligibleCount: number;
+  countKingExcludedCount: number;
   opsDaily: OpsDailyIncentiveWarningCounts;
   opsMonthly: OpsMonthlyIncentiveWarningCounts;
   opsWarningMessageCount: number;
@@ -78,8 +82,22 @@ export type MonthlyClosingTherapistRowDto = {
   warningCounts: TherapistDailySettlementDto["warningCounts"];
   fullAttendanceDays: number | null;
   fullAttendanceAllowanceAmount: number;
-  bonusStatus: "pending_story_5_2";
-  finalBasePayoutAmount: number;
+  fullAttendanceBasis: string;
+  countKingRank: number | null;
+  countKingBonusAmount: number;
+  countKingBasis: string;
+  finalPayoutAmount: number;
+  bonusWarningMessages: string[];
+};
+
+export type TherapistFullAttendanceRecognitionResultDto = {
+  sourceStatus: "available" | "missing_story_4_1_source";
+  sourceDayCount: number;
+  rows: Array<{
+    employeeId: string;
+    fullAttendanceDays: number;
+  }>;
+  warningMessages: string[];
 };
 
 export type MonthlyClosingOperationsRowDto = {
@@ -146,6 +164,11 @@ export type MonthlyClosingPreviewDto = {
     sourceDayCount: number;
     includedCallCount: number;
     excludedCallCount: number;
+    fullAttendanceSourceStatus: TherapistFullAttendanceRecognitionResultDto["sourceStatus"];
+    fullAttendanceSourceDayCount: number;
+    countKingEligibleCount: number;
+    countKingExcludedCount: number;
+    countKingTieBreaker: string;
     policyWarningCount: number;
     warningCount: number;
     representativeEvidence: {
@@ -166,6 +189,12 @@ export class MonthlyClosingPreviewDomainError extends Error {
 
 export type MonthlyClosingPreviewDependencies = {
   listTherapistDailySettlements: typeof listTherapistDailySettlements;
+  listTherapistFullAttendanceRecognitions?: (input: {
+    operatingMonthId: string;
+    startDate: string;
+    endDate: string;
+    prismaClient?: unknown;
+  }) => Promise<TherapistFullAttendanceRecognitionResultDto>;
   listOpsDailyIncentives: typeof listOpsDailyIncentives;
   listOpsMonthlyIncentivePreview: typeof listOpsMonthlyIncentivePreview;
   listEarcareDailySettlements: typeof listEarcareDailySettlements;
@@ -183,6 +212,15 @@ const defaultDependencies: MonthlyClosingPreviewDependencies = {
 };
 
 const courseCodes = ["A", "B", "C", "D", "E"] as const;
+const FULL_ATTENDANCE_THRESHOLD_DAYS = 20;
+const FULL_ATTENDANCE_ALLOWANCE_AMOUNT = 2_000_000;
+const COUNT_KING_MIN_CALLS = 40;
+const COUNT_KING_BONUS_BY_RANK = {
+  1: 5_000_000,
+  2: 3_000_000,
+  3: 1_000_000
+} as const;
+const COUNT_KING_TIE_BREAKER_BASIS = "tie-breaker: totalCallCount desc, monthlySettlementAmount desc, staffCode asc, Employee.id asc";
 
 function getClient(client?: MonthlyClosingPreviewPrismaClient) {
   return client ?? (prisma as unknown as MonthlyClosingPreviewPrismaClient);
@@ -250,12 +288,95 @@ function createMonthlyTherapistRow(therapist: ActiveTherapistRecord): MonthlyClo
     warningCounts: { zeroPolicy: 0, missingPolicy: 0 },
     fullAttendanceDays: null,
     fullAttendanceAllowanceAmount: 0,
-    bonusStatus: "pending_story_5_2",
-    finalBasePayoutAmount: 0
+    fullAttendanceBasis: "Story 4.1 만근 인정 source 없음",
+    countKingRank: null,
+    countKingBonusAmount: 0,
+    countKingBasis: "월 총콜 0콜 / 40콜 미만 제외",
+    finalPayoutAmount: 0,
+    bonusWarningMessages: []
   };
 }
 
-function aggregateTherapists(dailyResults: TherapistDailySettlementResultDto[], activeTherapists: ActiveTherapistRecord[]) {
+function missingFullAttendanceResult(): TherapistFullAttendanceRecognitionResultDto {
+  return {
+    sourceStatus: "missing_story_4_1_source",
+    sourceDayCount: 0,
+    rows: [],
+    warningMessages: ["Story 4.1 마사지사 출퇴근/만근 인정 source가 없어 만근수당을 계산하지 않았습니다."]
+  };
+}
+
+function applyFullAttendanceAllowances(rows: MonthlyClosingTherapistRowDto[], result: TherapistFullAttendanceRecognitionResultDto) {
+  const daysByEmployeeId = new Map(result.rows.map((row) => [row.employeeId, row.fullAttendanceDays]));
+  const sourceMissing = result.sourceStatus === "missing_story_4_1_source";
+
+  for (const row of rows) {
+    if (sourceMissing) {
+      row.fullAttendanceDays = null;
+      row.fullAttendanceAllowanceAmount = 0;
+      row.fullAttendanceBasis = "Story 4.1 만근 인정 source 없음";
+      row.bonusWarningMessages.push(...result.warningMessages);
+      continue;
+    }
+
+    const days = daysByEmployeeId.get(row.employeeId) ?? 0;
+    row.fullAttendanceDays = days;
+    row.fullAttendanceAllowanceAmount = days >= FULL_ATTENDANCE_THRESHOLD_DAYS ? FULL_ATTENDANCE_ALLOWANCE_AMOUNT : 0;
+    row.fullAttendanceBasis =
+      days >= FULL_ATTENDANCE_THRESHOLD_DAYS
+        ? `만근 인정 ${days}일 / 20일 이상 2,000,000 VND`
+        : `만근 인정 ${days}일 / 20일 미만`;
+  }
+}
+
+function applyCountKingBonuses(rows: MonthlyClosingTherapistRowDto[]) {
+  const eligibleRows = rows
+    .filter((row) => row.totalCallCount >= COUNT_KING_MIN_CALLS)
+    .sort(
+      (a, b) =>
+        b.totalCallCount - a.totalCallCount ||
+        b.monthlySettlementAmount - a.monthlySettlementAmount ||
+        a.staffCode.localeCompare(b.staffCode) ||
+        a.employeeId.localeCompare(b.employeeId)
+    );
+  const topRows = eligibleRows.slice(0, 3);
+  const rankByEmployeeId = new Map(topRows.map((row, index) => [row.employeeId, (index + 1) as keyof typeof COUNT_KING_BONUS_BY_RANK]));
+
+  for (const row of rows) {
+    const rank = rankByEmployeeId.get(row.employeeId) ?? null;
+    if (rank) {
+      const amount = COUNT_KING_BONUS_BY_RANK[rank];
+      row.countKingRank = rank;
+      row.countKingBonusAmount = amount;
+      row.countKingBasis = `월 총콜 ${row.totalCallCount}콜 / 40콜 이상 / ${rank}위 ${amount.toLocaleString("ko-KR")} VND / ${COUNT_KING_TIE_BREAKER_BASIS}`;
+    } else if (row.totalCallCount >= COUNT_KING_MIN_CALLS) {
+      row.countKingRank = null;
+      row.countKingBonusAmount = 0;
+      row.countKingBasis = `월 총콜 ${row.totalCallCount}콜 / 40콜 이상이나 1~3위 밖 / ${COUNT_KING_TIE_BREAKER_BASIS}`;
+    } else {
+      row.countKingRank = null;
+      row.countKingBonusAmount = 0;
+      row.countKingBasis = `월 총콜 ${row.totalCallCount}콜 / 40콜 미만 제외`;
+    }
+  }
+
+  return {
+    eligibleCount: eligibleRows.length,
+    excludedCount: rows.length - eligibleRows.length
+  };
+}
+
+function finalizeTherapistPayouts(rows: MonthlyClosingTherapistRowDto[]) {
+  for (const row of rows) {
+    row.finalPayoutAmount = row.monthlySettlementAmount + row.fullAttendanceAllowanceAmount + row.countKingBonusAmount;
+  }
+}
+
+function aggregateTherapists(
+  dailyResults: TherapistDailySettlementResultDto[],
+  activeTherapists: ActiveTherapistRecord[],
+  fullAttendanceResult: TherapistFullAttendanceRecognitionResultDto
+) {
   const rowsByEmployeeId = new Map<string, MonthlyClosingTherapistRowDto>();
   const warningCounts = {
     coursePolicyMissing: 0,
@@ -293,7 +414,6 @@ function aggregateTherapists(dailyResults: TherapistDailySettlementResultDto[], 
       if (!row) continue;
       row.totalCallCount += dailyRow.totalCallCount;
       row.monthlySettlementAmount += dailyRow.totalCommissionAmount;
-      row.finalBasePayoutAmount = row.monthlySettlementAmount;
       row.assignmentEvidenceCount += dailyRow.assignmentEvidence.length;
       row.warningCounts.zeroPolicy += dailyRow.warningCounts.zeroPolicy;
       row.warningCounts.missingPolicy += dailyRow.warningCounts.missingPolicy;
@@ -304,11 +424,19 @@ function aggregateTherapists(dailyResults: TherapistDailySettlementResultDto[], 
   }
 
   const rows = [...rowsByEmployeeId.values()].sort((a, b) => a.staffCode.localeCompare(b.staffCode) || a.employeeId.localeCompare(b.employeeId));
+  applyFullAttendanceAllowances(rows, fullAttendanceResult);
+  const countKing = applyCountKingBonuses(rows);
+  finalizeTherapistPayouts(rows);
   return {
     rows,
-    payoutAmount: rows.reduce((sum, row) => sum + row.finalBasePayoutAmount, 0),
+    payoutAmount: rows.reduce((sum, row) => sum + row.finalPayoutAmount, 0),
     totalCallCount: rows.reduce((sum, row) => sum + row.totalCallCount, 0),
-    warningCounts
+    warningCounts,
+    fullAttendanceSourceStatus: fullAttendanceResult.sourceStatus,
+    fullAttendanceSourceMissing: fullAttendanceResult.sourceStatus === "missing_story_4_1_source" ? 1 : 0,
+    fullAttendanceSourceDayCount: fullAttendanceResult.sourceDayCount,
+    countKingEligibleCount: countKing.eligibleCount,
+    countKingExcludedCount: countKing.excludedCount
   };
 }
 
@@ -465,7 +593,7 @@ function representativeEvidence(input: {
 }
 
 function warningTotal(input: {
-  therapists: ReturnType<typeof aggregateTherapists>["warningCounts"];
+  therapists: ReturnType<typeof aggregateTherapists>;
   operations: ReturnType<typeof aggregateOperations>["warningCounts"];
   earcare: ReturnType<typeof aggregateEarcare>;
 }) {
@@ -486,12 +614,13 @@ function warningTotal(input: {
     input.earcare.warningCounts.secondTherapistRequired;
 
   return (
-    input.therapists.coursePolicyMissing +
-    input.therapists.therapistRateMissing +
-    input.therapists.secondTherapistRequired +
-    input.therapists.zeroPolicy +
-    input.therapists.missingPolicy +
-    input.therapists.excludedCallCount +
+    input.therapists.warningCounts.coursePolicyMissing +
+    input.therapists.warningCounts.therapistRateMissing +
+    input.therapists.warningCounts.secondTherapistRequired +
+    input.therapists.warningCounts.zeroPolicy +
+    input.therapists.warningCounts.missingPolicy +
+    input.therapists.warningCounts.excludedCallCount +
+    input.therapists.fullAttendanceSourceMissing +
     opsDaily +
     opsMonthly +
     input.operations.warningMessageCount +
@@ -548,6 +677,15 @@ export async function listMonthlyClosingPreview(input: {
     );
   }
 
+  const fullAttendanceResult = dependencies.listTherapistFullAttendanceRecognitions
+    ? await dependencies.listTherapistFullAttendanceRecognitions({
+        operatingMonthId: parsed.data.operatingMonthId,
+        startDate,
+        endDate,
+        prismaClient: client
+      })
+    : missingFullAttendanceResult();
+
   for (const serviceDate of dates) {
     opsDailyResults.push(
       await dependencies.listOpsDailyIncentives({
@@ -573,10 +711,10 @@ export async function listMonthlyClosingPreview(input: {
     );
   }
 
-  const therapists = aggregateTherapists(therapistDailyResults, activeTherapists);
+  const therapists = aggregateTherapists(therapistDailyResults, activeTherapists, fullAttendanceResult);
   const operations = aggregateOperations(opsDailyResults, opsMonthlyResult);
   const earcare = aggregateEarcare(earcareDailyResults);
-  const total = warningTotal({ therapists: therapists.warningCounts, operations: operations.warningCounts, earcare });
+  const total = warningTotal({ therapists, operations: operations.warningCounts, earcare });
   const policyWarningCount =
     therapists.warningCounts.coursePolicyMissing +
     operations.warningCounts.daily.coursePolicyMissing +
@@ -626,6 +764,10 @@ export async function listMonthlyClosingPreview(input: {
       therapistSecondTherapistRequired: therapists.warningCounts.secondTherapistRequired,
       therapistZeroPolicy: therapists.warningCounts.zeroPolicy,
       therapistExcludedCallCount: therapists.warningCounts.excludedCallCount,
+      fullAttendanceSourceMissing: therapists.fullAttendanceSourceMissing,
+      fullAttendanceSourceDayCount: therapists.fullAttendanceSourceDayCount,
+      countKingEligibleCount: therapists.countKingEligibleCount,
+      countKingExcludedCount: therapists.countKingExcludedCount,
       opsDaily: operations.warningCounts.daily,
       opsMonthly: operations.warningCounts.monthly,
       opsWarningMessageCount: operations.warningCounts.warningMessageCount,
@@ -639,6 +781,11 @@ export async function listMonthlyClosingPreview(input: {
       sourceDayCount: dates.length,
       includedCallCount: therapists.totalCallCount + operations.sourceCallCount + earcare.sourceCallCount,
       excludedCallCount: therapists.warningCounts.excludedCallCount,
+      fullAttendanceSourceStatus: therapists.fullAttendanceSourceStatus,
+      fullAttendanceSourceDayCount: therapists.fullAttendanceSourceDayCount,
+      countKingEligibleCount: therapists.countKingEligibleCount,
+      countKingExcludedCount: therapists.countKingExcludedCount,
+      countKingTieBreaker: COUNT_KING_TIE_BREAKER_BASIS,
       policyWarningCount,
       warningCount: total,
       representativeEvidence: representativeEvidence({

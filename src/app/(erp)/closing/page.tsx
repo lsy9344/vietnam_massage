@@ -36,7 +36,7 @@ function PreviewNotice({ result }: { result: MonthlyClosingPreviewDto }) {
 
 function SummaryBand({ result }: { result: MonthlyClosingPreviewDto }) {
   const rows = [
-    ["마사지사 지급 합계", result.totals.therapistPayoutAmount, `${result.therapists.totalCallCount} 담당 건`],
+    ["마사지사 지급 합계", result.totals.therapistPayoutAmount, `보너스 포함 / ${result.therapists.totalCallCount} 담당 건`],
     ["운영팀 일일인센", result.totals.opsDailyIncentiveAmount, `${result.operations.rows.length} 직원 row`],
     ["운영팀 월인센", result.totals.opsMonthlyIncentiveAmount, `${result.operations.monthlyOpsCallCredit} 월 총콜`],
     ["귀케어 지급 합계", result.totals.earcarePayoutAmount, `${result.earcare.sourceCallCount} source call`],
@@ -70,16 +70,19 @@ function TherapistTable({ result }: { result: MonthlyClosingPreviewDto }) {
     <section className="mb-4 overflow-x-auto border border-border bg-surface">
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-base font-semibold text-foreground">마사지사</h2>
-        <p className="mt-1 text-sm text-muted">직원 row key와 downstream 식별자는 Employee.id이며, 보너스는 Story 5.2 대기 상태로 분리한다.</p>
+        <p className="mt-1 text-sm text-muted">직원 row key와 downstream 식별자는 Employee.id이며, 최종지급액은 월 정산액과 만근/갯수왕 보너스를 합산한다.</p>
       </div>
-      <table className="min-w-[1120px] w-full border-collapse text-sm">
+      <table className="min-w-[1320px] w-full border-collapse text-sm">
         <thead className="bg-readonly text-left text-xs font-semibold uppercase text-muted">
           <tr>
             <th className="border-b border-border px-3 py-2">마사지사</th>
             <th className="border-b border-border px-3 py-2 text-right">월 총 담당 콜</th>
             <th className="border-b border-border px-3 py-2 text-right">월 정산액</th>
-            <th className="border-b border-border px-3 py-2">만근/보너스 상태</th>
-            <th className="border-b border-border px-3 py-2 text-right">최종지급액 기초값</th>
+            <th className="border-b border-border px-3 py-2 text-right">만근 인정일</th>
+            <th className="border-b border-border px-3 py-2 text-right">만근수당</th>
+            <th className="border-b border-border px-3 py-2">갯수왕</th>
+            <th className="border-b border-border px-3 py-2 text-right">갯수왕 수당</th>
+            <th className="border-b border-border px-3 py-2 text-right">최종지급액</th>
             <th className="border-b border-border px-3 py-2">산출 근거</th>
           </tr>
         </thead>
@@ -92,10 +95,18 @@ function TherapistTable({ result }: { result: MonthlyClosingPreviewDto }) {
               </td>
               <td className="px-3 py-2 text-right tabular-nums">{row.totalCallCount}건</td>
               <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(row.monthlySettlementAmount)}</td>
-              <td className="px-3 py-2 text-muted">만근수당/갯수왕 수당 후속 story 대기</td>
-              <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(row.finalBasePayoutAmount)}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{row.fullAttendanceDays === null ? "source 없음" : `${row.fullAttendanceDays}일`}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{formatVnd(row.fullAttendanceAllowanceAmount)}</td>
+              <td className="px-3 py-2 text-muted">{row.countKingRank ? `${row.countKingRank}위` : "순위 없음"}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{formatVnd(row.countKingBonusAmount)}</td>
+              <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(row.finalPayoutAmount)}</td>
               <td className="px-3 py-2 text-muted">
-                evidence {row.assignmentEvidenceCount}건, zero policy {row.warningCounts.zeroPolicy}, missing policy {row.warningCounts.missingPolicy}
+                <div>{row.fullAttendanceBasis}</div>
+                <div>{row.countKingBasis}</div>
+                <div>
+                  evidence {row.assignmentEvidenceCount}건, zero policy {row.warningCounts.zeroPolicy}, missing policy {row.warningCounts.missingPolicy}
+                </div>
+                {row.bonusWarningMessages.length > 0 ? <div className="mt-1 font-medium text-danger">{row.bonusWarningMessages.join(" / ")}</div> : null}
               </td>
             </tr>
           ))}
@@ -191,12 +202,18 @@ function EvidenceSection({ result }: { result: MonthlyClosingPreviewDto }) {
           기간 {result.evidence.period}, source day count {result.evidence.sourceDayCount}, included call count {result.evidence.includedCallCount},
           excluded call count {result.evidence.excludedCallCount}
         </p>
+        <p className="mt-1 text-sm text-muted">
+          만근 source {result.evidence.fullAttendanceSourceStatus}, full-attendance source day count {result.evidence.fullAttendanceSourceDayCount}, 갯수왕 대상{" "}
+          {result.evidence.countKingEligibleCount}명, 제외 {result.evidence.countKingExcludedCount}명, {result.evidence.countKingTieBreaker}
+        </p>
       </div>
       <div className="grid gap-0 md:grid-cols-2">
         <div className="border-b border-border px-4 py-3 md:border-r">
           <div className="text-xs font-medium text-muted">warning counts</div>
           <div className="mt-1 text-sm text-foreground">
             total {result.warningCounts.total}, policy {result.evidence.policyWarningCount}, 마사지사 제외 {result.warningCounts.therapistExcludedCallCount},
+            만근 source missing {result.warningCounts.fullAttendanceSourceMissing}, 만근 source day {result.warningCounts.fullAttendanceSourceDayCount}, 갯수왕 대상{" "}
+            {result.warningCounts.countKingEligibleCount}, 갯수왕 제외 {result.warningCounts.countKingExcludedCount},
             운영팀 일일{" "}
             {result.warningCounts.opsDaily.notCompleted +
               result.warningCounts.opsDaily.coursePolicyMissing +

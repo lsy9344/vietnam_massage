@@ -29,8 +29,8 @@ function readJson(path) {
 ].forEach(requireFile);
 
 const packageJson = readJson("package.json");
-if (!packageJson.scripts?.lint?.includes("validate-story-4-6.mjs && node scripts/validate-story-5-1.mjs")) {
-  errors.push("package.json lint script must run scripts/validate-story-5-1.mjs immediately after validate-story-4-6.mjs");
+if (!packageJson.scripts?.lint?.includes("validate-story-4-6.mjs && node scripts/validate-story-5-1.mjs && node scripts/validate-story-5-2.mjs")) {
+  errors.push("package.json lint script must run scripts/validate-story-5-1.mjs after validate-story-4-6.mjs and then scripts/validate-story-5-2.mjs");
 }
 
 const service = read("src/modules/closing/monthly-closing-preview-service.ts");
@@ -50,10 +50,9 @@ for (const required of [
   "Employee.id",
   "draft_current",
   "closed_current",
-  "pending_story_5_2",
-  "fullAttendanceDays: null",
-  "fullAttendanceAllowanceAmount: 0",
-  "finalBasePayoutAmount",
+  "fullAttendanceDays",
+  "fullAttendanceAllowanceAmount",
+  "finalPayoutAmount",
   "therapistPayoutAmount",
   "opsDailyIncentiveAmount",
   "opsMonthlyIncentiveAmount",
@@ -122,8 +121,7 @@ for (const required of [
   "therapist:2026-06-01",
   "ops:2026-06-01",
   "earcare:2026-06-01",
-  "finalBasePayoutAmount",
-  "pending_story_5_2",
+  "finalPayoutAmount",
   "totalOpsPayoutAmount",
   "grandPayoutAmount",
   "earcareNormalStaffZeroDays",
@@ -182,8 +180,7 @@ for (const required of [
   "no persistence",
   "no `MonthlyClose`",
   "no audit event",
-  "no status mutation",
-  "pending_story_5_2"
+  "no status mutation"
 ]) {
   if (!readme.includes(required)) errors.push(`src/modules/closing/README.md missing ${required}`);
 }
