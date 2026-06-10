@@ -125,8 +125,8 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - 정상 근무 귀케어사가 0명인 날의 귀케어 풀 처리는 정책 확정 전까지 지급액 `0` 또는 미확정 상태로 명시적으로 테스트한다.
 - 월마감 확정 후에는 현재 설정 변경이 과거 지급 스냅샷을 바꾸지 않는 회귀 테스트를 둔다.
 - 월간 집계는 Excel 행 범위가 아니라 운영월 날짜 조건으로 계산되는지 테스트한다.
-- Story 5.3 기준 월마감 확정은 Prisma `MonthlyClosing` 모델(`monthly_closings`)이 소유하며 운영월당 하나의 확정 스냅샷만 허용한다. `snapshotJson`은 확정 시점의 `listMonthlyClosingPreview()` 결과를 confirmation DTO로 정규화해 저장하고, 이후 현재 미리보기 재계산값과 섞지 않는다.
-- Story 5.3 기준 closing domain service contract는 `startMonthlyCloseReview()`, `confirmMonthlyClose()`, `getMonthlyClosingSnapshot()`이다. 검토 시작은 `작성중 -> 검토중`과 `operating_month.status_changed`를 기록하고, 확정은 `검토중 -> 마감확정`, `MonthlyClosing.create`, `monthly_close.confirmed`를 하나의 transaction으로 처리한다.
+- Story 5.3/5.5 기준 월마감 확정은 Prisma `MonthlyClosing` 모델(`monthly_closings`)이 소유하며 운영월별 versioned snapshot row를 보존한다. `snapshotJson`은 확정 시점의 `listMonthlyClosingPreview()` 결과를 confirmation DTO로 정규화해 저장하고, 이후 현재 미리보기 재계산값과 섞지 않는다.
+- Story 5.3/5.5 기준 closing domain service contract는 `startMonthlyCloseReview()`, `confirmMonthlyClose()`, `getMonthlyClosingSnapshot()`이다. 검토 시작은 `작성중 -> 검토중`과 `operating_month.status_changed`를 기록하고, 확정은 `검토중 -> 마감확정`, 다음 `closeVersion`의 `MonthlyClosing.create`, `monthly_close.confirmed`를 하나의 transaction으로 처리한다.
 - Story 5.3 기준 `monthly_close.confirmed` 감사 로그 `targetType`은 `monthly_close`이며 afterValue에는 operating month, before/after state, snapshot id, confirmedAt을 plain JSON으로 포함한다. 스냅샷 조회는 저장된 `snapshotJson`을 반환해야 하며 `listMonthlyClosingPreview()`를 다시 호출해 과거값처럼 보여주면 안 된다.
 - Story 5.4 기준 월마감 잠금은 closing domain service `lockMonthlyClose()`가 소유한다. 허용 전이는 `마감확정 -> 잠금`뿐이며, `monthly_close.locked` 감사 로그에는 `lockedAt`, `lockedByAccountId`, snapshot id, operating month before/after state를 plain JSON으로 기록한다.
 - Story 5.4 기준 `마감확정` 또는 `잠금` 운영월의 지급 영향 데이터 write는 서버 domain/service boundary에서 차단한다. 공용 guard는 `src/modules/closing/month-lock-guard.ts`의 `isOperatingMonthPayoutLocked()`와 `assertOperatingMonthPayoutWritable()`이며, calls, daily expenses, 귀케어/운영팀 근무상태, 코스 정책, 마사지사 수당, 운영팀 인센 정책 range mutation은 이 규칙을 따라야 한다.
@@ -215,4 +215,4 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - 기술 스택이나 구현 패턴이 바뀌면 갱신한다.
 - 오래되었거나 당연해진 규칙은 정리해 LLM 컨텍스트 비용을 낮춘다.
 
-Last Updated: 2026-06-09
+Last Updated: 2026-06-10

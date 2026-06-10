@@ -22,9 +22,10 @@ The closing module owns monthly close workflow and payout snapshots:
 ## Core Entities
 
 - `MonthlyClosing`
-- `MonthlyPayout`
-- `MonthlyCloseSnapshot`
-- `MonthlyCloseEvent`
+- `OperatingMonth`
+- `AuditLog`
+- `MonthlyClosing.snapshotJson`
+- `MonthlyClosing.closeVersion`
 
 ## Rules
 
@@ -36,7 +37,7 @@ The closing module owns monthly close workflow and payout snapshots:
 - Story 5.6 monthly close confirmation is a two-step UI action: the first `/closing` `마감 확정` click opens an AlertDialog with payout summary and snapshot immutability warning, and only the second confirmation submits the existing `confirmMonthlyCloseAction` Server Action.
 - The confirm dialog uses the monthly closing preview DTO as display input. It does not recalculate payout totals in UI code.
 - The confirm dialog accessibility contract is part of the closing boundary: `role="alertdialog"`, connected title/description, safe initial focus on cancel/title, `Esc` cancel with no side effects, focus trap while open, and focus return to the trigger.
-- Locked months should block normal mutations to source records that affect payout.
+- `마감확정` and `잠금` months should block normal mutations to source records that affect payout.
 - Reopen is administrator-only and requires a reason. The domain transition is `잠금 -> 검토중`.
 - Monthly close snapshots are versioned by operating month and close version. Reconfirmation after reopen creates a new snapshot row and preserves prior snapshots for audit/history.
 - `monthly_close.reopened` audit events record the reason, actor, timestamp, operating month before/after state, and snapshot version.
@@ -45,5 +46,5 @@ The closing module owns monthly close workflow and payout snapshots:
 
 - Reads settlement results from `settlements`.
 - Reads sales, expense, and call totals from `calls`.
-- Emits summary data to `dashboard`.
+- Emits versioned snapshot and current-preview summary data to `dashboard`.
 - Emits audit events through `audit`.
