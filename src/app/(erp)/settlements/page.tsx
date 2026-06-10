@@ -1,14 +1,254 @@
-import { ErpEmptyState } from "@/components/domain/erp-empty-state";
+import Link from "next/link";
 import { requireRouteAccess } from "@/lib/authorization";
+import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
+import { listOperatingMonths } from "@/modules/masters/operating-month-service";
+import { listTherapistDailySettlements, type TherapistDailySettlementResultDto } from "@/modules/settlements/therapist-daily-settlement-service";
 
-export default async function SettlementsPage() {
-  await requireRouteAccess("/settlements");
+type SettlementsPageSearchParams = {
+  operatingMonthId?: string;
+  serviceDate?: string;
+};
+
+const courseCodes = ["A", "B", "C", "D", "E"] as const;
+
+const rateStatusLabel = {
+  applied: "정책 적용",
+  zero_policy: "0원 정책",
+  missing_policy: "정책 없음"
+} as const;
+
+const roleLabel = {
+  THERAPIST_1: "마사지사1",
+  THERAPIST_2: "마사지사2"
+} as const;
+
+function formatVnd(amount: number) {
+  return `${new Intl.NumberFormat("ko-KR").format(amount)} VND`;
+}
+
+function warningSummary(result: TherapistDailySettlementResultDto) {
+  return result.warningCounts.coursePolicyMissing + result.warningCounts.therapistRateMissing + result.warningCounts.secondTherapistRequired;
+}
+
+export default async function SettlementsPage({ searchParams }: { searchParams: Promise<SettlementsPageSearchParams> }) {
+  const account = await requireRouteAccess("/settlements");
+  const params = await searchParams;
+  const operatingMonths = await listOperatingMonths();
+  const selectedMonth = selectedOperatingMonthFor(operatingMonths, params.operatingMonthId);
+
+  if (!selectedMonth) {
+    return (
+      <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
+        <div className="mb-5 flex items-end justify-between gap-6">
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase text-muted">정산</p>
+            <h1 className="text-2xl font-semibold text-foreground">마사지사 일일정산</h1>
+            <p className="mt-2 max-w-3xl text-sm text-muted">방문완료 콜의 마사지사1/2 담당 건과 코스별 수당 근거를 조회한다.</p>
+          </div>
+        </div>
+        <section className="border border-border bg-surface px-4 py-8">
+          <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
+          <p className="mt-2 max-w-2xl text-sm text-muted">마사지사 일일정산은 운영월 날짜 범위 안에서만 조회할 수 있다.</p>
+          {account.role === "administrator" ? (
+            <Link className="mt-4 inline-flex text-sm font-semibold text-brand underline-offset-4 hover:underline" href="/masters/operating-months">
+              운영월 관리로 이동
+            </Link>
+          ) : null}
+        </section>
+      </main>
+    );
+  }
+
+  const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
+  let result: TherapistDailySettlementResultDto | null = null;
+  let errorMessage: string | null = null;
+
+  try {
+    result = await listTherapistDailySettlements({
+      operatingMonthId: selectedMonth.id,
+      serviceDate
+    });
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : "마사지사 일일정산을 조회하지 못했습니다.";
+  }
 
   return (
-    <ErpEmptyState
-      description="방문완료 기준 결제, 수당, 콜 인정 계산 화면은 후속 story에서 연결한다."
-      eyebrow="정산"
-      title="정산 화면"
-    />
+    <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
+      <div className="mb-5 flex items-end justify-between gap-6">
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase text-muted">정산</p>
+          <h1 className="text-2xl font-semibold text-foreground">마사지사 일일정산</h1>
+          <p className="mt-2 max-w-3xl text-sm text-muted">방문완료 콜 기준으로 마사지사별 담당 콜, 코스별 수당, 정책 상태 근거를 조회한다.</p>
+        </div>
+        <div className="text-right text-xs text-muted">
+          <div>운영월 상태: {selectedMonth.status}</div>
+          <div>
+            날짜 범위: {selectedMonth.startDate} ~ {selectedMonth.endDate}
+          </div>
+        </div>
+      </div>
+
+      <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
+        <label className="grid gap-1 text-xs font-medium text-muted">
+          운영월
+          <select
+            aria-label="운영월"
+            className="h-9 min-w-44 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
+            defaultValue={selectedMonth.id}
+            name="operatingMonthId"
+          >
+            {operatingMonths.map((month) => (
+              <option key={month.id} value={month.id}>
+                {month.monthKey} ({month.status})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs font-medium text-muted">
+          조회날짜
+          <input
+            aria-label="조회날짜"
+            className="h-9 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
+            defaultValue={serviceDate}
+            max={selectedMonth.endDate}
+            min={selectedMonth.startDate}
+            name="serviceDate"
+            type="date"
+          />
+        </label>
+        <button className="h-9 border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
+          조회
+        </button>
+      </form>
+
+      {errorMessage ? (
+        <section className="border border-danger bg-surface px-4 py-5" role="alert">
+          <h2 className="text-base font-semibold text-danger">정산 조회 실패</h2>
+          <p className="mt-2 text-sm text-muted">{errorMessage}</p>
+          <form className="mt-4" method="get">
+            <input name="operatingMonthId" type="hidden" value={selectedMonth.id} />
+            <input name="serviceDate" type="hidden" value={serviceDate} />
+            <button className="h-9 border border-border bg-background px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
+              재조회
+            </button>
+          </form>
+        </section>
+      ) : result ? (
+        <>
+          <section aria-label="마사지사 일일정산 요약" className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="border border-border bg-surface px-4 py-3">
+              <div className="text-xs font-medium text-muted">정산 대상 마사지사</div>
+              <div className="mt-1 text-xl font-semibold text-foreground">{result.settlements.length}명</div>
+            </div>
+            <div className="border border-border bg-surface px-4 py-3">
+              <div className="text-xs font-medium text-muted">총 담당 콜</div>
+              <div className="mt-1 text-xl font-semibold text-foreground">
+                {result.settlements.reduce((sum, row) => sum + row.totalCallCount, 0)}건
+              </div>
+            </div>
+            <div className="border border-border bg-surface px-4 py-3">
+              <div className="text-xs font-medium text-muted">당일정산 합계</div>
+              <div className="mt-1 text-xl font-semibold text-foreground">
+                {formatVnd(result.settlements.reduce((sum, row) => sum + row.totalCommissionAmount, 0))}
+              </div>
+            </div>
+            <div className="border border-border bg-surface px-4 py-3">
+              <div className="text-xs font-medium text-muted">정책 warning / 제외 콜</div>
+              <div className="mt-1 text-xl font-semibold text-foreground">
+                {warningSummary(result)}건 / {result.excludedCallCount}건
+              </div>
+            </div>
+          </section>
+
+          {result.settlements.length === 0 ? (
+            <section className="border border-border bg-surface px-4 py-8">
+              <h2 className="text-base font-semibold text-foreground">이 날짜의 방문완료 콜이 없습니다</h2>
+              <p className="mt-2 text-sm text-muted">운영월 또는 조회날짜를 변경해 다시 조회하세요.</p>
+            </section>
+          ) : (
+            <section className="overflow-x-auto border border-border bg-surface">
+              <table className="min-w-[1120px] w-full border-collapse text-sm">
+                <thead className="bg-readonly text-left text-xs font-semibold uppercase text-muted">
+                  <tr>
+                    <th className="border-b border-border px-3 py-2">마사지사</th>
+                    <th className="border-b border-border px-3 py-2 text-right">담당 콜</th>
+                    <th className="border-b border-border px-3 py-2 text-right">당일정산</th>
+                    {courseCodes.map((courseCode) => (
+                      <th key={courseCode} className="border-b border-border px-3 py-2 text-right">
+                        {courseCode} 수량/금액
+                      </th>
+                    ))}
+                    <th className="border-b border-border px-3 py-2 text-right">정책 상태</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.settlements.map((settlement) => (
+                    <tr key={settlement.employeeId} className="border-b border-border last:border-b-0">
+                      <td className="px-3 py-2">
+                        <div className="font-semibold text-foreground">{settlement.displayName}</div>
+                        <div className="text-xs text-muted">{settlement.staffCode}</div>
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">{settlement.totalCallCount}건</td>
+                      <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(settlement.totalCommissionAmount)}</td>
+                      {courseCodes.map((courseCode) => {
+                        const summary = settlement.courseBreakdown[courseCode];
+                        return (
+                          <td key={courseCode} className="px-3 py-2 text-right tabular-nums">
+                            <div>{summary.callCount}건</div>
+                            <div className="text-xs text-muted">{formatVnd(summary.commissionAmount)}</div>
+                          </td>
+                        );
+                      })}
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        정책 없음 {settlement.warningCounts.missingPolicy} / 0원 정책 {settlement.warningCounts.zeroPolicy}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
+
+          <section className="mt-5 border border-border bg-surface">
+            <div className="border-b border-border px-4 py-3">
+              <h2 className="text-base font-semibold text-foreground">콜별 산출 근거</h2>
+              <p className="mt-1 text-sm text-muted">
+                담당 역할, 코스, 수당 금액, 적용 수당 정책 상태를 함께 표시한다. 정책 없음 건은 0원 담당 건으로 남긴다.
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-[900px] w-full border-collapse text-sm">
+                <thead className="bg-readonly text-left text-xs font-semibold uppercase text-muted">
+                  <tr>
+                    <th className="border-b border-border px-3 py-2">마사지사</th>
+                    <th className="border-b border-border px-3 py-2">콜 ID</th>
+                    <th className="border-b border-border px-3 py-2">담당 역할</th>
+                    <th className="border-b border-border px-3 py-2">코스</th>
+                    <th className="border-b border-border px-3 py-2 text-right">수당</th>
+                    <th className="border-b border-border px-3 py-2">정책 상태</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.settlements.flatMap((settlement) =>
+                    settlement.assignmentEvidence.map((evidence) => (
+                      <tr key={`${evidence.serviceCallId}-${evidence.role}-${evidence.employeeId}`} className="border-b border-border last:border-b-0">
+                        <td className="px-3 py-2">
+                          {settlement.displayName} <span className="text-xs text-muted">({settlement.staffCode})</span>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-xs">{evidence.serviceCallId}</td>
+                        <td className="px-3 py-2">{roleLabel[evidence.role]}</td>
+                        <td className="px-3 py-2">{evidence.courseCode}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatVnd(evidence.commissionAmount)}</td>
+                        <td className="px-3 py-2">{rateStatusLabel[evidence.rateStatus]}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      ) : null}
+    </main>
   );
 }
