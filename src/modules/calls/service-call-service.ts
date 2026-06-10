@@ -237,6 +237,7 @@ export type ServiceCallRowDto = {
   paymentMethodCode: string | null;
   note: string | null;
   confirmationCode: string | null;
+  basePrice: number;
   paymentAmount: number;
   discountAmount: number;
   therapist1Commission: number;
@@ -297,6 +298,7 @@ export type CompletedServiceCallCalculationDto = {
   serviceDate: string;
   courseId: string;
   courseCode: string;
+  basePrice: number;
   paymentAmount: number;
   discountAmount: number;
   earcarePoolAmount: number;
@@ -418,6 +420,7 @@ function firstCurrentRate(rates: TherapistCourseRateRecord[], monthKey: string) 
 
 function emptyCalculation(status: ServiceCallCalculationStatus, error?: { code: string; message: string }) {
   return {
+    basePrice: 0,
     paymentAmount: 0,
     discountAmount: 0,
     therapist1Commission: 0,
@@ -475,6 +478,7 @@ async function calculateServiceCallCompletion(tx: ServiceCallPrismaClient, recor
 
   const discountAmount = record.discountTypeCode === null ? 0 : 100000;
   const baseCalculation = {
+    basePrice: policy.basePrice,
     paymentAmount: Math.max(policy.basePrice - discountAmount, 0),
     discountAmount,
     therapist1Commission: 0,
@@ -1392,6 +1396,7 @@ export function completedServiceCallCalculationsFromRows(rows: ServiceCallRowDto
       serviceDate: row.serviceDate,
       courseId: row.courseId,
       courseCode: row.courseCode,
+      basePrice: row.basePrice,
       paymentAmount: row.paymentAmount,
       discountAmount: row.discountAmount,
       earcarePoolAmount: row.earcarePoolAmount,
