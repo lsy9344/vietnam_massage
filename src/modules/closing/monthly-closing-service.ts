@@ -21,9 +21,13 @@ type OperatingMonthRecord = {
 type MonthlyClosingRecord = {
   id: string;
   operatingMonthId: string;
+  closeVersion: number;
   snapshotJson: unknown;
   confirmedByAccountId: string;
   confirmedAt: Date;
+  reopenedAt?: Date | null;
+  reopenedByAccountId?: string | null;
+  reopenReason?: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -37,7 +41,8 @@ type MonthlyClosingPrismaClient = {
   };
   monthlyClosing: {
     create(args: unknown): Promise<MonthlyClosingRecord>;
-    findUnique(args: unknown): Promise<MonthlyClosingRecord | null>;
+    findFirst(args: unknown): Promise<MonthlyClosingRecord | null>;
+    update(args: unknown): Promise<MonthlyClosingRecord>;
   };
   auditLog: {
     create(args: unknown): Promise<unknown>;
@@ -73,9 +78,13 @@ export type MonthlyClosingSnapshotDto = {
 export type MonthlyClosingDto = {
   id: string;
   operatingMonthId: string;
+  closeVersion: number;
   status: "마감확정";
   confirmedByAccountId: string;
   confirmedAt: string;
+  reopenedAt: string | null;
+  reopenedByAccountId: string | null;
+  reopenReason: string | null;
   snapshot: MonthlyClosingSnapshotDto;
 };
 
@@ -113,6 +122,14 @@ export type LockMonthlyCloseInput = {
   clock?: () => Date;
 };
 
+export type ReopenMonthlyCloseInput = {
+  operatingMonthId: string;
+  actorId: string;
+  reason: string;
+  prismaClient?: MonthlyClosingPrismaClient;
+  clock?: () => Date;
+};
+
 export type GetMonthlyClosingSnapshotInput = {
   operatingMonthId: string;
   prismaClient?: MonthlyClosingPrismaClient;
@@ -128,6 +145,10 @@ export class MonthlyClosingDomainError extends Error {
 const monthlyClosingInputSchema = z.object({
   operatingMonthId: z.string().trim().min(1, "운영월을 선택하세요."),
   actorId: z.string().trim().min(1, "처리자 계정을 확인할 수 없습니다.")
+});
+
+const reopenMonthlyClosingInputSchema = monthlyClosingInputSchema.extend({
+  reason: z.string().trim().min(5, "재오픈 사유를 5자 이상 입력하세요.")
 });
 
 const snapshotQuerySchema = z.object({
@@ -152,6 +173,13 @@ function normalizeParseError(message: string) {
 
 function isUniqueConstraintError(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "P2002";
+}
+
+async function findLatestMonthlyClosing(client: MonthlyClosingPrismaClient, operatingMonthId: string) {
+  return client.monthlyClosing.findFirst({
+    where: { operatingMonthId },
+    orderBy: { closeVersion: "desc" }
+  });
 }
 
 function isPlainObject(value: object) {
@@ -259,9 +287,13 @@ function toDto(record: MonthlyClosingRecord, snapshot: MonthlyClosingSnapshotDto
   return {
     id: record.id,
     operatingMonthId: record.operatingMonthId,
+    closeVersion: record.closeVersion,
     status: "마감확정",
     confirmedByAccountId: record.confirmedByAccountId,
     confirmedAt: record.confirmedAt.toISOString(),
+    reopenedAt: record.reopenedAt ? record.reopenedAt.toISOString() : null,
+    reopenedByAccountId: record.reopenedByAccountId ?? null,
+    reopenReason: record.reopenReason ?? null,
     snapshot
   };
 }
@@ -347,6 +379,9 @@ export async function confirmMonthlyClose(input: ConfirmMonthlyCloseInput): Prom
         throw new MonthlyClosingDomainError("현재 상태에서는 마감 확정할 수 없습니다.", "INVALID_MONTHLY_CLOSE_TRANSITION");
       }
 
+      const latestClosing = await findLatestMonthlyClosing(tx, current.id);
+      const closeVersion = (latestClosing?.closeVersion ?? 0) + 1;
+
       const updateResult = await tx.operatingMonth.updateMany({
         where: { id: current.id, status: "검토중" },
         data: { status: "마감확정" }
@@ -367,6 +402,7 @@ export async function confirmMonthlyClose(input: ConfirmMonthlyCloseInput): Prom
         data: {
           id: snapshotId,
           operatingMonthId: current.id,
+          closeVersion,
           snapshotJson: snapshot,
           confirmedByAccountId: parsed.data.actorId,
           confirmedAt: now
@@ -389,6 +425,7 @@ export async function confirmMonthlyClose(input: ConfirmMonthlyCloseInput): Prom
             monthKey: current.monthKey,
             status: "마감확정",
             snapshotId: closing.id,
+            closeVersion,
             confirmedAt
           }
         },
@@ -399,7 +436,7 @@ export async function confirmMonthlyClose(input: ConfirmMonthlyCloseInput): Prom
     });
   } catch (error) {
     if (isUniqueConstraintError(error)) {
-      throw new MonthlyClosingDomainError("현재 상태에서는 마감 확정할 수 없습니다.", "MONTHLY_CLOSE_ALREADY_CONFIRMED");
+      throw new MonthlyClosingDomainError("동일한 월마감 버전이 이미 생성되었습니다. 다시 시도해 주세요.", "MONTHLY_CLOSE_VERSION_CONFLICT");
     }
 
     throw error;
@@ -438,9 +475,7 @@ export async function lockMonthlyClose(input: LockMonthlyCloseInput): Promise<Mo
       throw new MonthlyClosingDomainError("현재 상태에서는 잠금 처리할 수 없습니다.", "INVALID_MONTHLY_CLOSE_TRANSITION");
     }
 
-    const closing = await tx.monthlyClosing.findUnique({
-      where: { operatingMonthId: current.id }
-    });
+    const closing = await findLatestMonthlyClosing(tx, current.id);
     if (!closing) {
       throw new MonthlyClosingDomainError("확정 스냅샷을 찾을 수 없습니다.", "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND");
     }
@@ -462,15 +497,100 @@ export async function lockMonthlyClose(input: LockMonthlyCloseInput): Promise<Mo
           operatingMonthId: current.id,
           monthKey: current.monthKey,
           status: current.status,
-          snapshotId: closing.id
+          snapshotId: closing.id,
+          closeVersion: closing.closeVersion
         },
         afterValue: {
           operatingMonthId: updated.id,
           monthKey: updated.monthKey,
           status: updated.status,
           snapshotId: closing.id,
+          closeVersion: closing.closeVersion,
           lockedAt,
           lockedByAccountId: parsed.data.actorId
+        }
+      },
+      { prismaClient: tx as any }
+    );
+
+    return toReviewDto(updated);
+  });
+}
+
+export async function reopenMonthlyClose(input: ReopenMonthlyCloseInput): Promise<MonthlyCloseReviewDto> {
+  const parsed = reopenMonthlyClosingInputSchema.safeParse(input);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const code = issue?.path[0] === "reason" ? "INVALID_MONTHLY_CLOSE_REOPEN_REASON" : "INVALID_MONTHLY_CLOSE_INPUT";
+    throw new MonthlyClosingDomainError(issue?.message ?? "월마감 재오픈 입력값이 올바르지 않습니다.", code);
+  }
+
+  const client = getClient(input.prismaClient);
+  const now = input.clock?.() ?? new Date();
+  const reopenedAt = now.toISOString();
+
+  return runInTransaction(client, async (tx) => {
+    const current = await tx.operatingMonth.findUnique({
+      where: { id: parsed.data.operatingMonthId }
+    });
+    if (!current) {
+      throw new MonthlyClosingDomainError("운영월을 찾을 수 없습니다.", "OPERATING_MONTH_NOT_FOUND");
+    }
+    if (current.status !== "잠금") {
+      throw new MonthlyClosingDomainError("현재 상태에서는 재오픈할 수 없습니다.", "INVALID_MONTHLY_CLOSE_REOPEN_TRANSITION");
+    }
+
+    const closing = await findLatestMonthlyClosing(tx, current.id);
+    if (!closing) {
+      throw new MonthlyClosingDomainError("확정 스냅샷을 찾을 수 없습니다.", "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND");
+    }
+
+    const updateResult = await tx.operatingMonth.updateMany({
+      where: { id: current.id, status: "잠금" },
+      data: { status: "검토중" }
+    });
+    if (updateResult.count !== 1) {
+      throw new MonthlyClosingDomainError("현재 상태에서는 재오픈할 수 없습니다.", "INVALID_MONTHLY_CLOSE_REOPEN_TRANSITION");
+    }
+
+    const updatedClosing = await tx.monthlyClosing.update({
+      where: { id: closing.id },
+      data: {
+        reopenedAt: now,
+        reopenedByAccountId: parsed.data.actorId,
+        reopenReason: parsed.data.reason
+      }
+    });
+
+    const updated = await tx.operatingMonth.findUnique({
+      where: { id: current.id }
+    });
+    if (!updated) {
+      throw new MonthlyClosingDomainError("운영월을 찾을 수 없습니다.", "OPERATING_MONTH_NOT_FOUND");
+    }
+
+    await recordAuditEvent(
+      {
+        actorId: parsed.data.actorId,
+        action: "monthly_close.reopened",
+        targetType: "monthly_close",
+        targetId: closing.id,
+        beforeValue: {
+          operatingMonthId: current.id,
+          monthKey: current.monthKey,
+          status: current.status,
+          snapshotId: closing.id,
+          closeVersion: closing.closeVersion
+        },
+        afterValue: {
+          operatingMonthId: updated.id,
+          monthKey: updated.monthKey,
+          status: updated.status,
+          reason: parsed.data.reason,
+          reopenedAt,
+          reopenedByAccountId: parsed.data.actorId,
+          snapshotId: updatedClosing.id,
+          closeVersion: updatedClosing.closeVersion
         }
       },
       { prismaClient: tx as any }
@@ -486,9 +606,7 @@ export async function getMonthlyClosingSnapshot(input: GetMonthlyClosingSnapshot
     throw normalizeParseError(parsed.error.issues[0]?.message ?? "월마감 스냅샷 조회 조건이 올바르지 않습니다.");
   }
 
-  const record = await getClient(input.prismaClient).monthlyClosing.findUnique({
-    where: { operatingMonthId: parsed.data.operatingMonthId }
-  });
+  const record = await findLatestMonthlyClosing(getClient(input.prismaClient), parsed.data.operatingMonthId);
 
   if (!record) {
     throw new MonthlyClosingDomainError("확정 스냅샷을 찾을 수 없습니다.", "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND");

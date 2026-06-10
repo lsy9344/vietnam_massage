@@ -5,6 +5,7 @@ import {
   confirmMonthlyClose,
   getMonthlyClosingSnapshot,
   lockMonthlyClose,
+  reopenMonthlyClose,
   startMonthlyCloseReview,
   type MonthlyClosingSnapshotDto
 } from "@/modules/closing/monthly-closing-service";
@@ -151,6 +152,7 @@ function createPrisma(options: { status?: string; existingClosing?: any; failAud
       updatedAt: new Date("2026-06-01T00:00:00.000Z")
     },
     closing: options.existingClosing ?? null,
+    closings: options.existingClosing ? [options.existingClosing] : ([] as any[]),
     auditLogs: [] as any[],
     transactionSnapshots: [] as any[]
   };
@@ -172,25 +174,44 @@ function createPrisma(options: { status?: string; existingClosing?: any; failAud
     },
     monthlyClosing: {
       async create({ data }: any) {
-        if (options.uniqueCreate || state.closing) {
+        if (options.uniqueCreate || state.closings.some((closing) => closing.operatingMonthId === data.operatingMonthId && closing.closeVersion === data.closeVersion)) {
           const error = new Error("unique") as Error & { code: string };
           error.code = "P2002";
           throw error;
         }
-        state.closing = {
+        const closing = {
           id: data.id ?? "closing-1",
           operatingMonthId: data.operatingMonthId,
+          closeVersion: data.closeVersion ?? 1,
           snapshotJson: data.snapshotJson,
           confirmedByAccountId: data.confirmedByAccountId,
           confirmedAt: data.confirmedAt,
+          reopenedAt: data.reopenedAt ?? null,
+          reopenedByAccountId: data.reopenedByAccountId ?? null,
+          reopenReason: data.reopenReason ?? null,
           createdAt: new Date("2026-06-10T04:00:00.000Z"),
           updatedAt: new Date("2026-06-10T04:00:00.000Z")
         };
-        return { ...state.closing };
+        state.closings.push(closing);
+        state.closing = closing;
+        return { ...closing };
       },
-      async findUnique({ where }: any) {
-        if (where.operatingMonthId === state.closing?.operatingMonthId) return { ...state.closing };
+      async findFirst({ where }: any) {
+        const matches = state.closings.filter((closing) => !where?.operatingMonthId || closing.operatingMonthId === where.operatingMonthId);
+        const latest = matches.sort((a, b) => b.closeVersion - a.closeVersion)[0];
+        if (latest) return { ...latest };
         return null;
+      },
+      async update({ where, data }: any) {
+        const index = state.closings.findIndex((closing) => closing.id === where.id);
+        if (index === -1) throw new Error("closing not found");
+        state.closings[index] = {
+          ...state.closings[index],
+          ...data,
+          updatedAt: new Date("2026-06-10T04:00:00.000Z")
+        };
+        state.closing = state.closings[index];
+        return { ...state.closings[index] };
       }
     },
     auditLog: {
@@ -204,6 +225,7 @@ function createPrisma(options: { status?: string; existingClosing?: any; failAud
       const snapshot = structuredClone({
         operatingMonth: state.operatingMonth,
         closing: state.closing,
+        closings: state.closings,
         auditLogs: state.auditLogs
       });
       state.transactionSnapshots.push(snapshot);
@@ -212,6 +234,7 @@ function createPrisma(options: { status?: string; existingClosing?: any; failAud
       } catch (error) {
         state.operatingMonth = snapshot.operatingMonth;
         state.closing = snapshot.closing;
+        state.closings = snapshot.closings;
         state.auditLogs = snapshot.auditLogs;
         throw error;
       }
@@ -256,18 +279,26 @@ function storedClosingSnapshot(): MonthlyClosingSnapshotDto {
 function existingClosing(overrides: Partial<{
   id: string;
   operatingMonthId: string;
+  closeVersion: number;
   snapshotJson: MonthlyClosingSnapshotDto;
   confirmedByAccountId: string;
   confirmedAt: Date;
+  reopenedAt: Date | null;
+  reopenedByAccountId: string | null;
+  reopenReason: string | null;
   createdAt: Date;
   updatedAt: Date;
 }> = {}) {
   return {
     id: "closing-1",
     operatingMonthId: "month-1",
+    closeVersion: 1,
     snapshotJson: storedClosingSnapshot(),
     confirmedByAccountId: "account-1",
     confirmedAt: new Date("2026-06-10T04:00:00.000Z"),
+    reopenedAt: null,
+    reopenedByAccountId: null,
+    reopenReason: null,
     createdAt: new Date("2026-06-10T04:00:00.000Z"),
     updatedAt: new Date("2026-06-10T04:00:00.000Z"),
     ...overrides
@@ -309,6 +340,7 @@ describe("monthly closing service", () => {
     assert.equal(result.status, "마감확정");
     assert.equal(result.confirmedByAccountId, "account-1");
     assert.equal(result.confirmedAt, "2026-06-10T04:00:00.000Z");
+    assert.equal(result.closeVersion, 1);
     assert.equal(result.snapshot.id, "closing-1");
     assert.equal(result.snapshot.month.statusAtConfirmation, "검토중");
     assert.equal(result.snapshot.source.serviceVersion, "monthly-closing-service:5.3");
@@ -319,6 +351,7 @@ describe("monthly closing service", () => {
     assert.equal(prismaClient.state.auditLogs[0].action, "monthly_close.confirmed");
     assert.equal(prismaClient.state.auditLogs[0].targetType, "monthly_close");
     assert.equal(prismaClient.state.auditLogs[0].afterValue.snapshotId, "closing-1");
+    assert.equal(prismaClient.state.auditLogs[0].afterValue.closeVersion, 1);
     assert.equal(prismaClient.state.auditLogs[0].afterValue.status, "마감확정");
   });
 
@@ -368,7 +401,7 @@ describe("monthly closing service", () => {
           prismaClient,
           dependencies: { listMonthlyClosingPreview: async () => preview() }
         }),
-      (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_ALREADY_CONFIRMED"
+      (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_VERSION_CONFLICT"
     );
 
     assert.equal(prismaClient.state.operatingMonth.status, "검토중");
@@ -424,7 +457,120 @@ describe("monthly closing service", () => {
     assert.equal(prismaClient.state.auditLogs[0].afterValue.status, "잠금");
     assert.equal(prismaClient.state.auditLogs[0].afterValue.lockedAt, "2026-06-10T05:00:00.000Z");
     assert.equal(prismaClient.state.auditLogs[0].afterValue.lockedByAccountId, "account-locker");
+    assert.equal(prismaClient.state.auditLogs[0].afterValue.closeVersion, 1);
     assert.equal(prismaClient.state.closing.snapshotJson.totals.grandPayoutAmount, 10);
+  });
+
+  it("reopens a locked monthly close to 검토중 with trimmed reason and monthly_close.reopened audit", async () => {
+    const prismaClient = createPrisma({ status: "잠금", existingClosing: existingClosing() });
+
+    const result = await reopenMonthlyClose({
+      operatingMonthId: "month-1",
+      actorId: "account-admin",
+      reason: "  정산 입력 오류 수정  ",
+      prismaClient,
+      clock: () => new Date("2026-06-10T06:00:00.000Z")
+    });
+
+    assert.equal(result.status, "검토중");
+    assert.equal(prismaClient.state.operatingMonth.status, "검토중");
+    assert.equal(prismaClient.state.closing.snapshotJson.totals.grandPayoutAmount, 10);
+    assert.equal(prismaClient.state.closing.reopenReason, "정산 입력 오류 수정");
+    assert.equal(prismaClient.state.closing.reopenedByAccountId, "account-admin");
+    assert.equal(prismaClient.state.auditLogs.length, 1);
+    assert.equal(prismaClient.state.auditLogs[0].action, "monthly_close.reopened");
+    assert.equal(prismaClient.state.auditLogs[0].targetType, "monthly_close");
+    assert.equal(prismaClient.state.auditLogs[0].targetId, "closing-1");
+    assert.equal(prismaClient.state.auditLogs[0].beforeValue.status, "잠금");
+    assert.equal(prismaClient.state.auditLogs[0].afterValue.status, "검토중");
+    assert.equal(prismaClient.state.auditLogs[0].afterValue.reason, "정산 입력 오류 수정");
+    assert.equal(prismaClient.state.auditLogs[0].afterValue.reopenedAt, "2026-06-10T06:00:00.000Z");
+    assert.equal(prismaClient.state.auditLogs[0].afterValue.reopenedByAccountId, "account-admin");
+    assert.equal(prismaClient.state.auditLogs[0].afterValue.closeVersion, 1);
+  });
+
+  it("blocks reopen when reason is blank or too short without side effects", async () => {
+    const prismaClient = createPrisma({ status: "잠금", existingClosing: existingClosing() });
+
+    await assert.rejects(
+      () => reopenMonthlyClose({ operatingMonthId: "month-1", actorId: "account-1", reason: "  ", prismaClient }),
+      (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "INVALID_MONTHLY_CLOSE_REOPEN_REASON"
+    );
+    await assert.rejects(
+      () => reopenMonthlyClose({ operatingMonthId: "month-1", actorId: "account-1", reason: "짧음", prismaClient }),
+      (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "INVALID_MONTHLY_CLOSE_REOPEN_REASON"
+    );
+
+    assert.equal(prismaClient.state.operatingMonth.status, "잠금");
+    assert.equal(prismaClient.state.closing.reopenReason, null);
+    assert.equal(prismaClient.state.auditLogs.length, 0);
+  });
+
+  it("blocks reopen unless the operating month is 잠금", async () => {
+    for (const status of ["작성중", "검토중", "마감확정"]) {
+      const prismaClient = createPrisma({ status, existingClosing: existingClosing() });
+
+      await assert.rejects(
+        () => reopenMonthlyClose({ operatingMonthId: "month-1", actorId: "account-1", reason: "충분한 재오픈 사유", prismaClient }),
+        (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "INVALID_MONTHLY_CLOSE_REOPEN_TRANSITION"
+      );
+
+      assert.equal(prismaClient.state.operatingMonth.status, status);
+      assert.equal(prismaClient.state.auditLogs.length, 0);
+    }
+  });
+
+  it("blocks reopen when latest snapshot is missing and rolls back status changes", async () => {
+    const prismaClient = createPrisma({ status: "잠금" });
+
+    await assert.rejects(
+      () => reopenMonthlyClose({ operatingMonthId: "month-1", actorId: "account-1", reason: "충분한 재오픈 사유", prismaClient }),
+      (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND"
+    );
+
+    assert.equal(prismaClient.state.operatingMonth.status, "잠금");
+    assert.equal(prismaClient.state.auditLogs.length, 0);
+  });
+
+  it("rolls back reopened status and metadata when monthly_close.reopened audit fails", async () => {
+    const prismaClient = createPrisma({ status: "잠금", existingClosing: existingClosing(), failAudit: true });
+
+    await assert.rejects(() =>
+      reopenMonthlyClose({
+        operatingMonthId: "month-1",
+        actorId: "account-1",
+        reason: "충분한 재오픈 사유",
+        prismaClient
+      })
+    );
+
+    assert.equal(prismaClient.state.operatingMonth.status, "잠금");
+    assert.equal(prismaClient.state.closing.reopenReason, null);
+    assert.equal(prismaClient.state.auditLogs.length, 0);
+  });
+
+  it("creates a new closeVersion after reopen without deleting or overwriting the previous snapshot", async () => {
+    const previousClosing = existingClosing();
+    const prismaClient = createPrisma({ status: "검토중", existingClosing: previousClosing });
+
+    const result = await confirmMonthlyClose({
+      operatingMonthId: "month-1",
+      actorId: "account-2",
+      prismaClient,
+      clock: () => new Date("2026-06-11T04:00:00.000Z"),
+      idFactory: () => "closing-2",
+      dependencies: {
+        listMonthlyClosingPreview: async () => preview({ therapists: { ...preview().therapists, payoutAmount: 2200000 } })
+      }
+    });
+
+    assert.equal(result.id, "closing-2");
+    assert.equal(result.closeVersion, 2);
+    assert.equal(prismaClient.state.closings.length, 2);
+    assert.equal(prismaClient.state.closings[0].id, "closing-1");
+    assert.equal(prismaClient.state.closings[0].snapshotJson.totals.grandPayoutAmount, 10);
+    assert.equal(prismaClient.state.closings[1].id, "closing-2");
+    assert.equal(prismaClient.state.auditLogs[0].afterValue.closeVersion, 2);
   });
 
   it("blocks lock before confirmation without status or audit changes", async () => {
@@ -489,6 +635,24 @@ describe("monthly closing service", () => {
 
     assert.equal(result.snapshot.totals.grandPayoutAmount, 10);
     assert.equal(result.snapshot.month.confirmedStatus, "마감확정");
+  });
+
+  it("returns the latest versioned snapshot for existing getMonthlyClosingSnapshot callers", async () => {
+    const prismaClient = createPrisma({ status: "마감확정", existingClosing: existingClosing() });
+    prismaClient.state.closings.push(
+      existingClosing({
+        id: "closing-2",
+        closeVersion: 2,
+        snapshotJson: { ...storedClosingSnapshot(), id: "closing-2", totals: { ...storedClosingSnapshot().totals, grandPayoutAmount: 20 } },
+        confirmedAt: new Date("2026-06-11T04:00:00.000Z")
+      })
+    );
+
+    const result = await getMonthlyClosingSnapshot({ operatingMonthId: "month-1", prismaClient });
+
+    assert.equal(result.id, "closing-2");
+    assert.equal(result.closeVersion, 2);
+    assert.equal(result.snapshot.totals.grandPayoutAmount, 20);
   });
 
   it("raises MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND when no persisted snapshot exists", async () => {

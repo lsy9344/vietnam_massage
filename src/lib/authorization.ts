@@ -19,6 +19,7 @@ export type SensitivePermission =
   | "call:write"
   | "payout:write"
   | "closing:write"
+  | "closing:reopen"
   | "employee:write"
   | "audit:read";
 
@@ -39,7 +40,7 @@ const roleRoutePrefixes: Record<Role, string[]> = {
 };
 
 const rolePermissions: Record<Role, SensitivePermission[]> = {
-  administrator: ["call:write", "payout:write", "closing:write", "employee:write", "audit:read"],
+  administrator: ["call:write", "payout:write", "closing:write", "closing:reopen", "employee:write", "audit:read"],
   counter: ["call:write"],
   settlement_manager: ["payout:write", "closing:write"],
   waiter: [],

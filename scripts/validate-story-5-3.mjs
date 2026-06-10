@@ -41,10 +41,10 @@ for (const required of [
   "model MonthlyClosing",
   "@@map(\"monthly_closings\")",
   "snapshotJson         Json",
-  "operatingMonthId     String         @unique",
+  "operatingMonthId     String",
   "confirmedByAccountId String",
   "confirmedByAccount   UserAccount",
-  "monthlyClosing MonthlyClosing?",
+  "monthlyClosings MonthlyClosing[]",
   "confirmedMonthlyClosings MonthlyClosing[]"
 ]) {
   if (!schema.includes(required)) errors.push(`schema.prisma missing ${required}`);
@@ -131,7 +131,7 @@ for (const required of [
   "useActionState",
   "검토 시작",
   "마감 확정",
-  "이미 마감확정된 운영월입니다.",
+  "잠금은 먼저 마감확정이 필요합니다.",
   "월마감 처리 권한이 없습니다."
 ]) {
   if (!actionPanel.includes(required)) errors.push(`closing-action-panel.tsx missing ${required}`);

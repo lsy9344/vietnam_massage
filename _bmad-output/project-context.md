@@ -132,6 +132,11 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Story 5.4 기준 `마감확정` 또는 `잠금` 운영월의 지급 영향 데이터 write는 서버 domain/service boundary에서 차단한다. 공용 guard는 `src/modules/closing/month-lock-guard.ts`의 `isOperatingMonthPayoutLocked()`와 `assertOperatingMonthPayoutWritable()`이며, calls, daily expenses, 귀케어/운영팀 근무상태, 코스 정책, 마사지사 수당, 운영팀 인센 정책 range mutation은 이 규칙을 따라야 한다.
 - Story 5.4 기준 `마감확정`/`잠금` 월 조회 UI는 read-only 보조 신호를 제공하지만 source of truth는 server-side guard다. 확정/잠금 월의 월마감 및 월간 KPI 조회는 `getMonthlyClosingSnapshot()`의 저장 스냅샷을 우선 사용하고 현재 기준 미리보기와 섞지 않는다.
 - Story 5.4 기준 `/settlements/operations/monthly` 같은 월간 지급 화면은 `마감확정`/`잠금` 월에서 `확정 스냅샷` 섹션을 먼저 표시하고, 현재 재계산 값은 `현재 기준 미리보기`로 분리 표시한다.
+- Story 5.5 기준 월마감 재오픈은 closing domain service `reopenMonthlyClose()`가 소유한다. 허용 전이는 `잠금 -> 검토중`뿐이며, Server Action은 administrator-only `closing:reopen` 권한과 5자 이상 trim된 사유를 요구한다. `settlement_manager`의 `closing:write` 권한으로는 재오픈할 수 없다.
+- Story 5.5 기준 `MonthlyClosing`은 운영월당 여러 versioned snapshot row를 보존한다. `closeVersion`은 운영월별 증가값이고, 최신 조회는 `operatingMonthId` + `closeVersion desc` 기준이다. 재확정은 이전 snapshot을 update/delete하지 않고 새 `closeVersion` row를 생성한다.
+- Story 5.5 기준 `monthly_close.reopened` 감사 로그 `targetType`은 `monthly_close`, `targetId`는 최신 snapshot id이며 afterValue에는 operating month id/monthKey, 상태 `검토중`, reason, reopenedAt, reopenedByAccountId, snapshot id, closeVersion을 plain JSON으로 포함한다.
+- Story 5.5 기준 재오픈된 `검토중` 월은 Story 5.4 payout lock guard 대상이 아니므로 지급 영향 데이터 수정이 가능하다. 단, 후속 콜/지출/근태/정책 변경은 각 domain service의 기존 감사 이벤트를 별도로 기록해야 한다.
+- Story 5.5 기준 `/closing`은 재오픈된 `검토중` 월의 이전 snapshot을 `이전 확정 스냅샷` 또는 동등한 historical label로 표시하고, 현재 editable truth는 `현재 기준 미리보기`로 분리한다. 후속 dashboard/KPI 조회도 versioned snapshot을 고려해야 한다.
 
 ### 코드 품질 및 스타일 규칙
 

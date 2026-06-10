@@ -72,16 +72,25 @@ function ClosingStepper({ status }: { status: string }) {
   );
 }
 
-function SnapshotSummary({ closing }: { closing: MonthlyClosingDto }) {
+function SnapshotSummary({ closing, currentStatus }: { closing: MonthlyClosingDto; currentStatus: string }) {
+  const isHistoricalAfterReopen = currentStatus === "검토중" && closing.reopenedAt !== null;
+  const label = isHistoricalAfterReopen ? "이전 확정 스냅샷" : "확정 스냅샷";
+  const heading = isHistoricalAfterReopen ? `${closing.snapshot.month.monthKey} 재오픈 전 확정값` : `${closing.snapshot.month.monthKey} 월마감 확정값`;
+
   return (
-    <section className="mb-4 border border-border bg-surface px-4 py-3" aria-label="확정 스냅샷">
+    <section className="mb-4 border border-border bg-surface px-4 py-3" aria-label={label}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="inline-flex border border-success bg-success/10 px-2 py-1 text-xs font-semibold text-success">확정 스냅샷</div>
-          <h2 className="mt-2 text-base font-semibold text-foreground">{closing.snapshot.month.monthKey} 월마감 확정값</h2>
+          <div className="inline-flex border border-success bg-success/10 px-2 py-1 text-xs font-semibold text-success">{label}</div>
+          <h2 className="mt-2 text-base font-semibold text-foreground">{heading}</h2>
           <p className="mt-1 text-sm text-muted">
-            snapshot id {closing.snapshot.id} / 확정자 {closing.confirmedByAccountId} / 확정시각 {closing.confirmedAt}
+            snapshot id {closing.snapshot.id} / version {closing.closeVersion} / 확정자 {closing.confirmedByAccountId} / 확정시각 {closing.confirmedAt}
           </p>
+          {isHistoricalAfterReopen ? (
+            <p className="mt-1 text-sm text-muted">
+              재오픈 사유 {closing.reopenReason} / 재오픈 시각 {closing.reopenedAt} / 현재 truth는 아래 현재 기준 미리보기입니다.
+            </p>
+          ) : null}
         </div>
         <div className="text-right">
           <div className="text-xs font-medium text-muted">확정 전체 지급 합계</div>
@@ -376,6 +385,7 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
     }
   }
   const canWriteClosing = canPerform(account.role, "closing:write");
+  const canReopenClosing = canPerform(account.role, "closing:reopen");
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
@@ -415,7 +425,7 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
       </form>
 
       <ClosingStepper status={selectedMonth.status} />
-      <ClosingActionPanel canWrite={canWriteClosing} operatingMonthId={selectedMonth.id} status={selectedMonth.status} />
+      <ClosingActionPanel canReopen={canReopenClosing} canWrite={canWriteClosing} operatingMonthId={selectedMonth.id} status={selectedMonth.status} />
 
       {errorMessage ? (
         <section className="border border-danger bg-surface px-4 py-5" role="alert">
@@ -430,7 +440,7 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
         </section>
       ) : result ? (
         <>
-          {closingSnapshot ? <SnapshotSummary closing={closingSnapshot} /> : null}
+          {closingSnapshot ? <SnapshotSummary closing={closingSnapshot} currentStatus={selectedMonth.status} /> : null}
           <PreviewNotice result={result} />
           <SummaryBand result={result} />
           <TherapistTable result={result} />

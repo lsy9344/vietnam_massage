@@ -93,22 +93,28 @@ model OperatingMonth {
   dailyExpenses DailyExpense[]
   earcareAttendances EarcareAttendance[]
   opsAttendances OpsAttendance[]
-  monthlyClosing MonthlyClosing?
+  monthlyClosings MonthlyClosing[]
 
   @@map("operating_months")
 }
 
 model MonthlyClosing {
   id                   String         @id @default(cuid())
-  operatingMonthId     String         @unique @map("operating_month_id")
+  operatingMonthId     String         @map("operating_month_id")
   operatingMonth       OperatingMonth @relation(fields: [operatingMonthId], references: [id])
+  closeVersion         Int            @default(1) @map("close_version")
   snapshotJson         Json           @map("snapshot_json")
   confirmedByAccountId String         @map("confirmed_by_account_id")
   confirmedByAccount   UserAccount    @relation(fields: [confirmedByAccountId], references: [id])
   confirmedAt          DateTime       @map("confirmed_at")
+  reopenedAt           DateTime?      @map("reopened_at")
+  reopenedByAccountId  String?        @map("reopened_by_account_id")
+  reopenReason         String?        @map("reopen_reason")
   createdAt            DateTime       @default(now()) @map("created_at")
   updatedAt            DateTime       @updatedAt @map("updated_at")
 
+  @@unique([operatingMonthId, closeVersion], map: "uq_monthly_closings_month_version")
+  @@index([operatingMonthId, closeVersion], map: "idx_monthly_closings_month_version")
   @@index([confirmedAt], map: "idx_monthly_closings_confirmed_at")
   @@index([confirmedByAccountId, confirmedAt], map: "idx_monthly_closings_confirmer_confirmed_at")
   @@map("monthly_closings")

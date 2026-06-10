@@ -190,7 +190,7 @@ test.describe("Story 5.3 monthly close confirmation snapshot", () => {
     await expect(page.getByText("확정 스냅샷")).toBeVisible();
     await expect(page.getByText("현재 기준 미리보기").first()).toBeVisible();
     await expect(page.getByText(/snapshot id/)).toBeVisible();
-    await expect(page.getByText("이미 마감확정된 운영월입니다.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "잠금" })).toBeEnabled();
 
     const operatingMonth = await (prisma as any).operatingMonth.findUnique({
       where: { id: seededData.draftOperatingMonthId },
@@ -239,7 +239,7 @@ test.describe("Story 5.3 monthly close confirmation snapshot", () => {
 
     await page.reload();
     await expect(page.getByRole("button", { name: "마감 확정" })).toBeDisabled();
-    await expect(page.getByText("이미 마감확정된 운영월입니다.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "잠금" })).toBeEnabled();
     const closingCountAfterReload = await (prisma as any).monthlyClosing.count({ where: { operatingMonthId: seededData.draftOperatingMonthId } });
     expect(closingCountAfterReload).toBe(1);
   });
@@ -254,8 +254,9 @@ test.describe("Story 5.3 monthly close confirmation snapshot", () => {
     await expect(page.getByText("확정 스냅샷")).toBeVisible();
     await expect(page.getByText("확정 전체 지급 합계")).toBeVisible();
 
-    const closing = await (prisma as any).monthlyClosing.findUnique({
-      where: { operatingMonthId: seededData.reviewOperatingMonthId }
+    const closing = await (prisma as any).monthlyClosing.findFirst({
+      where: { operatingMonthId: seededData.reviewOperatingMonthId },
+      orderBy: { closeVersion: "desc" }
     });
     expect(closing?.confirmedByAccountId).toBe(seededData.accountRecordIds.settlement);
     expect((closing?.snapshotJson as any)?.month.confirmedByAccountId).toBe(seededData.accountRecordIds.settlement);

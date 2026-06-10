@@ -9,6 +9,7 @@ import {
   MonthlyClosingDomainError,
   confirmMonthlyClose,
   lockMonthlyClose,
+  reopenMonthlyClose,
   startMonthlyCloseReview,
   type MonthlyCloseReviewDto,
   type MonthlyClosingDto
@@ -18,6 +19,10 @@ export type MonthlyClosingActionState = ActionResult<MonthlyCloseReviewDto | Mon
 
 const monthlyClosingActionSchema = z.object({
   operatingMonthId: z.string().trim().min(1, "운영월을 선택하세요.")
+});
+
+const reopenMonthlyClosingActionSchema = monthlyClosingActionSchema.extend({
+  reason: z.string().trim().min(5, "재오픈 사유를 5자 이상 입력하세요.")
 });
 
 function toFieldErrors(fieldErrors: Partial<Record<string, string[]>>) {
@@ -127,6 +132,37 @@ export async function lockMonthlyCloseAction(
     const data = await lockMonthlyClose({
       actorId: account.id,
       operatingMonthId: parsed.data.operatingMonthId
+    });
+    revalidatePath("/closing");
+    return { ok: true, data };
+  } catch (error) {
+    return mapActionError(error);
+  }
+}
+
+export async function reopenMonthlyCloseAction(
+  _previousState: MonthlyClosingActionState,
+  formData: FormData
+): Promise<MonthlyClosingActionState> {
+  const parsed = reopenMonthlyClosingActionSchema.safeParse({
+    operatingMonthId: formData.get("operatingMonthId"),
+    reason: formData.get("reason")
+  });
+
+  if (!parsed.success) {
+    return {
+      ok: false,
+      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
+      formError: "재오픈 입력값을 확인하세요."
+    };
+  }
+
+  try {
+    const account = await requirePermission("closing:reopen");
+    const data = await reopenMonthlyClose({
+      actorId: account.id,
+      operatingMonthId: parsed.data.operatingMonthId,
+      reason: parsed.data.reason
     });
     revalidatePath("/closing");
     return { ok: true, data };

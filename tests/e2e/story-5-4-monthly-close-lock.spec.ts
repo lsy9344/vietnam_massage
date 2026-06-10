@@ -93,7 +93,7 @@ async function seedClosedMonth(monthKey: string, status: "마감확정" | "잠�
     update: { startDate: utcDate(monthKey), endDate: utcDate(monthKey), status },
     create: { monthKey, startDate: utcDate(monthKey), endDate: utcDate(monthKey), status }
   });
-  const existingClosing = await (prisma as any).monthlyClosing.findUnique({ where: { operatingMonthId: month.id } });
+  const existingClosing = await (prisma as any).monthlyClosing.findFirst({ where: { operatingMonthId: month.id }, orderBy: { closeVersion: "desc" } });
   await (prisma as any).auditLog.deleteMany({
     where: {
       OR: existingClosing ? [{ targetId: month.id }, { targetId: existingClosing.id }] : [{ targetId: month.id }]
@@ -104,6 +104,7 @@ async function seedClosedMonth(monthKey: string, status: "마감확정" | "잠�
   const closing = await (prisma as any).monthlyClosing.create({
     data: {
       operatingMonthId: month.id,
+      closeVersion: 1,
       confirmedByAccountId,
       confirmedAt: new Date("2026-06-10T05:00:00.000Z"),
       snapshotJson: {
@@ -200,7 +201,10 @@ test.describe("Story 5.4 monthly close lock", () => {
     const month = await (prisma as any).operatingMonth.findUnique({ where: { id: seededData.adminConfirmedMonth.id }, select: { status: true } });
     expect(month?.status).toBe("잠금");
 
-    const closing = await (prisma as any).monthlyClosing.findUnique({ where: { operatingMonthId: seededData.adminConfirmedMonth.id } });
+    const closing = await (prisma as any).monthlyClosing.findFirst({
+      where: { operatingMonthId: seededData.adminConfirmedMonth.id },
+      orderBy: { closeVersion: "desc" }
+    });
     const audits = await (prisma as any).auditLog.findMany({
       where: { action: "monthly_close.locked", targetType: "monthly_close", targetId: closing.id }
     });
@@ -243,7 +247,10 @@ test.describe("Story 5.4 monthly close lock", () => {
     await page.getByRole("button", { name: "잠금" }).click();
     await expect(page.getByText("운영월 상태: 잠금").first()).toBeVisible();
 
-    const closing = await (prisma as any).monthlyClosing.findUnique({ where: { operatingMonthId: seededData.settlementConfirmedMonth.id } });
+    const closing = await (prisma as any).monthlyClosing.findFirst({
+      where: { operatingMonthId: seededData.settlementConfirmedMonth.id },
+      orderBy: { closeVersion: "desc" }
+    });
     const audit = await (prisma as any).auditLog.findFirst({
       where: { action: "monthly_close.locked", targetType: "monthly_close", targetId: closing.id }
     });

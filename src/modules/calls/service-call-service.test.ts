@@ -58,6 +58,18 @@ function createMemoryPrisma() {
         createdAt: new Date("2026-08-01T00:00:00.000Z"),
         updatedAt: new Date("2026-08-01T00:10:00.000Z")
       }
+    ],
+    [
+      "month-reopened",
+      {
+        id: "month-reopened",
+        monthKey: "2026-09",
+        startDate: dbDate("2026-09-01"),
+        endDate: dbDate("2026-09-30"),
+        status: "검토중",
+        createdAt: new Date("2026-09-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-09-01T00:10:00.000Z")
+      }
     ]
   ]);
   const rooms = new Map<string, any>([
@@ -819,6 +831,33 @@ describe("service call service", () => {
         }),
       (error) => error instanceof ServiceCallDomainError && error.code === "OPERATING_MONTH_LOCKED"
     );
+  });
+
+  it("allows payout-impacting writes after monthly close reopen returns the month to 검토중", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const saved = await saveBasicServiceCallRow({
+      operatingMonthId: "month-reopened",
+      serviceDate: "2026-09-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "예약",
+      prismaClient
+    });
+    const expense = await createDailyExpense({
+      operatingMonthId: "month-reopened",
+      expenseDate: "2026-09-10",
+      amount: 1000,
+      description: "재오픈 후 검토중 지출",
+      handledByEmployeeId: "ops-1",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(saved.operatingMonthId, "month-reopened");
+    assert.equal(expense.operatingMonthId, "month-reopened");
+    assert.equal(prismaClient.auditEvents.at(-1).action, "daily_expense.created");
   });
 
   it("uses only active masters for select options and filters staff by assignment role", async () => {

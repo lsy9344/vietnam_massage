@@ -60,6 +60,7 @@ function thresholdLabel(result: OpsMonthlyIncentiveResultDto) {
 
 function PreviewNotice({ selectedMonth, result }: { selectedMonth: { status: string }; result: OpsMonthlyIncentiveResultDto }) {
   const isClosed = result.isClosedOrLocked;
+  const isReopenedReview = selectedMonth.status === "검토중";
   return (
     <section className="mb-4 border border-border bg-surface px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -71,23 +72,29 @@ function PreviewNotice({ selectedMonth, result }: { selectedMonth: { status: str
       <p className="mt-2 text-sm text-muted">
         {isClosed
           ? "마감확정/잠금 운영월의 확정값은 월마감 스냅샷 기준이며, 이 화면은 현재 콜 원장과 현재 정책 기준의 재계산 미리보기입니다."
-          : "작성중/검토중 운영월의 현재 콜 원장과 현재 정책 기준 미확정 미리보기입니다."}
+          : isReopenedReview
+            ? "검토중 운영월의 현재 미리보기가 수정 가능한 현재값입니다. 이전 확정 스냅샷이 있으면 historical reference로만 표시합니다."
+            : "작성중/검토중 운영월의 현재 콜 원장과 현재 정책 기준 미확정 미리보기입니다."}
       </p>
     </section>
   );
 }
 
-function SnapshotSummary({ closing }: { closing: MonthlyClosingDto }) {
+function SnapshotSummary({ closing, currentStatus }: { closing: MonthlyClosingDto; currentStatus: string }) {
   const operations = closing.snapshot.operations;
+  const isHistoricalAfterReopen = currentStatus === "검토중" && closing.reopenedAt !== null;
+  const label = isHistoricalAfterReopen ? "이전 확정 스냅샷" : "확정 스냅샷";
+  const heading = isHistoricalAfterReopen ? `${closing.snapshot.month.monthKey} 재오픈 전 운영팀 확정 지급값` : `${closing.snapshot.month.monthKey} 운영팀 확정 지급값`;
   return (
-    <section className="mb-4 border border-border bg-surface px-4 py-3" aria-label="운영팀 월인센 확정 스냅샷">
+    <section className="mb-4 border border-border bg-surface px-4 py-3" aria-label={`운영팀 월인센 ${label}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="inline-flex border border-success bg-success/10 px-2 py-1 text-xs font-semibold text-success">확정 스냅샷</div>
-          <h2 className="mt-2 text-base font-semibold text-foreground">{closing.snapshot.month.monthKey} 운영팀 확정 지급값</h2>
+          <div className="inline-flex border border-success bg-success/10 px-2 py-1 text-xs font-semibold text-success">{label}</div>
+          <h2 className="mt-2 text-base font-semibold text-foreground">{heading}</h2>
           <p className="mt-1 text-sm text-muted">
-            snapshot id {closing.snapshot.id} / 확정시각 {closing.confirmedAt}
+            snapshot id {closing.snapshot.id} / version {closing.closeVersion} / 확정시각 {closing.confirmedAt}
           </p>
+          {isHistoricalAfterReopen ? <p className="mt-1 text-sm text-muted">현재 기준 미리보기가 수정 가능한 현재값입니다.</p> : null}
         </div>
         <div className="text-right">
           <div className="text-xs font-medium text-muted">운영팀 확정 지급 합계</div>
@@ -298,11 +305,12 @@ export default async function OperationsMonthlyIncentivePage({
     result = await listOpsMonthlyIncentivePreview({
       operatingMonthId: selectedMonth.id
     });
-    if (result.isClosedOrLocked) {
+    if (result.isClosedOrLocked || selectedMonth.status === "검토중") {
       try {
-        closingSnapshot = await getMonthlyClosingSnapshot({
+        const snapshot = await getMonthlyClosingSnapshot({
           operatingMonthId: selectedMonth.id
         });
+        closingSnapshot = result.isClosedOrLocked || snapshot.reopenedAt !== null ? snapshot : null;
       } catch (error) {
         if (error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND") {
           snapshotErrorMessage = "확정 스냅샷을 찾을 수 없습니다. 현재 기준 미리보기와 확정값을 혼동하지 마세요.";
@@ -367,7 +375,7 @@ export default async function OperationsMonthlyIncentivePage({
         </section>
       ) : result ? (
         <>
-          {closingSnapshot ? <SnapshotSummary closing={closingSnapshot} /> : null}
+          {closingSnapshot ? <SnapshotSummary closing={closingSnapshot} currentStatus={selectedMonth.status} /> : null}
           {snapshotErrorMessage ? (
             <section className="mb-4 border border-warning bg-surface px-4 py-3" role="status">
               <h2 className="text-sm font-semibold text-warning">확정 스냅샷 없음</h2>

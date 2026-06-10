@@ -34,6 +34,9 @@ The closing module owns monthly close workflow and payout snapshots:
 - Final therapist payout is monthly settlement plus attendance bonus plus ranking bonus.
 - Confirmed closes must preserve payout snapshots.
 - Locked months should block normal mutations to source records that affect payout.
+- Reopen is administrator-only and requires a reason. The domain transition is `잠금 -> 검토중`.
+- Monthly close snapshots are versioned by operating month and close version. Reconfirmation after reopen creates a new snapshot row and preserves prior snapshots for audit/history.
+- `monthly_close.reopened` audit events record the reason, actor, timestamp, operating month before/after state, and snapshot version.
 
 ## Handoffs
 
@@ -41,4 +44,3 @@ The closing module owns monthly close workflow and payout snapshots:
 - Reads sales, expense, and call totals from `calls`.
 - Emits summary data to `dashboard`.
 - Emits audit events through `audit`.
-

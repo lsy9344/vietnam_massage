@@ -49,7 +49,7 @@ for (const required of [
   "monthlyClosingInputSchema.safeParse",
   "status: \"마감확정\"",
   "data: { status: \"잠금\" }",
-  "monthlyClosing.findUnique",
+  "findLatestMonthlyClosing",
   "monthly_close.locked",
   "targetType: \"monthly_close\"",
   "lockedAt",
@@ -61,7 +61,8 @@ for (const required of [
 ]) {
   if (!service.includes(required)) errors.push(`monthly-closing-service.ts missing ${required}`);
 }
-if (service.includes("monthlyClosing.update") || service.includes("snapshotJson:") && service.includes("lockMonthlyClose") && service.includes("monthlyClosing.updateMany")) {
+const lockSection = service.slice(service.indexOf("export async function lockMonthlyClose"), service.indexOf("export async function reopenMonthlyClose"));
+if (lockSection.includes("snapshotJson:") || lockSection.includes("monthlyClosing.update(")) {
   errors.push("lockMonthlyClose must not overwrite the persisted MonthlyClosing snapshot");
 }
 
