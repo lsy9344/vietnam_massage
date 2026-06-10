@@ -15,3 +15,13 @@ describe("authorization Story 5.5 permissions", () => {
     assert.equal(canPerform("settlement_manager", "closing:reopen"), false);
   });
 });
+
+describe("authorization Story 6.3 graph report route access", () => {
+  it("allows dashboard read-only roles to access /dashboard/reports and keeps waiter redirected", () => {
+    assert.equal(canAccessRoute("administrator", "/dashboard/reports"), true);
+    assert.equal(canAccessRoute("counter", "/dashboard/reports"), true);
+    assert.equal(canAccessRoute("settlement_manager", "/dashboard/reports"), true);
+    assert.equal(canAccessRoute("read_only_viewer", "/dashboard/reports"), true);
+    assert.equal(canAccessRoute("waiter", "/dashboard/reports"), false);
+  });
+});

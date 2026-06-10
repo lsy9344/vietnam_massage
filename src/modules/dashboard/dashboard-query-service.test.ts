@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { DashboardQueryDomainError, getMonthlyDashboardMetrics, getTodayDashboardMetrics } from "@/modules/dashboard/dashboard-query-service";
+import {
+  DashboardQueryDomainError,
+  getDashboardGraphReport,
+  getMonthlyDashboardMetrics,
+  getTodayDashboardMetrics
+} from "@/modules/dashboard/dashboard-query-service";
 
 function dbDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
@@ -563,6 +568,268 @@ describe("getMonthlyDashboardMetrics", () => {
         error instanceof DashboardQueryDomainError &&
         error.code === "INVALID_DASHBOARD_QUERY" &&
         error.message === "운영월을 선택하세요."
+    );
+  });
+});
+
+function graphDailySummary(overrides: any = {}) {
+  return {
+    reservationCount: 0,
+    inUseCount: 0,
+    cleaningCount: 0,
+    completedCount: 0,
+    noShowCount: 0,
+    canceledCount: 0,
+    paymentTotal: 0,
+    therapistCommissionTotal: 0,
+    earcarePoolTotal: 0,
+    discountTotal: 0,
+    expenseTotal: 0,
+    netSales: 0,
+    courseSummaries: [
+      { courseCode: "A", completedCount: 0, discountCount: 0, therapistAssignmentCount: 0 },
+      { courseCode: "B", completedCount: 0, discountCount: 0, therapistAssignmentCount: 0 },
+      { courseCode: "C", completedCount: 0, discountCount: 0, therapistAssignmentCount: 0 },
+      { courseCode: "D", completedCount: 0, discountCount: 0, therapistAssignmentCount: 0 },
+      { courseCode: "E", completedCount: 0, discountCount: 0, therapistAssignmentCount: 0 }
+    ],
+    warningCounts: {
+      coursePolicyMissing: 0,
+      therapistRateMissing: 0,
+      secondTherapistRequired: 0
+    },
+    ...overrides
+  };
+}
+
+function graphSettlement(employeeId: string, displayName: string, staffCode: string, role: "THERAPIST_1" | "THERAPIST_2", callCount: number) {
+  return {
+    employeeId,
+    displayName,
+    staffCode,
+    sortOrder: employeeId === "therapist-1" ? 1 : 2,
+    totalCallCount: callCount,
+    totalCommissionAmount: callCount * 700000,
+    courseBreakdown: {
+      A: { courseCode: "A", callCount, commissionAmount: callCount * 700000 },
+      B: { courseCode: "B", callCount: 0, commissionAmount: 0 },
+      C: { courseCode: "C", callCount: 0, commissionAmount: 0 },
+      D: { courseCode: "D", callCount: 0, commissionAmount: 0 },
+      E: { courseCode: "E", callCount: 0, commissionAmount: 0 }
+    },
+    assignmentEvidence: Array.from({ length: callCount }).map((_, index) => ({
+      serviceCallId: `${employeeId}-${role}-${index}`,
+      courseId: "course-a",
+      courseCode: "A",
+      role,
+      employeeId,
+      commissionAmount: 700000,
+      rateStatus: "applied"
+    })),
+    warningCounts: {
+      zeroPolicy: 0,
+      missingPolicy: 0
+    }
+  };
+}
+
+describe("getDashboardGraphReport", () => {
+  it("운영월 범위 기준으로 매출 추이, 코스 비중, 마사지사 순위, 객실/노쇼 추이를 DTO에서 조립한다", async () => {
+    const result = await getDashboardGraphReport({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient: createDashboardPrisma(),
+      dependencies: {
+        getDailyCallLedgerSummary: async ({ serviceDate }: any) =>
+          serviceDate === "2026-06-10"
+            ? graphDailySummary({
+                completedCount: 2,
+                noShowCount: 1,
+                canceledCount: 1,
+                paymentTotal: 3300000,
+                netSales: 3200000,
+                expenseTotal: 100000,
+                courseSummaries: [
+                  { courseCode: "A", completedCount: 1, discountCount: 0, therapistAssignmentCount: 1 },
+                  { courseCode: "B", completedCount: 1, discountCount: 0, therapistAssignmentCount: 2 },
+                  { courseCode: "C", completedCount: 0, discountCount: 0, therapistAssignmentCount: 0 },
+                  { courseCode: "D", completedCount: 0, discountCount: 0, therapistAssignmentCount: 0 },
+                  { courseCode: "E", completedCount: 0, discountCount: 0, therapistAssignmentCount: 0 }
+                ]
+              })
+            : graphDailySummary(),
+        listCompletedServiceCallCalculationsForOperatingMonth: async () => [
+          {
+            serviceCallId: "call-a",
+            serviceDate: "2026-06-10",
+            courseId: "course-a",
+            courseCode: "A",
+            paymentAmount: 1500000,
+            discountAmount: 0,
+            earcarePoolAmount: 100000,
+            opsCallCredit: 1,
+            therapistAssignments: [{ role: "THERAPIST_1", employeeId: "therapist-1", commissionAmount: 700000 }]
+          },
+          {
+            serviceCallId: "call-b",
+            serviceDate: "2026-06-10",
+            courseId: "course-b",
+            courseCode: "B",
+            paymentAmount: 1800000,
+            discountAmount: 0,
+            earcarePoolAmount: 200000,
+            opsCallCredit: 1,
+            therapistAssignments: [
+              { role: "THERAPIST_1", employeeId: "therapist-1", commissionAmount: 900000 },
+              { role: "THERAPIST_2", employeeId: "therapist-1", commissionAmount: 900000 }
+            ]
+          }
+        ],
+        listTherapistDailySettlements: (async ({ serviceDate }: any) => ({
+          operatingMonthId: "month-2026-06",
+          serviceDate,
+          settlements:
+            serviceDate === "2026-06-10"
+              ? [
+                  {
+                    ...graphSettlement("therapist-1", "마사지사1", "THR-001", "THERAPIST_1", 2),
+                    totalCallCount: 3,
+                    totalCommissionAmount: 2500000,
+                    assignmentEvidence: [
+                      {
+                        serviceCallId: "call-a",
+                        courseId: "course-a",
+                        courseCode: "A",
+                        role: "THERAPIST_1",
+                        employeeId: "therapist-1",
+                        commissionAmount: 700000,
+                        rateStatus: "applied"
+                      },
+                      {
+                        serviceCallId: "call-b",
+                        courseId: "course-b",
+                        courseCode: "B",
+                        role: "THERAPIST_1",
+                        employeeId: "therapist-1",
+                        commissionAmount: 900000,
+                        rateStatus: "applied"
+                      },
+                      {
+                        serviceCallId: "call-b",
+                        courseId: "course-b",
+                        courseCode: "B",
+                        role: "THERAPIST_2",
+                        employeeId: "therapist-1",
+                        commissionAmount: 900000,
+                        rateStatus: "applied"
+                      }
+                    ]
+                  },
+                  graphSettlement("therapist-2", "마사지사2", "THR-002", "THERAPIST_2", 1)
+                ]
+              : [],
+          warningCounts: { coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
+          excludedCallCount: 0
+        })) as any,
+        listRoomStatuses: (async () => [
+          { roomId: "room-1", displayStatus: "사용중" },
+          { roomId: "room-2", displayStatus: "청소중" },
+          { roomId: "room-3", displayStatus: "종료확인" },
+          { roomId: "room-4", displayStatus: "빈방" }
+        ]) as any,
+        listMonthlyClosingPreview: async () =>
+          monthlyPreview({
+            therapists: {
+              rows: [
+                {
+                  employeeId: "therapist-1",
+                  staffCode: "THR-001",
+                  displayName: "마사지사1",
+                  totalCallCount: 2,
+                  monthlySettlementAmount: 1600000,
+                  finalPayoutAmount: 1800000
+                }
+              ],
+              payoutAmount: 1800000,
+              totalCallCount: 2
+            }
+          })
+      }
+    });
+
+    assert.equal(result.sourceBasis.kind, "current_recalculation");
+    assert.equal(result.dailyRevenueTrend.find((row) => row.serviceDate === "2026-06-10")?.paymentTotal, 3300000);
+    assert.deepEqual(
+      result.courseMix.map((row) => [row.courseCode, row.completedCount, row.paymentTotal, row.callShare, row.revenueShare]),
+      [
+        ["A", 1, 1500000, 0.5, 1500000 / 3300000],
+        ["B", 1, 1800000, 0.5, 1800000 / 3300000],
+        ["C", 0, 0, 0, 0],
+        ["D", 0, 0, 0, 0],
+        ["E", 0, 0, 0, 0]
+      ]
+    );
+    assert.equal(result.therapistCallRanking[0]?.employeeId, "therapist-1");
+    assert.equal(result.therapistCallRanking[0]?.assignedCallCount, 3);
+    assert.equal(result.therapistCallRanking[0]?.therapist2Count, 1);
+    assert.equal(result.therapistSettlementRanking[0]?.finalPayoutAmount, 1800000);
+    assert.deepEqual(
+      result.roomStatusDistribution.map((row) => [row.displayStatus, row.count]),
+      [
+        ["사용중", 1],
+        ["청소중", 1],
+        ["예약", 0],
+        ["종료확인", 1],
+        ["빈방", 1]
+      ]
+    );
+    assert.equal(result.noShowCancelTrend.find((row) => row.serviceDate === "2026-06-10")?.noShowCount, 1);
+    assert.equal(result.opsIncentiveOrPayoutComposition.status, "available");
+    assert.equal(result.emptyStates.snapshotMissing, false);
+  });
+
+  it("마감확정/잠금 운영월에서 snapshot이 없으면 지급 순위와 구성 그래프를 current로 대체하지 않는다", async () => {
+    const result = await getDashboardGraphReport({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient: createDashboardPrisma({ operatingMonthStatus: "잠금" }),
+      dependencies: {
+        getDailyCallLedgerSummary: async () => graphDailySummary(),
+        listCompletedServiceCallCalculationsForOperatingMonth: async () => [],
+        listTherapistDailySettlements: async () => ({
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-06-10",
+          settlements: [],
+          warningCounts: { coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
+          excludedCallCount: 0
+        }),
+        listRoomStatuses: async () => [],
+        getMonthlyClosingSnapshot: async () => {
+          const error = new Error("확정 스냅샷을 찾을 수 없습니다.");
+          (error as any).code = "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND";
+          throw error;
+        },
+        listMonthlyClosingPreview: async () => monthlyPreview({ totals: { grandPayoutAmount: 999999999 } })
+      }
+    });
+
+    assert.equal(result.sourceBasis.kind, "snapshot_missing");
+    assert.equal(result.therapistSettlementRanking.length, 0);
+    assert.equal(result.opsIncentiveOrPayoutComposition.status, "snapshot_missing");
+    assert.equal(result.emptyStates.snapshotMissing, true);
+  });
+
+  it("운영월 범위 밖 조회날짜는 한국어 domain error로 차단한다", async () => {
+    await assert.rejects(
+      getDashboardGraphReport({
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-07-01",
+        prismaClient: createDashboardPrisma()
+      }),
+      (error) =>
+        error instanceof DashboardQueryDomainError &&
+        error.code === "DASHBOARD_DATE_OUT_OF_RANGE" &&
+        error.message === "조회 날짜가 선택한 운영월 범위를 벗어났습니다."
     );
   });
 });

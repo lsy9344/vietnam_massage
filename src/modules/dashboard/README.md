@@ -6,6 +6,7 @@ Owns read-only KPI summaries.
 
 - today dashboard metrics
 - monthly dashboard metrics
+- graph report metrics
 - course completion counts
 - payment and settlement summaries
 - monthly close snapshot summaries for closed months
@@ -43,6 +44,19 @@ Owns read-only KPI summaries.
 - Missing closed snapshots surface `snapshot_missing`; the dashboard must not silently fallback to current payout preview.
 - Reopened `검토중` months keep current recalculation as the KPI source. Any latest snapshot is returned only as `이전 확정 스냅샷` reference.
 - `/dashboard/monthly` consumes the DTO and must not parse `MonthlyClosing.snapshotJson`, read service call rows directly, or recreate course/settlement calculations in route code.
+
+## Story 6.3 Graph Report
+
+- `dashboard-query-service.ts` owns `getDashboardGraphReport({ operatingMonthId, serviceDate, prismaClient?, dependencies? })`.
+- The service returns a read-only `DashboardGraphReportDto` for `/dashboard/reports`: operating month, selected service date, `sourceBasis`, daily revenue trend, A-E course mix, therapist call ranking, therapist settlement ranking, room status distribution, no-show/cancel trend, payout composition, warning counts, and empty states.
+- Revenue trend, no-show/cancel trend, and warning counts are accumulated over `OperatingMonth.startDate` through `endDate` with `operatingMonthId`; Excel row ranges are not a query boundary.
+- Course mix uses calculated completed service-call DTOs with stable `courseCode`; route and chart components must not recompute payment, discount, course policy, or therapist rate rules from raw rows.
+- Therapist call ranking aggregates `THERAPIST_1` and `THERAPIST_2` assignment evidence by `Employee.id`. Display names and staff codes are labels only.
+- Therapist settlement ranking and payout composition use `listMonthlyClosingPreview()` for `작성중`/`검토중` and latest `getMonthlyClosingSnapshot()` for `마감확정`/`잠금`.
+- Missing closed snapshots surface `sourceBasis.kind = "snapshot_missing"` and empty settlement/payout graph states. Current preview must not be shown as fallback.
+- Room status distribution uses `listRoomStatuses()` and `RoomStatusDto.displayStatus`; dashboard code must not recreate active call selection, remaining minutes, or `종료확인`.
+- `/dashboard/reports` consumes `DashboardGraphReportDto` only. Chart components may compute visual scaling or presentation percentages, but must not create business aggregates, parse `snapshotJson`, or call upstream calls/settlements/rooms services directly.
+- Charts must include accessible names, visible numeric labels, legends or labels, and table/list fallback data so color is never the only source of meaning.
 
 ## Downstream
 

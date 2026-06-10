@@ -20,6 +20,7 @@ The dashboard module owns read-only operational KPI summaries:
 - monthly completed calls
 - monthly reservations, no-shows, cancellations, and sales
 - monthly close payout snapshot summaries for closed operating months
+- graph report datasets for owner-facing trends and rankings
 
 ## Core Models
 
@@ -47,6 +48,16 @@ The dashboard module owns read-only operational KPI summaries:
 - For reopened `검토중` operating months, current dashboard values are the editable current truth. Any previous monthly close snapshot is historical reference only and must not be shown as the current KPI source.
 - Dashboard components must not parse `snapshotJson` ad hoc inside route components. Use a dashboard query service or closing adapter that returns a stable DTO for charts and KPI cards.
 - If a required close snapshot is missing for a closed/locked month, show a distinct snapshot-missing state instead of silently falling back to current recalculation.
+- Story 6.3 graph reports are owned by `getDashboardGraphReport({ operatingMonthId, serviceDate })` and returned as `DashboardGraphReportDto`.
+- `/dashboard/reports` canonicalizes `operatingMonthId` and `serviceDate` in URL search params and consumes the graph report DTO.
+- Graph report `sourceBasis` uses the same `current_recalculation`, `closed_snapshot`, and `snapshot_missing` semantics as Story 6.2.
+- Daily revenue and no-show/cancel trends scan `OperatingMonth.startDate` through `endDate` and include only completed calculated calls for revenue.
+- Course mix uses stable A-E course codes from calculated service-call DTOs. CRM, customer segment, marketing, or non-Excel-derived metrics are not part of this report.
+- Therapist call ranking aggregates `THERAPIST_1` and `THERAPIST_2` evidence by `Employee.id`, including same employee dual-role assignments.
+- Therapist settlement ranking and payout composition use current monthly closing preview for open/review months and latest closing snapshot for closed/locked months.
+- Room status distribution uses `listRoomStatuses()` and `RoomStatusDto.displayStatus`; route/chart code must not recalculate occupancy or `종료확인`.
+- Chart components must provide accessible labels, visible values, legends or text labels, and table/list fallback data. Color-only meaning is not allowed.
+- Route and chart components must not parse `snapshotJson`, query call rows directly, or recreate calls, settlements, closing, or room-status business calculations.
 
 ## Handoffs
 
@@ -55,3 +66,4 @@ The dashboard module owns read-only operational KPI summaries:
 - Does not mutate operational records.
 - Exposes today KPI DTO fields: `operatingMonth`, `serviceDate`, `statusCounts`, `financials`, `therapistSummary`, `courseCompletions`, `warningCounts`, `emptyState`, and `sourceBasis`.
 - Exposes monthly KPI DTO fields: `operatingMonth`, `sourceBasis`, `statusCounts`, `financials`, `courseCompletions`, `warningCounts`, `settlementSummary`, `snapshot`, and `emptyState`.
+- Exposes graph report DTO fields: `operatingMonth`, `serviceDate`, `sourceBasis`, `dailyRevenueTrend`, `courseMix`, `therapistCallRanking`, `therapistSettlementRanking`, `roomStatusDistribution`, `noShowCancelTrend`, `opsIncentiveOrPayoutComposition`, `warningCounts`, and `emptyStates`.

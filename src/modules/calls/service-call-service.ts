@@ -296,6 +296,7 @@ export type CompletedServiceCallCalculationDto = {
   serviceCallId: string;
   serviceDate: string;
   courseId: string;
+  courseCode: string;
   paymentAmount: number;
   discountAmount: number;
   earcarePoolAmount: number;
@@ -1390,6 +1391,7 @@ export function completedServiceCallCalculationsFromRows(rows: ServiceCallRowDto
       serviceCallId: row.id,
       serviceDate: row.serviceDate,
       courseId: row.courseId,
+      courseCode: row.courseCode,
       paymentAmount: row.paymentAmount,
       discountAmount: row.discountAmount,
       earcarePoolAmount: row.earcarePoolAmount,

@@ -186,6 +186,11 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Story 6.2 기준 `작성중`/`검토중` 운영월은 `미확정 현재 기준`으로 현재 콜 원장과 현재 정책 미리보기 값을 표시한다. 재오픈된 `검토중` 월의 이전 snapshot은 `이전 확정 스냅샷` 참고 정보로만 분리하고 현재 KPI source와 섞지 않는다.
 - Story 6.2 기준 `마감확정`/`잠금` 운영월의 지급/정산 값은 `getMonthlyClosingSnapshot()`의 latest `MonthlyClosing` snapshot을 우선 source로 사용하고 `확정 스냅샷 기준`, `closeVersion`, `confirmedAt`을 표시한다. snapshot이 없거나 형식이 부족하면 current preview로 fallback하지 않고 `확정 스냅샷을 찾을 수 없습니다` 상태를 표시한다.
 - Story 6.2 기준 `/dashboard/monthly`는 administrator, counter, settlement_manager, read_only_viewer만 접근하고 waiter는 `/rooms`로 redirect된다. mutation UI, Server Action, audit write, chart dependency, 월마감 snapshot 생성/수정은 포함하지 않는다.
+- Story 6.3 기준 주인용 그래프 리포트는 `src/modules/dashboard/dashboard-query-service.ts`의 `getDashboardGraphReport()`가 소유한다. `/dashboard/reports` route와 chart component는 `DashboardGraphReportDto`를 소비하고 콜 row 조회, 월마감 snapshot JSON parsing, 정산 evidence 재계산, 객실 활성콜/종료확인 계산을 화면에서 재구현하지 않는다.
+- Story 6.3 기준 그래프 리포트 DTO는 운영월 날짜 범위의 일별 매출/노쇼/취소 추이, A~E 코스별 calculated 완료 콜/매출 비중, `Employee.id` 기준 마사지사 담당콜/정산 순위, 선택 조회날짜의 `RoomStatusDto.displayStatus` 객실 분포, 운영팀 인센/월마감 지급 구성을 제공한다.
+- Story 6.3 기준 정산 순위와 지급 구성은 `작성중`/`검토중` 월에서 `listMonthlyClosingPreview()`, `마감확정`/`잠금` 월에서 latest `getMonthlyClosingSnapshot()`을 사용한다. 필요한 snapshot이 없으면 `snapshot_missing`으로 표시하고 current preview로 fallback하지 않는다.
+- Story 6.3 기준 `/dashboard/reports`는 administrator, counter, settlement_manager, read_only_viewer만 접근하고 waiter는 `/rooms`로 redirect된다. mutation UI, Server Action, audit write, monthly close 상태 변경, chart dependency 추가는 포함하지 않는다.
+- Story 6.3 기준 chart는 접근 가능한 이름, visible numeric label, legend/text label, 표 또는 목록 fallback을 제공해야 하며 색상만으로 의미를 전달하지 않는다. 매출/순위 series는 객실 상태 색상을 임의 재사용하지 않는다.
 - Story 3.3 기준 `/rooms`는 웨이터와 조회 전용 사용자의 객실 현황 landing이며 읽기 전용 화면이다. `requireRouteAccess("/rooms")`를 유지하고 웨이터는 `/rooms` 외 route에 접근하면 `/rooms`로 redirect한다.
 - Story 3.3 기준 `/rooms`는 `listRoomStatuses()`의 `RoomStatusDto`와 `RoomStatusCard`를 그대로 재사용한다. 화면에서 활성 콜, `remainingMinutes`, `expectedEndAt`, `종료확인`, 안내 문구를 다시 계산하지 않는다.
 - Story 3.3 기준 상태별 안내 문구 source of truth는 `src/modules/rooms/room-status-service.ts`의 `ROOM_STATUS_GUIDANCE_TEXT`다. `/rooms`에서 문구를 별도 상수로 복제하지 않는다.

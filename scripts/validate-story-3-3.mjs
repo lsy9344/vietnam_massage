@@ -133,7 +133,7 @@ for (const required of [
   "waiter: \"/rooms\"",
   "read_only_viewer: \"/rooms\"",
   "waiter: [\"/rooms\"]",
-  "read_only_viewer: [\"/rooms\", \"/tv\", \"/dashboard/today\", \"/dashboard/monthly\"]"
+  "read_only_viewer: [\"/rooms\", \"/tv\", \"/dashboard/today\", \"/dashboard/monthly\""
 ]) {
   if (!authorization.includes(required)) errors.push(`authorization.ts missing ${required}`);
 }

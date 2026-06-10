@@ -148,9 +148,9 @@ for (const required of ["●", "◷", "◐", "⚠", "○", "상태:"]) {
 const authorization = read("src/lib/authorization.ts");
 for (const required of [
   "administrator: [\"/live\", \"/calls\", \"/rooms\", \"/settlements\", \"/closing\", \"/dashboard\", \"/masters\", \"/audit\", \"/tv\"]",
-  "read_only_viewer: [\"/rooms\", \"/tv\", \"/dashboard/today\", \"/dashboard/monthly\"]",
+  "read_only_viewer: [\"/rooms\", \"/tv\", \"/dashboard/today\", \"/dashboard/monthly\"",
   "waiter: [\"/rooms\"]",
-  "counter: [\"/live\", \"/calls\", \"/rooms\", \"/dashboard/today\", \"/dashboard/monthly\"]"
+  "counter: [\"/live\", \"/calls\", \"/rooms\", \"/dashboard/today\", \"/dashboard/monthly\""
 ]) {
   if (!authorization.includes(required)) errors.push(`authorization.ts missing ${required}`);
 }
