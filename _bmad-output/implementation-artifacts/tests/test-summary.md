@@ -3,30 +3,34 @@
 ## 생성/보강한 테스트
 
 ### API Tests
-- [x] Story 5.6은 신규 REST/API endpoint가 없다. 월마감 확정은 기존 Next.js Server Action `confirmMonthlyCloseAction`과 closing domain service를 재사용하므로 별도 HTTP API 테스트는 해당 없음.
-- [x] 기존 `src/modules/closing/monthly-closing-service.test.ts`가 확정 상태 전이, snapshot 생성, audit rollback 등 domain/API에 준하는 서버 경계를 계속 검증한다.
+- [x] Story 6.1은 신규 REST/API endpoint가 없다. 서버 경계는 `getTodayDashboardMetrics()` read-only query service 단위 테스트로 검증한다.
+- [x] `src/modules/dashboard/dashboard-query-service.test.ts` - 예약/방문완료/노쇼/취소 상태 수, calculated 완료 콜 기준 금액, 마사지사1/2 담당콜, 같은 마사지사 이중 역할, A~E 코스 완료, warning propagation을 검증한다.
+- [x] `src/modules/dashboard/dashboard-query-service.test.ts` - 운영월 범위 밖 날짜, 잘못된 날짜 형식, 없는 운영월을 한국어 domain error로 검증한다.
+- [x] `src/modules/dashboard/dashboard-query-service.test.ts` - 콜이 없는 날짜의 0값 KPI와 `"이 날짜의 콜이 없습니다."` empty state를 검증한다.
 
 ### E2E Tests
-- [x] `tests/e2e/story-5-6-monthly-close-confirm-dialog.spec.ts` - 첫 `마감 확정` 클릭이 즉시 제출하지 않고 `role="alertdialog"` 모달을 여는지 검증한다.
-- [x] `tests/e2e/story-5-6-monthly-close-confirm-dialog.spec.ts` - 운영월, 전체 지급 합계, 마사지사/운영팀/귀케어 지급 합계와 인원 수, 운영팀 일일/월 인센, warning count, 스냅샷 불변 경고를 검증한다.
-- [x] `tests/e2e/story-5-6-monthly-close-confirm-dialog.spec.ts` - `Esc` 취소와 `취소` 버튼이 snapshot/audit 부작용 없이 닫히고 focus를 trigger로 돌려주는지 검증한다.
-- [x] `tests/e2e/story-5-6-monthly-close-confirm-dialog.spec.ts` - safe initial focus, destructive button non-initial focus, focus trap, `aria-labelledby`/`aria-describedby` 연결을 검증한다.
-- [x] `tests/e2e/story-5-6-monthly-close-confirm-dialog.spec.ts` - 두 번째 확인에서만 확정되어 `마감확정`, 최신 `확정 스냅샷`, `잠금`, `monthly_close.confirmed` audit이 생성되는지 검증한다.
-- [x] `tests/e2e/story-5-6-monthly-close-confirm-dialog.spec.ts` - stale 상태 전이 실패 시 한국어 `role="alert"` 오류가 보이고 snapshot/audit 부작용이 없음을 검증한다.
-- [x] `tests/e2e/story-5-3-monthly-close-confirmation.spec.ts` - 기존 Story 5.3 확정 흐름을 이중확인 모달 기반으로 갱신했다.
-- [x] `tests/e2e/story-5-5-monthly-close-reopen.spec.ts` - 재오픈 후 재확정(closeVersion 2) 흐름도 이중확인 모달을 거치도록 갱신했다.
+- [x] `tests/e2e/story-6-1-today-dashboard.spec.ts` - administrator, counter, settlement_manager, read_only_viewer의 `/dashboard/today` 접근과 waiter의 `/rooms` redirect를 검증한다.
+- [x] `tests/e2e/story-6-1-today-dashboard.spec.ts` - 운영월/조회날짜 조건에서 상태 KPI, 금액 KPI, 코스별 완료, 마사지사 담당콜/정산 요약, warning alert를 검증한다.
+- [x] `tests/e2e/story-6-1-today-dashboard.spec.ts` - 조회날짜 변경이 URL search params를 갱신하고 서버 데이터 기준 empty state로 바뀌는 흐름을 검증한다.
+- [x] `tests/e2e/story-6-1-today-dashboard.spec.ts` - 데이터 없는 날짜 empty state와 콜 원장 이동 affordance를 검증한다.
+- [x] `tests/e2e/story-6-1-today-dashboard.spec.ts` - loading skeleton과 retry/error affordance wiring을 정적 검증한다.
 
 ## Coverage
 - API endpoints: 0/0 applicable.
-- UI features: Story 5.6 confirm dialog 1/1 covered.
-- Critical success paths: 모달 열림, 즉시 제출 방지, 두 번째 확인 확정, Story 5.3/5.5 호환.
-- Critical error/cancel paths: `Esc` 취소, `취소` 버튼, stale transition failure.
-- Accessibility contract: alertdialog role, title/description labeling, safe initial focus, focus trap, focus return.
+- Server/query service features: Story 6.1 today dashboard DTO 1/1 covered.
+- UI features: `/dashboard/today` access, date selection, KPI display, course summary, therapist summary, warning, empty state, loading/error wiring covered.
+- Critical success paths: 조회날짜 기준 재계산, URL search params update, calculated completed calls only amount basis, therapist1/2 담당콜 aggregation.
+- Critical error/edge paths: invalid query, missing operating month, out-of-range date, no-call date, waiter route redirect.
 
 ## Validation
-- [x] `node scripts/validate-story-5-6.mjs` - passed.
-- [x] `PLAYWRIGHT_SKIP_WEBSERVER=1 npx playwright test --list tests/e2e/story-5-6-monthly-close-confirm-dialog.spec.ts tests/e2e/story-5-3-monthly-close-confirmation.spec.ts tests/e2e/story-5-5-monthly-close-reopen.spec.ts` - listed 10 tests.
-- [ ] `npx playwright test tests/e2e/story-5-6-monthly-close-confirm-dialog.spec.ts tests/e2e/story-5-3-monthly-close-confirmation.spec.ts tests/e2e/story-5-5-monthly-close-reopen.spec.ts` - attempted during final verification; the Next web server started, then seed setup stopped because Prisma returned `ECONNREFUSED` on `Employee`. A direct Prisma probe against `DATABASE_URL` confirmed the same `ECONNREFUSED` database connectivity blocker.
+- [x] `node --import tsx --test src/modules/dashboard/dashboard-query-service.test.ts` - 5 tests passed.
+- [x] `node scripts/validate-story-6-1.mjs` - passed.
+- [x] `PLAYWRIGHT_SKIP_WEBSERVER=1 npx playwright test --list tests/e2e/story-6-1-today-dashboard.spec.ts` - listed 9 tests.
+- [x] `npm run lint` - Story 1.1 through Story 6.1 static validators passed.
+- [x] `npm run test:unit` - passed, but local shell glob only executed 5 tests in 2 suites.
+- [x] `node --import tsx --test $(rg --files src | rg '\.test\.ts$')` - 151 tests / 20 suites passed.
+- [x] `git diff --check` - passed.
+- [ ] `npx playwright test tests/e2e/story-6-1-today-dashboard.spec.ts` - attempted; the Next webServer started, then seed setup stopped because Prisma returned `ECONNREFUSED` on `Employee`. A direct Prisma probe against `DATABASE_URL` reproduced `code: "ECONNREFUSED"` for `employee.findUnique()`/`employee.findFirst()`.
 
 ## Next Steps
-- Run the three Story 5.3/5.5/5.6 Playwright specs after the PostgreSQL database for `DATABASE_URL` is reachable and migrated.
+- Run the Story 6.1 Playwright spec after the PostgreSQL database for `DATABASE_URL` is reachable and migrated.

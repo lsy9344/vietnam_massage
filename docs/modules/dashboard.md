@@ -32,6 +32,11 @@ The dashboard module owns read-only operational KPI summaries:
 - Sales and settlement amounts are based on completed calls only.
 - Dashboard should query by date and operating month, not by Excel row ranges.
 - Dashboard should not own business calculations that belong to `calls`, `settlements`, or `closing`.
+- Story 6.1 today KPI is owned by `src/modules/dashboard/dashboard-query-service.ts`.
+- `/dashboard/today` consumes `getTodayDashboardMetrics()` and must not calculate call counts, completed-call financial totals, therapist evidence, or course completion rules in the route component.
+- `getTodayDashboardMetrics()` reuses `getDailyCallLedgerSummary()` for status counts, payment/net sales/discount/expense/earcare/commission totals, A-E course completions, and warning counts.
+- `getTodayDashboardMetrics()` reuses `listTherapistDailySettlements()` for `THERAPIST_1`/`THERAPIST_2` assigned-call counts and therapist settlement totals, including same-therapist dual-role evidence.
+- Today dashboard empty state distinguishes dates with no calls from dates where warning rows are excluded from amount/course aggregates.
 - For `마감확정` or `잠금` operating months, monthly KPI and payout composition views must read the latest `MonthlyClosing` snapshot from `closing`, ordered by operating month and `closeVersion`.
 - For reopened `검토중` operating months, current dashboard values are the editable current truth. Any previous monthly close snapshot is historical reference only and must not be shown as the current KPI source.
 - Dashboard components must not parse `snapshotJson` ad hoc inside route components. Use a dashboard query service or closing adapter that returns a stable DTO for charts and KPI cards.
@@ -42,3 +47,4 @@ The dashboard module owns read-only operational KPI summaries:
 - Reads current metrics from `calls` and `settlements`.
 - Reads historical monthly close values from `closing` snapshots.
 - Does not mutate operational records.
+- Exposes today KPI DTO fields: `operatingMonth`, `serviceDate`, `statusCounts`, `financials`, `therapistSummary`, `courseCompletions`, `warningCounts`, `emptyState`, and `sourceBasis`.

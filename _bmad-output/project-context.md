@@ -177,6 +177,10 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Story 3.2 기준 `/live` 첫 화면은 읽기 전용 운영 현황 route다. `RoomStatusDto`는 `listRoomStatuses()`에서만 받고, 오늘 상태/매출 KPI는 `getDailyCallLedgerSummary()`를 재사용한다. UI 계산 재구현 금지: `/live` component는 객실 상태, `inUseCount`, `cleaningCount`, 결제합계, 순매출, 코스별 방문완료 수를 다시 계산하지 않는다.
 - Story 3.2 기준 `getDailyCallLedgerSummary()`는 `reservationCount`, `inUseCount`, `cleaningCount`, `completedCount`, `noShowCount`, `canceledCount`를 콜 원장 상태 기준으로 제공한다. `사용중`은 `사용중`/`IN_USE`/`USING`, `청소중`은 `청소중`/`CLEANING`을 포함한다.
 - Story 3.2 기준 `/live`는 `router.refresh()` 기반 15초 자동 갱신과 수동 새로고침을 제공하며, 마지막 갱신 시각과 `갱신 지연` 상태를 표시해야 한다. 새 React Query dependency 없이 route-local Client Component에서 처리한다.
+- Story 6.1 기준 오늘 KPI는 `src/modules/dashboard/dashboard-query-service.ts`의 `getTodayDashboardMetrics()`가 소유한다. `/dashboard/today` route component는 이 DTO를 소비하고 `getDailyCallLedgerSummary()` 또는 `listTherapistDailySettlements()` 계산을 화면에서 재구현하지 않는다.
+- Story 6.1 기준 today dashboard DTO는 `getDailyCallLedgerSummary()`로 상태 수, 방문완료 calculated 금액, 지출, A~E 코스별 완료, warning counts를 가져오고 `listTherapistDailySettlements()`로 `THERAPIST_1`/`THERAPIST_2` 담당콜과 마사지사 정산 합계를 가져온다.
+- Story 6.1 기준 `/dashboard/today`는 administrator, counter, settlement_manager, read_only_viewer만 접근하고 waiter는 `/rooms`로 redirect된다. mutation UI, audit write, chart dependency, 월마감 snapshot 생성/수정은 포함하지 않는다.
+- Story 6.1 기준 today dashboard empty state는 콜이 없는 날짜와 정책/수당/D코스 검증 warning 때문에 금액/코스 집계에서 제외된 날짜를 구분해 표시한다.
 - Story 3.3 기준 `/rooms`는 웨이터와 조회 전용 사용자의 객실 현황 landing이며 읽기 전용 화면이다. `requireRouteAccess("/rooms")`를 유지하고 웨이터는 `/rooms` 외 route에 접근하면 `/rooms`로 redirect한다.
 - Story 3.3 기준 `/rooms`는 `listRoomStatuses()`의 `RoomStatusDto`와 `RoomStatusCard`를 그대로 재사용한다. 화면에서 활성 콜, `remainingMinutes`, `expectedEndAt`, `종료확인`, 안내 문구를 다시 계산하지 않는다.
 - Story 3.3 기준 상태별 안내 문구 source of truth는 `src/modules/rooms/room-status-service.ts`의 `ROOM_STATUS_GUIDANCE_TEXT`다. `/rooms`에서 문구를 별도 상수로 복제하지 않는다.
