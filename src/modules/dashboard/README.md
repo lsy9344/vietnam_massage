@@ -58,6 +58,16 @@ Owns read-only KPI summaries.
 - `/dashboard/reports` consumes `DashboardGraphReportDto` only. Chart components may compute visual scaling or presentation percentages, but must not create business aggregates, parse `snapshotJson`, or call upstream calls/settlements/rooms services directly.
 - Charts must include accessible names, visible numeric labels, legends or labels, and table/list fallback data so color is never the only source of meaning.
 
+## Story 6.4 Dashboard State and Color Contract
+
+- Story 6.4 keeps the dashboard loading, error, empty, and chart color rules as a route-local presentation contract. Add a shared helper only when today, monthly, and reports all reuse it and it reduces tests.
+- Dashboard loading screens must preserve the real layout outline with `Skeleton`, `aria-busy="true"`, and Korean loading labels. While URL criteria change, the UI must not show the previous date or month as if it were the new server query basis.
+- Dashboard error boundaries must show safe Korean copy, `role="alert"`, `다시 시도`, and `현재 조건 새로고침`. They must not expose raw server error details.
+- Dashboard empty states must distinguish no calls, no calculated completed calls, missing settlement source, missing room status data, and `snapshot_missing`. Do not render missing completed data as a fake 0값 completed graph.
+- status color tokens are reserved for room/status meaning only. General revenue, ranking, payout, no-show, and cancel series use brand/danger or another non-status chart color.
+- Chart legend, visible labels, SVG titles, and table/list fallback must include text and numbers; color alone is not enough.
+- No chart dependency is allowed for this story. If a later story requires one, pin an exact compatible version and document the bundle impact before adding it.
+
 ## Downstream
 
 - dashboard screens and reports

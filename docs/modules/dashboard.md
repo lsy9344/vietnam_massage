@@ -58,6 +58,10 @@ The dashboard module owns read-only operational KPI summaries:
 - Room status distribution uses `listRoomStatuses()` and `RoomStatusDto.displayStatus`; route/chart code must not recalculate occupancy or `종료확인`.
 - Chart components must provide accessible labels, visible values, legends or text labels, and table/list fallback data. Color-only meaning is not allowed.
 - Route and chart components must not parse `snapshotJson`, query call rows directly, or recreate calls, settlements, closing, or room-status business calculations.
+- Story 6.4 formalizes dashboard state handling across today, monthly, and reports. `loading` uses layout-preserving Skeleton UI with Korean labels; `error` uses safe Korean copy, alert semantics, retry, and refresh; `empty` states distinguish no calls, no calculated completed calls, missing settlement source, missing room status data, and `snapshot_missing`.
+- Story 6.4 status color rule: status color tokens are used only for room or service status meaning through `StatusBadge` or equivalent status UI. Revenue, ranking, payout composition, no-show, and cancel chart series must use non-status colors such as brand/danger.
+- Story 6.4 forbids fake 0값 graphs for missing calculated data. If calculated completed-call data is missing, show an explicit empty message and do not render revenue or course mix charts as successful completed charts.
+- Story 6.4 keeps the Story 6.3 project-local SVG/CSS primitives. Do not add a chart dependency unless a later story verifies and pins the exact version and records compatibility and bundle impact.
 
 ## Handoffs
 

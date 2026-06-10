@@ -3,29 +3,25 @@
 ## 생성/보강한 테스트
 
 ### API Tests
-- [x] Story 6.3은 신규 REST/API endpoint가 없다. 서버 경계는 `getDashboardGraphReport()` read-only query service 단위 테스트와 static validator로 검증한다.
-- [x] `src/modules/dashboard/dashboard-query-service.test.ts` - URL/query 입력 검증, completed-only 매출 추이, A~E 코스 비중, 마사지사 담당/정산 순위, 객실 상태 분포, 노쇼/취소 추이, snapshot missing fallback 금지를 검증한다.
+- [x] Story 6.4는 신규 REST/API endpoint가 없다. 대시보드 query service 계약은 기존 `src/modules/dashboard/dashboard-query-service.test.ts`와 Story 6.4 static validator로 유지한다.
 
 ### E2E Tests
-- [x] `tests/e2e/story-6-3-graph-report.spec.ts` - administrator, counter, settlement_manager, read_only_viewer의 `/dashboard/reports` 접근과 waiter의 `/rooms` redirect를 검증한다.
-- [x] `tests/e2e/story-6-3-graph-report.spec.ts` - worker-local 운영월, 계정, 객실, 마사지사, 코스 정책, 수당, 콜, 지출 seed를 생성한다.
-- [x] `tests/e2e/story-6-3-graph-report.spec.ts` - canonical URL search params, out-of-range `serviceDate` 정규화, chart section labels, accessible chart role, table fallback을 검증한다.
-- [x] `tests/e2e/story-6-3-graph-report.spec.ts` - 실제 그래프 값으로 방문완료 매출 `1,400,000 VND`, 순매출 `1,100,000 VND`, A/B 코스 비중, 마사지사 evidence 기반 담당 `3건`, 객실 `사용중`/`청소중`, 노쇼/취소 `1건`을 검증한다.
-- [x] `tests/e2e/story-6-3-graph-report.spec.ts` - loading skeleton과 safe Korean error/retry copy가 raw `error.message`를 노출하지 않는지 검증한다.
+- [x] `tests/e2e/story-6-4-dashboard-states-and-colors.spec.ts` - today/monthly/reports loading skeleton, `aria-busy`, safe Korean error boundary, retry/refresh affordance, raw `error.message`/stack 미노출을 검증한다.
+- [x] `tests/e2e/story-6-4-dashboard-states-and-colors.spec.ts` - `/dashboard/reports` chart source가 non-status series에 `bg-brand`, `bg-danger`, `var(--color-brand)`, `var(--color-danger)`를 유지하고 `bg-status-*`/`var(--color-status-*)`를 쓰지 않는지 검증한다.
+- [x] `tests/e2e/story-6-4-dashboard-states-and-colors.spec.ts` - worker-local 계정과 운영월 seed로 today no-call empty, monthly/reports snapshot missing, current payout fallback 금지, reports 정산 source 없음 상태를 브라우저에서 검증한다.
+- [x] `tests/e2e/story-6-4-dashboard-states-and-colors.spec.ts` - waiter의 `/dashboard/today`, `/dashboard/monthly`, `/dashboard/reports` direct access가 `/rooms`로 redirect되고 dashboard nav가 숨겨지는지 검증한다.
+- [x] `tests/e2e/story-6-4-dashboard-states-and-colors.spec.ts` - counter, settlement_manager, read_only_viewer의 `/dashboard/reports` 접근 회귀를 검증한다.
 
 ## Coverage
 - API endpoints: 0/0 applicable.
-- Server/query service features: Story 6.3 graph report DTO 1/1 covered.
-- UI features: `/dashboard/reports` access, URL param retention/canonicalization, chart labels, visible numeric labels, table fallback, role access, waiter redirect, loading/error wiring covered.
-- Critical success paths: calculated completed calls only revenue basis, A~E course mix, therapist role evidence aggregation by employee, room status DTO display status, no-show/cancel trend.
-- Critical error/edge paths: out-of-range service date canonicalization, invalid query unit coverage, snapshot missing without current fallback, safe error boundary.
+- Server/query service features: dashboard read-only query DTO 기존 단위 테스트로 유지.
+- UI features: loading, safe error, no-call empty, snapshot missing, settlement source missing, status color 의미 보존, legend/table fallback source markers, route access covered.
+- Critical edge paths: raw server error exposure prevention, fake 0값 success graph prevention, current preview/snapshot mixing prevention, waiter dashboard redirect.
 
 ## Validation
+- [x] `node scripts/validate-story-6-4.mjs` - passed.
 - [x] `node --import tsx --test src/modules/dashboard/dashboard-query-service.test.ts src/lib/authorization.test.ts` - 16 tests passed.
-- [x] `node scripts/validate-story-6-3.mjs` - passed.
-- [x] `npm run lint` - Story 1.1 through Story 6.3 static validators passed.
-- [x] `PLAYWRIGHT_SKIP_WEBSERVER=1 npx playwright test --list tests/e2e/story-6-3-graph-report.spec.ts` - listed 7 tests.
-- [ ] `npx playwright test tests/e2e/story-6-3-graph-report.spec.ts` - attempted; sandbox blocked Next dev server bind with `listen EPERM: operation not permitted 127.0.0.1:3000`.
-
-## Next Steps
-- Run the Story 6.3 Playwright spec in an environment where the dev server can bind to `127.0.0.1:3000` and the configured PostgreSQL `DATABASE_URL` is reachable/migrated.
+- [x] `npm run lint` - Story 1.1 through Story 6.4 static validators passed.
+- [x] `PLAYWRIGHT_SKIP_WEBSERVER=1 npx playwright test tests/e2e/story-6-4-dashboard-states-and-colors.spec.ts -g "source guardrails"` - 2 static Playwright guard tests passed.
+- [x] `PLAYWRIGHT_SKIP_WEBSERVER=1 npx playwright test --list tests/e2e/story-6-4-dashboard-states-and-colors.spec.ts` - listed 10 tests.
+- [ ] `npx playwright test tests/e2e/story-6-4-dashboard-states-and-colors.spec.ts` - attempted; sandbox blocked Next dev server bind with `listen EPERM: operation not permitted 127.0.0.1:3000`.

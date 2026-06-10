@@ -62,7 +62,9 @@ function SourceBasisPanel({ report }: { report: DashboardGraphReportDto }) {
 function EmptyStatePanel({ report }: { report: DashboardGraphReportDto }) {
   const messages = [
     report.emptyStates.noCallsInPeriod ? "운영월 기간 전체에 콜 원장 데이터가 없습니다." : null,
-    report.emptyStates.noCalculatedCompletedCalls ? "calculated 방문완료 콜이 없어 매출/코스 비중 그래프가 0으로 표시됩니다." : null,
+    report.emptyStates.noCalculatedCompletedCalls
+      ? "calculated 방문완료 콜이 없어 매출/코스 비중 그래프를 성공처럼 표시하지 않습니다. 이 기간의 데이터가 없습니다."
+      : null,
     report.emptyStates.noRoomStatuses ? "선택 날짜의 객실 상태 데이터가 없습니다." : null,
     report.emptyStates.noSettlementSource ? "정산 source가 없어 정산 순위와 지급 구성을 표시하지 않습니다." : null
   ].filter((message): message is string => Boolean(message));
@@ -77,6 +79,17 @@ function EmptyStatePanel({ report }: { report: DashboardGraphReportDto }) {
           <li key={message}>{message}</li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+function CompletedChartEmptyPanel() {
+  return (
+    <section className="border border-border bg-surface px-4 py-5" aria-label="완료 콜 그래프 없음">
+      <h2 className="text-base font-semibold text-foreground">방문완료 그래프를 표시하지 않습니다</h2>
+      <p className="mt-2 text-sm text-muted">
+        calculated 방문완료 콜이 없는 조회 기준입니다. 누락된 완료 데이터를 0값 매출 또는 0값 코스 비중 그래프로 꾸미지 않습니다.
+      </p>
     </section>
   );
 }
@@ -420,11 +433,15 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       <div className="space-y-4">
         <SourceBasisPanel report={report} />
         <EmptyStatePanel report={report} />
-        <RevenueTrendChart report={report} />
-        <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]" aria-label="코스 비중과 지급 구성">
-          <CourseMixChart report={report} />
+        {report.emptyStates.noCalculatedCompletedCalls ? <CompletedChartEmptyPanel /> : <RevenueTrendChart report={report} />}
+        {report.emptyStates.noCalculatedCompletedCalls ? (
           <PayoutCompositionChart report={report} />
-        </section>
+        ) : (
+          <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]" aria-label="코스 비중과 지급 구성">
+            <CourseMixChart report={report} />
+            <PayoutCompositionChart report={report} />
+          </section>
+        )}
         <RankingCharts report={report} />
         <RoomAndNoShowCharts report={report} />
       </div>

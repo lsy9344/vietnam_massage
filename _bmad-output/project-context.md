@@ -191,6 +191,9 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Story 6.3 기준 정산 순위와 지급 구성은 `작성중`/`검토중` 월에서 `listMonthlyClosingPreview()`, `마감확정`/`잠금` 월에서 latest `getMonthlyClosingSnapshot()`을 사용한다. 필요한 snapshot이 없으면 `snapshot_missing`으로 표시하고 current preview로 fallback하지 않는다.
 - Story 6.3 기준 `/dashboard/reports`는 administrator, counter, settlement_manager, read_only_viewer만 접근하고 waiter는 `/rooms`로 redirect된다. mutation UI, Server Action, audit write, monthly close 상태 변경, chart dependency 추가는 포함하지 않는다.
 - Story 6.3 기준 chart는 접근 가능한 이름, visible numeric label, legend/text label, 표 또는 목록 fallback을 제공해야 하며 색상만으로 의미를 전달하지 않는다. 매출/순위 series는 객실 상태 색상을 임의 재사용하지 않는다.
+- Story 6.4 기준 dashboard loading/error/empty contract는 `/dashboard/today`, `/dashboard/monthly`, `/dashboard/reports` 모두에 적용한다. loading은 Skeleton과 `aria-busy`, 한국어 label로 layout outline을 유지하고, error boundary는 raw server error를 노출하지 않으며 retry/refresh affordance를 제공해야 한다.
+- Story 6.4 기준 dashboard empty 상태는 콜 없음, calculated 방문완료 콜 없음, 정산 source 없음, room status 없음, `snapshot_missing`을 구분한다. 누락 데이터를 0값 완료 그래프로 렌더링하면 안 되고 current preview와 확정 snapshot을 섞으면 안 된다.
+- Story 6.4 기준 status color token은 객실/콜 상태 의미를 표시할 때만 사용한다. 매출, 순위, 지급 구성, 노쇼/취소 chart series는 brand/danger 등 non-status 색을 사용하며 chart dependency 추가는 금지한다.
 - Story 3.3 기준 `/rooms`는 웨이터와 조회 전용 사용자의 객실 현황 landing이며 읽기 전용 화면이다. `requireRouteAccess("/rooms")`를 유지하고 웨이터는 `/rooms` 외 route에 접근하면 `/rooms`로 redirect한다.
 - Story 3.3 기준 `/rooms`는 `listRoomStatuses()`의 `RoomStatusDto`와 `RoomStatusCard`를 그대로 재사용한다. 화면에서 활성 콜, `remainingMinutes`, `expectedEndAt`, `종료확인`, 안내 문구를 다시 계산하지 않는다.
 - Story 3.3 기준 상태별 안내 문구 source of truth는 `src/modules/rooms/room-status-service.ts`의 `ROOM_STATUS_GUIDANCE_TEXT`다. `/rooms`에서 문구를 별도 상수로 복제하지 않는다.
