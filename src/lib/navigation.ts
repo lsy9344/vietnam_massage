@@ -49,7 +49,8 @@ export const navigationGroups: NavigationGroup[] = [
       { label: "객실", href: "/masters/rooms", allowedRoles: ["administrator"] },
       { label: "코드/시간 슬롯", href: "/masters/codes", allowedRoles: ["administrator"] },
       { label: "직원", href: "/masters/employees", allowedRoles: ["administrator"] },
-      { label: "코스/수당/인센", href: "/masters/courses", allowedRoles: ["administrator"] }
+      { label: "코스/수당/인센", href: "/masters/courses", allowedRoles: ["administrator"] },
+      { label: "시트 기능 매핑표", href: "/masters/sheet-mapping", allowedRoles: ["administrator", "read_only_viewer"] }
     ]
   },
   {

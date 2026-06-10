@@ -39,6 +39,14 @@ const roleRoutePrefixes: Record<Role, string[]> = {
   read_only_viewer: ["/rooms", "/tv", "/dashboard/today", "/dashboard/monthly", "/dashboard/reports"]
 };
 
+const roleExactRoutes: Record<Role, string[]> = {
+  administrator: [],
+  counter: [],
+  settlement_manager: [],
+  waiter: [],
+  read_only_viewer: ["/masters/sheet-mapping"]
+};
+
 const rolePermissions: Record<Role, SensitivePermission[]> = {
   administrator: ["call:write", "payout:write", "closing:write", "closing:reopen", "employee:write", "audit:read"],
   counter: ["call:write"],
@@ -64,6 +72,7 @@ export function getRoleLandingPath(role: Role) {
 
 export function canAccessRoute(role: Role, pathname: string) {
   const normalizedPath = pathname === "/" ? getRoleLandingPath(role) : pathname;
+  if (roleExactRoutes[role].includes(normalizedPath)) return true;
   return roleRoutePrefixes[role].some((prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`));
 }
 

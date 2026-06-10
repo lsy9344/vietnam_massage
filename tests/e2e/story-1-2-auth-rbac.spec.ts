@@ -29,6 +29,7 @@ const users = [
       "월마감",
       "오늘 대시보드",
       "직원",
+      "시트 기능 매핑표",
       "감사 로그"
     ],
     hiddenLinks: []
@@ -68,9 +69,9 @@ const users = [
     role: "read_only_viewer",
     password: "Story12!read_only_viewer",
     landing: "/rooms",
-    visibleGroups: ["운영 현황", "대시보드"],
-    hiddenGroups: ["콜 원장", "정산", "월마감", "마스터 설정", "감사 로그"],
-    visibleLinks: ["객실 현황", "TV 현황판", "오늘 대시보드"],
+    visibleGroups: ["운영 현황", "대시보드", "마스터 설정"],
+    hiddenGroups: ["콜 원장", "정산", "월마감", "감사 로그"],
+    visibleLinks: ["객실 현황", "TV 현황판", "오늘 대시보드", "시트 기능 매핑표"],
     hiddenLinks: ["첫화면 실시간 현황", "콜/예약 입력 원장", "정산 화면", "월마감", "직원", "감사 로그"]
   }
 ];

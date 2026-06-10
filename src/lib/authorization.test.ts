@@ -25,3 +25,14 @@ describe("authorization Story 6.3 graph report route access", () => {
     assert.equal(canAccessRoute("waiter", "/dashboard/reports"), false);
   });
 });
+
+describe("authorization Story 7.1 sheet mapping route access", () => {
+  it("allows read-only QA access to the sheet mapping page without opening all masters routes", () => {
+    assert.equal(canAccessRoute("administrator", "/masters/sheet-mapping"), true);
+    assert.equal(canAccessRoute("read_only_viewer", "/masters/sheet-mapping"), true);
+    assert.equal(canAccessRoute("read_only_viewer", "/masters/sheet-mapping/details"), false);
+    assert.equal(canAccessRoute("read_only_viewer", "/masters"), false);
+    assert.equal(canAccessRoute("read_only_viewer", "/masters/codes"), false);
+    assert.equal(canAccessRoute("waiter", "/masters/sheet-mapping"), false);
+  });
+});

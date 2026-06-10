@@ -194,6 +194,9 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Story 6.4 기준 dashboard loading/error/empty contract는 `/dashboard/today`, `/dashboard/monthly`, `/dashboard/reports` 모두에 적용한다. loading은 Skeleton과 `aria-busy`, 한국어 label로 layout outline을 유지하고, error boundary는 raw server error를 노출하지 않으며 retry/refresh affordance를 제공해야 한다.
 - Story 6.4 기준 dashboard empty 상태는 콜 없음, calculated 방문완료 콜 없음, 정산 source 없음, room status 없음, `snapshot_missing`을 구분한다. 누락 데이터를 0값 완료 그래프로 렌더링하면 안 되고 current preview와 확정 snapshot을 섞으면 안 된다.
 - Story 6.4 기준 status color token은 객실/콜 상태 의미를 표시할 때만 사용한다. 매출, 순위, 지급 구성, 노쇼/취소 chart series는 brand/danger 등 non-status 색을 사용하며 chart dependency 추가는 금지한다.
+- Story 7.1 기준 원본 시트 기능 매핑표는 `src/modules/migration/sheet-feature-mapping.ts`를 source of truth로 사용한다. hidden `목록`을 포함한 원본 12개 전체 시트는 모두 검증 대상이며 기능 보존율 100%가 기준이다.
+- Story 7.1 기준 매핑 행은 원본 근거, ERP 화면, 설정, 계산 엔진, 검증 항목, 보존 규칙, source reference를 포함해야 한다. 셀 좌표와 workbook range는 검증 근거이지 구현 기준이 아니며 downstream 저장/조인은 stable ID 원칙(`Room.id`, `Employee.id`/`staffCode`, `Course.id`, `CodeItem.id`, `TimeSlot.value`)을 표시해야 한다.
+- Story 7.1 기준 `/masters/sheet-mapping`은 read-only QA/reference route다. mutation Server Action, audit write, DB migration, seed reset, policy write, 지급 영향 동작을 추가하지 않는다. `read_only_viewer`는 exact `/masters/sheet-mapping`만 접근할 수 있고 `/masters` 전체 prefix는 열지 않는다.
 - Story 3.3 기준 `/rooms`는 웨이터와 조회 전용 사용자의 객실 현황 landing이며 읽기 전용 화면이다. `requireRouteAccess("/rooms")`를 유지하고 웨이터는 `/rooms` 외 route에 접근하면 `/rooms`로 redirect한다.
 - Story 3.3 기준 `/rooms`는 `listRoomStatuses()`의 `RoomStatusDto`와 `RoomStatusCard`를 그대로 재사용한다. 화면에서 활성 콜, `remainingMinutes`, `expectedEndAt`, `종료확인`, 안내 문구를 다시 계산하지 않는다.
 - Story 3.3 기준 상태별 안내 문구 source of truth는 `src/modules/rooms/room-status-service.ts`의 `ROOM_STATUS_GUIDANCE_TEXT`다. `/rooms`에서 문구를 별도 상수로 복제하지 않는다.
