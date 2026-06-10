@@ -35,6 +35,14 @@ async function login(page: Page, accountId: string, password: string) {
   await page.getByRole("button", { name: "로그인" }).click();
 }
 
+async function confirmMonthlyCloseThroughDialog(page: Page) {
+  await page.getByRole("button", { name: "마감 확정" }).click();
+  const dialog = page.getByRole("alertdialog", { name: /월마감을 확정할까요/ });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("확정 시 스냅샷이 고정되어 이후 설정 변경으로 재계산되지 않습니다.");
+  await dialog.getByRole("button", { name: "지급 스냅샷 확정" }).click();
+}
+
 function story55WorkerSuffix(workerIndex: number) {
   return `W${String(workerIndex + 1).padStart(2, "0")}`;
 }
@@ -50,11 +58,30 @@ function utcDate(monthKey: string) {
   return new Date(`${monthKey}-01T00:00:00.000Z`);
 }
 
+async function storyEmployeeSortOrder(employeeGroup: string, staffCode: string, preferredSortOrder: number) {
+  const existing = await (prisma as any).employee.findUnique({
+    where: { staffCode },
+    select: { sortOrder: true }
+  });
+  if (existing) return existing.sortOrder;
+
+  for (let sortOrder = preferredSortOrder; sortOrder < preferredSortOrder + 100; sortOrder += 1) {
+    const conflicting = await (prisma as any).employee.findFirst({
+      where: { employeeGroup, sortOrder, NOT: { staffCode } },
+      select: { id: true }
+    });
+    if (!conflicting) return sortOrder;
+  }
+
+  throw new Error(`No Story 5.5 employee sortOrder available for ${employeeGroup}:${staffCode}`);
+}
+
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, position: string, sortOrder: number) {
+  const safeSortOrder = await storyEmployeeSortOrder(employeeGroup, staffCode, sortOrder);
   return (prisma as any).employee.upsert({
     where: { staffCode },
-    update: { displayName, employeeGroup, position, shiftType: "전체", baseSalary: 0, employmentStatus: "재직", sortOrder, isActive: true },
-    create: { staffCode, displayName, employeeGroup, position, shiftType: "전체", baseSalary: 0, employmentStatus: "재직", sortOrder, isActive: true }
+    update: { displayName, employeeGroup, position, shiftType: "전체", baseSalary: 0, employmentStatus: "재직", sortOrder: safeSortOrder, isActive: true },
+    create: { staffCode, displayName, employeeGroup, position, shiftType: "전체", baseSalary: 0, employmentStatus: "재직", sortOrder: safeSortOrder, isActive: true }
   });
 }
 
@@ -144,7 +171,7 @@ async function seedLockedMonth(monthKey: string, confirmedByAccountId: string) {
 
 async function seedStoryData(workerIndex: number): Promise<SeededData> {
   const suffix = story55WorkerSuffix(workerIndex);
-  const sortBase = 95500 + workerIndex * 100;
+  const sortBase = 96500 + workerIndex * 100;
   const accounts = {
     admin: `story55_admin_${suffix.toLowerCase()}`,
     settlement: `story55_settlement_${suffix.toLowerCase()}`
@@ -214,7 +241,7 @@ test.describe("Story 5.5 monthly close reopen", () => {
     expect((reopenAudit?.afterValue as any).reason).toBe("Story 5.5 관리자 사유 기반 재오픈");
     expect((reopenAudit?.afterValue as any).status).toBe("검토중");
 
-    await page.getByRole("button", { name: "마감 확정" }).click();
+    await confirmMonthlyCloseThroughDialog(page);
     await expect(page.getByText("운영월 상태: 마감확정").first()).toBeVisible();
     const closings = await (prisma as any).monthlyClosing.findMany({
       where: { operatingMonthId: seededData.adminLockedMonth.id },

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { canPerform, requireRouteAccess } from "@/lib/authorization";
-import { ClosingActionPanel } from "@/app/(erp)/closing/closing-action-panel";
+import { ClosingActionPanel, type ConfirmDialogSummary } from "@/app/(erp)/closing/closing-action-panel";
 import { selectedOperatingMonthFor } from "@/lib/operating-date";
 import {
   getMonthlyClosingSnapshot,
@@ -139,6 +139,25 @@ function SummaryBand({ result }: { result: MonthlyClosingPreviewDto }) {
       ))}
     </section>
   );
+}
+
+function confirmSummaryFor(result: MonthlyClosingPreviewDto): ConfirmDialogSummary {
+  return {
+    monthKey: result.monthKey,
+    startDate: result.startDate,
+    endDate: result.endDate,
+    status: result.status,
+    grandPayoutAmount: result.totals.grandPayoutAmount,
+    therapistPayoutAmount: result.totals.therapistPayoutAmount,
+    therapistCount: result.therapists.rows.length,
+    operationsPayoutAmount: result.operations.totalOpsPayoutAmount,
+    operationsCount: result.operations.rows.length,
+    opsDailyIncentiveAmount: result.totals.opsDailyIncentiveAmount,
+    opsMonthlyIncentiveAmount: result.totals.opsMonthlyIncentiveAmount,
+    earcarePayoutAmount: result.totals.earcarePayoutAmount,
+    earcareCount: result.earcare.rows.length,
+    warningCount: result.warningCounts.total
+  };
 }
 
 function TherapistTable({ result }: { result: MonthlyClosingPreviewDto }) {
@@ -425,7 +444,13 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
       </form>
 
       <ClosingStepper status={selectedMonth.status} />
-      <ClosingActionPanel canReopen={canReopenClosing} canWrite={canWriteClosing} operatingMonthId={selectedMonth.id} status={selectedMonth.status} />
+      <ClosingActionPanel
+        canReopen={canReopenClosing}
+        canWrite={canWriteClosing}
+        confirmSummary={result ? confirmSummaryFor(result) : null}
+        operatingMonthId={selectedMonth.id}
+        status={selectedMonth.status}
+      />
 
       {errorMessage ? (
         <section className="border border-danger bg-surface px-4 py-5" role="alert">

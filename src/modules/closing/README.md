@@ -47,7 +47,18 @@ Owns monthly close and payout snapshots.
 - Confirmation uses a transaction across conditional `OperatingMonth.updateMany`, `MonthlyClosing.create`, and audit logging. Reconfirmation after reopen creates the next `closeVersion`; same-version races fail through the DB unique constraint.
 - `monthly_close.confirmed` uses `targetType: "monthly_close"`; operating-month review status changes use `targetType: "operating_month"`.
 - The UI separates preview and snapshot: current recalculating values are labeled `현재 기준 미리보기`, while persisted historical values are labeled `확정 스냅샷`.
-- Story 5.6 will own the double-confirmation dialog/focus contract.
+- Story 5.6 owns the double-confirmation dialog/focus contract for `confirmMonthlyCloseAction()`.
+
+## Story 5.6 Double Confirmation Dialog
+
+`/closing` must not submit `confirmMonthlyCloseAction()` from the first `마감 확정` click. For `검토중` months with a ready preview, the first click opens a shadcn/Radix `AlertDialog`; only the second dialog action submits the existing Server Action with the same `operatingMonthId`.
+
+- The dialog summary is read-only preview DTO display: month key/date range/status, grand payout total, therapist payout/count, operations payout/count with daily/month incentive amounts, earcare payout/count, and warning count.
+- The UI must not recalculate monthly closing payout totals. It reads `listMonthlyClosingPreview()` output passed from `/closing/page.tsx`.
+- The dialog must expose `role="alertdialog"` semantics with `AlertDialogTitle` and `AlertDialogDescription`; E2E coverage asserts `getByRole("alertdialog")`.
+- Initial focus goes to the safe `취소` control, not the destructive confirmation action. `Esc` and cancel close the dialog without status, snapshot, or audit side effects.
+- Focus stays trapped inside the dialog while open and returns to the `마감 확정` trigger when closed.
+- Server errors from authorization, stale state transition, snapshot creation, or audit rollback remain visible as Korean `role="alert"` feedback in the dialog/action area. Domain logic and audit payloads remain owned by `confirmMonthlyClose()`.
 
 ## Story 5.4 Lock And Payout Write Blocking
 

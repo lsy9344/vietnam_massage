@@ -137,6 +137,10 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Story 5.5 기준 `monthly_close.reopened` 감사 로그 `targetType`은 `monthly_close`, `targetId`는 최신 snapshot id이며 afterValue에는 operating month id/monthKey, 상태 `검토중`, reason, reopenedAt, reopenedByAccountId, snapshot id, closeVersion을 plain JSON으로 포함한다.
 - Story 5.5 기준 재오픈된 `검토중` 월은 Story 5.4 payout lock guard 대상이 아니므로 지급 영향 데이터 수정이 가능하다. 단, 후속 콜/지출/근태/정책 변경은 각 domain service의 기존 감사 이벤트를 별도로 기록해야 한다.
 - Story 5.5 기준 `/closing`은 재오픈된 `검토중` 월의 이전 snapshot을 `이전 확정 스냅샷` 또는 동등한 historical label로 표시하고, 현재 editable truth는 `현재 기준 미리보기`로 분리한다. 후속 dashboard/KPI 조회도 versioned snapshot을 고려해야 한다.
+- Story 5.6 기준 `/closing`의 `마감 확정`은 즉시 `confirmMonthlyCloseAction()`을 제출하지 않고 shadcn/Radix AlertDialog 이중확인을 먼저 열어야 한다. 실제 확정은 모달 내부 두 번째 확인에서만 같은 `operatingMonthId`로 기존 Server Action을 호출한다.
+- Story 5.6 기준 confirm dialog는 `listMonthlyClosingPreview()` 결과에서 운영월, 날짜 범위, 전체 지급 합계, 마사지사/운영팀/귀케어 지급 합계와 인원 수, warning count를 표시하고 UI에서 지급액 총계를 재계산하지 않는다.
+- Story 5.6 기준 confirm dialog는 `role="alertdialog"`, 연결된 title/description, safe initial focus(취소 또는 제목), `Esc` 취소 무부작용, focus trap, 닫힌 뒤 `마감 확정` trigger focus return을 E2E 회귀 대상으로 유지한다.
+- Story 5.6 기준 서버 권한/상태 전이/snapshot/audit 실패는 모달 또는 월마감 action 영역에 한국어 `role="alert"` 피드백으로 남기고, 실패 시 운영월 상태, `MonthlyClosing`, 감사 로그 부작용이 없어야 한다.
 
 ### 코드 품질 및 스타일 규칙
 

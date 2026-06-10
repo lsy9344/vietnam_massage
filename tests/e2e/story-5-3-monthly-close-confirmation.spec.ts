@@ -37,6 +37,16 @@ async function login(page: Page, accountId: string, password: string) {
   await page.getByRole("button", { name: "로그인" }).click();
 }
 
+async function confirmMonthlyCloseThroughDialog(page: Page) {
+  await expect(page.getByRole("button", { name: "마감 확정" })).toBeEnabled();
+  await page.getByRole("button", { name: "마감 확정" }).click();
+  const dialog = page.getByRole("alertdialog", { name: /월마감을 확정할까요/ });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("확정 시 스냅샷이 고정되어 이후 설정 변경으로 재계산되지 않습니다.");
+  await expect(dialog.getByRole("button", { name: "지급 스냅샷 확정" })).toBeEnabled();
+  await dialog.getByRole("button", { name: "지급 스냅샷 확정" }).click();
+}
+
 function story53WorkerSuffix(workerIndex: number) {
   return `W${String(workerIndex + 1).padStart(2, "0")}`;
 }
@@ -184,8 +194,7 @@ test.describe("Story 5.3 monthly close confirmation snapshot", () => {
     await page.getByRole("button", { name: "검토 시작" }).click();
     await expect(page.getByText("운영월 상태: 검토중").first()).toBeVisible();
 
-    await expect(page.getByRole("button", { name: "마감 확정" })).toBeEnabled();
-    await page.getByRole("button", { name: "마감 확정" }).click();
+    await confirmMonthlyCloseThroughDialog(page);
 
     await expect(page.getByText("확정 스냅샷")).toBeVisible();
     await expect(page.getByText("현재 기준 미리보기").first()).toBeVisible();
@@ -249,8 +258,7 @@ test.describe("Story 5.3 monthly close confirmation snapshot", () => {
 
     await page.goto(`/closing?operatingMonthId=${seededData.reviewOperatingMonthId}`);
 
-    await expect(page.getByRole("button", { name: "마감 확정" })).toBeEnabled();
-    await page.getByRole("button", { name: "마감 확정" }).click();
+    await confirmMonthlyCloseThroughDialog(page);
     await expect(page.getByText("확정 스냅샷")).toBeVisible();
     await expect(page.getByText("확정 전체 지급 합계")).toBeVisible();
 
