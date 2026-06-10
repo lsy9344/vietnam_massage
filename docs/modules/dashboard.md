@@ -37,7 +37,13 @@ The dashboard module owns read-only operational KPI summaries:
 - `getTodayDashboardMetrics()` reuses `getDailyCallLedgerSummary()` for status counts, payment/net sales/discount/expense/earcare/commission totals, A-E course completions, and warning counts.
 - `getTodayDashboardMetrics()` reuses `listTherapistDailySettlements()` for `THERAPIST_1`/`THERAPIST_2` assigned-call counts and therapist settlement totals, including same-therapist dual-role evidence.
 - Today dashboard empty state distinguishes dates with no calls from dates where warning rows are excluded from amount/course aggregates.
-- For `마감확정` or `잠금` operating months, monthly KPI and payout composition views must read the latest `MonthlyClosing` snapshot from `closing`, ordered by operating month and `closeVersion`.
+- Story 6.2 monthly KPI is owned by `getMonthlyDashboardMetrics({ operatingMonthId })`.
+- `/dashboard/monthly` canonicalizes `operatingMonthId` in URL search params and consumes the monthly dashboard DTO.
+- Monthly KPI reads `OperatingMonth.startDate` through `endDate` with `operatingMonthId`; it does not use Excel row ranges.
+- Monthly status counts and completed-call financial/course values are accumulated from `getDailyCallLedgerSummary()` range results so warning and completed-only semantics stay aligned with the call ledger.
+- For `마감확정` or `잠금` operating months, monthly KPI and payout composition views must read the latest `MonthlyClosing` snapshot through `getMonthlyClosingSnapshot()`, ordered by operating month and `closeVersion`.
+- Closed/locked dashboard payout values are labeled `확정 스냅샷 기준` and expose `closeVersion` and `confirmedAt`.
+- Missing closed snapshots are a distinct `snapshot_missing` state; current payout preview must not be shown as a fallback.
 - For reopened `검토중` operating months, current dashboard values are the editable current truth. Any previous monthly close snapshot is historical reference only and must not be shown as the current KPI source.
 - Dashboard components must not parse `snapshotJson` ad hoc inside route components. Use a dashboard query service or closing adapter that returns a stable DTO for charts and KPI cards.
 - If a required close snapshot is missing for a closed/locked month, show a distinct snapshot-missing state instead of silently falling back to current recalculation.
@@ -48,3 +54,4 @@ The dashboard module owns read-only operational KPI summaries:
 - Reads historical monthly close values from `closing` snapshots.
 - Does not mutate operational records.
 - Exposes today KPI DTO fields: `operatingMonth`, `serviceDate`, `statusCounts`, `financials`, `therapistSummary`, `courseCompletions`, `warningCounts`, `emptyState`, and `sourceBasis`.
+- Exposes monthly KPI DTO fields: `operatingMonth`, `sourceBasis`, `statusCounts`, `financials`, `courseCompletions`, `warningCounts`, `settlementSummary`, `snapshot`, and `emptyState`.

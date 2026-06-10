@@ -32,6 +32,18 @@ Owns read-only KPI summaries.
 - Route components and UI components must not recalculate call, discount, commission, course, or therapist evidence rules.
 - Empty dates are shown as no-call state; warning dates are shown as calculated values with explicit policy/rate/D-course exclusions.
 
+## Story 6.2 Monthly Dashboard
+
+- `dashboard-query-service.ts` owns `getMonthlyDashboardMetrics({ operatingMonthId, prismaClient? })`.
+- The service returns a read-only DTO for `/dashboard/monthly`: operating month, `sourceBasis`, monthly status counts, completed-call financials, A-E course completions, warning counts, settlement summary, snapshot reference, and empty state.
+- Monthly call metrics are accumulated over `OperatingMonth.startDate` through `endDate` with `operatingMonthId`; Excel row ranges are not a query boundary.
+- `sourceBasis.kind` is `current_recalculation`, `closed_snapshot`, or `snapshot_missing`.
+- `작성중` and `검토중` months use current call ledger and `listMonthlyClosingPreview()` payout summary and are labeled `미확정 현재 기준`.
+- `마감확정` and `잠금` months use `getMonthlyClosingSnapshot()` latest `MonthlyClosing` snapshot for payout/settlement summary and are labeled `확정 스냅샷 기준` with `closeVersion` and `confirmedAt`.
+- Missing closed snapshots surface `snapshot_missing`; the dashboard must not silently fallback to current payout preview.
+- Reopened `검토중` months keep current recalculation as the KPI source. Any latest snapshot is returned only as `이전 확정 스냅샷` reference.
+- `/dashboard/monthly` consumes the DTO and must not parse `MonthlyClosing.snapshotJson`, read service call rows directly, or recreate course/settlement calculations in route code.
+
 ## Downstream
 
 - dashboard screens and reports

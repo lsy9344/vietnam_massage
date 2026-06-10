@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { DashboardQueryDomainError, getTodayDashboardMetrics } from "@/modules/dashboard/dashboard-query-service";
+import { DashboardQueryDomainError, getMonthlyDashboardMetrics, getTodayDashboardMetrics } from "@/modules/dashboard/dashboard-query-service";
 
 function dbDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
@@ -9,13 +9,13 @@ function dbDate(value: string) {
 const createdAt = new Date("2026-06-10T00:00:00.000Z");
 const updatedAt = new Date("2026-06-10T00:10:00.000Z");
 
-function createDashboardPrisma(options: { operatingMonthMissing?: boolean; noCalls?: boolean } = {}) {
+function createDashboardPrisma(options: { operatingMonthMissing?: boolean; noCalls?: boolean; operatingMonthStatus?: string } = {}) {
   const operatingMonth = {
     id: "month-2026-06",
     monthKey: "2026-06",
     startDate: dbDate("2026-06-01"),
     endDate: dbDate("2026-06-30"),
-    status: "작성중",
+    status: options.operatingMonthStatus ?? "작성중",
     createdAt,
     updatedAt
   };
@@ -325,5 +325,244 @@ describe("getTodayDashboardMetrics", () => {
     assert.equal(result.therapistSummary.totalAssignedCallCount, 0);
     assert.equal(result.emptyState.kind, "no_calls");
     assert.equal(result.emptyState.message, "이 날짜의 콜이 없습니다.");
+  });
+});
+
+function monthlyPreview(overrides: any = {}) {
+  return {
+    operatingMonthId: "month-2026-06",
+    monthKey: "2026-06",
+    startDate: "2026-06-01",
+    endDate: "2026-06-30",
+    status: "작성중",
+    previewStatus: "draft_current",
+    therapists: { rows: [], payoutAmount: 4300000, totalCallCount: 7 },
+    operations: {
+      dailyIncentiveAmount: 100000,
+      monthlyIncentiveAmount: 200000,
+      totalOpsPayoutAmount: 300000,
+      monthlyOpsCallCredit: 4,
+      appliedThresholdCallCount: null,
+      ruleStatus: "not_applicable",
+      warningMessages: [],
+      rows: []
+    },
+    earcare: {
+      earcarePoolTotal: 300000,
+      distributedAmount: 300000,
+      undistributedAmount: 0,
+      sourceCallCount: 2,
+      eligibleDayCount: 1,
+      rows: []
+    },
+    totals: {
+      therapistPayoutAmount: 4300000,
+      opsDailyIncentiveAmount: 100000,
+      opsMonthlyIncentiveAmount: 200000,
+      earcarePayoutAmount: 300000,
+      grandPayoutAmount: 4900000
+    },
+    warningCounts: {
+      total: 0
+    },
+    evidence: {
+      period: "2026-06-01~2026-06-30",
+      sourceDayCount: 30,
+      includedCallCount: 4,
+      excludedCallCount: 2,
+      warningCount: 0,
+      representativeEvidence: {
+        therapist: [],
+        operationsDaily: [],
+        operationsMonthly: [],
+        earcare: []
+      }
+    },
+    ...overrides
+  };
+}
+
+function monthlySnapshot(overrides: any = {}) {
+  return {
+    id: "closing-2",
+    operatingMonthId: "month-2026-06",
+    closeVersion: 2,
+    status: "마감확정",
+    confirmedByAccountId: "admin-1",
+    confirmedAt: "2026-06-30T15:00:00.000Z",
+    reopenedAt: null,
+    reopenedByAccountId: null,
+    reopenReason: null,
+    snapshot: {
+      id: "closing-2",
+      month: {
+        operatingMonthId: "month-2026-06",
+        monthKey: "2026-06",
+        startDate: "2026-06-01",
+        endDate: "2026-06-30",
+        statusAtConfirmation: "검토중",
+        confirmedStatus: "마감확정",
+        confirmedAt: "2026-06-30T15:00:00.000Z",
+        confirmedByAccountId: "admin-1"
+      },
+      therapists: { rows: [], payoutAmount: 9100000, totalCallCount: 12 },
+      operations: {
+        dailyIncentiveAmount: 300000,
+        monthlyIncentiveAmount: 500000,
+        totalOpsPayoutAmount: 800000,
+        monthlyOpsCallCredit: 12,
+        appliedThresholdCallCount: null,
+        ruleStatus: "not_applicable",
+        warningMessages: [],
+        rows: []
+      },
+      earcare: {
+        earcarePoolTotal: 600000,
+        distributedAmount: 600000,
+        undistributedAmount: 0,
+        sourceCallCount: 4,
+        eligibleDayCount: 2,
+        rows: []
+      },
+      totals: {
+        therapistPayoutAmount: 9100000,
+        opsDailyIncentiveAmount: 300000,
+        opsMonthlyIncentiveAmount: 500000,
+        earcarePayoutAmount: 600000,
+        grandPayoutAmount: 10500000
+      },
+      warningCounts: { total: 1 },
+      evidence: {
+        period: "2026-06-01~2026-06-30",
+        sourceDayCount: 30,
+        includedCallCount: 12,
+        excludedCallCount: 1,
+        warningCount: 1,
+        representativeEvidence: {
+          therapist: [],
+          operationsDaily: [],
+          operationsMonthly: [],
+          earcare: []
+        }
+      },
+      source: {
+        serviceVersion: "monthly-closing-service:5.3",
+        previewBasis: "listMonthlyClosingPreview",
+        snapshotCreatedAt: "2026-06-30T15:00:00.000Z"
+      }
+    },
+    ...overrides
+  };
+}
+
+describe("getMonthlyDashboardMetrics", () => {
+  it("운영월 날짜 범위 전체를 누적하고 완료 calculated 콜만 금액/코스 집계에 포함한다", async () => {
+    const result = await getMonthlyDashboardMetrics({
+      operatingMonthId: "month-2026-06",
+      prismaClient: createDashboardPrisma(),
+      dependencies: {
+        listMonthlyClosingPreview: async () => monthlyPreview()
+      }
+    });
+
+    assert.deepEqual(result.statusCounts, {
+      reservation: 1,
+      inUse: 0,
+      cleaning: 0,
+      completed: 6,
+      noShow: 1,
+      canceled: 1
+    });
+    assert.equal(result.financials.paymentTotal, 9400000);
+    assert.equal(result.financials.discountTotal, 100000);
+    assert.deepEqual(
+      result.courseCompletions.map((course) => [course.courseCode, course.completedCount, course.therapistAssignmentCount]),
+      [
+        ["A", 1, 1],
+        ["B", 1, 2],
+        ["C", 0, 0],
+        ["D", 1, 2],
+        ["E", 1, 1]
+      ]
+    );
+    assert.deepEqual(result.warningCounts.callLedger, {
+      coursePolicyMissing: 0,
+      therapistRateMissing: 1,
+      secondTherapistRequired: 1
+    });
+    assert.equal(result.sourceBasis.kind, "current_recalculation");
+    assert.equal(result.sourceBasis.label, "미확정 현재 기준");
+    assert.equal(result.settlementSummary?.grandPayoutAmount, 4900000);
+    assert.equal(result.emptyState.kind, "warnings_excluded");
+  });
+
+  it("마감확정/잠금 운영월은 latest closing snapshot을 지급 기준 source로 사용한다", async () => {
+    const result = await getMonthlyDashboardMetrics({
+      operatingMonthId: "month-2026-06",
+      prismaClient: createDashboardPrisma({ operatingMonthStatus: "마감확정" }),
+      dependencies: {
+        getMonthlyClosingSnapshot: async () => monthlySnapshot()
+      }
+    });
+
+    assert.equal(result.sourceBasis.kind, "closed_snapshot");
+    assert.equal(result.sourceBasis.label, "확정 스냅샷 기준");
+    assert.equal(result.sourceBasis.closeVersion, 2);
+    assert.equal(result.sourceBasis.confirmedAt, "2026-06-30T15:00:00.000Z");
+    assert.equal(result.settlementSummary?.grandPayoutAmount, 10500000);
+    assert.equal(result.snapshot?.kind, "latest");
+    assert.equal(result.snapshot?.closeVersion, 2);
+  });
+
+  it("마감확정/잠금 운영월에서 snapshot이 없으면 current 지급값으로 fallback하지 않는다", async () => {
+    const result = await getMonthlyDashboardMetrics({
+      operatingMonthId: "month-2026-06",
+      prismaClient: createDashboardPrisma({ operatingMonthStatus: "잠금" }),
+      dependencies: {
+        getMonthlyClosingSnapshot: async () => {
+          const error = new Error("확정 스냅샷을 찾을 수 없습니다.");
+          (error as any).code = "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND";
+          throw error;
+        },
+        listMonthlyClosingPreview: async () => monthlyPreview({ totals: { grandPayoutAmount: 999999999 } })
+      }
+    });
+
+    assert.equal(result.sourceBasis.kind, "snapshot_missing");
+    assert.equal(result.sourceBasis.label, "확정 스냅샷을 찾을 수 없습니다");
+    assert.equal(result.settlementSummary, null);
+    assert.equal(result.snapshot, null);
+    assert.equal(result.emptyState.kind, "snapshot_missing");
+  });
+
+  it("재오픈되어 검토중인 운영월은 current source를 사용하고 이전 snapshot은 참고 정보로만 분리한다", async () => {
+    const result = await getMonthlyDashboardMetrics({
+      operatingMonthId: "month-2026-06",
+      prismaClient: createDashboardPrisma({ operatingMonthStatus: "검토중" }),
+      dependencies: {
+        listMonthlyClosingPreview: async () => monthlyPreview({ status: "검토중" }),
+        getMonthlyClosingSnapshot: async () => monthlySnapshot({ closeVersion: 1 })
+      }
+    });
+
+    assert.equal(result.sourceBasis.kind, "current_recalculation");
+    assert.equal(result.sourceBasis.label, "미확정 현재 기준");
+    assert.equal(result.settlementSummary?.grandPayoutAmount, 4900000);
+    assert.equal(result.snapshot?.kind, "previous");
+    assert.equal(result.snapshot?.label, "이전 확정 스냅샷");
+    assert.equal(result.snapshot?.closeVersion, 1);
+  });
+
+  it("잘못된 운영월 입력은 한국어 domain error로 차단한다", async () => {
+    await assert.rejects(
+      getMonthlyDashboardMetrics({
+        operatingMonthId: "",
+        prismaClient: createDashboardPrisma()
+      }),
+      (error) =>
+        error instanceof DashboardQueryDomainError &&
+        error.code === "INVALID_DASHBOARD_QUERY" &&
+        error.message === "운영월을 선택하세요."
+    );
   });
 });

@@ -33,10 +33,10 @@ const roleLandingPath: Record<Role, string> = {
 
 const roleRoutePrefixes: Record<Role, string[]> = {
   administrator: ["/live", "/calls", "/rooms", "/settlements", "/closing", "/dashboard", "/masters", "/audit", "/tv"],
-  counter: ["/live", "/calls", "/rooms", "/dashboard/today"],
-  settlement_manager: ["/settlements", "/closing", "/dashboard/today"],
+  counter: ["/live", "/calls", "/rooms", "/dashboard/today", "/dashboard/monthly"],
+  settlement_manager: ["/settlements", "/closing", "/dashboard/today", "/dashboard/monthly"],
   waiter: ["/rooms"],
-  read_only_viewer: ["/rooms", "/tv", "/dashboard/today"]
+  read_only_viewer: ["/rooms", "/tv", "/dashboard/today", "/dashboard/monthly"]
 };
 
 const rolePermissions: Record<Role, SensitivePermission[]> = {

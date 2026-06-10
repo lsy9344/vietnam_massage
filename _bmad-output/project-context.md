@@ -181,6 +181,11 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Story 6.1 기준 today dashboard DTO는 `getDailyCallLedgerSummary()`로 상태 수, 방문완료 calculated 금액, 지출, A~E 코스별 완료, warning counts를 가져오고 `listTherapistDailySettlements()`로 `THERAPIST_1`/`THERAPIST_2` 담당콜과 마사지사 정산 합계를 가져온다.
 - Story 6.1 기준 `/dashboard/today`는 administrator, counter, settlement_manager, read_only_viewer만 접근하고 waiter는 `/rooms`로 redirect된다. mutation UI, audit write, chart dependency, 월마감 snapshot 생성/수정은 포함하지 않는다.
 - Story 6.1 기준 today dashboard empty state는 콜이 없는 날짜와 정책/수당/D코스 검증 warning 때문에 금액/코스 집계에서 제외된 날짜를 구분해 표시한다.
+- Story 6.2 기준 월간 KPI는 `src/modules/dashboard/dashboard-query-service.ts`의 `getMonthlyDashboardMetrics()`가 소유한다. `/dashboard/monthly` route component는 이 DTO를 소비하고 콜 row 조회, 월마감 snapshot JSON parsing, 코스별 집계, 지급/정산 계산을 화면에서 재구현하지 않는다. DTO의 `sourceBasis`는 `current_recalculation`, `closed_snapshot`, `snapshot_missing`을 구분한다.
+- Story 6.2 기준 월간 집계는 `OperatingMonth.startDate`~`endDate`와 `operatingMonthId` 기준으로 수행하고 Excel 행 범위를 query boundary로 쓰지 않는다. 방문완료 매출/할인/코스별 완료는 `calculationStatus === "calculated"`인 완료 콜만 포함하며 제외 row는 warning으로 노출한다.
+- Story 6.2 기준 `작성중`/`검토중` 운영월은 `미확정 현재 기준`으로 현재 콜 원장과 현재 정책 미리보기 값을 표시한다. 재오픈된 `검토중` 월의 이전 snapshot은 `이전 확정 스냅샷` 참고 정보로만 분리하고 현재 KPI source와 섞지 않는다.
+- Story 6.2 기준 `마감확정`/`잠금` 운영월의 지급/정산 값은 `getMonthlyClosingSnapshot()`의 latest `MonthlyClosing` snapshot을 우선 source로 사용하고 `확정 스냅샷 기준`, `closeVersion`, `confirmedAt`을 표시한다. snapshot이 없거나 형식이 부족하면 current preview로 fallback하지 않고 `확정 스냅샷을 찾을 수 없습니다` 상태를 표시한다.
+- Story 6.2 기준 `/dashboard/monthly`는 administrator, counter, settlement_manager, read_only_viewer만 접근하고 waiter는 `/rooms`로 redirect된다. mutation UI, Server Action, audit write, chart dependency, 월마감 snapshot 생성/수정은 포함하지 않는다.
 - Story 3.3 기준 `/rooms`는 웨이터와 조회 전용 사용자의 객실 현황 landing이며 읽기 전용 화면이다. `requireRouteAccess("/rooms")`를 유지하고 웨이터는 `/rooms` 외 route에 접근하면 `/rooms`로 redirect한다.
 - Story 3.3 기준 `/rooms`는 `listRoomStatuses()`의 `RoomStatusDto`와 `RoomStatusCard`를 그대로 재사용한다. 화면에서 활성 콜, `remainingMinutes`, `expectedEndAt`, `종료확인`, 안내 문구를 다시 계산하지 않는다.
 - Story 3.3 기준 상태별 안내 문구 source of truth는 `src/modules/rooms/room-status-service.ts`의 `ROOM_STATUS_GUIDANCE_TEXT`다. `/rooms`에서 문구를 별도 상수로 복제하지 않는다.

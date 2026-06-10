@@ -36,7 +36,10 @@ export const navigationGroups: NavigationGroup[] = [
   },
   {
     label: "대시보드",
-    items: [{ label: "오늘 대시보드", href: "/dashboard/today", allowedRoles: allRoles.filter((role) => role !== "waiter") }]
+    items: [
+      { label: "오늘 대시보드", href: "/dashboard/today", allowedRoles: allRoles.filter((role) => role !== "waiter") },
+      { label: "월간 대시보드", href: "/dashboard/monthly", allowedRoles: allRoles.filter((role) => role !== "waiter") }
+    ]
   },
   {
     label: "마스터 설정",
