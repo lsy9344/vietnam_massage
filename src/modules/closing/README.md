@@ -35,6 +35,20 @@ Owns monthly close and payout snapshots.
 - Full-attendance recognition remains owned by Story 4.1 / settlements attendance source. When that source is absent, the service returns `fullAttendanceSourceStatus: "missing_story_4_1_source"` and warning evidence instead of estimating days or silently treating the allowance as a successful 0 VND calculation.
 - The preview is read-only: no persistence, no `MonthlyClose`/snapshot model, no payout table, no audit event, no status mutation, no Server Action write path.
 
+## Story 5.3 Monthly Close Confirmation
+
+`MonthlyClosing` is the persisted historical close record in `monthly_closings`. It stores one immutable snapshot per `OperatingMonth` through the unique `operatingMonthId` constraint.
+
+- `startMonthlyCloseReview()` owns the `작성중 -> 검토중` transition for the closing workflow and records `operating_month.status_changed`.
+- `confirmMonthlyClose()` owns the `검토중 -> 마감확정` transition, calls `listMonthlyClosingPreview()` inside the transaction boundary, creates the `MonthlyClosing` snapshot, and records `monthly_close.confirmed`.
+- `getMonthlyClosingSnapshot()` returns the stored `snapshotJson`; it must not call the preview service and present recalculated current values as historical values.
+- The snapshot normalizes preview data into a confirmation DTO with month key/date range/status at confirmation, therapist rows, operations rows, earcare rows, totals, warning counts, evidence, and source basis.
+- Snapshot rows preserve stable identifiers (`Employee.id`, `staffCode`, `Course.code` where present), display labels, ISO dates/date-times, warning/evidence strings, and VND number amounts as plain JSON.
+- Confirmation uses a transaction across conditional `OperatingMonth.updateMany`, `MonthlyClosing.create`, and audit logging. Duplicate confirm is blocked by both domain status checks and the DB unique constraint.
+- `monthly_close.confirmed` uses `targetType: "monthly_close"`; operating-month review status changes use `targetType: "operating_month"`.
+- The UI separates preview and snapshot: current recalculating values are labeled `현재 기준 미리보기`, while persisted historical values are labeled `확정 스냅샷`.
+- Story 5.4 will add lock-state write blocking, Story 5.5 will own reopen/cancel policy with reason, and Story 5.6 will own the double-confirmation dialog/focus contract.
+
 ## Downstream
 
 - `dashboard` for closed-month summaries

@@ -21,6 +21,7 @@ model UserAccount {
   updatedAt        DateTime       @updatedAt @map("updated_at")
   loginAttempts    LoginAttempt[]
   changedServiceCallStatusHistories ServiceCallStatusHistory[]
+  confirmedMonthlyClosings MonthlyClosing[]
 
   @@map("user_accounts")
 }
@@ -92,8 +93,25 @@ model OperatingMonth {
   dailyExpenses DailyExpense[]
   earcareAttendances EarcareAttendance[]
   opsAttendances OpsAttendance[]
+  monthlyClosing MonthlyClosing?
 
   @@map("operating_months")
+}
+
+model MonthlyClosing {
+  id                   String         @id @default(cuid())
+  operatingMonthId     String         @unique @map("operating_month_id")
+  operatingMonth       OperatingMonth @relation(fields: [operatingMonthId], references: [id])
+  snapshotJson         Json           @map("snapshot_json")
+  confirmedByAccountId String         @map("confirmed_by_account_id")
+  confirmedByAccount   UserAccount    @relation(fields: [confirmedByAccountId], references: [id])
+  confirmedAt          DateTime       @map("confirmed_at")
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  @@index([confirmedAt], map: "idx_monthly_closings_confirmed_at")
+  @@index([confirmedByAccountId, confirmedAt], map: "idx_monthly_closings_confirmer_confirmed_at")
+  @@map("monthly_closings")
 }
 
 model Room {

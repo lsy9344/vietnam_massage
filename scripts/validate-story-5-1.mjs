@@ -106,7 +106,7 @@ for (const required of [
 ]) {
   if (!page.includes(required)) errors.push(`closing page.tsx missing ${required}`);
 }
-for (const forbidden of ["use server", "action=", "recordAuditEvent", "revalidatePath", "MonthlyClose", "closingSnapshot", "createMonthlyClose"]) {
+for (const forbidden of ["use server", "action=", "recordAuditEvent", "revalidatePath", "MonthlyClose", "createMonthlyClose"]) {
   if (page.includes(forbidden)) errors.push(`closing page.tsx must not add write/snapshot behavior: ${forbidden}`);
 }
 

@@ -1,6 +1,12 @@
 import Link from "next/link";
-import { requireRouteAccess } from "@/lib/authorization";
+import { canPerform, requireRouteAccess } from "@/lib/authorization";
+import { ClosingActionPanel } from "@/app/(erp)/closing/closing-action-panel";
 import { selectedOperatingMonthFor } from "@/lib/operating-date";
+import {
+  getMonthlyClosingSnapshot,
+  MonthlyClosingDomainError,
+  type MonthlyClosingDto
+} from "@/modules/closing/monthly-closing-service";
 import {
   listMonthlyClosingPreview,
   type MonthlyClosingPreviewDto
@@ -21,7 +27,7 @@ function PreviewNotice({ result }: { result: MonthlyClosingPreviewDto }) {
     <section className="mb-4 border border-border bg-surface px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="inline-flex border border-border bg-readonly px-2 py-1 text-xs font-semibold text-muted">
-          {isClosed ? "현재 기준 미리보기" : "미확정 미리보기"}
+          현재 기준 미리보기
         </span>
         <span className="text-sm font-semibold text-foreground">운영월 상태: {result.status}</span>
       </div>
@@ -30,6 +36,76 @@ function PreviewNotice({ result }: { result: MonthlyClosingPreviewDto }) {
           ? "마감확정/잠금 운영월의 확정값은 월마감 스냅샷 기준입니다. 이 화면은 현재 콜 원장과 현재 정책 기준의 미리보기입니다."
           : "작성중/검토중 운영월의 현재 콜 원장과 현재 정책 기준 미확정 미리보기입니다."}
       </p>
+    </section>
+  );
+}
+
+function ClosingStepper({ status }: { status: string }) {
+  const steps = ["작성중", "검토중", "마감확정", "잠금"];
+  const currentIndex = Math.max(steps.indexOf(status), 0);
+
+  return (
+    <section className="mb-4 border border-border bg-surface px-4 py-3" aria-label="월마감 상태 단계">
+      <ol className="grid gap-2 md:grid-cols-4">
+        {steps.map((step, index) => {
+          const active = index === currentIndex;
+          const passed = index < currentIndex;
+          return (
+            <li
+              aria-current={active ? "step" : undefined}
+              className={`border px-3 py-2 text-sm ${
+                active
+                  ? "border-brand bg-brand text-brand-foreground"
+                  : passed
+                    ? "border-success bg-success/10 text-success"
+                    : "border-border bg-background text-muted"
+              }`}
+              key={step}
+            >
+              <div className="text-xs font-medium">STEP {index + 1}</div>
+              <div className="font-semibold">{step}</div>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
+function SnapshotSummary({ closing }: { closing: MonthlyClosingDto }) {
+  return (
+    <section className="mb-4 border border-border bg-surface px-4 py-3" aria-label="확정 스냅샷">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="inline-flex border border-success bg-success/10 px-2 py-1 text-xs font-semibold text-success">확정 스냅샷</div>
+          <h2 className="mt-2 text-base font-semibold text-foreground">{closing.snapshot.month.monthKey} 월마감 확정값</h2>
+          <p className="mt-1 text-sm text-muted">
+            snapshot id {closing.snapshot.id} / 확정자 {closing.confirmedByAccountId} / 확정시각 {closing.confirmedAt}
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-xs font-medium text-muted">확정 전체 지급 합계</div>
+          <div className="text-lg font-semibold text-foreground tabular-nums">{formatVnd(closing.snapshot.totals.grandPayoutAmount)}</div>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 text-sm md:grid-cols-4">
+        <div className="border border-border bg-background px-3 py-2">
+          <div className="text-xs text-muted">마사지사</div>
+          <div className="font-semibold tabular-nums">{formatVnd(closing.snapshot.totals.therapistPayoutAmount)}</div>
+        </div>
+        <div className="border border-border bg-background px-3 py-2">
+          <div className="text-xs text-muted">운영팀</div>
+          <div className="font-semibold tabular-nums">{formatVnd(closing.snapshot.operations.totalOpsPayoutAmount)}</div>
+        </div>
+        <div className="border border-border bg-background px-3 py-2">
+          <div className="text-xs text-muted">귀케어</div>
+          <div className="font-semibold tabular-nums">{formatVnd(closing.snapshot.totals.earcarePayoutAmount)}</div>
+        </div>
+        <div className="border border-border bg-background px-3 py-2">
+          <div className="text-xs text-muted">warning</div>
+          <div className="font-semibold tabular-nums">{closing.snapshot.warningCounts.total}건</div>
+        </div>
+      </div>
     </section>
   );
 }
@@ -282,15 +358,24 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
   }
 
   let result: MonthlyClosingPreviewDto | null = null;
+  let closingSnapshot: MonthlyClosingDto | null = null;
   let errorMessage: string | null = null;
 
   try {
     result = await listMonthlyClosingPreview({
       operatingMonthId: selectedMonth.id
     });
+    closingSnapshot = await getMonthlyClosingSnapshot({
+      operatingMonthId: selectedMonth.id
+    });
   } catch (error) {
-    errorMessage = error instanceof Error ? error.message : "월마감 미리보기를 조회하지 못했습니다.";
+    if (error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND") {
+      closingSnapshot = null;
+    } else {
+      errorMessage = error instanceof Error ? error.message : "월마감 미리보기를 조회하지 못했습니다.";
+    }
   }
+  const canWriteClosing = canPerform(account.role, "closing:write");
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
@@ -329,6 +414,9 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
         </button>
       </form>
 
+      <ClosingStepper status={selectedMonth.status} />
+      <ClosingActionPanel canWrite={canWriteClosing} operatingMonthId={selectedMonth.id} status={selectedMonth.status} />
+
       {errorMessage ? (
         <section className="border border-danger bg-surface px-4 py-5" role="alert">
           <h2 className="text-base font-semibold text-danger">월마감 미리보기 조회 실패</h2>
@@ -342,6 +430,7 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
         </section>
       ) : result ? (
         <>
+          {closingSnapshot ? <SnapshotSummary closing={closingSnapshot} /> : null}
           <PreviewNotice result={result} />
           <SummaryBand result={result} />
           <TherapistTable result={result} />
