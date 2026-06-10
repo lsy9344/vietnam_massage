@@ -88,7 +88,7 @@ development_status:
   6-2-월간-kpi-대시보드와-스냅샷-조회: done
   6-3-주인용-그래프-리포트: done
   6-4-대시보드-로딩-실패-차트-색상-규칙: done
-  epic-6-retrospective: optional
+  epic-6-retrospective: done
   epic-7: backlog
   7-1-원본-시트-기능-매핑표: backlog
   7-2-핵심-계산-대조-검증-fixture와-테스트: backlog

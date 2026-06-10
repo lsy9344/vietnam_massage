@@ -306,7 +306,7 @@ Project initialization using this selected starter should be the first implement
 
 **TV mode:** Implement TV board as a dedicated fullscreen route using the same room-status DTO as the regular room-status screen. Hide chrome/sidebar/input controls, poll for updates, and show last-updated or refresh-delay state.
 
-**Charts:** Defer chart library lock-in until dashboard implementation. Prefer a lightweight React chart library such as Recharts only if KPI cards and simple CSS/table visualizations are insufficient. Dashboard visuals must not slow the call-entry grid.
+**Charts:** Epic 6 implementation resolved the initial chart-library deferral by using project-local SVG/CSS chart primitives with visible labels and table/list fallback data. Do not add a chart dependency for dashboard reports unless a later story verifies and pins an exact compatible version, records React/Next compatibility and bundle impact, and proves the local primitives are insufficient. Dashboard visuals must not slow the call-entry grid.
 
 **Performance:** Query and render the call ledger by selected date within an operating month. Do not render the full monthly 31-day x 100-slot input volume as one editable grid. Use date navigation and summary queries for monthly views.
 
@@ -367,7 +367,7 @@ Project initialization using this selected starter should be the first implement
 
 - TV/room refresh can start with polling and later move to SSE/websocket if measured operational latency requires it.
 - External caching is deferred until query/index tuning and Next-level cache/revalidation are insufficient.
-- Chart library is deferred until dashboard implementation proves CSS/simple visualizations insufficient.
+- Dashboard chart library selection has been resolved for Epic 6: use project-local SVG/CSS primitives and no chart dependency. Reopen this only with measured need, exact version pinning, compatibility notes, and bundle-impact documentation.
 - Auth.js v5 vs stable v4 must be rechecked at implementation time because v5 was still beta during this architecture run.
 - Hosting provider details, backup retention, and migration approval flow remain project-standard confirmations before implementation.
 
@@ -820,13 +820,13 @@ AI 에이전트 충돌 가능성이 높은 명명, 응답 형식, 상태 관리,
 
 **Nice-to-Have Gaps:**
 
-- dashboard chart library는 대시보드 구현 시 확정한다.
+- dashboard chart library 결정은 Epic 6에서 project-local SVG/CSS primitive와 no chart dependency로 확정했다. 이후 변경은 exact version pin, React/Next 호환성, bundle impact 기록이 있을 때만 허용한다.
 - external APM/log aggregation은 배포 표준 또는 운영 필요가 생기면 추가한다.
 - source Excel migration range/period는 데이터 이관 스토리에서 확정한다.
 
 ### Validation Issues Addressed
 
-검증 중 발견한 주요 위험은 “구현 전 결정되지 않은 세부 도구를 아키텍처에서 과도하게 확정하는 것”이었다. 이를 피하기 위해 test runner, chart library, external cache, realtime transport, APM은 구현/운영 근거가 생길 때 확정하도록 watch/deferred decision으로 남겼다.
+검증 중 발견한 주요 위험은 “구현 전 결정되지 않은 세부 도구를 아키텍처에서 과도하게 확정하는 것”이었다. 이를 피하기 위해 test runner, external cache, realtime transport, APM은 구현/운영 근거가 생길 때 확정하도록 watch/deferred decision으로 남겼다. chart library는 Epic 6 구현 근거가 생겨 project-local SVG/CSS primitive와 no chart dependency로 확정됐다.
 
 ### Architecture Completeness Checklist
 
@@ -877,7 +877,7 @@ AI 에이전트 충돌 가능성이 높은 명명, 응답 형식, 상태 관리,
 - 구현 착수 시 test runner와 e2e framework 확정
 - 운영 환경 확정 후 backup/restore, migration approval, monitoring 세부화
 - TV/room polling 성능 측정 후 SSE/WebSocket 필요성 판단
-- 대시보드 구현 중 chart library 확정
+- 대시보드 chart library는 Epic 6에서 project-local SVG/CSS primitive와 no chart dependency로 확정됨
 
 ### Implementation Handoff
 
