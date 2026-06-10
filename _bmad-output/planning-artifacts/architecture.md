@@ -70,7 +70,7 @@ UX 측면에서는 데스크톱 웹이 1차 표면이고, TV 현황판 풀스크
 
 - Primary domain: 데스크톱 웹 기반 풀스택 운영 ERP
 - Complexity level: 높음
-- Estimated architectural components: 8개 도메인 모듈(`masters`, `calls`, `rooms`, `settlements`, `closing`, `dashboard`, `audit`, `shared`) + 인증/권한 + 데이터 이관/검증 흐름
+- Estimated architectural components: 9개 도메인 모듈(`masters`, `calls`, `rooms`, `settlements`, `closing`, `dashboard`, `migration`, `audit`, `shared`) + 인증/권한 + 데이터 이관/검증 흐름
 - Complexity drivers: 엑셀 기능 보존, 계산 정확성, 마감 스냅샷 불변성, 감사 로그, 권한 게이트, 빠른 그리드 입력, TV/객실 현황 갱신, 정산/월마감 서버 계산
 
 ### 기술 제약과 의존성
@@ -95,7 +95,7 @@ UX 측면에서는 데스크톱 웹이 1차 표면이고, TV 현황판 풀스크
 - 키보드 중심 입력: 콜 원장 그리드는 빠른 입력, autosave, 계산 셀 갱신, 오류 보류 상태를 지원해야 한다.
 - 접근성: 상태 토큰, 글리프, 라벨, 모션 안전, 오류 알림, 월마감 모달 포커스 관리를 구현 기준으로 유지해야 한다.
 - 정책 이력: 객실/직원/코스명은 안정 키가 아니며, 수당/인센/가격 정책은 적용월과 이력을 가져야 한다.
-- 데이터 이관 검증: 원본 12개 시트와 숨김 시트 `목록`을 기능/설정/검증 항목으로 모두 매핑해야 한다.
+- 데이터 이관 검증: 원본 12개 시트와 숨김 시트 `목록`을 기능/설정/검증 항목으로 모두 매핑하고, `/masters/sheet-mapping`에서 기능 보존율, 계산 대조, 열린 QA 추적 상태를 확인할 수 있어야 한다.
 
 ## Starter Template Evaluation
 
@@ -694,7 +694,7 @@ vietnam_massage/
 - FR-31 to FR-33: `src/app/(erp)/dashboard`, `src/modules/dashboard`
 - FR-34: `src/lib/auth.ts`, `src/lib/authorization.ts`, route layouts/actions
 - FR-35: `src/modules/audit`
-- FR-36 to FR-37: `docs/modules`, tests, migration fixtures, domain calculation tests
+- FR-36 to FR-37: `src/app/(erp)/masters/sheet-mapping`, `src/modules/migration`, `tests/fixtures`, `tests/e2e`, `docs/modules`, domain calculation tests, `MigrationVerificationIssue`/`MigrationVerificationIssueHistory` QA tracking tables
 
 ### Integration Points
 
@@ -703,6 +703,9 @@ vietnam_massage/
 - Pages call Server Components and Server Actions.
 - Server Actions validate, authorize, call domain services, and return `ActionResult<T>`.
 - Domain services call other domain services only through explicit service functions, not through UI.
+- Migration verification uses `src/modules/migration` as the report and mapping boundary. It consumes Story 7.1 sheet mapping data and Story 7.2 fixture/mismatch contracts; it must not parse `sheet.xlsx`, workbook ranges, formulas, or cell coordinates at request time.
+- `/masters/sheet-mapping` is the exact QA/reference route for administrators and `read_only_viewer`. Only administrators can mutate QA tracking status through `migration:write`; `read_only_viewer` must not receive the full `/masters` prefix.
+- Migration QA tracking uses `MigrationVerificationIssue` and `MigrationVerificationIssueHistory`, not operational audit logs. Status values are bounded to `미확인`, `수정중`, `재검증 필요`, and `통과`.
 
 **External Integrations:**
 
@@ -720,6 +723,7 @@ vietnam_massage/
 - root config: `package.json`, `next.config.ts`, `tsconfig.json`, `eslint.config.mjs`, `postcss.config.mjs`, `components.json`
 - env sample: `.env.example`
 - DB config: `prisma/schema.prisma`, `prisma/migrations`
+- fixture config: `tests/fixtures` for migration calculation comparison fixtures and memory Prisma adapters
 
 **Source Organization:**
 
@@ -736,6 +740,7 @@ vietnam_massage/
 - e2e tests under `tests/e2e`
 - fixtures under `tests/fixtures`
 - calculation tests must precede UI-heavy implementation
+- migration verification source guardrails must run without requiring a browser server or database; DB-backed browser checks must be clearly separated.
 
 **Asset Organization:**
 
