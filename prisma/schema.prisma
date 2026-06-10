@@ -7,47 +7,48 @@ datasource db {
 }
 
 model UserAccount {
-  id               String         @id @default(cuid())
-  email            String         @unique
-  accountId        String         @unique @map("account_id")
-  passwordHash     String         @map("password_hash")
-  role             String
+  id                                         String                              @id @default(cuid())
+  email                                      String                              @unique
+  accountId                                  String                              @unique @map("account_id")
+  passwordHash                               String                              @map("password_hash")
+  role                                       String
   employeeId       String?        @unique @map("employee_id")
-  employee         Employee?      @relation(fields: [employeeId], references: [id])
-  isActive         Boolean        @default(true) @map("is_active")
-  lockedUntil      DateTime?      @map("locked_until")
-  failedLoginCount Int            @default(0) @map("failed_login_count")
-  createdAt        DateTime       @default(now()) @map("created_at")
-  updatedAt        DateTime       @updatedAt @map("updated_at")
-  loginAttempts    LoginAttempt[]
+  employee                                   Employee?                           @relation(fields: [employeeId], references: [id])
+  isActive       Boolean    @default(true) @map("is_active")
+  lockedUntil                                DateTime?                           @map("locked_until")
+  failedLoginCount                           Int                                 @default(0) @map("failed_login_count")
+  createdAt                                  DateTime                            @default(now()) @map("created_at")
+  updatedAt                                  DateTime                            @updatedAt @map("updated_at")
+  loginAttempts                              LoginAttempt[]
   changedServiceCallStatusHistories ServiceCallStatusHistory[]
   confirmedMonthlyClosings MonthlyClosing[]
+  changedMigrationVerificationIssueHistories MigrationVerificationIssueHistory[]
 
   @@map("user_accounts")
 }
 
 model Employee {
-  id               String       @id @default(cuid())
-  displayName      String       @map("display_name")
-  staffCode        String       @unique @map("staff_code")
-  employeeGroup    String       @map("employee_group")
-  position         String
-  shiftType        String?      @map("shift_type")
-  baseSalary       Int          @map("base_salary")
-  phone            String?
-  birthday         DateTime?    @db.Date
-  hireDate         DateTime?    @map("hire_date") @db.Date
-  employmentStatus String       @default("재직") @map("employment_status")
-  sortOrder        Int          @map("sort_order")
-  isActive         Boolean      @default(true) @map("is_active")
-  createdAt        DateTime     @default(now()) @map("created_at")
-  updatedAt        DateTime     @updatedAt @map("updated_at")
-  account          UserAccount?
-  therapistRates   TherapistCourseRate[]
+  id                     String                  @id @default(cuid())
+  displayName            String                  @map("display_name")
+  staffCode              String                  @unique @map("staff_code")
+  employeeGroup          String                  @map("employee_group")
+  position               String
+  shiftType              String?                 @map("shift_type")
+  baseSalary             Int                     @map("base_salary")
+  phone                  String?
+  birthday               DateTime?               @db.Date
+  hireDate               DateTime?               @map("hire_date") @db.Date
+  employmentStatus       String                  @default("재직") @map("employment_status")
+  sortOrder              Int                     @map("sort_order")
+  isActive               Boolean                 @default(true) @map("is_active")
+  createdAt              DateTime                @default(now()) @map("created_at")
+  updatedAt              DateTime                @updatedAt @map("updated_at")
+  account                UserAccount?
+  therapistRates         TherapistCourseRate[]
   serviceCallAssignments ServiceCallAssignment[]
-  handledDailyExpenses DailyExpense[]
-  earcareAttendances EarcareAttendance[]
-  opsAttendances     OpsAttendance[]
+  handledDailyExpenses   DailyExpense[]
+  earcareAttendances     EarcareAttendance[]
+  opsAttendances         OpsAttendance[]
 
   @@unique([employeeGroup, sortOrder], map: "uq_employees_employee_group_sort_order")
   @@map("employees")
@@ -81,18 +82,54 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+model MigrationVerificationIssue {
+  id                 String                              @id @default(cuid())
+  itemKey            String                              @unique @map("item_key")
+  kind               String
+  sourceSheet        String?                             @map("source_sheet")
+  relatedRequirement String?                             @map("related_requirement")
+  relatedStory       String?                             @map("related_story")
+  status             String
+  assigneeName       String?                             @map("assignee_name")
+  note               String?                             @db.VarChar(500)
+  createdAt          DateTime                            @default(now()) @map("created_at")
+  updatedAt          DateTime                            @updatedAt @map("updated_at")
+  histories          MigrationVerificationIssueHistory[]
+
+  @@index([kind, status], map: "idx_migration_verification_issues_kind_status")
+  @@index([sourceSheet], map: "idx_migration_verification_issues_source_sheet")
+  @@map("migration_verification_issues")
+}
+
+model MigrationVerificationIssueHistory {
+  id                 String                     @id @default(cuid())
+  issueId            String                     @map("issue_id")
+  issue              MigrationVerificationIssue @relation(fields: [issueId], references: [id])
+  previousStatus     String?                    @map("previous_status")
+  newStatus          String                     @map("new_status")
+  note               String?                    @db.VarChar(500)
+  changedByAccountId String                     @map("changed_by_account_id")
+  changedByAccount   UserAccount                @relation(fields: [changedByAccountId], references: [id])
+  changedAt          DateTime                   @default(now()) @map("changed_at")
+  createdAt          DateTime                   @default(now()) @map("created_at")
+
+  @@index([issueId, changedAt], map: "idx_migration_verification_histories_issue_changed")
+  @@index([changedByAccountId, changedAt], map: "idx_migration_verification_histories_actor_changed")
+  @@map("migration_verification_issue_histories")
+}
+
 model OperatingMonth {
-  id        String   @id @default(cuid())
-  monthKey  String   @unique @map("month_key")
-  startDate DateTime @map("start_date") @db.Date
-  endDate   DateTime @map("end_date") @db.Date
-  status    String   @default("작성중")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  serviceCalls ServiceCall[]
-  dailyExpenses DailyExpense[]
+  id                 String              @id @default(cuid())
+  monthKey           String              @unique @map("month_key")
+  startDate          DateTime            @map("start_date") @db.Date
+  endDate            DateTime            @map("end_date") @db.Date
+  status             String              @default("작성중")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  serviceCalls       ServiceCall[]
+  dailyExpenses      DailyExpense[]
   earcareAttendances EarcareAttendance[]
-  opsAttendances OpsAttendance[]
+  opsAttendances     OpsAttendance[]
   monthlyClosings MonthlyClosing[]
 
   @@map("operating_months")
@@ -121,13 +158,13 @@ model MonthlyClosing {
 }
 
 model Room {
-  id                     String   @id @default(cuid())
-  displayName            String   @map("display_name")
-  migrationReferenceName String   @map("migration_reference_name")
-  sortOrder              Int      @unique @map("sort_order")
-  isActive               Boolean  @default(true) @map("is_active")
-  createdAt              DateTime @default(now()) @map("created_at")
-  updatedAt              DateTime @updatedAt @map("updated_at")
+  id                     String        @id @default(cuid())
+  displayName            String        @map("display_name")
+  migrationReferenceName String        @map("migration_reference_name")
+  sortOrder              Int           @unique @map("sort_order")
+  isActive               Boolean       @default(true) @map("is_active")
+  createdAt              DateTime      @default(now()) @map("created_at")
+  updatedAt              DateTime      @updatedAt @map("updated_at")
   serviceCalls           ServiceCall[]
 
   @@map("rooms")
@@ -161,11 +198,11 @@ model TimeSlot {
 }
 
 model Course {
-  id             String                 @id @default(cuid())
-  code           String                 @unique
-  isActive       Boolean                @default(true) @map("is_active")
-  createdAt      DateTime               @default(now()) @map("created_at")
-  updatedAt      DateTime               @updatedAt @map("updated_at")
+  id             String                @id @default(cuid())
+  code           String                @unique
+  isActive       Boolean               @default(true) @map("is_active")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
   policies       CoursePolicy[]
   therapistRates TherapistCourseRate[]
   serviceCalls   ServiceCall[]
@@ -174,23 +211,23 @@ model Course {
 }
 
 model ServiceCall {
-  id                String                  @id @default(cuid())
-  operatingMonthId  String                  @map("operating_month_id")
-  operatingMonth    OperatingMonth          @relation(fields: [operatingMonthId], references: [id])
-  serviceDate       DateTime                @map("service_date") @db.Date
-  startTime         String                  @map("start_time")
-  roomId            String                  @map("room_id")
-  room              Room                    @relation(fields: [roomId], references: [id])
-  courseId          String                  @map("course_id")
-  course            Course                  @relation(fields: [courseId], references: [id])
-  customerMemo      String?                 @map("customer_memo")
+  id                String                     @id @default(cuid())
+  operatingMonthId  String                     @map("operating_month_id")
+  operatingMonth    OperatingMonth             @relation(fields: [operatingMonthId], references: [id])
+  serviceDate       DateTime                   @map("service_date") @db.Date
+  startTime         String                     @map("start_time")
+  roomId            String                     @map("room_id")
+  room              Room                       @relation(fields: [roomId], references: [id])
+  courseId          String                     @map("course_id")
+  course            Course                     @relation(fields: [courseId], references: [id])
+  customerMemo      String?                    @map("customer_memo")
   status            String
-  discountTypeCode  String?                 @map("discount_type_code")
-  paymentMethodCode String?                 @map("payment_method_code")
+  discountTypeCode  String?                    @map("discount_type_code")
+  paymentMethodCode String?                    @map("payment_method_code")
   note              String?
-  confirmationCode  String?                 @map("confirmation_code")
-  createdAt         DateTime                @default(now()) @map("created_at")
-  updatedAt         DateTime                @updatedAt @map("updated_at")
+  confirmationCode  String?                    @map("confirmation_code")
+  createdAt         DateTime                   @default(now()) @map("created_at")
+  updatedAt         DateTime                   @updatedAt @map("updated_at")
   assignments       ServiceCallAssignment[]
   statusHistories   ServiceCallStatusHistory[]
 
@@ -201,15 +238,15 @@ model ServiceCall {
 }
 
 model ServiceCallAssignment {
-  id            String      @id @default(cuid())
-  serviceCallId String      @map("service_call_id")
-  serviceCall   ServiceCall @relation(fields: [serviceCallId], references: [id])
-  employeeId    String      @map("employee_id")
-  employee      Employee    @relation(fields: [employeeId], references: [id])
-  assignmentRole String     @map("assignment_role")
-  isActive       Boolean    @default(true) @map("is_active")
-  createdAt     DateTime   @default(now()) @map("created_at")
-  updatedAt     DateTime   @updatedAt @map("updated_at")
+  id             String      @id @default(cuid())
+  serviceCallId  String      @map("service_call_id")
+  serviceCall    ServiceCall @relation(fields: [serviceCallId], references: [id])
+  employeeId     String      @map("employee_id")
+  employee       Employee    @relation(fields: [employeeId], references: [id])
+  assignmentRole String      @map("assignment_role")
+  isActive       Boolean     @default(true) @map("is_active")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
 
   @@unique([serviceCallId, assignmentRole], map: "uq_service_call_assignments_call_role")
   @@index([employeeId, assignmentRole], map: "idx_service_call_assignments_employee_role")
@@ -252,16 +289,16 @@ model DailyExpense {
 }
 
 model EarcareAttendance {
-  id                String         @id @default(cuid())
-  operatingMonthId  String         @map("operating_month_id")
-  operatingMonth    OperatingMonth @relation(fields: [operatingMonthId], references: [id])
+  id               String         @id @default(cuid())
+  operatingMonthId String         @map("operating_month_id")
+  operatingMonth   OperatingMonth @relation(fields: [operatingMonthId], references: [id])
   attendanceDate    DateTime       @map("attendance_date") @db.Date
   employeeId        String         @map("employee_id")
-  employee          Employee       @relation(fields: [employeeId], references: [id])
+  employee         Employee       @relation(fields: [employeeId], references: [id])
   statusCode        String         @map("status_code")
-  isActive          Boolean        @default(true) @map("is_active")
-  createdAt         DateTime       @default(now()) @map("created_at")
-  updatedAt         DateTime       @updatedAt @map("updated_at")
+  isActive         Boolean        @default(true) @map("is_active")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
 
   @@unique([operatingMonthId, attendanceDate, employeeId], map: "uq_earcare_attendances_month_date_employee")
   @@index([employeeId, attendanceDate], map: "idx_earcare_attendances_employee_date")
@@ -269,16 +306,16 @@ model EarcareAttendance {
 }
 
 model OpsAttendance {
-  id                String         @id @default(cuid())
-  operatingMonthId  String         @map("operating_month_id")
-  operatingMonth    OperatingMonth @relation(fields: [operatingMonthId], references: [id])
-  attendanceDate    DateTime       @map("attendance_date") @db.Date
-  employeeId        String         @map("employee_id")
-  employee          Employee       @relation(fields: [employeeId], references: [id])
-  statusCode        String         @map("status_code")
-  isActive          Boolean        @default(true) @map("is_active")
-  createdAt         DateTime       @default(now()) @map("created_at")
-  updatedAt         DateTime       @updatedAt @map("updated_at")
+  id               String         @id @default(cuid())
+  operatingMonthId String         @map("operating_month_id")
+  operatingMonth   OperatingMonth @relation(fields: [operatingMonthId], references: [id])
+  attendanceDate   DateTime       @map("attendance_date") @db.Date
+  employeeId       String         @map("employee_id")
+  employee         Employee       @relation(fields: [employeeId], references: [id])
+  statusCode       String         @map("status_code")
+  isActive         Boolean        @default(true) @map("is_active")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
 
   @@unique([operatingMonthId, attendanceDate, employeeId], map: "uq_ops_attendances_month_date_employee")
   @@index([employeeId, attendanceDate], map: "idx_ops_attendances_employee_date")
@@ -286,21 +323,21 @@ model OpsAttendance {
 }
 
 model CoursePolicy {
-  id                       String   @id @default(cuid())
-  courseId                 String   @map("course_id")
-  course                   Course   @relation(fields: [courseId], references: [id])
-  name                     String
-  durationMinutes          Int      @map("duration_minutes")
-  basePrice                Int      @map("base_price")
-  opsCallCredit            Int      @map("ops_call_credit")
-  earcarePoolAmount        Int      @map("earcare_pool_amount")
-  requiresSecondTherapist  Boolean  @default(false) @map("requires_second_therapist")
-  tvDisplayName            String   @map("tv_display_name")
-  effectiveFromMonth       String   @map("effective_from_month")
-  effectiveToMonth         String?  @map("effective_to_month")
-  isActive                 Boolean  @default(true) @map("is_active")
-  createdAt                DateTime @default(now()) @map("created_at")
-  updatedAt                DateTime @updatedAt @map("updated_at")
+  id                      String   @id @default(cuid())
+  courseId                String   @map("course_id")
+  course                  Course   @relation(fields: [courseId], references: [id])
+  name                    String
+  durationMinutes         Int      @map("duration_minutes")
+  basePrice               Int      @map("base_price")
+  opsCallCredit           Int      @map("ops_call_credit")
+  earcarePoolAmount       Int      @map("earcare_pool_amount")
+  requiresSecondTherapist Boolean  @default(false) @map("requires_second_therapist")
+  tvDisplayName           String   @map("tv_display_name")
+  effectiveFromMonth      String   @map("effective_from_month")
+  effectiveToMonth        String?  @map("effective_to_month")
+  isActive                Boolean  @default(true) @map("is_active")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
 
   @@index([courseId, effectiveFromMonth], map: "idx_course_policies_course_month")
   @@map("course_policies")
@@ -338,17 +375,17 @@ model OpsDailyIncentiveRule {
 }
 
 model OpsMonthlyIncentiveRule {
-  id                   String   @id @default(cuid())
-  thresholdCallCount   Int      @map("threshold_call_count")
-  totalAmount          Int      @map("total_amount")
-  leadShare            Float    @map("lead_share")
-  counterTeamShare     Float    @map("counter_team_share")
-  waiterTeamShare      Float    @map("waiter_team_share")
-  effectiveFromMonth   String   @map("effective_from_month")
-  effectiveToMonth     String?  @map("effective_to_month")
-  isActive             Boolean  @default(true) @map("is_active")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  id                 String   @id @default(cuid())
+  thresholdCallCount Int      @map("threshold_call_count")
+  totalAmount        Int      @map("total_amount")
+  leadShare          Float    @map("lead_share")
+  counterTeamShare   Float    @map("counter_team_share")
+  waiterTeamShare    Float    @map("waiter_team_share")
+  effectiveFromMonth String   @map("effective_from_month")
+  effectiveToMonth   String?  @map("effective_to_month")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   @@index([thresholdCallCount, effectiveFromMonth], map: "idx_ops_monthly_incentive_rules_lookup")
   @@map("ops_monthly_incentive_rules")

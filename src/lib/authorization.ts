@@ -21,7 +21,8 @@ export type SensitivePermission =
   | "closing:write"
   | "closing:reopen"
   | "employee:write"
-  | "audit:read";
+  | "audit:read"
+  | "migration:write";
 
 const roleLandingPath: Record<Role, string> = {
   administrator: "/live",
@@ -48,7 +49,7 @@ const roleExactRoutes: Record<Role, string[]> = {
 };
 
 const rolePermissions: Record<Role, SensitivePermission[]> = {
-  administrator: ["call:write", "payout:write", "closing:write", "closing:reopen", "employee:write", "audit:read"],
+  administrator: ["call:write", "payout:write", "closing:write", "closing:reopen", "employee:write", "audit:read", "migration:write"],
   counter: ["call:write"],
   settlement_manager: ["payout:write", "closing:write"],
   waiter: [],
