@@ -48,6 +48,31 @@ Owns daily settlement calculations.
 - Locked operating months remain readable; only Story 4.3 attendance mutation is disabled.
 - The service creates no payout persistence, no payout edit action, no audit event, and no monthly close snapshot.
 
+## Ops Attendance Service
+
+`listOpsAttendanceForDate()` and `upsertOpsAttendance()` own daily operations-team attendance input for daily incentive calculation.
+
+- Persists `OpsAttendance` by `operatingMonthId + attendanceDate + Employee.id`; display names, positions, and Excel row references are never stored as downstream keys.
+- Uses active `CodeItem` rows where `codeType === "ATTENDANCE_STATUS"` for status options and stores only the stable `statusCode`.
+- The active operations-team 대상 source is `Employee.employeeGroup === "OPERATIONS"` ordered by `sortOrder`, then `staffCode`.
+- `NORMAL` or a status code whose display name is `정상` is payout eligible; non-normal codes expose `exclusionReason`.
+- `upsertOpsAttendance()` blocks `잠금` operating months and out-of-range dates before any write, then rechecks the operating month inside the transaction.
+- Attendance writes and audit logs are one transaction. Audit actions are `ops_attendance.created` and `ops_attendance.changed` with plain JSON snapshots, `payoutImpact: true`, and `reason: "payout_affecting"`.
+
+## Ops Daily Incentive Service
+
+`listOpsDailyIncentives()` owns the read-only daily incentive calculation for operations-team staff.
+
+- Uses `listOpsAttendanceForDate()` as the payout 대상 source; the daily incentive service does not recalculate employee identity, status labels, or payout eligibility.
+- Uses `listCompletedServiceCallCalculationsForDate()` as the 일 총콜 source and sums only `opsCallCredit` from `calculationStatus === "calculated"` completed calls.
+- Warning counts expose excluded service-call rows: `notCompleted`, `coursePolicyMissing`, `therapistRateMissing`, and `secondTherapistRequired`.
+- Uses active `OpsDailyIncentiveRule` rows effective for `OperatingMonth.monthKey`; the highest satisfied `thresholdCallCount` wins.
+- Seed 기준 thresholds are 30/40/50 calls for 50,000/100,000/200,000 VND personal incentive amounts.
+- If no effective rule exists, `ruleStatus = "missing_policy"` and a Korean warning is returned. The service does not silently assume a 0 VND policy.
+- If rules exist but 일 총콜 is below the minimum threshold, `ruleStatus = "below_threshold"` and every row returns `payoutAmount = 0`.
+- Locked operating months remain readable; only Story 4.5 attendance mutation is disabled.
+- The service creates no payout persistence, no payout edit action, no audit event, no monthly preview, and no monthly close snapshot.
+
 ## Upstream
 
 - `calls` for completed service calls and assignments
