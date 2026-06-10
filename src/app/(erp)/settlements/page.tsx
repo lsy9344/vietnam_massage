@@ -30,6 +30,19 @@ function warningSummary(result: TherapistDailySettlementResultDto) {
   return result.warningCounts.coursePolicyMissing + result.warningCounts.therapistRateMissing + result.warningCounts.secondTherapistRequired;
 }
 
+function SettlementTabs() {
+  return (
+    <nav aria-label="정산 화면" className="mb-4 flex flex-wrap gap-2">
+      <Link className="border border-brand bg-brand px-3 py-2 text-sm font-semibold text-brand-foreground" href="/settlements">
+        마사지사 일일정산
+      </Link>
+      <Link className="border border-border bg-surface px-3 py-2 text-sm font-semibold text-muted hover:bg-readonly" href="/settlements/earcare">
+        귀케어 근무상태
+      </Link>
+    </nav>
+  );
+}
+
 export default async function SettlementsPage({ searchParams }: { searchParams: Promise<SettlementsPageSearchParams> }) {
   const account = await requireRouteAccess("/settlements");
   const params = await searchParams;
@@ -46,6 +59,7 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
             <p className="mt-2 max-w-3xl text-sm text-muted">방문완료 콜의 마사지사1/2 담당 건과 코스별 수당 근거를 조회한다.</p>
           </div>
         </div>
+        <SettlementTabs />
         <section className="border border-border bg-surface px-4 py-8">
           <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
           <p className="mt-2 max-w-2xl text-sm text-muted">마사지사 일일정산은 운영월 날짜 범위 안에서만 조회할 수 있다.</p>
@@ -87,6 +101,8 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
           </div>
         </div>
       </div>
+
+      <SettlementTabs />
 
       <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
         <label className="grid gap-1 text-xs font-medium text-muted">

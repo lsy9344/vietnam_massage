@@ -24,6 +24,17 @@ Owns daily settlement calculations.
 - `missing_policy` means the applicable course policy or therapist rate is missing; the assignment remains visible as a 0 VND evidence row with warning context.
 - `second_therapist_required` invalid completed D-course rows are excluded from therapist payout totals.
 
+## Earcare Attendance Service
+
+`listEarcareAttendanceForDate()` and `upsertEarcareAttendance()` own daily earcare attendance input for future earcare daily settlement.
+
+- Persists `EarcareAttendance` by `operatingMonthId + attendanceDate + Employee.id`; display names are never stored as downstream keys.
+- Uses active `CodeItem` rows where `codeType === "ATTENDANCE_STATUS"` for status options and stores only the stable `statusCode`.
+- `NORMAL` or a status code whose display name is `정상` is payout eligible; `DAY_OFF`, `LATE`, `EARLY_LEAVE`, `ABSENT`, and equivalent non-normal codes expose `exclusionReason`.
+- The DTO returned by `listEarcareAttendanceForDate()` is reusable by Story 4.4 and includes `employeeId`, `staffCode`, `displayName`, `statusCode`, `statusDisplayName`, `isPayoutEligible`, `exclusionReason`, and `attendanceDate`.
+- `upsertEarcareAttendance()` blocks `잠금` operating months and out-of-range dates before any write.
+- Attendance writes and audit logs are one transaction. Audit actions are `earcare_attendance.created` and `earcare_attendance.changed` with plain JSON snapshots, `payoutImpact: true`, and `reason: "payout_affecting"`.
+
 ## Upstream
 
 - `calls` for completed service calls and assignments

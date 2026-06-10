@@ -1,5 +1,5 @@
 # generated: 2026-06-08T01:33:23+0900
-# last_updated: 2026-06-10T00:30:00+0900
+# last_updated: 2026-06-10T09:52:34+0900
 # project: vietnam_massage
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-08T01:33:23+0900
-last_updated: 2026-06-10T00:30:00+0900
+last_updated: 2026-06-10T09:52:34+0900
 project: vietnam_massage
 project_key: NOKEY
 tracking_system: file-system
@@ -70,7 +70,7 @@ development_status:
   epic-4: in-progress
   4-1-마사지사-출퇴근-입력과-만근-인정-기초: backlog
   4-2-마사지사-일일정산: done
-  4-3-귀케어-근무상태-입력: backlog
+  4-3-귀케어-근무상태-입력: done
   4-4-귀케어-일일정산: backlog
   4-5-운영팀-근무상태와-일일-인센: backlog
   4-6-운영팀-월-인센-미리보기: backlog
