@@ -42,6 +42,9 @@ function SettlementTabs() {
       <Link className="border border-border bg-surface px-3 py-2 text-sm font-semibold text-muted hover:bg-readonly" href="/settlements/operations">
         운영팀 근무/일일인센
       </Link>
+      <Link className="border border-border bg-surface px-3 py-2 text-sm font-semibold text-muted hover:bg-readonly" href="/settlements/operations/monthly">
+        운영팀 월인센
+      </Link>
     </nav>
   );
 }

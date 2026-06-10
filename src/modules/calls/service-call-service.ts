@@ -398,8 +398,8 @@ function isDateWithinOperatingMonth(date: Date, month: OperatingMonthRecord) {
   return date.getTime() >= month.startDate.getTime() && date.getTime() <= month.endDate.getTime();
 }
 
-function effectiveForMonth(policy: CoursePolicyRecord, monthKey: string) {
-  return policy.isActive && policy.effectiveFromMonth <= monthKey && (policy.effectiveToMonth === null || policy.effectiveToMonth >= monthKey);
+function effectiveForMonth(record: { isActive: boolean; effectiveFromMonth: string; effectiveToMonth: string | null }, monthKey: string) {
+  return record.isActive && record.effectiveFromMonth <= monthKey && (record.effectiveToMonth === null || record.effectiveToMonth >= monthKey);
 }
 
 function firstCurrentPolicy(course: CourseRecord, monthKey: string) {
@@ -865,6 +865,55 @@ export async function listServiceCallsForDate(input: {
   );
 }
 
+export async function listServiceCallsForOperatingMonth(input: {
+  operatingMonthId: string;
+  startDate: string;
+  endDate: string;
+  prismaClient?: ServiceCallPrismaClient;
+}) {
+  const parsed = serviceCallInputSchema
+    .pick({ operatingMonthId: true, serviceDate: true })
+    .safeParse({ operatingMonthId: input.operatingMonthId, serviceDate: input.startDate });
+  const endDateParsed = serviceCallInputSchema.pick({ serviceDate: true }).safeParse({ serviceDate: input.endDate });
+  if (!parsed.success || !endDateParsed.success) {
+    throw new ServiceCallDomainError("월별 콜 원장 조회 조건이 올바르지 않습니다.", "INVALID_SERVICE_CALL_MONTH_QUERY");
+  }
+
+  const client = getClient(input.prismaClient);
+  const [records, timeSlots] = await Promise.all([
+    client.serviceCall.findMany({
+      where: {
+        operatingMonthId: parsed.data.operatingMonthId,
+        serviceDate: {
+          gte: toDateOnly(parsed.data.serviceDate),
+          lte: toDateOnly(endDateParsed.data.serviceDate)
+        }
+      },
+      include: {
+        operatingMonth: true,
+        room: true,
+        course: { include: { policies: true } },
+        assignments: { include: { employee: true } }
+      },
+      orderBy: [{ serviceDate: "asc" }, { startTime: "asc" }, { createdAt: "asc" }]
+    }),
+    client.timeSlot.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] })
+  ]);
+  const sortOrderByTime = new Map(timeSlots.map((slot) => [slot.value, slot.sortOrder]));
+
+  return Promise.all(
+    records
+      .sort((a, b) => {
+        const dateDiff = a.serviceDate.getTime() - b.serviceDate.getTime();
+        if (dateDiff !== 0) return dateDiff;
+        const leftOrder = sortOrderByTime.get(a.startTime) ?? 9999;
+        const rightOrder = sortOrderByTime.get(b.startTime) ?? 9999;
+        return leftOrder - rightOrder || a.createdAt.getTime() - b.createdAt.getTime();
+      })
+      .map((record) => toRowDto(client, record))
+  );
+}
+
 export async function saveBasicServiceCallRow(input: ServiceCallInput & { prismaClient?: ServiceCallPrismaClient }) {
   const parsed = serviceCallInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -1041,7 +1090,7 @@ export async function autosaveServiceCallRow(
           beforeValue: beforeSnapshot,
           afterValue: afterSnapshot
         },
-        { prismaClient: tx }
+        { prismaClient: tx as any }
       );
     }
 
@@ -1055,7 +1104,7 @@ export async function autosaveServiceCallRow(
           beforeValue: beforeSnapshot,
           afterValue: afterSnapshot
         },
-        { prismaClient: tx }
+        { prismaClient: tx as any }
       );
     }
 
@@ -1128,7 +1177,7 @@ export async function createDailyExpense(input: DailyExpenseInput & { actorId: s
         beforeValue: null,
         afterValue: toDailyExpenseAuditSnapshot(record)
       },
-      { prismaClient: tx }
+      { prismaClient: tx as any }
     );
 
     return toDailyExpenseDto(record);
@@ -1181,7 +1230,7 @@ export async function updateDailyExpense(input: DailyExpenseUpdateInput & { acto
         beforeValue: toDailyExpenseAuditSnapshot(before),
         afterValue: toDailyExpenseAuditSnapshot(after)
       },
-      { prismaClient: tx }
+      { prismaClient: tx as any }
     );
 
     return toDailyExpenseDto(after);
@@ -1223,7 +1272,7 @@ export async function deactivateDailyExpense(input: DailyExpenseDeactivateInput 
         beforeValue: toDailyExpenseAuditSnapshot(before),
         afterValue: toDailyExpenseAuditSnapshot(after)
       },
-      { prismaClient: tx }
+      { prismaClient: tx as any }
     );
 
     return toDailyExpenseDto(after);
@@ -1328,13 +1377,7 @@ export async function getDailyCallLedgerSummary(input: {
   };
 }
 
-export async function listCompletedServiceCallCalculationsForDate(input: {
-  operatingMonthId: string;
-  serviceDate: string;
-  prismaClient?: ServiceCallPrismaClient;
-}): Promise<CompletedServiceCallCalculationDto[]> {
-  const rows = await listServiceCallsForDate(input);
-
+export function completedServiceCallCalculationsFromRows(rows: ServiceCallRowDto[]): CompletedServiceCallCalculationDto[] {
   return rows
     .filter((row) => row.calculationStatus === "calculated")
     .map((row) => ({
@@ -1366,6 +1409,25 @@ export async function listCompletedServiceCallCalculationsForDate(input: {
           : [])
       ]
     }));
+}
+
+export async function listCompletedServiceCallCalculationsForDate(input: {
+  operatingMonthId: string;
+  serviceDate: string;
+  prismaClient?: ServiceCallPrismaClient;
+}): Promise<CompletedServiceCallCalculationDto[]> {
+  const rows = await listServiceCallsForDate(input);
+  return completedServiceCallCalculationsFromRows(rows);
+}
+
+export async function listCompletedServiceCallCalculationsForOperatingMonth(input: {
+  operatingMonthId: string;
+  startDate: string;
+  endDate: string;
+  prismaClient?: ServiceCallPrismaClient;
+}): Promise<CompletedServiceCallCalculationDto[]> {
+  const rows = await listServiceCallsForOperatingMonth(input);
+  return completedServiceCallCalculationsFromRows(rows);
 }
 
 export async function listServiceCallStatusHistory(

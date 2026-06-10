@@ -73,6 +73,23 @@ Owns daily settlement calculations.
 - Locked operating months remain readable; only Story 4.5 attendance mutation is disabled.
 - The service creates no payout persistence, no payout edit action, no audit event, no monthly preview, and no monthly close snapshot.
 
+## Ops Monthly Incentive Preview Service
+
+`listOpsMonthlyIncentivePreview()` owns the read-only operations-team monthly incentive preview.
+
+- Uses `listCompletedServiceCallCalculationsForOperatingMonth()` as the monthly total-call source and sums only calculated completed-call `opsCallCredit`.
+- Excluded call rows are surfaced as warning counts: `notCompleted`, `coursePolicyMissing`, `therapistRateMissing`, and `secondTherapistRequired`.
+- Uses active `OpsMonthlyIncentiveRule` rows with effective-month filtering: `effectiveFromMonth <= OperatingMonth.monthKey` and `effectiveToMonth` null or greater than/equal to the month key.
+- The highest satisfied `thresholdCallCount` wins. Seed 기준 thresholds are 1000/1100/1200/1300/1400/1500 calls.
+- The service applies the policy row's 30/35/35 team split values (`leadShare`, `counterTeamShare`, `waiterTeamShare`) instead of hard-coding UI calculations.
+- Team shares are converted to integer VND with `Math.floor`; any policy-share remainder is tracked as `undistributedAmount`.
+- Counter-team and waiter-team member payouts use deterministic remainder allocation in `sortOrder`, `staffCode`, then `Employee.id` order.
+- Employee rows use stable `Employee.id`; display names, position text, staffCode, and Excel references are display/context only.
+- `missing_policy` is returned when no effective monthly policy exists; the service does not silently assume a 0 VND policy.
+- `below_threshold` is returned when a policy exists but the monthly total is under the minimum threshold.
+- 작성중/검토중 months are draft current previews. 마감확정/잠금 months remain readable but are labeled current preview so they are not confused with closing snapshot values.
+- The service is read-only: no persistence, no write action, no audit log, no operating-month status mutation, and no closing snapshot creation or recalculation.
+
 ## Upstream
 
 - `calls` for completed service calls and assignments
