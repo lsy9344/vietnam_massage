@@ -133,7 +133,7 @@ test.describe("Story 4.3 earcare attendance", () => {
     await login(page, "story43_settlement", "Story43!settlement");
     await page.goto(`/settlements/earcare?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2034-03-12`);
 
-    await expect(page.getByRole("heading", { name: "귀케어 근무상태" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "귀케어 일일정산" })).toBeVisible();
     await expect(page.getByLabel("운영월")).toHaveValue(seededData.writableOperatingMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2034-03-12");
     await expect(page.getByText("E2E43 귀케어1")).toBeVisible();

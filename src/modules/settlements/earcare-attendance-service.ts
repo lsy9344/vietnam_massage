@@ -75,6 +75,7 @@ export type EarcareAttendanceDto = {
   employeeId: string;
   staffCode: string;
   displayName: string;
+  sortOrder: number;
   statusCode: string;
   statusDisplayName: string;
   isPayoutEligible: boolean;
@@ -202,6 +203,7 @@ function toDto(input: {
     employeeId: input.employee.id,
     staffCode: input.employee.staffCode,
     displayName: input.employee.displayName,
+    sortOrder: input.employee.sortOrder,
     statusCode: input.status.code,
     statusDisplayName: input.status.displayName,
     isPayoutEligible: payoutEligible,

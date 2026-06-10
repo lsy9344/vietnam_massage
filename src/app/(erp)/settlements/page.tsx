@@ -37,7 +37,7 @@ function SettlementTabs() {
         마사지사 일일정산
       </Link>
       <Link className="border border-border bg-surface px-3 py-2 text-sm font-semibold text-muted hover:bg-readonly" href="/settlements/earcare">
-        귀케어 근무상태
+        귀케어 일일정산
       </Link>
     </nav>
   );

@@ -3,28 +3,28 @@
 ## 생성/보강한 테스트
 
 ### API Tests
-- [x] Story 4.3에는 신규 REST/API endpoint가 없다. `/settlements/earcare` 저장은 Server Action과 `upsertEarcareAttendance()` domain service 경계로 처리되므로 별도 API endpoint 테스트는 해당 없음.
-- [x] `src/modules/settlements/earcare-attendance-service.test.ts` - active EARCARE 4명 목록, inactive 제외, stable `ATTENDANCE_STATUS` code 사용, `NORMAL` 지급 대상, 휴무/지각/조퇴/결근 제외, 운영월 범위 밖 차단, 잠금 차단 무부작용, transaction 내부 잠금 재확인, create/update audit transaction, audit 실패 rollback을 검증한다.
+- [x] Story 4.4에는 신규 REST/API endpoint가 없다. 귀케어 지급액은 `listEarcareDailySettlements()` read-only domain service와 `/settlements/earcare` 서버 컴포넌트 조회로 처리되므로 별도 API endpoint 테스트는 해당 없음.
+- [x] `src/modules/settlements/earcare-daily-settlement-service.test.ts` - calculated 방문완료 귀케어 풀 합계, 비완료/정책없음/수당없음/D코스누락 제외 warning, 정상 근무자 균등 분배, 잔여 1 VND deterministic 배분, `Employee.id` tie-breaker, 정상근무자 0명 미분배, 잠금 운영월 read-only 조회, 운영월 범위 밖 오류를 검증한다.
 
 ### E2E Tests
-- [x] `tests/e2e/story-4-3-earcare-attendance.spec.ts` - 정산 담당자가 `/settlements/earcare`에서 운영월/조회날짜로 active 귀케어사 4명을 조회하고 비정상 근무상태를 저장하는 흐름을 검증한다.
-- [x] `tests/e2e/story-4-3-earcare-attendance.spec.ts` - 저장 payload가 표시명이 아니라 stable code `DAY_OFF`와 `Employee.id`로 persistence 되고 `earcare_attendance.created` 감사 로그가 남는지 DB까지 확인하도록 보강했다.
-- [x] `tests/e2e/story-4-3-earcare-attendance.spec.ts` - 날짜 변경 시 이전 날짜의 `지각` 상태가 새 날짜 값처럼 보이지 않고 기본 `NORMAL`/`지급 대상`으로 표시되는지 검증하도록 보강했다.
-- [x] `tests/e2e/story-4-3-earcare-attendance.spec.ts` - 잘못된 stable status code 저장 실패 시 inline error와 `재시도` affordance가 표시되고 attendance row가 생성되지 않는 critical error case를 추가했다.
-- [x] `tests/e2e/story-4-3-earcare-attendance.spec.ts` - 잠긴 운영월 disabled 입력 상태와 권한 없는 counter direct access redirect를 검증한다.
+- [x] `tests/e2e/story-4-4-earcare-daily-settlement.spec.ts` - 정산 담당자가 `/settlements/earcare`에서 운영월/조회날짜로 귀케어 풀, 정상 근무자 수, 지급액 row, 풀 산출 근거, warning count를 조회하는 흐름을 검증한다.
+- [x] `tests/e2e/story-4-4-earcare-daily-settlement.spec.ts` - 근무상태 변경 후 재조회 시 지급 대상 수와 개인 지급액이 최신 상태 기준으로 갱신되는지 검증한다.
+- [x] `tests/e2e/story-4-4-earcare-daily-settlement.spec.ts` - 정상 근무자 0명일 때 지급액 0원/미분배 풀/`정상 근무자 0명` 근거가 표시되는지 검증한다.
+- [x] `tests/e2e/story-4-4-earcare-daily-settlement.spec.ts` - 잠금 운영월에서도 계산 결과는 읽기 전용으로 보이고 근무상태 입력은 disabled인지 검증한다.
+- [x] `tests/e2e/story-4-4-earcare-daily-settlement.spec.ts` - counter 권한 direct access가 `/calls`로 redirect되는지 검증한다.
+- [x] 보강: E2E가 각 테스트 시작 시 Story 4.4 seed를 재생성해 근무상태 변경이 다른 케이스에 남지 않도록 했고, 잔여 배분 근거와 지급액 직접 수정 버튼 부재를 추가 assertion으로 확인한다.
 
 ## Coverage
 - API endpoints: 0/0 applicable.
-- UI features: 8/8 Story 4.3 주요 화면 조건 covered by E2E/static assertions: route access, 운영월 selector, 조회날짜 selector, active 귀케어사 4명 목록, 상태 select, 저장 성공, 저장 실패/재시도, 잠금 disabled, 날짜 변경 stale 값 방지.
-- Domain service: 8/8 Story 4.3 핵심 업무 규칙 covered by unit tests: active EARCARE 필터, stable code 저장, 정상 지급 대상, 비정상 제외 사유, 운영월 범위 검증, 잠금 차단 무부작용, 감사 로그 transaction, 후속 Story 4.4 재사용 DTO.
-- Critical/negative cases: inactive 귀케어사 제외, out-of-range date 차단, locked month mutation 차단, invalid status code 차단, audit 실패 rollback, 권한 없는 route redirect, 날짜 변경 stale attendance 방지.
-- Discovered gaps fixed: E2E가 기존 happy path/lock/permission 중심에서 persistence stable key, audit evidence, stale-date prevention, invalid status save failure까지 직접 검증하도록 보강했다. Senior Developer Review에서 audit payout-impact classification, transaction 내부 locked-month recheck, `조퇴` exclusion unit coverage를 보강했다.
+- Domain service: 8/8 Story 4.4 핵심 계산 규칙 covered by unit tests, including explicit `sortOrder`, `staffCode`, `Employee.id` remainder ordering.
+- UI workflows: 5/5 Story 4.4 주요 E2E 흐름 covered: 조회 happy path, 근무상태 변경 반영, 정상근무자 0명, 잠금 read-only, 권한 redirect.
+- Critical/negative cases: 비완료 row 제외, `therapist_rate_missing`, `second_therapist_required`, `course_policy_missing`, 운영월 범위 밖 날짜, 정상근무자 0명, 잠금 운영월, 권한 없는 route 접근.
 
 ## Validation
-- [x] `npm run test:unit -- src/modules/settlements/earcare-attendance-service.test.ts` - passed 11/11 executed tests, including the focused Story 4.3 service suite plus review-added coverage.
-- [x] `npm run lint` - passed all story validators through Story 4.3.
-- [x] `PLAYWRIGHT_SKIP_WEBSERVER=1 npx playwright test --list tests/e2e/story-4-3-earcare-attendance.spec.ts` - listed 5 Story 4.3 tests successfully.
-- [ ] `npm run test:e2e -- tests/e2e/story-4-3-earcare-attendance.spec.ts` - attempted, but Playwright's configured Next dev server could not bind to `127.0.0.1:3000` in this sandbox (`listen EPERM`), so browser assertions did not run here.
+- [x] `npm run test:unit -- src/modules/settlements/earcare-daily-settlement-service.test.ts src/modules/settlements/earcare-attendance-service.test.ts` - passed 16/16 executed tests.
+- [x] `npm run lint` - passed all story validators through Story 4.4.
+- [x] `PLAYWRIGHT_SKIP_WEBSERVER=1 npx playwright test tests/e2e/story-4-4-earcare-daily-settlement.spec.ts --list` - listed 5 Story 4.4 tests successfully.
+- [ ] `npm run test:e2e -- tests/e2e/story-4-4-earcare-daily-settlement.spec.ts` - attempted, but Playwright's configured Next dev server could not bind to `127.0.0.1:3000` in this sandbox (`listen EPERM`), so browser assertions did not run here.
 
 ## Next Steps
-- E2E 실행이 로컬 sandbox의 Next dev server bind 제한으로 막히면, `DATABASE_URL`이 E2E DB를 가리키고 `127.0.0.1:3000` listen이 가능한 환경에서 focused Playwright command를 실행한다.
+- `DATABASE_URL`이 E2E DB를 가리키고 `127.0.0.1:3000` listen이 가능한 환경에서 focused Playwright command를 실행한다.

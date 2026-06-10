@@ -35,6 +35,19 @@ Owns daily settlement calculations.
 - `upsertEarcareAttendance()` blocks `잠금` operating months and out-of-range dates before any write.
 - Attendance writes and audit logs are one transaction. Audit actions are `earcare_attendance.created` and `earcare_attendance.changed` with plain JSON snapshots, `payoutImpact: true`, and `reason: "payout_affecting"`.
 
+## Earcare Daily Settlement Service
+
+`listEarcareDailySettlements()` owns the read-only daily payout calculation for earcare staff.
+
+- Uses `listEarcareAttendanceForDate()` as the payout 대상 source; the daily settlement service does not recalculate `isPayoutEligible`, `exclusionReason`, status labels, or stable employee identity.
+- Uses `listCompletedServiceCallCalculationsForDate()` as the earcare pool source and includes only `calculationStatus === "calculated"` completed calls in `earcarePoolTotal`.
+- Warning counts expose excluded service-call rows: `notCompleted`, `coursePolicyMissing`, `therapistRateMissing`, and `secondTherapistRequired`.
+- If one or more earcare workers are `NORMAL` / `정상`, `baseShareAmount = Math.floor(earcarePoolTotal / eligibleCount)`.
+- `remainderAmount` is allocated as 1 VND increments to eligible rows in the deterministic attendance order (`sortOrder`, `staffCode`, then `Employee.id` tie-breaker).
+- If no earcare worker is payout eligible, every row returns `payoutAmount = 0` and `undistributedAmount = earcarePoolTotal`.
+- Locked operating months remain readable; only Story 4.3 attendance mutation is disabled.
+- The service creates no payout persistence, no payout edit action, no audit event, and no monthly close snapshot.
+
 ## Upstream
 
 - `calls` for completed service calls and assignments

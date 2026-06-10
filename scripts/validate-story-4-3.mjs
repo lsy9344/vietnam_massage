@@ -137,7 +137,7 @@ for (const required of [
 }
 
 const settlementPage = read("src/app/(erp)/settlements/page.tsx");
-if (!settlementPage.includes("귀케어 근무상태") || !settlementPage.includes("href=\"/settlements/earcare\"")) {
+if (!settlementPage.includes("귀케어 일일정산") || !settlementPage.includes("href=\"/settlements/earcare\"")) {
   errors.push("settlements/page.tsx must link to /settlements/earcare without replacing therapist daily settlement");
 }
 
