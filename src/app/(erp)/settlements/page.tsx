@@ -3,6 +3,11 @@ import { requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import { listTherapistDailySettlements, type TherapistDailySettlementResultDto } from "@/modules/settlements/therapist-daily-settlement-service";
+import {
+  listTherapistAttendanceForDate,
+  type TherapistAttendanceForDateDto
+} from "@/modules/settlements/therapist-attendance-service";
+import { TherapistAttendanceTable } from "@/app/(erp)/settlements/therapist-attendance-table";
 
 type SettlementsPageSearchParams = {
   operatingMonthId?: string;
@@ -81,15 +86,34 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
 
   const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
   let result: TherapistDailySettlementResultDto | null = null;
+  let attendance: TherapistAttendanceForDateDto | null = null;
   let errorMessage: string | null = null;
+  let attendanceErrorMessage: string | null = null;
 
-  try {
-    result = await listTherapistDailySettlements({
+  // Settlement read and attendance read are independent: a failure in one must not hide the other.
+  const [settlementResult, attendanceResult] = await Promise.allSettled([
+    listTherapistDailySettlements({
       operatingMonthId: selectedMonth.id,
       serviceDate
-    });
-  } catch (error) {
-    errorMessage = error instanceof Error ? error.message : "마사지사 일일정산을 조회하지 못했습니다.";
+    }),
+    listTherapistAttendanceForDate({
+      operatingMonthId: selectedMonth.id,
+      attendanceDate: serviceDate
+    })
+  ]);
+
+  if (settlementResult.status === "fulfilled") {
+    result = settlementResult.value;
+  } else {
+    errorMessage =
+      settlementResult.reason instanceof Error ? settlementResult.reason.message : "마사지사 일일정산을 조회하지 못했습니다.";
+  }
+
+  if (attendanceResult.status === "fulfilled") {
+    attendance = attendanceResult.value;
+  } else {
+    attendanceErrorMessage =
+      attendanceResult.reason instanceof Error ? attendanceResult.reason.message : "출퇴근 입력을 조회하지 못했습니다.";
   }
 
   return (
@@ -98,7 +122,9 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
         <div>
           <p className="mb-2 text-xs font-semibold uppercase text-muted">정산</p>
           <h1 className="text-2xl font-semibold text-foreground">마사지사 일일정산</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">방문완료 콜 기준으로 마사지사별 담당 콜, 코스별 수당, 정책 상태 근거를 조회한다.</p>
+          <p className="mt-2 max-w-3xl text-sm text-muted">
+            방문완료 콜 기준으로 마사지사별 담당 콜, 코스별 수당, 정책 상태 근거를 조회하고 출퇴근 시간과 만근 인정을 함께 관리한다.
+          </p>
         </div>
         <div className="text-right text-xs text-muted">
           <div>운영월 상태: {selectedMonth.status}</div>
@@ -142,6 +168,13 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
           조회
         </button>
       </form>
+
+      {attendance?.isLocked ? (
+        <section className="mb-4 border border-danger bg-surface px-4 py-3" role="status">
+          <h2 className="text-sm font-semibold text-danger">잠긴 운영월입니다. 마감확정 또는 잠금 운영월입니다</h2>
+          <p className="mt-1 text-sm text-muted">이 운영월의 출퇴근 시간은 수정할 수 없습니다. 입력 항목은 읽기 전용으로 표시됩니다.</p>
+        </section>
+      ) : null}
 
       {errorMessage ? (
         <section className="border border-danger bg-surface px-4 py-5" role="alert">
@@ -270,6 +303,29 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
             </div>
           </section>
         </>
+      ) : null}
+
+      {attendanceErrorMessage ? (
+        <section className="mt-5 border border-danger bg-surface px-4 py-5" role="alert">
+          <h2 className="text-base font-semibold text-danger">출퇴근 입력 조회 실패</h2>
+          <p className="mt-2 text-sm text-muted">{attendanceErrorMessage}</p>
+          <form className="mt-4" method="get">
+            <input name="operatingMonthId" type="hidden" value={selectedMonth.id} />
+            <input name="serviceDate" type="hidden" value={serviceDate} />
+            <button className="h-9 border border-border bg-background px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
+              재조회
+            </button>
+          </form>
+        </section>
+      ) : attendance ? (
+        <div className="mt-5">
+          <TherapistAttendanceTable
+            attendanceDate={attendance.attendanceDate}
+            disabled={attendance.isLocked}
+            operatingMonthId={attendance.operatingMonthId}
+            rows={attendance.rows}
+          />
+        </div>
       ) : null}
     </main>
   );

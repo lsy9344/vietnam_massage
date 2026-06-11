@@ -5,6 +5,7 @@ import {
   listMonthlyClosingPreview,
   type TherapistFullAttendanceRecognitionResultDto
 } from "@/modules/closing/monthly-closing-preview-service";
+import { listTherapistFullAttendanceRecognitions } from "@/modules/settlements/therapist-attendance-service";
 
 function dbDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
@@ -16,6 +17,7 @@ function createClosingPrisma(
     invalidRange?: boolean;
     missingMonth?: boolean;
     activeTherapists?: Array<{ id: string; staffCode: string; displayName: string; sortOrder: number }>;
+    therapistAttendances?: Array<{ employeeId: string; attendanceDate: string; isFullAttendanceRecognized: boolean; isActive?: boolean }>;
   } = {}
 ) {
   const operatingMonth = options.missingMonth
@@ -27,6 +29,13 @@ function createClosingPrisma(
         endDate: options.invalidRange ? dbDate("2026-06-01") : dbDate("2026-06-02"),
         status: options.status ?? "검토중"
       };
+
+  const attendanceRecords = (options.therapistAttendances ?? []).map((record) => ({
+    ...record,
+    operatingMonthId: "month-2026-06",
+    attendanceDate: dbDate(record.attendanceDate),
+    isActive: record.isActive ?? true
+  }));
 
   return {
     operatingMonth: {
@@ -41,6 +50,17 @@ function createClosingPrisma(
           { id: "therapist-2", staffCode: "THR-002", displayName: "마사지사2", sortOrder: 2 },
           { id: "therapist-3", staffCode: "THR-003", displayName: "마사지사3", sortOrder: 3 }
         ];
+      }
+    },
+    therapistAttendance: {
+      async findMany({ where }: any = {}) {
+        return attendanceRecords.filter((record) => {
+          if (where?.operatingMonthId !== undefined && record.operatingMonthId !== where.operatingMonthId) return false;
+          if (where?.isActive !== undefined && record.isActive !== where.isActive) return false;
+          if (where?.attendanceDate?.gte !== undefined && record.attendanceDate < where.attendanceDate.gte) return false;
+          if (where?.attendanceDate?.lte !== undefined && record.attendanceDate > where.attendanceDate.lte) return false;
+          return true;
+        });
       }
     }
   } as any;
@@ -683,6 +703,124 @@ describe("listMonthlyClosingPreview", () => {
 
     assert.equal(result.previewStatus, "closed_current");
     assert.equal(result.status, "잠금");
+  });
+
+  it("consumes the real Story 4.1 therapist attendance source so missing_story_4_1_source disappears and the 20-day allowance applies", async () => {
+    const activeTherapists = [
+      { id: "therapist-1", staffCode: "THR-001", displayName: "마사지사1", sortOrder: 1 },
+      { id: "therapist-2", staffCode: "THR-002", displayName: "마사지사2", sortOrder: 2 }
+    ];
+    // therapist-1 reaches 20 recognized days; therapist-2 only 19.
+    const therapistAttendances: Array<{ employeeId: string; attendanceDate: string; isFullAttendanceRecognized: boolean }> = [];
+    for (let day = 1; day <= 20; day += 1) {
+      const attendanceDate = `2026-06-${String(day).padStart(2, "0")}`;
+      therapistAttendances.push({ employeeId: "therapist-1", attendanceDate, isFullAttendanceRecognized: true });
+      therapistAttendances.push({ employeeId: "therapist-2", attendanceDate, isFullAttendanceRecognized: day <= 19 });
+    }
+
+    const closingPrisma = createClosingPrisma({
+      // widen the date range so all 20 seeded days fall inside the operating month
+      activeTherapists,
+      therapistAttendances
+    });
+    // Stretch the operating month to cover the 20 seeded days.
+    closingPrisma.operatingMonth.findUnique = async ({ where }: any) =>
+      where.id === "month-2026-06"
+        ? { id: "month-2026-06", monthKey: "2026-06", startDate: dbDate("2026-06-01"), endDate: dbDate("2026-06-20"), status: "검토중" }
+        : null;
+
+    const { dependencies } = createDependencies({
+      therapistResults: Object.fromEntries(
+        Array.from({ length: 20 }, (_, index) => {
+          const serviceDate = `2026-06-${String(index + 1).padStart(2, "0")}`;
+          return [
+            serviceDate,
+            {
+              operatingMonthId: "month-2026-06",
+              serviceDate,
+              settlements: [],
+              warningCounts: { coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
+              excludedCallCount: 0
+            }
+          ];
+        })
+      )
+    });
+    // Provide empty-but-valid ops/earcare results for every seeded date.
+    dependencies.listOpsDailyIncentives = async ({ serviceDate }: { serviceDate: string }) =>
+      ({
+        operatingMonthId: "month-2026-06",
+        serviceDate,
+        sourceCallCount: 0,
+        distributedAmount: 0,
+        warningMessage: null,
+        warningCounts: { notCompleted: 0, coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
+        rows: [],
+        callEvidence: []
+      }) as any;
+    dependencies.listEarcareDailySettlements = async ({ serviceDate }: { serviceDate: string }) =>
+      ({
+        operatingMonthId: "month-2026-06",
+        serviceDate,
+        earcarePoolTotal: 0,
+        sourceCallCount: 0,
+        eligibleCount: 0,
+        distributedAmount: 0,
+        undistributedAmount: 0,
+        warningCounts: { notCompleted: 0, coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
+        rows: [],
+        poolEvidence: []
+      }) as any;
+    dependencies.listOpsMonthlyIncentivePreview = async () =>
+      ({
+        operatingMonthId: "month-2026-06",
+        monthKey: "2026-06",
+        startDate: "2026-06-01",
+        endDate: "2026-06-20",
+        monthlyOpsCallCredit: 0,
+        appliedThresholdCallCount: null,
+        ruleStatus: "below_threshold",
+        warningMessage: null,
+        rows: [],
+        warningCounts: { notCompleted: 0, coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
+        callEvidence: []
+      }) as any;
+    // Use the real Story 4.1 recognition source instead of the missing-source stub.
+    dependencies.listTherapistFullAttendanceRecognitions = (async (input: {
+      operatingMonthId: string;
+      startDate: string;
+      endDate: string;
+      prismaClient?: unknown;
+    }): Promise<TherapistFullAttendanceRecognitionResultDto> => {
+      const result = await listTherapistFullAttendanceRecognitions({
+        operatingMonthId: input.operatingMonthId,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        prismaClient: input.prismaClient as any
+      });
+      return { sourceStatus: "available", sourceDayCount: result.sourceDayCount, rows: result.rows, warningMessages: [] };
+    }) as typeof dependencies.listTherapistFullAttendanceRecognitions;
+
+    const result = await listMonthlyClosingPreview({
+      operatingMonthId: "month-2026-06",
+      prismaClient: closingPrisma,
+      dependencies
+    });
+
+    assert.equal(result.evidence.fullAttendanceSourceStatus, "available");
+    assert.equal(result.warningCounts.fullAttendanceSourceMissing, 0);
+    assert.equal(result.warningCounts.fullAttendanceSourceDayCount, 20);
+
+    const rowsById = new Map(result.therapists.rows.map((row) => [row.employeeId, row]));
+    assert.equal(rowsById.get("therapist-1")?.fullAttendanceDays, 20);
+    assert.equal(rowsById.get("therapist-1")?.fullAttendanceAllowanceAmount, 2000000);
+    assert.match(rowsById.get("therapist-1")?.fullAttendanceBasis ?? "", /20일 이상 2,000,000 VND/);
+    assert.equal(rowsById.get("therapist-2")?.fullAttendanceDays, 19);
+    assert.equal(rowsById.get("therapist-2")?.fullAttendanceAllowanceAmount, 0);
+    assert.equal(
+      result.therapists.rows.some((row) => row.bonusWarningMessages.some((message) => message.includes("missing_story_4_1_source"))),
+      false
+    );
   });
 
   it("maps invalid input and operating-month records to Korean domain errors", async () => {

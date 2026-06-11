@@ -1,9 +1,9 @@
 # generated: 2026-06-08T01:33:23+0900
-# last_updated: 2026-06-10T21:06:57+0900
+# last_updated: 2026-06-11T17:48:53+0900
 # project: vietnam_massage
 # project_key: NOKEY
 # tracking_system: file-system
-# story_location: /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/implementation-artifacts
+# story_location: C:\Users\KimYS\Desktop\개발외주\erp_vietnam_massage\_bmad-output\implementation-artifacts
 
 # STATUS DEFINITIONS:
 # ==================
@@ -35,14 +35,15 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-08T01:33:23+0900
-last_updated: 2026-06-10T21:06:57+0900
+last_updated: 2026-06-11T19:10:23+0900
 project: vietnam_massage
 project_key: NOKEY
 tracking_system: file-system
-story_location: /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/implementation-artifacts
+story_location: 'C:\Users\KimYS\Desktop\개발외주\erp_vietnam_massage\_bmad-output\implementation-artifacts'
+# 2026-06-11: Story 4.1 review patches resolved; marked done
 
 development_status:
-  epic-1: in-progress
+  epic-1: done
   1-1-next-js-erp-앱-쉘과-디자인-토큰-기반-구축: done
   1-2-직원-계정-로그인과-역할별-랜딩-사이드바: done
   1-3-감사-로그-기반과-조회-화면: done
@@ -52,7 +53,7 @@ development_status:
   1-7-직원-마스터와-계정-연결: done
   1-8-코스-마스터와-수당-인센-정책-관리: done
   epic-1-retrospective: optional
-  epic-2: in-progress
+  epic-2: done
   2-1-날짜별-콜-원장-그리드-조회와-기본-입력: done
   2-2-콜-행-자동저장과-상태-변경-이력: done
   2-3-방문완료-기준-결제-수당-콜인정-계산: done
@@ -60,7 +61,7 @@ development_status:
   2-5-일별-지출-입력과-요약-계산: done
   2-6-콜-원장-키보드-입력성과-type-ahead-완성: done
   epic-2-retrospective: optional
-  epic-3: in-progress
+  epic-3: done
   3-1-객실-상태-dto와-최신-활성-콜-계산: done
   3-2-첫-화면-실시간-객실-콜-현황: done
   3-3-객실-현황-화면과-웨이터-안내-문구: done
@@ -68,14 +69,14 @@ development_status:
   3-5-상태-badge-종료확인-주의-표현-접근성-polish: done
   epic-3-retrospective: done
   epic-4: in-progress
-  4-1-마사지사-출퇴근-입력과-만근-인정-기초: backlog
+  4-1-마사지사-출퇴근-입력과-만근-인정-기초: done
   4-2-마사지사-일일정산: done
   4-3-귀케어-근무상태-입력: done
   4-4-귀케어-일일정산: done
   4-5-운영팀-근무상태와-일일-인센: done
   4-6-운영팀-월-인센-미리보기: done
   epic-4-retrospective: optional
-  epic-5: in-progress
+  epic-5: done
   5-1-월마감-미리보기-집계: done
   5-2-만근수당과-갯수왕-수당-계산: done
   5-3-월마감-검토와-확정-스냅샷: done
@@ -83,13 +84,13 @@ development_status:
   5-5-관리자-사유-기반-재오픈: done
   5-6-월마감-이중확인-모달과-접근성: done
   epic-5-retrospective: done
-  epic-6: in-progress
+  epic-6: done
   6-1-오늘-kpi-대시보드: done
   6-2-월간-kpi-대시보드와-스냅샷-조회: done
   6-3-주인용-그래프-리포트: done
   6-4-대시보드-로딩-실패-차트-색상-규칙: done
   epic-6-retrospective: done
-  epic-7: in-progress
+  epic-7: done
   7-1-원본-시트-기능-매핑표: done
   7-2-핵심-계산-대조-검증-fixture와-테스트: done
   7-3-이관-검증-리포트와-누락-추적: done

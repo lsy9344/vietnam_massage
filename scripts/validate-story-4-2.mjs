@@ -28,8 +28,8 @@ function readJson(path) {
 ].forEach(requireFile);
 
 const packageJson = readJson("package.json");
-if (!packageJson.scripts?.lint?.includes("validate-story-3-5.mjs && node scripts/validate-story-4-2.mjs")) {
-  errors.push("package.json lint script must run scripts/validate-story-4-2.mjs immediately after validate-story-3-5.mjs");
+if (!packageJson.scripts?.lint?.includes("validate-story-4-1.mjs && node scripts/validate-story-4-2.mjs")) {
+  errors.push("package.json lint script must run scripts/validate-story-4-2.mjs immediately after validate-story-4-1.mjs");
 }
 
 const dependencies = { ...packageJson.dependencies, ...packageJson.devDependencies };

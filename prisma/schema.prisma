@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
@@ -49,6 +50,7 @@ model Employee {
   handledDailyExpenses   DailyExpense[]
   earcareAttendances     EarcareAttendance[]
   opsAttendances         OpsAttendance[]
+  therapistAttendances   TherapistAttendance[]
 
   @@unique([employeeGroup, sortOrder], map: "uq_employees_employee_group_sort_order")
   @@map("employees")
@@ -126,10 +128,11 @@ model OperatingMonth {
   status             String              @default("작성중")
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @updatedAt @map("updated_at")
-  serviceCalls       ServiceCall[]
-  dailyExpenses      DailyExpense[]
+  serviceCalls ServiceCall[]
+  dailyExpenses DailyExpense[]
   earcareAttendances EarcareAttendance[]
-  opsAttendances     OpsAttendance[]
+  opsAttendances OpsAttendance[]
+  therapistAttendances TherapistAttendance[]
   monthlyClosings MonthlyClosing[]
 
   @@map("operating_months")
@@ -320,6 +323,31 @@ model OpsAttendance {
   @@unique([operatingMonthId, attendanceDate, employeeId], map: "uq_ops_attendances_month_date_employee")
   @@index([employeeId, attendanceDate], map: "idx_ops_attendances_employee_date")
   @@map("ops_attendances")
+}
+
+// DB CHECK constraints (declared in the migration, not expressible in Prisma schema):
+//   - check_in_minute / check_out_minute are minute-of-day integers in 0..1439
+//   - standby_minutes is the overnight-aware difference in 0..1439 and equals
+//     ((check_out_minute - check_in_minute + 1440) % 1440)
+//   - is_full_attendance_recognized equals (standby_minutes >= 480)
+model TherapistAttendance {
+  id                         String         @id @default(cuid())
+  operatingMonthId           String         @map("operating_month_id")
+  operatingMonth             OperatingMonth @relation(fields: [operatingMonthId], references: [id])
+  attendanceDate             DateTime       @map("attendance_date") @db.Date
+  employeeId                 String         @map("employee_id")
+  employee                   Employee       @relation(fields: [employeeId], references: [id])
+  checkInMinute              Int            @map("check_in_minute")
+  checkOutMinute             Int            @map("check_out_minute")
+  standbyMinutes             Int            @map("standby_minutes")
+  isFullAttendanceRecognized Boolean        @map("is_full_attendance_recognized")
+  isActive                   Boolean        @default(true) @map("is_active")
+  createdAt                  DateTime       @default(now()) @map("created_at")
+  updatedAt                  DateTime       @updatedAt @map("updated_at")
+
+  @@unique([operatingMonthId, attendanceDate, employeeId], map: "uq_therapist_attendances_month_date_employee")
+  @@index([employeeId, attendanceDate], map: "idx_therapist_attendances_employee_date")
+  @@map("therapist_attendances")
 }
 
 model CoursePolicy {

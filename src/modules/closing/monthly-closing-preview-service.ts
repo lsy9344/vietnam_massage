@@ -23,6 +23,7 @@ import {
   type TherapistDailySettlementDto,
   type TherapistDailySettlementResultDto
 } from "@/modules/settlements/therapist-daily-settlement-service";
+import { listTherapistFullAttendanceRecognitions } from "@/modules/settlements/therapist-attendance-service";
 
 type OperatingMonthRecord = {
   id: string;
@@ -204,8 +205,32 @@ const previewQuerySchema = z.object({
   operatingMonthId: z.string().trim().min(1, "운영월을 선택하세요.")
 });
 
+// Story 4.1 wires the real therapist attendance source. The closing preview keeps its own
+// `missing_story_4_1_source` fallback for callers that omit this dependency, but the default
+// path now consumes actual `TherapistAttendance` recognition data.
+async function defaultTherapistFullAttendanceRecognitions(input: {
+  operatingMonthId: string;
+  startDate: string;
+  endDate: string;
+  prismaClient?: unknown;
+}): Promise<TherapistFullAttendanceRecognitionResultDto> {
+  const result = await listTherapistFullAttendanceRecognitions({
+    operatingMonthId: input.operatingMonthId,
+    startDate: input.startDate,
+    endDate: input.endDate,
+    prismaClient: input.prismaClient as Parameters<typeof listTherapistFullAttendanceRecognitions>[0]["prismaClient"]
+  });
+  return {
+    sourceStatus: "available",
+    sourceDayCount: result.sourceDayCount,
+    rows: result.rows,
+    warningMessages: []
+  };
+}
+
 const defaultDependencies: MonthlyClosingPreviewDependencies = {
   listTherapistDailySettlements,
+  listTherapistFullAttendanceRecognitions: defaultTherapistFullAttendanceRecognitions,
   listOpsDailyIncentives,
   listOpsMonthlyIncentivePreview,
   listEarcareDailySettlements
