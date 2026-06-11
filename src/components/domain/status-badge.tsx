@@ -46,7 +46,7 @@ export function StatusBadge({
     <span
       aria-label={`상태: ${state}`}
       className={cn(
-        "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-sm font-semibold",
+        "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-sm font-semibold leading-none",
         config.className,
         className
       )}

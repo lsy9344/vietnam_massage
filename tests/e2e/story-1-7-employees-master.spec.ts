@@ -1,16 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { Algorithm, hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { hash } from "@node-rs/argon2";
+import { prisma } from "./support/db";
+import { argon2idOptions, login } from "./support/auth";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: Algorithm.Argon2id,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 const users = [
   { accountId: "story17_administrator", role: "administrator", password: "Story17!administrator", landing: "/live" },
@@ -20,12 +12,6 @@ const users = [
   { accountId: "story17_read_only_viewer", role: "read_only_viewer", password: "Story17!read_only_viewer", landing: "/rooms" }
 ];
 
-async function login(page: import("@playwright/test").Page, accountId: string, password: string) {
-  await page.goto("/sign-in");
-  await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
-}
 
 async function seedAuthAccount(input: {
   accountId: string;
@@ -156,7 +142,7 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await createForm.getByLabel("기본급").fill("1000");
     await createForm.getByLabel("정렬 순서").fill(String(sortOrder));
     await createForm.getByRole("button", { name: "직원 생성" }).click();
-    await expect(page.getByDisplayValue("테스트 직원")).toBeVisible();
+    await expect(page.locator('input[value="테스트 직원"]')).toBeVisible();
 
     const created = await findEmployeeByStaffCode(staffCode);
     expect(created).toMatchObject({ displayName: "테스트 직원", staffCode, isActive: true });
@@ -165,7 +151,7 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await expect(row.getByText(`직원 ID: ${created.id}`)).toBeVisible();
     await row.getByLabel("표시명").fill("테스트 직원 변경");
     await row.getByRole("button", { name: "프로필 저장" }).click();
-    await expect(page.getByDisplayValue("테스트 직원 변경")).toBeVisible();
+    await expect(page.locator('input[value="테스트 직원 변경"]')).toBeVisible();
     const renamed = await findEmployeeByStaffCode(staffCode);
     expect(renamed).toMatchObject({ id: created.id, displayName: "테스트 직원 변경", staffCode });
 

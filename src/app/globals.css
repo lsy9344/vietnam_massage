@@ -10,6 +10,7 @@
   --color-readonly: var(--readonly);
   --color-brand: var(--brand);
   --color-brand-secondary: var(--brand-secondary);
+  --color-brand-strong: var(--brand-strong);
   --color-status-active: var(--status-active);
   --color-status-active-foreground: var(--status-active-foreground);
   --color-status-reserved: var(--status-reserved);
@@ -21,20 +22,30 @@
   --color-status-complete-check-glow: var(--status-complete-check-glow);
   --color-status-empty: var(--status-empty);
   --color-status-empty-foreground: var(--status-empty-foreground);
+  --color-danger-foreground: var(--danger-foreground);
   --font-sans: var(--font-geist-sans);
+  /* Radius scale wired to the global --radius token (design.md §2.1).
+     max() clamps to 0 so smaller steps never go negative at --radius: 0. */
+  --radius-sm: max(0px, calc(var(--radius) - 4px));
+  --radius-md: max(0px, calc(var(--radius) - 2px));
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
 :root {
-  --brand: #B57E12;
-  --brand-secondary: #D9A526;
-  --background: #FBF3E1;
-  --surface: #FFFCF4;
-  --text: #3D3115;
-  --border: #EAD7AE;
-  --muted: #6E5E38;
-  --muted-line: #B3A37D;
-  --danger: #C8392B;
-  --readonly: #F4EAD2;
+  /* OKLCH(L C H) per design.md §2.2 — Royal Gold palette. */
+  --brand: oklch(0.604 0.124 78);
+  --brand-secondary: oklch(0.737 0.135 82);
+  --brand-strong: oklch(0.534 0.118 76);
+  --background: oklch(0.965 0.022 90);
+  --surface: oklch(0.992 0.008 92);
+  --text: oklch(0.296 0.035 75);
+  --border: oklch(0.883 0.048 85);
+  --muted: oklch(0.47 0.046 80);
+  --muted-line: oklch(0.712 0.043 85);
+  --danger: oklch(0.547 0.187 27);
+  --danger-foreground: oklch(0.985 0.005 90);
+  --readonly: oklch(0.94 0.028 88);
   --status-active: #0E7549;
   --status-active-foreground: #FFFFFF;
   --status-reserved: #2F6FD0;
@@ -46,7 +57,7 @@
   --status-complete-check-foreground: #FFFFFF;
   --status-empty: #B3A37D;
   --status-empty-foreground: #3D3115;
-  --radius: 8px;
+  --radius: 0rem;
 }
 
 * {
@@ -63,7 +74,9 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--text);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  /* Tighten tracking slightly for scannability (design.md §3). */
+  letter-spacing: -0.01em;
 }
 
 button,

@@ -8,6 +8,9 @@
 # Common generated files
 node_modules/
 .next/
+.codex/
+src/generated/prisma/
+*.bak
 playwright-report/
 test-results/
 tsconfig.tsbuildinfo

@@ -1,17 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "./support/db";
+import { argon2idOptions } from "./support/auth";
 import { defaultRooms } from "@/modules/masters/room-schema";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: 2,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const OPERATING_DAY_START_MINUTES = 11 * 60;
@@ -430,6 +422,8 @@ test.describe("Story 3.5 status badge accessibility", () => {
   });
 
   test.afterAll(async () => {
+    // 이 스펙이 시드한 콜을 메모 prefix 범위로 정리한 뒤 연결을 닫는다.
+    await cleanupStoryCalls(seededData.openMonthId);
     await prisma.$disconnect();
   });
 });

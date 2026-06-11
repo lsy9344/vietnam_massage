@@ -13,7 +13,6 @@ type SeededData = {
 
 let seededData: SeededData;
 
-
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, position: string, sortOrder: number, isActive = true) {
   return (prisma as any).employee.upsert({
     where: { staffCode },

@@ -2,8 +2,8 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = {
-  default: "bg-brand text-white hover:bg-[#9F6D0E]",
-  secondary: "bg-readonly text-foreground hover:bg-[#EAD7AE]",
+  default: "bg-brand text-white hover:bg-brand-strong",
+  secondary: "bg-readonly text-foreground hover:bg-border",
   ghost: "text-muted hover:bg-readonly hover:text-foreground"
 } as const;
 

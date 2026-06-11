@@ -1,4 +1,4 @@
-import { Algorithm, hash, verify } from "@node-rs/argon2";
+import { hash, verify } from "@node-rs/argon2";
 import { prisma } from "@/lib/prisma";
 import { SAFE_AUTH_ERROR_MESSAGE } from "@/lib/auth-messages";
 import type { Role } from "@/lib/authorization";
@@ -9,6 +9,7 @@ import { linkUserAccountToEmployeeSchema } from "@/modules/masters/employee-sche
 export { SAFE_AUTH_ERROR_MESSAGE };
 export const LOGIN_LOCKOUT_THRESHOLD = 5;
 export const LOGIN_LOCKOUT_MINUTES = 15;
+const ARGON2ID_ALGORITHM = 2;
 
 const validRoles = [
   "administrator",
@@ -172,7 +173,7 @@ export async function hashPassword(secret: string) {
   }
 
   return hash(secret, {
-    algorithm: Algorithm.Argon2id,
+    algorithm: ARGON2ID_ALGORITHM,
     memoryCost: 19456,
     timeCost: 2,
     parallelism: 1
@@ -286,7 +287,7 @@ export async function authenticateAccount(identity: string, secret: string) {
 
 export async function getCurrentAccountAuthorization(accountId: string) {
   const account = (await (prisma as any).userAccount.findUnique({
-    where: { id: accountId },
+    where: { accountId },
     select: {
       id: true,
       role: true,

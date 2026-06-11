@@ -1,17 +1,9 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { Algorithm, hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { hash } from "@node-rs/argon2";
+import { prisma } from "./support/db";
+import { argon2idOptions } from "./support/auth";
 import { defaultRooms } from "@/modules/masters/room-schema";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: Algorithm.Argon2id,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 const monthKey = "2026-06";
 const serviceDate = "2026-06-09";
@@ -307,6 +299,8 @@ test.describe("Story 3.2 live room and call status", () => {
   });
 
   test.afterAll(async () => {
+    // 이 스펙이 시드한 콜/지출을 메모 prefix 범위로 정리한 뒤 연결을 닫는다.
+    await cleanupStoryCalls(seededData.openMonthId);
     await prisma.$disconnect();
   });
 });

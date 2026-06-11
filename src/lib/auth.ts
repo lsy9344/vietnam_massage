@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { authenticateAccount, isAccountRole, SAFE_AUTH_ERROR_MESSAGE } from "@/modules/masters/account-service";
 
 export const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET,
   session: {
     strategy: "jwt"
   },

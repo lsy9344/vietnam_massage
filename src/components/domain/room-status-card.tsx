@@ -38,7 +38,7 @@ export function RoomStatusCard({ status, variant = "default" }: { status: RoomSt
     <article
       aria-label={`${status.roomDisplayName} ${status.displayStatus}`}
       className={cn(
-        "grid min-h-56 gap-3 border border-border bg-surface p-4",
+        "grid h-full min-h-56 grid-rows-[auto_auto_1fr] gap-3 border border-border bg-surface p-4",
         "rounded-md",
         isEmpty && "border-dashed border-status-empty bg-surface",
         isAttention && "status-attention border-status-complete-check",
@@ -46,14 +46,27 @@ export function RoomStatusCard({ status, variant = "default" }: { status: RoomSt
       )}
       data-testid="room-status-card"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className={cn("truncate text-xl font-semibold text-foreground", isTv && "text-[40px] font-black leading-none")}>{status.roomDisplayName}</h2>
-          <p className={cn("mt-1 text-xs text-muted", isTv && "mt-3 text-[22px] font-bold leading-tight")}>
-            {isAttention ? "결제·확인 필요" : isEmpty ? "즉시 가능" : status.guidanceText}
-          </p>
+      <div className="min-w-0">
+        {/* Badge on its own row so the large room name never has to share
+            horizontal space with it (the prior side-by-side layout overflowed
+            narrow 4-up TV columns). */}
+        <div className="flex justify-start">
+          <StatusBadge
+            className={cn("max-w-full", isTv && "h-12 gap-2 px-4 text-[28px] font-black")}
+            state={status.displayStatus}
+          />
         </div>
-        <StatusBadge className={cn(isTv && "h-12 gap-2 px-4 text-[28px] font-black")} state={status.displayStatus} />
+        <h2
+          className={cn(
+            "mt-2 truncate text-xl font-semibold text-foreground",
+            isTv && "mt-3 text-[40px] font-black leading-none"
+          )}
+        >
+          {status.roomDisplayName}
+        </h2>
+        <p className={cn("mt-1 line-clamp-2 text-xs text-muted", isTv && "mt-3 text-[22px] font-bold leading-tight")}>
+          {isAttention ? "결제·확인 필요" : isEmpty ? "즉시 가능" : status.guidanceText}
+        </p>
       </div>
 
       <div className={cn("grid grid-cols-2 gap-2 text-sm", isTv && "gap-4 text-[22px]")}>
@@ -75,7 +88,7 @@ export function RoomStatusCard({ status, variant = "default" }: { status: RoomSt
         </div>
       </div>
 
-      <div className={cn("min-w-0 border-t border-border pt-3", isTv && "pt-4")}>
+      <div className={cn("min-w-0 self-end border-t border-border pt-3", isTv && "pt-4")}>
         <p className={cn("text-xs font-medium text-muted", isTv && "text-base font-bold")}>담당자</p>
         <p className={cn("truncate text-sm font-semibold text-foreground", isTv && "text-[22px] font-bold leading-tight")}>{assigneeLine(status)}</p>
       </div>

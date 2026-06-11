@@ -1,16 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { Algorithm, hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { hash } from "@node-rs/argon2";
+import { prisma } from "./support/db";
+import { argon2idOptions, login } from "./support/auth";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: Algorithm.Argon2id,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 const codeAuditActions = [
   "code_item.created",
@@ -69,12 +61,6 @@ const users = [
   }
 ];
 
-async function login(page: import("@playwright/test").Page, accountId: string, password: string) {
-  await page.goto("/sign-in");
-  await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
-}
 
 async function seedAuthAccount(input: {
   accountId: string;
@@ -172,7 +158,7 @@ async function getTimeSlot(value: string) {
 }
 
 function rowByDisplayValue(page: import("@playwright/test").Page, value: string) {
-  return page.locator("tbody tr").filter({ has: page.getByDisplayValue(value) });
+  return page.locator("tbody tr").filter({ has: page.locator(`input[value="${value}"]`) });
 }
 
 test.describe("Story 1.6 코드와 시간 슬롯 관리", () => {
@@ -214,11 +200,11 @@ test.describe("Story 1.6 코드와 시간 슬롯 관리", () => {
       await expect(page.getByRole("heading", { name: heading })).toBeVisible();
     }
     for (const value of ["예약", "사용중", "청소중", "방문완료", "노쇼", "취소", "현금", "카드", "계좌", "기타", "일주일내방문", "생일자", "후기작성", "정상", "휴무", "지각", "조퇴", "결근", "Y", "N", "11:00", "01:00"]) {
-      await expect(page.getByDisplayValue(value).first()).toBeVisible();
+      await expect(page.locator(`input[value="${value}"]`).first()).toBeVisible();
     }
-    await expect(page.getByDisplayValue("01:30")).toHaveCount(0);
-    await expect(page.getByDisplayValue("02:00")).toHaveCount(0);
-    await expect(page.getByDisplayValue("02:30")).toHaveCount(0);
+    await expect(page.locator('input[value="01:30"]')).toHaveCount(0);
+    await expect(page.locator('input[value="02:00"]')).toHaveCount(0);
+    await expect(page.locator('input[value="02:30"]')).toHaveCount(0);
 
     const slots = await (prisma as any).timeSlot.findMany({ orderBy: { sortOrder: "asc" } });
     expect(slots.map((slot: { value: string }) => slot.value)).toEqual([...defaultTimeSlotValues]);

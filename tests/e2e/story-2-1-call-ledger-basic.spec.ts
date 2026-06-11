@@ -1,16 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
-import { Algorithm, hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { hash } from "@node-rs/argon2";
+import { prisma } from "./support/db";
+import { argon2idOptions, login } from "./support/auth";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: Algorithm.Argon2id,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 const users = [
   { accountId: "story21_administrator", role: "administrator", password: "Story21!administrator", landing: "/live" },
@@ -30,12 +22,6 @@ type SeededData = {
 
 let seededData: SeededData;
 
-async function login(page: Page, accountId: string, password: string) {
-  await page.goto("/sign-in");
-  await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
-}
 
 async function seedAuthAccount(input: { accountId: string; email: string; staffCode: string; role: string; secret: string }) {
   const sortOrder = 92100 + [...input.staffCode].reduce((sum, char) => sum + char.charCodeAt(0), 0);
@@ -272,6 +258,7 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
     await expect(page.getByRole("heading", { name: /콜|예약|원장/, level: 1 })).toBeVisible();
     await expect(page.getByText("이 날짜의 콜이 없습니다")).toBeVisible();
     await expect(page.getByRole("button", { name: "새 콜 행 추가" })).toBeEnabled();
+    await expect(page.getByRole("columnheader", { name: "코스" })).toBeVisible();
     await expect(page.getByLabel("운영월")).toHaveValue(seededData.openMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2032-01-05");
 

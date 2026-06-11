@@ -1,16 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { Algorithm, hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { hash } from "@node-rs/argon2";
+import { prisma } from "./support/db";
+import { argon2idOptions, login } from "./support/auth";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: Algorithm.Argon2id,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 const users = [
   { accountId: "story18_administrator", role: "administrator", password: "Story18!administrator", landing: "/live" },
@@ -22,12 +14,6 @@ function courseRow(page: import("@playwright/test").Page, code: string) {
   return page.locator("tbody tr").filter({ hasText: new RegExp(`^\\s*${code}\\s*Course\\.id`) }).first();
 }
 
-async function login(page: import("@playwright/test").Page, accountId: string, password: string) {
-  await page.goto("/sign-in");
-  await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
-}
 
 async function seedAuthAccount(input: { accountId: string; email: string; staffCode: string; role: string; secret: string }) {
   const employee = await (prisma as any).employee.upsert({
@@ -107,9 +93,9 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     await expect(page.getByText("E 풀코스120")).toBeVisible();
     await expect(courseRow(page, "D").getByText("마사지사2 필요: Y")).toBeVisible();
     await expect(page.getByText("0원 수당")).toBeVisible();
-    await expect(page.getByDisplayValue("0").first()).toBeVisible();
-    await expect(page.getByText("30콜").or(page.getByDisplayValue("30"))).toBeVisible();
-    await expect(page.getByDisplayValue("1000")).toBeVisible();
+    await expect(page.locator('input[value="0"]').first()).toBeVisible();
+    await expect(page.getByText("30콜").or(page.locator('input[value="30"]'))).toBeVisible();
+    await expect(page.locator('input[value="1000"]')).toBeVisible();
 
     const dCourse = await (prisma as any).course.findUnique({ where: { code: "D" }, select: { id: true, code: true } });
     const dPolicy = await (prisma as any).coursePolicy.findFirst({
@@ -126,7 +112,7 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     const newTvLabel = `A 누루60 ${Date.now().toString(36).slice(-4)}`;
     await row.getByLabel("TV 표시명").fill(newTvLabel);
     await row.getByRole("button", { name: "현재 정책 저장" }).click();
-    await expect(page.getByDisplayValue(newTvLabel)).toBeVisible();
+    await expect(page.locator(`input[value="${newTvLabel}"]`)).toBeVisible();
 
     const courseA = await (prisma as any).course.findUnique({ where: { code: "A" }, select: { id: true, code: true } });
     expect(courseA).toMatchObject({ id: beforeCourseA.id, code: "A" });
