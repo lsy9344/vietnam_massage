@@ -56,6 +56,25 @@ const rolePermissions: Record<Role, SensitivePermission[]> = {
   read_only_viewer: []
 };
 
+const isDevAuthBypassEnabled = () =>
+  process.env.NODE_ENV !== "production" && process.env.LOCAL_AUTH_BYPASS === "true";
+
+const devBypassRole = (process.env.LOCAL_AUTH_ROLE as Role | undefined) ?? "administrator";
+
+function getDevBypassAccount() {
+  if (!isDevAuthBypassEnabled() || !isRole(devBypassRole)) {
+    return null;
+  }
+
+  return {
+    id: "local-bypass-account",
+    role: devBypassRole,
+    employeeId: null,
+    isActive: true,
+    lockedUntil: null
+  };
+}
+
 export class AuthorizationError extends Error {
   constructor(message = "권한이 없습니다.") {
     super(message);
@@ -85,7 +104,12 @@ function isUnavailable(account: { isActive: boolean; lockedUntil: Date | null })
   return !account.isActive || (account.lockedUntil !== null && account.lockedUntil > new Date());
 }
 
-async function getAuthorizedAccount() {
+export async function getAuthorizedAccount() {
+  const bypassAccount = getDevBypassAccount();
+  if (bypassAccount) {
+    return bypassAccount;
+  }
+
   const session = await getServerSession(authOptions);
   const sessionAccountId = session?.user?.accountId;
   if (!sessionAccountId) {

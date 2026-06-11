@@ -1,13 +1,11 @@
-import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
-import { authOptions } from "@/lib/auth";
-import { getRoleLandingPath, isRole } from "@/lib/authorization";
+import { getRoleLandingPath, getAuthorizedAccount } from "@/lib/authorization";
 
 export default async function Home() {
-  const session = await getServerSession(authOptions);
-  const role = session?.user?.role;
+  const account = await getAuthorizedAccount();
+  const role = account?.role;
 
-  if (!session || !isRole(role)) {
+  if (!role || !account) {
     redirect("/sign-in");
   }
 

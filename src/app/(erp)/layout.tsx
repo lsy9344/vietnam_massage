@@ -1,18 +1,9 @@
-import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { RoleAwareSidebar } from "@/components/domain/role-aware-sidebar";
-import { authOptions } from "@/lib/auth";
-import { getCurrentAccountAuthorization } from "@/modules/masters/account-service";
+import { getAuthorizedAccount } from "@/lib/authorization";
 
 export default async function ErpLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const session = await getServerSession(authOptions);
-  const accountId = session?.user?.accountId;
-
-  if (!accountId) {
-    redirect("/sign-in");
-  }
-
-  const account = await getCurrentAccountAuthorization(accountId);
+  const account = await getAuthorizedAccount();
   if (!account || !account.isActive || (account.lockedUntil !== null && account.lockedUntil > new Date())) {
     redirect("/sign-in");
   }
@@ -34,7 +25,7 @@ export default async function ErpLayout({ children }: Readonly<{ children: React
             <h2 className="text-lg font-semibold">역할별 ERP 업무</h2>
           </div>
           <div className="rounded-md border border-border bg-readonly px-3 py-2 text-sm text-muted">
-            {accountId}
+            {account.id}
           </div>
         </header>
         {children}
