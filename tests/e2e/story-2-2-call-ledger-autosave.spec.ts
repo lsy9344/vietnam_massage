@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { hash } from "@node-rs/argon2";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
@@ -255,6 +255,18 @@ function rowByText(page: Page, text: string) {
   return page.getByRole("row", { name: new RegExp(text) });
 }
 
+/**
+ * Story 2.6 type-ahead 콤보박스 셀 선택 헬퍼.
+ * 상태/결제수단 등 그리드 셀은 `<select>`가 아니라 `role="combobox"` 입력이므로
+ * focus → 라벨 입력 → Enter 커밋 패턴으로 선택한다(과거 `selectOption`은 동작하지 않음).
+ */
+async function selectGridCombobox(scope: Locator, label: string, value: string) {
+  const combobox = scope.getByRole("combobox", { name: label });
+  await combobox.focus();
+  await combobox.fill(value);
+  await combobox.press("Enter");
+}
+
 test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -281,17 +293,18 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
 
     const row = rowByText(page, originalMemo);
     await expect(row).toBeVisible();
-    await row.getByLabel("고객/메모").fill(updatedMemo);
-    await row.getByLabel("고객/메모").blur();
+    // 메모를 바꾸면 row의 접근성 이름(=memo 텍스트)이 바뀌어 originalMemo 기반 row 로케이터가
+    // stale해진다. fill/blur는 텍스트와 무관한 안정 식별자(data-service-call-id)로 셀을 잡는다.
+    const stableRow = page.locator(`tr[data-service-call-id="${call.id}"]`);
+    await stableRow.getByLabel("고객/메모").fill(updatedMemo);
+    await stableRow.getByLabel("고객/메모").blur();
     await expect(rowByText(page, updatedMemo).getByText(/저장중|저장됨/)).toBeVisible();
     await expect(rowByText(page, updatedMemo).getByText("저장됨")).toBeVisible();
 
     const updatedRow = rowByText(page, updatedMemo);
-    await updatedRow.getByLabel("상태").selectOption("사용중");
-    await updatedRow.getByLabel("상태").blur();
+    await selectGridCombobox(updatedRow, "상태", "사용중");
     await expect(updatedRow.getByText("저장됨")).toBeVisible();
-    await updatedRow.getByLabel("결제수단").selectOption("카드");
-    await updatedRow.getByLabel("결제수단").blur();
+    await selectGridCombobox(updatedRow, "결제수단", "카드");
     await expect(updatedRow.getByText("저장됨")).toBeVisible();
 
     await expect
@@ -331,10 +344,10 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
 
     await upsertCodeItem("PAYMENT_METHOD", "카드", "카드", 92202, false);
     try {
-      const row = rowByText(page, originalMemo);
-      await row.getByLabel("고객/메모").fill(retryMemo);
-      await row.getByLabel("결제수단").selectOption("카드");
-      await row.getByLabel("결제수단").blur();
+      // memo를 바꾸면 텍스트 기반 row가 stale해지므로 안정 식별자로 셀을 잡는다.
+      const stableRow = page.locator(`tr[data-service-call-id="${call.id}"]`);
+      await stableRow.getByLabel("고객/메모").fill(retryMemo);
+      await selectGridCombobox(stableRow, "결제수단", "카드");
 
       await expect(rowByText(page, retryMemo).getByText("저장 보류")).toBeVisible();
       await expect(rowByText(page, retryMemo).getByRole("button", { name: /재시도|retry/i })).toBeVisible();

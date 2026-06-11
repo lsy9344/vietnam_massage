@@ -227,8 +227,12 @@ function normalizeParseError(message: string) {
   return new CourseDomainError(message, "INVALID_COURSE_INPUT");
 }
 
+function isCourseCode(value: string): value is CourseCode {
+  return ["A", "B", "C", "D", "E"].includes(value);
+}
+
 function assertCourseCode(value: string): asserts value is CourseCode {
-  if (!["A", "B", "C", "D", "E"].includes(value)) {
+  if (!isCourseCode(value)) {
     throw new CourseDomainError("코스 코드가 올바르지 않습니다.", "INVALID_COURSE_CODE");
   }
 }
@@ -269,11 +273,18 @@ function toMonthlyRuleDto(record: OpsMonthlyIncentiveRuleRecord): OpsMonthlyInce
   };
 }
 
-function toCourseDto(record: CourseRecord, currentPolicy: CoursePolicyDto | null): CourseDto {
-  assertCourseCode(record.code);
+function toCourseDto(
+  record: CourseRecord,
+  currentPolicy: CoursePolicyDto | null,
+  options: { tolerateInvalidCode?: boolean } = {}
+): CourseDto {
+  // 쓰기/감사 경로는 invariant를 강제하고, 조회 경로(tolerateInvalidCode)는 비표준 코드도 통과시킨다.
+  if (!options.tolerateInvalidCode) {
+    assertCourseCode(record.code);
+  }
   return {
     ...record,
-    code: record.code,
+    code: record.code as CourseCode,
     currentPolicy,
     createdAt: toIso(record.createdAt),
     updatedAt: toIso(record.updatedAt)
@@ -696,7 +707,10 @@ export async function listCourses(options: { monthKey?: string; prismaClient?: C
       const currentPolicy = policies
         .filter((policy) => effectiveForMonth(policy, monthKey))
         .sort((a, b) => b.effectiveFromMonth.localeCompare(a.effectiveFromMonth))[0];
-      return toCourseDto(course, currentPolicy ? toCoursePolicyDto(currentPolicy) : null);
+      // 조회 경로는 코드가 표준 A~E가 아니어도 throw하지 않고 코스를 그대로 통과시킨다.
+      // 단일 비표준 코드 row가 전체 목록/페이지를 깨뜨리지 않게 하기 위함이며,
+      // 생성/수정 같은 쓰기 경로의 assertCourseCode 검증은 그대로 유지된다.
+      return toCourseDto(course, currentPolicy ? toCoursePolicyDto(currentPolicy) : null, { tolerateInvalidCode: true });
     })
   );
 }

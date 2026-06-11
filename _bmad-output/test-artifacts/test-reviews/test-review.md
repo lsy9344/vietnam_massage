@@ -346,6 +346,71 @@ in-flight `POST /api/auth/callback/credentials`를 `net::ERR_ABORTED`로 취소 
 > OPERATIONS/EARCARE/THERAPIST만 허용인데 5개+/8개 스펙이 위반 값을 시드. `/calls`·`/live` 등이 전체 리스트를
 > 검증하다 throw. **후속 과제**로 시드 코드를 도메인 유효값으로 교체하면 E2E가 더 풀릴 것으로 예상.
 
+### 데이터 버그 2종 수정 — 조회 경로 robust화 (2026-06-11)
+
+**방향 (사용자 결정):** 시드를 바꾸는 대신 **앱 조회 경로를 robust하게** — 단일 비표준 row가 전체 리스트/페이지를
+깨뜨리지 않도록. 쓰기/감사 경로의 invariant 검증은 그대로 유지.
+
+**코스 코드 (`src/modules/masters/course-service.ts`):**
+- `toCourseDto(record, policy, { tolerateInvalidCode })` 옵션 추가. `listCourses`(조회)는 `tolerateInvalidCode: true`로
+  비 A~E 코드도 통과시키고, 생성/수정/감사 경로(라인 558/832/836)는 기존대로 `assertCourseCode` throw 유지.
+- `isCourseCode` 비throw predicate 추출.
+
+**직원 그룹 (`src/modules/masters/employee-service.ts`):**
+- `toDto(record, { tolerateInvalidEnums })` 옵션 추가. `listEmployees`/`listActiveEmployees`(조회)는
+  `tolerateInvalidEnums: true`로 비표준 group/shift/status도 통과, 생성/감사 경로는 기존 assert 유지.
+
+**검증 (로컬 DB E2E, force-reset 클린 상태, `--workers=1`):**
+| 스펙 | Before(추정) | After |
+| --- | --- | --- |
+| story-6-1 today dashboard | 거의 전부 차단 | **8 passed / 1 failed** |
+| story-1-2 auth/rbac | 4 passed (login fix 전) | **7 passed / 5 failed** |
+| dashboards 6-2/6-3/6-4 | 거의 전부 차단 | **16 passed / 13 failed** |
+| migration 7-1/7-3 | 거의 전부 차단 | **4 passed / 4 failed** |
+
+- 단위 198/198 통과 유지, `tsc --noEmit` exit 0. robust화가 쓰기 경로 strict 검증 단위 테스트를 깨지 않음.
+
+**결론:** 3대 systemic blocker(로그인 race, 코스 코드, 직원 그룹)가 모두 해소되어 E2E가 **near-total 실패 → 과반 통과**로 전환.
+남은 실패는 스펙별 데이터 기대값/타이밍(예: story-2-2 autosave blur, KPI `toContainText`) 같은 **개별 소규모 이슈**로,
+systemic 차단과 다른 별개 class. 전체 그린은 이들 개별 케이스를 스펙별로 다듬는 후속 작업 필요.
+
+### story-2-2 개별 실패 분석 + 부분 수정 (2026-06-11)
+
+story-2-2 autosave 첫 테스트를 끝까지 파고들어 **두 가지 재사용 가능한 패턴**을 발견·적용했다.
+
+**패턴 1 — stale row 로케이터 (blur 30s 타임아웃의 진짜 원인):** `rowByText(page, originalMemo)`로 잡은 row의
+접근성 이름은 memo 입력값을 포함한다. `fill(updatedMemo)` 후 row 이름이 바뀌어 originalMemo 기반 로케이터가
+stale → 이어지는 `.blur()`가 영영 못 찾아 타임아웃. **수정:** 텍스트 대신 안정 식별자
+`tr[data-service-call-id="${call.id}"]`(grid가 이미 렌더하는 속성)로 셀을 잡는다.
+
+**패턴 2 — combobox vs `<select>` (Story 2.6 이후 미반영):** 상태/결제수단 등 그리드 셀은 Story 2.6에서
+`<select>` → `role="combobox"` 타입어헤드로 바뀌었는데 옛 테스트는 `selectOption()`을 그대로 사용 →
+`Element is not a <select> element` 실패. **수정:** `selectGridCombobox(scope, label, value)` 헬퍼
+(focus → fill → Enter) 추가, story-2-2의 상태/결제수단 선택을 전환. → **story-2-2 test1 green(30s 타임아웃 → 3.9s).**
+
+**남은 범위 (전체 그린의 큰 덩어리, 별개 다회차 작업):**
+- `selectOption`을 쓰는 스펙 **13개 / ~50회**(1-7, 2-1~2-5, 4-3~4-6, 5-1, 6-2, 7-3). 단, 전부 깨진 건 아님 —
+  운영월/날짜 같은 **진짜 `<select>` 폼**은 정상이고 **그리드 셀 combobox**만 전환 필요. 스펙별 case-by-case 판단 요함.
+- 일부 테스트는 **시나리오 자체가 옛 `<select>` 동작에 의존**(예: story-2-2 test2 — 비활성 카드 코드를 select해 서버
+  autosave 실패를 유도). combobox는 활성 옵션만 노출하므로 시나리오 재설계 필요(기계적 치환 불가).
+- 이 작업은 1회 PR로 끝나지 않는 **테스트 현대화 프로젝트**이며, 스펙별 도메인 흐름 이해가 필요.
+
+### combobox 현대화 진행 (story-2-1) + 환경 교훈 (2026-06-11)
+
+**value-based combobox 헬퍼 패턴 확정:** 그리드 combobox 옵션은 `<li role="option" id="...-option-${value}">`로
+렌더되고, add-row 셀은 `[data-call-cell-row="0"][data-call-cell-column="${columnId}"]`로 잡힌다. 따라서
+`addRowCell(page, columnId)` + `click → [role=option][id$=-option-${value}] click`으로 **stable value 기준**
+(과거 `selectOption(value)`와 동등) 선택이 가능. story-2-1 `fillBasicCallRow`에 적용 → 저장까지 성공 확인
+(`예약수 1건` 요약 렌더). 단, 저장 후 그리드 row의 room **display name** 표시 검증 등 일부 스펙별 assertion은 추가 조사 필요.
+
+**환경 hygiene 교훈 (중요):** 반복 `npm run dev` 백그라운드 기동이 **stale dev 서버 누적**을 만든다. 새 서버가
+3000 점유 프로세스를 감지하면 3001로 옮겨가고, 옛 서버가 죽으면서 테스트가 `net::ERR_CONNECTION_REFUSED`로
+무더기 실패한다(테스트 로직 무관). **대책:** 매 실행 전 `netstat ... :3000 LISTENING` PID를 `taskkill`로 정리하고
+단일 서버가 `Ready in`을 찍을 때까지 대기 후 5회 hit로 안정성 확인. (memory `[[e2e-environment]]`에 기록)
+
+**동시 편집 주의:** story-2-1은 본 세션 작업 중 외부에서 병행 개선됨(label-based → column-id-based `addRowCell`로 리팩터).
+충돌 방지를 위해 해당 파일 추가 편집을 중단함. combobox 현대화는 여러 방향에서 진행 중인 ongoing 작업.
+
 ---
 
 ## 강점 요약 (보존할 것)

@@ -191,6 +191,23 @@ async function seedStoryData(): Promise<SeededData> {
   };
 }
 
+async function cleanupStoryCalls(operatingMonthId: string) {
+  const calls = await (prisma as any).serviceCall.findMany({
+    where: {
+      operatingMonthId,
+      serviceDate: new Date("2032-01-05T00:00:00.000Z"),
+      customerMemo: { startsWith: "E2E story 2.1" }
+    },
+    select: { id: true }
+  });
+  const callIds = calls.map((call: { id: string }) => call.id);
+  if (callIds.length === 0) return;
+
+  await (prisma as any).serviceCallAssignment.deleteMany({ where: { serviceCallId: { in: callIds } } });
+  await (prisma as any).serviceCallStatusHistory.deleteMany({ where: { serviceCallId: { in: callIds } } });
+  await (prisma as any).serviceCall.deleteMany({ where: { id: { in: callIds } } });
+}
+
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, sortOrder: number) {
   return (prisma as any).employee.upsert({
     where: { staffCode },
@@ -218,19 +235,35 @@ async function seedEmployee(staffCode: string, displayName: string, employeeGrou
   });
 }
 
+/**
+ * Story 2.6 type-ahead 콤보박스 셀을 stable value로 선택한다.
+ * 셀은 `<select>`가 아니라 `role="combobox"` 입력이고, 각 옵션 `<li>`는
+ * `id={...}-option-${value}`로 렌더된다. 클릭으로 목록을 연 뒤 value로 옵션을 클릭한다.
+ * (과거 `selectOption(value)`와 동일하게 stable value 기준으로 선택)
+ */
+function addRowCell(page: Page, columnId: string) {
+  return page.locator(`[data-call-cell-row="0"][data-call-cell-column="${columnId}"]`);
+}
+
+async function selectCombobox(page: Page, columnId: string, value: string) {
+  const combobox = addRowCell(page, columnId);
+  await combobox.click();
+  await page.locator(`[role="option"][id$="-option-${value}"]`).click();
+}
+
 async function fillBasicCallRow(page: Page, memo: string) {
-  await page.getByLabel("시간").selectOption("11:00");
-  await page.getByLabel("객실").selectOption(seededData.roomId);
-  await page.getByLabel("코스").selectOption(seededData.courseId);
-  await page.getByLabel("고객/메모").fill(memo);
-  await page.getByLabel("마사지사1").selectOption(seededData.therapist1Id);
-  await page.getByLabel("마사지사2").selectOption(seededData.therapist2Id);
-  await page.getByLabel("귀케어 담당").selectOption(seededData.earcareEmployeeId);
-  await page.getByLabel("상태").selectOption("예약");
-  await page.getByLabel("할인구분").selectOption("생일자");
-  await page.getByLabel("결제수단").selectOption("현금");
-  await page.getByLabel("비고").fill("E2E 비고");
-  await page.getByLabel("확인값").selectOption("Y");
+  await selectCombobox(page, "startTime", "11:00");
+  await selectCombobox(page, "roomId", seededData.roomId);
+  await selectCombobox(page, "courseId", seededData.courseId);
+  await addRowCell(page, "customerMemo").fill(memo);
+  await selectCombobox(page, "therapist1Id", seededData.therapist1Id);
+  await selectCombobox(page, "therapist2Id", seededData.therapist2Id);
+  await selectCombobox(page, "earcareEmployeeId", seededData.earcareEmployeeId);
+  await selectCombobox(page, "status", "예약");
+  await selectCombobox(page, "discountTypeCode", "생일자");
+  await selectCombobox(page, "paymentMethodCode", "현금");
+  await addRowCell(page, "note").fill("E2E 비고");
+  await selectCombobox(page, "confirmationCode", "Y");
 }
 
 test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력", () => {
@@ -247,6 +280,7 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
       });
     }
     seededData = await seedStoryData();
+    await cleanupStoryCalls(seededData.openMonthId);
   });
 
   test("counter는 날짜별 빈 상태를 보고 기본 콜 행을 입력하면 stable ID와 담당자 row가 저장된다", async ({ page }) => {
@@ -258,19 +292,20 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
     await expect(page.getByRole("heading", { name: /콜|예약|원장/, level: 1 })).toBeVisible();
     await expect(page.getByText("이 날짜의 콜이 없습니다")).toBeVisible();
     await expect(page.getByRole("button", { name: "새 콜 행 추가" })).toBeEnabled();
-    await expect(page.getByRole("columnheader", { name: "코스" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "코스" }).nth(1)).toBeVisible();
     await expect(page.getByLabel("운영월")).toHaveValue(seededData.openMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2032-01-05");
 
     await fillBasicCallRow(page, memo);
     await page.getByRole("button", { name: "새 콜 행 추가" }).click();
 
-    await expect(page.getByText("저장됨").or(page.getByText(memo))).toBeVisible();
+    await expect(page.getByText("저장됨").first()).toBeVisible();
     await expect(page.getByText(memo)).toBeVisible();
-    await expect(page.getByText("E2E 921 호실")).toBeVisible();
-    await expect(page.getByText("E2E 마사지사1")).toBeVisible();
-    await expect(page.getByText("E2E 귀케어1")).toBeVisible();
-    await expect(page.getByText("결제/수당/콜인정 -")).toBeVisible();
+    const savedRow = page.getByRole("row", { name: new RegExp(memo) });
+    await expect(savedRow.getByRole("combobox", { name: "객실" })).toHaveValue("E2E 921 호실");
+    await expect(savedRow.getByRole("combobox", { name: "마사지사1" })).toHaveValue(/E2E 마사지사1/);
+    await expect(savedRow.getByRole("combobox", { name: "귀케어 담당" })).toHaveValue(/E2E 귀케어1/);
+    await expect(savedRow.getByText("비완료 제외")).toBeVisible();
 
     const savedCall = await (prisma as any).serviceCall.findFirst({
       where: { customerMemo: memo },

@@ -163,23 +163,27 @@ function assertEmploymentStatus(value: string): asserts value is EmploymentStatu
   }
 }
 
-function toDto(record: EmployeeRecord): EmployeeDto {
-  assertEmployeeGroup(record.employeeGroup);
-  assertShiftType(record.shiftType);
-  assertEmploymentStatus(record.employmentStatus);
+function toDto(record: EmployeeRecord, options: { tolerateInvalidEnums?: boolean } = {}): EmployeeDto {
+  // 쓰기/감사 경로는 enum invariant를 강제하고, 조회 경로(tolerateInvalidEnums)는
+  // 비표준 값 단일 row가 전체 목록/페이지를 깨뜨리지 않도록 통과시킨다.
+  if (!options.tolerateInvalidEnums) {
+    assertEmployeeGroup(record.employeeGroup);
+    assertShiftType(record.shiftType);
+    assertEmploymentStatus(record.employmentStatus);
+  }
 
   return {
     id: record.id,
     displayName: record.displayName,
     staffCode: record.staffCode,
-    employeeGroup: record.employeeGroup,
+    employeeGroup: record.employeeGroup as EmployeeGroup,
     position: record.position,
-    shiftType: record.shiftType,
+    shiftType: record.shiftType as ShiftType | null,
     baseSalary: record.baseSalary,
     phone: record.phone,
     birthday: toIsoDate(record.birthday),
     hireDate: toIsoDate(record.hireDate),
-    employmentStatus: record.employmentStatus,
+    employmentStatus: record.employmentStatus as EmploymentStatus,
     sortOrder: record.sortOrder,
     isActive: record.isActive,
     createdAt: record.createdAt.toISOString(),
@@ -353,7 +357,7 @@ export async function listEmployees(options: { prismaClient?: EmployeePrismaClie
     orderBy: [{ employeeGroup: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }]
   });
 
-  return records.map(toDto);
+  return records.map((record) => toDto(record, { tolerateInvalidEnums: true }));
 }
 
 export async function listActiveEmployees(options: { employeeGroup?: EmployeeGroup; prismaClient?: EmployeePrismaClient } = {}) {
@@ -363,7 +367,7 @@ export async function listActiveEmployees(options: { employeeGroup?: EmployeeGro
     orderBy: [{ employeeGroup: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }]
   });
 
-  return records.map(toDto);
+  return records.map((record) => toDto(record, { tolerateInvalidEnums: true }));
 }
 
 export async function createEmployee(input: CreateEmployeeInput) {
