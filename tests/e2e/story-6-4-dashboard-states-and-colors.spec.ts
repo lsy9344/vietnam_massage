@@ -131,7 +131,7 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
 
   for (const [index, role] of accountRoles.entries()) {
     const employee = await seedEmployee(`E2E64-${suffix}-${role}`, `E2E64 ${role}`, "OPERATIONS", role, sortBase + index);
-    accounts[role] = { accountId: `story64_${suffix}_${role}`, password: `Story64!${role}` };
+    accounts[role] = { accountId: `story64_${suffix}_${role}`.toLowerCase(), password: `Story64!${role}` };
     await seedAccount({ ...accounts[role], role, employeeId: employee.id });
   }
 
