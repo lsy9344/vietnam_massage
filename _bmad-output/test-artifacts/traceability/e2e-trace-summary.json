@@ -1,0 +1,121 @@
+{
+  "schema_version": "0.1.0",
+  "snapshot_at": "2026-06-12T00:44:04Z",
+  "repo": "vietnam_massage",
+  "collection_mode": "sequential",
+  "collection_status": "COLLECTED",
+  "inventory_basis": "acceptance_criteria",
+  "gate_basis": "priority_thresholds",
+  "source_sha": "8c6ef8cb60ab745161ec9d7de377a46bc9a405d4",
+  "target": {
+    "type": "release",
+    "id": "vietnam_massage-v1",
+    "label": "Excel ERP 이전 v1 (Epic 1~7 전체)"
+  },
+  "decision_mode": "automated",
+  "evaluator": "noah",
+  "confidence": "high",
+  "oracle": {
+    "resolution_mode": "formal_requirements",
+    "confidence": "high",
+    "sources": [
+      "_bmad-output/planning-artifacts/epics.md",
+      "_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/prd.md",
+      "_bmad-output/project-context.md"
+    ],
+    "external_pointer_status": "not_used",
+    "synthetic": false
+  },
+  "coverage": {
+    "inventory": {
+      "covered": 36,
+      "total": 37,
+      "pct": 97
+    },
+    "priority_breakdown": {
+      "P0": { "total": 17, "covered": 17, "pct": 100 },
+      "P1": { "total": 12, "covered": 11, "pct": 92 },
+      "P2": { "total": 8, "covered": 8, "pct": 100 },
+      "P3": { "total": 0, "covered": 0, "pct": 100 }
+    },
+    "by_level": {
+      "e2e": { "files": 38, "criteria_covered": 37 },
+      "unit": { "files": 24, "criteria_covered": 30 },
+      "component": { "files": 0, "criteria_covered": 0 },
+      "api": { "files": 0, "criteria_covered": 0 }
+    }
+  },
+  "tests": {
+    "files": 62,
+    "cases": 0,
+    "skipped_cases": 0,
+    "fixme_cases": 0,
+    "pending_cases": 0,
+    "note": "케이스 단위 카운트 미집계(정적 분석). 파일 단위: E2E 38, Unit 24."
+  },
+  "risk_summary": {
+    "critical_open": 0,
+    "high_open": 0,
+    "medium_open": 1,
+    "low_open": 0
+  },
+  "heuristics": {
+    "endpoint_gaps": 0,
+    "auth_negative_path_status": "present",
+    "error_path_status": "present",
+    "ui_journey_status": "present",
+    "ui_state_status": "present"
+  },
+  "gate_status": "PASS",
+  "gate_criteria": {
+    "p0_coverage_required": "100%",
+    "p0_coverage_actual": "100%",
+    "p0_status": "MET",
+    "p1_coverage_target": "90%",
+    "p1_coverage_minimum": "80%",
+    "p1_coverage_actual": "92%",
+    "p1_status": "MET",
+    "overall_coverage_minimum": "80%",
+    "overall_coverage_actual": "97%",
+    "overall_status": "MET"
+  },
+  "blockers": [
+    {
+      "id": "FR10-combobox-modernization",
+      "severity": "medium",
+      "reason": "Story 2.6 이후 selectOption 잔존 13파일/~50회 — 그리드 셀 combobox 전환 필요.",
+      "test_file": "tests/e2e/story-2-*.spec.ts 외",
+      "test_title": "콜 원장 grid combobox 상호작용"
+    },
+    {
+      "id": "e2e-environment-blocker",
+      "severity": "high",
+      "reason": "브라우저↔NextAuth HTTP 경계 환경 이슈 + stale dev 서버. E2E full-green 검증 미완. 테스트 로직 무관.",
+      "test_file": "tests/e2e/*",
+      "test_title": "E2E 전체 실행"
+    }
+  ],
+  "recommendations": [
+    {
+      "priority": "MEDIUM",
+      "action": "FR10 PARTIAL 해소 — combobox 현대화 (selectOption → selectGridCombobox)",
+      "requirements": ["FR10"]
+    },
+    {
+      "priority": "MEDIUM",
+      "action": "NFR3/NFR8 — NFR Evidence Audit (성능·UX 증거) 실행 권장",
+      "requirements": ["NFR3", "NFR8"]
+    },
+    {
+      "priority": "MEDIUM",
+      "action": "NFR10 — CI 워크플로우 (배포/migration 파이프라인) 실행 권장",
+      "requirements": ["NFR10"]
+    }
+  ],
+  "links": {
+    "trace_report_path": "_bmad-output/test-artifacts/traceability-matrix.md",
+    "trace_report_url": "",
+    "artifact_url": "",
+    "journey_evidence_url": ""
+  }
+}

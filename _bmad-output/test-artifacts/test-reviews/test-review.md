@@ -1,8 +1,10 @@
 ---
-stepsCompleted: ['step-01-load-context', 'step-02-discover-tests', 'step-03-quality-evaluation', 'step-03f-aggregate-scores']
-lastStep: 'step-03f-aggregate-scores'
-lastSaved: '2026-06-11'
+stepsCompleted: ['step-01-load-context', 'step-02-discover-tests', 'step-03-quality-evaluation', 'step-03f-aggregate-scores', 'step-04-generate-report']
+lastStep: 'step-04-generate-report'
+lastSaved: '2026-06-12'
 overallScore: 74
+qualityGrade: 'B (Acceptable)'
+recommendation: 'Approve with comments'
 executionMode: 'sequential'
 reviewScope: 'suite'
 detectedStack: 'fullstack'
@@ -420,4 +422,65 @@ stale → 이어지는 `.blur()`가 영영 못 찾아 타임아웃. **수정:** 
 - 단위 테스트의 의존성 주입 in-memory 목 — 격리·속도 양면에서 모범. 지급액 영향 도메인(정산/월마감/인센)에 대한 unit 커버리지 충실.
 - 한국어 도메인 상태값 원문 보존로 `sheet.xlsx` 업무 규칙 회귀 방지.
 - API-first 시드 (UI 우회) — 성능 모범.
+
+---
+
+## Executive Summary (최종)
+
+- **품질 점수:** **74 / 100 · Grade B (Acceptable)**
+- **전체 평가:** **양호하나 구조 개선 필요.** 결정성(92)과 성능(78)은 강하고, 격리(68)·유지보수성(60)이 끌어내림. 단위 레이어는 사실상 만점 수준, 감점은 전적으로 E2E 인프라 레이어에 집중.
+- **권고 판정:** **Approve with comments** — 머지 차단 사유는 없으나, H2 잔여(blind teardown 보류분)와 M1(타입 안전성)을 후속 과제로 명시 추적할 것.
+
+### 핵심 강점 (Top 5)
+
+1. 하드 웨이트 0건 + `expect.poll` 결정적 대기 (Determinism 92).
+2. 시맨틱 셀렉터 일관 사용 (`getByRole`/`getByLabel`/`getByText`).
+3. 단위 테스트 의존성 주입 in-memory 목 — 격리·속도 양면 모범.
+4. API-first 시드 (UI 우회) — 성능 모범.
+5. 한국어 도메인 상태값 원문 보존 — `sheet.xlsx` 회귀 방어.
+
+### 핵심 약점 (Top 5)
+
+1. **H2 잔여:** 4개 고위험 스펙(2-1, 5-3, 5-6, 6-4) blind teardown 보류 — 실 DB 검증 필요.
+2. **M1:** `(prisma as any)` **608회 / 36파일** 잔존 — 시드 오타가 컴파일 타임에 안 잡힘.
+3. **M2:** CI `workers: 1` + serial 17파일 — CI 실행시간 부담.
+4. **M4:** 16개 E2E 스펙 300줄 초과 (대부분 H1 해소로 자연 축소 진행 중).
+5. **combobox 현대화 미완:** Story 2.6 이후 `selectOption` 잔존 13파일/~50회 — 테스트 현대화 프로젝트로 별도 추적.
+
+---
+
+## 리메디에이션 검증 (Step 4 기준, 2026-06-12)
+
+본 브랜치(`fix/e2e-lowercase-account-id`)의 리메디에이션 로그를 실제 코드 상태와 대조 검증:
+
+| 항목 | 보고서 주장 | 코드 검증 결과 | 판정 |
+| --- | --- | --- | --- |
+| H1 — `argon2idOptions` 중앙화 | 35 → 0 (support 1곳) | `support/auth.ts` 1건만 정의 | ✅ 일치 |
+| H1 — support 모듈 신설 | `db.ts`/`auth.ts` | `support/{auth,cleanup,db}.ts` 존재 | ✅ 일치 (+cleanup) |
+| H2 — `afterAll` cleanup 연결 | 1 → 17 | 35개 스펙에 `afterAll` 존재 | ✅ 일치 |
+| M1 — `(prisma as any)` 제거 | 미해소 (범위 밖) | 608회 / 36파일 잔존 | ⚠️ 미해소 확정 |
+| 데이터 버그 robust화 | course/employee 조회 경로 | `8c6ef8c`에 course/employee-service 반영 | ✅ 일치 |
+
+> **결론:** 보고서의 모든 ✅ 주장이 코드와 byte-level로 부합. M1은 의도적으로 범위 밖으로 둔 상태이며 미해소가 정확히 기록됨(과장 없음).
+
+---
+
+## Coverage 경계 안내
+
+`test-review`는 **커버리지를 점수화하지 않는다.** 다음 커버리지 관련 질문은 모두 `trace` 워크플로우로 라우팅한다:
+
+- 요구사항(FR/AC) ↔ 테스트 1:1 매핑
+- Story 4.x(마사지사/귀케어 출퇴근·정산) E2E 커버리지 충분성
+- P0/P1 시나리오 누락 여부 및 품질 게이트(PASS/CONCERNS/FAIL) 결정
+
+---
+
+## 다음 권고 워크플로우
+
+1. **`TR` (Trace Coverage)** — 본 리뷰는 품질만 평가했다. 지급액 영향 도메인(정산/월마감)의 요구사항↔테스트 매핑과 게이트 결정은 trace가 소유. **다음 단계로 권장.**
+2. **후속 리메디 (별도 작업):**
+   - (a) 4개 고위험 스펙 blind teardown — 로컬 DB 기동 후 실 시드 관찰하며 scoped cleanup 작성·E2E 검증.
+   - (b) combobox 현대화 — `selectOption` → `selectGridCombobox` 그리드 셀만 case-by-case 전환.
+   - (c) M1 — `(prisma as any)` → 생성 Prisma 타입 적용 (타입 안전 시드).
+3. **환경 선결 과제:** memory `[[e2e-environment]]` 기록대로 stale dev 서버 정리 후 E2E full-green 재실행.
 
