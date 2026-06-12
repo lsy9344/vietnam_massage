@@ -230,9 +230,12 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     const auditRow = page.getByRole("row", { name: /room\.display_name_changed/ }).filter({ hasText: "101 E2E 호실" });
     await expect(auditRow).toBeVisible();
     await expect(auditRow).toContainText(before.id);
-    await auditRow.locator("details").nth(1).locator("summary").click();
-    await expect(auditRow.getByText('"displayName": "101 E2E 호실"')).toBeVisible();
-    await expect(auditRow.getByText(`"id": "${before.id}"`)).toBeVisible();
+    // beforeValue/afterValue JSON 두 details 블록 모두 같은 room id를 포함하므로,
+    // 단언 범위를 연 afterValue details(nth(1)) 내부로 한정해야 strict 위반을 피한다.
+    const afterDetails = auditRow.locator("details").nth(1);
+    await afterDetails.locator("summary").click();
+    await expect(afterDetails.getByText('"displayName": "101 E2E 호실"')).toBeVisible();
+    await expect(afterDetails.getByText(`"id": "${before.id}"`)).toBeVisible();
   });
 
   test("administrator는 정렬 순서를 수정하고 중복 정렬값 오류를 볼 수 있다", async ({ page }) => {
@@ -244,11 +247,17 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     await row.locator('input[name="sortOrder"]').fill("25");
     await row.getByRole("button", { name: "적용" }).click();
     await expect(roomRowByDisplayValue(page, "102 호실").locator('input[name="sortOrder"]')).toHaveValue("25");
+    // toHaveValue는 내가 채운 값이라 즉시 통과하므로 server action 반영을 보장하지 못한다.
+    // DB가 갱신되기를 폴링해 이후 단언이 stale row를 읽지 않게 한다.
+    await expect.poll(async () => (await getRoomByMigrationReferenceName("2번방")).sortOrder).toBe(25);
 
     const updated = await getRoomByMigrationReferenceName("2번방");
     expect(updated.id).toBe(room.id);
     expect(updated.sortOrder).toBe(25);
 
+    // 첫 적용(25)의 revalidate로 행 input이 리렌더되면 이어지는 fill이 stale 요소에 적용될 수 있다.
+    // goto로 RSC를 안전하게 재조회한 뒤 중복(30) 입력을 진행한다.
+    await page.goto("/masters/rooms");
     const updatedRow = roomRowByDisplayValue(page, "102 호실");
     await updatedRow.locator('input[name="sortOrder"]').fill("30");
     await updatedRow.getByRole("button", { name: "적용" }).click();
@@ -257,8 +266,10 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     await page.goto("/audit?targetType=room");
     const auditRow = page.getByRole("row", { name: /room\.sort_order_changed/ }).filter({ hasText: room.id });
     await expect(auditRow).toBeVisible();
-    await auditRow.locator("details").nth(1).locator("summary").click();
-    await expect(auditRow.getByText('"sortOrder": 25')).toBeVisible();
+    // 단언 범위를 연 afterValue details(nth(1)) 내부로 한정해 before/after JSON 중복 매칭을 피한다.
+    const afterDetails = auditRow.locator("details").nth(1);
+    await afterDetails.locator("summary").click();
+    await expect(afterDetails.getByText('"sortOrder": 25')).toBeVisible();
   });
 
   test("administrator는 객실을 물리 삭제 대신 비활성 처리하고 감사 로그를 확인할 수 있다", async ({ page }) => {
@@ -268,7 +279,9 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     const room = await getRoomByMigrationReferenceName("11번방");
     const row = roomRowByDisplayValue(page, "402 호실");
     await row.getByRole("button", { name: "비활성 처리" }).click();
-    await expect(roomRowByDisplayValue(page, "402 호실")).toContainText("비활성");
+    // toContainText("비활성")은 "비활성 처리" 버튼 라벨에도 매칭되는 거짓 양성이라 server action을
+    // 동기화하지 못한다. 비활성 반영을 DB 폴링으로 확정한다.
+    await expect.poll(async () => (await getRoomByMigrationReferenceName("11번방")).isActive).toBe(false);
 
     const after = await getRoomByMigrationReferenceName("11번방");
     expect(after.id).toBe(room.id);
@@ -277,8 +290,10 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     await page.goto("/audit?targetType=room");
     const auditRow = page.getByRole("row", { name: /room\.deactivated/ }).filter({ hasText: room.id });
     await expect(auditRow).toBeVisible();
-    await auditRow.locator("details").nth(1).locator("summary").click();
-    await expect(auditRow.getByText('"isActive": false')).toBeVisible();
+    // 단언 범위를 연 afterValue details(nth(1)) 내부로 한정해 before/after JSON 중복 매칭을 피한다.
+    const afterDetails = auditRow.locator("details").nth(1);
+    await afterDetails.locator("summary").click();
+    await expect(afterDetails.getByText('"isActive": false')).toBeVisible();
   });
 
   for (const user of users.filter((candidate) => candidate.role !== "administrator")) {

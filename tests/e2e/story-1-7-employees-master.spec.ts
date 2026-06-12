@@ -144,16 +144,28 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await createForm.getByLabel("기본급").fill("1000");
     await createForm.getByLabel("정렬 순서").fill(String(sortOrder));
     await createForm.getByRole("button", { name: "직원 생성" }).click();
-    await expect(page.locator('input[value="테스트 직원"]').first()).toBeVisible();
+    // 생성 server action 완료를 DB 폴링으로 확정한 뒤 reload로 RSC를 강제 동기화한다.
+    // (`input[value="테스트 직원"]`는 리셋된 생성 폼/비제어 표시명 input 사이에서 불안정하고,
+    //  클릭 직후 row 단언은 revalidate race로 깨진다.)
+    await expect.poll(async () => (await findEmployeeByStaffCode(staffCode))?.staffCode).toBe(staffCode);
+    // reload는 in-flight server action POST를 abort(net::ERR_ABORTED)시키므로, 새 네비게이션(goto)으로
+    // RSC를 안전하게 재조회한다. DB poll로 생성이 이미 확정되었으니 새 페이지에 직원 행이 보인다.
+    await page.goto("/masters/employees");
+    const row = page.locator("tbody tr").filter({ hasText: staffCode });
+    await expect(row).toBeVisible();
 
     const created = await findEmployeeByStaffCode(staffCode);
     expect(created).toMatchObject({ displayName: "테스트 직원", staffCode, isActive: true });
 
-    const row = page.locator("tbody tr").filter({ hasText: staffCode });
     await expect(row.getByText(`직원 ID: ${created.id}`)).toBeVisible();
     await row.getByLabel("표시명").fill("테스트 직원 변경");
     await row.getByRole("button", { name: "프로필 저장" }).click();
-    await expect(row.locator('input[value="테스트 직원 변경"]')).toBeVisible();
+    await expect(row.getByLabel("표시명")).toHaveValue("테스트 직원 변경");
+    // 비제어 input의 toHaveValue는 내가 채운 값이라 즉시 통과하므로 server action 반영을 보장하지 못한다.
+    // revalidate 후 DB가 갱신되기를 폴링해 이후 단언이 stale row를 읽지 않게 한다.
+    await expect
+      .poll(async () => (await findEmployeeByStaffCode(staffCode))?.displayName)
+      .toBe("테스트 직원 변경");
     const renamed = await findEmployeeByStaffCode(staffCode);
     expect(renamed).toMatchObject({ id: created.id, displayName: "테스트 직원 변경", staffCode });
 
@@ -162,7 +174,11 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await row.getByLabel("역할").selectOption("counter");
     await row.getByLabel("초기 비밀번호").fill("Story17!linked");
     await row.getByRole("button", { name: "계정 연결" }).click();
-    await expect(row.getByText("counter")).toBeVisible();
+    // 계정 연결 server action 완료를 DB 폴링으로 먼저 확정해 revalidate race를 제거한다.
+    await expect.poll(async () => (await (prisma as any).userAccount.findUnique({ where: { accountId: linkedAccountId }, select: { role: true } }))?.role).toBe("counter");
+    // "counter"는 역할 <select>의 selected option과 결과 표시 div("현재 역할: counter") 양쪽에 매칭(strict 위반).
+    // 계정 연결 결과는 표시 div로 확인한다.
+    await expect(row.getByText("현재 역할: counter")).toBeVisible();
     const linkedAccount = await (prisma as any).userAccount.findUnique({
       where: { accountId: linkedAccountId },
       select: { employeeId: true, role: true, isActive: true }
@@ -175,7 +191,13 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await linkedPage.close();
 
     await row.getByRole("button", { name: "비활성 처리" }).click();
-    await expect(row.getByText("비활성")).toBeVisible();
+    // 비활성 server action 완료를 DB 폴링으로 확정한다(서버 진실).
+    await expect.poll(async () => (await findEmployeeByStaffCode(staffCode))?.isActive).toBe(false);
+    // goto로 RSC를 안전하게 재조회한 뒤 UI 신호를 확인한다("비활성"은 "비활성 처리" 버튼에도 매칭되는
+    // 거짓 양성이므로, 비활성 시 버튼이 대체되는 "이미 비활성" 텍스트로 확인 — employee-forms.tsx).
+    await page.goto("/masters/employees");
+    const deactivatedRow = page.locator("tbody tr").filter({ hasText: staffCode });
+    await expect(deactivatedRow.getByText("이미 비활성")).toBeVisible();
     const deactivated = await findEmployeeByStaffCode(staffCode);
     expect(deactivated).toMatchObject({ id: created.id, staffCode, isActive: false });
     const accountAfterEmployeeDeactivate = await (prisma as any).userAccount.findUnique({
@@ -209,7 +231,15 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await createForm.getByRole("button", { name: "직원 생성" }).click();
     await expect(page.getByText("staff code는 영문 대문자, 숫자, 하이픈만 사용할 수 있습니다.")).toBeVisible();
 
+    // 직원 생성 server action 제출 후 비제어 input이 리렌더로 초기화되므로,
+    // 두 번째 제출 전에 필수 필드를 다시 채워야 zod 검증을 통과해 도메인 단계(중복 staff code)까지 도달한다.
+    await createForm.getByLabel("이름").fill("오류 직원");
     await createForm.getByLabel("staff code").fill("OPS-LEAD-001");
+    await createForm.getByLabel("그룹").selectOption("OPERATIONS");
+    await createForm.getByLabel("직책").fill("카운터");
+    await createForm.getByLabel("주/야간").selectOption("주간");
+    await createForm.getByLabel("기본급").fill("1000");
+    await createForm.getByLabel("정렬 순서").fill("9801");
     await createForm.getByRole("button", { name: "직원 생성" }).click();
     await expect(page.getByText("이미 사용 중인 staff code입니다.")).toBeVisible();
 
