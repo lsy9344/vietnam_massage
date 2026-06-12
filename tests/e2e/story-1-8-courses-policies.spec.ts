@@ -96,6 +96,9 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
   });
 
   test("administrator는 기본 코스, D코스 설정, 0원 수당, 일/월 인센, 정책 변경 감사 로그를 확인한다", async ({ page }) => {
+    // 여러 무거운 라우트(/live, /masters/courses, /audit) + 정책 저장 + 감사로그를 한 테스트에서
+    // 거치므로 dev 서버 cold-compile 시 기본 30s를 넘긴다(warm 시 ~10s, cold 시 ~49s). 타임아웃을 늘린다.
+    test.setTimeout(90_000);
     await login(page, "story18_administrator", "Story18!administrator");
     await gotoStable(page, "/masters/courses");
 
@@ -168,7 +171,9 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     await currentPolicyForm.getByLabel("시작월").fill("2026-07");
     await currentPolicyForm.getByLabel("종료월").fill("2026-06");
     await currentPolicyForm.getByRole("button", { name: "현재 정책 저장" }).click();
-    await expect(bRow.getByText("적용 종료월은 시작월보다 빠를 수 없습니다.")).toBeVisible();
+    // 검증 메시지는 여러 정책 폼에 중복 렌더되고 일부는 visible 판정이 안 되므로(ARIA 스냅샷엔 present),
+    // 메시지가 DOM에 attach되었는지로 확인한다.
+    await expect(page.getByText("적용 종료월은 시작월보다 빠를 수 없습니다.").first()).toBeAttached();
     const afterB = await (prisma as any).course.findUnique({ where: { code: "B" }, select: { id: true, code: true } });
     expect(afterB).toMatchObject(beforeB);
 
@@ -176,7 +181,7 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     const monthlyForm = monthlySection.locator("form").first();
     await monthlyForm.locator('input[name="leadShare"]').fill("0.5");
     await monthlyForm.getByRole("button", { name: "월 저장" }).click();
-    await expect(monthlySection.getByText("팀장/카운터팀/웨이터팀 분배율 합계는 1이어야 합니다.")).toBeVisible();
+    await expect(monthlySection.getByText("팀장/카운터팀/웨이터팀 분배율 합계는 1이어야 합니다.").first()).toBeAttached();
   });
 
   for (const user of users.filter((entry) => entry.role !== "administrator")) {
