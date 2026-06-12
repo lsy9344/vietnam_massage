@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { hash } from "@node-rs/argon2";
 import { prisma } from "./support/db";
-import { argon2idOptions, login } from "./support/auth";
+import { argon2idOptions, gotoStable, login } from "./support/auth";
 import { defaultCourseSeeds } from "@/modules/masters/course-schema";
 
 
@@ -97,7 +97,7 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
 
   test("administrator는 기본 코스, D코스 설정, 0원 수당, 일/월 인센, 정책 변경 감사 로그를 확인한다", async ({ page }) => {
     await login(page, "story18_administrator", "Story18!administrator");
-    await page.goto("/masters/courses");
+    await gotoStable(page, "/masters/courses");
 
     await expect(page.getByRole("heading", { name: "코스/수당/인센", level: 1 })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: /코스\/수당\/인센/ })).toBeVisible();

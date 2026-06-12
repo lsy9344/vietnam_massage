@@ -12,6 +12,21 @@ export const argon2idOptions = {
 } as const;
 
 /**
+ * cold-compile(force-reset 직후 등)이나 직전 페이지의 in-flight fetch와 충돌해 page.goto가
+ * net::ERR_ABORTED로 취소될 때 최대 3회 재시도하는 안전 navigation 헬퍼.
+ */
+export async function gotoStable(page: Page, path: string) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await page.goto(path);
+      return;
+    } catch (error) {
+      if (attempt === 2) throw error;
+    }
+  }
+}
+
+/**
  * 공유 로그인 헬퍼: 계정 ID(또는 이메일)와 비밀번호로 로그인 폼을 제출한다.
  *
  * 폼은 `signIn("credentials", { redirect: false })`로 `/api/auth/callback/credentials`에
