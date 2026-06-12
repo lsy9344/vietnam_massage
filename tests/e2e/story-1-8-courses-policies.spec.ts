@@ -86,16 +86,18 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
 
     await expect(page.getByRole("heading", { name: "코스/수당/인센", level: 1 })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: /코스\/수당\/인센/ })).toBeVisible();
-    await expect(page.getByText("A 누루60")).toBeVisible();
-    await expect(page.getByText("B 귀청소90")).toBeVisible();
-    await expect(page.getByText("C 때밀이90")).toBeVisible();
-    await expect(page.getByText("D 2:1 90")).toBeVisible();
-    await expect(page.getByText("E 풀코스120")).toBeVisible();
+    // tvDisplayName은 텍스트 노드가 아니라 정책 폼의 input value(course-forms.tsx)로 렌더되므로
+    // getByText로는 잡히지 않는다. input value 로케이터로 확인한다.
+    await expect(page.locator('input[value="A 누루60"]').first()).toBeVisible();
+    await expect(page.locator('input[value="B 귀청소90"]').first()).toBeVisible();
+    await expect(page.locator('input[value="C 때밀이90"]').first()).toBeVisible();
+    await expect(page.locator('input[value="D 2:1 90"]').first()).toBeVisible();
+    await expect(page.locator('input[value="E 풀코스120"]').first()).toBeVisible();
     await expect(courseRow(page, "D").getByText("마사지사2 필요: Y")).toBeVisible();
     await expect(page.getByText("0원 수당")).toBeVisible();
     await expect(page.locator('input[value="0"]').first()).toBeVisible();
-    await expect(page.getByText("30콜").or(page.locator('input[value="30"]'))).toBeVisible();
-    await expect(page.locator('input[value="1000"]')).toBeVisible();
+    await expect(page.getByText("30콜").or(page.locator('input[value="30"]')).first()).toBeVisible();
+    await expect(page.locator('input[value="1000"]').first()).toBeVisible();
 
     const dCourse = await (prisma as any).course.findUnique({ where: { code: "D" }, select: { id: true, code: true } });
     const dPolicy = await (prisma as any).coursePolicy.findFirst({
@@ -110,9 +112,19 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     });
     const row = courseRow(page, "A");
     const newTvLabel = `A 누루60 ${Date.now().toString(36).slice(-4)}`;
-    await row.getByLabel("TV 표시명").fill(newTvLabel);
-    await row.getByRole("button", { name: "현재 정책 저장" }).click();
-    await expect(page.locator(`input[value="${newTvLabel}"]`)).toBeVisible();
+    // 코스 A 행에는 현재 정책 폼(현재 정책 저장)과 새 정책 폼이 각각 TV 표시명 input을 렌더한다.
+    // 현재 정책 폼의 input(first)을 채우고 같은 폼의 "현재 정책 저장" 버튼을 누른다.
+    const currentPolicyForm = row.locator("form").filter({ has: page.getByRole("button", { name: "현재 정책 저장" }) });
+    await currentPolicyForm.getByLabel("TV 표시명").fill(newTvLabel);
+    await currentPolicyForm.getByRole("button", { name: "현재 정책 저장" }).click();
+    // 정책 저장 server action 반영을 DB 폴링으로 확정한 뒤 goto로 RSC를 재조회한다.
+    await expect
+      .poll(async () =>
+        (await (prisma as any).coursePolicy.count({ where: { courseId: beforeCourseA.id, tvDisplayName: newTvLabel } }))
+      )
+      .toBeGreaterThan(0);
+    await page.goto("/masters/courses");
+    await expect(page.locator(`input[value="${newTvLabel}"]`).first()).toBeVisible();
 
     const courseA = await (prisma as any).course.findUnique({ where: { code: "A" }, select: { id: true, code: true } });
     expect(courseA).toMatchObject({ id: beforeCourseA.id, code: "A" });
