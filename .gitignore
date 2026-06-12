@@ -24,3 +24,4 @@ __pycache__/
 package-lock.json
 
 .agents/.story-automator-active
+.vercel
