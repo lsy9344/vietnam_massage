@@ -22,7 +22,16 @@ export const argon2idOptions = {
  * 응답이 오므로 실패를 검증하는 테스트도 그대로 동작한다.
  */
 export async function login(page: Page, accountId: string, password: string) {
-  await page.goto("/sign-in");
+  // cold-compile(force-reset 직후 첫 요청 등)에서 첫 navigation이 net::ERR_ABORTED로 취소될 수 있어
+  // /sign-in 진입을 최대 3회 재시도한다.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await page.goto("/sign-in");
+      break;
+    } catch (error) {
+      if (attempt === 2) throw error;
+    }
+  }
   await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
   await page.getByLabel("비밀번호").fill(password);
 
@@ -34,4 +43,19 @@ export async function login(page: Page, accountId: string, password: string) {
     .catch(() => undefined);
   await page.getByRole("button", { name: "로그인" }).click();
   await credentialsResponse;
+
+  // 로그인 성공 시 클라이언트가 `router.replace`로 landing(`/sign-in` 이탈)으로 이동하고, landing
+  // 페이지(예: 무거운 `/live`)의 RSC fetch가 이어진다. 이 navigation/fetch가 진행 중일 때 호출부가
+  // 곧바로 page.goto(...)하면 net::ERR_ABORTED로 취소된다(story-1-8에서 결정적으로 노출).
+  // landing URL 도달 + 문서 로드 완료까지 기다려 in-flight navigation을 해소한다.
+  // 실패 케이스는 `/sign-in`에 머무므로 짧은 타임아웃으로 빠져 실패 검증 테스트 흐름을 막지 않는다.
+  // cold-compile(특히 force-reset 직후 첫 login)에서 landing 페이지 첫 렌더가 느릴 수 있어
+  // 타임아웃을 넉넉히 둔다. 실패 케이스는 `/sign-in`에 머물러 이 대기를 소진하지만 드물다.
+  const reachedLanding = await page
+    .waitForURL((url) => !url.pathname.startsWith("/sign-in"), { timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (reachedLanding) {
+    await page.waitForLoadState("load").catch(() => undefined);
+  }
 }

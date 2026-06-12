@@ -196,8 +196,9 @@ test.describe("Story 1.6 코드와 시간 슬롯 관리", () => {
 
     await expect(page.getByRole("heading", { name: "코드/시간 슬롯", level: 1 })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: "코드/시간 슬롯" })).toBeVisible();
+    // "상태"는 "근무상태" heading에도 부분 매칭(strict 위반)하므로 exact로 정확히 겨냥한다.
     for (const heading of ["상태", "결제수단", "할인구분", "근무상태", "확인값", "시간 슬롯"]) {
-      await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+      await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
     }
     for (const value of ["예약", "사용중", "청소중", "방문완료", "노쇼", "취소", "현금", "카드", "계좌", "기타", "일주일내방문", "생일자", "후기작성", "정상", "휴무", "지각", "조퇴", "결근", "Y", "N", "11:00", "01:00"]) {
       await expect(page.locator(`input[value="${value}"]`).first()).toBeVisible();
@@ -298,7 +299,9 @@ test.describe("Story 1.6 코드와 시간 슬롯 관리", () => {
     const slot = await getTimeSlot("01:00");
     const row = rowByDisplayValue(page, "01:00");
     await row.getByRole("button", { name: "비활성 처리" }).click();
-    await expect(rowByDisplayValue(page, "01:00")).toContainText("비활성");
+    // toContainText("비활성")은 "비활성 처리" 버튼 라벨에도 매칭되는 거짓 양성이라 동기화하지 못한다.
+    // 비활성 반영을 DB 폴링으로 확정한 뒤 /audit으로 navigate한다(in-flight POST abort 회피).
+    await expect.poll(async () => (await getTimeSlot("01:00")).isActive).toBe(false);
 
     const after = await getTimeSlot("01:00");
     expect(after.id).toBe(slot.id);

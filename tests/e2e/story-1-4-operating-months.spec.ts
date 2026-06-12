@@ -158,13 +158,20 @@ test.describe("Story 1.4 운영월 관리", () => {
 
     await page.getByRole("row", { name: /2031-04/ }).getByRole("button", { name: "검토중으로 변경" }).click();
     await expect(page.getByRole("row", { name: /2031-04/ }).getByText("검토중")).toBeVisible();
+    // 상태 변경 server action을 DB 폴링으로 확정한 뒤 /audit으로 navigate한다.
+    // (in-flight POST 중 goto하면 net::ERR_ABORTED로 status_changed 감사 로그가 누락된다.)
+    await expect
+      .poll(async () => (await (prisma as any).operatingMonth.findUnique({ where: { monthKey: "2031-04" }, select: { status: true } }))?.status)
+      .toBe("검토중");
 
     await page.goto("/audit?targetType=operating_month");
     await expect(page.getByRole("row", { name: /operating_month\.created/ }).filter({ hasText: "2031-04" })).toBeVisible();
     const statusChangedAuditRow = page.getByRole("row", { name: /operating_month\.status_changed/ }).filter({ hasText: "2031-04" });
     await expect(statusChangedAuditRow).toBeVisible();
-    await statusChangedAuditRow.locator("details").nth(1).locator("summary").click();
-    await expect(statusChangedAuditRow.getByText('"status": "검토중"')).toBeVisible();
+    // 단언 범위를 연 afterValue details(nth(1)) 내부로 한정해 before/after JSON 중복 매칭을 피한다.
+    const afterDetails = statusChangedAuditRow.locator("details").nth(1);
+    await afterDetails.locator("summary").click();
+    await expect(afterDetails.getByText('"status": "검토중"')).toBeVisible();
   });
 
   for (const user of users.filter((candidate) => candidate.role !== "administrator")) {
