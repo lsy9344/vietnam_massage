@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { hash } from "@node-rs/argon2";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { defaultCourseSeeds } from "@/modules/masters/course-schema";
 
 
 const users = [
@@ -80,6 +81,20 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     }
   });
 
+  test.afterAll(async () => {
+    // 테스트가 코스 정책 tvDisplayName/name을 변경하므로(현재 정책 저장), 반복 실행 안정성을 위해
+    // 각 코스의 활성 정책을 schema 기본값으로 복원한다(teardown 부재 시 다음 실행에서 원본 라벨 누락).
+    for (const seed of defaultCourseSeeds) {
+      const course = await (prisma as any).course.findUnique({ where: { code: seed.code }, select: { id: true } });
+      if (!course) continue;
+      await (prisma as any).coursePolicy.updateMany({
+        where: { courseId: course.id, isActive: true },
+        data: { tvDisplayName: seed.tvDisplayName, name: seed.name }
+      });
+    }
+    await prisma.$disconnect();
+  });
+
   test("administrator는 기본 코스, D코스 설정, 0원 수당, 일/월 인센, 정책 변경 감사 로그를 확인한다", async ({ page }) => {
     await login(page, "story18_administrator", "Story18!administrator");
     await page.goto("/masters/courses");
@@ -116,8 +131,13 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     // 현재 정책 폼의 input(first)을 채우고 같은 폼의 "현재 정책 저장" 버튼을 누른다.
     const currentPolicyForm = row.locator("form").filter({ has: page.getByRole("button", { name: "현재 정책 저장" }) });
     await currentPolicyForm.getByLabel("TV 표시명").fill(newTvLabel);
+    // 저장 server action POST 응답을 기다린 뒤 반환해 in-flight POST 중 goto가 abort되지 않게 한다.
+    const saveResponse = page
+      .waitForResponse((r) => r.request().method() === "POST" && r.url().includes("/masters/courses"), { timeout: 15_000 })
+      .catch(() => undefined);
     await currentPolicyForm.getByRole("button", { name: "현재 정책 저장" }).click();
-    // 정책 저장 server action 반영을 DB 폴링으로 확정한 뒤 goto로 RSC를 재조회한다.
+    await saveResponse;
+    // 정책 저장 반영을 DB 폴링으로 확정한 뒤 goto로 RSC를 재조회한다.
     await expect
       .poll(async () =>
         (await (prisma as any).coursePolicy.count({ where: { courseId: beforeCourseA.id, tvDisplayName: newTvLabel } }))
