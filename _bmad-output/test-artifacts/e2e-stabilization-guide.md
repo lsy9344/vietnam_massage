@@ -144,11 +144,15 @@ test.afterAll(async () => {
 | story-1-5-rooms-master | 1번 테스트 green, 2번에서 strict(감사로그 id 중복) | line 214 audit row `getByText(id)` 2개 매칭 → row 범위/`.first()` |
 | story-1-7-employees-master | 5개 버그 수정 + teardown 추가, line 153 미해결 | `row.getByText("직원 ID: ${created.id}")` — row 범위 재확인 필요 |
 
-### ⚙️ 수정만, 별도 검증 필요 (DB 셋업 의존)
+### ✅ 완전 green 확정 (2026-06-12 추가, clean DB 27 passed 검증)
 
-| 스펙 | 적용 | 비고 |
+| 스펙 | 결과 | 적용 패턴 |
 | --- | --- | --- |
-| story-5-4/5-5/5-6 | 패턴 1B("확정 스냅샷" exact) | 마감 시드 필요, 격리 검증 권장 |
+| story-5-4-monthly-close-lock | 3 passed | 패턴 4 변형(seedEmployee `(employee_group, sort_order)` unique 충돌 가드 — 5-3 `storyEmployeeSortOrder` 이식) + 패턴 1B |
+| story-5-5-monthly-close-reopen | 3 passed | 패턴 1B("확정 스냅샷" exact) |
+| story-5-6-monthly-close-confirm-dialog | 4 passed | 패턴 1B("확정 스냅샷" exact) |
+
+> **핵심 발견:** 마감/정산 계열은 `scripts/seed-master-data.ts`(코드 아이템 포함)가 **필수 전제**다. clean DB에서 이걸 안 돌리면 `listMonthlyClosingPreview`가 `OpsAttendanceDomainError`를 던져 `마감 확정` 버튼이 영구 disabled가 된다. 과거 "green"은 잔존 데이터에 우연히 의존한 flaky green이었다. **표준 셋업 순서: force-reset → seed-dev-accounts → seed-master-data → dev 서버.**
 
 ### ⏳ 미착수 (31개 중 위 외)
 
