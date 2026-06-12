@@ -143,7 +143,7 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
         (await (prisma as any).coursePolicy.count({ where: { courseId: beforeCourseA.id, tvDisplayName: newTvLabel } }))
       )
       .toBeGreaterThan(0);
-    await page.goto("/masters/courses");
+    await gotoStable(page, "/masters/courses");
     await expect(page.locator(`input[value="${newTvLabel}"]`).first()).toBeVisible();
 
     const courseA = await (prisma as any).course.findUnique({ where: { code: "A" }, select: { id: true, code: true } });
@@ -152,7 +152,7 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
       .poll(async () => (prisma as any).auditLog.count({ where: { action: "course.policy_changed", targetType: "course_policy" } }))
       .toBeGreaterThan(auditCountBefore);
 
-    await page.goto("/audit?targetType=course_policy");
+    await gotoStable(page, "/audit?targetType=course_policy");
     const auditRow = page.getByRole("row", { name: /course\.policy_changed/ }).filter({ hasText: newTvLabel });
     await expect(auditRow).toBeVisible();
     await expect(auditRow).toContainText(beforeCourseA.id);
@@ -160,7 +160,7 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
 
   test("administrator는 정책 입력 오류를 한국어 메시지로 확인하고 기존 정책을 보존한다", async ({ page }) => {
     await login(page, "story18_administrator", "Story18!administrator");
-    await page.goto("/masters/courses");
+    await gotoStable(page, "/masters/courses");
 
     const beforeB = await (prisma as any).course.findUnique({ where: { code: "B" }, select: { id: true, code: true } });
     const bRow = courseRow(page, "B");
@@ -182,7 +182,7 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
   for (const user of users.filter((entry) => entry.role !== "administrator")) {
     test(`non-admin ${user.role}는 direct /masters/courses 접근과 sidebar 항목에서 제외된다`, async ({ page }) => {
       await login(page, user.accountId, user.password);
-      await page.goto("/masters/courses");
+      await gotoStable(page, "/masters/courses");
       await expect(page).toHaveURL(new RegExp(user.landing));
       await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: /코스\/수당\/인센/ })).toHaveCount(0);
     });
