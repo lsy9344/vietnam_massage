@@ -203,7 +203,7 @@ test.describe("Story 5.5 monthly close reopen", () => {
     await login(page, seededData.accounts.admin, "Story55!admin");
 
     await page.goto(`/closing?operatingMonthId=${seededData.adminLockedMonth.id}`);
-    await expect(page.getByText("확정 스냅샷")).toBeVisible();
+    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "재오픈" })).toBeEnabled();
     await page.getByLabel("재오픈 사유").fill("Story 5.5 관리자 사유 기반 재오픈");
     await page.getByRole("button", { name: "재오픈" }).click();

@@ -126,14 +126,16 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await expect(page.getByRole("heading", { name: /운영팀/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: /귀케어팀/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: /마사지사/ })).toBeVisible();
-    await expect(page.getByText("OPS-LEAD-001")).toBeVisible();
-    await expect(page.getByText("EAR-001")).toBeVisible();
-    await expect(page.getByText("THR-050")).toBeVisible();
+    await expect(page.getByText("OPS-LEAD-001").first()).toBeVisible();
+    await expect(page.getByText("EAR-001").first()).toBeVisible();
+    await expect(page.getByText("THR-050").first()).toBeVisible();
     await expect.poll(async () => (prisma as any).employee.count({ where: { employeeGroup: "OPERATIONS", staffCode: { startsWith: "OPS-" } } })).toBe(5);
     await expect.poll(async () => (prisma as any).employee.count({ where: { employeeGroup: "EARCARE", staffCode: { startsWith: "EAR-" } } })).toBe(4);
     await expect.poll(async () => (prisma as any).employee.count({ where: { employeeGroup: "THERAPIST", staffCode: { startsWith: "THR-" } } })).toBe(50);
 
-    const createForm = page.locator("section").filter({ has: page.getByRole("heading", { name: "직원 생성" }) });
+    // 범위를 section이 아니라 form으로 좁힌다. section은 생성 폼과 직원 테이블을
+    // 모두 포함해, getByLabel("그룹")이 테이블 행의 인라인 <select>까지 매칭(strict 위반)한다.
+    const createForm = page.locator("form").filter({ has: page.getByRole("button", { name: "직원 생성" }) });
     await createForm.getByLabel("이름").fill("테스트 직원");
     await createForm.getByLabel("staff code").fill(staffCode);
     await createForm.getByLabel("그룹").selectOption("OPERATIONS");
@@ -142,7 +144,7 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await createForm.getByLabel("기본급").fill("1000");
     await createForm.getByLabel("정렬 순서").fill(String(sortOrder));
     await createForm.getByRole("button", { name: "직원 생성" }).click();
-    await expect(page.locator('input[value="테스트 직원"]')).toBeVisible();
+    await expect(page.locator('input[value="테스트 직원"]').first()).toBeVisible();
 
     const created = await findEmployeeByStaffCode(staffCode);
     expect(created).toMatchObject({ displayName: "테스트 직원", staffCode, isActive: true });
@@ -151,7 +153,7 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await expect(row.getByText(`직원 ID: ${created.id}`)).toBeVisible();
     await row.getByLabel("표시명").fill("테스트 직원 변경");
     await row.getByRole("button", { name: "프로필 저장" }).click();
-    await expect(page.locator('input[value="테스트 직원 변경"]')).toBeVisible();
+    await expect(row.locator('input[value="테스트 직원 변경"]')).toBeVisible();
     const renamed = await findEmployeeByStaffCode(staffCode);
     expect(renamed).toMatchObject({ id: created.id, displayName: "테스트 직원 변경", staffCode });
 
@@ -194,7 +196,9 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await login(page, "story17_administrator", "Story17!administrator");
     await page.goto("/masters/employees");
 
-    const createForm = page.locator("section").filter({ has: page.getByRole("heading", { name: "직원 생성" }) });
+    // 범위를 section이 아니라 form으로 좁힌다. section은 생성 폼과 직원 테이블을
+    // 모두 포함해, getByLabel("그룹")이 테이블 행의 인라인 <select>까지 매칭(strict 위반)한다.
+    const createForm = page.locator("form").filter({ has: page.getByRole("button", { name: "직원 생성" }) });
     await createForm.getByLabel("이름").fill("오류 직원");
     await createForm.getByLabel("staff code").fill("bad-code");
     await createForm.getByLabel("그룹").selectOption("OPERATIONS");
@@ -225,6 +229,30 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
       await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: /직원/ })).toHaveCount(0);
     });
   }
+
+  // 이 스펙이 생성하는 E2E17 직원과 연결 계정을 정리한다. teardown이 없으면 매 실행마다
+  // "테스트 직원" 행이 누적되어 value 기반 셀렉터가 strict 위반으로 깨진다(test-review H2).
+  // 직원은 FK 참조(ServiceCallAssignment 등) 가능성이 있어 물리삭제 대신 고유 prefix로
+  // rename + 비활성화해 후속 실행의 셀렉터 충돌만 제거한다.
+  test.afterAll(async () => {
+    const e2eEmployees = await (prisma as any).employee.findMany({
+      where: { staffCode: { startsWith: "E2E17-CUSTOM" } },
+      select: { id: true }
+    });
+    const employeeIds = e2eEmployees.map((e: { id: string }) => e.id);
+    if (employeeIds.length > 0) {
+      await (prisma as any).userAccount.deleteMany({ where: { employeeId: { in: employeeIds } } });
+      // 표시명을 고유화해 다음 실행의 `input[value="테스트 직원"]` 중복 매칭을 막는다.
+      for (const id of employeeIds) {
+        await (prisma as any).employee.update({
+          where: { id },
+          data: { isActive: false, displayName: `E2E17-정리됨-${id.slice(0, 8)}` }
+        });
+      }
+    }
+    await (prisma as any).userAccount.deleteMany({ where: { accountId: { startsWith: "story17_no_secret" } } });
+    await prisma.$disconnect();
+  });
 });
 
 // Static validator anchors: user_account.linked_to_employee, employee.profile_changed.

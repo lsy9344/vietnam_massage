@@ -182,7 +182,7 @@ test.describe("Story 5.3 monthly close confirmation snapshot", () => {
 
     await confirmMonthlyCloseThroughDialog(page);
 
-    await expect(page.getByText("확정 스냅샷")).toBeVisible();
+    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("현재 기준 미리보기").first()).toBeVisible();
     await expect(page.getByText(/snapshot id/)).toBeVisible();
     await expect(page.getByRole("button", { name: "잠금" })).toBeEnabled();
@@ -245,7 +245,7 @@ test.describe("Story 5.3 monthly close confirmation snapshot", () => {
     await page.goto(`/closing?operatingMonthId=${seededData.reviewOperatingMonthId}`);
 
     await confirmMonthlyCloseThroughDialog(page);
-    await expect(page.getByText("확정 스냅샷")).toBeVisible();
+    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("확정 전체 지급 합계")).toBeVisible();
 
     const closing = await (prisma as any).monthlyClosing.findFirst({

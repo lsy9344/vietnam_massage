@@ -39,11 +39,30 @@ function utcDate(monthKey: string) {
   return new Date(`${monthKey}-01T00:00:00.000Z`);
 }
 
+async function storyEmployeeSortOrder(employeeGroup: string, staffCode: string, preferredSortOrder: number) {
+  const existing = await (prisma as any).employee.findUnique({
+    where: { staffCode },
+    select: { sortOrder: true }
+  });
+  if (existing) return existing.sortOrder;
+
+  for (let sortOrder = preferredSortOrder; sortOrder < preferredSortOrder + 100; sortOrder += 1) {
+    const conflicting = await (prisma as any).employee.findFirst({
+      where: { employeeGroup, sortOrder, NOT: { staffCode } },
+      select: { id: true }
+    });
+    if (!conflicting) return sortOrder;
+  }
+
+  throw new Error(`No Story 5.4 employee sortOrder available for ${employeeGroup}:${staffCode}`);
+}
+
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, position: string, sortOrder: number) {
+  const safeSortOrder = await storyEmployeeSortOrder(employeeGroup, staffCode, sortOrder);
   return (prisma as any).employee.upsert({
     where: { staffCode },
-    update: { displayName, employeeGroup, position, shiftType: "전체", baseSalary: 0, employmentStatus: "재직", sortOrder, isActive: true },
-    create: { staffCode, displayName, employeeGroup, position, shiftType: "전체", baseSalary: 0, employmentStatus: "재직", sortOrder, isActive: true }
+    update: { displayName, employeeGroup, position, shiftType: "전체", baseSalary: 0, employmentStatus: "재직", sortOrder: safeSortOrder, isActive: true },
+    create: { staffCode, displayName, employeeGroup, position, shiftType: "전체", baseSalary: 0, employmentStatus: "재직", sortOrder: safeSortOrder, isActive: true }
   });
 }
 
@@ -175,11 +194,11 @@ test.describe("Story 5.4 monthly close lock", () => {
     await login(page, seededData.accounts.admin, "Story54!admin");
 
     await page.goto(`/closing?operatingMonthId=${seededData.adminConfirmedMonth.id}`);
-    await expect(page.getByText("확정 스냅샷")).toBeVisible();
+    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "잠금" })).toBeEnabled();
     await page.getByRole("button", { name: "잠금" }).click();
     await expect(page.getByText("운영월 상태: 잠금").first()).toBeVisible();
-    await expect(page.getByText("확정 스냅샷")).toBeVisible();
+    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
     await page.goto(`/settlements/operations/monthly?operatingMonthId=${seededData.adminConfirmedMonth.id}`);
     await expect(page.getByText("운영팀 확정 지급값")).toBeVisible();
     await expect(page.getByText("현재 기준 미리보기")).toBeVisible();
@@ -228,7 +247,7 @@ test.describe("Story 5.4 monthly close lock", () => {
     await login(page, seededData.accounts.settlement, "Story54!settlement");
 
     await page.goto(`/closing?operatingMonthId=${seededData.settlementConfirmedMonth.id}`);
-    await expect(page.getByText("확정 스냅샷")).toBeVisible();
+    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "잠금" })).toBeEnabled();
     await page.getByRole("button", { name: "잠금" }).click();
     await expect(page.getByText("운영월 상태: 잠금").first()).toBeVisible();

@@ -196,7 +196,7 @@ test.describe("Story 5.6 monthly close double-confirm dialog", () => {
     expect(await confirmedAuditCount(seededData.months.success)).toBe(0);
 
     await dialog.getByRole("button", { name: "지급 스냅샷 확정" }).click();
-    await expect(page.getByText("확정 스냅샷")).toBeVisible();
+    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "잠금" })).toBeEnabled();
 
     const month = await (prisma as any).operatingMonth.findUnique({ where: { id: seededData.months.success }, select: { status: true } });

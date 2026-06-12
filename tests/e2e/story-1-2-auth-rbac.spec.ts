@@ -168,7 +168,7 @@ test.describe("Story 1.2 직원 로그인과 RBAC", () => {
   test("이메일 identity로도 직원 계정 로그인이 가능하다", async ({ page }) => {
     await login(page, "administrator@example.local", "Story12!administrator");
     await expect(page).toHaveURL(/\/live$/);
-    await expect(page.getByRole("heading", { name: "첫화면 실시간 현황", level: 3 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "첫화면 실시간 현황", level: 1 })).toBeVisible();
   });
 
   test("public signup affordance가 없고 실패 메시지는 안전한 문구로 통일된다", async ({ page }) => {
@@ -224,7 +224,7 @@ test.describe("Story 1.2 직원 로그인과 RBAC", () => {
       password: "Story12!settlement_manager",
       forbiddenPath: "/calls",
       expectedLanding: /\/settlements$/,
-      expectedHeading: "정산 화면"
+      expectedHeading: "마사지사 일일정산"
     },
     {
       accountId: "waiter",
@@ -247,7 +247,7 @@ test.describe("Story 1.2 직원 로그인과 RBAC", () => {
       await login(page, routeCase.accountId, routeCase.password);
       await page.goto(routeCase.forbiddenPath);
       await expect(page).toHaveURL(routeCase.expectedLanding);
-      await expect(page.getByRole("heading", { name: routeCase.expectedHeading, level: 3 })).toBeVisible();
+      await expect(page.getByRole("heading", { name: routeCase.expectedHeading, level: 1 })).toBeVisible();
     });
   }
 

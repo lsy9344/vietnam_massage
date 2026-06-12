@@ -179,7 +179,7 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     await page.goto("/masters/rooms");
 
     await expect(page.getByRole("heading", { name: "객실 마스터", level: 1 })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: "객실" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: "객실", exact: true })).toBeVisible();
     await expect(page.getByText("기본 객실: 11개")).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "표시명" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "이관 참조값" })).toBeVisible();
@@ -289,7 +289,7 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
       await expect(page).toHaveURL(new RegExp(`${user.landing}$`));
       const menu = page.getByRole("navigation", { name: "ERP 도메인 메뉴" });
       await expect(menu.getByText("객실", { exact: true })).toHaveCount(0);
-      await expect(menu.getByRole("link", { name: "객실" })).toHaveCount(0);
+      await expect(menu.getByRole("link", { name: "객실", exact: true })).toHaveCount(0);
     });
   }
 

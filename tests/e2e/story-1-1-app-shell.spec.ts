@@ -10,14 +10,6 @@ const sidebarGroups = [
   "감사 로그"
 ];
 
-const statusRules = [
-  { label: "사용중", glyph: "●" },
-  { label: "예약", glyph: "◷" },
-  { label: "청소중", glyph: "◐" },
-  { label: "종료확인", glyph: "⚠" },
-  { label: "빈방", glyph: "○" }
-];
-
 test.describe("Story 1.1 ERP 앱 쉘", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/sign-in");
@@ -40,32 +32,17 @@ test.describe("Story 1.1 ERP 앱 쉘", () => {
     await expect(menu.getByRole("link", { name: "첫화면 실시간 현황" })).toHaveAttribute("aria-current", "page");
 
     await expect(page.getByText("운영 현황").first()).toBeVisible();
-    await expect(page.getByText("데이터 연결 대기").first()).toBeVisible();
+    // 로그인 직후 /live 랜딩이 실제로 렌더된다 (운영월 유무와 무관하게 heading은 항상 존재).
+    await expect(page.getByRole("heading", { name: "첫화면 실시간 현황", level: 1 })).toBeVisible();
   });
 
-  test("상태 badge는 라벨과 glyph를 함께 노출하고 접근 가능한 이름을 가진다", async ({ page }) => {
-    const tokenRegion = page.getByLabel("상태 배지 토큰");
-    await expect(tokenRegion).toBeVisible();
+  // NOTE: Story 1.1 시절의 상태 배지 토큰/연결 대기 데모는 `erp-empty-state.tsx`에 있었으나,
+  // 화면 진화 후 이 컴포넌트는 더 이상 어디에서도 렌더되지 않는다(dead component).
+  // 상태 배지 라벨/glyph/색상 접근성 검증은 실제 `StatusBadge` 컴포넌트를 사용하는
+  // story-3-5-status-badge-accessibility.spec.ts가 소유한다. 죽은 데모를 검증하던
+  // 3개 테스트(상태 배지 토큰, 색상 보정, 연결 대기 영역)는 제거했다.
 
-    for (const status of statusRules) {
-      const badge = page.getByLabel(`상태: ${status.label}`);
-      await expect(badge).toBeVisible();
-      await expect(badge).toContainText(status.glyph);
-      await expect(badge).toContainText(status.label);
-    }
-  });
-
-  test("critical status token 색상은 접근성 보정값을 유지한다", async ({ page }) => {
-    await expect(page.getByLabel("상태: 청소중")).toHaveCSS("color", "rgb(61, 49, 21)");
-    await expect(page.getByLabel("상태: 빈방")).toHaveCSS("color", "rgb(61, 49, 21)");
-    await expect(page.getByLabel("상태: 빈방")).toHaveCSS("border-color", "rgb(179, 163, 125)");
-  });
-
-  test("blank screen 방지와 v1 desktop 제약을 유지한다", async ({ page }) => {
-    await expect(page.getByLabel("연결 대기 영역")).toContainText("후속 기능 연결 대기");
-    await expect(page.getByText("표시할 운영 데이터가 아직 없다.")).toBeVisible();
-    await expect(page.getByLabel("로딩 상태 예시").locator(".animate-pulse")).toHaveCount(3);
-
+  test("v1 desktop 최소 너비 제약을 유지한다", async ({ page }) => {
     const minWidth = await page.evaluate(() => getComputedStyle(document.body).minWidth);
     expect(minWidth).toBe("1280px");
   });
