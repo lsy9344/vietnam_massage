@@ -35,6 +35,13 @@ test("Arrow movement is bounded and can land on readonly computed cells without 
   assert.deepEqual(moveAdjacentCell(cell(2, "status"), rows.length, "ArrowDown"), cell(2, "status"));
 });
 
+test("Arrow movement uses the visible column list when settlement columns are hidden", () => {
+  const visibleFields = [...EDITABLE_CALL_FIELDS, "paymentAmount", "discountAmount", "calculationStatus"];
+
+  assert.deepEqual(moveAdjacentCell(cell(0, "discountAmount"), rows.length, "ArrowRight", visibleFields), cell(0, "calculationStatus"));
+  assert.deepEqual(moveAdjacentCell(cell(0, "calculationStatus"), rows.length, "ArrowLeft", visibleFields), cell(0, "discountAmount"));
+});
+
 test("computed cells are excluded from the explicit editable field sequence", () => {
   assert.equal((EDITABLE_CALL_FIELDS as readonly string[]).includes("paymentAmount"), false);
   assert.equal((EDITABLE_CALL_FIELDS as readonly string[]).includes("earcarePoolAmount"), false);

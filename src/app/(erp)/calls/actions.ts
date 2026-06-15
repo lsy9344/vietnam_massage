@@ -9,6 +9,7 @@ import {
   createDailyExpense,
   deactivateDailyExpense,
   updateDailyExpense,
+  redactServiceCallSettlementAmounts,
   saveBasicServiceCallRow,
   ServiceCallDomainError,
   type DailyExpenseDto,
@@ -76,6 +77,15 @@ function mapActionError<T>(
       };
     }
 
+    if (error.code === "ROOM_REQUIRED_FOR_STATUS") {
+      return {
+        ok: false,
+        fieldErrors: { roomId: [error.message] },
+        formError: error.message,
+        domainErrorCode: error.code
+      };
+    }
+
     return {
       ok: false,
       formError: error.message,
@@ -102,6 +112,14 @@ function mapActionError<T>(
     ok: false,
     formError: "콜 원장 저장 중 오류가 발생했습니다."
   };
+}
+
+function canViewSettlementAmounts(role: string) {
+  return role === "administrator" || role === "settlement_manager";
+}
+
+function visibleServiceCallRowForRole(row: ServiceCallRowDto, role: string) {
+  return canViewSettlementAmounts(role) ? row : redactServiceCallSettlementAmounts(row);
 }
 
 export async function saveBasicServiceCallRowAction(
@@ -135,10 +153,10 @@ export async function saveBasicServiceCallRowAction(
   }
 
   try {
-    await requirePermission("call:write");
+    const account = await requirePermission("call:write");
     const data = await saveBasicServiceCallRow(parsed.data);
     revalidatePath("/calls");
-    return { ok: true, data };
+    return { ok: true, data: visibleServiceCallRowForRole(data, account.role) };
   } catch (error) {
     return mapActionError<ServiceCallRowDto>(error);
   }
@@ -162,7 +180,7 @@ export async function autosaveServiceCallRowAction(input: ServiceCallAutosaveInp
       actorId: account.id
     });
     revalidatePath("/calls");
-    return { ok: true, data };
+    return { ok: true, data: visibleServiceCallRowForRole(data, account.role) };
   } catch (error) {
     return mapActionError<ServiceCallRowDto>(error);
   }

@@ -3,6 +3,7 @@ import type { RoomDisplayStatus, RoomStatusAssigneeDto, RoomStatusCourseDto, Roo
 
 const OPERATING_DAY_START_HOUR = 11;
 const SERVICE_TIMEZONE_OFFSET_MINUTES = 9 * 60;
+const ENDING_SOON_THRESHOLD_MINUTES = 10;
 
 export const ACTIVE_ROOM_OCCUPANCY_STATUSES = ["예약", "RESERVED", "사용중", "IN_USE", "USING", "청소중", "CLEANING"] as const;
 export const EXCLUDED_ROOM_OCCUPANCY_STATUSES = ["방문완료", "VISIT_COMPLETE", "노쇼", "NO_SHOW", "취소", "CANCELED"] as const;
@@ -10,6 +11,7 @@ export const EXCLUDED_ROOM_OCCUPANCY_STATUSES = ["방문완료", "VISIT_COMPLETE
 export const ROOM_STATUS_GUIDANCE_TEXT: Record<RoomDisplayStatus, string> = {
   예약: "예약 고객 입실 준비가 필요합니다.",
   사용중: "서비스가 진행 중입니다.",
+  종료임박: "종료 10분 전입니다. 결제와 다음 안내를 준비하세요.",
   청소중: "정리 후 입실 가능합니다.",
   종료확인: "종료 확인이 필요합니다.",
   빈방: "입실 가능합니다."
@@ -70,8 +72,8 @@ type ServiceCallRecord = {
   operatingMonth?: OperatingMonthRecord;
   serviceDate: Date;
   startTime: string;
-  roomId: string;
-  room?: RoomRecord;
+  roomId: string | null;
+  room?: RoomRecord | null;
   courseId: string;
   course?: CourseRecord;
   status: string;
@@ -171,9 +173,25 @@ function isActiveRoomOccupancyStatus(status: string) {
   return ACTIVE_ROOM_OCCUPANCY_STATUSES.includes(status as (typeof ACTIVE_ROOM_OCCUPANCY_STATUSES)[number]);
 }
 
-function toDisplayStatus(status: string): Exclude<RoomDisplayStatus, "종료확인" | "빈방"> {
+function toDisplayStatus(status: string): Exclude<RoomDisplayStatus, "종료임박" | "종료확인" | "빈방"> {
   if (status === "예약" || status === "RESERVED") return "예약";
   if (status === "청소중" || status === "CLEANING") return "청소중";
+  return "사용중";
+}
+
+function toTimedDisplayStatus(sourceDisplayStatus: ReturnType<typeof toDisplayStatus>, remainingMinutes: number | null): RoomDisplayStatus {
+  if (sourceDisplayStatus !== "사용중" || remainingMinutes === null) {
+    return sourceDisplayStatus;
+  }
+
+  if (remainingMinutes <= 0) {
+    return "종료확인";
+  }
+
+  if (remainingMinutes <= ENDING_SOON_THRESHOLD_MINUTES) {
+    return "종료임박";
+  }
+
   return "사용중";
 }
 
@@ -242,7 +260,7 @@ function latestActiveCallByRoom(calls: ServiceCallRecord[]) {
   const grouped = new Map<string, ServiceCallRecord>();
 
   for (const call of calls) {
-    if (!isActiveRoomOccupancyStatus(call.status)) {
+    if (!call.roomId || !isActiveRoomOccupancyStatus(call.status)) {
       continue;
     }
 
@@ -283,8 +301,7 @@ async function activeRoomStatus(tx: RoomStatusPrismaClient, input: { room: RoomR
   const expectedEndAt = policy ? new Date(startAt.getTime() + policy.durationMinutes * 60 * 1000) : null;
   const rawRemainingMinutes = expectedEndAt ? Math.ceil((expectedEndAt.getTime() - input.now.getTime()) / 60000) : null;
   const remainingMinutes = rawRemainingMinutes === null ? null : Math.max(0, rawRemainingMinutes);
-  const displayStatus: RoomDisplayStatus =
-    sourceDisplayStatus === "사용중" && remainingMinutes !== null && remainingMinutes <= 0 ? "종료확인" : sourceDisplayStatus;
+  const displayStatus = toTimedDisplayStatus(sourceDisplayStatus, remainingMinutes);
   const therapist1 = assignmentByRole(input.call, "THERAPIST_1");
   const therapist2 = assignmentByRole(input.call, "THERAPIST_2");
   const earcare = assignmentByRole(input.call, "EARCARE");
@@ -325,6 +342,7 @@ export async function listRoomStatuses(input: ListRoomStatusesInput): Promise<Ro
     where: {
       operatingMonthId: input.operatingMonthId,
       serviceDate: toDateOnly(input.serviceDate),
+      roomId: { not: null },
       status: { in: [...ACTIVE_ROOM_OCCUPANCY_STATUSES] }
     },
     include: {

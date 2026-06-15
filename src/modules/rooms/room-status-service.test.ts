@@ -1,9 +1,30 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { listRoomStatuses, RoomStatusDomainError } from "@/modules/rooms/room-status-service";
+import type { RoomStatusDto } from "@/modules/rooms/dtos";
+
+const defaultRoomFixtures = [
+  { number: "401", migrationReferenceName: "10번방", sortOrder: 10 },
+  { number: "402", migrationReferenceName: "11번방", sortOrder: 20 },
+  { number: "301", migrationReferenceName: "7번방", sortOrder: 30 },
+  { number: "302", migrationReferenceName: "8번방", sortOrder: 40 },
+  { number: "303", migrationReferenceName: "9번방", sortOrder: 50 },
+  { number: "201", migrationReferenceName: "4번방", sortOrder: 60 },
+  { number: "202", migrationReferenceName: "5번방", sortOrder: 70 },
+  { number: "203", migrationReferenceName: "6번방", sortOrder: 80 },
+  { number: "101", migrationReferenceName: "1번방", sortOrder: 90 },
+  { number: "102", migrationReferenceName: "2번방", sortOrder: 100 },
+  { number: "103", migrationReferenceName: "3번방", sortOrder: 110 }
+] as const;
 
 function dbDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
+}
+
+function statusByRoom(statuses: RoomStatusDto[], roomId: string) {
+  const status = statuses.find((candidate) => candidate.roomId === roomId);
+  assert.ok(status, `${roomId} 상태가 필요합니다.`);
+  return status;
 }
 
 function createMemoryPrisma() {
@@ -22,16 +43,14 @@ function createMemoryPrisma() {
     ]
   ]);
   const rooms = new Map<string, any>(
-    Array.from({ length: 11 }, (_, index) => {
-      const floor = index < 3 ? 1 : index < 6 ? 2 : index < 9 ? 3 : 4;
-      const number = `${floor}0${(index % 3) + 1}`;
+    defaultRoomFixtures.map((fixture, index) => {
       return [
-        `room-${number}`,
+        `room-${fixture.number}`,
         {
-          id: `room-${number}`,
-          displayName: `${number} 호실`,
-          migrationReferenceName: `${index + 1}번방`,
-          sortOrder: (index + 1) * 10,
+          id: `room-${fixture.number}`,
+          displayName: `${fixture.number} 호실`,
+          migrationReferenceName: fixture.migrationReferenceName,
+          sortOrder: fixture.sortOrder,
           isActive: true,
           createdAt: new Date(`2034-06-01T00:${String(index).padStart(2, "0")}:00.000Z`),
           updatedAt: new Date(`2034-06-01T00:${String(index).padStart(2, "0")}:00.000Z`)
@@ -248,18 +267,22 @@ describe("room status service", () => {
 
     assert.equal(statuses.length, 11);
     assert.deepEqual(
+      statuses.map((status) => status.roomId),
+      ["room-401", "room-402", "room-301", "room-302", "room-303", "room-201", "room-202", "room-203", "room-101", "room-102", "room-103"]
+    );
+    assert.deepEqual(
       statuses.map((status) => status.roomSortOrder),
       [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110]
     );
-    assert.equal(statuses[0].roomId, "room-101");
-    assert.equal(statuses[0].displayStatus, "빈방");
-    assert.equal(statuses[0].sourceCallStatus, null);
-    assert.equal(statuses[0].activeCallId, null);
-    assert.equal(statuses[0].expectedEndAt, null);
-    assert.equal(statuses[0].remainingMinutes, null);
-    assert.equal(statuses[0].course, null);
-    assert.equal(statuses[0].therapist1, null);
-    assert.equal(statuses[0].guidanceText, "입실 가능합니다.");
+    const room401 = statusByRoom(statuses, "room-401");
+    assert.equal(room401.displayStatus, "빈방");
+    assert.equal(room401.sourceCallStatus, null);
+    assert.equal(room401.activeCallId, null);
+    assert.equal(room401.expectedEndAt, null);
+    assert.equal(room401.remainingMinutes, null);
+    assert.equal(room401.course, null);
+    assert.equal(room401.therapist1, null);
+    assert.equal(room401.guidanceText, "입실 가능합니다.");
   });
 
   it("maps 예약, 청소중, 사용중 active calls with course and active assignees", async () => {
@@ -278,17 +301,20 @@ describe("room status service", () => {
       prismaClient: client
     });
 
-    assert.equal(statuses[0].displayStatus, "예약");
-    assert.equal(statuses[0].sourceCallStatus, "RESERVED");
-    assert.equal(statuses[0].course?.tvDisplayName, "A60");
-    assert.equal(statuses[1].displayStatus, "청소중");
-    assert.equal(statuses[1].sourceCallStatus, "청소중");
-    assert.equal(statuses[2].displayStatus, "사용중");
-    assert.equal(statuses[2].sourceCallStatus, "사용중");
-    assert.equal(statuses[2].remainingMinutes, 45);
-    assert.equal(statuses[2].therapist1?.id, "therapist-1");
-    assert.equal(statuses[2].therapist2?.staffCode, "THR-002");
-    assert.equal(statuses[2].earcare?.displayName, "귀케어1");
+    const room101 = statusByRoom(statuses, "room-101");
+    const room102 = statusByRoom(statuses, "room-102");
+    const room103 = statusByRoom(statuses, "room-103");
+    assert.equal(room101.displayStatus, "예약");
+    assert.equal(room101.sourceCallStatus, "RESERVED");
+    assert.equal(room101.course?.tvDisplayName, "A60");
+    assert.equal(room102.displayStatus, "청소중");
+    assert.equal(room102.sourceCallStatus, "청소중");
+    assert.equal(room103.displayStatus, "사용중");
+    assert.equal(room103.sourceCallStatus, "사용중");
+    assert.equal(room103.remainingMinutes, 45);
+    assert.equal(room103.therapist1?.id, "therapist-1");
+    assert.equal(room103.therapist2?.staffCode, "THR-002");
+    assert.equal(room103.earcare?.displayName, "귀케어1");
   });
 
   it("excludes 방문완료, 노쇼, and 취소 statuses from current room occupancy", async () => {
@@ -304,9 +330,9 @@ describe("room status service", () => {
       prismaClient: client
     });
 
-    assert.equal(statuses[0].displayStatus, "빈방");
-    assert.equal(statuses[1].displayStatus, "빈방");
-    assert.equal(statuses[2].displayStatus, "빈방");
+    assert.equal(statusByRoom(statuses, "room-101").displayStatus, "빈방");
+    assert.equal(statusByRoom(statuses, "room-102").displayStatus, "빈방");
+    assert.equal(statusByRoom(statuses, "room-103").displayStatus, "빈방");
   });
 
   it("selects the latest active call by normalized service date, start time, and deterministic tie breaker", async () => {
@@ -351,10 +377,10 @@ describe("room status service", () => {
       prismaClient: client
     });
 
-    assert.equal(statuses[0].activeCallId, "call-early-next-day");
-    assert.equal(statuses[0].displayStatus, "예약");
-    assert.equal(statuses[1].activeCallId, "call-tie-winner");
-    assert.equal(statuses[1].displayStatus, "예약");
+    assert.equal(statusByRoom(statuses, "room-101").activeCallId, "call-early-next-day");
+    assert.equal(statusByRoom(statuses, "room-101").displayStatus, "예약");
+    assert.equal(statusByRoom(statuses, "room-102").activeCallId, "call-tie-winner");
+    assert.equal(statusByRoom(statuses, "room-102").displayStatus, "예약");
   });
 
   it("calculates cross-midnight expected end and clamps elapsed 사용중 to 종료확인 without negative remaining minutes", async () => {
@@ -369,12 +395,32 @@ describe("room status service", () => {
       prismaClient: client
     });
 
-    assert.equal(statuses[0].displayStatus, "사용중");
-    assert.equal(statuses[0].expectedEndAt, "2034-06-05T16:00:00.000Z");
-    assert.equal(statuses[0].remainingMinutes, 45);
-    assert.equal(statuses[1].displayStatus, "종료확인");
-    assert.equal(statuses[1].sourceCallStatus, "사용중");
-    assert.equal(statuses[1].remainingMinutes, 0);
+    const room101 = statusByRoom(statuses, "room-101");
+    const room102 = statusByRoom(statuses, "room-102");
+    assert.equal(room101.displayStatus, "사용중");
+    assert.equal(room101.expectedEndAt, "2034-06-05T16:00:00.000Z");
+    assert.equal(room101.remainingMinutes, 45);
+    assert.equal(room102.displayStatus, "종료확인");
+    assert.equal(room102.sourceCallStatus, "사용중");
+    assert.equal(room102.remainingMinutes, 0);
+  });
+
+  it("marks in-use rooms ending within 10 minutes as 종료임박", async () => {
+    const { client, addCall } = createMemoryPrisma();
+    addCall({ id: "call-ending-soon", roomId: "room-101", status: "사용중", startTime: "11:00", courseId: "course-a" });
+
+    const statuses = await listRoomStatuses({
+      operatingMonthId: "month-2034-06",
+      serviceDate: "2034-06-05",
+      now: new Date("2034-06-05T11:50:00.000+09:00"),
+      prismaClient: client
+    });
+
+    const room101 = statusByRoom(statuses, "room-101");
+    assert.equal(room101.displayStatus, "종료임박");
+    assert.equal(room101.sourceCallStatus, "사용중");
+    assert.equal(room101.remainingMinutes, 10);
+    assert.equal(room101.guidanceText, "종료 10분 전입니다. 결제와 다음 안내를 준비하세요.");
   });
 
   it("keeps active occupancy when course policy is missing and nulls time calculation fields", async () => {
@@ -388,11 +434,12 @@ describe("room status service", () => {
       prismaClient: client
     });
 
-    assert.equal(statuses[0].displayStatus, "사용중");
-    assert.equal(statuses[0].activeCallId, "call-missing-policy");
-    assert.equal(statuses[0].course, null);
-    assert.equal(statuses[0].expectedEndAt, null);
-    assert.equal(statuses[0].remainingMinutes, null);
+    const room101 = statusByRoom(statuses, "room-101");
+    assert.equal(room101.displayStatus, "사용중");
+    assert.equal(room101.activeCallId, "call-missing-policy");
+    assert.equal(room101.course, null);
+    assert.equal(room101.expectedEndAt, null);
+    assert.equal(room101.remainingMinutes, null);
   });
 
   it("performs read-only queries and never writes service-call, settlement, closing, or audit data", async () => {

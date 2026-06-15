@@ -1,4 +1,4 @@
-export type RoomDisplayStatus = "사용중" | "예약" | "청소중" | "종료확인" | "빈방";
+export type RoomDisplayStatus = "사용중" | "종료임박" | "예약" | "청소중" | "종료확인" | "빈방";
 
 export type RoomStatusAssigneeDto = {
   id: string;

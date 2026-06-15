@@ -10,6 +10,7 @@ import {
   upsertTherapistAttendance,
   type TherapistAttendanceDto
 } from "@/modules/settlements/therapist-attendance-service";
+import { setTherapistDailySettlementPayment } from "@/modules/settlements/therapist-daily-settlement-service";
 
 export type TherapistAttendanceActionState = ActionResult<TherapistAttendanceDto> | null;
 
@@ -117,4 +118,16 @@ export async function deactivateTherapistAttendanceAction(
   } catch (error) {
     return mapActionError(error);
   }
+}
+
+export async function setTherapistDailySettlementPaymentAction(formData: FormData) {
+  const account = await requirePermission("payout:write");
+  await setTherapistDailySettlementPayment({
+    operatingMonthId: formValue(formData, "operatingMonthId"),
+    serviceDate: formValue(formData, "serviceDate"),
+    employeeId: formValue(formData, "employeeId"),
+    isPaid: formValue(formData, "isPaid") === "true",
+    actorId: account.id
+  });
+  revalidatePath("/settlements");
 }

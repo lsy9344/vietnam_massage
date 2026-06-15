@@ -25,7 +25,7 @@ export const serviceCallInputSchema = z.object({
   operatingMonthId: z.string().trim().min(1, "운영월을 선택하세요."),
   serviceDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, isoDateMessage),
   startTime: z.string().trim().regex(/^\d{2}:\d{2}$/, timeMessage),
-  roomId: z.string().trim().min(1, "객실을 선택하세요."),
+  roomId: optionalId,
   courseId: z.string().trim().min(1, "코스를 선택하세요."),
   customerMemo: optionalText,
   therapist1Id: optionalId,

@@ -5,6 +5,7 @@ import {
   type ServiceCallAssigneeDto,
   type ServiceCallRowDto
 } from "@/modules/calls/service-call-service";
+import { assertOperatingMonthPayoutWritable } from "@/modules/closing/month-lock-guard";
 
 const courseCodes = ["A", "B", "C", "D", "E"] as const;
 const assignmentRoles = ["THERAPIST_1", "THERAPIST_2"] as const;
@@ -16,6 +17,9 @@ type TherapistRateStatus = "applied" | "zero_policy" | "missing_policy";
 type OperatingMonthRecord = {
   id: string;
   monthKey: string;
+  startDate: Date;
+  endDate: Date;
+  status: string;
 };
 
 type TherapistCourseRateRecord = {
@@ -37,6 +41,18 @@ type EmployeeRecord = {
   isActive: boolean;
 };
 
+type TherapistDailySettlementPaymentRecord = {
+  id: string;
+  operatingMonthId: string;
+  serviceDate: Date;
+  employeeId: string;
+  isPaid: boolean;
+  paidAt: Date | null;
+  paidByAccountId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type TherapistDailySettlementPrismaClient = {
   operatingMonth: {
     findUnique(args: unknown): Promise<OperatingMonthRecord | null>;
@@ -46,6 +62,11 @@ type TherapistDailySettlementPrismaClient = {
   };
   employee: {
     findMany(args?: unknown): Promise<EmployeeRecord[]>;
+    findUnique?(args: unknown): Promise<EmployeeRecord | null>;
+  };
+  therapistDailySettlementPayment?: {
+    findMany(args?: unknown): Promise<TherapistDailySettlementPaymentRecord[]>;
+    upsert(args: unknown): Promise<TherapistDailySettlementPaymentRecord>;
   };
 };
 
@@ -80,6 +101,11 @@ export type TherapistDailySettlementDto = {
     zeroPolicy: number;
     missingPolicy: number;
   };
+  paymentStatus: {
+    isPaid: boolean;
+    paidAt: string | null;
+    paidByAccountId: string | null;
+  };
 };
 
 export type TherapistDailySettlementResultDto = {
@@ -99,8 +125,22 @@ const settlementQuerySchema = z.object({
   serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "조회 날짜는 YYYY-MM-DD 형식이어야 합니다.")
 });
 
+const settlementPaymentSchema = settlementQuerySchema.extend({
+  employeeId: z.string().min(1, "마사지사를 선택하세요."),
+  isPaid: z.boolean(),
+  actorId: z.string().min(1, "처리자를 확인할 수 없습니다.")
+});
+
 function getClient(client?: TherapistDailySettlementPrismaClient) {
   return client ?? (prisma as unknown as TherapistDailySettlementPrismaClient);
+}
+
+function toDateOnly(isoDate: string) {
+  return new Date(`${isoDate}T00:00:00.000Z`);
+}
+
+function isDateWithinOperatingMonth(serviceDate: Date, month: OperatingMonthRecord) {
+  return serviceDate >= month.startDate && serviceDate <= month.endDate;
 }
 
 function emptyCourseBreakdown(): Record<CourseCode, TherapistCourseSettlementSummary> {
@@ -183,8 +223,46 @@ function createSettlement(employee: EmployeeRecord): TherapistDailySettlementDto
     warningCounts: {
       zeroPolicy: 0,
       missingPolicy: 0
+    },
+    paymentStatus: {
+      isPaid: false,
+      paidAt: null,
+      paidByAccountId: null
     }
   };
+}
+
+function toPaymentStatus(record: TherapistDailySettlementPaymentRecord | null): TherapistDailySettlementDto["paymentStatus"] {
+  return {
+    isPaid: record?.isPaid ?? false,
+    paidAt: record?.paidAt?.toISOString() ?? null,
+    paidByAccountId: record?.paidByAccountId ?? null
+  };
+}
+
+async function attachPaymentStatuses(input: {
+  client: TherapistDailySettlementPrismaClient;
+  operatingMonthId: string;
+  serviceDate: string;
+  settlements: TherapistDailySettlementDto[];
+}) {
+  if (!input.client.therapistDailySettlementPayment || input.settlements.length === 0) {
+    return input.settlements;
+  }
+
+  const records = await input.client.therapistDailySettlementPayment.findMany({
+    where: {
+      operatingMonthId: input.operatingMonthId,
+      serviceDate: toDateOnly(input.serviceDate),
+      employeeId: { in: input.settlements.map((settlement) => settlement.employeeId) }
+    }
+  });
+  const byEmployeeId = new Map(records.map((record) => [record.employeeId, record]));
+
+  return input.settlements.map((settlement) => ({
+    ...settlement,
+    paymentStatus: toPaymentStatus(byEmployeeId.get(settlement.employeeId) ?? null)
+  }));
 }
 
 function evidenceForRole(input: {
@@ -352,11 +430,106 @@ export async function listTherapistDailySettlements(input: {
     }
   }
 
+  const settlements = [...settlementsByEmployeeId.values()].sort((a, b) => a.sortOrder - b.sortOrder || a.staffCode.localeCompare(b.staffCode));
+
   return {
     operatingMonthId: parsed.data.operatingMonthId,
     serviceDate: parsed.data.serviceDate,
-    settlements: [...settlementsByEmployeeId.values()].sort((a, b) => a.sortOrder - b.sortOrder || a.staffCode.localeCompare(b.staffCode)),
+    settlements: await attachPaymentStatuses({
+      client,
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate: parsed.data.serviceDate,
+      settlements
+    }),
     warningCounts,
     excludedCallCount
+  };
+}
+
+export async function setTherapistDailySettlementPayment(input: {
+  operatingMonthId: string;
+  serviceDate: string;
+  employeeId: string;
+  isPaid: boolean;
+  actorId: string;
+  prismaClient?: TherapistDailySettlementPrismaClient;
+}) {
+  const parsed = settlementPaymentSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "지급완료 입력값이 올바르지 않습니다.");
+  }
+
+  const client = getClient(input.prismaClient);
+  if (!client.therapistDailySettlementPayment) {
+    throw new Error("지급완료 저장소를 사용할 수 없습니다.");
+  }
+
+  const operatingMonth = await client.operatingMonth.findUnique({ where: { id: parsed.data.operatingMonthId } });
+  if (!operatingMonth) {
+    throw new Error("운영월을 찾을 수 없습니다.");
+  }
+  assertOperatingMonthPayoutWritable(operatingMonth, "마감확정 또는 잠금 운영월의 지급완료 상태는 변경할 수 없습니다.");
+
+  const serviceDate = toDateOnly(parsed.data.serviceDate);
+  if (!isDateWithinOperatingMonth(serviceDate, operatingMonth)) {
+    throw new Error("운영월 범위를 벗어난 날짜입니다.");
+  }
+
+  if (client.employee.findUnique) {
+    const employee = await client.employee.findUnique({ where: { id: parsed.data.employeeId } });
+    if (!employee) {
+      throw new Error("마사지사를 찾을 수 없습니다.");
+    }
+    if (!employee.isActive || employee.employeeGroup !== "THERAPIST") {
+      throw new Error("활성 마사지사만 지급완료 상태를 변경할 수 있습니다.");
+    }
+  }
+
+  // 지급완료(true)는 해당 날짜에 실제 정산 대상(담당 방문완료 콜)이 있는 마사지사에만 허용한다.
+  // 정산 행이 없는 직원에게 지급완료가 미리 찍히는 것을 막는다.
+  // 해제(false)는 잘못 저장된 기록 정리를 위해 정산 행 여부와 무관하게 허용한다.
+  if (parsed.data.isPaid) {
+    const { settlements } = await listTherapistDailySettlements({
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate: parsed.data.serviceDate,
+      prismaClient: input.prismaClient
+    });
+    const hasSettlement = settlements.some(
+      (settlement) => settlement.employeeId === parsed.data.employeeId && settlement.totalCallCount > 0
+    );
+    if (!hasSettlement) {
+      throw new Error("해당 날짜에 정산 대상 콜이 없는 마사지사는 지급완료로 표시할 수 없습니다.");
+    }
+  }
+
+  const now = new Date();
+  const record = await client.therapistDailySettlementPayment.upsert({
+    where: {
+      operatingMonthId_serviceDate_employeeId: {
+        operatingMonthId: parsed.data.operatingMonthId,
+        serviceDate,
+        employeeId: parsed.data.employeeId
+      }
+    },
+    update: {
+      isPaid: parsed.data.isPaid,
+      paidAt: parsed.data.isPaid ? now : null,
+      paidByAccountId: parsed.data.isPaid ? parsed.data.actorId : null
+    },
+    create: {
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate,
+      employeeId: parsed.data.employeeId,
+      isPaid: parsed.data.isPaid,
+      paidAt: parsed.data.isPaid ? now : null,
+      paidByAccountId: parsed.data.isPaid ? parsed.data.actorId : null
+    }
+  });
+
+  return {
+    operatingMonthId: parsed.data.operatingMonthId,
+    serviceDate: parsed.data.serviceDate,
+    employeeId: parsed.data.employeeId,
+    paymentStatus: toPaymentStatus(record)
   };
 }

@@ -1,4 +1,5 @@
 import { requirePermission, requireRouteAccess } from "@/lib/authorization";
+import { PageHeader } from "@/components/domain/page-header";
 import { listAuditLogs } from "@/modules/audit/audit-service";
 
 type AuditPageProps = {
@@ -85,19 +86,17 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <div className="mb-5 flex items-end justify-between gap-6">
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase text-muted">감사 로그</p>
-          <h1 className="text-2xl font-semibold text-foreground">변경 이력 조회</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">
-            지급액과 운영 상태에 영향을 주는 변경의 행위자, 액션, 대상, 변경 전후값을 조회한다.
-          </p>
-        </div>
-        <div className="text-right text-xs text-muted">
-          <div>최근 100건</div>
-          <div>삭제 불가 이력</div>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="감사 로그"
+        title="변경 이력 조회"
+        description="지급액과 운영 상태에 영향을 주는 변경의 행위자, 액션, 대상, 변경 전후값을 조회한다."
+        meta={
+          <>
+            <div>최근 100건</div>
+            <div>삭제 불가 이력</div>
+          </>
+        }
+      />
 
       <form className="mb-4 grid grid-cols-1 items-end gap-3 border border-border bg-surface p-3 lg:grid-cols-[220px_180px_180px_auto]" method="get">
         <label className="grid gap-1 text-xs font-semibold text-muted">

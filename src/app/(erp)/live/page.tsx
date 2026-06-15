@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/domain/page-header";
 import { RoomStatusCard } from "@/components/domain/room-status-card";
 import { requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getDailyCallLedgerSummary } from "@/modules/calls/service-call-service";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
+import type { RoomStatusDto } from "@/modules/rooms/dtos";
 import { listRoomStatuses } from "@/modules/rooms/room-status-service";
 import { RoomStatusRefreshController } from "@/components/domain/room-status-refresh-controller";
 
@@ -24,6 +26,28 @@ function latestUpdatedAt(values: Array<{ updatedAt: string }>) {
   return values.reduce((latest, value) => (value.updatedAt > latest ? value.updatedAt : latest), new Date().toISOString());
 }
 
+function roomFloor(status: RoomStatusDto) {
+  return status.roomDisplayName.match(/^\d/)?.[0] ?? "기타";
+}
+
+function roomFloorGroups(statuses: RoomStatusDto[]) {
+  const groups: Array<{ floor: string; statuses: RoomStatusDto[] }> = [];
+  for (const status of statuses) {
+    const floor = roomFloor(status);
+    const current = groups.find((group) => group.floor === floor);
+    if (current) {
+      current.statuses.push(status);
+    } else {
+      groups.push({ floor, statuses: [status] });
+    }
+  }
+  return groups;
+}
+
+function floorGridClass(count: number) {
+  return count === 2 ? "grid grid-cols-1 gap-3 sm:grid-cols-2" : "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3";
+}
+
 function SummaryTile({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-border bg-surface px-4 py-3">
@@ -42,11 +66,11 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
   if (!selectedMonth) {
     return (
       <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-        <div className="mb-5">
-          <p className="mb-2 text-xs font-semibold uppercase text-muted">운영 현황</p>
-          <h1 className="text-2xl font-semibold text-foreground">첫화면 실시간 현황</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">객실 상태와 오늘 콜/매출 요약을 조회한다.</p>
-        </div>
+        <PageHeader
+          eyebrow="운영 현황"
+          title="첫화면 실시간 현황"
+          description="객실 상태와 오늘 콜/매출 요약을 조회한다."
+        />
         <section className="border border-border bg-surface px-4 py-8">
           <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
           <p className="mt-2 max-w-2xl text-sm text-muted">첫 화면은 운영월 날짜 범위 안의 객실 상태와 콜 요약을 조회한다.</p>
@@ -80,14 +104,16 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <div className="mb-5 flex items-end justify-between gap-6">
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase text-muted">운영 현황</p>
-          <h1 className="text-2xl font-semibold text-foreground">첫화면 실시간 현황</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">객실 상태와 오늘 콜/매출 요약을 조회한다.</p>
-        </div>
-        <RoomStatusRefreshController lastUpdatedAt={lastUpdatedAt} />
-      </div>
+      <PageHeader
+        eyebrow="운영 현황"
+        title="첫화면 실시간 현황"
+        description="객실 상태와 오늘 콜/매출 요약을 조회한다."
+        meta={
+          <>
+            <RoomStatusRefreshController lastUpdatedAt={lastUpdatedAt} />
+          </>
+        }
+      />
 
       <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
         <label className="grid gap-1 text-xs font-medium text-muted">
@@ -129,8 +155,12 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
       </form>
 
       <section className="grid grid-cols-4 gap-3" aria-label="객실 상태">
-        {roomStatuses.map((status) => (
-          <RoomStatusCard key={status.roomId} status={status} />
+        {roomFloorGroups(roomStatuses).map((group) => (
+          <div className={`col-span-full ${floorGridClass(group.statuses.length)}`} key={group.floor}>
+            {group.statuses.map((status) => (
+              <RoomStatusCard key={status.roomId} status={status} />
+            ))}
+          </div>
         ))}
       </section>
 

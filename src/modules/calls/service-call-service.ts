@@ -131,8 +131,8 @@ type ServiceCallRecord = {
   operatingMonth?: OperatingMonthRecord;
   serviceDate: Date;
   startTime: string;
-  roomId: string;
-  room?: RoomRecord;
+  roomId: string | null;
+  room?: RoomRecord | null;
   courseId: string;
   course?: CourseRecord;
   customerMemo: string | null;
@@ -223,7 +223,7 @@ export type ServiceCallRowDto = {
   operatingMonthId: string;
   serviceDate: string;
   startTime: string;
-  roomId: string;
+  roomId: string | null;
   roomLabel: string;
   courseId: string;
   courseCode: string;
@@ -285,6 +285,12 @@ export type DailyCallLedgerSummaryDto = {
   discountTotal: number;
   expenseTotal: number;
   netSales: number;
+  paymentMethodTotals: {
+    cash: number;
+    card: number;
+    bank: number;
+    other: number;
+  };
   courseSummaries: DailyCourseSummaryDto[];
   warningCounts: {
     coursePolicyMissing: number;
@@ -367,6 +373,31 @@ function isNoShowStatus(status: string) {
 
 function isCanceledStatus(status: string) {
   return status === "취소" || status === "CANCELED";
+}
+
+function requiresAssignedRoom(status: string) {
+  return isInUseStatus(status) || isCleaningStatus(status) || isCompletedServiceCallStatus(status);
+}
+
+function recognizesRevenue(record: ServiceCallRecord) {
+  if (isNoShowStatus(record.status) || isCanceledStatus(record.status)) {
+    return false;
+  }
+
+  return isCompletedServiceCallStatus(record.status) || isInUseStatus(record.status) || Boolean(record.paymentMethodCode);
+}
+
+function paymentMethodBucket(code: string | null): keyof DailyCallLedgerSummaryDto["paymentMethodTotals"] {
+  if (!code) return "other";
+
+  const normalized = code.trim().toUpperCase();
+  if (code === "현금" || normalized === "CASH") return "cash";
+  if (code === "카드" || normalized === "CARD" || normalized === "CREDIT_CARD") return "card";
+  if (code === "계좌" || normalized === "BANK" || normalized === "TRANSFER" || normalized === "BANK_TRANSFER" || normalized === "ACCOUNT_TRANSFER") {
+    return "bank";
+  }
+
+  return "other";
 }
 
 function getClient(client?: ServiceCallPrismaClient) {
@@ -456,7 +487,7 @@ async function findTherapistCourseRateForCalculation(
 }
 
 async function calculateServiceCallCompletion(tx: ServiceCallPrismaClient, record: ServiceCallRecord) {
-  if (!isCompletedServiceCallStatus(record.status)) {
+  if (!recognizesRevenue(record)) {
     return emptyCalculation("not_completed");
   }
 
@@ -491,6 +522,16 @@ async function calculateServiceCallCompletion(tx: ServiceCallPrismaClient, recor
   };
   const therapist1 = assignmentByRole(record, "THERAPIST_1");
   const therapist2 = assignmentByRole(record, "THERAPIST_2");
+
+  if (!isCompletedServiceCallStatus(record.status)) {
+    return {
+      ...baseCalculation,
+      therapist1Commission: 0,
+      therapist2Commission: 0,
+      earcarePoolAmount: 0,
+      opsCallCredit: 0
+    };
+  }
 
   if (policy.requiresSecondTherapist && !therapist2) {
     return emptyCalculation("second_therapist_required", {
@@ -566,7 +607,7 @@ async function toRowDto(tx: ServiceCallPrismaClient, record: ServiceCallRecord):
     serviceDate: toIsoDateOnly(record.serviceDate),
     startTime: record.startTime,
     roomId: record.roomId,
-    roomLabel: record.room?.displayName ?? record.roomId,
+    roomLabel: record.room?.displayName ?? "미배정",
     courseId: record.courseId,
     courseCode: course?.code ?? "",
     courseLabel: policy ? `${course?.code ?? ""} ${policy.name}`.trim() : record.courseId,
@@ -636,10 +677,20 @@ async function assertActiveTimeSlot(tx: ServiceCallPrismaClient, startTime: stri
   }
 }
 
-async function assertActiveRoom(tx: ServiceCallPrismaClient, roomId: string) {
+async function assertActiveRoom(tx: ServiceCallPrismaClient, roomId: string | null | undefined) {
+  if (!roomId) {
+    return;
+  }
+
   const room = await tx.room.findUnique({ where: { id: roomId } });
   if (!room || !room.isActive) {
     throw new ServiceCallDomainError("활성 객실을 선택하세요.", "ROOM_NOT_ACTIVE");
+  }
+}
+
+function assertRoomRequiredForStatus(input: { roomId: string | null | undefined; status: string }) {
+  if (!input.roomId && requiresAssignedRoom(input.status)) {
+    throw new ServiceCallDomainError("사용중, 청소중, 방문완료 상태는 객실을 선택해야 합니다.", "ROOM_REQUIRED_FOR_STATUS");
   }
 }
 
@@ -930,6 +981,7 @@ export async function saveBasicServiceCallRow(input: ServiceCallInput & { prisma
   if (!parsed.success) {
     throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "콜 원장 입력값이 올바르지 않습니다.", "INVALID_SERVICE_CALL_INPUT");
   }
+  assertRoomRequiredForStatus({ roomId: parsed.data.roomId, status: parsed.data.status });
 
   const client = getClient(input.prismaClient);
 
@@ -957,7 +1009,7 @@ export async function saveBasicServiceCallRow(input: ServiceCallInput & { prisma
       operatingMonthId: parsed.data.operatingMonthId,
       serviceDate,
       startTime: parsed.data.startTime,
-      roomId: parsed.data.roomId,
+      roomId: parsed.data.roomId ?? null,
       courseId: parsed.data.courseId,
       customerMemo: parsed.data.customerMemo ?? null,
       status: parsed.data.status,
@@ -1010,6 +1062,7 @@ export async function autosaveServiceCallRow(
   if (!parsed.success) {
     throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "콜 원장 입력값이 올바르지 않습니다.", "INVALID_SERVICE_CALL_INPUT");
   }
+  assertRoomRequiredForStatus({ roomId: parsed.data.roomId, status: parsed.data.status });
 
   const actorId = input.actorId?.trim();
   if (!actorId) {
@@ -1043,7 +1096,7 @@ export async function autosaveServiceCallRow(
       operatingMonthId: parsed.data.operatingMonthId,
       serviceDate,
       startTime: parsed.data.startTime,
-      roomId: parsed.data.roomId,
+      roomId: parsed.data.roomId ?? null,
       courseId: parsed.data.courseId,
       customerMemo: parsed.data.customerMemo ?? null,
       status: parsed.data.status,
@@ -1336,6 +1389,12 @@ export async function getDailyCallLedgerSummary(input: {
   });
   const courseSummaries = emptyCourseSummaries();
   const courseSummaryByCode = new Map(courseSummaries.map((summary) => [summary.courseCode, summary]));
+  const paymentMethodTotals: DailyCallLedgerSummaryDto["paymentMethodTotals"] = {
+    cash: 0,
+    card: 0,
+    bank: 0,
+    other: 0
+  };
 
   let paymentTotal = 0;
   let therapistCommissionTotal = 0;
@@ -1357,9 +1416,15 @@ export async function getDailyCallLedgerSummary(input: {
     }
 
     paymentTotal += row.paymentAmount;
+    discountTotal += row.discountAmount;
+    paymentMethodTotals[paymentMethodBucket(row.paymentMethodCode)] += row.paymentAmount;
+
+    if (!isCompletedServiceCallStatus(row.status)) {
+      continue;
+    }
+
     therapistCommissionTotal += row.therapist1Commission + row.therapist2Commission;
     earcarePoolTotal += row.earcarePoolAmount;
-    discountTotal += row.discountAmount;
 
     const courseSummary = courseSummaryByCode.get(row.courseCode as DailyCourseSummaryDto["courseCode"]);
     if (courseSummary) {
@@ -1371,7 +1436,7 @@ export async function getDailyCallLedgerSummary(input: {
 
   const expenseTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0);
   return {
-    reservationCount: rows.filter((row) => isReservationStatus(row.status)).length,
+    reservationCount: rows.length,
     inUseCount: rows.filter((row) => isInUseStatus(row.status)).length,
     cleaningCount: rows.filter((row) => isCleaningStatus(row.status)).length,
     completedCount: rows.filter((row) => isCompletedServiceCallStatus(row.status)).length,
@@ -1383,6 +1448,7 @@ export async function getDailyCallLedgerSummary(input: {
     discountTotal,
     expenseTotal,
     netSales: paymentTotal - expenseTotal,
+    paymentMethodTotals,
     courseSummaries,
     warningCounts
   };
@@ -1390,7 +1456,7 @@ export async function getDailyCallLedgerSummary(input: {
 
 export function completedServiceCallCalculationsFromRows(rows: ServiceCallRowDto[]): CompletedServiceCallCalculationDto[] {
   return rows
-    .filter((row) => row.calculationStatus === "calculated")
+    .filter((row) => row.calculationStatus === "calculated" && isCompletedServiceCallStatus(row.status))
     .map((row) => ({
       serviceCallId: row.id,
       serviceDate: row.serviceDate,
@@ -1422,6 +1488,16 @@ export function completedServiceCallCalculationsFromRows(rows: ServiceCallRowDto
           : [])
       ]
     }));
+}
+
+export function redactServiceCallSettlementAmounts(row: ServiceCallRowDto): ServiceCallRowDto {
+  return {
+    ...row,
+    therapist1Commission: 0,
+    therapist2Commission: 0,
+    earcarePoolAmount: 0,
+    opsCallCredit: 0
+  };
 }
 
 export async function listCompletedServiceCallCalculationsForDate(input: {

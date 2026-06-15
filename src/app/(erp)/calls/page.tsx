@@ -6,11 +6,13 @@ import {
   getDailyCallLedgerSummary,
   listDailyExpensesForDate,
   listServiceCallFormOptions,
-  listServiceCallsForDate
+  listServiceCallsForDate,
+  redactServiceCallSettlementAmounts
 } from "@/modules/calls/service-call-service";
 import { DailyExpensePanel } from "@/app/(erp)/calls/daily-expense-panel";
 import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
+import { PageHeader } from "@/components/domain/page-header";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 
 type CallsPageSearchParams = {
@@ -28,13 +30,11 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
   if (!selectedMonth) {
     return (
       <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-        <div className="mb-5 flex items-end justify-between gap-6">
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase text-muted">콜 원장</p>
-            <h1 className="text-2xl font-semibold text-foreground">콜/예약 입력 원장</h1>
-            <p className="mt-2 max-w-3xl text-sm text-muted">운영월과 날짜별로 실시간콜입력 A:S 의미의 기본 콜 정보를 기록한다.</p>
-          </div>
-        </div>
+        <PageHeader
+          eyebrow="콜 원장"
+          title="콜/예약 입력 원장"
+          description="운영월과 날짜별로 실시간콜입력 A:S 의미의 기본 콜 정보를 기록한다."
+        />
         <section className="border border-border bg-surface px-4 py-8">
           <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
           <p className="mt-2 max-w-2xl text-sm text-muted">콜 원장은 운영월 날짜 범위 안에서만 조회하고 저장할 수 있다.</p>
@@ -56,22 +56,24 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
     getDailyCallLedgerSummary({ operatingMonthId: selectedMonth.id, serviceDate })
   ]);
   const isLocked = isOperatingMonthPayoutLocked(selectedMonth.status);
+  const canViewSettlementAmounts = account.role === "administrator" || account.role === "settlement_manager";
+  const visibleRows = canViewSettlementAmounts ? rows : rows.map(redactServiceCallSettlementAmounts);
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <div className="mb-5 flex items-end justify-between gap-6">
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase text-muted">콜 원장</p>
-          <h1 className="text-2xl font-semibold text-foreground">콜/예약 입력 원장</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">운영월과 날짜별로 실시간콜입력 A:S 의미의 기본 콜 정보를 기록한다.</p>
-        </div>
-        <div className="text-right text-xs text-muted">
-          <div>운영월 상태: {selectedMonth.status}</div>
-          <div>
-            날짜 범위: {selectedMonth.startDate} ~ {selectedMonth.endDate}
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="콜 원장"
+        title="콜/예약 입력 원장"
+        description="운영월과 날짜별로 실시간콜입력 A:S 의미의 기본 콜 정보를 기록한다."
+        meta={
+          <>
+            <div>운영월 상태: {selectedMonth.status}</div>
+            <div>
+              날짜 범위: {selectedMonth.startDate} ~ {selectedMonth.endDate}
+            </div>
+          </>
+        }
+      />
 
       <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
         <label className="grid gap-1 text-xs font-medium text-muted">
@@ -106,7 +108,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
         </button>
       </form>
 
-      <DailySummaryStrip summary={summary} />
+      <DailySummaryStrip summary={summary} showSettlementAmounts={canViewSettlementAmounts} />
       <DailyExpensePanel
         expenses={expenses}
         handlers={options.expenseHandlers}
@@ -119,8 +121,9 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
         isLocked={isLocked}
         operatingMonthId={selectedMonth.id}
         options={options}
-        rows={rows}
+        rows={visibleRows}
         serviceDate={serviceDate}
+        showSettlementColumns={canViewSettlementAmounts}
       />
     </main>
   );

@@ -10,6 +10,7 @@ import {
   listServiceCallStatusHistory,
   listServiceCallFormOptions,
   listServiceCallsForDate,
+  redactServiceCallSettlementAmounts,
   saveBasicServiceCallRow,
   ServiceCallDomainError,
   updateDailyExpense
@@ -604,9 +605,13 @@ describe("service call service", () => {
     assert.equal(row.therapist1?.id, "therapist-1");
     assert.equal(row.therapist2?.staffCode, "THR-002");
     assert.equal(row.earcare?.id, "earcare-1");
-    assert.equal(row.paymentAmount, 0);
-    assert.equal(row.discountAmount, 0);
-    assert.equal(row.calculationStatus, "not_completed");
+    assert.equal(row.paymentAmount, 1400000);
+    assert.equal(row.discountAmount, 100000);
+    assert.equal(row.therapist1Commission, 0);
+    assert.equal(row.therapist2Commission, 0);
+    assert.equal(row.earcarePoolAmount, 0);
+    assert.equal(row.opsCallCredit, 0);
+    assert.equal(row.calculationStatus, "calculated");
     assert.equal(prismaClient.assignments.size, 3);
 
     const saved = [...prismaClient.serviceCalls.values()][0];
@@ -614,6 +619,46 @@ describe("service call service", () => {
     assert.equal(saved.courseId, "course-a");
     assert.equal(saved.status, "예약");
     assert.equal(saved.paymentMethodCode, "현금");
+  });
+
+  it("allows reservation rows to be saved without assigning a room yet", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const row = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: null as any,
+      courseId: "course-a",
+      customerMemo: "오후 방문 예정",
+      status: "예약",
+      prismaClient
+    });
+
+    assert.equal(row.roomId, null);
+    assert.equal(row.roomLabel, "미배정");
+    assert.equal(row.calculationStatus, "not_completed");
+    assert.equal([...prismaClient.serviceCalls.values()][0].roomId, null);
+  });
+
+  it("requires a room before changing a row to an active or completed room status", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    for (const status of ["사용중", "청소중", "방문완료"]) {
+      await assert.rejects(
+        () =>
+          saveBasicServiceCallRow({
+            operatingMonthId: "month-2026-06",
+            serviceDate: "2026-06-10",
+            startTime: "11:00",
+            roomId: null as any,
+            courseId: "course-a",
+            status,
+            prismaClient
+          }),
+        (error: unknown) => error instanceof ServiceCallDomainError && error.code === "ROOM_REQUIRED_FOR_STATUS"
+      );
+    }
   });
 
   it("calculates completed-call payment, fixed discount, commissions, earcare pool, and ops call credit from policy sources", async () => {
@@ -643,6 +688,31 @@ describe("service call service", () => {
     assert.equal(row.opsCallCredit, 1);
   });
 
+  it("redacts settlement-only amounts before rows are sent to non-settlement client views", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const row = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      earcareEmployeeId: "earcare-1",
+      status: "방문완료",
+      prismaClient
+    });
+
+    assert.equal(row.therapist1Commission, 700000);
+    const redacted = redactServiceCallSettlementAmounts(row);
+    assert.equal(redacted.paymentAmount, row.paymentAmount);
+    assert.equal(redacted.discountAmount, row.discountAmount);
+    assert.equal(redacted.therapist1Commission, 0);
+    assert.equal(redacted.therapist2Commission, 0);
+    assert.equal(redacted.earcarePoolAmount, 0);
+    assert.equal(redacted.opsCallCredit, 0);
+  });
+
   it("calculates completed calls when status is the stable VISIT_COMPLETE code", async () => {
     const prismaClient = createMemoryPrisma();
 
@@ -665,7 +735,7 @@ describe("service call service", () => {
     assert.equal(row.therapist1Commission, 700000);
   });
 
-  it("keeps non-completed statuses out of completed-call calculations", async () => {
+  it("keeps non-completed statuses out of settlement while reflecting using-state prepaid revenue", async () => {
     const prismaClient = createMemoryPrisma();
 
     for (const status of ["예약", "사용중", "청소중", "노쇼", "취소"]) {
@@ -681,8 +751,8 @@ describe("service call service", () => {
         prismaClient
       });
 
-      assert.equal(row.calculationStatus, "not_completed");
-      assert.equal(row.paymentAmount, 0);
+      assert.equal(row.calculationStatus, status === "사용중" ? "calculated" : "not_completed");
+      assert.equal(row.paymentAmount, status === "사용중" ? 1400000 : 0);
       assert.equal(row.therapist1Commission, 0);
       assert.equal(row.earcarePoolAmount, 0);
       assert.equal(row.opsCallCredit, 0);
@@ -1602,18 +1672,18 @@ describe("service call service", () => {
       prismaClient
     });
 
-    assert.equal(summary.reservationCount, 1);
+    assert.equal(summary.reservationCount, 9);
     assert.equal(summary.inUseCount, 2);
     assert.equal(summary.cleaningCount, 2);
     assert.equal(summary.completedCount, 3);
     assert.equal(summary.noShowCount, 0);
     assert.equal(summary.canceledCount, 1);
-    assert.equal(summary.paymentTotal, 4600000);
+    assert.equal(summary.paymentTotal, 7600000);
     assert.equal(summary.therapistCommissionTotal, 2500000);
     assert.equal(summary.earcarePoolTotal, 100000);
     assert.equal(summary.discountTotal, 100000);
     assert.equal(summary.expenseTotal, 250000);
-    assert.equal(summary.netSales, 4350000);
+    assert.equal(summary.netSales, 7350000);
     assert.equal(summary.warningCounts.secondTherapistRequired, 1);
     assert.deepEqual(summary.courseSummaries.find((course) => course.courseCode === "A"), {
       courseCode: "A",
@@ -1626,6 +1696,66 @@ describe("service call service", () => {
       completedCount: 1,
       discountCount: 0,
       therapistAssignmentCount: 2
+    });
+  });
+
+  it("summarizes all ledger rows as reservation count and recognizes prepaid revenue once", async () => {
+    const prismaClient = createMemoryPrisma();
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "예약",
+      paymentMethodCode: "CASH",
+      prismaClient
+    });
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "사용중",
+      prismaClient
+    });
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      status: "방문완료",
+      discountTypeCode: "생일자",
+      paymentMethodCode: "현금",
+      prismaClient
+    });
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "취소",
+      paymentMethodCode: "현금",
+      prismaClient
+    });
+
+    const summary = await getDailyCallLedgerSummary({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient
+    });
+
+    assert.equal(summary.reservationCount, 4);
+    assert.equal(summary.paymentTotal, 4400000);
+    assert.deepEqual((summary as any).paymentMethodTotals, {
+      cash: 2900000,
+      card: 0,
+      bank: 0,
+      other: 1500000
     });
   });
 });

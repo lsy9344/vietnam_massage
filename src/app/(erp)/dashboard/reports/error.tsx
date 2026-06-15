@@ -1,16 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { PageHeader } from "@/components/domain/page-header";
 
 export default function ReportsError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const router = useRouter();
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <div className="mb-5">
-        <p className="mb-2 text-xs font-semibold uppercase text-muted">대시보드</p>
-        <h1 className="text-2xl font-semibold text-foreground">그래프 리포트</h1>
-      </div>
+      <PageHeader eyebrow="대시보드" title="그래프 리포트" />
       <section className="border border-danger bg-surface px-4 py-6" role="alert">
         <h2 className="text-base font-semibold text-foreground">그래프 리포트를 불러오지 못했습니다</h2>
         <p className="mt-2 max-w-2xl text-sm text-muted">

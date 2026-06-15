@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/domain/page-header";
 import { StatusBadge } from "@/components/domain/status-badge";
 import { requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
@@ -347,11 +348,11 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   if (!selectedMonth) {
     return (
       <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-        <div className="mb-5">
-          <p className="mb-2 text-xs font-semibold uppercase text-muted">대시보드</p>
-          <h1 className="text-2xl font-semibold text-foreground">그래프 리포트</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">운영월과 조회날짜 기준으로 매출, 코스, 마사지사, 객실, 노쇼/취소 흐름을 조회한다.</p>
-        </div>
+        <PageHeader
+          eyebrow="대시보드"
+          title="그래프 리포트"
+          description="운영월과 조회날짜 기준으로 매출, 코스, 마사지사, 객실, 노쇼/취소 흐름을 조회한다."
+        />
         <section className="border border-border bg-surface px-4 py-8">
           <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
           <p className="mt-2 max-w-2xl text-sm text-muted">그래프 리포트는 운영월 날짜 범위와 선택 조회날짜를 기준으로 조회한다.</p>
@@ -383,19 +384,19 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase text-muted">대시보드</p>
-          <h1 className="text-2xl font-semibold text-foreground">그래프 리포트</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">매출, 코스, 마사지사, 객실, 노쇼/취소 흐름을 그래프로 조회한다.</p>
-        </div>
-        <div className="text-right text-xs text-muted">
-          <div>운영월 상태: {report.operatingMonth.status}</div>
-          <div>
-            날짜 범위: {report.operatingMonth.startDate} ~ {report.operatingMonth.endDate}
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="대시보드"
+        title="그래프 리포트"
+        description="매출, 코스, 마사지사, 객실, 노쇼/취소 흐름을 그래프로 조회한다."
+        meta={
+          <>
+            <div>운영월 상태: {report.operatingMonth.status}</div>
+            <div>
+              날짜 범위: {report.operatingMonth.startDate} ~ {report.operatingMonth.endDate}
+            </div>
+          </>
+        }
+      />
 
       <form className="mb-5 flex flex-wrap items-end gap-3" method="get">
         <label className="grid gap-1 text-xs font-medium text-muted">

@@ -70,20 +70,22 @@ function createDashboardPrisma(options: { operatingMonthMissing?: boolean; noCal
         call("call-noshow", "course-a", "노쇼", [assignment("call-noshow", "THERAPIST_1", "therapist-1")]),
         call("call-canceled", "course-a", "CANCELED", [assignment("call-canceled", "THERAPIST_1", "therapist-1")])
       ];
-  const expenses = [
-    {
-      id: "expense-1",
-      operatingMonthId: operatingMonth.id,
-      expenseDate: dbDate("2026-06-10"),
-      amount: 300000,
-      description: "소모품",
-      handledByEmployeeId: "therapist-1",
-      note: null,
-      isActive: true,
-      createdAt,
-      updatedAt
-    }
-  ];
+  const expenses = options.noCalls
+    ? []
+    : [
+        {
+          id: "expense-1",
+          operatingMonthId: operatingMonth.id,
+          expenseDate: dbDate("2026-06-10"),
+          amount: 300000,
+          description: "소모품",
+          handledByEmployeeId: "therapist-1",
+          note: null,
+          isActive: true,
+          createdAt,
+          updatedAt
+        }
+      ];
 
   function policy(id: string, courseId: string, name: string, basePrice: number, earcarePoolAmount: number, requiresSecondTherapist: boolean) {
     return {
@@ -219,16 +221,26 @@ function createDashboardPrisma(options: { operatingMonthMissing?: boolean; noCal
   } as any;
 }
 
+function todayCostDependencies(overrides: { opsDailyIncentiveTotal?: number; earcarePayoutTotal?: number } = {}) {
+  const opsDailyIncentiveTotal = overrides.opsDailyIncentiveTotal ?? 100000;
+  const earcarePayoutTotal = overrides.earcarePayoutTotal ?? 300000;
+  return {
+    listOpsDailyIncentives: async () => ({ distributedAmount: opsDailyIncentiveTotal }),
+    listEarcareDailySettlements: async () => ({ distributedAmount: earcarePayoutTotal })
+  } as any;
+}
+
 describe("getTodayDashboardMetrics", () => {
-  it("오늘 KPI DTO는 예약/방문완료/노쇼/취소, 비완료 금액 제외, 담당콜, 코스, warning을 조립한다", async () => {
+  it("오늘 KPI DTO는 예약/방문완료/노쇼/취소와 선결제 매출, 비완료 금액 제외 정산, 코스, warning을 조립한다", async () => {
     const result = await getTodayDashboardMetrics({
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
-      prismaClient: createDashboardPrisma()
+      prismaClient: createDashboardPrisma(),
+      dependencies: todayCostDependencies()
     });
 
     assert.deepEqual(result.statusCounts, {
-      reservation: 1,
+      reservation: 9,
       inUse: 0,
       cleaning: 0,
       completed: 6,
@@ -236,12 +248,20 @@ describe("getTodayDashboardMetrics", () => {
       canceled: 1
     });
     assert.deepEqual(result.financials, {
-      paymentTotal: 9400000,
-      netSales: 9100000,
+      paymentTotal: 10900000,
+      netSales: 10600000,
       discountTotal: 100000,
       expenseTotal: 300000,
       earcarePoolTotal: 300000,
-      therapistCommissionTotal: 4300000
+      earcarePayoutTotal: 300000,
+      opsDailyIncentiveTotal: 100000,
+      opsMonthlyIncentiveTotal: 0,
+      therapistCommissionTotal: 4300000,
+      therapistPayoutTotal: 4300000,
+      dailyCostTotal: 5000000,
+      monthlyCostTotal: 0,
+      settlementPayoutTotal: 4700000,
+      netProfit: 5900000
     });
     assert.equal(result.therapistSummary.totalAssignedCallCount, 7);
     assert.equal(result.therapistSummary.totalCommissionAmount, 4300000);
@@ -315,7 +335,8 @@ describe("getTodayDashboardMetrics", () => {
     const result = await getTodayDashboardMetrics({
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
-      prismaClient: createDashboardPrisma({ noCalls: true })
+      prismaClient: createDashboardPrisma({ noCalls: true }),
+      dependencies: todayCostDependencies({ opsDailyIncentiveTotal: 0, earcarePayoutTotal: 0 })
     });
 
     assert.deepEqual(result.statusCounts, {
@@ -327,6 +348,7 @@ describe("getTodayDashboardMetrics", () => {
       canceled: 0
     });
     assert.equal(result.financials.paymentTotal, 0);
+    assert.equal(result.financials.netProfit, 0);
     assert.equal(result.therapistSummary.totalAssignedCallCount, 0);
     assert.equal(result.emptyState.kind, "no_calls");
     assert.equal(result.emptyState.message, "이 날짜의 콜이 없습니다.");
@@ -471,15 +493,20 @@ describe("getMonthlyDashboardMetrics", () => {
     });
 
     assert.deepEqual(result.statusCounts, {
-      reservation: 1,
+      reservation: 9,
       inUse: 0,
       cleaning: 0,
       completed: 6,
       noShow: 1,
       canceled: 1
     });
-    assert.equal(result.financials.paymentTotal, 9400000);
+    assert.equal(result.financials.paymentTotal, 10900000);
     assert.equal(result.financials.discountTotal, 100000);
+    assert.equal(result.financials.opsDailyIncentiveTotal, 100000);
+    assert.equal(result.financials.opsMonthlyIncentiveTotal, 200000);
+    assert.equal(result.financials.dailyCostTotal, 5000000);
+    assert.equal(result.financials.monthlyCostTotal, 200000);
+    assert.equal(result.financials.netProfit, 5700000);
     assert.deepEqual(
       result.courseCompletions.map((course) => [course.courseCode, course.completedCount, course.therapistAssignmentCount]),
       [
@@ -779,6 +806,7 @@ describe("getDashboardGraphReport", () => {
       result.roomStatusDistribution.map((row) => [row.displayStatus, row.count]),
       [
         ["사용중", 1],
+        ["종료임박", 0],
         ["청소중", 1],
         ["예약", 0],
         ["종료확인", 1],

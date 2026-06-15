@@ -30,7 +30,7 @@ function remainingLabel(status: RoomStatusDto) {
 }
 
 export function RoomStatusCard({ status, variant = "default" }: { status: RoomStatusDto; variant?: "default" | "tv" }) {
-  const isAttention = status.displayStatus === "종료확인";
+  const isEndingSoon = status.displayStatus === "종료임박";
   const isEmpty = status.displayStatus === "빈방";
   const isTv = variant === "tv";
 
@@ -41,7 +41,8 @@ export function RoomStatusCard({ status, variant = "default" }: { status: RoomSt
         "grid h-full min-h-56 grid-rows-[auto_auto_1fr] gap-3 border border-border bg-surface p-4",
         "rounded-md",
         isEmpty && "border-dashed border-status-empty bg-surface",
-        isAttention && "status-attention border-status-complete-check",
+        isEndingSoon && "status-attention border-status-ending-soon",
+        status.displayStatus === "종료확인" && "status-attention border-status-complete-check",
         isTv && "min-h-[270px] gap-5 p-6"
       )}
       data-testid="room-status-card"
@@ -65,7 +66,7 @@ export function RoomStatusCard({ status, variant = "default" }: { status: RoomSt
           {status.roomDisplayName}
         </h2>
         <p className={cn("mt-1 line-clamp-2 text-xs text-muted", isTv && "mt-3 text-[22px] font-bold leading-tight")}>
-          {isAttention ? "결제·확인 필요" : isEmpty ? "즉시 가능" : status.guidanceText}
+          {status.displayStatus === "종료확인" ? "결제·확인 필요" : isEndingSoon ? "곧 종료" : isEmpty ? "즉시 가능" : status.guidanceText}
         </p>
       </div>
 

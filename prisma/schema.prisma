@@ -24,6 +24,7 @@ model UserAccount {
   changedServiceCallStatusHistories ServiceCallStatusHistory[]
   confirmedMonthlyClosings MonthlyClosing[]
   changedMigrationVerificationIssueHistories MigrationVerificationIssueHistory[]
+  therapistDailySettlementPayments TherapistDailySettlementPayment[]
 
   @@map("user_accounts")
 }
@@ -51,6 +52,7 @@ model Employee {
   earcareAttendances     EarcareAttendance[]
   opsAttendances         OpsAttendance[]
   therapistAttendances   TherapistAttendance[]
+  therapistDailySettlementPayments TherapistDailySettlementPayment[]
 
   @@unique([employeeGroup, sortOrder], map: "uq_employees_employee_group_sort_order")
   @@map("employees")
@@ -133,6 +135,7 @@ model OperatingMonth {
   earcareAttendances EarcareAttendance[]
   opsAttendances OpsAttendance[]
   therapistAttendances TherapistAttendance[]
+  therapistDailySettlementPayments TherapistDailySettlementPayment[]
   monthlyClosings MonthlyClosing[]
 
   @@map("operating_months")
@@ -219,8 +222,8 @@ model ServiceCall {
   operatingMonth    OperatingMonth             @relation(fields: [operatingMonthId], references: [id])
   serviceDate       DateTime                   @map("service_date") @db.Date
   startTime         String                     @map("start_time")
-  roomId            String                     @map("room_id")
-  room              Room                       @relation(fields: [roomId], references: [id])
+  roomId            String?                    @map("room_id")
+  room              Room?                      @relation(fields: [roomId], references: [id])
   courseId          String                     @map("course_id")
   course            Course                     @relation(fields: [courseId], references: [id])
   customerMemo      String?                    @map("customer_memo")
@@ -348,6 +351,26 @@ model TherapistAttendance {
   @@unique([operatingMonthId, attendanceDate, employeeId], map: "uq_therapist_attendances_month_date_employee")
   @@index([employeeId, attendanceDate], map: "idx_therapist_attendances_employee_date")
   @@map("therapist_attendances")
+}
+
+model TherapistDailySettlementPayment {
+  id                 String         @id @default(cuid())
+  operatingMonthId   String         @map("operating_month_id")
+  operatingMonth     OperatingMonth @relation(fields: [operatingMonthId], references: [id])
+  serviceDate        DateTime       @map("service_date") @db.Date
+  employeeId         String         @map("employee_id")
+  employee           Employee       @relation(fields: [employeeId], references: [id])
+  isPaid             Boolean        @default(false) @map("is_paid")
+  paidAt             DateTime?      @map("paid_at")
+  paidByAccountId    String?        @map("paid_by_account_id")
+  paidByAccount      UserAccount?   @relation(fields: [paidByAccountId], references: [id])
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  @@unique([operatingMonthId, serviceDate, employeeId], map: "uq_therapist_daily_settlement_payments_month_date_employee")
+  @@index([employeeId, serviceDate], map: "idx_therapist_daily_settlement_payments_employee_date")
+  @@index([paidByAccountId, paidAt], map: "idx_therapist_daily_settlement_payments_actor_paid_at")
+  @@map("therapist_daily_settlement_payments")
 }
 
 model CoursePolicy {

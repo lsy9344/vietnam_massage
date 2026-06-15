@@ -100,11 +100,11 @@ describe("room service", () => {
     assert.equal(created.length, 11);
     assert.deepEqual(
       rooms.map((room) => room.displayName),
-      ["101 호실", "102 호실", "103 호실", "201 호실", "202 호실", "203 호실", "301 호실", "302 호실", "303 호실", "401 호실", "402 호실"]
+      ["401 호실", "402 호실", "301 호실", "302 호실", "303 호실", "201 호실", "202 호실", "203 호실", "101 호실", "102 호실", "103 호실"]
     );
     assert.deepEqual(
       rooms.map((room) => room.migrationReferenceName),
-      ["1번방", "2번방", "3번방", "4번방", "5번방", "6번방", "7번방", "8번방", "9번방", "10번방", "11번방"]
+      ["10번방", "11번방", "7번방", "8번방", "9번방", "4번방", "5번방", "6번방", "1번방", "2번방", "3번방"]
     );
     assert.equal(rooms[0].isActive, true);
     assert.equal(prismaClient.auditEvents.length, 11);
@@ -126,7 +126,8 @@ describe("room service", () => {
   it("updates a display name and preserves its stable id and migration reference", async () => {
     const prismaClient = createMemoryPrisma();
     await ensureDefaultRooms({ actorId: "admin-1", prismaClient });
-    const before = (await listRooms({ prismaClient }))[0];
+    const before = (await listRooms({ prismaClient })).find((room) => room.migrationReferenceName === "1번방");
+    assert.ok(before);
 
     const updated = await updateRoomDisplayName({
       actorId: "admin-1",

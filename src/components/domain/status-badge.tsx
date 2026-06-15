@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-export const statusBadgeStates = ["사용중", "예약", "청소중", "종료확인", "빈방"] as const;
+export const statusBadgeStates = ["사용중", "예약", "청소중", "종료확인", "빈방", "종료임박"] as const;
 
 export type StatusBadgeState = (typeof statusBadgeStates)[number];
 
@@ -14,6 +14,10 @@ const statusBadgeConfig: Record<
   사용중: {
     glyph: "●",
     className: "bg-status-active text-status-active-foreground"
+  },
+  종료임박: {
+    glyph: "◴",
+    className: "bg-status-ending-soon text-status-ending-soon-foreground"
   },
   예약: {
     glyph: "◷",

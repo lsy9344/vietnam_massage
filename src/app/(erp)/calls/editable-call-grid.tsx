@@ -33,71 +33,54 @@ type FieldErrors = Record<string, string[]>;
 
 // Shared fixed column widths so the data table and the add-row table align
 // column-for-column. Order matches the header arrays below.
-const CALL_GRID_COLUMN_WIDTHS = [
-  "5.5rem", // 날짜
-  "9rem", // 시간
-  "9rem", // 객실
-  "10rem", // 코스
-  "12rem", // 고객/메모
-  "9rem", // 마사지사1
-  "9rem", // 마사지사2
-  "9rem", // 귀케어 담당
-  "8rem", // 예약상태
-  "9rem", // 할인구분
-  "9rem", // 결제수단
-  "11rem", // 비고
-  "9rem", // 확인값
-  "7rem", // 결제금액
-  "6rem", // 할인
-  "7rem", // 마사지사1수당
-  "7rem", // 마사지사2수당
-  "6.5rem", // 귀케어풀
-  "6rem", // 콜인정
-  "10rem" // 저장상태
+const CALL_GRID_COLUMNS = [
+  { header: "날짜", width: "5.5rem" },
+  { header: "시간", width: "9rem" },
+  { header: "객실", width: "9rem" },
+  { header: "코스", width: "10rem" },
+  { header: "고객/메모", width: "12rem" },
+  { header: "마사지사1", width: "9rem" },
+  { header: "마사지사2", width: "9rem" },
+  { header: "귀케어 담당", width: "9rem" },
+  { header: "예약상태", width: "8rem" },
+  { header: "할인구분", width: "9rem" },
+  { header: "결제수단", width: "9rem" },
+  { header: "비고", width: "11rem" },
+  { header: "확인값", width: "9rem" },
+  { header: "결제금액", width: "8rem" },
+  { header: "할인", width: "6rem" },
+  { header: "마사지사1수당", width: "7rem", settlement: true },
+  { header: "마사지사2수당", width: "7rem", settlement: true },
+  { header: "귀케어풀", width: "6.5rem", settlement: true },
+  { header: "콜인정", width: "6rem", settlement: true },
+  { header: "저장상태", width: "10rem" }
 ] as const;
 
-const CALL_GRID_MIN_WIDTH = "168rem";
+function visibleCallGridColumns(showSettlementColumns: boolean) {
+  return CALL_GRID_COLUMNS.filter((column) => showSettlementColumns || !("settlement" in column && column.settlement));
+}
 
-function CallGridColgroup() {
+function callGridMinWidth(showSettlementColumns: boolean) {
+  return showSettlementColumns ? "169rem" : "142rem";
+}
+
+function CallGridColgroup({ showSettlementColumns }: { showSettlementColumns: boolean }) {
   return (
     <colgroup>
-      {CALL_GRID_COLUMN_WIDTHS.map((width, index) => (
-        <col key={index} style={{ width }} />
+      {visibleCallGridColumns(showSettlementColumns).map((column) => (
+        <col key={column.header} style={{ width: column.width }} />
       ))}
     </colgroup>
   );
 }
 
-const CALL_GRID_HEADERS = [
-  "날짜",
-  "시간",
-  "객실",
-  "코스",
-  "고객/메모",
-  "마사지사1",
-  "마사지사2",
-  "귀케어 담당",
-  "예약상태",
-  "할인구분",
-  "결제수단",
-  "비고",
-  "확인값",
-  "결제금액",
-  "할인",
-  "마사지사1수당",
-  "마사지사2수당",
-  "귀케어풀",
-  "콜인정",
-  "저장상태"
-] as const;
-
-function CallGridHead() {
+function CallGridHead({ showSettlementColumns }: { showSettlementColumns: boolean }) {
   return (
     <thead className="bg-readonly text-xs font-semibold text-foreground">
       <tr>
-        {CALL_GRID_HEADERS.map((header) => (
-          <th className="whitespace-nowrap border-b border-border px-2 py-2 align-middle" key={header}>
-            {header}
+        {visibleCallGridColumns(showSettlementColumns).map((column) => (
+          <th className="whitespace-nowrap border-b border-border px-2 py-2 align-middle" key={column.header}>
+            {column.header}
           </th>
         ))}
       </tr>
@@ -496,13 +479,15 @@ function AddRowForm({
   isLocked,
   operatingMonthId,
   options,
-  serviceDate
+  serviceDate,
+  showSettlementColumns
 }: {
   existingRowCount: number;
   isLocked: boolean;
   operatingMonthId: string;
   options: ServiceCallFormOptions;
   serviceDate: string;
+  showSettlementColumns: boolean;
 }) {
   const [state, formAction, pending] = useActionState<ServiceCallActionState, FormData>(saveBasicServiceCallRowAction, null);
   const disabled = isLocked || pending;
@@ -523,7 +508,7 @@ function AddRowForm({
 
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
       event.preventDefault();
-      const nextCell = moveAdjacentCell({ rowIndex, columnId }, rowCount, event.key as ArrowNavigationKey);
+      const nextCell = moveAdjacentCell({ rowIndex, columnId }, rowCount, event.key as ArrowNavigationKey, EDITABLE_CALL_FIELDS);
       if (isEditableCallField(nextCell.columnId)) {
         focusLedgerCell(nextCell.rowIndex, nextCell.columnId);
       }
@@ -535,9 +520,9 @@ function AddRowForm({
       <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
       <input name="serviceDate" type="hidden" value={serviceDate} />
       <div className="overflow-x-auto">
-        <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: CALL_GRID_MIN_WIDTH }}>
-          <CallGridColgroup />
-          <CallGridHead />
+        <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(showSettlementColumns) }}>
+          <CallGridColgroup showSettlementColumns={showSettlementColumns} />
+          <CallGridHead showSettlementColumns={showSettlementColumns} />
           <tbody>
             <tr className="align-top">
               <td className="border-b border-border px-2 py-2 text-xs text-muted">{serviceDate}</td>
@@ -562,7 +547,6 @@ function AddRowForm({
                   name="roomId"
                   onGridKeyDown={(event) => handleAddRowKeyDown("roomId", event)}
                   options={options.rooms}
-                  required
                   rowIndex={rowIndex}
                 />
                 <InlineError field="roomId" state={state} />
@@ -684,7 +668,7 @@ function AddRowForm({
                   rowIndex={rowIndex}
                 />
               </td>
-              <td className="border-b border-border bg-readonly px-2 py-2" colSpan={7}>
+              <td className="border-b border-border bg-readonly px-2 py-2" colSpan={showSettlementColumns ? 7 : 3}>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button className="h-8 whitespace-nowrap px-3 text-xs" disabled={disabled} type="submit">
                     새 콜 행 추가
@@ -747,6 +731,42 @@ function formatVnd(value: number) {
   return new Intl.NumberFormat("ko-KR").format(value);
 }
 
+function PaymentAmountCell({
+  onKeyDown,
+  row,
+  rowIndex,
+  saveStatus
+}: {
+  onKeyDown?: (event: KeyboardEvent<HTMLTableCellElement>) => void;
+  row: ServiceCallRowDto;
+  rowIndex: number;
+  saveStatus: RowSaveState;
+}) {
+  const isStaleFailedDraft = saveStatus === "error";
+  const canShowAmount = row.calculationStatus === "calculated" && !isStaleFailedDraft;
+  const title = isStaleFailedDraft ? "저장 보류 중인 draft는 재계산값으로 표시하지 않습니다." : row.calculationErrorMessage ?? undefined;
+
+  return (
+    <td
+      className="border-b border-border bg-readonly px-2 py-2 text-right text-xs font-medium text-foreground outline-none focus:ring-1 focus:ring-brand [font-variant-numeric:tabular-nums]"
+      data-call-cell-column="paymentAmount"
+      data-call-cell-row={rowIndex}
+      onKeyDown={onKeyDown}
+      tabIndex={-1}
+    >
+      <span className="sr-only">결제금액</span>
+      <span className="grid gap-0.5" title={title}>
+        {canShowAmount && row.discountAmount > 0 && row.basePrice > row.paymentAmount ? (
+          <span className="text-[11px] text-muted line-through">{formatVnd(row.basePrice)}</span>
+        ) : null}
+        <span className={canShowAmount && row.discountAmount > 0 ? "font-bold text-foreground" : ""}>
+          {canShowAmount ? formatVnd(row.paymentAmount) : "—"}
+        </span>
+      </span>
+    </td>
+  );
+}
+
 function ComputedCell({
   columnId,
   label,
@@ -787,13 +807,15 @@ function EditableCallRow({
   options,
   row,
   rowCount,
-  rowIndex
+  rowIndex,
+  showSettlementColumns
 }: {
   isLocked: boolean;
   options: ServiceCallFormOptions;
   row: ServiceCallRowDto;
   rowCount: number;
   rowIndex: number;
+  showSettlementColumns: boolean;
 }) {
   const [draft, setDraft] = useState<ServiceCallAutosaveInput>(() => draftFromRow(row));
   const [serverRow, setServerRow] = useState<ServiceCallRowDto>(row);
@@ -802,6 +824,16 @@ function EditableCallRow({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [savedAt, setSavedAt] = useState(row.savedAt);
   const [, startTransition] = useTransition();
+  const navigableFields = useMemo(
+    () => [
+      ...EDITABLE_CALL_FIELDS,
+      "paymentAmount",
+      "discountAmount",
+      ...(showSettlementColumns ? ["therapist1Commission", "therapist2Commission", "earcarePoolAmount", "opsCallCredit"] : []),
+      "calculationStatus"
+    ],
+    [showSettlementColumns]
+  );
 
   function updateDraft<Key extends keyof ServiceCallAutosaveInput>(key: Key, value: ServiceCallAutosaveInput[Key]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -871,7 +903,7 @@ function EditableCallRow({
 
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
       event.preventDefault();
-      const nextCell = moveAdjacentCell({ rowIndex, columnId }, rowCount, event.key as ArrowNavigationKey);
+      const nextCell = moveAdjacentCell({ rowIndex, columnId }, rowCount, event.key as ArrowNavigationKey, navigableFields);
       focusLedgerCell(nextCell.rowIndex, nextCell.columnId);
     }
   }
@@ -882,7 +914,7 @@ function EditableCallRow({
     }
 
     event.preventDefault();
-    const nextCell = moveAdjacentCell({ rowIndex, columnId }, rowCount, event.key as ArrowNavigationKey);
+    const nextCell = moveAdjacentCell({ rowIndex, columnId }, rowCount, event.key as ArrowNavigationKey, navigableFields);
     focusLedgerCell(nextCell.rowIndex, nextCell.columnId);
   }
 
@@ -915,13 +947,12 @@ function EditableCallRow({
           label="객실"
           name="roomId"
           onBlur={() => commit()}
-          onChange={(value) => updateDraft("roomId", value)}
-          onCommitValue={(value) => updateDraftAndCommit("roomId", value)}
+          onChange={(value) => updateDraft("roomId", nullableValue(value))}
+          onCommitValue={(value) => updateDraftAndCommit("roomId", nullableValue(value))}
           onGridKeyDown={(event) => handleGridKeyDown("roomId", event)}
           options={options.rooms}
-          required
           rowIndex={rowIndex}
-          value={draft.roomId}
+          value={draft.roomId ?? ""}
         />
       </td>
       <td className="border-b border-border px-2 py-2">
@@ -1077,14 +1108,11 @@ function EditableCallRow({
           value={draft.confirmationCode ?? ""}
         />
       </td>
-      <ComputedCell
-        columnId="paymentAmount"
-        label="결제금액"
+      <PaymentAmountCell
         onKeyDown={(event) => handleReadonlyKeyDown("paymentAmount", event)}
         row={serverRow}
         rowIndex={rowIndex}
         saveStatus={saveStatus}
-        value={serverRow.paymentAmount}
       />
       <ComputedCell
         columnId="discountAmount"
@@ -1095,42 +1123,46 @@ function EditableCallRow({
         saveStatus={saveStatus}
         value={serverRow.discountAmount}
       />
-      <ComputedCell
-        columnId="therapist1Commission"
-        label="마사지사1수당"
-        onKeyDown={(event) => handleReadonlyKeyDown("therapist1Commission", event)}
-        row={serverRow}
-        rowIndex={rowIndex}
-        saveStatus={saveStatus}
-        value={serverRow.therapist1Commission}
-      />
-      <ComputedCell
-        columnId="therapist2Commission"
-        label="마사지사2수당"
-        onKeyDown={(event) => handleReadonlyKeyDown("therapist2Commission", event)}
-        row={serverRow}
-        rowIndex={rowIndex}
-        saveStatus={saveStatus}
-        value={serverRow.therapist2Commission}
-      />
-      <ComputedCell
-        columnId="earcarePoolAmount"
-        label="귀케어풀"
-        onKeyDown={(event) => handleReadonlyKeyDown("earcarePoolAmount", event)}
-        row={serverRow}
-        rowIndex={rowIndex}
-        saveStatus={saveStatus}
-        value={serverRow.earcarePoolAmount}
-      />
-      <ComputedCell
-        columnId="opsCallCredit"
-        label="콜인정"
-        onKeyDown={(event) => handleReadonlyKeyDown("opsCallCredit", event)}
-        row={serverRow}
-        rowIndex={rowIndex}
-        saveStatus={saveStatus}
-        value={serverRow.opsCallCredit}
-      />
+      {showSettlementColumns ? (
+        <>
+          <ComputedCell
+            columnId="therapist1Commission"
+            label="마사지사1수당"
+            onKeyDown={(event) => handleReadonlyKeyDown("therapist1Commission", event)}
+            row={serverRow}
+            rowIndex={rowIndex}
+            saveStatus={saveStatus}
+            value={serverRow.therapist1Commission}
+          />
+          <ComputedCell
+            columnId="therapist2Commission"
+            label="마사지사2수당"
+            onKeyDown={(event) => handleReadonlyKeyDown("therapist2Commission", event)}
+            row={serverRow}
+            rowIndex={rowIndex}
+            saveStatus={saveStatus}
+            value={serverRow.therapist2Commission}
+          />
+          <ComputedCell
+            columnId="earcarePoolAmount"
+            label="귀케어풀"
+            onKeyDown={(event) => handleReadonlyKeyDown("earcarePoolAmount", event)}
+            row={serverRow}
+            rowIndex={rowIndex}
+            saveStatus={saveStatus}
+            value={serverRow.earcarePoolAmount}
+          />
+          <ComputedCell
+            columnId="opsCallCredit"
+            label="콜인정"
+            onKeyDown={(event) => handleReadonlyKeyDown("opsCallCredit", event)}
+            row={serverRow}
+            rowIndex={rowIndex}
+            saveStatus={saveStatus}
+            value={serverRow.opsCallCredit}
+          />
+        </>
+      ) : null}
       <td
         className="border-b border-border bg-readonly px-2 py-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-brand"
         data-call-cell-column="calculationStatus"
@@ -1171,13 +1203,15 @@ export function EditableCallGrid({
   operatingMonthId,
   options,
   rows,
-  serviceDate
+  serviceDate,
+  showSettlementColumns
 }: {
   isLocked: boolean;
   operatingMonthId: string;
   options: ServiceCallFormOptions;
   rows: ServiceCallRowDto[];
   serviceDate: string;
+  showSettlementColumns: boolean;
 }) {
   const columns = useMemo<ColumnDef<ServiceCallRowDto>[]>(
     () => [
@@ -1185,13 +1219,17 @@ export function EditableCallGrid({
       ...EDITABLE_CALL_FIELDS.map((field) => ({ accessorKey: field, header: field })),
       { accessorKey: "paymentAmount", header: "결제금액" },
       { accessorKey: "discountAmount", header: "할인" },
-      { accessorKey: "therapist1Commission", header: "마사지사1수당" },
-      { accessorKey: "therapist2Commission", header: "마사지사2수당" },
-      { accessorKey: "earcarePoolAmount", header: "귀케어풀" },
-      { accessorKey: "opsCallCredit", header: "콜인정" },
+      ...(showSettlementColumns
+        ? [
+            { accessorKey: "therapist1Commission", header: "마사지사1수당" },
+            { accessorKey: "therapist2Commission", header: "마사지사2수당" },
+            { accessorKey: "earcarePoolAmount", header: "귀케어풀" },
+            { accessorKey: "opsCallCredit", header: "콜인정" }
+          ]
+        : []),
       { accessorKey: "calculationStatus", header: "저장상태" }
     ],
-    []
+    [showSettlementColumns]
   );
   const table = useReactTable({
     columns,
@@ -1223,9 +1261,9 @@ export function EditableCallGrid({
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: CALL_GRID_MIN_WIDTH }}>
-            <CallGridColgroup />
-            <CallGridHead />
+          <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(showSettlementColumns) }}>
+            <CallGridColgroup showSettlementColumns={showSettlementColumns} />
+            <CallGridHead showSettlementColumns={showSettlementColumns} />
             <tbody>
               {table.getRowModel().rows.map((tableRow, index) => (
                 <EditableCallRow
@@ -1235,6 +1273,7 @@ export function EditableCallGrid({
                   row={tableRow.original}
                   rowCount={table.getRowModel().rows.length + 1}
                   rowIndex={index}
+                  showSettlementColumns={showSettlementColumns}
                 />
               ))}
             </tbody>
@@ -1248,6 +1287,7 @@ export function EditableCallGrid({
         operatingMonthId={operatingMonthId}
         options={options}
         serviceDate={serviceDate}
+        showSettlementColumns={showSettlementColumns}
       />
     </section>
   );

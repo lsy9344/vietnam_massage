@@ -135,7 +135,7 @@ describe("Story 7.2 migration calculation comparison", () => {
     ]);
   });
 
-  it("대조: 방문완료만 결제, 할인, 수당, 귀케어 풀, 콜인정 계산에 포함한다", async () => {
+  it("대조: 선결제 매출은 일별 요약에 포함하고 정산 계산은 방문완료 기준으로 유지한다", async () => {
     const prismaClient = createMigrationCalculationPrisma();
     const calculations = await listCompletedServiceCallCalculationsForDate({ operatingMonthId: monthId, serviceDate: comparisonDate, prismaClient });
     assertMigrationComparisonEqual({

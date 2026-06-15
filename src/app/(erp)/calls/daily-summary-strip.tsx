@@ -13,7 +13,7 @@ function Kpi({ label, value, danger }: { label: string; value: string; danger?: 
   );
 }
 
-export function DailySummaryStrip({ summary }: { summary: DailyCallLedgerSummaryDto }) {
+export function DailySummaryStrip({ summary, showSettlementAmounts }: { summary: DailyCallLedgerSummaryDto; showSettlementAmounts: boolean }) {
   return (
     <section className="mb-4 border border-border bg-surface" aria-label="일별 요약">
       <div className="flex flex-wrap border-b border-border">
@@ -23,11 +23,21 @@ export function DailySummaryStrip({ summary }: { summary: DailyCallLedgerSummary
         <Kpi label="방문완료" value={`${formatNumber(summary.completedCount)}건`} />
         <Kpi label="노쇼/취소" value={`${formatNumber(summary.noShowCount)} / ${formatNumber(summary.canceledCount)}`} />
         <Kpi label="결제합계" value={`${formatNumber(summary.paymentTotal)} VND`} />
-        <Kpi label="마사지사정산" value={`${formatNumber(summary.therapistCommissionTotal)} VND`} />
-        <Kpi label="귀케어풀" value={`${formatNumber(summary.earcarePoolTotal)} VND`} />
         <Kpi label="할인합계" value={`${formatNumber(summary.discountTotal)} VND`} />
         <Kpi label="지출합계" value={`${formatNumber(summary.expenseTotal)} VND`} danger={summary.expenseTotal > 0} />
         <Kpi label="순매출" value={`${formatNumber(summary.netSales)} VND`} danger={summary.netSales < 0} />
+        {showSettlementAmounts ? (
+          <>
+            <Kpi label="마사지사정산" value={`${formatNumber(summary.therapistCommissionTotal)} VND`} />
+            <Kpi label="귀케어풀" value={`${formatNumber(summary.earcarePoolTotal)} VND`} />
+          </>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap border-b border-border bg-background/60">
+        <Kpi label="현금" value={`${formatNumber(summary.paymentMethodTotals.cash)} VND`} />
+        <Kpi label="카드" value={`${formatNumber(summary.paymentMethodTotals.card)} VND`} />
+        <Kpi label="계좌" value={`${formatNumber(summary.paymentMethodTotals.bank)} VND`} />
+        <Kpi label="기타" value={`${formatNumber(summary.paymentMethodTotals.other)} VND`} />
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] border-collapse text-left text-xs">

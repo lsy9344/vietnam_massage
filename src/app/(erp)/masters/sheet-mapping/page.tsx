@@ -11,6 +11,7 @@ import {
   type MigrationVerificationFilters,
   type MigrationVerificationSheetRow
 } from "@/modules/migration/migration-verification-report";
+import { PageHeader } from "@/components/domain/page-header";
 
 // Story 7.1 compatibility marker: report service still consumes getSheetMappingSummary().
 
@@ -314,21 +315,19 @@ export default async function SheetMappingPage({ searchParams }: { searchParams:
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase text-muted">마스터 설정</p>
-          <h1 className="text-2xl font-semibold text-foreground">시트 기능 매핑표</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">
-            원본 엑셀 11개 visible sheet와 숨김 목록 sheet의 매핑, Story 7.2 계산 대조, 출시 전 열린 위험을 한 화면에서 확인한다.
-          </p>
-        </div>
-        <div className="text-right text-xs text-muted">
-          <div>기준: 기능 보존율 100%</div>
-          <div>생성 {formatDateTime(report.generatedAt)}</div>
-          <div>{canWrite ? "관리자 상태 변경 가능" : "조회 전용"}</div>
-          <div>read_only_viewer 쓰기 작업 없음 · 운영 DB 변경 없음</div>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="마스터 설정"
+        title="시트 기능 매핑표"
+        description="원본 엑셀 11개 visible sheet와 숨김 목록 sheet의 매핑, Story 7.2 계산 대조, 출시 전 열린 위험을 한 화면에서 확인한다."
+        meta={
+          <>
+            <div>기준: 기능 보존율 100%</div>
+            <div>생성 {formatDateTime(report.generatedAt)}</div>
+            <div>{canWrite ? "관리자 상태 변경 가능" : "조회 전용"}</div>
+            <div>read_only_viewer 쓰기 작업 없음 · 운영 DB 변경 없음</div>
+          </>
+        }
+      />
 
       <section className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5" aria-label="이관 검증 요약">
         <SummaryTile

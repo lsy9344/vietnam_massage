@@ -136,6 +136,10 @@ function effectiveForMonth(rule: OpsMonthlyIncentiveRuleRecord, monthKey: string
   return rule.isActive && rule.effectiveFromMonth <= monthKey && (!rule.effectiveToMonth || rule.effectiveToMonth >= monthKey);
 }
 
+function isCompletedStatus(status: string) {
+  return status === "방문완료" || status === "VISIT_COMPLETE";
+}
+
 function selectRule(input: { rules: OpsMonthlyIncentiveRuleRecord[]; monthKey: string; monthlyOpsCallCredit: number }) {
   const effectiveRules = input.rules
     .filter((rule) => effectiveForMonth(rule, input.monthKey))
@@ -174,7 +178,7 @@ function selectRule(input: { rules: OpsMonthlyIncentiveRuleRecord[]; monthKey: s
 
 function warningCounts(rows: Awaited<ReturnType<typeof listServiceCallsForOperatingMonth>>): OpsMonthlyIncentiveWarningCounts {
   return {
-    notCompleted: rows.filter((row) => row.calculationStatus === "not_completed").length,
+    notCompleted: rows.filter((row) => !isCompletedStatus(row.status)).length,
     coursePolicyMissing: rows.filter((row) => row.calculationStatus === "course_policy_missing").length,
     therapistRateMissing: rows.filter((row) => row.calculationStatus === "therapist_rate_missing").length,
     secondTherapistRequired: rows.filter((row) => row.calculationStatus === "second_therapist_required").length

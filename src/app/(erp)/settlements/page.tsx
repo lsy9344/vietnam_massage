@@ -8,6 +8,9 @@ import {
   type TherapistAttendanceForDateDto
 } from "@/modules/settlements/therapist-attendance-service";
 import { TherapistAttendanceTable } from "@/app/(erp)/settlements/therapist-attendance-table";
+import { setTherapistDailySettlementPaymentAction } from "@/app/(erp)/settlements/actions";
+import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
+import { PageHeader } from "@/components/domain/page-header";
 
 type SettlementsPageSearchParams = {
   operatingMonthId?: string;
@@ -29,6 +32,18 @@ const roleLabel = {
 
 function formatVnd(amount: number) {
   return `${new Intl.NumberFormat("ko-KR").format(amount)} VND`;
+}
+
+function formatKstDateTime(value: string | null) {
+  if (!value) return null;
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(new Date(value));
 }
 
 function warningSummary(result: TherapistDailySettlementResultDto) {
@@ -63,13 +78,11 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
   if (!selectedMonth) {
     return (
       <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-        <div className="mb-5 flex items-end justify-between gap-6">
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase text-muted">정산</p>
-            <h1 className="text-2xl font-semibold text-foreground">마사지사 일일정산</h1>
-            <p className="mt-2 max-w-3xl text-sm text-muted">방문완료 콜의 마사지사1/2 담당 건과 코스별 수당 근거를 조회한다.</p>
-          </div>
-        </div>
+        <PageHeader
+          eyebrow="정산"
+          title="마사지사 일일정산"
+          description="방문완료 콜의 마사지사1/2 담당 건과 코스별 수당 근거를 조회한다."
+        />
         <SettlementTabs />
         <section className="border border-border bg-surface px-4 py-8">
           <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
@@ -116,23 +129,25 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
       attendanceResult.reason instanceof Error ? attendanceResult.reason.message : "출퇴근 입력을 조회하지 못했습니다.";
   }
 
+  // 잠금 여부는 운영월 상태(항상 조회됨)를 기준으로 판단한다. 출퇴근 조회가 실패해도
+  // 잠긴 운영월에서 지급완료 버튼이 노출됐다가 서버에서 거절되는 UX를 막는다.
+  const isMonthLocked = isOperatingMonthPayoutLocked(selectedMonth.status) || (attendance?.isLocked ?? false);
+
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <div className="mb-5 flex items-end justify-between gap-6">
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase text-muted">정산</p>
-          <h1 className="text-2xl font-semibold text-foreground">마사지사 일일정산</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">
-            방문완료 콜 기준으로 마사지사별 담당 콜, 코스별 수당, 정책 상태 근거를 조회하고 출퇴근 시간과 만근 인정을 함께 관리한다.
-          </p>
-        </div>
-        <div className="text-right text-xs text-muted">
-          <div>운영월 상태: {selectedMonth.status}</div>
-          <div>
-            날짜 범위: {selectedMonth.startDate} ~ {selectedMonth.endDate}
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="정산"
+        title="마사지사 일일정산"
+        description="방문완료 콜 기준으로 마사지사별 담당 콜, 코스별 수당, 정책 상태 근거를 조회하고 출퇴근 시간과 만근 인정을 함께 관리한다."
+        meta={
+          <>
+            <div>운영월 상태: {selectedMonth.status}</div>
+            <div>
+              날짜 범위: {selectedMonth.startDate} ~ {selectedMonth.endDate}
+            </div>
+          </>
+        }
+      />
 
       <SettlementTabs />
 
@@ -169,7 +184,7 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
         </button>
       </form>
 
-      {attendance?.isLocked ? (
+      {isMonthLocked ? (
         <section className="mb-4 border border-danger bg-surface px-4 py-3" role="status">
           <h2 className="text-sm font-semibold text-danger">잠긴 운영월입니다. 마감확정 또는 잠금 운영월입니다</h2>
           <p className="mt-1 text-sm text-muted">이 운영월의 출퇴근 시간은 수정할 수 없습니다. 입력 항목은 읽기 전용으로 표시됩니다.</p>
@@ -190,7 +205,7 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
         </section>
       ) : result ? (
         <>
-          <section aria-label="마사지사 일일정산 요약" className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <section aria-label="마사지사 일일정산 요약" className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <div className="border border-border bg-surface px-4 py-3">
               <div className="text-xs font-medium text-muted">정산 대상 마사지사</div>
               <div className="mt-1 text-xl font-semibold text-foreground">{result.settlements.length}명</div>
@@ -208,6 +223,12 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
               </div>
             </div>
             <div className="border border-border bg-surface px-4 py-3">
+              <div className="text-xs font-medium text-muted">지급완료</div>
+              <div className="mt-1 text-xl font-semibold text-foreground">
+                {result.settlements.filter((row) => row.paymentStatus.isPaid).length} / {result.settlements.length}명
+              </div>
+            </div>
+            <div className="border border-border bg-surface px-4 py-3">
               <div className="text-xs font-medium text-muted">정책 warning / 제외 콜</div>
               <div className="mt-1 text-xl font-semibold text-foreground">
                 {warningSummary(result)}건 / {result.excludedCallCount}건
@@ -222,12 +243,13 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
             </section>
           ) : (
             <section className="overflow-x-auto border border-border bg-surface">
-              <table className="min-w-[1120px] w-full border-collapse text-sm">
+              <table className="min-w-[1240px] w-full border-collapse text-sm">
                 <thead className="bg-readonly text-left text-xs font-semibold uppercase text-muted">
                   <tr>
                     <th className="border-b border-border px-3 py-2">마사지사</th>
                     <th className="border-b border-border px-3 py-2 text-right">담당 콜</th>
                     <th className="border-b border-border px-3 py-2 text-right">당일정산</th>
+                    <th className="border-b border-border px-3 py-2">지급완료</th>
                     {courseCodes.map((courseCode) => (
                       <th key={courseCode} className="border-b border-border px-3 py-2 text-right">
                         {courseCode} 수량/금액
@@ -245,6 +267,31 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">{settlement.totalCallCount}건</td>
                       <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(settlement.totalCommissionAmount)}</td>
+                      <td className="px-3 py-2">
+                        <div
+                          className={
+                            settlement.paymentStatus.isPaid
+                              ? "inline-flex border border-status-active bg-status-active px-2 py-1 text-xs font-semibold text-status-active-foreground"
+                              : "inline-flex border border-border bg-readonly px-2 py-1 text-xs font-semibold text-muted"
+                          }
+                        >
+                          {settlement.paymentStatus.isPaid ? "지급완료" : "미지급"}
+                        </div>
+                        {settlement.paymentStatus.isPaid ? (
+                          <div className="mt-1 text-xs text-muted">{formatKstDateTime(settlement.paymentStatus.paidAt)}</div>
+                        ) : null}
+                        {isMonthLocked ? null : (
+                          <form action={setTherapistDailySettlementPaymentAction} className="mt-2">
+                            <input name="operatingMonthId" type="hidden" value={selectedMonth.id} />
+                            <input name="serviceDate" type="hidden" value={serviceDate} />
+                            <input name="employeeId" type="hidden" value={settlement.employeeId} />
+                            <input name="isPaid" type="hidden" value={settlement.paymentStatus.isPaid ? "false" : "true"} />
+                            <button className="h-8 border border-border bg-background px-2 text-xs font-semibold text-foreground hover:bg-readonly" type="submit">
+                              {settlement.paymentStatus.isPaid ? "완료 취소" : "지급완료"}
+                            </button>
+                          </form>
+                        )}
+                      </td>
                       {courseCodes.map((courseCode) => {
                         const summary = settlement.courseBreakdown[courseCode];
                         return (
