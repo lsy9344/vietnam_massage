@@ -423,6 +423,23 @@ describe("room status service", () => {
     assert.equal(room101.guidanceText, "종료 10분 전입니다. 결제와 다음 안내를 준비하세요.");
   });
 
+  it("keeps in-use rooms with more than 10 minutes remaining as 사용중", async () => {
+    const { client, addCall } = createMemoryPrisma();
+    addCall({ id: "call-not-ending-soon", roomId: "room-101", status: "사용중", startTime: "11:00", courseId: "course-a" });
+
+    const statuses = await listRoomStatuses({
+      operatingMonthId: "month-2034-06",
+      serviceDate: "2034-06-05",
+      now: new Date("2034-06-05T11:49:00.000+09:00"),
+      prismaClient: client
+    });
+
+    const room101 = statusByRoom(statuses, "room-101");
+    assert.equal(room101.displayStatus, "사용중");
+    assert.equal(room101.sourceCallStatus, "사용중");
+    assert.equal(room101.remainingMinutes, 11);
+  });
+
   it("keeps active occupancy when course policy is missing and nulls time calculation fields", async () => {
     const { client, addCall } = createMemoryPrisma();
     addCall({ id: "call-missing-policy", roomId: "room-101", status: "사용중", startTime: "11:00", courseId: "course-missing-policy" });

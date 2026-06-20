@@ -340,6 +340,53 @@ const earcareDayResults = {
   }
 } as const;
 
+function financialDayResult(overrides: Partial<{
+  paymentTotal: number;
+  netSales: number;
+  discountTotal: number;
+  expenseTotal: number;
+  earcarePoolTotal: number;
+  therapistCommissionTotal: number;
+}> = {}) {
+  return {
+    reservationCount: 0,
+    inUseCount: 0,
+    cleaningCount: 0,
+    completedCount: 0,
+    noShowCount: 0,
+    canceledCount: 0,
+    paymentTotal: 0,
+    netSales: 0,
+    discountTotal: 0,
+    expenseTotal: 0,
+    earcarePoolTotal: 0,
+    therapistCommissionTotal: 0,
+    paymentMethodTotals: { cash: 0, card: 0, bank: 0, other: 0 },
+    courseSummaries: [],
+    warningCounts: { coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
+    ...overrides
+  };
+}
+
+const financialDayResults = {
+  "2026-06-01": financialDayResult({
+    paymentTotal: 3000000,
+    netSales: 2850000,
+    discountTotal: 100000,
+    expenseTotal: 150000,
+    earcarePoolTotal: 100000,
+    therapistCommissionTotal: 1600000
+  }),
+  "2026-06-02": financialDayResult({
+    paymentTotal: 1000000,
+    netSales: 950000,
+    discountTotal: 0,
+    expenseTotal: 50000,
+    earcarePoolTotal: 50000,
+    therapistCommissionTotal: 700000
+  })
+} as const;
+
 function createDependencies(options: { fullAttendanceResult?: TherapistFullAttendanceRecognitionResultDto; therapistResults?: Record<string, unknown> } = {}) {
   const calledDates: string[] = [];
 
@@ -409,6 +456,39 @@ function createDependencies(options: { fullAttendanceResult?: TherapistFullAtten
       async listEarcareDailySettlements({ serviceDate }: { serviceDate: string }) {
         calledDates.push(`earcare:${serviceDate}`);
         return earcareDayResults[serviceDate as keyof typeof earcareDayResults] as any;
+      },
+      async getDailyCallLedgerSummary({ serviceDate }: { serviceDate: string }) {
+        calledDates.push(`financial:${serviceDate}`);
+        return financialDayResults[serviceDate as keyof typeof financialDayResults] ?? financialDayResult();
+      },
+      async listCompletedServiceCallCalculationsForOperatingMonth() {
+        calledDates.push("completed-calculations");
+        return [
+          {
+            serviceCallId: "call-a",
+            serviceDate: "2026-06-01",
+            courseId: "course-a",
+            courseCode: "A",
+            basePrice: 3000000,
+            paymentAmount: 3000000,
+            discountAmount: 0,
+            earcarePoolAmount: 100000,
+            opsCallCredit: 1,
+            therapistAssignments: [{ role: "THERAPIST_1", employeeId: "therapist-1", commissionAmount: 1600000 }]
+          },
+          {
+            serviceCallId: "call-b",
+            serviceDate: "2026-06-02",
+            courseId: "course-b",
+            courseCode: "B",
+            basePrice: 1000000,
+            paymentAmount: 1000000,
+            discountAmount: 0,
+            earcarePoolAmount: 50000,
+            opsCallCredit: 1,
+            therapistAssignments: [{ role: "THERAPIST_1", employeeId: "therapist-1", commissionAmount: 700000 }]
+          }
+        ];
       }
     }
   };
@@ -432,7 +512,10 @@ describe("listMonthlyClosingPreview", () => {
       "ops:2026-06-02",
       "ops-monthly",
       "earcare:2026-06-01",
-      "earcare:2026-06-02"
+      "earcare:2026-06-02",
+      "financial:2026-06-01",
+      "financial:2026-06-02",
+      "completed-calculations"
     ]);
     assert.equal(result.startDate, "2026-06-01");
     assert.equal(result.endDate, "2026-06-02");
@@ -458,11 +541,26 @@ describe("listMonthlyClosingPreview", () => {
     assert.equal(result.earcare.earcarePoolTotal, 150000);
     assert.equal(result.earcare.distributedAmount, 100000);
     assert.equal(result.earcare.undistributedAmount, 50000);
+    assert.deepEqual(result.financials, {
+      paymentTotal: 4000000,
+      netSales: 3800000,
+      discountTotal: 100000,
+      expenseTotal: 200000,
+      earcarePoolTotal: 150000,
+      therapistCommissionTotal: 2300000
+    });
     assert.equal(result.totals.therapistPayoutAmount, 2300000);
     assert.equal(result.totals.opsDailyIncentiveAmount, 100000);
     assert.equal(result.totals.opsMonthlyIncentiveAmount, 3000000);
     assert.equal(result.totals.earcarePayoutAmount, 100000);
     assert.equal(result.totals.grandPayoutAmount, 5500000);
+    assert.equal((result as any).dashboardFinancials.dailyCostTotal, 2700000);
+    assert.equal((result as any).dashboardFinancials.monthlyCostTotal, 3000000);
+    assert.equal((result as any).dashboardFinancials.settlementPayoutTotal, 5500000);
+    assert.equal((result as any).dashboardFinancials.netProfit, -1700000);
+    assert.equal((result as any).graphReport.dailyRevenueTrend[0].paymentTotal, 3000000);
+    assert.equal((result as any).graphReport.courseMix[0].paymentTotal, 3000000);
+    assert.equal((result as any).graphReport.therapistCallRanking[0].employeeId, "therapist-1");
     assert.equal(result.evidence.sourceDayCount, 2);
     assert.equal(result.evidence.includedCallCount, 8);
     assert.equal(result.evidence.excludedCallCount, 3);

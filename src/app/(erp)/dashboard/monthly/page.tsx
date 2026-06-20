@@ -47,7 +47,7 @@ function KpiTile({ label, value, note, tone = "default" }: { label: string; valu
   );
 }
 
-function StatusCountTile({ label, value }: { label: "예약" | "사용중" | "청소중" | "방문완료" | "노쇼" | "취소"; value: number }) {
+function StatusCountTile({ label, value }: { label: string; value: number }) {
   return (
     <div className="border border-border bg-surface px-4 py-3">
       <div className="flex items-center justify-between gap-3">
@@ -127,6 +127,39 @@ function EmptyOrWarningState({ metrics }: { metrics: MonthlyDashboardMetricsDto 
         정책 누락 {metrics.warningCounts.callLedger.coursePolicyMissing}건, 수당 누락 {metrics.warningCounts.callLedger.therapistRateMissing}건,
         D코스 마사지사2 필요 {metrics.warningCounts.callLedger.secondTherapistRequired}건
       </p>
+    </section>
+  );
+}
+
+function MonthlyMoneyKpis({ metrics }: { metrics: MonthlyDashboardMetricsDto }) {
+  // 마감확정/잠금 월인데 확정 스냅샷이 없으면, 현재 재계산값으로 금액 KPI를 대체하지 않는다.
+  // (잠금 월은 확정 스냅샷만이 신뢰 가능한 금액 기준이다.)
+  if (metrics.sourceBasis.kind === "snapshot_missing" || !metrics.financials) {
+    return (
+      <section className="border border-danger bg-surface px-4 py-5" role="alert" aria-label="월간 금액 KPI 표시 보류">
+        <h2 className="text-base font-semibold text-foreground">월간 금액 KPI를 표시하지 않습니다</h2>
+        <p className="mt-2 text-sm text-muted">
+          마감확정 또는 잠금 운영월의 결제합계·순이익·비용 지표는 확정 스냅샷에서만 산출합니다. 스냅샷이 없어 현재 재계산값으로 대체하지 않았습니다.
+        </p>
+      </section>
+    );
+  }
+
+  const financials = metrics.financials;
+
+  return (
+    <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-4" aria-label="월간 금액 KPI">
+      <KpiTile label="결제합계" value={formatVnd(financials.paymentTotal)} tone="strong" />
+      <KpiTile label="월간 순이익" value={formatVnd(financials.netProfit)} note="결제합계 - 일일비용 - 월간비용" tone="strong" />
+      <KpiTile label="할인합계" value={formatVnd(financials.discountTotal)} />
+      <KpiTile label="지출합계" value={formatVnd(financials.expenseTotal)} tone="cost" />
+      <KpiTile label="일일비용 합계" value={formatVnd(financials.dailyCostTotal)} note="지출, 마사지사 정산, 귀케어, 일일인센" tone="cost" />
+      <KpiTile label="월간비용 합계" value={formatVnd(financials.monthlyCostTotal)} note="운영팀 월인센, 만근수당, 갯수왕" tone="cost" />
+      <KpiTile label="운영팀 월인센" value={formatVnd(financials.opsMonthlyIncentiveTotal)} tone="cost" />
+      <KpiTile label="만근수당" value={formatVnd(financials.fullAttendanceAllowanceTotal)} tone="cost" />
+      <KpiTile label="갯수왕" value={formatVnd(financials.countKingBonusTotal)} tone="cost" />
+      <KpiTile label="전체 지급 합계" value={formatVnd(financials.settlementPayoutTotal)} tone="cost" />
+      <KpiTile label="귀케어 풀" value={formatVnd(financials.earcarePoolTotal)} />
     </section>
   );
 }
@@ -214,7 +247,8 @@ export default async function MonthlyDashboardPage({ searchParams }: { searchPar
     operatingMonthId: selectedMonth.id
   });
   const statusCounts = [
-    ["예약", metrics.statusCounts.reservation],
+    // REQ-009: 예약건수는 상태가 아니라 원장에 등록된 전체 건수다(방문완료·노쇼·취소로 바뀌어도 빠지지 않음).
+    ["예약건수", metrics.statusCounts.reservation],
     ["사용중", metrics.statusCounts.inUse],
     ["청소중", metrics.statusCounts.cleaning],
     ["방문완료", metrics.statusCounts.completed],
@@ -227,7 +261,7 @@ export default async function MonthlyDashboardPage({ searchParams }: { searchPar
       <PageHeader
         eyebrow="대시보드"
         title="월간 KPI 대시보드"
-        description="운영월 전체 기준의 콜 상태, 방문완료 매출, 지급 스냅샷 흐름을 조회한다."
+        description="운영월 전체 기준의 콜 상태, 선결제 반영 매출, 지급 스냅샷 흐름을 조회한다."
         meta={
           <>
             <div>운영월 상태: {metrics.operatingMonth.status}</div>
@@ -270,16 +304,7 @@ export default async function MonthlyDashboardPage({ searchParams }: { searchPar
           ))}
         </section>
 
-        <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-4" aria-label="월간 금액 KPI">
-          <KpiTile label="결제합계" value={formatVnd(metrics.financials.paymentTotal)} tone="strong" />
-          <KpiTile label="월간 순이익" value={formatVnd(metrics.financials.netProfit)} note="결제합계 - 일일비용 - 월간비용" tone="strong" />
-          <KpiTile label="할인합계" value={formatVnd(metrics.financials.discountTotal)} />
-          <KpiTile label="지출합계" value={formatVnd(metrics.financials.expenseTotal)} tone="cost" />
-          <KpiTile label="일일비용 합계" value={formatVnd(metrics.financials.dailyCostTotal)} note="지출, 마사지사 정산, 귀케어, 일일인센" tone="cost" />
-          <KpiTile label="월간비용 합계" value={formatVnd(metrics.financials.monthlyCostTotal)} note="운영팀 월인센, 만근수당, 갯수왕" tone="cost" />
-          <KpiTile label="전체 지급 합계" value={formatVnd(metrics.financials.settlementPayoutTotal)} tone="cost" />
-          <KpiTile label="귀케어 풀" value={formatVnd(metrics.financials.earcarePoolTotal)} />
-        </section>
+        <MonthlyMoneyKpis metrics={metrics} />
 
         <SettlementSummary metrics={metrics} />
 

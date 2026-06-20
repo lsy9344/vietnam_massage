@@ -144,6 +144,14 @@ async function seedLockedMonth(monthKey: string, confirmedByAccountId: string) {
           rows: []
         },
         earcare: { earcarePoolTotal: 0, distributedAmount: 0, undistributedAmount: 0, sourceCallCount: 0, eligibleDayCount: 0, rows: [] },
+        financials: {
+          paymentTotal: 0,
+          netSales: 0,
+          discountTotal: 0,
+          expenseTotal: 0,
+          earcarePoolTotal: 0,
+          therapistCommissionTotal: 0
+        },
         totals: { therapistPayoutAmount: 0, opsDailyIncentiveAmount: 0, opsMonthlyIncentiveAmount: 0, earcarePayoutAmount: 0, grandPayoutAmount: 0 },
         warningCounts: { total: 0 },
         evidence: { period: `${monthKey}-01 ~ ${monthKey}-01`, sourceDayCount: 1 },

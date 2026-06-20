@@ -197,6 +197,14 @@ function snapshotJson(input: { id: string; operatingMonthId: string; monthKey: s
       eligibleDayCount: 2,
       rows: []
     },
+    financials: {
+      paymentTotal: 10900000,
+      netSales: 10650000,
+      discountTotal: 100000,
+      expenseTotal: 250000,
+      earcarePoolTotal: 600000,
+      therapistCommissionTotal: 4350000
+    },
     totals: {
       therapistPayoutAmount: 9100000,
       opsDailyIncentiveAmount: 300000,
@@ -452,14 +460,22 @@ test.describe("Story 6.2 monthly dashboard", () => {
   });
 
   test.afterAll(async () => {
+    if (!seededData) {
+      await prisma.$disconnect();
+      return;
+    }
+
     // 이 스펙이 시드한 4개 운영월의 콜/데이터를 범위로 정리한 뒤 연결을 닫는다.
-    await cleanupStoryData([
-      seededData.months.draft,
-      seededData.months.reviewReopened,
-      seededData.months.closed,
-      seededData.months.lockedMissing
-    ]);
-    await prisma.$disconnect();
+    try {
+      await cleanupStoryData([
+        seededData.months.draft,
+        seededData.months.reviewReopened,
+        seededData.months.closed,
+        seededData.months.lockedMissing
+      ]);
+    } finally {
+      await prisma.$disconnect();
+    }
   });
 
   for (const role of ["administrator", "counter", "settlement_manager", "read_only_viewer"] as const) {
@@ -489,7 +505,10 @@ test.describe("Story 6.2 monthly dashboard", () => {
     await expect(page.getByRole("region", { name: "월간 KPI 기준" })).toContainText("closeVersion 2");
     await expect(page.getByRole("region", { name: "월간 지급 정산 KPI" })).toContainText("10,500,000 VND");
     await expect(page.getByRole("region", { name: "월간 상태 건수" })).toContainText("예약");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("방문완료 매출");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("결제합계");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("운영팀 월인센");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("만근수당");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("갯수왕");
     await expect(page.getByRole("region", { name: "월간 코스별 방문완료" })).toContainText("A");
   });
 
@@ -519,10 +538,13 @@ test.describe("Story 6.2 monthly dashboard", () => {
     await expect(page.getByRole("region", { name: "월간 상태 건수" })).toContainText("1건");
     await expect(page.getByRole("region", { name: "월간 상태 건수" })).toContainText("방문완료");
     await expect(page.getByRole("region", { name: "월간 상태 건수" })).toContainText("6건");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("방문완료 매출");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("결제합계");
     await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("9,400,000 VND");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("순매출");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("월간 순이익");
     await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("9,100,000 VND");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("운영팀 월인센");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("만근수당");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("갯수왕");
     await expect(page.getByLabel("A 코스 방문완료")).toContainText("1");
     await expect(page.getByLabel("B 코스 방문완료")).toContainText("담당 2건");
     await expect(page.getByLabel("D 코스 방문완료")).toContainText("담당 2건");
@@ -548,8 +570,11 @@ test.describe("Story 6.2 monthly dashboard", () => {
     await login(page, account.accountId, account.password);
     await page.goto(`/dashboard/monthly?operatingMonthId=${seededData.months.lockedMissing}`);
 
-    await expect(page.getByRole("alert")).toContainText("확정 스냅샷을 찾을 수 없습니다");
+    await expect(page.getByRole("alert").filter({ hasText: "확정 스냅샷을 찾을 수 없습니다" })).toBeVisible();
     await expect(page.getByRole("region", { name: "지급 요약 없음" })).toContainText("현재 지급 계산값으로 대체하지 않았습니다");
+    // 잠금 월에 스냅샷이 없으면 금액 KPI(결제합계/순이익/비용)도 현재 재계산값으로 대체하지 않는다.
+    await expect(page.getByRole("alert", { name: "월간 금액 KPI 표시 보류" })).toContainText("확정 스냅샷에서만 산출합니다");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toHaveCount(0);
   });
 
   test("loading UI presence and retry/error affordance are wired", async () => {

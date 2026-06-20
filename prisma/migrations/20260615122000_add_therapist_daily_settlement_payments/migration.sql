@@ -31,4 +31,4 @@ ALTER TABLE "therapist_daily_settlement_payments"
 
 ALTER TABLE "therapist_daily_settlement_payments"
   ADD CONSTRAINT "therapist_daily_settlement_payments_paid_by_account_id_fkey"
-  FOREIGN KEY ("paid_by_account_id") REFERENCES "user_accounts"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  FOREIGN KEY ("paid_by_account_id") REFERENCES "user_accounts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

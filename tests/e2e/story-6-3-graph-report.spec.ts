@@ -332,9 +332,17 @@ test.describe("Story 6.3 graph report", () => {
   });
 
   test.afterAll(async () => {
+    if (!seededData) {
+      await prisma.$disconnect();
+      return;
+    }
+
     // 이 스펙이 시드한 콜/데이터를 운영월 범위로 정리한 뒤 연결을 닫는다.
-    await cleanupStoryData(seededData.monthId);
-    await prisma.$disconnect();
+    try {
+      await cleanupStoryData(seededData.monthId);
+    } finally {
+      await prisma.$disconnect();
+    }
   });
 
   test("administrator sees canonical URL, chart labels, visible values, and table fallback", async ({ page }) => {
@@ -350,8 +358,8 @@ test.describe("Story 6.3 graph report", () => {
     await expect(page.getByText("객실 상태 분포")).toBeVisible();
     await expect(page.getByText("노쇼/취소 추이")).toBeVisible();
     await expect(page.getByText("운영팀 인센/월마감 지급 구성")).toBeVisible();
-    await expect(page.getByRole("img", { name: "일별 방문완료 매출과 순매출 추이" })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "방문완료 매출" })).toBeVisible();
+    await expect(page.getByRole("img", { name: "일별 선결제 매출과 순매출 추이" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "매출(선결제 반영)" })).toBeVisible();
     const selectedDateRevenueRow = page.getByRole("row").filter({ hasText: seededData.serviceDate }).first();
     await expect(selectedDateRevenueRow).toContainText("1,400,000 VND");
     await expect(selectedDateRevenueRow).toContainText("1,100,000 VND");

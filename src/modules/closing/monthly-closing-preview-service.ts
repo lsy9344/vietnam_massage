@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import {
+  getDailyCallLedgerSummary,
+  listCompletedServiceCallCalculationsForOperatingMonth,
+  type CompletedServiceCallCalculationDto,
+  type DailyCallLedgerSummaryDto
+} from "@/modules/calls/service-call-service";
+import {
   listEarcareDailySettlements,
   type EarcareDailySettlementResultDto,
   type EarcareDailySettlementRowDto,
@@ -122,6 +128,65 @@ export type MonthlyClosingEarcareRowDto = {
   calculationBasis: string;
 };
 
+export type MonthlyClosingFinancialsDto = {
+  paymentTotal: number;
+  netSales: number;
+  discountTotal: number;
+  expenseTotal: number;
+  earcarePoolTotal: number;
+  therapistCommissionTotal: number;
+};
+
+export type MonthlyClosingDashboardFinancialsDto = MonthlyClosingFinancialsDto & {
+  earcarePayoutTotal: number;
+  opsDailyIncentiveTotal: number;
+  opsMonthlyIncentiveTotal: number;
+  fullAttendanceAllowanceTotal: number;
+  countKingBonusTotal: number;
+  therapistPayoutTotal: number;
+  dailyCostTotal: number;
+  monthlyCostTotal: number;
+  settlementPayoutTotal: number;
+  netProfit: number;
+};
+
+export type MonthlyClosingGraphReportSnapshotDto = {
+  dailyRevenueTrend: Array<{
+    serviceDate: string;
+    paymentTotal: number;
+    netSales: number;
+    completedCount: number;
+  }>;
+  courseMix: Array<{
+    courseCode: CourseCode;
+    completedCount: number;
+    paymentTotal: number;
+    callShare: number;
+    revenueShare: number;
+  }>;
+  therapistCallRanking: Array<{
+    employeeId: string;
+    displayName: string;
+    staffCode: string;
+    assignedCallCount: number;
+    therapist1Count: number;
+    therapist2Count: number;
+    totalCommissionAmount: number;
+    evidenceCount: number;
+  }>;
+  noShowCancelTrend: Array<{
+    serviceDate: string;
+    noShowCount: number;
+    canceledCount: number;
+  }>;
+  callLedgerWarnings: {
+    coursePolicyMissing: number;
+    therapistRateMissing: number;
+    secondTherapistRequired: number;
+  };
+  totalStatusCount: number;
+};
+
 export type MonthlyClosingPreviewDto = {
   operatingMonthId: string;
   monthKey: string;
@@ -152,6 +217,9 @@ export type MonthlyClosingPreviewDto = {
     eligibleDayCount: number;
     rows: MonthlyClosingEarcareRowDto[];
   };
+  financials: MonthlyClosingFinancialsDto;
+  dashboardFinancials: MonthlyClosingDashboardFinancialsDto;
+  graphReport: MonthlyClosingGraphReportSnapshotDto;
   totals: {
     therapistPayoutAmount: number;
     opsDailyIncentiveAmount: number;
@@ -199,6 +267,8 @@ export type MonthlyClosingPreviewDependencies = {
   listOpsDailyIncentives: typeof listOpsDailyIncentives;
   listOpsMonthlyIncentivePreview: typeof listOpsMonthlyIncentivePreview;
   listEarcareDailySettlements: typeof listEarcareDailySettlements;
+  getDailyCallLedgerSummary: typeof getDailyCallLedgerSummary;
+  listCompletedServiceCallCalculationsForOperatingMonth: typeof listCompletedServiceCallCalculationsForOperatingMonth;
 };
 
 const previewQuerySchema = z.object({
@@ -233,7 +303,9 @@ const defaultDependencies: MonthlyClosingPreviewDependencies = {
   listTherapistFullAttendanceRecognitions: defaultTherapistFullAttendanceRecognitions,
   listOpsDailyIncentives,
   listOpsMonthlyIncentivePreview,
-  listEarcareDailySettlements
+  listEarcareDailySettlements,
+  getDailyCallLedgerSummary,
+  listCompletedServiceCallCalculationsForOperatingMonth
 };
 
 const courseCodes = ["A", "B", "C", "D", "E"] as const;
@@ -603,6 +675,212 @@ function aggregateEarcare(dailyResults: EarcareDailySettlementResultDto[]) {
   };
 }
 
+function aggregateFinancials(dailyResults: DailyCallLedgerSummaryDto[]): MonthlyClosingFinancialsDto {
+  return dailyResults.reduce(
+    (totals, result) => ({
+      paymentTotal: totals.paymentTotal + result.paymentTotal,
+      netSales: totals.netSales + result.netSales,
+      discountTotal: totals.discountTotal + result.discountTotal,
+      expenseTotal: totals.expenseTotal + result.expenseTotal,
+      earcarePoolTotal: totals.earcarePoolTotal + result.earcarePoolTotal,
+      therapistCommissionTotal: totals.therapistCommissionTotal + result.therapistCommissionTotal
+    }),
+    {
+      paymentTotal: 0,
+      netSales: 0,
+      discountTotal: 0,
+      expenseTotal: 0,
+      earcarePoolTotal: 0,
+      therapistCommissionTotal: 0
+    }
+  );
+}
+
+function dashboardNetProfit(input: {
+  paymentTotal: number;
+  expenseTotal: number;
+  therapistPayoutTotal: number;
+  earcarePayoutTotal: number;
+  opsDailyIncentiveTotal: number;
+  opsMonthlyIncentiveTotal: number;
+}) {
+  return (
+    input.paymentTotal -
+    input.expenseTotal -
+    input.therapistPayoutTotal -
+    input.earcarePayoutTotal -
+    input.opsDailyIncentiveTotal -
+    input.opsMonthlyIncentiveTotal
+  );
+}
+
+function aggregateDashboardFinancials(input: {
+  financials: MonthlyClosingFinancialsDto;
+  therapists: ReturnType<typeof aggregateTherapists>;
+  operations: ReturnType<typeof aggregateOperations>;
+  earcare: ReturnType<typeof aggregateEarcare>;
+}): MonthlyClosingDashboardFinancialsDto {
+  const fullAttendanceAllowanceTotal = input.therapists.rows.reduce((sum, row) => sum + row.fullAttendanceAllowanceAmount, 0);
+  const countKingBonusTotal = input.therapists.rows.reduce((sum, row) => sum + row.countKingBonusAmount, 0);
+  const therapistPayoutTotal = input.therapists.payoutAmount;
+  const earcarePayoutTotal = input.earcare.distributedAmount;
+  const opsDailyIncentiveTotal = input.operations.dailyIncentiveAmount;
+  const opsMonthlyIncentiveTotal = input.operations.monthlyIncentiveAmount;
+  const dailyCostTotal =
+    input.financials.expenseTotal + input.financials.therapistCommissionTotal + earcarePayoutTotal + opsDailyIncentiveTotal;
+  const monthlyCostTotal = fullAttendanceAllowanceTotal + countKingBonusTotal + opsMonthlyIncentiveTotal;
+
+  return {
+    ...input.financials,
+    earcarePayoutTotal,
+    opsDailyIncentiveTotal,
+    opsMonthlyIncentiveTotal,
+    fullAttendanceAllowanceTotal,
+    countKingBonusTotal,
+    therapistPayoutTotal,
+    dailyCostTotal,
+    monthlyCostTotal,
+    settlementPayoutTotal: therapistPayoutTotal + earcarePayoutTotal + opsDailyIncentiveTotal + opsMonthlyIncentiveTotal,
+    netProfit: dashboardNetProfit({
+      paymentTotal: input.financials.paymentTotal,
+      expenseTotal: input.financials.expenseTotal,
+      therapistPayoutTotal,
+      earcarePayoutTotal,
+      opsDailyIncentiveTotal,
+      opsMonthlyIncentiveTotal
+    })
+  };
+}
+
+function emptyGraphCourseMix(): MonthlyClosingGraphReportSnapshotDto["courseMix"] {
+  return courseCodes.map((courseCode) => ({
+    courseCode,
+    completedCount: 0,
+    paymentTotal: 0,
+    callShare: 0,
+    revenueShare: 0
+  }));
+}
+
+function aggregateGraphCourseMix(calculations: CompletedServiceCallCalculationDto[]): MonthlyClosingGraphReportSnapshotDto["courseMix"] {
+  const courseMix = emptyGraphCourseMix();
+  const byCode = new Map(courseMix.map((row) => [row.courseCode, row]));
+  for (const calculation of calculations) {
+    const row = byCode.get(calculation.courseCode as CourseCode);
+    if (!row) continue;
+    row.completedCount += 1;
+    row.paymentTotal += calculation.paymentAmount;
+  }
+
+  const totalCalls = courseMix.reduce((sum, row) => sum + row.completedCount, 0);
+  const totalRevenue = courseMix.reduce((sum, row) => sum + row.paymentTotal, 0);
+  return courseMix.map((row) => ({
+    ...row,
+    callShare: totalCalls > 0 ? row.completedCount / totalCalls : 0,
+    revenueShare: totalRevenue > 0 ? row.paymentTotal / totalRevenue : 0
+  }));
+}
+
+function aggregateGraphTherapistRanking(results: TherapistDailySettlementResultDto[]): MonthlyClosingGraphReportSnapshotDto["therapistCallRanking"] {
+  const rankings = new Map<string, MonthlyClosingGraphReportSnapshotDto["therapistCallRanking"][number]>();
+
+  for (const result of results) {
+    for (const settlement of result.settlements) {
+      const current =
+        rankings.get(settlement.employeeId) ??
+        {
+          employeeId: settlement.employeeId,
+          displayName: settlement.displayName,
+          staffCode: settlement.staffCode,
+          assignedCallCount: 0,
+          therapist1Count: 0,
+          therapist2Count: 0,
+          totalCommissionAmount: 0,
+          evidenceCount: 0
+        };
+      current.assignedCallCount += settlement.totalCallCount;
+      current.totalCommissionAmount += settlement.totalCommissionAmount;
+      current.evidenceCount += settlement.assignmentEvidence.length;
+      for (const evidence of settlement.assignmentEvidence) {
+        if (evidence.role === "THERAPIST_1") current.therapist1Count += 1;
+        if (evidence.role === "THERAPIST_2") current.therapist2Count += 1;
+      }
+      rankings.set(settlement.employeeId, current);
+    }
+  }
+
+  return [...rankings.values()].sort(
+    (left, right) =>
+      right.assignedCallCount - left.assignedCallCount ||
+      right.totalCommissionAmount - left.totalCommissionAmount ||
+      left.staffCode.localeCompare(right.staffCode)
+  );
+}
+
+function aggregateGraphReport(input: {
+  dates: string[];
+  dailyResults: DailyCallLedgerSummaryDto[];
+  completedCalculations: CompletedServiceCallCalculationDto[];
+  therapistDailyResults: TherapistDailySettlementResultDto[];
+}): MonthlyClosingGraphReportSnapshotDto {
+  const callLedgerWarnings = input.dailyResults.reduce(
+    (totals, result) => ({
+      coursePolicyMissing: totals.coursePolicyMissing + result.warningCounts.coursePolicyMissing,
+      therapistRateMissing: totals.therapistRateMissing + result.warningCounts.therapistRateMissing,
+      secondTherapistRequired: totals.secondTherapistRequired + result.warningCounts.secondTherapistRequired
+    }),
+    { coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 }
+  );
+
+  return {
+    dailyRevenueTrend: input.dates.map((serviceDate, index) => {
+      const result = input.dailyResults[index] ?? financialEmptyDayResult();
+      return {
+        serviceDate,
+        paymentTotal: result.paymentTotal,
+        netSales: result.netSales,
+        completedCount: result.completedCount
+      };
+    }),
+    courseMix: aggregateGraphCourseMix(input.completedCalculations),
+    therapistCallRanking: aggregateGraphTherapistRanking(input.therapistDailyResults),
+    noShowCancelTrend: input.dates.map((serviceDate, index) => {
+      const result = input.dailyResults[index] ?? financialEmptyDayResult();
+      return {
+        serviceDate,
+        noShowCount: result.noShowCount,
+        canceledCount: result.canceledCount
+      };
+    }),
+    callLedgerWarnings,
+    totalStatusCount: input.dailyResults.reduce(
+      (sum, result) =>
+        sum + result.reservationCount + result.inUseCount + result.cleaningCount + result.completedCount + result.noShowCount + result.canceledCount,
+      0
+    )
+  };
+}
+
+function financialEmptyDayResult(): DailyCallLedgerSummaryDto {
+  return {
+    reservationCount: 0,
+    inUseCount: 0,
+    cleaningCount: 0,
+    completedCount: 0,
+    noShowCount: 0,
+    canceledCount: 0,
+    paymentTotal: 0,
+    therapistCommissionTotal: 0,
+    earcarePoolTotal: 0,
+    discountTotal: 0,
+    expenseTotal: 0,
+    netSales: 0,
+    paymentMethodTotals: { cash: 0, card: 0, bank: 0, other: 0 },
+    courseSummaries: [],
+    warningCounts: { coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 }
+  };
+}
+
 function representativeEvidence(input: {
   therapists: TherapistDailySettlementResultDto[];
   opsDaily: OpsDailyIncentiveResultDto[];
@@ -664,7 +942,7 @@ export async function listMonthlyClosingPreview(input: {
   if (!parsed.success) throw toFieldError(parsed.error);
 
   const client = getClient(input.prismaClient);
-  const dependencies = input.dependencies ?? defaultDependencies;
+  const dependencies = { ...defaultDependencies, ...input.dependencies };
   const [operatingMonth, activeTherapists] = await Promise.all([
     client.operatingMonth.findUnique({
       where: { id: parsed.data.operatingMonthId },
@@ -691,6 +969,7 @@ export async function listMonthlyClosingPreview(input: {
   const therapistDailyResults: TherapistDailySettlementResultDto[] = [];
   const opsDailyResults: OpsDailyIncentiveResultDto[] = [];
   const earcareDailyResults: EarcareDailySettlementResultDto[] = [];
+  const financialDailyResults: DailyCallLedgerSummaryDto[] = [];
 
   for (const serviceDate of dates) {
     therapistDailyResults.push(
@@ -736,9 +1015,28 @@ export async function listMonthlyClosingPreview(input: {
     );
   }
 
+  for (const serviceDate of dates) {
+    financialDailyResults.push(
+      await dependencies.getDailyCallLedgerSummary({
+        operatingMonthId: parsed.data.operatingMonthId,
+        serviceDate,
+        prismaClient: client as unknown as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
+      })
+    );
+  }
+  const completedCalculations = await dependencies.listCompletedServiceCallCalculationsForOperatingMonth({
+    operatingMonthId: parsed.data.operatingMonthId,
+    startDate,
+    endDate,
+    prismaClient: client as unknown as Parameters<typeof listCompletedServiceCallCalculationsForOperatingMonth>[0]["prismaClient"]
+  });
+
   const therapists = aggregateTherapists(therapistDailyResults, activeTherapists, fullAttendanceResult);
   const operations = aggregateOperations(opsDailyResults, opsMonthlyResult);
   const earcare = aggregateEarcare(earcareDailyResults);
+  const financials = aggregateFinancials(financialDailyResults);
+  const dashboardFinancials = aggregateDashboardFinancials({ financials, therapists, operations, earcare });
+  const graphReport = aggregateGraphReport({ dates, dailyResults: financialDailyResults, completedCalculations, therapistDailyResults });
   const total = warningTotal({ therapists, operations: operations.warningCounts, earcare });
   const policyWarningCount =
     therapists.warningCounts.coursePolicyMissing +
@@ -776,6 +1074,9 @@ export async function listMonthlyClosingPreview(input: {
       sourceCallCount: earcare.sourceCallCount,
       eligibleDayCount: earcare.eligibleDayCount
     },
+    financials,
+    dashboardFinancials,
+    graphReport,
     totals: {
       therapistPayoutAmount: therapists.payoutAmount,
       opsDailyIncentiveAmount: operations.dailyIncentiveAmount,

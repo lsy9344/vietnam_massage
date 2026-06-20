@@ -6,6 +6,7 @@ import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/oper
 import { getDailyCallLedgerSummary } from "@/modules/calls/service-call-service";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import type { RoomStatusDto } from "@/modules/rooms/dtos";
+import { latestRoomStatusUpdatedAt } from "@/modules/rooms/room-status-refresh";
 import { listRoomStatuses } from "@/modules/rooms/room-status-service";
 import { RoomStatusRefreshController } from "@/components/domain/room-status-refresh-controller";
 
@@ -20,10 +21,6 @@ function formatNumber(value: number) {
 
 function formatVnd(value: number) {
   return `${formatNumber(value)} VND`;
-}
-
-function latestUpdatedAt(values: Array<{ updatedAt: string }>) {
-  return values.reduce((latest, value) => (value.updatedAt > latest ? value.updatedAt : latest), new Date().toISOString());
 }
 
 function roomFloor(status: RoomStatusDto) {
@@ -89,12 +86,13 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
     listRoomStatuses({ operatingMonthId: selectedMonth.id, serviceDate }),
     getDailyCallLedgerSummary({ operatingMonthId: selectedMonth.id, serviceDate })
   ]);
-  const lastUpdatedAt = latestUpdatedAt(roomStatuses);
+  const lastUpdatedAt = latestRoomStatusUpdatedAt(roomStatuses, new Date().toISOString());
   const warningTotal =
     summary.warningCounts.coursePolicyMissing + summary.warningCounts.therapistRateMissing + summary.warningCounts.secondTherapistRequired;
 
   const statusSummary = [
-    ["예약", summary.reservationCount],
+    // REQ-009: 예약건수는 상태가 아니라 원장에 등록된 전체 건수다(방문완료·노쇼·취소로 바뀌어도 빠지지 않음).
+    ["예약건수", summary.reservationCount],
     ["사용중", summary.inUseCount],
     ["청소중", summary.cleaningCount],
     ["방문완료", summary.completedCount],

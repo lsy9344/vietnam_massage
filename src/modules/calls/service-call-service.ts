@@ -379,12 +379,20 @@ function requiresAssignedRoom(status: string) {
   return isInUseStatus(status) || isCleaningStatus(status) || isCompletedServiceCallStatus(status);
 }
 
-function recognizesRevenue(record: ServiceCallRecord) {
+function recognizesRevenue(record: { status: string; paymentMethodCode: string | null }) {
+  // REQ-007 선결제: 매출 반영 단일 기준은 "결제수단 선택 시점"이다.
+  // - 취소/노쇼는 결제수단이 남아 있어도 매출에서 즉시 제외한다(차감 정책).
+  // - 결제수단을 고른 순간부터(예약/사용중 등 방문완료 이전이라도) 선결제 매출로 반영한다.
+  // - 결제수단이 비어 있으면 "사용중"이어도 매출에 잡지 않아 "기타" 버킷 오염을 막는다.
   if (isNoShowStatus(record.status) || isCanceledStatus(record.status)) {
     return false;
   }
 
-  return isCompletedServiceCallStatus(record.status) || isInUseStatus(record.status) || Boolean(record.paymentMethodCode);
+  return Boolean(record.paymentMethodCode);
+}
+
+function requiresCalculation(record: { status: string; paymentMethodCode: string | null }) {
+  return recognizesRevenue(record) || isCompletedServiceCallStatus(record.status);
 }
 
 function paymentMethodBucket(code: string | null): keyof DailyCallLedgerSummaryDto["paymentMethodTotals"] {
@@ -487,7 +495,7 @@ async function findTherapistCourseRateForCalculation(
 }
 
 async function calculateServiceCallCompletion(tx: ServiceCallPrismaClient, record: ServiceCallRecord) {
-  if (!recognizesRevenue(record)) {
+  if (!requiresCalculation(record)) {
     return emptyCalculation("not_completed");
   }
 
@@ -507,10 +515,11 @@ async function calculateServiceCallCompletion(tx: ServiceCallPrismaClient, recor
     });
   }
 
-  const discountAmount = record.discountTypeCode === null ? 0 : 100000;
+  const hasRevenue = recognizesRevenue(record);
+  const discountAmount = hasRevenue && record.discountTypeCode !== null ? 100000 : 0;
   const baseCalculation = {
     basePrice: policy.basePrice,
-    paymentAmount: Math.max(policy.basePrice - discountAmount, 0),
+    paymentAmount: hasRevenue ? Math.max(policy.basePrice - discountAmount, 0) : 0,
     discountAmount,
     therapist1Commission: 0,
     therapist2Commission: 0,
@@ -1415,9 +1424,11 @@ export async function getDailyCallLedgerSummary(input: {
       continue;
     }
 
-    paymentTotal += row.paymentAmount;
-    discountTotal += row.discountAmount;
-    paymentMethodTotals[paymentMethodBucket(row.paymentMethodCode)] += row.paymentAmount;
+    if (recognizesRevenue(row)) {
+      paymentTotal += row.paymentAmount;
+      discountTotal += row.discountAmount;
+      paymentMethodTotals[paymentMethodBucket(row.paymentMethodCode)] += row.paymentAmount;
+    }
 
     if (!isCompletedServiceCallStatus(row.status)) {
       continue;

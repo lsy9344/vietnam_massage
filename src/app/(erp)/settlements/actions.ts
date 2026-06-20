@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
 import { AuthorizationError, requirePermission } from "@/lib/authorization";
 import { AuditDomainError } from "@/modules/audit/audit-event";
+import { parseTherapistDailySettlementPaymentIsPaid } from "@/app/(erp)/settlements/payment-action-input";
+import { mapTherapistDailySettlementPaymentActionError } from "@/app/(erp)/settlements/payment-action-error";
 import {
   TherapistAttendanceDomainError,
   deactivateTherapistAttendance,
@@ -13,6 +15,8 @@ import {
 import { setTherapistDailySettlementPayment } from "@/modules/settlements/therapist-daily-settlement-service";
 
 export type TherapistAttendanceActionState = ActionResult<TherapistAttendanceDto> | null;
+type TherapistDailySettlementPaymentActionData = Awaited<ReturnType<typeof setTherapistDailySettlementPayment>>;
+export type TherapistDailySettlementPaymentActionState = ActionResult<TherapistDailySettlementPaymentActionData> | null;
 
 function formValue(formData: FormData, key: string) {
   return String(formData.get(key) ?? "");
@@ -80,6 +84,10 @@ function mapActionError(error: unknown): ActionResult<TherapistAttendanceDto> {
   };
 }
 
+function mapPaymentActionError(error: unknown): ActionResult<TherapistDailySettlementPaymentActionData> {
+  return mapTherapistDailySettlementPaymentActionError(error);
+}
+
 export async function saveTherapistAttendanceAction(
   _previousState: TherapistAttendanceActionState,
   formData: FormData
@@ -120,14 +128,22 @@ export async function deactivateTherapistAttendanceAction(
   }
 }
 
-export async function setTherapistDailySettlementPaymentAction(formData: FormData) {
-  const account = await requirePermission("payout:write");
-  await setTherapistDailySettlementPayment({
-    operatingMonthId: formValue(formData, "operatingMonthId"),
-    serviceDate: formValue(formData, "serviceDate"),
-    employeeId: formValue(formData, "employeeId"),
-    isPaid: formValue(formData, "isPaid") === "true",
-    actorId: account.id
-  });
-  revalidatePath("/settlements");
+export async function setTherapistDailySettlementPaymentAction(
+  _previousState: TherapistDailySettlementPaymentActionState,
+  formData: FormData
+): Promise<TherapistDailySettlementPaymentActionState> {
+  try {
+    const account = await requirePermission("payout:write");
+    const data = await setTherapistDailySettlementPayment({
+      operatingMonthId: formValue(formData, "operatingMonthId"),
+      serviceDate: formValue(formData, "serviceDate"),
+      employeeId: formValue(formData, "employeeId"),
+      isPaid: parseTherapistDailySettlementPaymentIsPaid(formValue(formData, "isPaid")),
+      actorId: account.id
+    });
+    revalidatePath("/settlements");
+    return { ok: true, data };
+  } catch (error) {
+    return mapPaymentActionError(error);
+  }
 }

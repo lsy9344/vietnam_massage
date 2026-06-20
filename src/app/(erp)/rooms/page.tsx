@@ -6,16 +6,13 @@ import { requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import type { RoomStatusDto } from "@/modules/rooms/dtos";
+import { latestRoomStatusUpdatedAt } from "@/modules/rooms/room-status-refresh";
 import { listRoomStatuses } from "@/modules/rooms/room-status-service";
 
 type RoomsPageSearchParams = {
   operatingMonthId?: string;
   serviceDate?: string;
 };
-
-function latestUpdatedAt(values: Array<{ updatedAt: string }>) {
-  return values.reduce((latest, value) => (value.updatedAt > latest ? value.updatedAt : latest), new Date().toISOString());
-}
 
 function roomFloor(status: RoomStatusDto) {
   return status.roomDisplayName.match(/^\d/)?.[0] ?? "기타";
@@ -68,7 +65,7 @@ export default async function RoomsPage({ searchParams }: { searchParams: Promis
 
   const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
   const [roomStatuses] = await Promise.all([listRoomStatuses({ operatingMonthId: selectedMonth.id, serviceDate })]);
-  const lastUpdatedAt = latestUpdatedAt(roomStatuses);
+  const lastUpdatedAt = latestRoomStatusUpdatedAt(roomStatuses, new Date().toISOString());
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">

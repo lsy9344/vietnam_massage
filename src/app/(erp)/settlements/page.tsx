@@ -8,7 +8,7 @@ import {
   type TherapistAttendanceForDateDto
 } from "@/modules/settlements/therapist-attendance-service";
 import { TherapistAttendanceTable } from "@/app/(erp)/settlements/therapist-attendance-table";
-import { setTherapistDailySettlementPaymentAction } from "@/app/(erp)/settlements/actions";
+import { TherapistDailySettlementPaymentForm } from "@/app/(erp)/settlements/therapist-daily-settlement-payment-form";
 import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import { PageHeader } from "@/components/domain/page-header";
 
@@ -44,6 +44,28 @@ function formatKstDateTime(value: string | null) {
     minute: "2-digit",
     hour12: false
   }).format(new Date(value));
+}
+
+function paymentActorAccountId(paymentStatus: TherapistDailySettlementResultDto["settlements"][number]["paymentStatus"]) {
+  return paymentStatus.paidBy?.accountId ?? paymentStatus.paidByAccountId;
+}
+
+function paymentActorEmployeeLabel(paymentStatus: TherapistDailySettlementResultDto["settlements"][number]["paymentStatus"]) {
+  if (!paymentStatus.paidBy?.employeeDisplayName) return null;
+  return paymentStatus.paidBy.employeeStaffCode
+    ? `${paymentStatus.paidBy.employeeDisplayName} (${paymentStatus.paidBy.employeeStaffCode})`
+    : paymentStatus.paidBy.employeeDisplayName;
+}
+
+function paymentHistoryActorLabel(history: TherapistDailySettlementResultDto["settlements"][number]["paymentStatus"]["history"][number]) {
+  const accountId = history.changedBy?.accountId ?? history.changedByAccountId;
+  const employeeName = history.changedBy?.employeeDisplayName;
+  return employeeName ? `${accountId} / ${employeeName}` : accountId;
+}
+
+function paymentStateLabel(value: boolean | null) {
+  if (value === null || value === false) return "미지급";
+  return "지급완료";
 }
 
 function warningSummary(result: TherapistDailySettlementResultDto) {
@@ -278,18 +300,39 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
                           {settlement.paymentStatus.isPaid ? "지급완료" : "미지급"}
                         </div>
                         {settlement.paymentStatus.isPaid ? (
-                          <div className="mt-1 text-xs text-muted">{formatKstDateTime(settlement.paymentStatus.paidAt)}</div>
+                          <div className="mt-1 space-y-0.5 text-xs text-muted">
+                            <div>{formatKstDateTime(settlement.paymentStatus.paidAt)}</div>
+                            {paymentActorAccountId(settlement.paymentStatus) ? (
+                              <div>처리자: {paymentActorAccountId(settlement.paymentStatus)}</div>
+                            ) : null}
+                            {paymentActorEmployeeLabel(settlement.paymentStatus) ? (
+                              <div>{paymentActorEmployeeLabel(settlement.paymentStatus)}</div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {settlement.paymentStatus.history.length > 0 ? (
+                          <div className="mt-2 border-l border-border pl-2 text-xs text-muted">
+                            <div className="font-semibold text-foreground">변경 이력 {settlement.paymentStatus.history.length}건</div>
+                            <ol className="mt-1 space-y-1">
+                              {settlement.paymentStatus.history.slice(0, 3).map((history) => (
+                                <li key={`${history.changedAt}-${history.changedByAccountId}`}>
+                                  <div>
+                                    {paymentStateLabel(history.previousIsPaid)} -&gt; {paymentStateLabel(history.newIsPaid)}
+                                  </div>
+                                  <div>{formatKstDateTime(history.changedAt)}</div>
+                                  <div>처리자: {paymentHistoryActorLabel(history)}</div>
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
                         ) : null}
                         {isMonthLocked ? null : (
-                          <form action={setTherapistDailySettlementPaymentAction} className="mt-2">
-                            <input name="operatingMonthId" type="hidden" value={selectedMonth.id} />
-                            <input name="serviceDate" type="hidden" value={serviceDate} />
-                            <input name="employeeId" type="hidden" value={settlement.employeeId} />
-                            <input name="isPaid" type="hidden" value={settlement.paymentStatus.isPaid ? "false" : "true"} />
-                            <button className="h-8 border border-border bg-background px-2 text-xs font-semibold text-foreground hover:bg-readonly" type="submit">
-                              {settlement.paymentStatus.isPaid ? "완료 취소" : "지급완료"}
-                            </button>
-                          </form>
+                          <TherapistDailySettlementPaymentForm
+                            employeeId={settlement.employeeId}
+                            isPaid={settlement.paymentStatus.isPaid}
+                            operatingMonthId={selectedMonth.id}
+                            serviceDate={serviceDate}
+                          />
                         )}
                       </td>
                       {courseCodes.map((courseCode) => {

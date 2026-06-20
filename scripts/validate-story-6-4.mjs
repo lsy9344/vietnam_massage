@@ -87,7 +87,7 @@ for (const required of [
   "정산 source가 없어 순위를 표시하지 않습니다.",
   "확정 스냅샷이 없어 지급 구성 그래프를 표시하지 않습니다.",
   "완료 콜 그래프 없음",
-  "report.emptyStates.noCalculatedCompletedCalls ? <CompletedChartEmptyPanel /> : <RevenueTrendChart report={report} />",
+  "report.emptyStates.noRevenueTrendData ? <CompletedChartEmptyPanel /> : <RevenueTrendChart report={report} />",
   "report.emptyStates.noCalculatedCompletedCalls ? ("
 ]) {
   if (!reportsPage.includes(required)) errors.push(`reports page missing Story 6.4 state/color marker: ${required}`);

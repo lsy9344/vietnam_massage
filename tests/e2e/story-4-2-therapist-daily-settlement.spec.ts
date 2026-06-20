@@ -96,6 +96,11 @@ async function cleanupStoryCalls(operatingMonthId: string) {
   await (prisma as any).serviceCall.deleteMany({ where: { id: { in: callIds } } });
 }
 
+async function cleanupStorySettlementPayments(operatingMonthId: string) {
+  await (prisma as any).therapistDailySettlementPaymentHistory.deleteMany({ where: { operatingMonthId } });
+  await (prisma as any).therapistDailySettlementPayment.deleteMany({ where: { operatingMonthId } });
+}
+
 async function createCall(input: {
   operatingMonthId: string;
   serviceDate: Date;
@@ -163,6 +168,7 @@ async function seedStoryData(): Promise<SeededData> {
   await upsertRate(therapist2.id, aCourse.id, 0);
   await upsertRate(therapist1.id, dCourse.id, 900000);
   await upsertRate(therapist2.id, dCourse.id, 900000);
+  await cleanupStorySettlementPayments(operatingMonth.id);
   await cleanupStoryCalls(operatingMonth.id);
   await createCall({
     operatingMonthId: operatingMonth.id,
@@ -220,7 +226,10 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   // 이 스펙이 시드한 콜을 운영월 범위로 정리한 뒤 연결을 닫는다.
-  await cleanupStoryCalls(seededData.operatingMonthId);
+  if (seededData) {
+    await cleanupStorySettlementPayments(seededData.operatingMonthId);
+    await cleanupStoryCalls(seededData.operatingMonthId);
+  }
   await prisma.$disconnect();
 });
 
@@ -255,6 +264,27 @@ test.describe("Story 4.2 therapist daily settlement", () => {
     await expect(page.getByText("0원 정책")).toBeVisible();
     await expect(page.getByText("정책 적용")).toBeVisible();
     await expect(page.getByText("정책 없음")).toBeVisible();
+  });
+
+  test("settlement manager can mark payment and review actor history", async ({ page }) => {
+    await login(page, "story42_settlement", "Story42!settlement");
+    await page.goto(`/settlements?operatingMonthId=${seededData.operatingMonthId}&serviceDate=2034-02-12`);
+
+    const therapist1Summary = page.getByRole("row").filter({ hasText: "E2E42 마사지사1" }).first();
+    await therapist1Summary.getByRole("button", { name: "지급완료" }).click();
+
+    await expect(therapist1Summary).toContainText("지급완료");
+    await expect(therapist1Summary).toContainText("처리자: story42_settlement");
+    await expect(therapist1Summary).toContainText("E2E42 정산담당");
+
+    await therapist1Summary.getByText("변경 이력 1건").click();
+    await expect(therapist1Summary).toContainText("미지급 -> 지급완료");
+    await expect(therapist1Summary).toContainText("처리자: story42_settlement / E2E42 정산담당");
+
+    await therapist1Summary.getByRole("button", { name: "완료 취소" }).click();
+    await expect(therapist1Summary).toContainText("미지급");
+    await expect(therapist1Summary).toContainText("변경 이력 2건");
+    await expect(therapist1Summary).toContainText("지급완료 -> 미지급");
   });
 
   test("empty date shows explicit empty state", async ({ page }) => {

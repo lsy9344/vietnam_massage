@@ -25,6 +25,7 @@ model UserAccount {
   confirmedMonthlyClosings MonthlyClosing[]
   changedMigrationVerificationIssueHistories MigrationVerificationIssueHistory[]
   therapistDailySettlementPayments TherapistDailySettlementPayment[]
+  changedTherapistDailySettlementPaymentHistories TherapistDailySettlementPaymentHistory[]
 
   @@map("user_accounts")
 }
@@ -366,11 +367,33 @@ model TherapistDailySettlementPayment {
   paidByAccount      UserAccount?   @relation(fields: [paidByAccountId], references: [id])
   createdAt          DateTime       @default(now()) @map("created_at")
   updatedAt          DateTime       @updatedAt @map("updated_at")
+  histories          TherapistDailySettlementPaymentHistory[]
 
   @@unique([operatingMonthId, serviceDate, employeeId], map: "uq_therapist_daily_settlement_payments_month_date_employee")
+  @@unique([id, operatingMonthId, serviceDate, employeeId], map: "uq_tdsp_id_month_date_employee")
   @@index([employeeId, serviceDate], map: "idx_therapist_daily_settlement_payments_employee_date")
   @@index([paidByAccountId, paidAt], map: "idx_therapist_daily_settlement_payments_actor_paid_at")
   @@map("therapist_daily_settlement_payments")
+}
+
+model TherapistDailySettlementPaymentHistory {
+  id                 String                          @id @default(cuid())
+  paymentId          String                          @map("payment_id")
+  operatingMonthId   String                          @map("operating_month_id")
+  serviceDate        DateTime                        @map("service_date") @db.Date
+  employeeId         String                          @map("employee_id")
+  payment            TherapistDailySettlementPayment @relation(fields: [paymentId, operatingMonthId, serviceDate, employeeId], references: [id, operatingMonthId, serviceDate, employeeId])
+  previousIsPaid     Boolean?                        @map("previous_is_paid")
+  newIsPaid          Boolean                         @map("new_is_paid")
+  changedByAccountId String                          @map("changed_by_account_id")
+  changedByAccount   UserAccount                     @relation(fields: [changedByAccountId], references: [id])
+  changedAt          DateTime                        @default(now()) @map("changed_at")
+  createdAt          DateTime                        @default(now()) @map("created_at")
+
+  @@index([paymentId, changedAt], map: "idx_tdsp_histories_payment_changed")
+  @@index([operatingMonthId, serviceDate, employeeId], map: "idx_tdsp_histories_month_date_emp")
+  @@index([changedByAccountId, changedAt], map: "idx_tdsp_histories_actor_changed")
+  @@map("therapist_daily_settlement_payment_histories")
 }
 
 model CoursePolicy {

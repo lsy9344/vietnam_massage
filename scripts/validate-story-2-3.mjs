@@ -21,6 +21,7 @@ function readJson(path) {
 [
   "src/modules/calls/service-call-service.ts",
   "src/modules/calls/service-call-service.test.ts",
+  "src/app/(erp)/calls/daily-summary-strip.tsx",
   "src/app/(erp)/calls/editable-call-grid.tsx",
   "tests/e2e/story-2-3-completed-call-calculation.spec.ts",
   "src/modules/calls/README.md",
@@ -43,7 +44,7 @@ for (const required of [
   "isCompletedServiceCallStatus",
   "calculateServiceCallCompletion",
   "VISIT_COMPLETE",
-  "discountTypeCode === null ? 0 : 100000",
+  "hasRevenue && record.discountTypeCode !== null ? 100000 : 0",
   "Math.max(policy.basePrice - discountAmount, 0)",
   "basePrice",
   "earcarePoolAmount",
@@ -79,6 +80,16 @@ for (const required of [
   "콜인정"
 ]) {
   if (!grid.includes(required)) errors.push(`editable-call-grid.tsx missing ${required}`);
+}
+
+const summaryStrip = read("src/app/(erp)/calls/daily-summary-strip.tsx");
+for (const required of [
+  "showSettlementAmounts",
+  "showTherapistAssignmentCount",
+  "showTherapistAssignmentCount ?",
+  "therapistAssignmentCount"
+]) {
+  if (!summaryStrip.includes(required)) errors.push(`daily-summary-strip.tsx missing ${required}`);
 }
 
 const unitTest = read("src/modules/calls/service-call-service.test.ts");

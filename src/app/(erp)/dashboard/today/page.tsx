@@ -40,7 +40,7 @@ function KpiTile({ label, value, note, tone = "default" }: { label: string; valu
   );
 }
 
-function StatusCountTile({ label, value }: { label: "예약" | "방문완료" | "노쇼" | "취소"; value: number }) {
+function StatusCountTile({ label, value }: { label: string; value: number }) {
   return (
     <div className="border border-border bg-surface px-4 py-3">
       <div className="flex items-center justify-between gap-3">
@@ -123,7 +123,8 @@ export default async function TodayDashboardPage({ searchParams }: { searchParam
     serviceDate
   });
   const statusCounts = [
-    ["예약", metrics.statusCounts.reservation],
+    // REQ-009: 예약건수는 상태가 아니라 원장에 등록된 전체 건수다(방문완료·노쇼·취소로 바뀌어도 빠지지 않음).
+    ["예약건수", metrics.statusCounts.reservation],
     ["방문완료", metrics.statusCounts.completed],
     ["노쇼", metrics.statusCounts.noShow],
     ["취소", metrics.statusCounts.canceled]

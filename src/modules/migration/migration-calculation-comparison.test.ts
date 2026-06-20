@@ -135,7 +135,7 @@ describe("Story 7.2 migration calculation comparison", () => {
     ]);
   });
 
-  it("대조: 선결제 매출은 일별 요약에 포함하고 정산 계산은 방문완료 기준으로 유지한다", async () => {
+  it("대조: 선결제 매출은 결제수단 선택 시점 기준으로 일별 요약에 반영하고 정산 계산은 방문완료 기준으로 유지한다", async () => {
     const prismaClient = createMigrationCalculationPrisma();
     const calculations = await listCompletedServiceCallCalculationsForDate({ operatingMonthId: monthId, serviceDate: comparisonDate, prismaClient });
     assertMigrationComparisonEqual({
@@ -288,6 +288,7 @@ describe("Story 7.2 migration calculation comparison", () => {
 
   it("대조: 월마감 preview는 만근 8시간/20일, 갯수왕 40콜, 최종지급액을 계산한다", async () => {
     const dependencies = {
+      getDailyCallLedgerSummary,
       async listTherapistDailySettlements({ serviceDate }: { serviceDate: string }) {
         return therapistDay(serviceDate) as any;
       },
