@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@node-rs/argon2";
 import { prisma } from "./support/db";
-import { argon2idOptions } from "./support/auth";
+import { argon2idOptions, login as loginAccount } from "./support/auth";
 import { defaultRooms } from "@/modules/masters/room-schema";
 
 
@@ -12,6 +12,7 @@ type SeededData = {
   openMonthId: string;
   courseId: string;
   attentionCourseId: string;
+  endingSoonCourseId: string;
   therapistId: string;
   roomIds: string[];
 };
@@ -56,7 +57,9 @@ function monthBounds(monthKey: string) {
 
 const serviceDate = currentOperatingServiceDate();
 const monthKey = serviceDate.slice(0, 7);
-const statusAriaLabels = ["상태: 예약", "상태: 사용중", "상태: 청소중", "상태: 종료확인", "상태: 빈방"] as const;
+const expectedRoomOrder = ["401 호실", "402 호실", "301 호실", "302 호실", "303 호실", "201 호실", "202 호실", "203 호실", "101 호실", "102 호실", "103 호실"];
+const expectedRoomNamePattern = new RegExp(expectedRoomOrder.join("|"));
+const statusAriaLabels = ["상태: 예약", "상태: 사용중", "상태: 종료임박", "상태: 청소중", "상태: 종료확인", "상태: 빈방"] as const;
 const tvRampClasses = ["text-[40px]", "text-[28px]", "text-[22px]"] as const;
 
 function statusSurfacePaths() {
@@ -68,10 +71,7 @@ function statusSurfacePaths() {
 }
 
 async function login(page: Page) {
-  await page.goto("/sign-in");
-  await page.getByLabel("이메일 또는 계정 ID").fill("story35_admin");
-  await page.getByLabel("비밀번호").fill("Story35!admin");
-  await page.getByRole("button", { name: "로그인" }).click();
+  await loginAccount(page, "story35_admin", "Story35!admin");
 }
 
 async function storyEmployeeSortOrder(employeeGroup: string, staffCode: string, preferredSortOrder: number) {
@@ -238,6 +238,19 @@ async function seedStoryData(): Promise<SeededData> {
     isActive: true
   });
 
+  const endingSoonCourse = await (prisma as any).course.upsert({ where: { code: "E2E35-Y" }, update: { isActive: true }, create: { code: "E2E35-Y", isActive: true } });
+  await upsertPolicy(endingSoonCourse.id, {
+    name: "Story35 종료임박",
+    durationMinutes: 10,
+    basePrice: 0,
+    opsCallCredit: 0,
+    earcarePoolAmount: 0,
+    requiresSecondTherapist: false,
+    tvDisplayName: "S35 임박",
+    effectiveToMonth: null,
+    isActive: true
+  });
+
   const therapist = await (prisma as any).employee.upsert({
     where: { staffCode: "E2E35-THR-001" },
     update: {
@@ -278,6 +291,7 @@ async function seedStoryData(): Promise<SeededData> {
     openMonthId: openMonth.id,
     courseId: course.id,
     attentionCourseId: attentionCourse.id,
+    endingSoonCourseId: endingSoonCourse.id,
     therapistId: therapist.id,
     roomIds: rooms.map((room: { id: string }) => room.id)
   };
@@ -304,6 +318,34 @@ async function expectStatusBadge(page: Page, label: string, glyph: string) {
   await expect(page.getByLabel(`상태: ${label}`).filter({ hasText: glyph }).first()).toBeVisible();
 }
 
+async function expectRoomOrder(page: Page) {
+  const defaultRoomCards = page.getByTestId("room-status-card").filter({ hasText: expectedRoomNamePattern });
+  await expect(defaultRoomCards).toHaveCount(11);
+  await expect(defaultRoomCards.locator("h2")).toHaveText(expectedRoomOrder);
+}
+
+async function expectEndingSoonAndCompleteCheckAreDistinct(page: Page) {
+  const cards = page.getByTestId("room-status-card");
+  const endingSoonCard = cards.filter({ has: page.getByLabel("상태: 종료임박") });
+  await expect(endingSoonCard).toHaveCount(1);
+  await expect(endingSoonCard.getByLabel("상태: 종료임박").filter({ hasText: "◴" })).toBeVisible();
+  await expect(endingSoonCard.getByLabel("상태: 종료임박")).toHaveClass(/bg-status-ending-soon/);
+  await expect(endingSoonCard.getByLabel("상태: 종료임박")).toHaveClass(/text-status-ending-soon-foreground/);
+  await expect(endingSoonCard).toHaveClass(/status-attention/);
+  await expect(endingSoonCard).toHaveClass(/border-status-ending-soon/);
+  await expect(endingSoonCard).not.toHaveClass(/border-status-complete-check/);
+  await expect(endingSoonCard).toContainText("곧 종료");
+  await expect(endingSoonCard).not.toContainText("결제·확인 필요");
+
+  const completeCheckCard = cards.filter({ has: page.getByLabel("상태: 종료확인") });
+  await expect(completeCheckCard).toHaveCount(1);
+  await expect(completeCheckCard.getByLabel("상태: 종료확인").filter({ hasText: "⚠" })).toBeVisible();
+  await expect(completeCheckCard).toHaveClass(/status-attention/);
+  await expect(completeCheckCard).toHaveClass(/border-status-complete-check/);
+  await expect(completeCheckCard).not.toHaveClass(/border-status-ending-soon/);
+  await expect(completeCheckCard).toContainText("결제·확인 필요");
+}
+
 test.describe("Story 3.5 status badge accessibility", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -311,6 +353,7 @@ test.describe("Story 3.5 status badge accessibility", () => {
     seededData = await seedStoryData();
     const operatingMinutes = currentOperatingMinutes();
     const activeStart = operatingMinutesToTime(Math.max(operatingMinutes - 30, OPERATING_DAY_START_MINUTES));
+    const endingSoonStart = operatingMinutesToTime(Math.max(operatingMinutes - 5, OPERATING_DAY_START_MINUTES));
     const futureStart = operatingMinutesToTime(operatingMinutes + 60);
 
     await createCall({ roomId: seededData.roomIds[0], status: "예약", startTime: futureStart, memo: "Story 3.5 reserved" });
@@ -323,6 +366,13 @@ test.describe("Story 3.5 status badge accessibility", () => {
       memo: "Story 3.5 attention",
       courseId: seededData.attentionCourseId
     });
+    await createCall({
+      roomId: seededData.roomIds[4],
+      status: "사용중",
+      startTime: endingSoonStart,
+      memo: "Story 3.5 ending soon",
+      courseId: seededData.endingSoonCourseId
+    });
   });
 
   test("renders shared label and glyph status badges on /live, /rooms, and /tv", async ({ page }) => {
@@ -330,13 +380,15 @@ test.describe("Story 3.5 status badge accessibility", () => {
 
     for (const path of statusSurfacePaths()) {
       await page.goto(path);
-      await expect(page.getByTestId("room-status-card")).toHaveCount(11);
+      await expectRoomOrder(page);
       await expectStatusBadge(page, "예약", "◷");
       await expectStatusBadge(page, "사용중", "●");
+      await expectStatusBadge(page, "종료임박", "◴");
       await expectStatusBadge(page, "청소중", "◐");
       await expectStatusBadge(page, "종료확인", "⚠");
       await expectStatusBadge(page, "빈방", "○");
       await expect(page.getByText("결제·확인 필요")).toBeVisible();
+      await expectEndingSoonAndCompleteCheckAreDistinct(page);
     }
   });
 
@@ -388,7 +440,7 @@ test.describe("Story 3.5 status badge accessibility", () => {
       await page.goto(path);
 
       const cards = page.getByTestId("room-status-card");
-      await expect(cards).toHaveCount(11);
+      await expect(cards.first()).toBeVisible();
       await expect(cards.getByRole("button")).toHaveCount(0);
       await expect(cards.filter({ hasText: /저장|수정|삭제|자동저장|정산|마감|입력/ })).toHaveCount(0);
     }

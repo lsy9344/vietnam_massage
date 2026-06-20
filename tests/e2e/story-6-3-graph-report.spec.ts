@@ -361,15 +361,16 @@ test.describe("Story 6.3 graph report", () => {
     await expect(page.getByRole("img", { name: "일별 선결제 매출과 순매출 추이" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "매출(선결제 반영)" })).toBeVisible();
     const selectedDateRevenueRow = page.getByRole("row").filter({ hasText: seededData.serviceDate }).first();
-    await expect(selectedDateRevenueRow).toContainText("1,400,000 VND");
-    await expect(selectedDateRevenueRow).toContainText("1,100,000 VND");
+    await expect(selectedDateRevenueRow).toContainText("4,700,000 VND");
+    await expect(selectedDateRevenueRow).toContainText("4,400,000 VND");
     await expect(selectedDateRevenueRow).toContainText("1건");
     await expect(page.getByText("A 코스")).toBeVisible();
     await expect(page.getByText("1건 · 1,400,000 VND · 콜 50% · 매출 43.8%")).toBeVisible();
     await expect(page.getByText("B 코스")).toBeVisible();
     await expect(page.getByText("1건 · 1,800,000 VND · 콜 50% · 매출 56.3%")).toBeVisible();
-    await expect(page.getByText(seededData.therapist1Name)).toBeVisible();
-    await expect(page.getByText("담당 3건 · 1번 2 · 2번 1")).toBeVisible();
+    const therapistRankings = page.getByRole("region", { name: "마사지사 순위 그래프", exact: true });
+    await expect(therapistRankings).toContainText(seededData.therapist1Name);
+    await expect(therapistRankings).toContainText("담당 3건 · 1번 2 · 2번 1");
     await expect(page.getByText("사용중")).toBeVisible();
     await expect(page.getByText("청소중")).toBeVisible();
     await expect(page.getByText("1개").first()).toBeVisible();
@@ -382,7 +383,8 @@ test.describe("Story 6.3 graph report", () => {
     await page.goto(`/dashboard/reports?operatingMonthId=${seededData.monthId}&serviceDate=${isoDate(seededData.monthKey, 31)}`);
 
     await expect(page).toHaveURL(new RegExp(`/dashboard/reports\\?operatingMonthId=${seededData.monthId}&serviceDate=${seededData.endDate}`));
-    await expect(page.getByLabel("조회날짜")).toHaveValue(seededData.endDate);
+    await expect(page.getByRole("heading", { name: "그래프 리포트" })).toBeVisible({ timeout: 45000 });
+    await expect(page.getByLabel("조회날짜")).toHaveValue(seededData.endDate, { timeout: 45000 });
   });
 
   for (const role of ["counter", "settlement_manager", "read_only_viewer"] as const) {

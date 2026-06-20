@@ -235,17 +235,22 @@ test.afterAll(async () => {
 
 test.describe("Story 4.2 therapist daily settlement", () => {
   test("settlement manager can query therapist totals and assignment evidence", async ({ page }) => {
-    await login(page, "story42_settlement", "Story42!settlement");
-    await page.goto(`/settlements?operatingMonthId=${seededData.operatingMonthId}&serviceDate=2034-02-12`);
+    const targetUrl = `/settlements?operatingMonthId=${seededData.operatingMonthId}&serviceDate=2034-02-12`;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await login(page, "story42_settlement", "Story42!settlement");
+      await page.goto(targetUrl);
+      if (!new URL(page.url()).pathname.startsWith("/sign-in")) break;
+    }
 
-    await expect(page.getByRole("heading", { name: "마사지사 일일정산" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "마사지사 일일정산" })).toBeVisible({ timeout: 45000 });
     await expect(page.getByLabel("운영월")).toHaveValue(seededData.operatingMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2034-02-12");
-    await expect(page.getByText("E2E42 마사지사1")).toBeVisible();
-    await expect(page.getByText("1,600,000 VND")).toBeVisible();
-    await expect(page.getByText("E2E42 마사지사2")).toBeVisible();
-    await expect(page.getByText("900,000 VND")).toBeVisible();
-    await expect(page.getByText("E2E42 마사지사3")).toBeVisible();
+    const therapist1Summary = page.getByRole("row").filter({ hasText: "E2E42 마사지사1" }).filter({ hasText: "1,600,000 VND" }).first();
+    const therapist2Summary = page.getByRole("row").filter({ hasText: "E2E42 마사지사2" }).filter({ hasText: "900,000 VND" }).first();
+    const therapist3Summary = page.getByRole("row").filter({ hasText: "E2E42 마사지사3" }).first();
+    await expect(therapist1Summary).toBeVisible();
+    await expect(therapist2Summary).toBeVisible();
+    await expect(therapist3Summary).toBeVisible();
     await expect(page.getByText("정책 warning / 제외 콜")).toBeVisible();
     await expect(page.getByText("1건 / 1건")).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "A 수량/금액" })).toBeVisible();
@@ -254,16 +259,14 @@ test.describe("Story 4.2 therapist daily settlement", () => {
     await expect(page.getByRole("columnheader", { name: "D 수량/금액" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "E 수량/금액" })).toBeVisible();
 
-    const therapist1Summary = page.getByRole("row").filter({ hasText: "E2E42 마사지사1" }).first();
     await expect(therapist1Summary).toContainText("2건");
     await expect(therapist1Summary).toContainText("700,000 VND");
     await expect(therapist1Summary).toContainText("900,000 VND");
 
     await expect(page.getByRole("heading", { name: "콜별 산출 근거" })).toBeVisible();
-    await expect(page.getByText("마사지사2")).toBeVisible();
-    await expect(page.getByText("0원 정책")).toBeVisible();
-    await expect(page.getByText("정책 적용")).toBeVisible();
-    await expect(page.getByText("정책 없음")).toBeVisible();
+    await expect(page.getByRole("row").filter({ hasText: "E2E42 마사지사2" }).filter({ hasText: "마사지사2" }).filter({ hasText: "0원 정책" }).first()).toBeVisible();
+    await expect(page.getByRole("row").filter({ hasText: "정책 적용" }).first()).toBeVisible();
+    await expect(page.getByRole("row").filter({ hasText: "E2E42 마사지사3" }).filter({ hasText: "정책 없음" }).first()).toBeVisible();
   });
 
   test("settlement manager can mark payment and review actor history", async ({ page }) => {

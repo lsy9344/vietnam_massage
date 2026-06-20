@@ -136,7 +136,8 @@ function focusLedgerCell(rowIndex: number, columnId: string) {
   });
 }
 
-function optionLabel(options: ServiceCallOption[], value: string | null | undefined) {
+function optionLabel(options: ServiceCallOption[], value: string | null | undefined, emptyLabel = "") {
+  if (!value) return emptyLabel;
   return options.find((option) => option.value === value)?.label ?? "";
 }
 
@@ -211,6 +212,7 @@ function SelectCell({
   rowIndex,
   label,
   name,
+  emptyLabel,
   onBlur,
   onChange,
   onCommitValue,
@@ -228,6 +230,7 @@ function SelectCell({
   errorMessage?: string | null;
   label: string;
   name: string;
+  emptyLabel?: string;
   onBlur?: () => void;
   onChange?: (value: string) => void;
   onCommitValue?: (value: string) => void;
@@ -243,7 +246,7 @@ function SelectCell({
   const isControlled = value !== undefined;
   const [internalValue, setInternalValue] = useState(defaultValue ?? "");
   const selectedValue = isControlled ? (value ?? "") : internalValue;
-  const [inputValue, setInputValue] = useState(() => optionLabel(options, selectedValue));
+  const [inputValue, setInputValue] = useState(() => optionLabel(options, selectedValue, emptyLabel));
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const skipNextBlurCommit = useRef(false);
@@ -258,7 +261,7 @@ function SelectCell({
 
   function selectOption(option: ServiceCallOption | null, commit: boolean) {
     const nextValue = option?.value ?? "";
-    const nextLabel = option?.label ?? "";
+    const nextLabel = option?.label ?? emptyLabel ?? "";
     setInputValue(nextLabel);
     setOpen(false);
     setActiveIndex(0);
@@ -275,7 +278,7 @@ function SelectCell({
   function closeAndRestore() {
     setOpen(false);
     setActiveIndex(0);
-    setInputValue(optionLabel(options, selectedValue));
+    setInputValue(optionLabel(options, selectedValue, emptyLabel));
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -359,7 +362,7 @@ function SelectCell({
           setActiveIndex(0);
         }}
         onFocus={(event) => {
-          setInputValue(optionLabel(options, selectedValue));
+          setInputValue(optionLabel(options, selectedValue, emptyLabel));
           event.currentTarget.select();
         }}
         onKeyDown={handleKeyDown}
@@ -543,6 +546,7 @@ function AddRowForm({
                 <SelectCell
                   columnId="roomId"
                   disabled={disabled}
+                  emptyLabel="미배정"
                   label="객실"
                   name="roomId"
                   onGridKeyDown={(event) => handleAddRowKeyDown("roomId", event)}
@@ -944,6 +948,7 @@ function EditableCallRow({
         <SelectCell
           columnId="roomId"
           disabled={isLocked || saveStatus === "saving"}
+          emptyLabel="미배정"
           label="객실"
           name="roomId"
           onBlur={() => commit()}
