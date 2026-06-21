@@ -5,8 +5,8 @@ import { requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getDailyCallLedgerSummary } from "@/modules/calls/service-call-service";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
-import type { RoomStatusDto } from "@/modules/rooms/dtos";
 import { latestRoomStatusUpdatedAt } from "@/modules/rooms/room-status-refresh";
+import { roomFloorGroups } from "@/modules/rooms/room-floor-groups";
 import { listRoomStatuses } from "@/modules/rooms/room-status-service";
 import { RoomStatusRefreshController } from "@/components/domain/room-status-refresh-controller";
 
@@ -21,24 +21,6 @@ function formatNumber(value: number) {
 
 function formatVnd(value: number) {
   return `${formatNumber(value)} VND`;
-}
-
-function roomFloor(status: RoomStatusDto) {
-  return status.roomDisplayName.match(/^\d/)?.[0] ?? "기타";
-}
-
-function roomFloorGroups(statuses: RoomStatusDto[]) {
-  const groups: Array<{ floor: string; statuses: RoomStatusDto[] }> = [];
-  for (const status of statuses) {
-    const floor = roomFloor(status);
-    const current = groups.find((group) => group.floor === floor);
-    if (current) {
-      current.statuses.push(status);
-    } else {
-      groups.push({ floor, statuses: [status] });
-    }
-  }
-  return groups;
 }
 
 function floorGridClass(count: number) {
@@ -166,6 +148,14 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
         {statusSummary.map(([label, count]) => (
           <SummaryTile key={label} label={label} value={`${formatNumber(count)}건`} />
         ))}
+      </section>
+
+      <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="결제수단별 집계">
+        {/* REQ-004: 카운터 직원이 돈통 현금 흐름을 한눈에 보도록 결제수단별 집계를 첫화면에도 노출한다. */}
+        <SummaryTile label="현금" value={formatVnd(summary.paymentMethodTotals.cash)} />
+        <SummaryTile label="카드" value={formatVnd(summary.paymentMethodTotals.card)} />
+        <SummaryTile label="계좌" value={formatVnd(summary.paymentMethodTotals.bank)} />
+        <SummaryTile label="기타" value={formatVnd(summary.paymentMethodTotals.other)} />
       </section>
 
       <section className="mt-4 grid grid-cols-[1fr_1fr_2fr] gap-3" aria-label="오늘 KPI">

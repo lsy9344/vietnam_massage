@@ -5,32 +5,14 @@ import { RoomStatusRefreshController } from "@/components/domain/room-status-ref
 import { requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
-import type { RoomStatusDto } from "@/modules/rooms/dtos";
 import { latestRoomStatusUpdatedAt } from "@/modules/rooms/room-status-refresh";
+import { roomFloorGroups } from "@/modules/rooms/room-floor-groups";
 import { listRoomStatuses } from "@/modules/rooms/room-status-service";
 
 type RoomsPageSearchParams = {
   operatingMonthId?: string;
   serviceDate?: string;
 };
-
-function roomFloor(status: RoomStatusDto) {
-  return status.roomDisplayName.match(/^\d/)?.[0] ?? "기타";
-}
-
-function roomFloorGroups(statuses: RoomStatusDto[]) {
-  const groups: Array<{ floor: string; statuses: RoomStatusDto[] }> = [];
-  for (const status of statuses) {
-    const floor = roomFloor(status);
-    const current = groups.find((group) => group.floor === floor);
-    if (current) {
-      current.statuses.push(status);
-    } else {
-      groups.push({ floor, statuses: [status] });
-    }
-  }
-  return groups;
-}
 
 function floorGridClass(count: number) {
   return count === 2 ? "grid grid-cols-1 gap-3 sm:grid-cols-2" : "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3";
