@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { CompletedServiceCallCalculationDto } from "@/modules/calls/service-call-service";
 import {
   MonthlyClosingPreviewDomainError,
   listMonthlyClosingPreview,
@@ -461,7 +462,7 @@ function createDependencies(options: { fullAttendanceResult?: TherapistFullAtten
         calledDates.push(`financial:${serviceDate}`);
         return financialDayResults[serviceDate as keyof typeof financialDayResults] ?? financialDayResult();
       },
-      async listCompletedServiceCallCalculationsForOperatingMonth() {
+      async listCompletedServiceCallCalculationsForOperatingMonth(): Promise<CompletedServiceCallCalculationDto[]> {
         calledDates.push("completed-calculations");
         return [
           {

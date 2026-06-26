@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   getDailyCallLedgerSummary,
   listCompletedServiceCallCalculationsForDate,
+  listCompletedServiceCallCalculationsForOperatingMonth,
   saveBasicServiceCallRow,
   ServiceCallDomainError
 } from "@/modules/calls/service-call-service";
@@ -320,7 +321,8 @@ describe("Story 7.2 migration calculation comparison", () => {
       },
       async listEarcareDailySettlements({ serviceDate }: { serviceDate: string }) {
         return emptyEarcareDay(serviceDate) as any;
-      }
+      },
+      listCompletedServiceCallCalculationsForOperatingMonth
     };
 
     const preview = await listMonthlyClosingPreview({

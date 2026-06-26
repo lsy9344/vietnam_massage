@@ -39,7 +39,7 @@ const discountedCallRow: ServiceCallRowDto = {
   courseCode: "A",
   courseLabel: "A 누루60",
   customerMemo: "할인 표시 검증",
-  therapist1: { employeeId: "therapist-1", displayName: "마사지사1", staffCode: "THR-001" },
+  therapist1: { id: "therapist-1", displayName: "마사지사1", staffCode: "THR-001" },
   therapist2: null,
   earcare: null,
   status: "VISIT_COMPLETE",
