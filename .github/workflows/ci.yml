@@ -20,9 +20,6 @@ on:
         required: false
         type: string
         default: ""
-  schedule:
-    - cron: "0 19 * * *"
-
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
@@ -139,7 +136,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [auth, calls, settlements, dashboard]
+        group: [auth, closing-lock, closing-reopen, closing-confirm]
 
     services:
       postgres:
@@ -188,20 +185,23 @@ jobs:
       - name: Seed local dev accounts
         run: pnpm exec tsx scripts/seed-dev-accounts.ts
 
+      - name: Seed master data
+        run: pnpm exec tsx scripts/seed-master-data.ts
+
       - name: Run representative e2e smoke
         run: |
           case "$SMOKE_GROUP" in
             auth)
               pnpm exec playwright test tests/e2e/story-1-2-auth-rbac.spec.ts --reporter=line
               ;;
-            calls)
-              pnpm exec playwright test tests/e2e/story-2-1-call-ledger-basic.spec.ts --reporter=line
+            closing-lock)
+              pnpm exec playwright test tests/e2e/story-5-4-monthly-close-lock.spec.ts --reporter=line
               ;;
-            settlements)
-              pnpm exec playwright test tests/e2e/story-4-2-therapist-daily-settlement.spec.ts --reporter=line
+            closing-reopen)
+              pnpm exec playwright test tests/e2e/story-5-5-monthly-close-reopen.spec.ts --reporter=line
               ;;
-            dashboard)
-              pnpm exec playwright test tests/e2e/story-6-1-today-dashboard.spec.ts --reporter=line
+            closing-confirm)
+              pnpm exec playwright test tests/e2e/story-5-6-monthly-close-confirm-dialog.spec.ts --reporter=line
               ;;
             *)
               echo "Unknown smoke group: $SMOKE_GROUP"
@@ -225,10 +225,7 @@ jobs:
     container:
       image: mcr.microsoft.com/playwright:v1.60.0-noble
     timeout-minutes: 35
-    if: >-
-      github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && inputs.run_full_e2e) ||
-      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
+    if: github.event_name == 'workflow_dispatch' && inputs.run_full_e2e
     strategy:
       fail-fast: false
       matrix:
@@ -281,6 +278,9 @@ jobs:
 
       - name: Seed local dev accounts
         run: pnpm exec tsx scripts/seed-dev-accounts.ts
+
+      - name: Seed master data
+        run: pnpm exec tsx scripts/seed-master-data.ts
 
       - name: Run Playwright shard
         run: |
@@ -354,6 +354,9 @@ jobs:
 
       - name: Seed local dev accounts
         run: pnpm exec tsx scripts/seed-dev-accounts.ts
+
+      - name: Seed master data
+        run: pnpm exec tsx scripts/seed-master-data.ts
 
       - name: Run smoke burn-in
         run: pnpm exec playwright test tests/e2e/story-1-2-auth-rbac.spec.ts --repeat-each=10 --reporter=line
