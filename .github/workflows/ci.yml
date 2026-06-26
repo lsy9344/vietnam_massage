@@ -192,16 +192,16 @@ jobs:
         run: |
           case "$SMOKE_GROUP" in
             auth)
-              pnpm run test:e2e -- tests/e2e/story-1-2-auth-rbac.spec.ts --reporter=line
+              pnpm exec playwright test tests/e2e/story-1-2-auth-rbac.spec.ts --reporter=line
               ;;
             calls)
-              pnpm run test:e2e -- tests/e2e/story-2-1-call-ledger-basic.spec.ts --reporter=line
+              pnpm exec playwright test tests/e2e/story-2-1-call-ledger-basic.spec.ts --reporter=line
               ;;
             settlements)
-              pnpm run test:e2e -- tests/e2e/story-4-2-therapist-daily-settlement.spec.ts --reporter=line
+              pnpm exec playwright test tests/e2e/story-4-2-therapist-daily-settlement.spec.ts --reporter=line
               ;;
             dashboard)
-              pnpm run test:e2e -- tests/e2e/story-6-1-today-dashboard.spec.ts --reporter=line
+              pnpm exec playwright test tests/e2e/story-6-1-today-dashboard.spec.ts --reporter=line
               ;;
             *)
               echo "Unknown smoke group: $SMOKE_GROUP"
@@ -286,9 +286,9 @@ jobs:
         run: |
           echo "Running Playwright shard $SHARD/4"
           if [ -n "$E2E_GREP" ]; then
-            pnpm run test:e2e -- --grep "$E2E_GREP" --shard="$SHARD/4" --reporter=line
+            pnpm exec playwright test --grep "$E2E_GREP" --shard="$SHARD/4" --reporter=line
           else
-            pnpm run test:e2e -- --shard="$SHARD/4" --reporter=line
+            pnpm exec playwright test --shard="$SHARD/4" --reporter=line
           fi
 
       - name: Upload Playwright artifacts
@@ -356,7 +356,7 @@ jobs:
         run: pnpm exec tsx scripts/seed-dev-accounts.ts
 
       - name: Run smoke burn-in
-        run: pnpm run test:e2e -- tests/e2e/story-1-2-auth-rbac.spec.ts --repeat-each=10 --reporter=line
+        run: pnpm exec playwright test tests/e2e/story-1-2-auth-rbac.spec.ts --repeat-each=10 --reporter=line
 
       - name: Upload Playwright artifacts
         if: failure() || cancelled()
