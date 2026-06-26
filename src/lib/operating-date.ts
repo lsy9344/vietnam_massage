@@ -19,10 +19,13 @@ export function kstTodayIsoDate(now = new Date()) {
 }
 
 export function clampDateToOperatingMonth(date: string | undefined, month: OperatingMonthDateRange, now = new Date()) {
-  if (!date || date < month.startDate || date > month.endDate) {
+  if (!date) {
     const today = kstTodayIsoDate(now);
     return today >= month.startDate && today <= month.endDate ? today : month.startDate;
   }
+
+  if (date < month.startDate) return month.startDate;
+  if (date > month.endDate) return month.endDate;
 
   return date;
 }

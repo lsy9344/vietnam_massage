@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
@@ -23,6 +24,8 @@ model UserAccount {
   changedServiceCallStatusHistories ServiceCallStatusHistory[]
   confirmedMonthlyClosings MonthlyClosing[]
   changedMigrationVerificationIssueHistories MigrationVerificationIssueHistory[]
+  therapistDailySettlementPayments TherapistDailySettlementPayment[]
+  changedTherapistDailySettlementPaymentHistories TherapistDailySettlementPaymentHistory[]
 
   @@map("user_accounts")
 }
@@ -49,6 +52,8 @@ model Employee {
   handledDailyExpenses   DailyExpense[]
   earcareAttendances     EarcareAttendance[]
   opsAttendances         OpsAttendance[]
+  therapistAttendances   TherapistAttendance[]
+  therapistDailySettlementPayments TherapistDailySettlementPayment[]
 
   @@unique([employeeGroup, sortOrder], map: "uq_employees_employee_group_sort_order")
   @@map("employees")
@@ -126,10 +131,12 @@ model OperatingMonth {
   status             String              @default("작성중")
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @updatedAt @map("updated_at")
-  serviceCalls       ServiceCall[]
-  dailyExpenses      DailyExpense[]
+  serviceCalls ServiceCall[]
+  dailyExpenses DailyExpense[]
   earcareAttendances EarcareAttendance[]
-  opsAttendances     OpsAttendance[]
+  opsAttendances OpsAttendance[]
+  therapistAttendances TherapistAttendance[]
+  therapistDailySettlementPayments TherapistDailySettlementPayment[]
   monthlyClosings MonthlyClosing[]
 
   @@map("operating_months")
@@ -216,8 +223,8 @@ model ServiceCall {
   operatingMonth    OperatingMonth             @relation(fields: [operatingMonthId], references: [id])
   serviceDate       DateTime                   @map("service_date") @db.Date
   startTime         String                     @map("start_time")
-  roomId            String                     @map("room_id")
-  room              Room                       @relation(fields: [roomId], references: [id])
+  roomId            String?                    @map("room_id")
+  room              Room?                      @relation(fields: [roomId], references: [id])
   courseId          String                     @map("course_id")
   course            Course                     @relation(fields: [courseId], references: [id])
   customerMemo      String?                    @map("customer_memo")
@@ -320,6 +327,73 @@ model OpsAttendance {
   @@unique([operatingMonthId, attendanceDate, employeeId], map: "uq_ops_attendances_month_date_employee")
   @@index([employeeId, attendanceDate], map: "idx_ops_attendances_employee_date")
   @@map("ops_attendances")
+}
+
+// DB CHECK constraints (declared in the migration, not expressible in Prisma schema):
+//   - check_in_minute / check_out_minute are minute-of-day integers in 0..1439
+//   - standby_minutes is the overnight-aware difference in 0..1439 and equals
+//     ((check_out_minute - check_in_minute + 1440) % 1440)
+//   - is_full_attendance_recognized equals (standby_minutes >= 480)
+model TherapistAttendance {
+  id                         String         @id @default(cuid())
+  operatingMonthId           String         @map("operating_month_id")
+  operatingMonth             OperatingMonth @relation(fields: [operatingMonthId], references: [id])
+  attendanceDate             DateTime       @map("attendance_date") @db.Date
+  employeeId                 String         @map("employee_id")
+  employee                   Employee       @relation(fields: [employeeId], references: [id])
+  checkInMinute              Int            @map("check_in_minute")
+  checkOutMinute             Int            @map("check_out_minute")
+  standbyMinutes             Int            @map("standby_minutes")
+  isFullAttendanceRecognized Boolean        @map("is_full_attendance_recognized")
+  isActive                   Boolean        @default(true) @map("is_active")
+  createdAt                  DateTime       @default(now()) @map("created_at")
+  updatedAt                  DateTime       @updatedAt @map("updated_at")
+
+  @@unique([operatingMonthId, attendanceDate, employeeId], map: "uq_therapist_attendances_month_date_employee")
+  @@index([employeeId, attendanceDate], map: "idx_therapist_attendances_employee_date")
+  @@map("therapist_attendances")
+}
+
+model TherapistDailySettlementPayment {
+  id                 String         @id @default(cuid())
+  operatingMonthId   String         @map("operating_month_id")
+  operatingMonth     OperatingMonth @relation(fields: [operatingMonthId], references: [id])
+  serviceDate        DateTime       @map("service_date") @db.Date
+  employeeId         String         @map("employee_id")
+  employee           Employee       @relation(fields: [employeeId], references: [id])
+  isPaid             Boolean        @default(false) @map("is_paid")
+  paidAt             DateTime?      @map("paid_at")
+  paidByAccountId    String?        @map("paid_by_account_id")
+  paidByAccount      UserAccount?   @relation(fields: [paidByAccountId], references: [id])
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+  histories          TherapistDailySettlementPaymentHistory[]
+
+  @@unique([operatingMonthId, serviceDate, employeeId], map: "uq_therapist_daily_settlement_payments_month_date_employee")
+  @@unique([id, operatingMonthId, serviceDate, employeeId], map: "uq_tdsp_id_month_date_employee")
+  @@index([employeeId, serviceDate], map: "idx_therapist_daily_settlement_payments_employee_date")
+  @@index([paidByAccountId, paidAt], map: "idx_therapist_daily_settlement_payments_actor_paid_at")
+  @@map("therapist_daily_settlement_payments")
+}
+
+model TherapistDailySettlementPaymentHistory {
+  id                 String                          @id @default(cuid())
+  paymentId          String                          @map("payment_id")
+  operatingMonthId   String                          @map("operating_month_id")
+  serviceDate        DateTime                        @map("service_date") @db.Date
+  employeeId         String                          @map("employee_id")
+  payment            TherapistDailySettlementPayment @relation(fields: [paymentId, operatingMonthId, serviceDate, employeeId], references: [id, operatingMonthId, serviceDate, employeeId])
+  previousIsPaid     Boolean?                        @map("previous_is_paid")
+  newIsPaid          Boolean                         @map("new_is_paid")
+  changedByAccountId String                          @map("changed_by_account_id")
+  changedByAccount   UserAccount                     @relation(fields: [changedByAccountId], references: [id])
+  changedAt          DateTime                        @default(now()) @map("changed_at")
+  createdAt          DateTime                        @default(now()) @map("created_at")
+
+  @@index([paymentId, changedAt], map: "idx_tdsp_histories_payment_changed")
+  @@index([operatingMonthId, serviceDate, employeeId], map: "idx_tdsp_histories_month_date_emp")
+  @@index([changedByAccountId, changedAt], map: "idx_tdsp_histories_actor_changed")
+  @@map("therapist_daily_settlement_payment_histories")
 }
 
 model CoursePolicy {

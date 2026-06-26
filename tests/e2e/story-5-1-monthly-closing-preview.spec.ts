@@ -1,16 +1,8 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "./support/db";
+import { argon2idOptions, login } from "./support/auth";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: 2,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 type SeededData = {
   previewOperatingMonthId: string;
@@ -18,6 +10,7 @@ type SeededData = {
   previewStartDate: string;
   previewEndDate: string;
   lockedStartDate: string;
+  memoPrefix: string;
   accounts: {
     admin: string;
     settlement: string;
@@ -128,12 +121,6 @@ async function retryAfterUniqueRace(attempt: number) {
   await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
 }
 
-async function login(page: Page, accountId: string, password: string) {
-  await page.goto("/sign-in");
-  await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
-}
 
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, position: string, sortOrder: number) {
   const safeSortOrder = await storyEmployeeSortOrder(employeeGroup, staffCode, sortOrder);
@@ -430,6 +417,7 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
     previewStartDate,
     previewEndDate,
     lockedStartDate,
+    memoPrefix,
     accounts
   };
 }
@@ -440,6 +428,8 @@ test.describe("Story 5.1 monthly closing preview", () => {
   });
 
   test.afterAll(async () => {
+    // 이 워커가 시드한 콜을 운영월 + 워커별 메모 prefix 범위로 정리한 뒤 연결을 닫는다.
+    await cleanupStoryData([seededData.previewOperatingMonthId, seededData.lockedOperatingMonthId], seededData.memoPrefix);
     await prisma.$disconnect();
   });
 

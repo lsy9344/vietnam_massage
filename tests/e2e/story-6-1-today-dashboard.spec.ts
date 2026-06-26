@@ -1,17 +1,9 @@
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 import { hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "./support/db";
+import { argon2idOptions, login } from "./support/auth";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: 2,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 type SeededData = {
   monthId: string;
@@ -41,11 +33,29 @@ function utcDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
-async function login(page: Page, accountId: string, password: string) {
-  await page.goto("/sign-in");
-  await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function kpiTile(region: Locator, label: string) {
+  return region.locator(":scope > div").filter({ hasText: new RegExp(`^\\s*${escapeRegExp(label)}\\s*`) }).first();
+}
+
+async function expectStrongTone(region: Locator, label: string) {
+  const tile = kpiTile(region, label);
+  await expect(tile).toHaveClass(/border-2/);
+  await expect(tile).toHaveClass(/border-brand/);
+  const value = tile.locator("p").nth(1);
+  await expect(value).toHaveClass(/text-3xl/);
+  await expect(value).toHaveClass(/font-bold/);
+  await expect(value).toHaveClass(/text-brand/);
+}
+
+async function expectCostTone(region: Locator, label: string) {
+  const value = kpiTile(region, label).locator("p").nth(1);
+  await expect(value).toHaveClass(/text-2xl/);
+  await expect(value).toHaveClass(/font-semibold/);
+  await expect(value).toHaveClass(/text-danger/);
 }
 
 async function safeEmployeeSortOrder(employeeGroup: string, staffCode: string, preferredSortOrder: number) {
@@ -138,6 +148,14 @@ async function seedAccount(input: { accountId: string; password: string; role: s
   });
 }
 
+async function upsertCodeItem(codeType: string, code: string, displayName: string, sortOrder: number) {
+  await (prisma as any).codeItem.upsert({
+    where: { codeType_code: { codeType, code } },
+    update: { displayName, sortOrder, isActive: true },
+    create: { codeType, code, displayName, sortOrder, isSystemDefault: false, isActive: true }
+  });
+}
+
 async function upsertCoursePolicy(courseId: string, monthKey: string, code: string, basePrice: number, earcarePoolAmount: number, requiresSecondTherapist = false) {
   const existing = await (prisma as any).coursePolicy.findFirst({ where: { courseId, effectiveFromMonth: monthKey } });
   const data = {
@@ -187,9 +205,11 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
   const accounts = {} as SeededData["accounts"];
   for (const [index, role] of accountRoles.entries()) {
     const employee = await seedEmployee(`E2E61-${suffix}-${role}`, `E2E61 ${role}`, "OPERATIONS", role, sortBase + index);
-    accounts[role] = { accountId: `story61_${suffix}_${role}`, password: `Story61!${role}` };
+    accounts[role] = { accountId: `story61_${suffix}_${role}`.toLowerCase(), password: `Story61!${role}` };
     await seedAccount({ ...accounts[role], role, employeeId: employee.id });
   }
+  await upsertCodeItem("ATTENDANCE_STATUS", "NORMAL", "정상", sortBase + 30);
+  await upsertCodeItem("ATTENDANCE_STATUS", "DAY_OFF", "휴무", sortBase + 31);
 
   const operatingMonth = await (prisma as any).operatingMonth.upsert({
     where: { monthKey },
@@ -305,6 +325,8 @@ test.describe("Story 6.1 today dashboard", () => {
   });
 
   test.afterAll(async () => {
+    // 이 스펙이 시드한 콜/데이터를 운영월 범위로 정리한 뒤 연결을 닫는다.
+    await cleanupStoryData(seededData.monthId);
     await prisma.$disconnect();
   });
 
@@ -330,17 +352,34 @@ test.describe("Story 6.1 today dashboard", () => {
     await login(page, account.accountId, account.password);
     await page.goto(`/dashboard/today?operatingMonthId=${seededData.monthId}&serviceDate=${seededData.serviceDate}`);
 
-    await expect(page.getByRole("region", { name: "오늘 상태 건수" })).toContainText("예약");
-    await expect(page.getByRole("region", { name: "오늘 상태 건수" })).toContainText("1건");
-    await expect(page.getByRole("region", { name: "오늘 상태 건수" })).toContainText("방문완료");
-    await expect(page.getByRole("region", { name: "오늘 상태 건수" })).toContainText("6건");
-    await expect(page.getByRole("region", { name: "오늘 금액 KPI" })).toContainText("9,400,000 VND");
-    await expect(page.getByRole("region", { name: "오늘 금액 KPI" })).toContainText("9,100,000 VND");
-    await expect(page.getByRole("region", { name: "코스별 방문완료" })).toContainText("A");
+    await expect(page.getByRole("region", { name: "오늘 상태 건수", exact: true })).toContainText("예약");
+    await expect(page.getByRole("region", { name: "오늘 상태 건수", exact: true })).toContainText("1건");
+    await expect(page.getByRole("region", { name: "오늘 상태 건수", exact: true })).toContainText("방문완료");
+    await expect(page.getByRole("region", { name: "오늘 상태 건수", exact: true })).toContainText("6건");
+    await expect(page.getByRole("region", { name: "오늘 금액 KPI", exact: true })).toContainText("10,900,000 VND");
+    await expect(page.getByRole("region", { name: "오늘 금액 KPI", exact: true })).toContainText("6,000,000 VND");
+    const details = page.getByRole("region", { name: "상세 요약", exact: true });
+    await expect(details).toContainText("코스별 방문완료");
+    await expect(details).toContainText("A");
     await expect(page.getByLabel("B 코스 방문완료")).toContainText("담당 2건");
     await expect(page.getByLabel("D 코스 방문완료")).toContainText("담당 2건");
-    await expect(page.getByRole("region", { name: "마사지사 담당콜/정산" })).toContainText("E2E61");
-    await expect(page.getByRole("alert")).toContainText("집계 제외 항목이 있습니다");
+    await expect(details).toContainText("마사지사 담당콜/정산");
+    await expect(details).toContainText("E2E61");
+    await expect(page.getByRole("alert").filter({ hasText: "집계 제외 항목이 있습니다" })).toBeVisible();
+  });
+
+  test("결제합계와 순이익은 strong tone, 비용 항목은 cost tone으로 유지한다", async ({ page }) => {
+    const account = seededData.accounts.administrator;
+    await page.setViewportSize({ width: 390, height: 844 });
+    await login(page, account.accountId, account.password);
+    await page.goto(`/dashboard/today?operatingMonthId=${seededData.monthId}&serviceDate=${seededData.serviceDate}`);
+
+    const money = page.getByRole("region", { name: "오늘 금액 KPI", exact: true });
+    await expectStrongTone(money, "결제합계");
+    await expectStrongTone(money, "순이익");
+    for (const label of ["일일인센 합계", "지출합계", "마사지사 정산", "귀케어 정산", "일일비용 합계"]) {
+      await expectCostTone(money, label);
+    }
   });
 
   test("조회날짜 변경은 URL search params와 서버 데이터 기준 empty state를 갱신한다", async ({ page }) => {
@@ -353,8 +392,8 @@ test.describe("Story 6.1 today dashboard", () => {
 
     await expect(page).toHaveURL(new RegExp(`/dashboard/today\\?operatingMonthId=${seededData.monthId}&serviceDate=${seededData.emptyDate}`));
     await expect(page.getByText("이 날짜의 콜이 없습니다")).toBeVisible();
-    await expect(page.getByRole("region", { name: "오늘 상태 건수" })).toContainText("예약");
-    await expect(page.getByRole("region", { name: "오늘 상태 건수" })).toContainText("0건");
+    await expect(page.getByRole("region", { name: "오늘 상태 건수", exact: true })).toContainText("예약");
+    await expect(page.getByRole("region", { name: "오늘 상태 건수", exact: true })).toContainText("0건");
   });
 
   test("데이터 없는 날짜는 empty state를 표시한다", async ({ page }) => {

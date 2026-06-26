@@ -1,6 +1,17 @@
 "use client";
 
-import { useActionState, useId, useMemo, useRef, useState, useTransition, type KeyboardEvent } from "react";
+import {
+  useActionState,
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type KeyboardEvent
+} from "react";
+import { createPortal } from "react-dom";
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import type { ServiceCallFormOptions, ServiceCallOption, ServiceCallRowDto } from "@/modules/calls/service-call-service";
@@ -19,6 +30,63 @@ import {
 
 type RowSaveState = "idle" | "saving" | "saved" | "error";
 type FieldErrors = Record<string, string[]>;
+
+// Shared fixed column widths so the data table and the add-row table align
+// column-for-column. Order matches the header arrays below.
+const CALL_GRID_COLUMNS = [
+  { header: "날짜", width: "5.5rem" },
+  { header: "시간", width: "9rem" },
+  { header: "객실", width: "9rem" },
+  { header: "코스", width: "10rem" },
+  { header: "고객/메모", width: "12rem" },
+  { header: "마사지사1", width: "9rem" },
+  { header: "마사지사2", width: "9rem" },
+  { header: "귀케어 담당", width: "9rem" },
+  { header: "예약상태", width: "8rem" },
+  { header: "할인구분", width: "9rem" },
+  { header: "결제수단", width: "9rem" },
+  { header: "비고", width: "11rem" },
+  { header: "확인값", width: "9rem" },
+  { header: "결제금액", width: "8rem" },
+  { header: "할인", width: "6rem" },
+  { header: "마사지사1수당", width: "7rem", settlement: true },
+  { header: "마사지사2수당", width: "7rem", settlement: true },
+  { header: "귀케어풀", width: "6.5rem", settlement: true },
+  { header: "콜인정", width: "6rem", settlement: true },
+  { header: "저장상태", width: "10rem" }
+] as const;
+
+function visibleCallGridColumns(showSettlementColumns: boolean) {
+  return CALL_GRID_COLUMNS.filter((column) => showSettlementColumns || !("settlement" in column && column.settlement));
+}
+
+function callGridMinWidth(showSettlementColumns: boolean) {
+  return showSettlementColumns ? "169rem" : "142rem";
+}
+
+function CallGridColgroup({ showSettlementColumns }: { showSettlementColumns: boolean }) {
+  return (
+    <colgroup>
+      {visibleCallGridColumns(showSettlementColumns).map((column) => (
+        <col key={column.header} style={{ width: column.width }} />
+      ))}
+    </colgroup>
+  );
+}
+
+function CallGridHead({ showSettlementColumns }: { showSettlementColumns: boolean }) {
+  return (
+    <thead className="bg-readonly text-xs font-semibold text-foreground">
+      <tr>
+        {visibleCallGridColumns(showSettlementColumns).map((column) => (
+          <th className="whitespace-nowrap border-b border-border px-2 py-2 align-middle" key={column.header}>
+            {column.header}
+          </th>
+        ))}
+      </tr>
+    </thead>
+  );
+}
 
 function fieldError(state: ServiceCallActionState, field: string) {
   if (!state || state.ok) {
@@ -68,8 +136,73 @@ function focusLedgerCell(rowIndex: number, columnId: string) {
   });
 }
 
-function optionLabel(options: ServiceCallOption[], value: string | null | undefined) {
+function optionLabel(options: ServiceCallOption[], value: string | null | undefined, emptyLabel = "") {
+  if (!value) return emptyLabel;
   return options.find((option) => option.value === value)?.label ?? "";
+}
+
+type ListboxPosition = {
+  left: number;
+  top: number;
+  width: number;
+  maxHeight: number;
+  placement: "below" | "above";
+};
+
+const LISTBOX_MAX_HEIGHT = 240; // px, matches the prior max-h-60-ish popup cap.
+const LISTBOX_GAP = 4; // px gap between the input and the popup.
+
+// The grid lives inside an `overflow-x-auto` scroll container, which clips any
+// absolutely-positioned popup. Anchoring the listbox to the input's viewport
+// rect (rendered through a portal) lets it escape the clip, and flipping it
+// above the input near the bottom of the page keeps options visible without
+// scrolling.
+function measureListboxPosition(anchor: HTMLElement): ListboxPosition {
+  const rect = anchor.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - rect.bottom - LISTBOX_GAP;
+  const spaceAbove = rect.top - LISTBOX_GAP;
+  const openAbove = spaceBelow < Math.min(LISTBOX_MAX_HEIGHT, spaceAbove) && spaceAbove > spaceBelow;
+  const maxHeight = Math.max(120, Math.min(LISTBOX_MAX_HEIGHT, openAbove ? spaceAbove : spaceBelow));
+  return {
+    left: rect.left,
+    top: openAbove ? rect.top - LISTBOX_GAP : rect.bottom + LISTBOX_GAP,
+    width: rect.width,
+    maxHeight,
+    placement: openAbove ? "above" : "below"
+  };
+}
+
+// Tracks the popup position relative to its anchor. The initial measurement is
+// taken by the listbox's own callback ref (`measureRef`) on mount, and scroll /
+// resize listeners keep it pinned while open — keeping all setState calls in
+// event callbacks rather than synchronously inside an effect body.
+function useListboxPosition(anchor: HTMLElement | null, open: boolean) {
+  const [position, setPosition] = useState<ListboxPosition | null>(null);
+
+  const measureRef = useCallback(
+    (node: HTMLElement | null) => {
+      if (node && anchor) {
+        setPosition(measureListboxPosition(anchor));
+      }
+    },
+    [anchor]
+  );
+
+  useLayoutEffect(() => {
+    if (!open || !anchor) {
+      return;
+    }
+    const update = () => setPosition(measureListboxPosition(anchor));
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      setPosition(null);
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open, anchor]);
+
+  return { position: open ? position : null, measureRef };
 }
 
 function SelectCell({
@@ -79,6 +212,7 @@ function SelectCell({
   rowIndex,
   label,
   name,
+  emptyLabel,
   onBlur,
   onChange,
   onCommitValue,
@@ -96,6 +230,7 @@ function SelectCell({
   errorMessage?: string | null;
   label: string;
   name: string;
+  emptyLabel?: string;
   onBlur?: () => void;
   onChange?: (value: string) => void;
   onCommitValue?: (value: string) => void;
@@ -111,10 +246,12 @@ function SelectCell({
   const isControlled = value !== undefined;
   const [internalValue, setInternalValue] = useState(defaultValue ?? "");
   const selectedValue = isControlled ? (value ?? "") : internalValue;
-  const [inputValue, setInputValue] = useState(() => optionLabel(options, selectedValue));
+  const [inputValue, setInputValue] = useState(() => optionLabel(options, selectedValue, emptyLabel));
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const skipNextBlurCommit = useRef(false);
+  const [inputEl, setInputEl] = useState<HTMLInputElement | null>(null);
+  const { position: listboxPosition, measureRef } = useListboxPosition(inputEl, open);
   const filteredOptions = options.filter((option) => {
     const query = inputValue.trim().toLowerCase();
     if (!query) return true;
@@ -124,7 +261,7 @@ function SelectCell({
 
   function selectOption(option: ServiceCallOption | null, commit: boolean) {
     const nextValue = option?.value ?? "";
-    const nextLabel = option?.label ?? "";
+    const nextLabel = option?.label ?? emptyLabel ?? "";
     setInputValue(nextLabel);
     setOpen(false);
     setActiveIndex(0);
@@ -141,7 +278,7 @@ function SelectCell({
   function closeAndRestore() {
     setOpen(false);
     setActiveIndex(0);
-    setInputValue(optionLabel(options, selectedValue));
+    setInputValue(optionLabel(options, selectedValue, emptyLabel));
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -181,7 +318,7 @@ function SelectCell({
   }
 
   return (
-    <label className="grid min-w-28 gap-1">
+    <label className="grid w-full gap-1">
       <span className="sr-only">{label}</span>
       <input
         aria-activedescendant={open && activeOption ? `${reactId}-option-${activeOption.value}` : undefined}
@@ -192,7 +329,7 @@ function SelectCell({
         aria-invalid={invalid ? "true" : undefined}
         aria-label={label}
         autoComplete="off"
-        className={`h-8 border bg-background px-2 text-xs text-foreground outline-none disabled:bg-readonly ${
+        className={`h-8 w-full border bg-background px-2 text-xs text-foreground outline-none disabled:bg-readonly ${
           invalid ? "border-danger ring-1 ring-danger focus:border-danger" : "border-border focus:border-brand"
         }`}
         data-call-cell-column={columnId}
@@ -214,22 +351,47 @@ function SelectCell({
           setOpen(true);
           setActiveIndex(0);
         }}
+        onClick={() => {
+          // Pointer activation opens the full option list immediately. Clearing
+          // the query shows every option (not just the current value); the prior
+          // value is restored on blur if nothing new is picked. Keyboard focus
+          // deliberately does not auto-open so arrow keys keep navigating between
+          // grid cells (ArrowDown still opens the list — see handleKeyDown).
+          setInputValue("");
+          setOpen(true);
+          setActiveIndex(0);
+        }}
         onFocus={(event) => {
-          setInputValue(optionLabel(options, selectedValue));
+          setInputValue(optionLabel(options, selectedValue, emptyLabel));
           event.currentTarget.select();
         }}
         onKeyDown={handleKeyDown}
+        ref={setInputEl}
         role="combobox"
         required={required}
         value={inputValue}
       />
       <input name={name} type="hidden" value={selectedValue} />
-      {open ? (
-        <ul
-          className="z-20 max-h-48 min-w-40 overflow-auto border border-border bg-surface text-xs shadow-sm"
-          id={listboxId}
-          role="listbox"
-        >
+      {open && typeof document !== "undefined"
+        ? createPortal(
+            <ul
+              className="fixed z-50 overflow-auto border border-border bg-surface text-xs shadow-lg"
+              id={listboxId}
+              ref={measureRef}
+              role="listbox"
+              style={
+                listboxPosition
+                  ? {
+                      left: listboxPosition.left,
+                      width: listboxPosition.width,
+                      maxHeight: listboxPosition.maxHeight,
+                      ...(listboxPosition.placement === "above"
+                        ? { bottom: window.innerHeight - listboxPosition.top }
+                        : { top: listboxPosition.top })
+                    }
+                  : { visibility: "hidden", top: 0, left: 0 }
+              }
+            >
           {!required ? (
             <li
               aria-selected={selectedValue === ""}
@@ -260,9 +422,11 @@ function SelectCell({
               <span>{option.label}</span>
             </li>
           ))}
-          {filteredOptions.length === 0 ? <li className="px-2 py-1.5 text-muted">검색 결과 없음</li> : null}
-        </ul>
-      ) : null}
+              {filteredOptions.length === 0 ? <li className="px-2 py-1.5 text-muted">검색 결과 없음</li> : null}
+            </ul>,
+            document.body
+          )
+        : null}
       {errorId ? <FieldErrorMessage id={errorId} message={errorMessage ?? null} /> : null}
     </label>
   );
@@ -294,10 +458,10 @@ function TextCell({
   value?: string;
 }) {
   return (
-    <label className="grid min-w-36 gap-1">
+    <label className="grid w-full gap-1">
       <span className="sr-only">{label}</span>
       <input
-        className="h-8 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
+        className="h-8 w-full border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
         data-call-cell-column={columnId}
         data-call-cell-row={rowIndex}
         disabled={disabled}
@@ -318,13 +482,15 @@ function AddRowForm({
   isLocked,
   operatingMonthId,
   options,
-  serviceDate
+  serviceDate,
+  showSettlementColumns
 }: {
   existingRowCount: number;
   isLocked: boolean;
   operatingMonthId: string;
   options: ServiceCallFormOptions;
   serviceDate: string;
+  showSettlementColumns: boolean;
 }) {
   const [state, formAction, pending] = useActionState<ServiceCallActionState, FormData>(saveBasicServiceCallRowAction, null);
   const disabled = isLocked || pending;
@@ -345,7 +511,7 @@ function AddRowForm({
 
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
       event.preventDefault();
-      const nextCell = moveAdjacentCell({ rowIndex, columnId }, rowCount, event.key as ArrowNavigationKey);
+      const nextCell = moveAdjacentCell({ rowIndex, columnId }, rowCount, event.key as ArrowNavigationKey, EDITABLE_CALL_FIELDS);
       if (isEditableCallField(nextCell.columnId)) {
         focusLedgerCell(nextCell.rowIndex, nextCell.columnId);
       }
@@ -357,7 +523,9 @@ function AddRowForm({
       <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
       <input name="serviceDate" type="hidden" value={serviceDate} />
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1540px] border-collapse text-left text-sm">
+        <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(showSettlementColumns) }}>
+          <CallGridColgroup showSettlementColumns={showSettlementColumns} />
+          <CallGridHead showSettlementColumns={showSettlementColumns} />
           <tbody>
             <tr className="align-top">
               <td className="border-b border-border px-2 py-2 text-xs text-muted">{serviceDate}</td>
@@ -378,11 +546,11 @@ function AddRowForm({
                 <SelectCell
                   columnId="roomId"
                   disabled={disabled}
+                  emptyLabel="미배정"
                   label="객실"
                   name="roomId"
                   onGridKeyDown={(event) => handleAddRowKeyDown("roomId", event)}
                   options={options.rooms}
-                  required
                   rowIndex={rowIndex}
                 />
                 <InlineError field="roomId" state={state} />
@@ -504,12 +672,14 @@ function AddRowForm({
                   rowIndex={rowIndex}
                 />
               </td>
-              <td className="border-b border-border px-2 py-2">
-                <Button className="h-8 whitespace-nowrap px-2 text-xs" disabled={disabled} type="submit">
-                  새 콜 행 추가
-                </Button>
-                <InlineError state={state} />
-                {state?.ok ? <span className="block text-xs text-muted">저장됨</span> : null}
+              <td className="border-b border-border bg-readonly px-2 py-2" colSpan={showSettlementColumns ? 7 : 3}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button className="h-8 whitespace-nowrap px-3 text-xs" disabled={disabled} type="submit">
+                    새 콜 행 추가
+                  </Button>
+                  <InlineError state={state} />
+                  {state?.ok ? <span className="text-xs text-muted">저장됨</span> : null}
+                </div>
               </td>
             </tr>
           </tbody>
@@ -565,6 +735,42 @@ function formatVnd(value: number) {
   return new Intl.NumberFormat("ko-KR").format(value);
 }
 
+function PaymentAmountCell({
+  onKeyDown,
+  row,
+  rowIndex,
+  saveStatus
+}: {
+  onKeyDown?: (event: KeyboardEvent<HTMLTableCellElement>) => void;
+  row: ServiceCallRowDto;
+  rowIndex: number;
+  saveStatus: RowSaveState;
+}) {
+  const isStaleFailedDraft = saveStatus === "error";
+  const canShowAmount = row.calculationStatus === "calculated" && !isStaleFailedDraft;
+  const title = isStaleFailedDraft ? "저장 보류 중인 draft는 재계산값으로 표시하지 않습니다." : row.calculationErrorMessage ?? undefined;
+
+  return (
+    <td
+      className="border-b border-border bg-readonly px-2 py-2 text-right text-xs font-medium text-foreground outline-none focus:ring-1 focus:ring-brand [font-variant-numeric:tabular-nums]"
+      data-call-cell-column="paymentAmount"
+      data-call-cell-row={rowIndex}
+      onKeyDown={onKeyDown}
+      tabIndex={-1}
+    >
+      <span className="sr-only">결제금액</span>
+      <span className="grid gap-0.5" title={title}>
+        {canShowAmount && row.discountAmount > 0 && row.basePrice > row.paymentAmount ? (
+          <span className="text-[11px] text-muted line-through">{formatVnd(row.basePrice)}</span>
+        ) : null}
+        <span className={canShowAmount && row.discountAmount > 0 ? "font-bold text-foreground" : ""}>
+          {canShowAmount ? formatVnd(row.paymentAmount) : "—"}
+        </span>
+      </span>
+    </td>
+  );
+}
+
 function ComputedCell({
   columnId,
   label,
@@ -605,13 +811,15 @@ function EditableCallRow({
   options,
   row,
   rowCount,
-  rowIndex
+  rowIndex,
+  showSettlementColumns
 }: {
   isLocked: boolean;
   options: ServiceCallFormOptions;
   row: ServiceCallRowDto;
   rowCount: number;
   rowIndex: number;
+  showSettlementColumns: boolean;
 }) {
   const [draft, setDraft] = useState<ServiceCallAutosaveInput>(() => draftFromRow(row));
   const [serverRow, setServerRow] = useState<ServiceCallRowDto>(row);
@@ -620,6 +828,16 @@ function EditableCallRow({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [savedAt, setSavedAt] = useState(row.savedAt);
   const [, startTransition] = useTransition();
+  const navigableFields = useMemo(
+    () => [
+      ...EDITABLE_CALL_FIELDS,
+      "paymentAmount",
+      "discountAmount",
+      ...(showSettlementColumns ? ["therapist1Commission", "therapist2Commission", "earcarePoolAmount", "opsCallCredit"] : []),
+      "calculationStatus"
+    ],
+    [showSettlementColumns]
+  );
 
   function updateDraft<Key extends keyof ServiceCallAutosaveInput>(key: Key, value: ServiceCallAutosaveInput[Key]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -689,7 +907,7 @@ function EditableCallRow({
 
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
       event.preventDefault();
-      const nextCell = moveAdjacentCell({ rowIndex, columnId }, rowCount, event.key as ArrowNavigationKey);
+      const nextCell = moveAdjacentCell({ rowIndex, columnId }, rowCount, event.key as ArrowNavigationKey, navigableFields);
       focusLedgerCell(nextCell.rowIndex, nextCell.columnId);
     }
   }
@@ -700,7 +918,7 @@ function EditableCallRow({
     }
 
     event.preventDefault();
-    const nextCell = moveAdjacentCell({ rowIndex, columnId }, rowCount, event.key as ArrowNavigationKey);
+    const nextCell = moveAdjacentCell({ rowIndex, columnId }, rowCount, event.key as ArrowNavigationKey, navigableFields);
     focusLedgerCell(nextCell.rowIndex, nextCell.columnId);
   }
 
@@ -730,16 +948,16 @@ function EditableCallRow({
         <SelectCell
           columnId="roomId"
           disabled={isLocked || saveStatus === "saving"}
+          emptyLabel="미배정"
           label="객실"
           name="roomId"
           onBlur={() => commit()}
-          onChange={(value) => updateDraft("roomId", value)}
-          onCommitValue={(value) => updateDraftAndCommit("roomId", value)}
+          onChange={(value) => updateDraft("roomId", nullableValue(value))}
+          onCommitValue={(value) => updateDraftAndCommit("roomId", nullableValue(value))}
           onGridKeyDown={(event) => handleGridKeyDown("roomId", event)}
           options={options.rooms}
-          required
           rowIndex={rowIndex}
-          value={draft.roomId}
+          value={draft.roomId ?? ""}
         />
       </td>
       <td className="border-b border-border px-2 py-2">
@@ -895,14 +1113,11 @@ function EditableCallRow({
           value={draft.confirmationCode ?? ""}
         />
       </td>
-      <ComputedCell
-        columnId="paymentAmount"
-        label="결제금액"
+      <PaymentAmountCell
         onKeyDown={(event) => handleReadonlyKeyDown("paymentAmount", event)}
         row={serverRow}
         rowIndex={rowIndex}
         saveStatus={saveStatus}
-        value={serverRow.paymentAmount}
       />
       <ComputedCell
         columnId="discountAmount"
@@ -913,42 +1128,46 @@ function EditableCallRow({
         saveStatus={saveStatus}
         value={serverRow.discountAmount}
       />
-      <ComputedCell
-        columnId="therapist1Commission"
-        label="마사지사1수당"
-        onKeyDown={(event) => handleReadonlyKeyDown("therapist1Commission", event)}
-        row={serverRow}
-        rowIndex={rowIndex}
-        saveStatus={saveStatus}
-        value={serverRow.therapist1Commission}
-      />
-      <ComputedCell
-        columnId="therapist2Commission"
-        label="마사지사2수당"
-        onKeyDown={(event) => handleReadonlyKeyDown("therapist2Commission", event)}
-        row={serverRow}
-        rowIndex={rowIndex}
-        saveStatus={saveStatus}
-        value={serverRow.therapist2Commission}
-      />
-      <ComputedCell
-        columnId="earcarePoolAmount"
-        label="귀케어풀"
-        onKeyDown={(event) => handleReadonlyKeyDown("earcarePoolAmount", event)}
-        row={serverRow}
-        rowIndex={rowIndex}
-        saveStatus={saveStatus}
-        value={serverRow.earcarePoolAmount}
-      />
-      <ComputedCell
-        columnId="opsCallCredit"
-        label="콜인정"
-        onKeyDown={(event) => handleReadonlyKeyDown("opsCallCredit", event)}
-        row={serverRow}
-        rowIndex={rowIndex}
-        saveStatus={saveStatus}
-        value={serverRow.opsCallCredit}
-      />
+      {showSettlementColumns ? (
+        <>
+          <ComputedCell
+            columnId="therapist1Commission"
+            label="마사지사1수당"
+            onKeyDown={(event) => handleReadonlyKeyDown("therapist1Commission", event)}
+            row={serverRow}
+            rowIndex={rowIndex}
+            saveStatus={saveStatus}
+            value={serverRow.therapist1Commission}
+          />
+          <ComputedCell
+            columnId="therapist2Commission"
+            label="마사지사2수당"
+            onKeyDown={(event) => handleReadonlyKeyDown("therapist2Commission", event)}
+            row={serverRow}
+            rowIndex={rowIndex}
+            saveStatus={saveStatus}
+            value={serverRow.therapist2Commission}
+          />
+          <ComputedCell
+            columnId="earcarePoolAmount"
+            label="귀케어풀"
+            onKeyDown={(event) => handleReadonlyKeyDown("earcarePoolAmount", event)}
+            row={serverRow}
+            rowIndex={rowIndex}
+            saveStatus={saveStatus}
+            value={serverRow.earcarePoolAmount}
+          />
+          <ComputedCell
+            columnId="opsCallCredit"
+            label="콜인정"
+            onKeyDown={(event) => handleReadonlyKeyDown("opsCallCredit", event)}
+            row={serverRow}
+            rowIndex={rowIndex}
+            saveStatus={saveStatus}
+            value={serverRow.opsCallCredit}
+          />
+        </>
+      ) : null}
       <td
         className="border-b border-border bg-readonly px-2 py-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-brand"
         data-call-cell-column="calculationStatus"
@@ -956,7 +1175,7 @@ function EditableCallRow({
         onKeyDown={(event) => handleReadonlyKeyDown("calculationStatus", event)}
         tabIndex={-1}
       >
-        <div className="grid min-w-40 gap-1">
+        <div className="grid w-full gap-1">
           {saveStatus === "error" ? <span className="text-danger">저장 보류 계산 대기</span> : null}
           {serverRow.calculationStatus === "calculated" && saveStatus !== "error" ? <span>계산됨</span> : null}
           {serverRow.calculationStatus === "not_completed" && saveStatus !== "error" ? <span>비완료 제외</span> : null}
@@ -989,13 +1208,15 @@ export function EditableCallGrid({
   operatingMonthId,
   options,
   rows,
-  serviceDate
+  serviceDate,
+  showSettlementColumns
 }: {
   isLocked: boolean;
   operatingMonthId: string;
   options: ServiceCallFormOptions;
   rows: ServiceCallRowDto[];
   serviceDate: string;
+  showSettlementColumns: boolean;
 }) {
   const columns = useMemo<ColumnDef<ServiceCallRowDto>[]>(
     () => [
@@ -1003,13 +1224,17 @@ export function EditableCallGrid({
       ...EDITABLE_CALL_FIELDS.map((field) => ({ accessorKey: field, header: field })),
       { accessorKey: "paymentAmount", header: "결제금액" },
       { accessorKey: "discountAmount", header: "할인" },
-      { accessorKey: "therapist1Commission", header: "마사지사1수당" },
-      { accessorKey: "therapist2Commission", header: "마사지사2수당" },
-      { accessorKey: "earcarePoolAmount", header: "귀케어풀" },
-      { accessorKey: "opsCallCredit", header: "콜인정" },
+      ...(showSettlementColumns
+        ? [
+            { accessorKey: "therapist1Commission", header: "마사지사1수당" },
+            { accessorKey: "therapist2Commission", header: "마사지사2수당" },
+            { accessorKey: "earcarePoolAmount", header: "귀케어풀" },
+            { accessorKey: "opsCallCredit", header: "콜인정" }
+          ]
+        : []),
       { accessorKey: "calculationStatus", header: "저장상태" }
     ],
-    []
+    [showSettlementColumns]
   );
   const table = useReactTable({
     columns,
@@ -1041,37 +1266,9 @@ export function EditableCallGrid({
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[2140px] border-collapse text-left text-sm">
-            <thead className="bg-readonly text-xs font-semibold text-foreground">
-              <tr>
-                {[
-                  "날짜",
-                  "시간",
-                  "객실",
-                  "코스",
-                  "고객/메모",
-                  "마사지사1",
-                  "마사지사2",
-                  "귀케어 담당",
-                  "예약상태",
-                  "할인구분",
-                  "결제수단",
-                  "비고",
-                  "확인값",
-                  "결제금액",
-                  "할인",
-                  "마사지사1수당",
-                  "마사지사2수당",
-                  "귀케어풀",
-                  "콜인정",
-                  "저장상태"
-                ].map((header) => (
-                  <th className="border-b border-border px-2 py-2" key={header}>
-                    {header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
+          <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(showSettlementColumns) }}>
+            <CallGridColgroup showSettlementColumns={showSettlementColumns} />
+            <CallGridHead showSettlementColumns={showSettlementColumns} />
             <tbody>
               {table.getRowModel().rows.map((tableRow, index) => (
                 <EditableCallRow
@@ -1081,6 +1278,7 @@ export function EditableCallGrid({
                   row={tableRow.original}
                   rowCount={table.getRowModel().rows.length + 1}
                   rowIndex={index}
+                  showSettlementColumns={showSettlementColumns}
                 />
               ))}
             </tbody>
@@ -1094,6 +1292,7 @@ export function EditableCallGrid({
         operatingMonthId={operatingMonthId}
         options={options}
         serviceDate={serviceDate}
+        showSettlementColumns={showSettlementColumns}
       />
     </section>
   );

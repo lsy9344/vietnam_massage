@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/domain/page-header";
 import { requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
@@ -173,13 +174,11 @@ export default async function EarcareAttendancePage({ searchParams }: { searchPa
   if (!selectedMonth) {
     return (
       <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-        <div className="mb-5 flex items-end justify-between gap-6">
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase text-muted">정산</p>
-            <h1 className="text-2xl font-semibold text-foreground">귀케어 일일정산</h1>
-            <p className="mt-2 max-w-3xl text-sm text-muted">방문완료 귀케어 풀과 날짜별 정상 근무 대상 기준으로 지급액을 조회한다.</p>
-          </div>
-        </div>
+        <PageHeader
+          eyebrow="정산"
+          title="귀케어 일일정산"
+          description="방문완료 귀케어 풀과 날짜별 정상 근무 대상 기준으로 지급액을 조회한다."
+        />
         <SettlementTabs />
         <section className="border border-border bg-surface px-4 py-8">
           <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
@@ -216,19 +215,19 @@ export default async function EarcareAttendancePage({ searchParams }: { searchPa
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <div className="mb-5 flex items-end justify-between gap-6">
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase text-muted">정산</p>
-          <h1 className="text-2xl font-semibold text-foreground">귀케어 일일정산</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">방문완료 콜 귀케어 풀을 정상 근무 귀케어사에게 균등 분배하고 근무상태 원천을 함께 관리한다.</p>
-        </div>
-        <div className="text-right text-xs text-muted">
-          <div>운영월 상태: {selectedMonth.status}</div>
-          <div>
-            날짜 범위: {selectedMonth.startDate} ~ {selectedMonth.endDate}
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="정산"
+        title="귀케어 일일정산"
+        description="방문완료 콜 귀케어 풀을 정상 근무 귀케어사에게 균등 분배하고 근무상태 원천을 함께 관리한다."
+        meta={
+          <>
+            <div>운영월 상태: {selectedMonth.status}</div>
+            <div>
+              날짜 범위: {selectedMonth.startDate} ~ {selectedMonth.endDate}
+            </div>
+          </>
+        }
+      />
 
       <SettlementTabs />
 

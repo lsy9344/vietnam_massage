@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { SignInForm } from "@/app/(auth)/sign-in/sign-in-form";
 
 export default function SignInPage() {
@@ -11,7 +12,9 @@ export default function SignInPage() {
         <p className="mt-3 text-sm leading-6 text-muted">
           관리자에게 발급받은 이메일 또는 계정 ID로 로그인한다.
         </p>
-        <SignInForm />
+        <Suspense>
+          <SignInForm />
+        </Suspense>
       </section>
     </main>
   );

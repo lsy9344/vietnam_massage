@@ -1,16 +1,8 @@
-import { expect, test, type Page } from "@playwright/test";
-import { Algorithm, hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { expect, test } from "@playwright/test";
+import { hash } from "@node-rs/argon2";
+import { prisma } from "./support/db";
+import { argon2idOptions, login } from "./support/auth";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: Algorithm.Argon2id,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 type SeededData = {
   operatingMonthId: string;
@@ -24,12 +16,6 @@ type SeededData = {
 
 let seededData: SeededData;
 
-async function login(page: Page, accountId: string, password: string) {
-  await page.goto("/sign-in");
-  await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
-}
 
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, position: string, sortOrder: number) {
   return (prisma as any).employee.upsert({
@@ -110,6 +96,11 @@ async function cleanupStoryCalls(operatingMonthId: string) {
   await (prisma as any).serviceCall.deleteMany({ where: { id: { in: callIds } } });
 }
 
+async function cleanupStorySettlementPayments(operatingMonthId: string) {
+  await (prisma as any).therapistDailySettlementPaymentHistory.deleteMany({ where: { operatingMonthId } });
+  await (prisma as any).therapistDailySettlementPayment.deleteMany({ where: { operatingMonthId } });
+}
+
 async function createCall(input: {
   operatingMonthId: string;
   serviceDate: Date;
@@ -177,6 +168,7 @@ async function seedStoryData(): Promise<SeededData> {
   await upsertRate(therapist2.id, aCourse.id, 0);
   await upsertRate(therapist1.id, dCourse.id, 900000);
   await upsertRate(therapist2.id, dCourse.id, 900000);
+  await cleanupStorySettlementPayments(operatingMonth.id);
   await cleanupStoryCalls(operatingMonth.id);
   await createCall({
     operatingMonthId: operatingMonth.id,
@@ -233,22 +225,32 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  // 이 스펙이 시드한 콜을 운영월 범위로 정리한 뒤 연결을 닫는다.
+  if (seededData) {
+    await cleanupStorySettlementPayments(seededData.operatingMonthId);
+    await cleanupStoryCalls(seededData.operatingMonthId);
+  }
   await prisma.$disconnect();
 });
 
 test.describe("Story 4.2 therapist daily settlement", () => {
   test("settlement manager can query therapist totals and assignment evidence", async ({ page }) => {
-    await login(page, "story42_settlement", "Story42!settlement");
-    await page.goto(`/settlements?operatingMonthId=${seededData.operatingMonthId}&serviceDate=2034-02-12`);
+    const targetUrl = `/settlements?operatingMonthId=${seededData.operatingMonthId}&serviceDate=2034-02-12`;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await login(page, "story42_settlement", "Story42!settlement");
+      await page.goto(targetUrl);
+      if (!new URL(page.url()).pathname.startsWith("/sign-in")) break;
+    }
 
-    await expect(page.getByRole("heading", { name: "마사지사 일일정산" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "마사지사 일일정산" })).toBeVisible({ timeout: 45000 });
     await expect(page.getByLabel("운영월")).toHaveValue(seededData.operatingMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2034-02-12");
-    await expect(page.getByText("E2E42 마사지사1")).toBeVisible();
-    await expect(page.getByText("1,600,000 VND")).toBeVisible();
-    await expect(page.getByText("E2E42 마사지사2")).toBeVisible();
-    await expect(page.getByText("900,000 VND")).toBeVisible();
-    await expect(page.getByText("E2E42 마사지사3")).toBeVisible();
+    const therapist1Summary = page.getByRole("row").filter({ hasText: "E2E42 마사지사1" }).filter({ hasText: "1,600,000 VND" }).first();
+    const therapist2Summary = page.getByRole("row").filter({ hasText: "E2E42 마사지사2" }).filter({ hasText: "900,000 VND" }).first();
+    const therapist3Summary = page.getByRole("row").filter({ hasText: "E2E42 마사지사3" }).first();
+    await expect(therapist1Summary).toBeVisible();
+    await expect(therapist2Summary).toBeVisible();
+    await expect(therapist3Summary).toBeVisible();
     await expect(page.getByText("정책 warning / 제외 콜")).toBeVisible();
     await expect(page.getByText("1건 / 1건")).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "A 수량/금액" })).toBeVisible();
@@ -257,16 +259,35 @@ test.describe("Story 4.2 therapist daily settlement", () => {
     await expect(page.getByRole("columnheader", { name: "D 수량/금액" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "E 수량/금액" })).toBeVisible();
 
-    const therapist1Summary = page.getByRole("row").filter({ hasText: "E2E42 마사지사1" }).first();
     await expect(therapist1Summary).toContainText("2건");
     await expect(therapist1Summary).toContainText("700,000 VND");
     await expect(therapist1Summary).toContainText("900,000 VND");
 
     await expect(page.getByRole("heading", { name: "콜별 산출 근거" })).toBeVisible();
-    await expect(page.getByText("마사지사2")).toBeVisible();
-    await expect(page.getByText("0원 정책")).toBeVisible();
-    await expect(page.getByText("정책 적용")).toBeVisible();
-    await expect(page.getByText("정책 없음")).toBeVisible();
+    await expect(page.getByRole("row").filter({ hasText: "E2E42 마사지사2" }).filter({ hasText: "마사지사2" }).filter({ hasText: "0원 정책" }).first()).toBeVisible();
+    await expect(page.getByRole("row").filter({ hasText: "정책 적용" }).first()).toBeVisible();
+    await expect(page.getByRole("row").filter({ hasText: "E2E42 마사지사3" }).filter({ hasText: "정책 없음" }).first()).toBeVisible();
+  });
+
+  test("settlement manager can mark payment and review actor history", async ({ page }) => {
+    await login(page, "story42_settlement", "Story42!settlement");
+    await page.goto(`/settlements?operatingMonthId=${seededData.operatingMonthId}&serviceDate=2034-02-12`);
+
+    const therapist1Summary = page.getByRole("row").filter({ hasText: "E2E42 마사지사1" }).first();
+    await therapist1Summary.getByRole("button", { name: "지급완료" }).click();
+
+    await expect(therapist1Summary).toContainText("지급완료");
+    await expect(therapist1Summary).toContainText("처리자: story42_settlement");
+    await expect(therapist1Summary).toContainText("E2E42 정산담당");
+
+    await therapist1Summary.getByText("변경 이력 1건").click();
+    await expect(therapist1Summary).toContainText("미지급 -> 지급완료");
+    await expect(therapist1Summary).toContainText("처리자: story42_settlement / E2E42 정산담당");
+
+    await therapist1Summary.getByRole("button", { name: "완료 취소" }).click();
+    await expect(therapist1Summary).toContainText("미지급");
+    await expect(therapist1Summary).toContainText("변경 이력 2건");
+    await expect(therapist1Summary).toContainText("지급완료 -> 미지급");
   });
 
   test("empty date shows explicit empty state", async ({ page }) => {

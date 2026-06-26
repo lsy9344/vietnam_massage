@@ -127,9 +127,13 @@ function payoutBasis(input: {
   return `방문완료 풀 ${input.earcarePoolTotal} VND / 정상 근무자 ${input.eligibleCount}명${suffix}`;
 }
 
+function isCompletedStatus(status: string) {
+  return status === "방문완료" || status === "VISIT_COMPLETE";
+}
+
 function warningCounts(rows: Awaited<ReturnType<typeof listServiceCallsForDate>>): EarcareDailySettlementWarningCounts {
   return {
-    notCompleted: rows.filter((row) => row.calculationStatus === "not_completed").length,
+    notCompleted: rows.filter((row) => !isCompletedStatus(row.status)).length,
     coursePolicyMissing: rows.filter((row) => row.calculationStatus === "course_policy_missing").length,
     therapistRateMissing: rows.filter((row) => row.calculationStatus === "therapist_rate_missing").length,
     secondTherapistRequired: rows.filter((row) => row.calculationStatus === "second_therapist_required").length

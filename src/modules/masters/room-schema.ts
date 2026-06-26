@@ -1,17 +1,17 @@
 import { z } from "zod";
 
 export const defaultRooms = [
-  { displayName: "101 호실", migrationReferenceName: "1번방", sortOrder: 10 },
-  { displayName: "102 호실", migrationReferenceName: "2번방", sortOrder: 20 },
-  { displayName: "103 호실", migrationReferenceName: "3번방", sortOrder: 30 },
-  { displayName: "201 호실", migrationReferenceName: "4번방", sortOrder: 40 },
-  { displayName: "202 호실", migrationReferenceName: "5번방", sortOrder: 50 },
-  { displayName: "203 호실", migrationReferenceName: "6번방", sortOrder: 60 },
-  { displayName: "301 호실", migrationReferenceName: "7번방", sortOrder: 70 },
-  { displayName: "302 호실", migrationReferenceName: "8번방", sortOrder: 80 },
-  { displayName: "303 호실", migrationReferenceName: "9번방", sortOrder: 90 },
-  { displayName: "401 호실", migrationReferenceName: "10번방", sortOrder: 100 },
-  { displayName: "402 호실", migrationReferenceName: "11번방", sortOrder: 110 }
+  { displayName: "401 호실", migrationReferenceName: "10번방", sortOrder: 10 },
+  { displayName: "402 호실", migrationReferenceName: "11번방", sortOrder: 20 },
+  { displayName: "301 호실", migrationReferenceName: "7번방", sortOrder: 30 },
+  { displayName: "302 호실", migrationReferenceName: "8번방", sortOrder: 40 },
+  { displayName: "303 호실", migrationReferenceName: "9번방", sortOrder: 50 },
+  { displayName: "201 호실", migrationReferenceName: "4번방", sortOrder: 60 },
+  { displayName: "202 호실", migrationReferenceName: "5번방", sortOrder: 70 },
+  { displayName: "203 호실", migrationReferenceName: "6번방", sortOrder: 80 },
+  { displayName: "101 호실", migrationReferenceName: "1번방", sortOrder: 90 },
+  { displayName: "102 호실", migrationReferenceName: "2번방", sortOrder: 100 },
+  { displayName: "103 호실", migrationReferenceName: "3번방", sortOrder: 110 }
 ] as const;
 
 export const roomIdSchema = z.string().trim().min(1, "객실 ID가 필요합니다.");

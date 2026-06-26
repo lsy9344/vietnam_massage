@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-export const statusBadgeStates = ["사용중", "예약", "청소중", "종료확인", "빈방"] as const;
+export const statusBadgeStates = ["사용중", "예약", "청소중", "종료확인", "빈방", "종료임박"] as const;
 
 export type StatusBadgeState = (typeof statusBadgeStates)[number];
 
@@ -14,6 +14,10 @@ const statusBadgeConfig: Record<
   사용중: {
     glyph: "●",
     className: "bg-status-active text-status-active-foreground"
+  },
+  종료임박: {
+    glyph: "◴",
+    className: "bg-status-ending-soon text-status-ending-soon-foreground"
   },
   예약: {
     glyph: "◷",
@@ -46,7 +50,7 @@ export function StatusBadge({
     <span
       aria-label={`상태: ${state}`}
       className={cn(
-        "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-sm font-semibold",
+        "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-sm font-semibold leading-none",
         config.className,
         className
       )}

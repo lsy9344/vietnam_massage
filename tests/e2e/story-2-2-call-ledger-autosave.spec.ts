@@ -1,16 +1,9 @@
-import { expect, test, type Page } from "@playwright/test";
-import { Algorithm, hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { expect, test, type Locator, type Page } from "@playwright/test";
+import { hash } from "@node-rs/argon2";
+import { prisma } from "./support/db";
+import { argon2idOptions, login } from "./support/auth";
+import { restoreUserAccount, setCodeItemActive } from "./support/cleanup";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: Algorithm.Argon2id,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 const users = [
   { accountId: "story22_administrator", role: "administrator", password: "Story22!administrator" },
@@ -31,12 +24,6 @@ type SeededData = {
 
 let seededData: SeededData;
 
-async function login(page: Page, accountId: string, password: string) {
-  await page.goto("/sign-in");
-  await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
-}
 
 async function seedAuthAccount(input: { accountId: string; email: string; staffCode: string; role: string; secret: string }) {
   const sortOrder = 92200 + [...input.staffCode].reduce((sum, char) => sum + char.charCodeAt(0), 0);
@@ -268,6 +255,18 @@ function rowByText(page: Page, text: string) {
   return page.getByRole("row", { name: new RegExp(text) });
 }
 
+/**
+ * Story 2.6 type-ahead 콤보박스 셀 선택 헬퍼.
+ * 상태/결제수단 등 그리드 셀은 `<select>`가 아니라 `role="combobox"` 입력이므로
+ * focus → 라벨 입력 → Enter 커밋 패턴으로 선택한다(과거 `selectOption`은 동작하지 않음).
+ */
+async function selectGridCombobox(scope: Locator, label: string, value: string) {
+  const combobox = scope.getByRole("combobox", { name: label });
+  await combobox.focus();
+  await combobox.fill(value);
+  await combobox.press("Enter");
+}
+
 test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -294,17 +293,18 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
 
     const row = rowByText(page, originalMemo);
     await expect(row).toBeVisible();
-    await row.getByLabel("고객/메모").fill(updatedMemo);
-    await row.getByLabel("고객/메모").blur();
+    // 메모를 바꾸면 row의 접근성 이름(=memo 텍스트)이 바뀌어 originalMemo 기반 row 로케이터가
+    // stale해진다. fill/blur는 텍스트와 무관한 안정 식별자(data-service-call-id)로 셀을 잡는다.
+    const stableRow = page.locator(`tr[data-service-call-id="${call.id}"]`);
+    await stableRow.getByLabel("고객/메모").fill(updatedMemo);
+    await stableRow.getByLabel("고객/메모").blur();
     await expect(rowByText(page, updatedMemo).getByText(/저장중|저장됨/)).toBeVisible();
     await expect(rowByText(page, updatedMemo).getByText("저장됨")).toBeVisible();
 
     const updatedRow = rowByText(page, updatedMemo);
-    await updatedRow.getByLabel("상태").selectOption("사용중");
-    await updatedRow.getByLabel("상태").blur();
+    await selectGridCombobox(updatedRow, "상태", "사용중");
     await expect(updatedRow.getByText("저장됨")).toBeVisible();
-    await updatedRow.getByLabel("결제수단").selectOption("카드");
-    await updatedRow.getByLabel("결제수단").blur();
+    await selectGridCombobox(updatedRow, "결제수단", "카드");
     await expect(updatedRow.getByText("저장됨")).toBeVisible();
 
     await expect
@@ -343,21 +343,26 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2032-03-06`);
 
     await upsertCodeItem("PAYMENT_METHOD", "카드", "카드", 92202, false);
-    const row = rowByText(page, originalMemo);
-    await row.getByLabel("고객/메모").fill(retryMemo);
-    await row.getByLabel("결제수단").selectOption("카드");
-    await row.getByLabel("결제수단").blur();
+    try {
+      // memo를 바꾸면 텍스트 기반 row가 stale해지므로 안정 식별자로 셀을 잡는다.
+      const stableRow = page.locator(`tr[data-service-call-id="${call.id}"]`);
+      await stableRow.getByLabel("고객/메모").fill(retryMemo);
+      await selectGridCombobox(stableRow, "결제수단", "카드");
 
-    await expect(rowByText(page, retryMemo).getByText("저장 보류")).toBeVisible();
-    await expect(rowByText(page, retryMemo).getByRole("button", { name: /재시도|retry/i })).toBeVisible();
-    await expect(rowByText(page, retryMemo).getByLabel("고객/메모")).toHaveValue(retryMemo);
+      await expect(rowByText(page, retryMemo).getByText("저장 보류")).toBeVisible();
+      await expect(rowByText(page, retryMemo).getByRole("button", { name: /재시도|retry/i })).toBeVisible();
+      await expect(rowByText(page, retryMemo).getByLabel("고객/메모")).toHaveValue(retryMemo);
 
-    await upsertCodeItem("PAYMENT_METHOD", "카드", "카드", 92202, true);
-    await rowByText(page, retryMemo).getByRole("button", { name: /재시도|retry/i }).click();
-    await expect(rowByText(page, retryMemo).getByText("저장됨")).toBeVisible();
+      await upsertCodeItem("PAYMENT_METHOD", "카드", "카드", 92202, true);
+      await rowByText(page, retryMemo).getByRole("button", { name: /재시도|retry/i }).click();
+      await expect(rowByText(page, retryMemo).getByText("저장됨")).toBeVisible();
 
-    const saved = await (prisma as any).serviceCall.findUnique({ where: { id: call.id } });
-    expect(saved).toMatchObject({ customerMemo: retryMemo, paymentMethodCode: "카드" });
+      const saved = await (prisma as any).serviceCall.findUnique({ where: { id: call.id } });
+      expect(saved).toMatchObject({ customerMemo: retryMemo, paymentMethodCode: "카드" });
+    } finally {
+      // 본문 단언이 실패해도 카드 결제수단 코드를 다시 활성화해 serial 후속 테스트 오염을 막는다.
+      await setCodeItemActive("PAYMENT_METHOD", "카드", true);
+    }
   });
 
   test("잠금 운영월의 기존 콜 행은 read-only이며 autosave retry 동작이 노출되지 않는다", async ({ page }) => {
@@ -386,21 +391,21 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
       where: { accountId: "story22_counter" },
       data: { role: "read_only_viewer" }
     });
-    const row = rowByText(page, memo);
-    await row.getByLabel("고객/메모").fill(draftMemo);
-    await row.getByLabel("고객/메모").blur();
+    try {
+      const row = rowByText(page, memo);
+      await row.getByLabel("고객/메모").fill(draftMemo);
+      await row.getByLabel("고객/메모").blur();
 
-    await expect(rowByText(page, draftMemo).getByText("저장 보류")).toBeVisible();
-    await expect(page.getByText("권한이 없습니다.")).toBeVisible();
-    await expect(rowByText(page, draftMemo).getByLabel("고객/메모")).toHaveValue(draftMemo);
+      await expect(rowByText(page, draftMemo).getByText("저장 보류")).toBeVisible();
+      await expect(page.getByText("권한이 없습니다.")).toBeVisible();
+      await expect(rowByText(page, draftMemo).getByLabel("고객/메모")).toHaveValue(draftMemo);
 
-    const saved = await (prisma as any).serviceCall.findUnique({ where: { id: call.id } });
-    expect(saved?.customerMemo).toBe(memo);
-
-    await (prisma as any).userAccount.update({
-      where: { accountId: "story22_counter" },
-      data: { role: "counter" }
-    });
+      const saved = await (prisma as any).serviceCall.findUnique({ where: { id: call.id } });
+      expect(saved?.customerMemo).toBe(memo);
+    } finally {
+      // 본문 단언이 실패해도 계정 role을 즉시 복구해 serial 후속 테스트 오염을 막는다.
+      await restoreUserAccount("story22_counter", "counter");
+    }
   });
 
   test("non-write role은 /calls direct access와 sidebar 콜 원장에서 제외된다", async ({ page }) => {
@@ -412,11 +417,9 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
   });
 
   test.afterAll(async () => {
-    await upsertCodeItem("PAYMENT_METHOD", "카드", "카드", 92202, true);
-    await (prisma as any).userAccount.update({
-      where: { accountId: "story22_counter" },
-      data: { role: "counter", isActive: true, lockedUntil: null, failedLoginCount: 0 }
-    });
+    // 본문 try/finally가 1차 복구를 보장하지만, 방어적으로 기본 상태를 한 번 더 확정한다.
+    await setCodeItemActive("PAYMENT_METHOD", "카드", true);
+    await restoreUserAccount("story22_counter", "counter");
     await prisma.$disconnect();
   });
 });

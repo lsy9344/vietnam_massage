@@ -145,7 +145,9 @@ for (const required of [
 }
 
 const schema = read("prisma/schema.prisma");
-for (const forbidden of ["TherapistAttendance", "MonthlyClose", "monthly_closes", "MonthlyCloseSnapshot", "closing_snapshots", "PayoutSnapshot", "monthly_payouts"]) {
+// TherapistAttendance is now legitimately owned by Story 4.1 as the full-attendance recognition source,
+// which Story 5.2's monthly closing preview consumes; it is no longer out-of-scope persistence.
+for (const forbidden of ["MonthlyClose", "monthly_closes", "MonthlyCloseSnapshot", "closing_snapshots", "PayoutSnapshot", "monthly_payouts"]) {
   if (schema.includes(forbidden)) errors.push(`schema.prisma must not include out-of-scope persistence/source model: ${forbidden}`);
 }
 

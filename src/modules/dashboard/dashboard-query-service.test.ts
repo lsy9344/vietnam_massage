@@ -70,20 +70,22 @@ function createDashboardPrisma(options: { operatingMonthMissing?: boolean; noCal
         call("call-noshow", "course-a", "노쇼", [assignment("call-noshow", "THERAPIST_1", "therapist-1")]),
         call("call-canceled", "course-a", "CANCELED", [assignment("call-canceled", "THERAPIST_1", "therapist-1")])
       ];
-  const expenses = [
-    {
-      id: "expense-1",
-      operatingMonthId: operatingMonth.id,
-      expenseDate: dbDate("2026-06-10"),
-      amount: 300000,
-      description: "소모품",
-      handledByEmployeeId: "therapist-1",
-      note: null,
-      isActive: true,
-      createdAt,
-      updatedAt
-    }
-  ];
+  const expenses = options.noCalls
+    ? []
+    : [
+        {
+          id: "expense-1",
+          operatingMonthId: operatingMonth.id,
+          expenseDate: dbDate("2026-06-10"),
+          amount: 300000,
+          description: "소모품",
+          handledByEmployeeId: "therapist-1",
+          note: null,
+          isActive: true,
+          createdAt,
+          updatedAt
+        }
+      ];
 
   function policy(id: string, courseId: string, name: string, basePrice: number, earcarePoolAmount: number, requiresSecondTherapist: boolean) {
     return {
@@ -219,16 +221,26 @@ function createDashboardPrisma(options: { operatingMonthMissing?: boolean; noCal
   } as any;
 }
 
+function todayCostDependencies(overrides: { opsDailyIncentiveTotal?: number; earcarePayoutTotal?: number } = {}) {
+  const opsDailyIncentiveTotal = overrides.opsDailyIncentiveTotal ?? 100000;
+  const earcarePayoutTotal = overrides.earcarePayoutTotal ?? 300000;
+  return {
+    listOpsDailyIncentives: async () => ({ distributedAmount: opsDailyIncentiveTotal }),
+    listEarcareDailySettlements: async () => ({ distributedAmount: earcarePayoutTotal })
+  } as any;
+}
+
 describe("getTodayDashboardMetrics", () => {
-  it("오늘 KPI DTO는 예약/방문완료/노쇼/취소, 비완료 금액 제외, 담당콜, 코스, warning을 조립한다", async () => {
+  it("오늘 KPI DTO는 예약/방문완료/노쇼/취소와 선결제 매출, 비완료 금액 제외 정산, 코스, warning을 조립한다", async () => {
     const result = await getTodayDashboardMetrics({
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
-      prismaClient: createDashboardPrisma()
+      prismaClient: createDashboardPrisma(),
+      dependencies: todayCostDependencies()
     });
 
     assert.deepEqual(result.statusCounts, {
-      reservation: 1,
+      reservation: 9,
       inUse: 0,
       cleaning: 0,
       completed: 6,
@@ -236,12 +248,22 @@ describe("getTodayDashboardMetrics", () => {
       canceled: 1
     });
     assert.deepEqual(result.financials, {
-      paymentTotal: 9400000,
-      netSales: 9100000,
+      paymentTotal: 10900000,
+      netSales: 10600000,
       discountTotal: 100000,
       expenseTotal: 300000,
       earcarePoolTotal: 300000,
-      therapistCommissionTotal: 4300000
+      earcarePayoutTotal: 300000,
+      opsDailyIncentiveTotal: 100000,
+      opsMonthlyIncentiveTotal: 0,
+      fullAttendanceAllowanceTotal: 0,
+      countKingBonusTotal: 0,
+      therapistCommissionTotal: 4300000,
+      therapistPayoutTotal: 4300000,
+      dailyCostTotal: 5000000,
+      monthlyCostTotal: 0,
+      settlementPayoutTotal: 4700000,
+      netProfit: 5900000
     });
     assert.equal(result.therapistSummary.totalAssignedCallCount, 7);
     assert.equal(result.therapistSummary.totalCommissionAmount, 4300000);
@@ -315,7 +337,8 @@ describe("getTodayDashboardMetrics", () => {
     const result = await getTodayDashboardMetrics({
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
-      prismaClient: createDashboardPrisma({ noCalls: true })
+      prismaClient: createDashboardPrisma({ noCalls: true }),
+      dependencies: todayCostDependencies({ opsDailyIncentiveTotal: 0, earcarePayoutTotal: 0 })
     });
 
     assert.deepEqual(result.statusCounts, {
@@ -327,11 +350,34 @@ describe("getTodayDashboardMetrics", () => {
       canceled: 0
     });
     assert.equal(result.financials.paymentTotal, 0);
+    assert.equal(result.financials.netProfit, 0);
     assert.equal(result.therapistSummary.totalAssignedCallCount, 0);
     assert.equal(result.emptyState.kind, "no_calls");
     assert.equal(result.emptyState.message, "이 날짜의 콜이 없습니다.");
   });
 });
+
+function monthlyTherapistRow(overrides: any = {}) {
+  return {
+    employeeId: "therapist-1",
+    staffCode: "THR-001",
+    displayName: "마사지사1",
+    totalCallCount: 4,
+    monthlySettlementAmount: 4300000,
+    courseBreakdown: {},
+    assignmentEvidenceCount: 4,
+    warningCounts: { zeroPolicy: 0, missingPolicy: 0 },
+    fullAttendanceDays: null,
+    fullAttendanceAllowanceAmount: 0,
+    fullAttendanceBasis: "none",
+    countKingRank: null,
+    countKingBonusAmount: 0,
+    countKingBasis: "none",
+    finalPayoutAmount: 4300000,
+    bonusWarningMessages: [],
+    ...overrides
+  };
+}
 
 function monthlyPreview(overrides: any = {}) {
   return {
@@ -359,6 +405,14 @@ function monthlyPreview(overrides: any = {}) {
       sourceCallCount: 2,
       eligibleDayCount: 1,
       rows: []
+    },
+    financials: {
+      paymentTotal: 10900000,
+      netSales: 10650000,
+      discountTotal: 100000,
+      expenseTotal: 250000,
+      earcarePoolTotal: 300000,
+      therapistCommissionTotal: 4350000
     },
     totals: {
       therapistPayoutAmount: 4300000,
@@ -429,6 +483,14 @@ function monthlySnapshot(overrides: any = {}) {
         eligibleDayCount: 2,
         rows: []
       },
+      financials: {
+        paymentTotal: 10900000,
+        netSales: 10650000,
+        discountTotal: 100000,
+        expenseTotal: 250000,
+        earcarePoolTotal: 600000,
+        therapistCommissionTotal: 4350000
+      },
       totals: {
         therapistPayoutAmount: 9100000,
         opsDailyIncentiveAmount: 300000,
@@ -471,15 +533,23 @@ describe("getMonthlyDashboardMetrics", () => {
     });
 
     assert.deepEqual(result.statusCounts, {
-      reservation: 1,
+      reservation: 9,
       inUse: 0,
       cleaning: 0,
       completed: 6,
       noShow: 1,
       canceled: 1
     });
-    assert.equal(result.financials.paymentTotal, 9400000);
+    assert.ok(result.financials);
+    assert.equal(result.financials.paymentTotal, 10900000);
     assert.equal(result.financials.discountTotal, 100000);
+    assert.equal(result.financials.opsDailyIncentiveTotal, 100000);
+    assert.equal(result.financials.opsMonthlyIncentiveTotal, 200000);
+    assert.equal(result.financials.dailyCostTotal, 5000000);
+    assert.equal(result.financials.monthlyCostTotal, 200000);
+    assert.equal(result.financials.fullAttendanceAllowanceTotal, 0);
+    assert.equal(result.financials.countKingBonusTotal, 0);
+    assert.equal(result.financials.netProfit, 5700000);
     assert.deepEqual(
       result.courseCompletions.map((course) => [course.courseCode, course.completedCount, course.therapistAssignmentCount]),
       [
@@ -498,15 +568,84 @@ describe("getMonthlyDashboardMetrics", () => {
     assert.equal(result.sourceBasis.kind, "current_recalculation");
     assert.equal(result.sourceBasis.label, "미확정 현재 기준");
     assert.equal(result.settlementSummary?.grandPayoutAmount, 4900000);
+    assert.equal(result.settlementSummary?.fullAttendanceAllowanceTotal, 0);
+    assert.equal(result.settlementSummary?.countKingBonusTotal, 0);
     assert.equal(result.emptyState.kind, "warnings_excluded");
   });
 
+  it("월간 비용 세부 항목은 closing preview의 마사지사 행에서 분리해 반환한다", async () => {
+    const result = await getMonthlyDashboardMetrics({
+      operatingMonthId: "month-2026-06",
+      prismaClient: createDashboardPrisma(),
+      dependencies: {
+        listMonthlyClosingPreview: async () =>
+          monthlyPreview({
+            therapists: {
+              rows: [
+                monthlyTherapistRow({
+                  monthlySettlementAmount: 2200000,
+                  fullAttendanceAllowanceAmount: 200000,
+                  countKingBonusAmount: 200000,
+                  finalPayoutAmount: 2600000
+                }),
+                monthlyTherapistRow({
+                  employeeId: "therapist-2",
+                  staffCode: "THR-002",
+                  displayName: "마사지사2",
+                  monthlySettlementAmount: 2100000,
+                  fullAttendanceAllowanceAmount: 100000,
+                  finalPayoutAmount: 2200000
+                })
+              ],
+              payoutAmount: 4800000,
+              totalCallCount: 7
+            },
+            totals: {
+              therapistPayoutAmount: 4800000,
+              opsDailyIncentiveAmount: 100000,
+              opsMonthlyIncentiveAmount: 200000,
+              earcarePayoutAmount: 300000,
+              grandPayoutAmount: 5400000
+            }
+          })
+      }
+    });
+
+    assert.equal(result.settlementSummary?.fullAttendanceAllowanceTotal, 300000);
+    assert.equal(result.settlementSummary?.countKingBonusTotal, 200000);
+    assert.equal(result.financials?.fullAttendanceAllowanceTotal, 300000);
+    assert.equal(result.financials?.countKingBonusTotal, 200000);
+    assert.equal(result.financials?.monthlyCostTotal, 700000);
+  });
+
   it("마감확정/잠금 운영월은 latest closing snapshot을 지급 기준 source로 사용한다", async () => {
+    const closing = monthlySnapshot();
+    closing.snapshot.therapists = {
+      rows: [
+        monthlyTherapistRow({
+          monthlySettlementAmount: 8500000,
+          fullAttendanceAllowanceAmount: 100000,
+          countKingBonusAmount: 200000,
+          finalPayoutAmount: 8800000
+        }),
+        monthlyTherapistRow({
+          employeeId: "therapist-2",
+          staffCode: "THR-002",
+          displayName: "마사지사2",
+          monthlySettlementAmount: 200000,
+          fullAttendanceAllowanceAmount: 100000,
+          finalPayoutAmount: 300000
+        })
+      ],
+      payoutAmount: 9100000,
+      totalCallCount: 12
+    };
+
     const result = await getMonthlyDashboardMetrics({
       operatingMonthId: "month-2026-06",
       prismaClient: createDashboardPrisma({ operatingMonthStatus: "마감확정" }),
       dependencies: {
-        getMonthlyClosingSnapshot: async () => monthlySnapshot()
+        getMonthlyClosingSnapshot: async () => closing
       }
     });
 
@@ -515,8 +654,75 @@ describe("getMonthlyDashboardMetrics", () => {
     assert.equal(result.sourceBasis.closeVersion, 2);
     assert.equal(result.sourceBasis.confirmedAt, "2026-06-30T15:00:00.000Z");
     assert.equal(result.settlementSummary?.grandPayoutAmount, 10500000);
+    assert.equal(result.settlementSummary?.fullAttendanceAllowanceTotal, 200000);
+    assert.equal(result.settlementSummary?.countKingBonusTotal, 200000);
+    assert.equal(result.financials?.monthlyCostTotal, 900000);
     assert.equal(result.snapshot?.kind, "latest");
     assert.equal(result.snapshot?.closeVersion, 2);
+  });
+
+  it("마감확정/잠금 운영월은 금액 KPI도 latest closing snapshot financials를 사용한다", async () => {
+    const closing = monthlySnapshot();
+    closing.snapshot.financials = {
+      paymentTotal: 4000000,
+      netSales: 3750000,
+      discountTotal: 100000,
+      expenseTotal: 250000,
+      earcarePoolTotal: 200000,
+      therapistCommissionTotal: 1200000
+    };
+
+    const result = await getMonthlyDashboardMetrics({
+      operatingMonthId: "month-2026-06",
+      prismaClient: createDashboardPrisma({ operatingMonthStatus: "잠금" }),
+      dependencies: {
+        getMonthlyClosingSnapshot: async () => closing
+      }
+    });
+
+    assert.equal(result.sourceBasis.kind, "closed_snapshot");
+    assert.equal(result.financials?.paymentTotal, 4000000);
+    assert.equal(result.financials?.expenseTotal, 250000);
+    assert.equal(result.financials?.therapistCommissionTotal, 1200000);
+    assert.equal(result.financials?.dailyCostTotal, 2350000);
+    assert.equal(result.financials?.netProfit, -6750000);
+  });
+
+  it("마감확정/잠금 운영월은 snapshot dashboardFinancials가 있으면 최종 손익과 비용도 그대로 사용한다", async () => {
+    const closing = monthlySnapshot();
+    closing.snapshot.dashboardFinancials = {
+      paymentTotal: 4000000,
+      netSales: 3750000,
+      discountTotal: 100000,
+      expenseTotal: 250000,
+      earcarePoolTotal: 200000,
+      earcarePayoutTotal: 333000,
+      opsDailyIncentiveTotal: 444000,
+      opsMonthlyIncentiveTotal: 555000,
+      fullAttendanceAllowanceTotal: 666000,
+      countKingBonusTotal: 777000,
+      therapistCommissionTotal: 1200000,
+      therapistPayoutTotal: 2222000,
+      dailyCostTotal: 3229000,
+      monthlyCostTotal: 1998000,
+      settlementPayoutTotal: 3554000,
+      netProfit: 196000
+    };
+
+    const result = await getMonthlyDashboardMetrics({
+      operatingMonthId: "month-2026-06",
+      prismaClient: createDashboardPrisma({ operatingMonthStatus: "잠금" }),
+      dependencies: {
+        getMonthlyClosingSnapshot: async () => closing
+      }
+    });
+
+    assert.equal(result.sourceBasis.kind, "closed_snapshot");
+    assert.equal(result.sourceBasis.calculationBasis, "getMonthlyClosingSnapshot.dashboardFinancials");
+    assert.equal(result.financials?.dailyCostTotal, 3229000);
+    assert.equal(result.financials?.monthlyCostTotal, 1998000);
+    assert.equal(result.financials?.settlementPayoutTotal, 3554000);
+    assert.equal(result.financials?.netProfit, 196000);
   });
 
   it("마감확정/잠금 운영월에서 snapshot이 없으면 current 지급값으로 fallback하지 않는다", async () => {
@@ -537,7 +743,30 @@ describe("getMonthlyDashboardMetrics", () => {
     assert.equal(result.sourceBasis.label, "확정 스냅샷을 찾을 수 없습니다");
     assert.equal(result.settlementSummary, null);
     assert.equal(result.snapshot, null);
+    assert.equal(result.financials, null);
     assert.equal(result.emptyState.kind, "snapshot_missing");
+  });
+
+  it("마감확정/잠금 운영월에서 구버전 snapshot에 financials가 없으면 정산 snapshot은 보존하고 금액만 표시하지 않는다", async () => {
+    const closing = monthlySnapshot();
+    delete closing.snapshot.financials;
+
+    const result = await getMonthlyDashboardMetrics({
+      operatingMonthId: "month-2026-06",
+      prismaClient: createDashboardPrisma({ operatingMonthStatus: "잠금" }),
+      dependencies: {
+        getMonthlyClosingSnapshot: async () => closing,
+        listMonthlyClosingPreview: async () => monthlyPreview({ totals: { grandPayoutAmount: 999999999 } })
+      }
+    });
+
+    assert.equal(result.sourceBasis.kind, "closed_snapshot");
+    assert.equal(result.sourceBasis.label, "확정 스냅샷 기준");
+    assert.equal(result.settlementSummary?.grandPayoutAmount, 10500000);
+    assert.equal(result.snapshot?.kind, "latest");
+    assert.equal(result.snapshot?.closeVersion, 2);
+    assert.equal(result.financials, null);
+    assert.equal(result.emptyState.kind, "warnings_excluded");
   });
 
   it("재오픈되어 검토중인 운영월은 current source를 사용하고 이전 snapshot은 참고 정보로만 분리한다", async () => {
@@ -779,6 +1008,7 @@ describe("getDashboardGraphReport", () => {
       result.roomStatusDistribution.map((row) => [row.displayStatus, row.count]),
       [
         ["사용중", 1],
+        ["종료임박", 0],
         ["청소중", 1],
         ["예약", 0],
         ["종료확인", 1],
@@ -819,6 +1049,111 @@ describe("getDashboardGraphReport", () => {
     assert.equal(result.therapistSettlementRanking.length, 0);
     assert.equal(result.opsIncentiveOrPayoutComposition.status, "snapshot_missing");
     assert.equal(result.emptyStates.snapshotMissing, true);
+  });
+
+  it("마감확정/잠금 운영월에서 graphReport snapshot이 있으면 현재 콜원장/정산 재계산을 호출하지 않는다", async () => {
+    const closing = monthlySnapshot();
+    closing.snapshot.graphReport = {
+      dailyRevenueTrend: [{ serviceDate: "2026-06-01", paymentTotal: 1234000, netSales: 1200000, completedCount: 1 }],
+      courseMix: [
+        { courseCode: "A", completedCount: 1, paymentTotal: 1234000, callShare: 1, revenueShare: 1 },
+        { courseCode: "B", completedCount: 0, paymentTotal: 0, callShare: 0, revenueShare: 0 },
+        { courseCode: "C", completedCount: 0, paymentTotal: 0, callShare: 0, revenueShare: 0 },
+        { courseCode: "D", completedCount: 0, paymentTotal: 0, callShare: 0, revenueShare: 0 },
+        { courseCode: "E", completedCount: 0, paymentTotal: 0, callShare: 0, revenueShare: 0 }
+      ],
+      therapistCallRanking: [
+        {
+          employeeId: "therapist-9",
+          displayName: "스냅샷 마사지사",
+          staffCode: "THR-009",
+          assignedCallCount: 4,
+          therapist1Count: 3,
+          therapist2Count: 1,
+          totalCommissionAmount: 2800000,
+          evidenceCount: 4
+        }
+      ],
+      noShowCancelTrend: [{ serviceDate: "2026-06-01", noShowCount: 2, canceledCount: 1 }],
+      callLedgerWarnings: { coursePolicyMissing: 1, therapistRateMissing: 2, secondTherapistRequired: 3 },
+      totalStatusCount: 4
+    };
+    const unexpectedCurrentRecalculation = async () => {
+      throw new Error("닫힌 월 그래프 리포트는 현재 원장/정산 재계산을 호출하면 안 됩니다.");
+    };
+
+    const result = await getDashboardGraphReport({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient: createDashboardPrisma({ operatingMonthStatus: "잠금" }),
+      dependencies: {
+        getDailyCallLedgerSummary: unexpectedCurrentRecalculation as any,
+        listCompletedServiceCallCalculationsForOperatingMonth: unexpectedCurrentRecalculation as any,
+        listTherapistDailySettlements: unexpectedCurrentRecalculation as any,
+        listRoomStatuses: async () => [],
+        getMonthlyClosingSnapshot: async () => closing
+      }
+    });
+
+    assert.equal(result.sourceBasis.kind, "closed_snapshot");
+    assert.equal(result.sourceBasis.calculationBasis, "getMonthlyClosingSnapshot.graphReport");
+    assert.equal(result.dailyRevenueTrend[0]?.paymentTotal, 1234000);
+    assert.equal(result.courseMix[0]?.paymentTotal, 1234000);
+    assert.equal(result.therapistCallRanking[0]?.employeeId, "therapist-9");
+    assert.deepEqual(result.warningCounts.callLedger, { coursePolicyMissing: 1, therapistRateMissing: 2, secondTherapistRequired: 3 });
+    assert.equal(result.emptyStates.noCallsInPeriod, false);
+    assert.equal(result.emptyStates.noCalculatedCompletedCalls, false);
+  });
+
+  it("선불 매출만 있고 완료 계산 콜이 없어도 매출 추이는 데이터 있음으로 표시한다", async () => {
+    const result = await getDashboardGraphReport({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient: createDashboardPrisma({ noCalls: true }),
+      dependencies: {
+        getDailyCallLedgerSummary: async ({ serviceDate }: any) =>
+          serviceDate === "2026-06-10"
+            ? graphDailySummary({
+                reservationCount: 1,
+                paymentTotal: 1500000,
+                netSales: 1500000
+              })
+            : graphDailySummary(),
+        listCompletedServiceCallCalculationsForOperatingMonth: async () => [],
+        listTherapistDailySettlements: async ({ serviceDate }: any) => ({
+          operatingMonthId: "month-2026-06",
+          serviceDate,
+          settlements: [],
+          warningCounts: { coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
+          excludedCallCount: 0
+        }),
+        listRoomStatuses: async () => [],
+        listMonthlyClosingPreview: async () => monthlyPreview()
+      }
+    });
+
+    assert.equal(result.dailyRevenueTrend.find((row) => row.serviceDate === "2026-06-10")?.paymentTotal, 1500000);
+    assert.equal(result.emptyStates.noCalculatedCompletedCalls, true);
+    assert.equal(result.emptyStates.noRevenueTrendData, false);
+  });
+
+  it("마감확정/잠금 운영월에서 구버전 snapshot에 graphReport가 없으면 빈 그래프 사유를 명시한다", async () => {
+    const closing = monthlySnapshot();
+
+    const result = await getDashboardGraphReport({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient: createDashboardPrisma({ operatingMonthStatus: "잠금" }),
+      dependencies: {
+        getMonthlyClosingSnapshot: async () => closing,
+        listRoomStatuses: async () => []
+      }
+    });
+
+    assert.equal(result.sourceBasis.kind, "closed_snapshot");
+    assert.equal(result.emptyStates.graphReportSnapshotMissing, true);
+    assert.equal(result.emptyStates.noRevenueTrendData, true);
+    assert.equal(result.dailyRevenueTrend.length, 0);
   });
 
   it("운영월 범위 밖 조회날짜는 한국어 domain error로 차단한다", async () => {

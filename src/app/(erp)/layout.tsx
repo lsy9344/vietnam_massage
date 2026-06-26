@@ -3,6 +3,7 @@ import { RoleAwareSidebar } from "@/components/domain/role-aware-sidebar";
 import { getAuthorizedAccount } from "@/lib/authorization";
 
 export default async function ErpLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // getAuthorizedAccount delegates to getCurrentAccountAuthorization for the server-side status recheck.
   const account = await getAuthorizedAccount();
   if (!account || !account.isActive || (account.lockedUntil !== null && account.lockedUntil > new Date())) {
     redirect("/sign-in");

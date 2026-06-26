@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   EDITABLE_CALL_FIELDS,
+  type EditableCallField,
   cancelCellDraft,
   moveAdjacentCell,
   moveEnterCell,
@@ -34,14 +35,38 @@ test("Arrow movement is bounded and can land on readonly computed cells without 
   assert.deepEqual(moveAdjacentCell(cell(2, "status"), rows.length, "ArrowDown"), cell(2, "status"));
 });
 
+test("Arrow movement uses the visible column list when settlement columns are hidden", () => {
+  const visibleFields = [...EDITABLE_CALL_FIELDS, "paymentAmount", "discountAmount", "calculationStatus"];
+
+  assert.deepEqual(moveAdjacentCell(cell(0, "discountAmount"), rows.length, "ArrowRight", visibleFields), cell(0, "calculationStatus"));
+  assert.deepEqual(moveAdjacentCell(cell(0, "calculationStatus"), rows.length, "ArrowLeft", visibleFields), cell(0, "discountAmount"));
+});
+
 test("computed cells are excluded from the explicit editable field sequence", () => {
-  assert.equal(EDITABLE_CALL_FIELDS.includes("paymentAmount"), false);
-  assert.equal(EDITABLE_CALL_FIELDS.includes("earcarePoolAmount"), false);
+  assert.equal((EDITABLE_CALL_FIELDS as readonly string[]).includes("paymentAmount"), false);
+  assert.equal((EDITABLE_CALL_FIELDS as readonly string[]).includes("earcarePoolAmount"), false);
 });
 
 test("Esc cancel restores the last server draft without changing object identity of the baseline", () => {
-  const serverDraft = { note: "서버 값", therapist2Id: null };
-  const editedDraft = { note: "수정 중", therapist2Id: "employee-1" };
+  const serverDraft: Record<EditableCallField, string | null> = {
+    startTime: "11:00",
+    roomId: "room-1",
+    courseId: "course-a",
+    customerMemo: null,
+    therapist1Id: "employee-0",
+    therapist2Id: null,
+    earcareEmployeeId: null,
+    status: "예약",
+    discountTypeCode: null,
+    paymentMethodCode: null,
+    note: "서버 값",
+    confirmationCode: null
+  };
+  const editedDraft: Record<EditableCallField, string | null> = {
+    ...serverDraft,
+    note: "수정 중",
+    therapist2Id: "employee-1"
+  };
   const restored = cancelCellDraft(editedDraft, serverDraft);
 
   assert.deepEqual(restored, serverDraft);

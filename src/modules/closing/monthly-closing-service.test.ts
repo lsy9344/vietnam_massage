@@ -92,6 +92,57 @@ function preview(overrides: Partial<MonthlyClosingPreviewDto> = {}): MonthlyClos
         }
       ]
     },
+    financials: {
+      paymentTotal: 1500000,
+      netSales: 1400000,
+      discountTotal: 0,
+      expenseTotal: 100000,
+      earcarePoolTotal: 200000,
+      therapistCommissionTotal: 1200000
+    },
+    dashboardFinancials: {
+      paymentTotal: 1500000,
+      netSales: 1400000,
+      discountTotal: 0,
+      expenseTotal: 100000,
+      earcarePoolTotal: 200000,
+      earcarePayoutTotal: 200000,
+      opsDailyIncentiveTotal: 50000,
+      opsMonthlyIncentiveTotal: 0,
+      fullAttendanceAllowanceTotal: 0,
+      countKingBonusTotal: 0,
+      therapistCommissionTotal: 1200000,
+      therapistPayoutTotal: 1200000,
+      dailyCostTotal: 1550000,
+      monthlyCostTotal: 0,
+      settlementPayoutTotal: 1450000,
+      netProfit: -50000
+    },
+    graphReport: {
+      dailyRevenueTrend: [{ serviceDate: "2026-06-01", paymentTotal: 1500000, netSales: 1400000, completedCount: 2 }],
+      courseMix: [
+        { courseCode: "A", completedCount: 2, paymentTotal: 1500000, callShare: 1, revenueShare: 1 },
+        { courseCode: "B", completedCount: 0, paymentTotal: 0, callShare: 0, revenueShare: 0 },
+        { courseCode: "C", completedCount: 0, paymentTotal: 0, callShare: 0, revenueShare: 0 },
+        { courseCode: "D", completedCount: 0, paymentTotal: 0, callShare: 0, revenueShare: 0 },
+        { courseCode: "E", completedCount: 0, paymentTotal: 0, callShare: 0, revenueShare: 0 }
+      ],
+      therapistCallRanking: [
+        {
+          employeeId: "emp-therapist-1",
+          displayName: "마사지사 원",
+          staffCode: "THR-001",
+          assignedCallCount: 2,
+          therapist1Count: 2,
+          therapist2Count: 0,
+          totalCommissionAmount: 1200000,
+          evidenceCount: 2
+        }
+      ],
+      noShowCancelTrend: [{ serviceDate: "2026-06-01", noShowCount: 0, canceledCount: 0 }],
+      callLedgerWarnings: { coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
+      totalStatusCount: 2
+    },
     totals: {
       therapistPayoutAmount: 1200000,
       opsDailyIncentiveAmount: 50000,
@@ -269,6 +320,14 @@ function storedClosingSnapshot(): MonthlyClosingSnapshotDto {
       warningMessages: []
     },
     earcare: { rows: [], earcarePoolTotal: 0, distributedAmount: 0, undistributedAmount: 0, sourceCallCount: 0, eligibleDayCount: 0 },
+    financials: {
+      paymentTotal: 1500000,
+      netSales: 1400000,
+      discountTotal: 0,
+      expenseTotal: 100000,
+      earcarePoolTotal: 200000,
+      therapistCommissionTotal: 1200000
+    },
     totals: { therapistPayoutAmount: 10, opsDailyIncentiveAmount: 0, opsMonthlyIncentiveAmount: 0, earcarePayoutAmount: 0, grandPayoutAmount: 10 },
     warningCounts: preview().warningCounts,
     evidence: preview().evidence,
@@ -353,6 +412,71 @@ describe("monthly closing service", () => {
     assert.equal(prismaClient.state.auditLogs[0].afterValue.snapshotId, "closing-1");
     assert.equal(prismaClient.state.auditLogs[0].afterValue.closeVersion, 1);
     assert.equal(prismaClient.state.auditLogs[0].afterValue.status, "마감확정");
+  });
+
+  it("persists dashboard financials and graph report in the immutable monthly close snapshot", async () => {
+    const prismaClient = createPrisma({ status: "검토중" });
+    const closingPreview = {
+      ...preview(),
+      dashboardFinancials: {
+        paymentTotal: 1500000,
+        netSales: 1400000,
+        discountTotal: 0,
+        expenseTotal: 100000,
+        earcarePoolTotal: 200000,
+        earcarePayoutTotal: 200000,
+        opsDailyIncentiveTotal: 50000,
+        opsMonthlyIncentiveTotal: 0,
+        fullAttendanceAllowanceTotal: 0,
+        countKingBonusTotal: 0,
+        therapistCommissionTotal: 1200000,
+        therapistPayoutTotal: 1200000,
+        dailyCostTotal: 1550000,
+        monthlyCostTotal: 0,
+        settlementPayoutTotal: 1450000,
+        netProfit: -50000
+      },
+      graphReport: {
+        dailyRevenueTrend: [{ serviceDate: "2026-06-01", paymentTotal: 1500000, netSales: 1400000, completedCount: 2 }],
+        courseMix: [
+          { courseCode: "A", completedCount: 2, paymentTotal: 1500000, callShare: 1, revenueShare: 1 },
+          { courseCode: "B", completedCount: 0, paymentTotal: 0, callShare: 0, revenueShare: 0 },
+          { courseCode: "C", completedCount: 0, paymentTotal: 0, callShare: 0, revenueShare: 0 },
+          { courseCode: "D", completedCount: 0, paymentTotal: 0, callShare: 0, revenueShare: 0 },
+          { courseCode: "E", completedCount: 0, paymentTotal: 0, callShare: 0, revenueShare: 0 }
+        ],
+        therapistCallRanking: [
+          {
+            employeeId: "emp-therapist-1",
+            displayName: "마사지사 원",
+            staffCode: "THR-001",
+            assignedCallCount: 2,
+            therapist1Count: 2,
+            therapist2Count: 0,
+            totalCommissionAmount: 1200000,
+            evidenceCount: 2
+          }
+        ],
+        noShowCancelTrend: [{ serviceDate: "2026-06-01", noShowCount: 0, canceledCount: 0 }],
+        callLedgerWarnings: { coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
+        totalStatusCount: 2
+      }
+    } as any;
+
+    const result = await confirmMonthlyClose({
+      operatingMonthId: "month-1",
+      actorId: "account-1",
+      prismaClient,
+      clock: () => new Date("2026-06-10T04:00:00.000Z"),
+      idFactory: () => "closing-1",
+      dependencies: {
+        listMonthlyClosingPreview: async () => closingPreview
+      }
+    });
+
+    assert.equal((result.snapshot as any).dashboardFinancials?.netProfit, -50000);
+    assert.equal((result.snapshot as any).graphReport?.courseMix[0].paymentTotal, 1500000);
+    assert.equal((prismaClient.state.closing.snapshotJson as any).dashboardFinancials?.dailyCostTotal, 1550000);
   });
 
   it("blocks duplicate or invalid confirmation without creating snapshot or audit rows", async () => {

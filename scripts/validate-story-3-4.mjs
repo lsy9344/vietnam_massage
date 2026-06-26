@@ -64,7 +64,7 @@ for (const required of [
   "variant=\"tv\"",
   "RoomStatusRefreshController",
   "variant=\"tv\"",
-  "latestUpdatedAt",
+  "latestRoomStatusUpdatedAt",
   "operatingMonthId",
   "serviceDate",
   "TV 현황판",

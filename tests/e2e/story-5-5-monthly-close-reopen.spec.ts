@@ -1,16 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "./support/db";
+import { argon2idOptions, login } from "./support/auth";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: 2,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 type SeededData = {
   adminLockedMonth: { id: string; monthKey: string };
@@ -28,12 +20,6 @@ type SeededData = {
 
 let seededData: SeededData;
 
-async function login(page: Page, accountId: string, password: string) {
-  await page.goto("/sign-in");
-  await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
-}
 
 async function confirmMonthlyCloseThroughDialog(page: Page) {
   await page.getByRole("button", { name: "마감 확정" }).click();
@@ -158,6 +144,14 @@ async function seedLockedMonth(monthKey: string, confirmedByAccountId: string) {
           rows: []
         },
         earcare: { earcarePoolTotal: 0, distributedAmount: 0, undistributedAmount: 0, sourceCallCount: 0, eligibleDayCount: 0, rows: [] },
+        financials: {
+          paymentTotal: 0,
+          netSales: 0,
+          discountTotal: 0,
+          expenseTotal: 0,
+          earcarePoolTotal: 0,
+          therapistCommissionTotal: 0
+        },
         totals: { therapistPayoutAmount: 0, opsDailyIncentiveAmount: 0, opsMonthlyIncentiveAmount: 0, earcarePayoutAmount: 0, grandPayoutAmount: 0 },
         warningCounts: { total: 0 },
         evidence: { period: `${monthKey}-01 ~ ${monthKey}-01`, sourceDayCount: 1 },
@@ -217,7 +211,7 @@ test.describe("Story 5.5 monthly close reopen", () => {
     await login(page, seededData.accounts.admin, "Story55!admin");
 
     await page.goto(`/closing?operatingMonthId=${seededData.adminLockedMonth.id}`);
-    await expect(page.getByText("확정 스냅샷")).toBeVisible();
+    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "재오픈" })).toBeEnabled();
     await page.getByLabel("재오픈 사유").fill("Story 5.5 관리자 사유 기반 재오픈");
     await page.getByRole("button", { name: "재오픈" }).click();

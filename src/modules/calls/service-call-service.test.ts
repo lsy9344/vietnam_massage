@@ -10,6 +10,7 @@ import {
   listServiceCallStatusHistory,
   listServiceCallFormOptions,
   listServiceCallsForDate,
+  redactServiceCallSettlementAmounts,
   saveBasicServiceCallRow,
   ServiceCallDomainError,
   updateDailyExpense
@@ -296,7 +297,13 @@ function createMemoryPrisma() {
       ["DISCOUNT_TYPE", "생일자", "생일자", 20, true],
       ["DISCOUNT_TYPE", "BIRTHDAY", "생일자", 120, true],
       ["PAYMENT_METHOD", "현금", "현금", 10, true],
+      ["PAYMENT_METHOD", "카드", "카드", 20, true],
+      ["PAYMENT_METHOD", "계좌", "계좌", 30, true],
+      ["PAYMENT_METHOD", "기타", "기타", 40, true],
       ["PAYMENT_METHOD", "CASH", "현금", 110, true],
+      ["PAYMENT_METHOD", "CARD", "카드", 120, true],
+      ["PAYMENT_METHOD", "BANK_TRANSFER", "계좌", 130, true],
+      ["PAYMENT_METHOD", "OTHER", "기타", 140, true],
       ["CONFIRMATION", "Y", "Y", 10, true],
       ["CONFIRMATION", "N", "N", 20, true],
       ["PAYMENT_METHOD", "비활성", "비활성", 99, false]
@@ -604,9 +611,13 @@ describe("service call service", () => {
     assert.equal(row.therapist1?.id, "therapist-1");
     assert.equal(row.therapist2?.staffCode, "THR-002");
     assert.equal(row.earcare?.id, "earcare-1");
-    assert.equal(row.paymentAmount, 0);
-    assert.equal(row.discountAmount, 0);
-    assert.equal(row.calculationStatus, "not_completed");
+    assert.equal(row.paymentAmount, 1400000);
+    assert.equal(row.discountAmount, 100000);
+    assert.equal(row.therapist1Commission, 0);
+    assert.equal(row.therapist2Commission, 0);
+    assert.equal(row.earcarePoolAmount, 0);
+    assert.equal(row.opsCallCredit, 0);
+    assert.equal(row.calculationStatus, "calculated");
     assert.equal(prismaClient.assignments.size, 3);
 
     const saved = [...prismaClient.serviceCalls.values()][0];
@@ -614,6 +625,46 @@ describe("service call service", () => {
     assert.equal(saved.courseId, "course-a");
     assert.equal(saved.status, "예약");
     assert.equal(saved.paymentMethodCode, "현금");
+  });
+
+  it("allows reservation rows to be saved without assigning a room yet", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const row = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: null as any,
+      courseId: "course-a",
+      customerMemo: "오후 방문 예정",
+      status: "예약",
+      prismaClient
+    });
+
+    assert.equal(row.roomId, null);
+    assert.equal(row.roomLabel, "미배정");
+    assert.equal(row.calculationStatus, "not_completed");
+    assert.equal([...prismaClient.serviceCalls.values()][0].roomId, null);
+  });
+
+  it("requires a room before changing a row to an active or completed room status", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    for (const status of ["사용중", "청소중", "방문완료"]) {
+      await assert.rejects(
+        () =>
+          saveBasicServiceCallRow({
+            operatingMonthId: "month-2026-06",
+            serviceDate: "2026-06-10",
+            startTime: "11:00",
+            roomId: null as any,
+            courseId: "course-a",
+            status,
+            prismaClient
+          }),
+        (error: unknown) => error instanceof ServiceCallDomainError && error.code === "ROOM_REQUIRED_FOR_STATUS"
+      );
+    }
   });
 
   it("calculates completed-call payment, fixed discount, commissions, earcare pool, and ops call credit from policy sources", async () => {
@@ -643,6 +694,31 @@ describe("service call service", () => {
     assert.equal(row.opsCallCredit, 1);
   });
 
+  it("redacts settlement-only amounts before rows are sent to non-settlement client views", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const row = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      earcareEmployeeId: "earcare-1",
+      status: "방문완료",
+      prismaClient
+    });
+
+    assert.equal(row.therapist1Commission, 700000);
+    const redacted = redactServiceCallSettlementAmounts(row);
+    assert.equal(redacted.paymentAmount, row.paymentAmount);
+    assert.equal(redacted.discountAmount, row.discountAmount);
+    assert.equal(redacted.therapist1Commission, 0);
+    assert.equal(redacted.therapist2Commission, 0);
+    assert.equal(redacted.earcarePoolAmount, 0);
+    assert.equal(redacted.opsCallCredit, 0);
+  });
+
   it("calculates completed calls when status is the stable VISIT_COMPLETE code", async () => {
     const prismaClient = createMemoryPrisma();
 
@@ -665,9 +741,10 @@ describe("service call service", () => {
     assert.equal(row.therapist1Commission, 700000);
   });
 
-  it("keeps non-completed statuses out of completed-call calculations", async () => {
+  it("keeps non-completed statuses out of revenue until a payment method is selected (REQ-007 single criterion)", async () => {
     const prismaClient = createMemoryPrisma();
 
+    // 결제수단이 비어 있으면 사용중이어도 매출로 잡지 않는다.
     for (const status of ["예약", "사용중", "청소중", "노쇼", "취소"]) {
       const row = await saveBasicServiceCallRow({
         operatingMonthId: "month-2026-06",
@@ -688,9 +765,51 @@ describe("service call service", () => {
       assert.equal(row.opsCallCredit, 0);
     }
 
+    // 결제수단을 선택하면 방문완료 이전(예약·사용중)이라도 선결제 매출로 반영된다.
+    for (const status of ["예약", "사용중", "청소중"]) {
+      const row = await saveBasicServiceCallRow({
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-06-11",
+        startTime: "11:00",
+        roomId: "room-101",
+        courseId: "course-a",
+        therapist1Id: "therapist-1",
+        status,
+        discountTypeCode: "생일자",
+        paymentMethodCode: "현금",
+        prismaClient
+      });
+
+      assert.equal(row.calculationStatus, "calculated");
+      assert.equal(row.paymentAmount, 1400000);
+      // 방문완료 이전에는 수당·귀케어·콜인정이 발생하지 않는다.
+      assert.equal(row.therapist1Commission, 0);
+      assert.equal(row.earcarePoolAmount, 0);
+      assert.equal(row.opsCallCredit, 0);
+    }
+
+    // 취소/노쇼는 결제수단이 선택되어 있어도 매출에서 즉시 제외한다(차감 정책).
+    for (const status of ["노쇼", "취소"]) {
+      const row = await saveBasicServiceCallRow({
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-06-12",
+        startTime: "11:00",
+        courseId: "course-a",
+        therapist1Id: "therapist-1",
+        status,
+        discountTypeCode: "생일자",
+        paymentMethodCode: "현금",
+        prismaClient
+      });
+
+      assert.equal(row.calculationStatus, "not_completed");
+      assert.equal(row.paymentAmount, 0);
+    }
+
+    // 방문완료 이전 건은 정산 대상에 포함되지 않는다.
     const calculations = await listCompletedServiceCallCalculationsForDate({
       operatingMonthId: "month-2026-06",
-      serviceDate: "2026-06-10",
+      serviceDate: "2026-06-11",
       prismaClient
     });
     assert.deepEqual(calculations, []);
@@ -708,6 +827,7 @@ describe("service call service", () => {
       therapist1Id: "therapist-1",
       status: "방문완료",
       discountTypeCode: null,
+      paymentMethodCode: "현금",
       prismaClient
     });
     const rows = await listServiceCallsForDate({
@@ -733,6 +853,7 @@ describe("service call service", () => {
       courseId: "course-missing-rate",
       therapist1Id: "therapist-1",
       status: "방문완료",
+      paymentMethodCode: "현금",
       prismaClient
     });
 
@@ -968,6 +1089,7 @@ describe("service call service", () => {
       therapist1Id: "therapist-1",
       therapist2Id: "therapist-2",
       status: "방문완료",
+      paymentMethodCode: "현금",
       prismaClient
     });
 
@@ -1086,6 +1208,7 @@ describe("service call service", () => {
       therapist1Id: "therapist-1",
       therapist2Id: "therapist-2",
       status: "방문완료",
+      paymentMethodCode: "현금",
       actorId: "counter-account",
       prismaClient
     });
@@ -1110,6 +1233,7 @@ describe("service call service", () => {
       earcareEmployeeId: "earcare-1",
       status: "방문완료",
       discountTypeCode: "생일자",
+      paymentMethodCode: "현금",
       prismaClient
     });
 
@@ -1496,6 +1620,7 @@ describe("service call service", () => {
       earcareEmployeeId: "earcare-1",
       status: "VISIT_COMPLETE",
       discountTypeCode: "BIRTHDAY",
+      paymentMethodCode: "현금",
       prismaClient
     });
     await saveBasicServiceCallRow({
@@ -1507,6 +1632,7 @@ describe("service call service", () => {
       therapist1Id: "therapist-1",
       therapist2Id: "therapist-2",
       status: "방문완료",
+      paymentMethodCode: "현금",
       prismaClient
     });
     await saveBasicServiceCallRow({
@@ -1602,12 +1728,14 @@ describe("service call service", () => {
       prismaClient
     });
 
-    assert.equal(summary.reservationCount, 1);
+    assert.equal(summary.reservationCount, 9);
     assert.equal(summary.inUseCount, 2);
     assert.equal(summary.cleaningCount, 2);
     assert.equal(summary.completedCount, 3);
     assert.equal(summary.noShowCount, 0);
     assert.equal(summary.canceledCount, 1);
+    // REQ-007: 결제수단이 없는 사용중/IN_USE는 더 이상 매출로 잡지 않는다.
+    // 매출은 방문완료 2건(1,400,000 + 3,200,000)만 인정된다.
     assert.equal(summary.paymentTotal, 4600000);
     assert.equal(summary.therapistCommissionTotal, 2500000);
     assert.equal(summary.earcarePoolTotal, 100000);
@@ -1627,5 +1755,130 @@ describe("service call service", () => {
       discountCount: 0,
       therapistAssignmentCount: 2
     });
+  });
+
+  it("counts every ledger row as a reservation and recognizes revenue only by selected payment method (REQ-007/009)", async () => {
+    const prismaClient = createMemoryPrisma();
+    // 예약 + 결제수단(CASH): 선결제 매출로 cash 버킷에 반영.
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "예약",
+      paymentMethodCode: "CASH",
+      prismaClient
+    });
+    // 사용중 + 결제수단 없음: 더 이상 매출로 잡지 않으며 other 버킷도 오염시키지 않는다.
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "사용중",
+      prismaClient
+    });
+    // 방문완료 + 결제수단(현금) + 할인: cash 버킷에 할인 반영 금액으로 집계.
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      status: "방문완료",
+      discountTypeCode: "생일자",
+      paymentMethodCode: "현금",
+      prismaClient
+    });
+    // 취소 + 결제수단(현금): 차감 정책에 따라 매출에서 즉시 제외.
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "취소",
+      paymentMethodCode: "현금",
+      prismaClient
+    });
+
+    const summary = await getDailyCallLedgerSummary({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient
+    });
+
+    assert.equal(summary.reservationCount, 4);
+    // 예약(1,500,000) + 방문완료(1,400,000) = 2,900,000. 사용중·취소는 제외.
+    assert.equal(summary.paymentTotal, 2900000);
+    assert.deepEqual((summary as any).paymentMethodTotals, {
+      cash: 2900000,
+      card: 0,
+      bank: 0,
+      other: 0
+    });
+  });
+
+  it("maps Korean and stable payment method codes into cash, card, bank, and other buckets (REQ-008)", async () => {
+    const prismaClient = createMemoryPrisma();
+    const paymentMethods = ["CASH", "현금", "CARD", "카드", "BANK_TRANSFER", "계좌", "OTHER", "기타"];
+
+    for (const [index, paymentMethodCode] of paymentMethods.entries()) {
+      await saveBasicServiceCallRow({
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-06-10",
+        startTime: "11:00",
+        roomId: "room-101",
+        courseId: "course-a",
+        customerMemo: `payment bucket ${index}`,
+        status: "예약",
+        paymentMethodCode,
+        prismaClient
+      });
+    }
+
+    const summary = await getDailyCallLedgerSummary({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient
+    });
+
+    assert.equal(summary.paymentTotal, 12000000);
+    assert.deepEqual(summary.paymentMethodTotals, {
+      cash: 3000000,
+      card: 3000000,
+      bank: 3000000,
+      other: 3000000
+    });
+  });
+
+  it("keeps completed calls without a payment method in settlement but out of revenue totals", async () => {
+    const prismaClient = createMemoryPrisma();
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      status: "방문완료",
+      prismaClient
+    });
+
+    const summary = await getDailyCallLedgerSummary({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient
+    });
+
+    assert.equal(summary.paymentTotal, 0);
+    assert.equal(summary.discountTotal, 0);
+    assert.deepEqual(summary.paymentMethodTotals, { cash: 0, card: 0, bank: 0, other: 0 });
+    assert.equal(summary.completedCount, 1);
+    assert.equal(summary.therapistCommissionTotal, 700000);
+    assert.equal(summary.courseSummaries.find((course) => course.courseCode === "A")?.completedCount, 1);
   });
 });

@@ -316,9 +316,17 @@ Project initialization using this selected starter should be the first implement
 
 **Decision:** Design for a Next.js Node server deployment. Do not use static export because the ERP requires authentication, Server Actions, Route Handlers, Prisma/PostgreSQL access, dynamic dashboards, and monthly close mutations.
 
-**Hosting stance:** Support either managed Next.js hosting or self-hosted Node deployment according to the project standard. If self-hosted, place a reverse proxy such as nginx in front of the Next.js server for HTTPS termination, request size limits, slow-request protection, and basic traffic controls.
+**Confirmed hosting (2026-06-21):** Deploy on **Vercel** (managed Next.js hosting, `nodejs` runtime functions) with the database on **Neon** (managed serverless PostgreSQL). This was selected over self-hosted/VPS and over Render because the operator wants GUI/CLI-only deploys (no server administration), and because the team already operates other projects on the same Vercel + Neon stack — operational consistency outweighs the marginal cost difference at single-store scale. The `@node-rs/argon2` native dependency and `export const runtime = "nodejs"` confirm the app needs Node serverless functions, which Vercel supports; no Edge-runtime path is used.
 
-**Database environments:** Keep production, staging, and local development databases separate. Production/staging use PostgreSQL managed service or operations-managed PostgreSQL according to the project standard.
+**Region pinning (latency-critical):** Pin the Vercel functions region to Singapore (`sin1`, in `vercel.json`) and create the Neon project in AWS `ap-southeast-1` (Singapore). The call-ledger save path issues many sequential queries per row inside a transaction, so app↔DB round-trip latency directly affects the "Excel-speed input" requirement. App and DB MUST be co-located in the same region; do not split them across continents.
+
+**Neon compute tier:** Use Neon **Launch** (pay-as-you-go) with always-on compute, not the Free tier. The 15-second room/TV polling keeps the DB awake during business hours, which would exhaust the Free tier's 100 CU-hour/month cap within days; Launch removes that cap and also eliminates the morning first-login cold-start (scale-to-zero wake delay).
+
+**Vercel plan:** Use the **Pro** plan, not Hobby — the Hobby tier is restricted to personal, non-commercial use, and this is a commercial store-operations ERP.
+
+**Hosting fallback:** If Vercel + Neon is ever abandoned, the app remains a standard Next.js Node server and can move to self-hosted Node deployment; in that case place a reverse proxy such as nginx in front of the Next.js server for HTTPS termination, request size limits, slow-request protection, and basic traffic controls.
+
+**Database environments:** Keep production, staging, and local development databases separate. Production/staging use Neon managed PostgreSQL; local development uses Docker PostgreSQL.
 
 **Migration procedure:** Use `prisma migrate deploy` in CI/CD or release phase for staging and production. Never use `prisma migrate dev` against production. Commit Prisma schema and migration history to source control.
 
@@ -330,11 +338,39 @@ Project initialization using this selected starter should be the first implement
 
 **Backup and restore:** PostgreSQL backup and restore procedures are mandatory because monthly close snapshots and audit logs are business-critical records. Define backup retention, restore testing, and point-in-time recovery expectations before production cutover.
 
-**Operational confirmations before implementation:** Confirm hosting provider, domain/HTTPS setup, database hosting, backup retention, migration approval flow, and deployment environment naming.
+**Operational confirmations before implementation:** Hosting provider (Vercel) and database hosting (Neon) are confirmed as of 2026-06-21. Still confirm before production cutover: custom domain/HTTPS setup, Neon backup retention/PITR window, migration approval flow, and deployment environment naming.
+
+**As-provisioned record (2026-06-21):** The production environment was provisioned and verified on this date. Actual resources and the exact stack applied:
+
+| Concern | Applied value |
+| --- | --- |
+| App host | Vercel project `erp_vietnam_massage` (`prj_Clxkks3vDpagQLiFk4PNISPEh0L6`), team `noah's projects` (`team_fGZaevoOIWwaUq9Nlstf7QpO`) |
+| App region | `sin1` (Singapore) — pinned in `vercel.json` |
+| Build command | `pnpm run vercel-build` (= `prisma generate && prisma migrate deploy && next build`) — set on the Vercel project (the project setting, not only `vercel.json`, is what runs) |
+| Database | Neon project `erp-vietnam-massage-sg` (Neon id `rapid-forest-91070214`, Vercel store `store_E2eQztb7zw0uI5Wb`) |
+| DB region | AWS `ap-southeast-1` (Singapore) — co-located with the app |
+| DB engine | PostgreSQL 17 |
+| Runtime conn | `DATABASE_URL` = Neon **pooled** string (`...-pooler.ap-southeast-1.aws.neon.tech/...?sslmode=require`), read by `src/lib/prisma.ts` |
+| Migrate conn | `DIRECT_DATABASE_URL` = Neon **direct** string (no `-pooler`), read by `prisma.config.ts` |
+| Auth | NextAuth v4 — `NEXTAUTH_SECRET`, `NEXTAUTH_URL=https://erpvietnammassage.vercel.app` |
+| Prod domain | `https://erpvietnammassage.vercel.app` |
+| ORM driver | Prisma 7 (`@prisma/client` 7.8.0) over `@prisma/adapter-pg` + `pg` 8 |
+
+Env vars are registered as **explicit** Vercel Environment Variables (Production), not via the Neon–Vercel integration's auto-injected `POSTGRES_*`/`PG*` names — the app reads only `DATABASE_URL`/`DIRECT_DATABASE_URL`, so the integration's 16 auto-vars were intentionally not relied upon. All four prod vars are stored as `type: sensitive` (write-only; values are not readable back via API or `vercel env pull`, which is expected).
+
+**Provisioning gotchas discovered (record so the next operator does not relearn them):**
+- The Neon org is **Vercel-managed**, so the Neon API / `neonctl` cannot create projects (`organization is managed by Vercel`). New Neon databases must be provisioned through Vercel's marketplace integration.
+- Vercel's `vercel integration add neon --non-interactive` provisions a store but **ignores region** and defaults to `us-east-1`. To pin Singapore from the CLI/API, POST to `/v1/integrations/integration/neon/marketplace/auto-provision/neon` with body `{"metadata":{"region":"sin1","auth":false}}` (region enum the integration accepts: `cle1, iad1, pdx1, fra1, lhr1, syd1, sin1, gru1`).
+- `prisma/migrations/migration_lock.toml` was missing from the repo and had never been committed; `prisma migrate deploy` requires it. It was added with `provider = "postgresql"`.
+- The first environment (created 2026-06-12) was in `us-east-1` and had been built with plain `next build`, so `prisma migrate deploy` had never run and its schema was ~3 migrations behind. The 2026-06-21 cutover migrated that data to Singapore via `pg_dump`/`pg_restore` (PostgreSQL 17 client), baselined the already-present migrations with `prisma migrate resolve --applied`, then applied the remaining migrations with `prisma migrate deploy`. The old `us-east-1` store was deleted after verification.
 
 **Reference Sources:**
 
-- Next.js self-hosting: https://nextjs.org/docs/app/guides/self-hosting
+- Vercel pricing/plans: https://vercel.com/pricing
+- Vercel function duration limits: https://vercel.com/docs/functions/configuring-functions/duration
+- Neon pricing/plans: https://neon.com/pricing
+- Prisma + Neon (pooled vs direct connection): https://www.prisma.io/docs/orm/overview/databases/neon
+- Next.js self-hosting (fallback): https://nextjs.org/docs/app/guides/self-hosting
 - Next.js environment variables: https://nextjs.org/docs/app/guides/environment-variables
 - Prisma `migrate deploy`: https://docs.prisma.io/docs/cli/migrate/deploy
 
@@ -369,7 +405,7 @@ Project initialization using this selected starter should be the first implement
 - External caching is deferred until query/index tuning and Next-level cache/revalidation are insufficient.
 - Dashboard chart library selection has been resolved for Epic 6: use project-local SVG/CSS primitives and no chart dependency. Reopen this only with measured need, exact version pinning, compatibility notes, and bundle-impact documentation.
 - Auth.js v5 vs stable v4 must be rechecked at implementation time because v5 was still beta during this architecture run.
-- Hosting provider details, backup retention, and migration approval flow remain project-standard confirmations before implementation.
+- Hosting confirmed (2026-06-21): Vercel (`sin1`) + Neon (`ap-southeast-1`, Launch tier). Backup retention and migration approval flow remain project-standard confirmations before production cutover. See `docs/deployment.md` for the step-by-step procedure.
 
 ## Implementation Patterns & Consistency Rules
 

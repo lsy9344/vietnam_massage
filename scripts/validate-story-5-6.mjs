@@ -39,7 +39,6 @@ if (!packageJson.scripts?.lint?.includes("validate-story-5-5.mjs && node scripts
   errors.push("package.json lint script must run scripts/validate-story-5-6.mjs immediately after validate-story-5-5.mjs");
 }
 
-read("package-lock.json");
 read("pnpm-lock.yaml");
 
 const alertDialog = read("src/components/ui/alert-dialog.tsx");

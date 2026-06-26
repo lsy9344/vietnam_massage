@@ -1,17 +1,9 @@
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 import { hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "./support/db";
+import { argon2idOptions, login } from "./support/auth";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: 2,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 type SeededData = {
   months: {
@@ -44,11 +36,29 @@ function utcDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
-async function login(page: Page, accountId: string, password: string) {
-  await page.goto("/sign-in");
-  await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function kpiTile(region: Locator, label: string) {
+  return region.locator(":scope > div").filter({ hasText: new RegExp(`^\\s*${escapeRegExp(label)}\\s*`) }).first();
+}
+
+async function expectStrongTone(region: Locator, label: string) {
+  const tile = kpiTile(region, label);
+  await expect(tile).toHaveClass(/border-2/);
+  await expect(tile).toHaveClass(/border-brand/);
+  const value = tile.locator("p").nth(1);
+  await expect(value).toHaveClass(/text-3xl/);
+  await expect(value).toHaveClass(/font-bold/);
+  await expect(value).toHaveClass(/text-brand/);
+}
+
+async function expectCostTone(region: Locator, label: string) {
+  const value = kpiTile(region, label).locator("p").nth(1);
+  await expect(value).toHaveClass(/text-2xl/);
+  await expect(value).toHaveClass(/font-semibold/);
+  await expect(value).toHaveClass(/text-danger/);
 }
 
 async function safeEmployeeSortOrder(employeeGroup: string, staffCode: string, preferredSortOrder: number) {
@@ -141,6 +151,14 @@ async function seedAccount(input: { accountId: string; password: string; role: s
   });
 }
 
+async function upsertCodeItem(codeType: string, code: string, displayName: string, sortOrder: number) {
+  await (prisma as any).codeItem.upsert({
+    where: { codeType_code: { codeType, code } },
+    update: { displayName, sortOrder, isActive: true },
+    create: { codeType, code, displayName, sortOrder, isSystemDefault: false, isActive: true }
+  });
+}
+
 async function upsertCoursePolicy(courseId: string, monthKey: string, code: string, basePrice: number, earcarePoolAmount: number, requiresSecondTherapist = false) {
   const existing = await (prisma as any).coursePolicy.findFirst({ where: { courseId, effectiveFromMonth: monthKey } });
   const data = {
@@ -211,6 +229,14 @@ function snapshotJson(input: { id: string; operatingMonthId: string; monthKey: s
       eligibleDayCount: 2,
       rows: []
     },
+    financials: {
+      paymentTotal: 10900000,
+      netSales: 10650000,
+      discountTotal: 100000,
+      expenseTotal: 250000,
+      earcarePoolTotal: 600000,
+      therapistCommissionTotal: 4350000
+    },
     totals: {
       therapistPayoutAmount: 9100000,
       opsDailyIncentiveAmount: 300000,
@@ -254,9 +280,11 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
 
   for (const [index, role] of accountRoles.entries()) {
     const employee = await seedEmployee(`E2E62-${suffix}-${role}`, `E2E62 ${role}`, "OPERATIONS", role, sortBase + index);
-    accounts[role] = { accountId: `story62_${suffix}_${role}`, password: `Story62!${role}` };
+    accounts[role] = { accountId: `story62_${suffix}_${role}`.toLowerCase(), password: `Story62!${role}` };
     await seedAccount({ ...accounts[role], role, employeeId: employee.id });
   }
+  await upsertCodeItem("ATTENDANCE_STATUS", "NORMAL", "정상", sortBase + 30);
+  await upsertCodeItem("ATTENDANCE_STATUS", "DAY_OFF", "휴무", sortBase + 31);
 
   const monthKeys = {
     draft: monthKeyForWorker(workerIndex, 0),
@@ -466,7 +494,22 @@ test.describe("Story 6.2 monthly dashboard", () => {
   });
 
   test.afterAll(async () => {
-    await prisma.$disconnect();
+    if (!seededData) {
+      await prisma.$disconnect();
+      return;
+    }
+
+    // 이 스펙이 시드한 4개 운영월의 콜/데이터를 범위로 정리한 뒤 연결을 닫는다.
+    try {
+      await cleanupStoryData([
+        seededData.months.draft,
+        seededData.months.reviewReopened,
+        seededData.months.closed,
+        seededData.months.lockedMissing
+      ]);
+    } finally {
+      await prisma.$disconnect();
+    }
   });
 
   for (const role of ["administrator", "counter", "settlement_manager", "read_only_viewer"] as const) {
@@ -492,12 +535,15 @@ test.describe("Story 6.2 monthly dashboard", () => {
     await page.goto(`/dashboard/monthly?operatingMonthId=${seededData.months.closed}`);
 
     await expect(page).toHaveURL(new RegExp(`/dashboard/monthly\\?operatingMonthId=${seededData.months.closed}`));
-    await expect(page.getByRole("region", { name: "월간 KPI 기준" })).toContainText("확정 스냅샷 기준");
-    await expect(page.getByRole("region", { name: "월간 KPI 기준" })).toContainText("closeVersion 2");
-    await expect(page.getByRole("region", { name: "월간 지급 정산 KPI" })).toContainText("10,500,000 VND");
-    await expect(page.getByRole("region", { name: "월간 상태 건수" })).toContainText("예약");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("방문완료 매출");
-    await expect(page.getByRole("region", { name: "월간 코스별 방문완료" })).toContainText("A");
+    await expect(page.getByRole("region", { name: "월간 KPI 기준", exact: true })).toContainText("확정 스냅샷 기준");
+    await expect(page.getByRole("region", { name: "월간 KPI 기준", exact: true })).toContainText("closeVersion 2");
+    await expect(page.getByRole("region", { name: "월간 지급 정산 KPI", exact: true })).toContainText("10,500,000 VND");
+    await expect(page.getByRole("region", { name: "월간 상태 건수", exact: true })).toContainText("예약");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("결제합계");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("운영팀 월인센");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("만근수당");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("갯수왕");
+    await expect(page.getByRole("region", { name: "월간 코스별 방문완료", exact: true })).toContainText("A");
   });
 
   test("운영월 선택 변경은 URL search params와 서버 데이터 기준 KPI를 갱신한다", async ({ page }) => {
@@ -509,11 +555,11 @@ test.describe("Story 6.2 monthly dashboard", () => {
     await page.getByRole("button", { name: "조회" }).click();
 
     await expect(page).toHaveURL(new RegExp(`/dashboard/monthly\\?operatingMonthId=${seededData.months.draft}`));
-    await expect(page.getByRole("region", { name: "월간 KPI 기준" })).toContainText("미확정 현재 기준");
-    await expect(page.getByRole("region", { name: "월간 상태 건수" })).toContainText("방문완료");
-    await expect(page.getByRole("region", { name: "월간 상태 건수" })).toContainText("6건");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("9,400,000 VND");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("9,100,000 VND");
+    await expect(page.getByRole("region", { name: "월간 KPI 기준", exact: true })).toContainText("미확정 현재 기준", { timeout: 45000 });
+    await expect(page.getByRole("region", { name: "월간 상태 건수", exact: true })).toContainText("방문완료");
+    await expect(page.getByRole("region", { name: "월간 상태 건수", exact: true })).toContainText("6건");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("10,900,000 VND");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("6,000,000 VND");
   });
 
   test("작성중 운영월은 월 전체 날짜 범위의 current KPI와 warning state를 표시한다", async ({ page }) => {
@@ -521,21 +567,40 @@ test.describe("Story 6.2 monthly dashboard", () => {
     await login(page, account.accountId, account.password);
     await page.goto(`/dashboard/monthly?operatingMonthId=${seededData.months.draft}`);
 
-    await expect(page.getByRole("region", { name: "월간 KPI 기준" })).toContainText("미확정 현재 기준");
-    await expect(page.getByRole("region", { name: "월간 상태 건수" })).toContainText("예약");
-    await expect(page.getByRole("region", { name: "월간 상태 건수" })).toContainText("1건");
-    await expect(page.getByRole("region", { name: "월간 상태 건수" })).toContainText("방문완료");
-    await expect(page.getByRole("region", { name: "월간 상태 건수" })).toContainText("6건");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("방문완료 매출");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("9,400,000 VND");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("순매출");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI" })).toContainText("9,100,000 VND");
+    await expect(page.getByRole("region", { name: "월간 KPI 기준", exact: true })).toContainText("미확정 현재 기준");
+    await expect(page.getByRole("region", { name: "월간 상태 건수", exact: true })).toContainText("예약");
+    await expect(page.getByRole("region", { name: "월간 상태 건수", exact: true })).toContainText("1건");
+    await expect(page.getByRole("region", { name: "월간 상태 건수", exact: true })).toContainText("방문완료");
+    await expect(page.getByRole("region", { name: "월간 상태 건수", exact: true })).toContainText("6건");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("결제합계");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("10,900,000 VND");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("월간 순이익");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("6,000,000 VND");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("운영팀 월인센");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("만근수당");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("갯수왕");
     await expect(page.getByLabel("A 코스 방문완료")).toContainText("1");
     await expect(page.getByLabel("B 코스 방문완료")).toContainText("담당 2건");
     await expect(page.getByLabel("D 코스 방문완료")).toContainText("담당 2건");
-    await expect(page.getByRole("alert")).toContainText("집계 제외 항목이 있습니다");
-    await expect(page.getByRole("alert")).toContainText("수당 누락 1건");
-    await expect(page.getByRole("alert")).toContainText("D코스 마사지사2 필요 1건");
+    const warning = page.getByRole("alert").filter({ hasText: "집계 제외 항목이 있습니다" });
+    await expect(warning).toContainText("집계 제외 항목이 있습니다");
+    await expect(warning).toContainText("수당 누락 1건");
+    await expect(warning).toContainText("D코스 마사지사2 필요 1건");
+  });
+
+  test("월간 금액 KPI는 순이익/비용 구분과 월간 비용 라벨을 브라우저 DOM class로 유지한다", async ({ page }) => {
+    const account = seededData.accounts.administrator;
+    await page.setViewportSize({ width: 390, height: 844 });
+    await login(page, account.accountId, account.password);
+    await page.goto(`/dashboard/monthly?operatingMonthId=${seededData.months.draft}`);
+
+    const money = page.getByRole("region", { name: "월간 금액 KPI", exact: true });
+    await expectStrongTone(money, "결제합계");
+    await expectStrongTone(money, "월간 순이익");
+    for (const label of ["일일비용 합계", "월간비용 합계", "운영팀 월인센", "만근수당", "갯수왕"]) {
+      await expect(money).toContainText(label);
+      await expectCostTone(money, label);
+    }
   });
 
   test("재오픈 검토중 월은 current source와 이전 확정 스냅샷을 분리 표시한다", async ({ page }) => {
@@ -543,10 +608,10 @@ test.describe("Story 6.2 monthly dashboard", () => {
     await login(page, account.accountId, account.password);
     await page.goto(`/dashboard/monthly?operatingMonthId=${seededData.months.reviewReopened}`);
 
-    await expect(page.getByRole("region", { name: "월간 KPI 기준" })).toContainText("미확정 현재 기준");
-    await expect(page.getByRole("region", { name: "이전 확정 스냅샷" })).toContainText("현재 KPI 기준에는 섞지 않습니다");
-    await expect(page.getByRole("region", { name: "이전 확정 스냅샷" })).toContainText("closeVersion 1");
-    await expect(page.getByRole("region", { name: "이전 확정 스냅샷" })).toContainText("10,500,000 VND");
+    await expect(page.getByRole("region", { name: "월간 KPI 기준", exact: true })).toContainText("미확정 현재 기준");
+    await expect(page.getByRole("region", { name: "이전 확정 스냅샷", exact: true })).toContainText("현재 KPI 기준에는 섞지 않습니다");
+    await expect(page.getByRole("region", { name: "이전 확정 스냅샷", exact: true })).toContainText("closeVersion 1");
+    await expect(page.getByRole("region", { name: "이전 확정 스냅샷", exact: true })).toContainText("10,500,000 VND");
     await expect(page.getByText("이 운영월의 콜이 없습니다")).toBeVisible();
   });
 
@@ -555,8 +620,11 @@ test.describe("Story 6.2 monthly dashboard", () => {
     await login(page, account.accountId, account.password);
     await page.goto(`/dashboard/monthly?operatingMonthId=${seededData.months.lockedMissing}`);
 
-    await expect(page.getByRole("alert")).toContainText("확정 스냅샷을 찾을 수 없습니다");
+    await expect(page.getByRole("alert").filter({ hasText: "확정 스냅샷을 찾을 수 없습니다" })).toBeVisible();
     await expect(page.getByRole("region", { name: "지급 요약 없음" })).toContainText("현재 지급 계산값으로 대체하지 않았습니다");
+    // 잠금 월에 스냅샷이 없으면 금액 KPI(결제합계/순이익/비용)도 현재 재계산값으로 대체하지 않는다.
+    await expect(page.getByRole("alert", { name: "월간 금액 KPI 표시 보류" })).toContainText("확정 스냅샷에서만 산출합니다");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toHaveCount(0);
   });
 
   test("loading UI presence and retry/error affordance are wired", async () => {

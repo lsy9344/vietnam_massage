@@ -3,6 +3,14 @@ import { requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import { listTherapistDailySettlements, type TherapistDailySettlementResultDto } from "@/modules/settlements/therapist-daily-settlement-service";
+import {
+  listTherapistAttendanceForDate,
+  type TherapistAttendanceForDateDto
+} from "@/modules/settlements/therapist-attendance-service";
+import { TherapistAttendanceTable } from "@/app/(erp)/settlements/therapist-attendance-table";
+import { TherapistDailySettlementPaymentForm } from "@/app/(erp)/settlements/therapist-daily-settlement-payment-form";
+import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
+import { PageHeader } from "@/components/domain/page-header";
 
 type SettlementsPageSearchParams = {
   operatingMonthId?: string;
@@ -24,6 +32,40 @@ const roleLabel = {
 
 function formatVnd(amount: number) {
   return `${new Intl.NumberFormat("ko-KR").format(amount)} VND`;
+}
+
+function formatKstDateTime(value: string | null) {
+  if (!value) return null;
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(new Date(value));
+}
+
+function paymentActorAccountId(paymentStatus: TherapistDailySettlementResultDto["settlements"][number]["paymentStatus"]) {
+  return paymentStatus.paidBy?.accountId ?? paymentStatus.paidByAccountId;
+}
+
+function paymentActorEmployeeLabel(paymentStatus: TherapistDailySettlementResultDto["settlements"][number]["paymentStatus"]) {
+  if (!paymentStatus.paidBy?.employeeDisplayName) return null;
+  return paymentStatus.paidBy.employeeStaffCode
+    ? `${paymentStatus.paidBy.employeeDisplayName} (${paymentStatus.paidBy.employeeStaffCode})`
+    : paymentStatus.paidBy.employeeDisplayName;
+}
+
+function paymentHistoryActorLabel(history: TherapistDailySettlementResultDto["settlements"][number]["paymentStatus"]["history"][number]) {
+  const accountId = history.changedBy?.accountId ?? history.changedByAccountId;
+  const employeeName = history.changedBy?.employeeDisplayName;
+  return employeeName ? `${accountId} / ${employeeName}` : accountId;
+}
+
+function paymentStateLabel(value: boolean | null) {
+  if (value === null || value === false) return "미지급";
+  return "지급완료";
 }
 
 function warningSummary(result: TherapistDailySettlementResultDto) {
@@ -58,13 +100,11 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
   if (!selectedMonth) {
     return (
       <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-        <div className="mb-5 flex items-end justify-between gap-6">
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase text-muted">정산</p>
-            <h1 className="text-2xl font-semibold text-foreground">마사지사 일일정산</h1>
-            <p className="mt-2 max-w-3xl text-sm text-muted">방문완료 콜의 마사지사1/2 담당 건과 코스별 수당 근거를 조회한다.</p>
-          </div>
-        </div>
+        <PageHeader
+          eyebrow="정산"
+          title="마사지사 일일정산"
+          description="방문완료 콜의 마사지사1/2 담당 건과 코스별 수당 근거를 조회한다."
+        />
         <SettlementTabs />
         <section className="border border-border bg-surface px-4 py-8">
           <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
@@ -81,32 +121,55 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
 
   const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
   let result: TherapistDailySettlementResultDto | null = null;
+  let attendance: TherapistAttendanceForDateDto | null = null;
   let errorMessage: string | null = null;
+  let attendanceErrorMessage: string | null = null;
 
-  try {
-    result = await listTherapistDailySettlements({
+  // Settlement read and attendance read are independent: a failure in one must not hide the other.
+  const [settlementResult, attendanceResult] = await Promise.allSettled([
+    listTherapistDailySettlements({
       operatingMonthId: selectedMonth.id,
       serviceDate
-    });
-  } catch (error) {
-    errorMessage = error instanceof Error ? error.message : "마사지사 일일정산을 조회하지 못했습니다.";
+    }),
+    listTherapistAttendanceForDate({
+      operatingMonthId: selectedMonth.id,
+      attendanceDate: serviceDate
+    })
+  ]);
+
+  if (settlementResult.status === "fulfilled") {
+    result = settlementResult.value;
+  } else {
+    errorMessage =
+      settlementResult.reason instanceof Error ? settlementResult.reason.message : "마사지사 일일정산을 조회하지 못했습니다.";
   }
+
+  if (attendanceResult.status === "fulfilled") {
+    attendance = attendanceResult.value;
+  } else {
+    attendanceErrorMessage =
+      attendanceResult.reason instanceof Error ? attendanceResult.reason.message : "출퇴근 입력을 조회하지 못했습니다.";
+  }
+
+  // 잠금 여부는 운영월 상태(항상 조회됨)를 기준으로 판단한다. 출퇴근 조회가 실패해도
+  // 잠긴 운영월에서 지급완료 버튼이 노출됐다가 서버에서 거절되는 UX를 막는다.
+  const isMonthLocked = isOperatingMonthPayoutLocked(selectedMonth.status) || (attendance?.isLocked ?? false);
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <div className="mb-5 flex items-end justify-between gap-6">
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase text-muted">정산</p>
-          <h1 className="text-2xl font-semibold text-foreground">마사지사 일일정산</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">방문완료 콜 기준으로 마사지사별 담당 콜, 코스별 수당, 정책 상태 근거를 조회한다.</p>
-        </div>
-        <div className="text-right text-xs text-muted">
-          <div>운영월 상태: {selectedMonth.status}</div>
-          <div>
-            날짜 범위: {selectedMonth.startDate} ~ {selectedMonth.endDate}
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="정산"
+        title="마사지사 일일정산"
+        description="방문완료 콜 기준으로 마사지사별 담당 콜, 코스별 수당, 정책 상태 근거를 조회하고 출퇴근 시간과 만근 인정을 함께 관리한다."
+        meta={
+          <>
+            <div>운영월 상태: {selectedMonth.status}</div>
+            <div>
+              날짜 범위: {selectedMonth.startDate} ~ {selectedMonth.endDate}
+            </div>
+          </>
+        }
+      />
 
       <SettlementTabs />
 
@@ -143,6 +206,13 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
         </button>
       </form>
 
+      {isMonthLocked ? (
+        <section className="mb-4 border border-danger bg-surface px-4 py-3" role="status">
+          <h2 className="text-sm font-semibold text-danger">잠긴 운영월입니다. 마감확정 또는 잠금 운영월입니다</h2>
+          <p className="mt-1 text-sm text-muted">이 운영월의 출퇴근 시간은 수정할 수 없습니다. 입력 항목은 읽기 전용으로 표시됩니다.</p>
+        </section>
+      ) : null}
+
       {errorMessage ? (
         <section className="border border-danger bg-surface px-4 py-5" role="alert">
           <h2 className="text-base font-semibold text-danger">정산 조회 실패</h2>
@@ -157,7 +227,7 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
         </section>
       ) : result ? (
         <>
-          <section aria-label="마사지사 일일정산 요약" className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <section aria-label="마사지사 일일정산 요약" className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <div className="border border-border bg-surface px-4 py-3">
               <div className="text-xs font-medium text-muted">정산 대상 마사지사</div>
               <div className="mt-1 text-xl font-semibold text-foreground">{result.settlements.length}명</div>
@@ -175,6 +245,12 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
               </div>
             </div>
             <div className="border border-border bg-surface px-4 py-3">
+              <div className="text-xs font-medium text-muted">지급완료</div>
+              <div className="mt-1 text-xl font-semibold text-foreground">
+                {result.settlements.filter((row) => row.paymentStatus.isPaid).length} / {result.settlements.length}명
+              </div>
+            </div>
+            <div className="border border-border bg-surface px-4 py-3">
               <div className="text-xs font-medium text-muted">정책 warning / 제외 콜</div>
               <div className="mt-1 text-xl font-semibold text-foreground">
                 {warningSummary(result)}건 / {result.excludedCallCount}건
@@ -189,12 +265,13 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
             </section>
           ) : (
             <section className="overflow-x-auto border border-border bg-surface">
-              <table className="min-w-[1120px] w-full border-collapse text-sm">
+              <table className="min-w-[1240px] w-full border-collapse text-sm">
                 <thead className="bg-readonly text-left text-xs font-semibold uppercase text-muted">
                   <tr>
                     <th className="border-b border-border px-3 py-2">마사지사</th>
                     <th className="border-b border-border px-3 py-2 text-right">담당 콜</th>
                     <th className="border-b border-border px-3 py-2 text-right">당일정산</th>
+                    <th className="border-b border-border px-3 py-2">지급완료</th>
                     {courseCodes.map((courseCode) => (
                       <th key={courseCode} className="border-b border-border px-3 py-2 text-right">
                         {courseCode} 수량/금액
@@ -212,6 +289,52 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">{settlement.totalCallCount}건</td>
                       <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(settlement.totalCommissionAmount)}</td>
+                      <td className="px-3 py-2">
+                        <div
+                          className={
+                            settlement.paymentStatus.isPaid
+                              ? "inline-flex border border-status-active bg-status-active px-2 py-1 text-xs font-semibold text-status-active-foreground"
+                              : "inline-flex border border-border bg-readonly px-2 py-1 text-xs font-semibold text-muted"
+                          }
+                        >
+                          {settlement.paymentStatus.isPaid ? "지급완료" : "미지급"}
+                        </div>
+                        {settlement.paymentStatus.isPaid ? (
+                          <div className="mt-1 space-y-0.5 text-xs text-muted">
+                            <div>{formatKstDateTime(settlement.paymentStatus.paidAt)}</div>
+                            {paymentActorAccountId(settlement.paymentStatus) ? (
+                              <div>처리자: {paymentActorAccountId(settlement.paymentStatus)}</div>
+                            ) : null}
+                            {paymentActorEmployeeLabel(settlement.paymentStatus) ? (
+                              <div>{paymentActorEmployeeLabel(settlement.paymentStatus)}</div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {settlement.paymentStatus.history.length > 0 ? (
+                          <div className="mt-2 border-l border-border pl-2 text-xs text-muted">
+                            <div className="font-semibold text-foreground">변경 이력 {settlement.paymentStatus.history.length}건</div>
+                            <ol className="mt-1 space-y-1">
+                              {settlement.paymentStatus.history.slice(0, 3).map((history) => (
+                                <li key={`${history.changedAt}-${history.changedByAccountId}`}>
+                                  <div>
+                                    {paymentStateLabel(history.previousIsPaid)} -&gt; {paymentStateLabel(history.newIsPaid)}
+                                  </div>
+                                  <div>{formatKstDateTime(history.changedAt)}</div>
+                                  <div>처리자: {paymentHistoryActorLabel(history)}</div>
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        ) : null}
+                        {isMonthLocked ? null : (
+                          <TherapistDailySettlementPaymentForm
+                            employeeId={settlement.employeeId}
+                            isPaid={settlement.paymentStatus.isPaid}
+                            operatingMonthId={selectedMonth.id}
+                            serviceDate={serviceDate}
+                          />
+                        )}
+                      </td>
                       {courseCodes.map((courseCode) => {
                         const summary = settlement.courseBreakdown[courseCode];
                         return (
@@ -270,6 +393,29 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
             </div>
           </section>
         </>
+      ) : null}
+
+      {attendanceErrorMessage ? (
+        <section className="mt-5 border border-danger bg-surface px-4 py-5" role="alert">
+          <h2 className="text-base font-semibold text-danger">출퇴근 입력 조회 실패</h2>
+          <p className="mt-2 text-sm text-muted">{attendanceErrorMessage}</p>
+          <form className="mt-4" method="get">
+            <input name="operatingMonthId" type="hidden" value={selectedMonth.id} />
+            <input name="serviceDate" type="hidden" value={serviceDate} />
+            <button className="h-9 border border-border bg-background px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
+              재조회
+            </button>
+          </form>
+        </section>
+      ) : attendance ? (
+        <div className="mt-5">
+          <TherapistAttendanceTable
+            attendanceDate={attendance.attendanceDate}
+            disabled={attendance.isLocked}
+            operatingMonthId={attendance.operatingMonthId}
+            rows={attendance.rows}
+          />
+        </div>
       ) : null}
     </main>
   );

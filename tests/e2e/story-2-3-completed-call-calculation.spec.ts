@@ -1,16 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
-import { Algorithm, hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { hash } from "@node-rs/argon2";
+import { prisma } from "./support/db";
+import { argon2idOptions } from "./support/auth";
+import { restoreUserAccount } from "./support/cleanup";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: Algorithm.Argon2id,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 type SeededData = {
   openMonthId: string;
@@ -348,10 +341,7 @@ test.describe("Story 2.3 방문완료 기준 계산 표시", () => {
   });
 
   test.afterAll(async () => {
-    await (prisma as any).userAccount.update({
-      where: { accountId: "story23_counter" },
-      data: { role: "counter", isActive: true, lockedUntil: null, failedLoginCount: 0 }
-    });
+    await restoreUserAccount("story23_counter", "counter");
     await prisma.$disconnect();
   });
 });

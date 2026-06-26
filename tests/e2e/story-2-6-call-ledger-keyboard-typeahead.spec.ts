@@ -1,16 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
-import { Algorithm, hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { hash } from "@node-rs/argon2";
+import { prisma } from "./support/db";
+import { argon2idOptions } from "./support/auth";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: Algorithm.Argon2id,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 type SeededData = {
   accountId: string;
@@ -251,6 +243,8 @@ test.describe("Story 2.6 keyboard-first call ledger type-ahead", () => {
   });
 
   test.afterAll(async () => {
+    // 이 스펙이 시드한 콜을 운영월 범위로 정리한 뒤 연결을 닫는다.
+    await cleanupStoryData(seededData.openMonthId);
     await prisma.$disconnect();
   });
 });

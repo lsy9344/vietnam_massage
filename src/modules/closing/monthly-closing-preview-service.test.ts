@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { CompletedServiceCallCalculationDto } from "@/modules/calls/service-call-service";
 import {
   MonthlyClosingPreviewDomainError,
   listMonthlyClosingPreview,
   type TherapistFullAttendanceRecognitionResultDto
 } from "@/modules/closing/monthly-closing-preview-service";
+import { listTherapistFullAttendanceRecognitions } from "@/modules/settlements/therapist-attendance-service";
 
 function dbDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
@@ -16,6 +18,7 @@ function createClosingPrisma(
     invalidRange?: boolean;
     missingMonth?: boolean;
     activeTherapists?: Array<{ id: string; staffCode: string; displayName: string; sortOrder: number }>;
+    therapistAttendances?: Array<{ employeeId: string; attendanceDate: string; isFullAttendanceRecognized: boolean; isActive?: boolean }>;
   } = {}
 ) {
   const operatingMonth = options.missingMonth
@@ -27,6 +30,13 @@ function createClosingPrisma(
         endDate: options.invalidRange ? dbDate("2026-06-01") : dbDate("2026-06-02"),
         status: options.status ?? "검토중"
       };
+
+  const attendanceRecords = (options.therapistAttendances ?? []).map((record) => ({
+    ...record,
+    operatingMonthId: "month-2026-06",
+    attendanceDate: dbDate(record.attendanceDate),
+    isActive: record.isActive ?? true
+  }));
 
   return {
     operatingMonth: {
@@ -41,6 +51,17 @@ function createClosingPrisma(
           { id: "therapist-2", staffCode: "THR-002", displayName: "마사지사2", sortOrder: 2 },
           { id: "therapist-3", staffCode: "THR-003", displayName: "마사지사3", sortOrder: 3 }
         ];
+      }
+    },
+    therapistAttendance: {
+      async findMany({ where }: any = {}) {
+        return attendanceRecords.filter((record) => {
+          if (where?.operatingMonthId !== undefined && record.operatingMonthId !== where.operatingMonthId) return false;
+          if (where?.isActive !== undefined && record.isActive !== where.isActive) return false;
+          if (where?.attendanceDate?.gte !== undefined && record.attendanceDate < where.attendanceDate.gte) return false;
+          if (where?.attendanceDate?.lte !== undefined && record.attendanceDate > where.attendanceDate.lte) return false;
+          return true;
+        });
       }
     }
   } as any;
@@ -320,6 +341,53 @@ const earcareDayResults = {
   }
 } as const;
 
+function financialDayResult(overrides: Partial<{
+  paymentTotal: number;
+  netSales: number;
+  discountTotal: number;
+  expenseTotal: number;
+  earcarePoolTotal: number;
+  therapistCommissionTotal: number;
+}> = {}) {
+  return {
+    reservationCount: 0,
+    inUseCount: 0,
+    cleaningCount: 0,
+    completedCount: 0,
+    noShowCount: 0,
+    canceledCount: 0,
+    paymentTotal: 0,
+    netSales: 0,
+    discountTotal: 0,
+    expenseTotal: 0,
+    earcarePoolTotal: 0,
+    therapistCommissionTotal: 0,
+    paymentMethodTotals: { cash: 0, card: 0, bank: 0, other: 0 },
+    courseSummaries: [],
+    warningCounts: { coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
+    ...overrides
+  };
+}
+
+const financialDayResults = {
+  "2026-06-01": financialDayResult({
+    paymentTotal: 3000000,
+    netSales: 2850000,
+    discountTotal: 100000,
+    expenseTotal: 150000,
+    earcarePoolTotal: 100000,
+    therapistCommissionTotal: 1600000
+  }),
+  "2026-06-02": financialDayResult({
+    paymentTotal: 1000000,
+    netSales: 950000,
+    discountTotal: 0,
+    expenseTotal: 50000,
+    earcarePoolTotal: 50000,
+    therapistCommissionTotal: 700000
+  })
+} as const;
+
 function createDependencies(options: { fullAttendanceResult?: TherapistFullAttendanceRecognitionResultDto; therapistResults?: Record<string, unknown> } = {}) {
   const calledDates: string[] = [];
 
@@ -389,6 +457,39 @@ function createDependencies(options: { fullAttendanceResult?: TherapistFullAtten
       async listEarcareDailySettlements({ serviceDate }: { serviceDate: string }) {
         calledDates.push(`earcare:${serviceDate}`);
         return earcareDayResults[serviceDate as keyof typeof earcareDayResults] as any;
+      },
+      async getDailyCallLedgerSummary({ serviceDate }: { serviceDate: string }) {
+        calledDates.push(`financial:${serviceDate}`);
+        return financialDayResults[serviceDate as keyof typeof financialDayResults] ?? financialDayResult();
+      },
+      async listCompletedServiceCallCalculationsForOperatingMonth(): Promise<CompletedServiceCallCalculationDto[]> {
+        calledDates.push("completed-calculations");
+        return [
+          {
+            serviceCallId: "call-a",
+            serviceDate: "2026-06-01",
+            courseId: "course-a",
+            courseCode: "A",
+            basePrice: 3000000,
+            paymentAmount: 3000000,
+            discountAmount: 0,
+            earcarePoolAmount: 100000,
+            opsCallCredit: 1,
+            therapistAssignments: [{ role: "THERAPIST_1", employeeId: "therapist-1", commissionAmount: 1600000 }]
+          },
+          {
+            serviceCallId: "call-b",
+            serviceDate: "2026-06-02",
+            courseId: "course-b",
+            courseCode: "B",
+            basePrice: 1000000,
+            paymentAmount: 1000000,
+            discountAmount: 0,
+            earcarePoolAmount: 50000,
+            opsCallCredit: 1,
+            therapistAssignments: [{ role: "THERAPIST_1", employeeId: "therapist-1", commissionAmount: 700000 }]
+          }
+        ];
       }
     }
   };
@@ -412,7 +513,10 @@ describe("listMonthlyClosingPreview", () => {
       "ops:2026-06-02",
       "ops-monthly",
       "earcare:2026-06-01",
-      "earcare:2026-06-02"
+      "earcare:2026-06-02",
+      "financial:2026-06-01",
+      "financial:2026-06-02",
+      "completed-calculations"
     ]);
     assert.equal(result.startDate, "2026-06-01");
     assert.equal(result.endDate, "2026-06-02");
@@ -438,11 +542,26 @@ describe("listMonthlyClosingPreview", () => {
     assert.equal(result.earcare.earcarePoolTotal, 150000);
     assert.equal(result.earcare.distributedAmount, 100000);
     assert.equal(result.earcare.undistributedAmount, 50000);
+    assert.deepEqual(result.financials, {
+      paymentTotal: 4000000,
+      netSales: 3800000,
+      discountTotal: 100000,
+      expenseTotal: 200000,
+      earcarePoolTotal: 150000,
+      therapistCommissionTotal: 2300000
+    });
     assert.equal(result.totals.therapistPayoutAmount, 2300000);
     assert.equal(result.totals.opsDailyIncentiveAmount, 100000);
     assert.equal(result.totals.opsMonthlyIncentiveAmount, 3000000);
     assert.equal(result.totals.earcarePayoutAmount, 100000);
     assert.equal(result.totals.grandPayoutAmount, 5500000);
+    assert.equal((result as any).dashboardFinancials.dailyCostTotal, 2700000);
+    assert.equal((result as any).dashboardFinancials.monthlyCostTotal, 3000000);
+    assert.equal((result as any).dashboardFinancials.settlementPayoutTotal, 5500000);
+    assert.equal((result as any).dashboardFinancials.netProfit, -1700000);
+    assert.equal((result as any).graphReport.dailyRevenueTrend[0].paymentTotal, 3000000);
+    assert.equal((result as any).graphReport.courseMix[0].paymentTotal, 3000000);
+    assert.equal((result as any).graphReport.therapistCallRanking[0].employeeId, "therapist-1");
     assert.equal(result.evidence.sourceDayCount, 2);
     assert.equal(result.evidence.includedCallCount, 8);
     assert.equal(result.evidence.excludedCallCount, 3);
@@ -683,6 +802,124 @@ describe("listMonthlyClosingPreview", () => {
 
     assert.equal(result.previewStatus, "closed_current");
     assert.equal(result.status, "잠금");
+  });
+
+  it("consumes the real Story 4.1 therapist attendance source so missing_story_4_1_source disappears and the 20-day allowance applies", async () => {
+    const activeTherapists = [
+      { id: "therapist-1", staffCode: "THR-001", displayName: "마사지사1", sortOrder: 1 },
+      { id: "therapist-2", staffCode: "THR-002", displayName: "마사지사2", sortOrder: 2 }
+    ];
+    // therapist-1 reaches 20 recognized days; therapist-2 only 19.
+    const therapistAttendances: Array<{ employeeId: string; attendanceDate: string; isFullAttendanceRecognized: boolean }> = [];
+    for (let day = 1; day <= 20; day += 1) {
+      const attendanceDate = `2026-06-${String(day).padStart(2, "0")}`;
+      therapistAttendances.push({ employeeId: "therapist-1", attendanceDate, isFullAttendanceRecognized: true });
+      therapistAttendances.push({ employeeId: "therapist-2", attendanceDate, isFullAttendanceRecognized: day <= 19 });
+    }
+
+    const closingPrisma = createClosingPrisma({
+      // widen the date range so all 20 seeded days fall inside the operating month
+      activeTherapists,
+      therapistAttendances
+    });
+    // Stretch the operating month to cover the 20 seeded days.
+    closingPrisma.operatingMonth.findUnique = async ({ where }: any) =>
+      where.id === "month-2026-06"
+        ? { id: "month-2026-06", monthKey: "2026-06", startDate: dbDate("2026-06-01"), endDate: dbDate("2026-06-20"), status: "검토중" }
+        : null;
+
+    const { dependencies } = createDependencies({
+      therapistResults: Object.fromEntries(
+        Array.from({ length: 20 }, (_, index) => {
+          const serviceDate = `2026-06-${String(index + 1).padStart(2, "0")}`;
+          return [
+            serviceDate,
+            {
+              operatingMonthId: "month-2026-06",
+              serviceDate,
+              settlements: [],
+              warningCounts: { coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
+              excludedCallCount: 0
+            }
+          ];
+        })
+      )
+    });
+    // Provide empty-but-valid ops/earcare results for every seeded date.
+    dependencies.listOpsDailyIncentives = async ({ serviceDate }: { serviceDate: string }) =>
+      ({
+        operatingMonthId: "month-2026-06",
+        serviceDate,
+        sourceCallCount: 0,
+        distributedAmount: 0,
+        warningMessage: null,
+        warningCounts: { notCompleted: 0, coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
+        rows: [],
+        callEvidence: []
+      }) as any;
+    dependencies.listEarcareDailySettlements = async ({ serviceDate }: { serviceDate: string }) =>
+      ({
+        operatingMonthId: "month-2026-06",
+        serviceDate,
+        earcarePoolTotal: 0,
+        sourceCallCount: 0,
+        eligibleCount: 0,
+        distributedAmount: 0,
+        undistributedAmount: 0,
+        warningCounts: { notCompleted: 0, coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
+        rows: [],
+        poolEvidence: []
+      }) as any;
+    dependencies.listOpsMonthlyIncentivePreview = async () =>
+      ({
+        operatingMonthId: "month-2026-06",
+        monthKey: "2026-06",
+        startDate: "2026-06-01",
+        endDate: "2026-06-20",
+        monthlyOpsCallCredit: 0,
+        appliedThresholdCallCount: null,
+        ruleStatus: "below_threshold",
+        warningMessage: null,
+        rows: [],
+        warningCounts: { notCompleted: 0, coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
+        callEvidence: []
+      }) as any;
+    // Use the real Story 4.1 recognition source instead of the missing-source stub.
+    dependencies.listTherapistFullAttendanceRecognitions = (async (input: {
+      operatingMonthId: string;
+      startDate: string;
+      endDate: string;
+      prismaClient?: unknown;
+    }): Promise<TherapistFullAttendanceRecognitionResultDto> => {
+      const result = await listTherapistFullAttendanceRecognitions({
+        operatingMonthId: input.operatingMonthId,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        prismaClient: input.prismaClient as any
+      });
+      return { sourceStatus: "available", sourceDayCount: result.sourceDayCount, rows: result.rows, warningMessages: [] };
+    }) as typeof dependencies.listTherapistFullAttendanceRecognitions;
+
+    const result = await listMonthlyClosingPreview({
+      operatingMonthId: "month-2026-06",
+      prismaClient: closingPrisma,
+      dependencies
+    });
+
+    assert.equal(result.evidence.fullAttendanceSourceStatus, "available");
+    assert.equal(result.warningCounts.fullAttendanceSourceMissing, 0);
+    assert.equal(result.warningCounts.fullAttendanceSourceDayCount, 20);
+
+    const rowsById = new Map(result.therapists.rows.map((row) => [row.employeeId, row]));
+    assert.equal(rowsById.get("therapist-1")?.fullAttendanceDays, 20);
+    assert.equal(rowsById.get("therapist-1")?.fullAttendanceAllowanceAmount, 2000000);
+    assert.match(rowsById.get("therapist-1")?.fullAttendanceBasis ?? "", /20일 이상 2,000,000 VND/);
+    assert.equal(rowsById.get("therapist-2")?.fullAttendanceDays, 19);
+    assert.equal(rowsById.get("therapist-2")?.fullAttendanceAllowanceAmount, 0);
+    assert.equal(
+      result.therapists.rows.some((row) => row.bonusWarningMessages.some((message) => message.includes("missing_story_4_1_source"))),
+      false
+    );
   });
 
   it("maps invalid input and operating-month records to Korean domain errors", async () => {

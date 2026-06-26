@@ -35,6 +35,7 @@ describe("operating date helpers", () => {
   it("keeps an in-range service date and clamps missing or out-of-range dates", () => {
     assert.equal(clampDateToOperatingMonth("2026-06-20", months[0], new Date("2026-06-09T00:00:00.000+09:00")), "2026-06-20");
     assert.equal(clampDateToOperatingMonth(undefined, months[0], new Date("2026-06-09T00:00:00.000+09:00")), "2026-06-09");
-    assert.equal(clampDateToOperatingMonth("2026-07-01", months[0], new Date("2026-07-01T00:00:00.000+09:00")), "2026-06-01");
+    assert.equal(clampDateToOperatingMonth("2026-05-31", months[0], new Date("2026-05-31T00:00:00.000+09:00")), "2026-06-01");
+    assert.equal(clampDateToOperatingMonth("2026-07-01", months[0], new Date("2026-07-01T00:00:00.000+09:00")), "2026-06-30");
   });
 });

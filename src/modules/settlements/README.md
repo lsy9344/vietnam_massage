@@ -24,6 +24,21 @@ Owns daily settlement calculations.
 - `missing_policy` means the applicable course policy or therapist rate is missing; the assignment remains visible as a 0 VND evidence row with warning context.
 - `second_therapist_required` invalid completed D-course rows are excluded from therapist payout totals.
 
+## Therapist Attendance Service
+
+`listTherapistAttendanceForDate()`, `upsertTherapistAttendance()`, `deactivateTherapistAttendance()`, and `listTherapistFullAttendanceRecognitions()` own daily massage-therapist check-in/check-out input and full-attendance recognition (Story 4.1).
+
+- Persists `TherapistAttendance` by `operatingMonthId + attendanceDate + Employee.id`; display names and Excel row numbers are never stored as downstream keys.
+- The active 대상 source is `Employee.employeeGroup === "THERAPIST"` ordered by `sortOrder`, then `staffCode`, then `Employee.id`. The list returns exactly the active therapists, with incomplete DTOs for days that have no row yet.
+- Time-of-day is stored as `checkInMinute`/`checkOutMinute` (minute-of-day `0`–`1439`). The UI renders `HH:mm`, but the minute integers are the source of truth so overnight math is deterministic.
+- Overnight checkout: when `checkOutMinute < checkInMinute`, `standbyMinutes = (checkOutMinute + 1440) - checkInMinute`, so standby is never negative. Equal minutes mean `0`.
+- Full-attendance recognition is `standbyMinutes >= 480` (8 hours). `standbyMinutes` and `isFullAttendanceRecognized` are computed and stored at write time so the monthly closing reuses the same source instead of re-deriving it.
+- `HH:mm` and date input are validated with Zod `safeParse()` and mapped to safe Korean field messages; invalid or missing input blocks the write.
+- `upsertTherapistAttendance()` / `deactivateTherapistAttendance()` block `마감확정` and `잠금` operating months plus out-of-range dates before any write, then re-check the operating-month lock inside the transaction to avoid races.
+- Attendance writes and audit logs are one transaction. Audit actions are `therapist_attendance.created`, `therapist_attendance.changed`, and `therapist_attendance.deactivated` with plain JSON snapshots, `payoutImpact: true`, and `reason: "payout_affecting"`.
+- `listTherapistFullAttendanceRecognitions({ operatingMonthId, startDate, endDate })` returns `{ sourceStatus: "available", sourceDayCount, rows: [{ employeeId, fullAttendanceDays }] }` from active attendance rows only. `sourceDayCount` is the distinct `attendanceDate` count of active source rows in range.
+- The monthly closing preview (`monthly-closing-preview-service.ts`) wires this function as its default `listTherapistFullAttendanceRecognitions` dependency, replacing the `missing_story_4_1_source` fallback. Story 5.2 owns the 만근수당 threshold/amount constants (20일 이상 2,000,000 VND); Story 4.1 only provides the recognition-day source.
+
 ## Earcare Attendance Service
 
 `listEarcareAttendanceForDate()` and `upsertEarcareAttendance()` own daily earcare attendance input for future earcare daily settlement.

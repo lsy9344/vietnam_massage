@@ -1,16 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { Algorithm, hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
-
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: Algorithm.Argon2id,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
+import { hash } from "@node-rs/argon2";
+import { prisma } from "./support/db";
+import { argon2idOptions, login } from "./support/auth";
 
 const users = [
   {
@@ -75,13 +66,6 @@ const users = [
     hiddenLinks: ["첫화면 실시간 현황", "콜/예약 입력 원장", "정산 화면", "월마감", "직원", "감사 로그"]
   }
 ];
-
-async function login(page: import("@playwright/test").Page, accountId: string, password: string) {
-  await page.goto("/sign-in");
-  await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
-}
 
 async function seedAuthAccount(input: {
   accountId: string;
@@ -165,10 +149,12 @@ test.describe("Story 1.2 직원 로그인과 RBAC", () => {
       const menu = page.getByRole("navigation", { name: "ERP 도메인 메뉴" });
 
       for (const label of user.visibleGroups) {
-        await expect(menu.getByText(label, { exact: true })).toBeVisible();
+        // 그룹명은 <h2> 헤딩으로 렌더된다. 같은 텍스트의 sidebar 링크(예: "월마감")와
+        // 겹치므로 getByText 대신 heading role로 구분한다.
+        await expect(menu.getByRole("heading", { name: label, exact: true })).toBeVisible();
       }
       for (const label of user.hiddenGroups) {
-        await expect(menu.getByText(label, { exact: true })).toHaveCount(0);
+        await expect(menu.getByRole("heading", { name: label, exact: true })).toHaveCount(0);
       }
       for (const label of user.visibleLinks) {
         await expect(menu.getByRole("link", { name: label })).toBeVisible();
@@ -182,7 +168,7 @@ test.describe("Story 1.2 직원 로그인과 RBAC", () => {
   test("이메일 identity로도 직원 계정 로그인이 가능하다", async ({ page }) => {
     await login(page, "administrator@example.local", "Story12!administrator");
     await expect(page).toHaveURL(/\/live$/);
-    await expect(page.getByRole("heading", { name: "첫화면 실시간 현황", level: 3 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "첫화면 실시간 현황", level: 1 })).toBeVisible();
   });
 
   test("public signup affordance가 없고 실패 메시지는 안전한 문구로 통일된다", async ({ page }) => {
@@ -238,7 +224,7 @@ test.describe("Story 1.2 직원 로그인과 RBAC", () => {
       password: "Story12!settlement_manager",
       forbiddenPath: "/calls",
       expectedLanding: /\/settlements$/,
-      expectedHeading: "정산 화면"
+      expectedHeading: "마사지사 일일정산"
     },
     {
       accountId: "waiter",
@@ -261,7 +247,7 @@ test.describe("Story 1.2 직원 로그인과 RBAC", () => {
       await login(page, routeCase.accountId, routeCase.password);
       await page.goto(routeCase.forbiddenPath);
       await expect(page).toHaveURL(routeCase.expectedLanding);
-      await expect(page.getByRole("heading", { name: routeCase.expectedHeading, level: 3 })).toBeVisible();
+      await expect(page.getByRole("heading", { name: routeCase.expectedHeading, level: 1 })).toBeVisible();
     });
   }
 

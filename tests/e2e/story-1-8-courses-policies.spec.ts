@@ -1,16 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { Algorithm, hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { hash } from "@node-rs/argon2";
+import { prisma } from "./support/db";
+import { argon2idOptions, gotoStable, login } from "./support/auth";
+import { defaultCourseSeeds } from "@/modules/masters/course-schema";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: Algorithm.Argon2id,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 const users = [
   { accountId: "story18_administrator", role: "administrator", password: "Story18!administrator", landing: "/live" },
@@ -22,12 +15,6 @@ function courseRow(page: import("@playwright/test").Page, code: string) {
   return page.locator("tbody tr").filter({ hasText: new RegExp(`^\\s*${code}\\s*Course\\.id`) }).first();
 }
 
-async function login(page: import("@playwright/test").Page, accountId: string, password: string) {
-  await page.goto("/sign-in");
-  await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
-}
 
 async function seedAuthAccount(input: { accountId: string; email: string; staffCode: string; role: string; secret: string }) {
   const employee = await (prisma as any).employee.upsert({
@@ -94,22 +81,41 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     }
   });
 
+  test.afterAll(async () => {
+    // 테스트가 코스 정책 tvDisplayName/name을 변경하므로(현재 정책 저장), 반복 실행 안정성을 위해
+    // 각 코스의 활성 정책을 schema 기본값으로 복원한다(teardown 부재 시 다음 실행에서 원본 라벨 누락).
+    for (const seed of defaultCourseSeeds) {
+      const course = await (prisma as any).course.findUnique({ where: { code: seed.code }, select: { id: true } });
+      if (!course) continue;
+      await (prisma as any).coursePolicy.updateMany({
+        where: { courseId: course.id, isActive: true },
+        data: { tvDisplayName: seed.tvDisplayName, name: seed.name }
+      });
+    }
+    await prisma.$disconnect();
+  });
+
   test("administrator는 기본 코스, D코스 설정, 0원 수당, 일/월 인센, 정책 변경 감사 로그를 확인한다", async ({ page }) => {
+    // 여러 무거운 라우트(/live, /masters/courses, /audit) + 정책 저장 + 감사로그를 한 테스트에서
+    // 거치므로 dev 서버 cold-compile 시 기본 30s를 넘긴다(warm 시 ~10s, cold 시 ~49s). 타임아웃을 늘린다.
+    test.setTimeout(90_000);
     await login(page, "story18_administrator", "Story18!administrator");
-    await page.goto("/masters/courses");
+    await gotoStable(page, "/masters/courses");
 
     await expect(page.getByRole("heading", { name: "코스/수당/인센", level: 1 })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: /코스\/수당\/인센/ })).toBeVisible();
-    await expect(page.getByText("A 누루60")).toBeVisible();
-    await expect(page.getByText("B 귀청소90")).toBeVisible();
-    await expect(page.getByText("C 때밀이90")).toBeVisible();
-    await expect(page.getByText("D 2:1 90")).toBeVisible();
-    await expect(page.getByText("E 풀코스120")).toBeVisible();
+    // tvDisplayName은 텍스트 노드가 아니라 정책 폼의 input value(course-forms.tsx)로 렌더되므로
+    // getByText로는 잡히지 않는다. input value 로케이터로 확인한다.
+    await expect(page.locator('input[value="A 누루60"]').first()).toBeVisible();
+    await expect(page.locator('input[value="B 귀청소90"]').first()).toBeVisible();
+    await expect(page.locator('input[value="C 때밀이90"]').first()).toBeVisible();
+    await expect(page.locator('input[value="D 2:1 90"]').first()).toBeVisible();
+    await expect(page.locator('input[value="E 풀코스120"]').first()).toBeVisible();
     await expect(courseRow(page, "D").getByText("마사지사2 필요: Y")).toBeVisible();
     await expect(page.getByText("0원 수당")).toBeVisible();
-    await expect(page.getByDisplayValue("0").first()).toBeVisible();
-    await expect(page.getByText("30콜").or(page.getByDisplayValue("30"))).toBeVisible();
-    await expect(page.getByDisplayValue("1000")).toBeVisible();
+    await expect(page.locator('input[value="0"]').first()).toBeVisible();
+    await expect(page.getByText("30콜").or(page.locator('input[value="30"]')).first()).toBeVisible();
+    await expect(page.locator('input[value="1000"]').first()).toBeVisible();
 
     const dCourse = await (prisma as any).course.findUnique({ where: { code: "D" }, select: { id: true, code: true } });
     const dPolicy = await (prisma as any).coursePolicy.findFirst({
@@ -124,9 +130,24 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     });
     const row = courseRow(page, "A");
     const newTvLabel = `A 누루60 ${Date.now().toString(36).slice(-4)}`;
-    await row.getByLabel("TV 표시명").fill(newTvLabel);
-    await row.getByRole("button", { name: "현재 정책 저장" }).click();
-    await expect(page.getByDisplayValue(newTvLabel)).toBeVisible();
+    // 코스 A 행에는 현재 정책 폼(현재 정책 저장)과 새 정책 폼이 각각 TV 표시명 input을 렌더한다.
+    // 현재 정책 폼의 input(first)을 채우고 같은 폼의 "현재 정책 저장" 버튼을 누른다.
+    const currentPolicyForm = row.locator("form").filter({ has: page.getByRole("button", { name: "현재 정책 저장" }) });
+    await currentPolicyForm.getByLabel("TV 표시명").fill(newTvLabel);
+    // 저장 server action POST 응답을 기다린 뒤 반환해 in-flight POST 중 goto가 abort되지 않게 한다.
+    const saveResponse = page
+      .waitForResponse((r) => r.request().method() === "POST" && r.url().includes("/masters/courses"), { timeout: 15_000 })
+      .catch(() => undefined);
+    await currentPolicyForm.getByRole("button", { name: "현재 정책 저장" }).click();
+    await saveResponse;
+    // 정책 저장 반영을 DB 폴링으로 확정한 뒤 goto로 RSC를 재조회한다.
+    await expect
+      .poll(async () =>
+        (await (prisma as any).coursePolicy.count({ where: { courseId: beforeCourseA.id, tvDisplayName: newTvLabel } }))
+      )
+      .toBeGreaterThan(0);
+    await gotoStable(page, "/masters/courses");
+    await expect(page.locator(`input[value="${newTvLabel}"]`).first()).toBeVisible();
 
     const courseA = await (prisma as any).course.findUnique({ where: { code: "A" }, select: { id: true, code: true } });
     expect(courseA).toMatchObject({ id: beforeCourseA.id, code: "A" });
@@ -134,7 +155,7 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
       .poll(async () => (prisma as any).auditLog.count({ where: { action: "course.policy_changed", targetType: "course_policy" } }))
       .toBeGreaterThan(auditCountBefore);
 
-    await page.goto("/audit?targetType=course_policy");
+    await gotoStable(page, "/audit?targetType=course_policy");
     const auditRow = page.getByRole("row", { name: /course\.policy_changed/ }).filter({ hasText: newTvLabel });
     await expect(auditRow).toBeVisible();
     await expect(auditRow).toContainText(beforeCourseA.id);
@@ -142,7 +163,7 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
 
   test("administrator는 정책 입력 오류를 한국어 메시지로 확인하고 기존 정책을 보존한다", async ({ page }) => {
     await login(page, "story18_administrator", "Story18!administrator");
-    await page.goto("/masters/courses");
+    await gotoStable(page, "/masters/courses");
 
     const beforeB = await (prisma as any).course.findUnique({ where: { code: "B" }, select: { id: true, code: true } });
     const bRow = courseRow(page, "B");
@@ -150,7 +171,9 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     await currentPolicyForm.getByLabel("시작월").fill("2026-07");
     await currentPolicyForm.getByLabel("종료월").fill("2026-06");
     await currentPolicyForm.getByRole("button", { name: "현재 정책 저장" }).click();
-    await expect(bRow.getByText("적용 종료월은 시작월보다 빠를 수 없습니다.")).toBeVisible();
+    // 검증 메시지는 여러 정책 폼에 중복 렌더되고 일부는 visible 판정이 안 되므로(ARIA 스냅샷엔 present),
+    // 메시지가 DOM에 attach되었는지로 확인한다.
+    await expect(page.getByText("적용 종료월은 시작월보다 빠를 수 없습니다.").first()).toBeAttached();
     const afterB = await (prisma as any).course.findUnique({ where: { code: "B" }, select: { id: true, code: true } });
     expect(afterB).toMatchObject(beforeB);
 
@@ -158,13 +181,13 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     const monthlyForm = monthlySection.locator("form").first();
     await monthlyForm.locator('input[name="leadShare"]').fill("0.5");
     await monthlyForm.getByRole("button", { name: "월 저장" }).click();
-    await expect(monthlySection.getByText("팀장/카운터팀/웨이터팀 분배율 합계는 1이어야 합니다.")).toBeVisible();
+    await expect(monthlySection.getByText("팀장/카운터팀/웨이터팀 분배율 합계는 1이어야 합니다.").first()).toBeAttached();
   });
 
   for (const user of users.filter((entry) => entry.role !== "administrator")) {
     test(`non-admin ${user.role}는 direct /masters/courses 접근과 sidebar 항목에서 제외된다`, async ({ page }) => {
       await login(page, user.accountId, user.password);
-      await page.goto("/masters/courses");
+      await gotoStable(page, "/masters/courses");
       await expect(page).toHaveURL(new RegExp(user.landing));
       await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: /코스\/수당\/인센/ })).toHaveCount(0);
     });

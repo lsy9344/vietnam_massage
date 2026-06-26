@@ -81,24 +81,29 @@ export function moveEnterCell(current: CellCoordinate, rowCount: number): CellCo
   };
 }
 
-export function moveAdjacentCell(current: CellCoordinate, rowCount: number, key: ArrowNavigationKey): CellCoordinate {
+export function moveAdjacentCell(
+  current: CellCoordinate,
+  rowCount: number,
+  key: ArrowNavigationKey,
+  fields: readonly string[] = NAVIGABLE_CALL_FIELDS
+): CellCoordinate {
   const rowIndex = boundedRowIndex(current.rowIndex, rowCount);
-  const columnIndex = fieldIndex(NAVIGABLE_CALL_FIELDS, current.columnId);
+  const columnIndex = fieldIndex(fields, current.columnId);
 
   if (key === "ArrowUp") {
-    return { rowIndex: boundedRowIndex(rowIndex - 1, rowCount), columnId: NAVIGABLE_CALL_FIELDS[columnIndex] };
+    return { rowIndex: boundedRowIndex(rowIndex - 1, rowCount), columnId: fields[columnIndex] };
   }
 
   if (key === "ArrowDown") {
-    return { rowIndex: boundedRowIndex(rowIndex + 1, rowCount), columnId: NAVIGABLE_CALL_FIELDS[columnIndex] };
+    return { rowIndex: boundedRowIndex(rowIndex + 1, rowCount), columnId: fields[columnIndex] };
   }
 
   const nextColumnIndex = key === "ArrowLeft" ? columnIndex - 1 : columnIndex + 1;
-  if (nextColumnIndex < 0 || nextColumnIndex >= NAVIGABLE_CALL_FIELDS.length) {
-    return { rowIndex, columnId: NAVIGABLE_CALL_FIELDS[columnIndex] };
+  if (nextColumnIndex < 0 || nextColumnIndex >= fields.length) {
+    return { rowIndex, columnId: fields[columnIndex] };
   }
 
-  return { rowIndex, columnId: NAVIGABLE_CALL_FIELDS[nextColumnIndex] };
+  return { rowIndex, columnId: fields[nextColumnIndex] };
 }
 
 export function cancelCellDraft<T extends Record<string, unknown>>(currentDraft: T, baselineDraft: T): T {

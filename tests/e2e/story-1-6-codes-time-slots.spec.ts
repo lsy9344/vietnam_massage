@@ -1,16 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { Algorithm, hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { hash } from "@node-rs/argon2";
+import { prisma } from "./support/db";
+import { argon2idOptions, login } from "./support/auth";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: Algorithm.Argon2id,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 const codeAuditActions = [
   "code_item.created",
@@ -69,12 +61,6 @@ const users = [
   }
 ];
 
-async function login(page: import("@playwright/test").Page, accountId: string, password: string) {
-  await page.goto("/sign-in");
-  await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
-}
 
 async function seedAuthAccount(input: {
   accountId: string;
@@ -172,7 +158,7 @@ async function getTimeSlot(value: string) {
 }
 
 function rowByDisplayValue(page: import("@playwright/test").Page, value: string) {
-  return page.locator("tbody tr").filter({ has: page.getByDisplayValue(value) });
+  return page.locator("tbody tr").filter({ has: page.locator(`input[value="${value}"]`) });
 }
 
 test.describe("Story 1.6 코드와 시간 슬롯 관리", () => {
@@ -210,15 +196,16 @@ test.describe("Story 1.6 코드와 시간 슬롯 관리", () => {
 
     await expect(page.getByRole("heading", { name: "코드/시간 슬롯", level: 1 })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: "코드/시간 슬롯" })).toBeVisible();
+    // "상태"는 "근무상태" heading에도 부분 매칭(strict 위반)하므로 exact로 정확히 겨냥한다.
     for (const heading of ["상태", "결제수단", "할인구분", "근무상태", "확인값", "시간 슬롯"]) {
-      await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+      await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
     }
     for (const value of ["예약", "사용중", "청소중", "방문완료", "노쇼", "취소", "현금", "카드", "계좌", "기타", "일주일내방문", "생일자", "후기작성", "정상", "휴무", "지각", "조퇴", "결근", "Y", "N", "11:00", "01:00"]) {
-      await expect(page.getByDisplayValue(value).first()).toBeVisible();
+      await expect(page.locator(`input[value="${value}"]`).first()).toBeVisible();
     }
-    await expect(page.getByDisplayValue("01:30")).toHaveCount(0);
-    await expect(page.getByDisplayValue("02:00")).toHaveCount(0);
-    await expect(page.getByDisplayValue("02:30")).toHaveCount(0);
+    await expect(page.locator('input[value="01:30"]')).toHaveCount(0);
+    await expect(page.locator('input[value="02:00"]')).toHaveCount(0);
+    await expect(page.locator('input[value="02:30"]')).toHaveCount(0);
 
     const slots = await (prisma as any).timeSlot.findMany({ orderBy: { sortOrder: "asc" } });
     expect(slots.map((slot: { value: string }) => slot.value)).toEqual([...defaultTimeSlotValues]);
@@ -312,7 +299,9 @@ test.describe("Story 1.6 코드와 시간 슬롯 관리", () => {
     const slot = await getTimeSlot("01:00");
     const row = rowByDisplayValue(page, "01:00");
     await row.getByRole("button", { name: "비활성 처리" }).click();
-    await expect(rowByDisplayValue(page, "01:00")).toContainText("비활성");
+    // toContainText("비활성")은 "비활성 처리" 버튼 라벨에도 매칭되는 거짓 양성이라 동기화하지 못한다.
+    // 비활성 반영을 DB 폴링으로 확정한 뒤 /audit으로 navigate한다(in-flight POST abort 회피).
+    await expect.poll(async () => (await getTimeSlot("01:00")).isActive).toBe(false);
 
     const after = await getTimeSlot("01:00");
     expect(after.id).toBe(slot.id);

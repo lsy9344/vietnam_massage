@@ -144,7 +144,7 @@ for (const required of [
 for (const forbidden of ["rounded-md", "style={{", "status-attention", "bg-status-empty text-white", "bg-status-complete-check-glow", "#F25C1F"]) {
   if (statusBadge.includes(forbidden)) errors.push(`status-badge.tsx must not include ${forbidden}`);
 }
-const cleaningBlock = statusBadge.match(/청소중:[\s\S]*?},\n  종료확인:/)?.[0] ?? "";
+const cleaningBlock = statusBadge.match(/청소중:[\s\S]*?},\r?\n  종료확인:/)?.[0] ?? "";
 if (cleaningBlock.includes("text-white") || !cleaningBlock.includes("text-status-cleaning-foreground")) {
   errors.push("청소중 badge must use text-status-cleaning-foreground and never text-white");
 }

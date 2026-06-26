@@ -1,17 +1,9 @@
 import { readFileSync } from "node:fs";
 import { hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "./support/db";
+import { argon2idOptions } from "./support/auth";
 import { expect, test, type Page } from "@playwright/test";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: 2,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 const story73OpenIssueKey = "calculation:earcare.zero-worker-pool:earcare-zero-worker";
 
@@ -108,7 +100,7 @@ async function seedStoryAccounts(workerIndex: number): Promise<SeededAccounts> {
 
   for (const [index, role] of roles.entries()) {
     accounts[role] = {
-      accountId: `story73_${suffix}_${role}`,
+      accountId: `story73_${suffix}_${role}`.toLowerCase(),
       password: `Story73!${role}`
     };
     await seedAccount({

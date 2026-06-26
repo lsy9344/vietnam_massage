@@ -4,6 +4,8 @@ import { RoomStatusRefreshController } from "@/components/domain/room-status-ref
 import { requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
+import { latestRoomStatusUpdatedAt } from "@/modules/rooms/room-status-refresh";
+import { roomFloorGroups } from "@/modules/rooms/room-floor-groups";
 import { listRoomStatuses } from "@/modules/rooms/room-status-service";
 
 type TvPageSearchParams = {
@@ -11,8 +13,8 @@ type TvPageSearchParams = {
   serviceDate?: string;
 };
 
-function latestUpdatedAt(values: Array<{ updatedAt: string }>) {
-  return values.reduce((latest, value) => (value.updatedAt > latest ? value.updatedAt : latest), new Date().toISOString());
+function floorGridClass(count: number) {
+  return count === 2 ? "grid grid-cols-1 gap-4 md:grid-cols-2" : "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3";
 }
 
 export default async function TvPage({ searchParams }: { searchParams: Promise<TvPageSearchParams> }) {
@@ -42,7 +44,7 @@ export default async function TvPage({ searchParams }: { searchParams: Promise<T
 
   const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
   const roomStatuses = await listRoomStatuses({ operatingMonthId: selectedMonth.id, serviceDate });
-  const lastUpdatedAt = latestUpdatedAt(roomStatuses);
+  const lastUpdatedAt = latestRoomStatusUpdatedAt(roomStatuses, new Date().toISOString());
 
   return (
     <main className="fullscreen min-h-screen bg-background px-5 py-5 text-foreground lg:px-8 lg:py-6">
@@ -58,8 +60,12 @@ export default async function TvPage({ searchParams }: { searchParams: Promise<T
       </header>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label="객실 상태">
-        {roomStatuses.map((status) => (
-          <RoomStatusCard key={status.roomId} status={status} variant="tv" />
+        {roomFloorGroups(roomStatuses).map((group) => (
+          <div className={`col-span-full ${floorGridClass(group.statuses.length)}`} key={group.floor}>
+            {group.statuses.map((status) => (
+              <RoomStatusCard key={status.roomId} status={status} variant="tv" />
+            ))}
+          </div>
         ))}
       </section>
     </main>

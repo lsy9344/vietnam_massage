@@ -1,17 +1,9 @@
 import { readFileSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "./support/db";
+import { argon2idOptions, login } from "./support/auth";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: 2,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 type SeededData = {
   monthId: string;
@@ -43,12 +35,6 @@ function utcDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
-async function login(page: Page, accountId: string, password: string) {
-  await page.goto("/sign-in");
-  await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
-}
 
 async function safeEmployeeSortOrder(employeeGroup: string, staffCode: string, preferredSortOrder: number) {
   const existing = await (prisma as any).employee.findUnique({
@@ -203,7 +189,7 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
 
   for (const [index, role] of accountRoles.entries()) {
     const employee = await seedEmployee(`E2E63-${suffix}-${role}`, `E2E63 ${role}`, "OPERATIONS", role, sortBase + index);
-    accounts[role] = { accountId: `story63_${suffix}_${role}`, password: `Story63!${role}` };
+    accounts[role] = { accountId: `story63_${suffix}_${role}`.toLowerCase(), password: `Story63!${role}` };
     await seedAccount({ ...accounts[role], role, employeeId: employee.id });
   }
 
@@ -346,7 +332,17 @@ test.describe("Story 6.3 graph report", () => {
   });
 
   test.afterAll(async () => {
-    await prisma.$disconnect();
+    if (!seededData) {
+      await prisma.$disconnect();
+      return;
+    }
+
+    // 이 스펙이 시드한 콜/데이터를 운영월 범위로 정리한 뒤 연결을 닫는다.
+    try {
+      await cleanupStoryData(seededData.monthId);
+    } finally {
+      await prisma.$disconnect();
+    }
   });
 
   test("administrator sees canonical URL, chart labels, visible values, and table fallback", async ({ page }) => {
@@ -362,18 +358,19 @@ test.describe("Story 6.3 graph report", () => {
     await expect(page.getByText("객실 상태 분포")).toBeVisible();
     await expect(page.getByText("노쇼/취소 추이")).toBeVisible();
     await expect(page.getByText("운영팀 인센/월마감 지급 구성")).toBeVisible();
-    await expect(page.getByRole("img", { name: "일별 방문완료 매출과 순매출 추이" })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "방문완료 매출" })).toBeVisible();
+    await expect(page.getByRole("img", { name: "일별 선결제 매출과 순매출 추이" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "매출(선결제 반영)" })).toBeVisible();
     const selectedDateRevenueRow = page.getByRole("row").filter({ hasText: seededData.serviceDate }).first();
-    await expect(selectedDateRevenueRow).toContainText("1,400,000 VND");
-    await expect(selectedDateRevenueRow).toContainText("1,100,000 VND");
+    await expect(selectedDateRevenueRow).toContainText("4,700,000 VND");
+    await expect(selectedDateRevenueRow).toContainText("4,400,000 VND");
     await expect(selectedDateRevenueRow).toContainText("1건");
     await expect(page.getByText("A 코스")).toBeVisible();
     await expect(page.getByText("1건 · 1,400,000 VND · 콜 50% · 매출 43.8%")).toBeVisible();
     await expect(page.getByText("B 코스")).toBeVisible();
     await expect(page.getByText("1건 · 1,800,000 VND · 콜 50% · 매출 56.3%")).toBeVisible();
-    await expect(page.getByText(seededData.therapist1Name)).toBeVisible();
-    await expect(page.getByText("담당 3건 · 1번 2 · 2번 1")).toBeVisible();
+    const therapistRankings = page.getByRole("region", { name: "마사지사 순위 그래프", exact: true });
+    await expect(therapistRankings).toContainText(seededData.therapist1Name);
+    await expect(therapistRankings).toContainText("담당 3건 · 1번 2 · 2번 1");
     await expect(page.getByText("사용중")).toBeVisible();
     await expect(page.getByText("청소중")).toBeVisible();
     await expect(page.getByText("1개").first()).toBeVisible();
@@ -386,7 +383,8 @@ test.describe("Story 6.3 graph report", () => {
     await page.goto(`/dashboard/reports?operatingMonthId=${seededData.monthId}&serviceDate=${isoDate(seededData.monthKey, 31)}`);
 
     await expect(page).toHaveURL(new RegExp(`/dashboard/reports\\?operatingMonthId=${seededData.monthId}&serviceDate=${seededData.endDate}`));
-    await expect(page.getByLabel("조회날짜")).toHaveValue(seededData.endDate);
+    await expect(page.getByRole("heading", { name: "그래프 리포트" })).toBeVisible({ timeout: 45000 });
+    await expect(page.getByLabel("조회날짜")).toHaveValue(seededData.endDate, { timeout: 45000 });
   });
 
   for (const role of ["counter", "settlement_manager", "read_only_viewer"] as const) {

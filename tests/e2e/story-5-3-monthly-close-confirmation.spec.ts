@@ -1,16 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "./support/db";
+import { argon2idOptions, login } from "./support/auth";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: 2,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 type SeededData = {
   draftOperatingMonthId: string;
@@ -30,12 +22,6 @@ type SeededData = {
 
 let seededData: SeededData;
 
-async function login(page: Page, accountId: string, password: string) {
-  await page.goto("/sign-in");
-  await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
-}
 
 async function confirmMonthlyCloseThroughDialog(page: Page) {
   await expect(page.getByRole("button", { name: "마감 확정" })).toBeEnabled();
@@ -196,7 +182,7 @@ test.describe("Story 5.3 monthly close confirmation snapshot", () => {
 
     await confirmMonthlyCloseThroughDialog(page);
 
-    await expect(page.getByText("확정 스냅샷")).toBeVisible();
+    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("현재 기준 미리보기").first()).toBeVisible();
     await expect(page.getByText(/snapshot id/)).toBeVisible();
     await expect(page.getByRole("button", { name: "잠금" })).toBeEnabled();
@@ -259,7 +245,7 @@ test.describe("Story 5.3 monthly close confirmation snapshot", () => {
     await page.goto(`/closing?operatingMonthId=${seededData.reviewOperatingMonthId}`);
 
     await confirmMonthlyCloseThroughDialog(page);
-    await expect(page.getByText("확정 스냅샷")).toBeVisible();
+    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("확정 전체 지급 합계")).toBeVisible();
 
     const closing = await (prisma as any).monthlyClosing.findFirst({

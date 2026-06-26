@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { canPerform, requireRouteAccess } from "@/lib/authorization";
+import { PageHeader } from "@/components/domain/page-header";
 import { ClosingActionPanel, type ConfirmDialogSummary } from "@/app/(erp)/closing/closing-action-panel";
 import { selectedOperatingMonthFor } from "@/lib/operating-date";
 import {
@@ -367,11 +368,11 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
   if (!selectedMonth) {
     return (
       <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-        <div className="mb-5">
-          <p className="mb-2 text-xs font-semibold uppercase text-muted">월마감</p>
-          <h1 className="text-2xl font-semibold text-foreground">월마감 미리보기</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">운영월 전체 날짜 범위로 지급액 미리보기를 집계한다.</p>
-        </div>
+        <PageHeader
+          eyebrow="월마감"
+          title="월마감 미리보기"
+          description="운영월 전체 날짜 범위로 지급액 미리보기를 집계한다."
+        />
         <section className="border border-border bg-surface px-4 py-8">
           <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
           <p className="mt-2 max-w-2xl text-sm text-muted">월마감 미리보기는 운영월 시작일과 종료일 기준으로만 조회할 수 있다.</p>
@@ -408,19 +409,19 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <div className="mb-5 flex items-end justify-between gap-6">
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase text-muted">월마감</p>
-          <h1 className="text-2xl font-semibold text-foreground">월마감 미리보기</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">마사지사, 운영팀, 귀케어 지급액을 운영월 날짜 범위 기준으로 읽기 전용 집계한다.</p>
-        </div>
-        <div className="text-right text-xs text-muted">
-          <div>운영월 상태: {selectedMonth.status}</div>
-          <div>
-            날짜 범위: {selectedMonth.startDate} ~ {selectedMonth.endDate}
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="월마감"
+        title="월마감 미리보기"
+        description="마사지사, 운영팀, 귀케어 지급액을 운영월 날짜 범위 기준으로 읽기 전용 집계한다."
+        meta={
+          <>
+            <div>운영월 상태: {selectedMonth.status}</div>
+            <div>
+              날짜 범위: {selectedMonth.startDate} ~ {selectedMonth.endDate}
+            </div>
+          </>
+        }
+      />
 
       <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
         <label className="grid gap-1 text-xs font-medium text-muted">

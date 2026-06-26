@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/domain/page-header";
 import { StatusBadge } from "@/components/domain/status-badge";
 import { requireRouteAccess } from "@/lib/authorization";
 import { selectedOperatingMonthFor } from "@/lib/operating-date";
@@ -26,17 +27,27 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
-function KpiTile({ label, value, note }: { label: string; value: string; note?: string }) {
+function KpiTile({ label, value, note, tone = "default" }: { label: string; value: string; note?: string; tone?: "default" | "strong" | "cost" }) {
   return (
-    <div className="border border-border bg-surface px-4 py-3">
+    <div className={tone === "strong" ? "border-2 border-brand bg-surface px-4 py-4" : "border border-border bg-surface px-4 py-3"}>
       <p className="text-xs font-medium text-muted">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-foreground [font-variant-numeric:tabular-nums]">{value}</p>
+      <p
+        className={
+          tone === "strong"
+            ? "mt-1 text-3xl font-bold text-brand [font-variant-numeric:tabular-nums]"
+            : tone === "cost"
+              ? "mt-1 text-2xl font-semibold text-danger [font-variant-numeric:tabular-nums]"
+              : "mt-1 text-2xl font-semibold text-foreground [font-variant-numeric:tabular-nums]"
+        }
+      >
+        {value}
+      </p>
       {note ? <p className="mt-1 text-xs text-muted">{note}</p> : null}
     </div>
   );
 }
 
-function StatusCountTile({ label, value }: { label: "예약" | "사용중" | "청소중" | "방문완료" | "노쇼" | "취소"; value: number }) {
+function StatusCountTile({ label, value }: { label: string; value: number }) {
   return (
     <div className="border border-border bg-surface px-4 py-3">
       <div className="flex items-center justify-between gap-3">
@@ -120,6 +131,39 @@ function EmptyOrWarningState({ metrics }: { metrics: MonthlyDashboardMetricsDto 
   );
 }
 
+function MonthlyMoneyKpis({ metrics }: { metrics: MonthlyDashboardMetricsDto }) {
+  // 마감확정/잠금 월인데 확정 스냅샷이 없으면, 현재 재계산값으로 금액 KPI를 대체하지 않는다.
+  // (잠금 월은 확정 스냅샷만이 신뢰 가능한 금액 기준이다.)
+  if (metrics.sourceBasis.kind === "snapshot_missing" || !metrics.financials) {
+    return (
+      <section className="border border-danger bg-surface px-4 py-5" role="alert" aria-label="월간 금액 KPI 표시 보류">
+        <h2 className="text-base font-semibold text-foreground">월간 금액 KPI를 표시하지 않습니다</h2>
+        <p className="mt-2 text-sm text-muted">
+          마감확정 또는 잠금 운영월의 결제합계·순이익·비용 지표는 확정 스냅샷에서만 산출합니다. 스냅샷이 없어 현재 재계산값으로 대체하지 않았습니다.
+        </p>
+      </section>
+    );
+  }
+
+  const financials = metrics.financials;
+
+  return (
+    <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-4" aria-label="월간 금액 KPI">
+      <KpiTile label="결제합계" value={formatVnd(financials.paymentTotal)} tone="strong" />
+      <KpiTile label="월간 순이익" value={formatVnd(financials.netProfit)} note="결제합계 - 일일비용 - 월간비용" tone="strong" />
+      <KpiTile label="할인합계" value={formatVnd(financials.discountTotal)} />
+      <KpiTile label="지출합계" value={formatVnd(financials.expenseTotal)} tone="cost" />
+      <KpiTile label="일일비용 합계" value={formatVnd(financials.dailyCostTotal)} note="지출, 마사지사 정산, 귀케어, 일일인센" tone="cost" />
+      <KpiTile label="월간비용 합계" value={formatVnd(financials.monthlyCostTotal)} note="운영팀 월인센, 만근수당, 갯수왕" tone="cost" />
+      <KpiTile label="운영팀 월인센" value={formatVnd(financials.opsMonthlyIncentiveTotal)} tone="cost" />
+      <KpiTile label="만근수당" value={formatVnd(financials.fullAttendanceAllowanceTotal)} tone="cost" />
+      <KpiTile label="갯수왕" value={formatVnd(financials.countKingBonusTotal)} tone="cost" />
+      <KpiTile label="전체 지급 합계" value={formatVnd(financials.settlementPayoutTotal)} tone="cost" />
+      <KpiTile label="귀케어 풀" value={formatVnd(financials.earcarePoolTotal)} />
+    </section>
+  );
+}
+
 function SettlementSummary({ metrics }: { metrics: MonthlyDashboardMetricsDto }) {
   if (!metrics.settlementSummary) {
     return (
@@ -174,11 +218,11 @@ export default async function MonthlyDashboardPage({ searchParams }: { searchPar
   if (!selectedMonth) {
     return (
       <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-        <div className="mb-5">
-          <p className="mb-2 text-xs font-semibold uppercase text-muted">대시보드</p>
-          <h1 className="text-2xl font-semibold text-foreground">월간 KPI 대시보드</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">운영월 전체 날짜 범위 기준으로 월간 상태, 매출, 지급 요약을 조회한다.</p>
-        </div>
+        <PageHeader
+          eyebrow="대시보드"
+          title="월간 KPI 대시보드"
+          description="운영월 전체 날짜 범위 기준으로 월간 상태, 매출, 지급 요약을 조회한다."
+        />
         <section className="border border-border bg-surface px-4 py-8">
           <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
           <p className="mt-2 max-w-2xl text-sm text-muted">월간 KPI는 운영월 날짜 범위와 운영월 ID를 기준으로 조회한다.</p>
@@ -203,7 +247,8 @@ export default async function MonthlyDashboardPage({ searchParams }: { searchPar
     operatingMonthId: selectedMonth.id
   });
   const statusCounts = [
-    ["예약", metrics.statusCounts.reservation],
+    // REQ-009: 예약건수는 상태가 아니라 원장에 등록된 전체 건수다(방문완료·노쇼·취소로 바뀌어도 빠지지 않음).
+    ["예약건수", metrics.statusCounts.reservation],
     ["사용중", metrics.statusCounts.inUse],
     ["청소중", metrics.statusCounts.cleaning],
     ["방문완료", metrics.statusCounts.completed],
@@ -213,19 +258,19 @@ export default async function MonthlyDashboardPage({ searchParams }: { searchPar
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase text-muted">대시보드</p>
-          <h1 className="text-2xl font-semibold text-foreground">월간 KPI 대시보드</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">운영월 전체 기준의 콜 상태, 방문완료 매출, 지급 스냅샷 흐름을 조회한다.</p>
-        </div>
-        <div className="text-right text-xs text-muted">
-          <div>운영월 상태: {metrics.operatingMonth.status}</div>
-          <div>
-            날짜 범위: {metrics.operatingMonth.startDate} ~ {metrics.operatingMonth.endDate}
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="대시보드"
+        title="월간 KPI 대시보드"
+        description="운영월 전체 기준의 콜 상태, 선결제 반영 매출, 지급 스냅샷 흐름을 조회한다."
+        meta={
+          <>
+            <div>운영월 상태: {metrics.operatingMonth.status}</div>
+            <div>
+              날짜 범위: {metrics.operatingMonth.startDate} ~ {metrics.operatingMonth.endDate}
+            </div>
+          </>
+        }
+      />
 
       <form className="mb-5 flex flex-wrap items-end gap-3" method="get">
         <label className="grid gap-1 text-xs font-medium text-muted">
@@ -259,14 +304,7 @@ export default async function MonthlyDashboardPage({ searchParams }: { searchPar
           ))}
         </section>
 
-        <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-6" aria-label="월간 금액 KPI">
-          <KpiTile label="방문완료 매출" value={formatVnd(metrics.financials.paymentTotal)} />
-          <KpiTile label="순매출" value={formatVnd(metrics.financials.netSales)} note="방문완료 매출 - 지출합계" />
-          <KpiTile label="할인합계" value={formatVnd(metrics.financials.discountTotal)} />
-          <KpiTile label="지출합계" value={formatVnd(metrics.financials.expenseTotal)} />
-          <KpiTile label="귀케어 풀" value={formatVnd(metrics.financials.earcarePoolTotal)} />
-          <KpiTile label="마사지사 정산" value={formatVnd(metrics.financials.therapistCommissionTotal)} />
-        </section>
+        <MonthlyMoneyKpis metrics={metrics} />
 
         <SettlementSummary metrics={metrics} />
 

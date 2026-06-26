@@ -267,6 +267,7 @@ export function createMigrationCalculationPrisma(options: { zeroEarcareWorkersDa
     },
     serviceCall: {
       async findMany({ where }: any = {}) {
+        const exactServiceDate = where?.serviceDate instanceof Date ? where.serviceDate : undefined;
         if (where?.serviceDate?.gte !== undefined && where?.serviceDate?.lte !== undefined && options.monthlyOpsCredit !== undefined) {
           return [
             withRelations({
@@ -297,7 +298,7 @@ export function createMigrationCalculationPrisma(options: { zeroEarcareWorkersDa
           .filter(
             (call) =>
               (where?.operatingMonthId === undefined || call.operatingMonthId === where.operatingMonthId) &&
-              (where?.serviceDate === undefined || sameDate(call.serviceDate, where.serviceDate)) &&
+              (exactServiceDate === undefined || sameDate(call.serviceDate, exactServiceDate)) &&
               (where?.serviceDate?.gte === undefined || call.serviceDate >= where.serviceDate.gte) &&
               (where?.serviceDate?.lte === undefined || call.serviceDate <= where.serviceDate.lte) &&
               matchesIn(call.status, where?.status)

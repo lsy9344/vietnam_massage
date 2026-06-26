@@ -1,29 +1,21 @@
 import { expect, test } from "@playwright/test";
-import { Algorithm, hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { hash } from "@node-rs/argon2";
+import { prisma } from "./support/db";
+import { argon2idOptions, login } from "./support/auth";
 
-const connectionString = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/vietnam_massage";
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) } as any);
-const argon2idOptions = {
-  algorithm: Algorithm.Argon2id,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
 
 const defaultRooms = [
-  { displayName: "101 호실", migrationReferenceName: "1번방", sortOrder: 10 },
-  { displayName: "102 호실", migrationReferenceName: "2번방", sortOrder: 20 },
-  { displayName: "103 호실", migrationReferenceName: "3번방", sortOrder: 30 },
-  { displayName: "201 호실", migrationReferenceName: "4번방", sortOrder: 40 },
-  { displayName: "202 호실", migrationReferenceName: "5번방", sortOrder: 50 },
-  { displayName: "203 호실", migrationReferenceName: "6번방", sortOrder: 60 },
-  { displayName: "301 호실", migrationReferenceName: "7번방", sortOrder: 70 },
-  { displayName: "302 호실", migrationReferenceName: "8번방", sortOrder: 80 },
-  { displayName: "303 호실", migrationReferenceName: "9번방", sortOrder: 90 },
-  { displayName: "401 호실", migrationReferenceName: "10번방", sortOrder: 100 },
-  { displayName: "402 호실", migrationReferenceName: "11번방", sortOrder: 110 }
+  { displayName: "401 호실", migrationReferenceName: "10번방", sortOrder: 10 },
+  { displayName: "402 호실", migrationReferenceName: "11번방", sortOrder: 20 },
+  { displayName: "301 호실", migrationReferenceName: "7번방", sortOrder: 30 },
+  { displayName: "302 호실", migrationReferenceName: "8번방", sortOrder: 40 },
+  { displayName: "303 호실", migrationReferenceName: "9번방", sortOrder: 50 },
+  { displayName: "201 호실", migrationReferenceName: "4번방", sortOrder: 60 },
+  { displayName: "202 호실", migrationReferenceName: "5번방", sortOrder: 70 },
+  { displayName: "203 호실", migrationReferenceName: "6번방", sortOrder: 80 },
+  { displayName: "101 호실", migrationReferenceName: "1번방", sortOrder: 90 },
+  { displayName: "102 호실", migrationReferenceName: "2번방", sortOrder: 100 },
+  { displayName: "103 호실", migrationReferenceName: "3번방", sortOrder: 110 }
 ] as const;
 
 const roomAuditActions = ["room.created", "room.display_name_changed", "room.sort_order_changed", "room.deactivated"];
@@ -61,12 +53,6 @@ const users = [
   }
 ];
 
-async function login(page: import("@playwright/test").Page, accountId: string, password: string) {
-  await page.goto("/sign-in");
-  await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
-}
 
 async function seedAuthAccount(input: {
   accountId: string;
@@ -154,8 +140,12 @@ async function getRoomByMigrationReferenceName(migrationReferenceName: string) {
   };
 }
 
+function getByDisplayValue(page: import("@playwright/test").Page, displayName: string) {
+  return page.locator(`input[value="${displayName}"]`);
+}
+
 function roomRowByDisplayValue(page: import("@playwright/test").Page, displayName: string) {
-  return page.locator("tbody tr").filter({ has: page.getByDisplayValue(displayName) });
+  return page.locator("tbody tr").filter({ has: getByDisplayValue(page, displayName) });
 }
 
 test.describe("Story 1.5 객실 마스터 관리", () => {
@@ -189,7 +179,7 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     await page.goto("/masters/rooms");
 
     await expect(page.getByRole("heading", { name: "객실 마스터", level: 1 })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: "객실" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: "객실", exact: true })).toBeVisible();
     await expect(page.getByText("기본 객실: 11개")).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "표시명" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "이관 참조값" })).toBeVisible();
@@ -240,9 +230,12 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     const auditRow = page.getByRole("row", { name: /room\.display_name_changed/ }).filter({ hasText: "101 E2E 호실" });
     await expect(auditRow).toBeVisible();
     await expect(auditRow).toContainText(before.id);
-    await auditRow.locator("details").nth(1).locator("summary").click();
-    await expect(auditRow.getByText('"displayName": "101 E2E 호실"')).toBeVisible();
-    await expect(auditRow.getByText(`"id": "${before.id}"`)).toBeVisible();
+    // beforeValue/afterValue JSON 두 details 블록 모두 같은 room id를 포함하므로,
+    // 단언 범위를 연 afterValue details(nth(1)) 내부로 한정해야 strict 위반을 피한다.
+    const afterDetails = auditRow.locator("details").nth(1);
+    await afterDetails.locator("summary").click();
+    await expect(afterDetails.getByText('"displayName": "101 E2E 호실"')).toBeVisible();
+    await expect(afterDetails.getByText(`"id": "${before.id}"`)).toBeVisible();
   });
 
   test("administrator는 정렬 순서를 수정하고 중복 정렬값 오류를 볼 수 있다", async ({ page }) => {
@@ -254,11 +247,17 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     await row.locator('input[name="sortOrder"]').fill("25");
     await row.getByRole("button", { name: "적용" }).click();
     await expect(roomRowByDisplayValue(page, "102 호실").locator('input[name="sortOrder"]')).toHaveValue("25");
+    // toHaveValue는 내가 채운 값이라 즉시 통과하므로 server action 반영을 보장하지 못한다.
+    // DB가 갱신되기를 폴링해 이후 단언이 stale row를 읽지 않게 한다.
+    await expect.poll(async () => (await getRoomByMigrationReferenceName("2번방")).sortOrder).toBe(25);
 
     const updated = await getRoomByMigrationReferenceName("2번방");
     expect(updated.id).toBe(room.id);
     expect(updated.sortOrder).toBe(25);
 
+    // 첫 적용(25)의 revalidate로 행 input이 리렌더되면 이어지는 fill이 stale 요소에 적용될 수 있다.
+    // goto로 RSC를 안전하게 재조회한 뒤 중복(30) 입력을 진행한다.
+    await page.goto("/masters/rooms");
     const updatedRow = roomRowByDisplayValue(page, "102 호실");
     await updatedRow.locator('input[name="sortOrder"]').fill("30");
     await updatedRow.getByRole("button", { name: "적용" }).click();
@@ -267,8 +266,10 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     await page.goto("/audit?targetType=room");
     const auditRow = page.getByRole("row", { name: /room\.sort_order_changed/ }).filter({ hasText: room.id });
     await expect(auditRow).toBeVisible();
-    await auditRow.locator("details").nth(1).locator("summary").click();
-    await expect(auditRow.getByText('"sortOrder": 25')).toBeVisible();
+    // 단언 범위를 연 afterValue details(nth(1)) 내부로 한정해 before/after JSON 중복 매칭을 피한다.
+    const afterDetails = auditRow.locator("details").nth(1);
+    await afterDetails.locator("summary").click();
+    await expect(afterDetails.getByText('"sortOrder": 25')).toBeVisible();
   });
 
   test("administrator는 객실을 물리 삭제 대신 비활성 처리하고 감사 로그를 확인할 수 있다", async ({ page }) => {
@@ -278,7 +279,9 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     const room = await getRoomByMigrationReferenceName("11번방");
     const row = roomRowByDisplayValue(page, "402 호실");
     await row.getByRole("button", { name: "비활성 처리" }).click();
-    await expect(roomRowByDisplayValue(page, "402 호실")).toContainText("비활성");
+    // toContainText("비활성")은 "비활성 처리" 버튼 라벨에도 매칭되는 거짓 양성이라 server action을
+    // 동기화하지 못한다. 비활성 반영을 DB 폴링으로 확정한다.
+    await expect.poll(async () => (await getRoomByMigrationReferenceName("11번방")).isActive).toBe(false);
 
     const after = await getRoomByMigrationReferenceName("11번방");
     expect(after.id).toBe(room.id);
@@ -287,8 +290,10 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     await page.goto("/audit?targetType=room");
     const auditRow = page.getByRole("row", { name: /room\.deactivated/ }).filter({ hasText: room.id });
     await expect(auditRow).toBeVisible();
-    await auditRow.locator("details").nth(1).locator("summary").click();
-    await expect(auditRow.getByText('"isActive": false')).toBeVisible();
+    // 단언 범위를 연 afterValue details(nth(1)) 내부로 한정해 before/after JSON 중복 매칭을 피한다.
+    const afterDetails = auditRow.locator("details").nth(1);
+    await afterDetails.locator("summary").click();
+    await expect(afterDetails.getByText('"isActive": false')).toBeVisible();
   });
 
   for (const user of users.filter((candidate) => candidate.role !== "administrator")) {
@@ -299,7 +304,7 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
       await expect(page).toHaveURL(new RegExp(`${user.landing}$`));
       const menu = page.getByRole("navigation", { name: "ERP 도메인 메뉴" });
       await expect(menu.getByText("객실", { exact: true })).toHaveCount(0);
-      await expect(menu.getByRole("link", { name: "객실" })).toHaveCount(0);
+      await expect(menu.getByRole("link", { name: "객실", exact: true })).toHaveCount(0);
     });
   }
 

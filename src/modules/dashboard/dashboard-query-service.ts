@@ -19,6 +19,8 @@ import {
   listTherapistDailySettlements,
   type TherapistDailySettlementDto
 } from "@/modules/settlements/therapist-daily-settlement-service";
+import { listOpsDailyIncentives } from "@/modules/settlements/ops-daily-incentive-service";
+import { listEarcareDailySettlements } from "@/modules/settlements/earcare-daily-settlement-service";
 import { listRoomStatuses } from "@/modules/rooms/room-status-service";
 import type { RoomDisplayStatus } from "@/modules/rooms/dtos";
 
@@ -63,7 +65,17 @@ export type TodayDashboardMetricsDto = {
     discountTotal: number;
     expenseTotal: number;
     earcarePoolTotal: number;
+    earcarePayoutTotal: number;
+    opsDailyIncentiveTotal: number;
+    opsMonthlyIncentiveTotal: number;
+    fullAttendanceAllowanceTotal: number;
+    countKingBonusTotal: number;
     therapistCommissionTotal: number;
+    therapistPayoutTotal: number;
+    dailyCostTotal: number;
+    monthlyCostTotal: number;
+    settlementPayoutTotal: number;
+    netProfit: number;
   };
   therapistSummary: {
     totalAssignedCallCount: number;
@@ -92,7 +104,7 @@ export type TodayDashboardMetricsDto = {
   sourceBasis: {
     callLedgerSummary: "getDailyCallLedgerSummary";
     therapistDailySettlements: "listTherapistDailySettlements";
-    amountBasis: "calculated_completed_service_calls_only";
+    amountBasis: "calculated_completed_service_calls_only" | "prepaid_revenue_and_completed_settlements";
     readOnly: true;
   };
 };
@@ -112,7 +124,11 @@ export type MonthlyDashboardMetricsDto = {
         label: "확정 스냅샷 기준";
         closeVersion: number;
         confirmedAt: string;
-        calculationBasis: "getDailyCallLedgerSummary_range";
+        calculationBasis:
+          | "getDailyCallLedgerSummary_range"
+          | "getMonthlyClosingSnapshot.financials"
+          | "getMonthlyClosingSnapshot.dashboardFinancials"
+          | "getMonthlyClosingSnapshot.graphReport";
         settlementBasis: "getMonthlyClosingSnapshot";
         readOnly: true;
       }
@@ -124,7 +140,7 @@ export type MonthlyDashboardMetricsDto = {
         readOnly: true;
       };
   statusCounts: TodayDashboardMetricsDto["statusCounts"];
-  financials: TodayDashboardMetricsDto["financials"];
+  financials: TodayDashboardMetricsDto["financials"] | null;
   courseCompletions: DailyCourseSummaryDto[];
   warningCounts: {
     callLedger: DailyDashboardWarningCounts;
@@ -147,6 +163,8 @@ type MonthlyDashboardSettlementSummaryDto = {
   therapistPayoutAmount: number;
   opsDailyIncentiveAmount: number;
   opsMonthlyIncentiveAmount: number;
+  fullAttendanceAllowanceTotal: number;
+  countKingBonusTotal: number;
   earcarePayoutAmount: number;
   grandPayoutAmount: number;
   includedCallCount: number;
@@ -168,6 +186,13 @@ export type MonthlyDashboardDependencies = {
   getDailyCallLedgerSummary: typeof getDailyCallLedgerSummary;
   listMonthlyClosingPreview: typeof listMonthlyClosingPreview;
   getMonthlyClosingSnapshot: typeof getMonthlyClosingSnapshot;
+};
+
+export type TodayDashboardDependencies = {
+  getDailyCallLedgerSummary: typeof getDailyCallLedgerSummary;
+  listTherapistDailySettlements: typeof listTherapistDailySettlements;
+  listOpsDailyIncentives: typeof listOpsDailyIncentives;
+  listEarcareDailySettlements: typeof listEarcareDailySettlements;
 };
 
 export type DashboardGraphReportDto = {
@@ -230,10 +255,12 @@ export type DashboardGraphReportDto = {
   };
   emptyStates: {
     noCallsInPeriod: boolean;
+    noRevenueTrendData: boolean;
     noCalculatedCompletedCalls: boolean;
     noRoomStatuses: boolean;
     noSettlementSource: boolean;
     snapshotMissing: boolean;
+    graphReportSnapshotMissing: boolean;
   };
 };
 
@@ -256,6 +283,13 @@ const defaultMonthlyDependencies: MonthlyDashboardDependencies = {
   getDailyCallLedgerSummary,
   listMonthlyClosingPreview,
   getMonthlyClosingSnapshot
+};
+
+const defaultTodayDependencies: TodayDashboardDependencies = {
+  getDailyCallLedgerSummary,
+  listTherapistDailySettlements,
+  listOpsDailyIncentives,
+  listEarcareDailySettlements
 };
 
 const defaultGraphReportDependencies: DashboardGraphReportDependencies = {
@@ -380,17 +414,41 @@ function emptyCourseMix(): DashboardGraphReportDto["courseMix"] {
 }
 
 function emptyRoomStatusDistribution(): DashboardGraphReportDto["roomStatusDistribution"] {
-  return (["사용중", "청소중", "예약", "종료확인", "빈방"] as const).map((displayStatus) => ({
+  return (["사용중", "종료임박", "청소중", "예약", "종료확인", "빈방"] as const).map((displayStatus) => ({
     displayStatus,
     count: 0
   }));
 }
 
-function toSettlementSummary(source: Pick<MonthlyClosingPreviewDto, "totals" | "evidence">): MonthlyDashboardSettlementSummaryDto {
+function netProfit(input: {
+  paymentTotal: number;
+  expenseTotal: number;
+  therapistPayoutTotal: number;
+  earcarePayoutTotal: number;
+  opsDailyIncentiveTotal: number;
+  opsMonthlyIncentiveTotal: number;
+}) {
+  return (
+    input.paymentTotal -
+    input.expenseTotal -
+    input.therapistPayoutTotal -
+    input.earcarePayoutTotal -
+    input.opsDailyIncentiveTotal -
+    input.opsMonthlyIncentiveTotal
+  );
+}
+
+function toSettlementSummary(source: Pick<MonthlyClosingPreviewDto, "totals" | "evidence" | "therapists">): MonthlyDashboardSettlementSummaryDto {
+  const therapistRows = source.therapists?.rows ?? [];
+  const fullAttendanceAllowanceTotal = therapistRows.reduce((sum, row) => sum + (row.fullAttendanceAllowanceAmount ?? 0), 0);
+  const countKingBonusTotal = therapistRows.reduce((sum, row) => sum + (row.countKingBonusAmount ?? 0), 0);
+
   return {
     therapistPayoutAmount: source.totals.therapistPayoutAmount,
     opsDailyIncentiveAmount: source.totals.opsDailyIncentiveAmount,
     opsMonthlyIncentiveAmount: source.totals.opsMonthlyIncentiveAmount,
+    fullAttendanceAllowanceTotal,
+    countKingBonusTotal,
     earcarePayoutAmount: source.totals.earcarePayoutAmount,
     grandPayoutAmount: source.totals.grandPayoutAmount,
     includedCallCount: source.evidence.includedCallCount,
@@ -422,6 +480,7 @@ function toGraphSourceBasis(input: {
   operatingMonthStatus: string;
   closing: MonthlyClosingDto | null;
   snapshotMissing: boolean;
+  calculationBasis?: Extract<MonthlyDashboardMetricsDto["sourceBasis"], { kind: "closed_snapshot" }>["calculationBasis"];
 }): MonthlyDashboardMetricsDto["sourceBasis"] {
   if (input.snapshotMissing) {
     return {
@@ -439,7 +498,7 @@ function toGraphSourceBasis(input: {
       label: "확정 스냅샷 기준",
       closeVersion: input.closing.closeVersion,
       confirmedAt: input.closing.confirmedAt,
-      calculationBasis: "getDailyCallLedgerSummary_range",
+      calculationBasis: input.calculationBasis ?? "getDailyCallLedgerSummary_range",
       settlementBasis: "getMonthlyClosingSnapshot",
       readOnly: true
     };
@@ -565,10 +624,72 @@ function isSnapshotNotFound(error: unknown) {
   );
 }
 
+function hasMonthlyClosingFinancials(value: unknown): value is MonthlyClosingPreviewDto["financials"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const financials = value as Record<keyof MonthlyClosingPreviewDto["financials"], unknown>;
+  return (
+    typeof financials.paymentTotal === "number" &&
+    typeof financials.netSales === "number" &&
+    typeof financials.discountTotal === "number" &&
+    typeof financials.expenseTotal === "number" &&
+    typeof financials.earcarePoolTotal === "number" &&
+    typeof financials.therapistCommissionTotal === "number"
+  );
+}
+
+function hasMonthlyClosingDashboardFinancials(value: unknown): value is TodayDashboardMetricsDto["financials"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const financials = value as Record<keyof TodayDashboardMetricsDto["financials"], unknown>;
+  return (
+    typeof financials.paymentTotal === "number" &&
+    typeof financials.netSales === "number" &&
+    typeof financials.discountTotal === "number" &&
+    typeof financials.expenseTotal === "number" &&
+    typeof financials.earcarePoolTotal === "number" &&
+    typeof financials.earcarePayoutTotal === "number" &&
+    typeof financials.opsDailyIncentiveTotal === "number" &&
+    typeof financials.opsMonthlyIncentiveTotal === "number" &&
+    typeof financials.fullAttendanceAllowanceTotal === "number" &&
+    typeof financials.countKingBonusTotal === "number" &&
+    typeof financials.therapistCommissionTotal === "number" &&
+    typeof financials.therapistPayoutTotal === "number" &&
+    typeof financials.dailyCostTotal === "number" &&
+    typeof financials.monthlyCostTotal === "number" &&
+    typeof financials.settlementPayoutTotal === "number" &&
+    typeof financials.netProfit === "number"
+  );
+}
+
+function hasMonthlyClosingGraphReport(value: unknown): value is MonthlyClosingPreviewDto["graphReport"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const report = value as Partial<MonthlyClosingPreviewDto["graphReport"]>;
+  return (
+    Array.isArray(report.dailyRevenueTrend) &&
+    Array.isArray(report.courseMix) &&
+    Array.isArray(report.therapistCallRanking) &&
+    Array.isArray(report.noShowCancelTrend) &&
+    !!report.callLedgerWarnings &&
+    typeof report.callLedgerWarnings.coursePolicyMissing === "number" &&
+    typeof report.callLedgerWarnings.therapistRateMissing === "number" &&
+    typeof report.callLedgerWarnings.secondTherapistRequired === "number" &&
+    typeof report.totalStatusCount === "number"
+  );
+}
+
 export async function getTodayDashboardMetrics(input: {
   operatingMonthId: string;
   serviceDate: string;
   prismaClient?: TodayDashboardPrismaClient;
+  dependencies?: Partial<TodayDashboardDependencies>;
 }): Promise<TodayDashboardMetricsDto> {
   const parsed = todayDashboardQuerySchema.safeParse(input);
   if (!parsed.success) {
@@ -594,16 +715,27 @@ export async function getTodayDashboardMetrics(input: {
     throw new DashboardQueryDomainError("조회 날짜가 선택한 운영월 범위를 벗어났습니다.", "DASHBOARD_DATE_OUT_OF_RANGE");
   }
 
-  const [callSummary, therapistSettlements] = await Promise.all([
-    getDailyCallLedgerSummary({
+  const dependencies = { ...defaultTodayDependencies, ...input.dependencies };
+  const [callSummary, therapistSettlements, opsDailyIncentives, earcareSettlements] = await Promise.all([
+    dependencies.getDailyCallLedgerSummary({
       operatingMonthId: parsed.data.operatingMonthId,
       serviceDate: parsed.data.serviceDate,
       prismaClient: client as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
     }),
-    listTherapistDailySettlements({
+    dependencies.listTherapistDailySettlements({
       operatingMonthId: parsed.data.operatingMonthId,
       serviceDate: parsed.data.serviceDate,
       prismaClient: client as Parameters<typeof listTherapistDailySettlements>[0]["prismaClient"]
+    }),
+    dependencies.listOpsDailyIncentives({
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate: parsed.data.serviceDate,
+      prismaClient: client as Parameters<typeof listOpsDailyIncentives>[0]["prismaClient"]
+    }),
+    dependencies.listEarcareDailySettlements({
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate: parsed.data.serviceDate,
+      prismaClient: client as Parameters<typeof listEarcareDailySettlements>[0]["prismaClient"]
     })
   ]);
 
@@ -617,6 +749,9 @@ export async function getTodayDashboardMetrics(input: {
   };
   const warningTotal =
     callSummary.warningCounts.coursePolicyMissing + callSummary.warningCounts.therapistRateMissing + callSummary.warningCounts.secondTherapistRequired;
+  const opsDailyIncentiveTotal = opsDailyIncentives.distributedAmount;
+  const earcarePayoutTotal = earcareSettlements.distributedAmount;
+  const dailyCostTotal = callSummary.expenseTotal + callSummary.therapistCommissionTotal + earcarePayoutTotal + opsDailyIncentiveTotal;
 
   return {
     operatingMonth,
@@ -628,7 +763,24 @@ export async function getTodayDashboardMetrics(input: {
       discountTotal: callSummary.discountTotal,
       expenseTotal: callSummary.expenseTotal,
       earcarePoolTotal: callSummary.earcarePoolTotal,
-      therapistCommissionTotal: callSummary.therapistCommissionTotal
+      earcarePayoutTotal,
+      opsDailyIncentiveTotal,
+      opsMonthlyIncentiveTotal: 0,
+      fullAttendanceAllowanceTotal: 0,
+      countKingBonusTotal: 0,
+      therapistCommissionTotal: callSummary.therapistCommissionTotal,
+      therapistPayoutTotal: callSummary.therapistCommissionTotal,
+      dailyCostTotal,
+      monthlyCostTotal: 0,
+      settlementPayoutTotal: callSummary.therapistCommissionTotal + earcarePayoutTotal + opsDailyIncentiveTotal,
+      netProfit: netProfit({
+        paymentTotal: callSummary.paymentTotal,
+        expenseTotal: callSummary.expenseTotal,
+        therapistPayoutTotal: callSummary.therapistCommissionTotal,
+        earcarePayoutTotal,
+        opsDailyIncentiveTotal,
+        opsMonthlyIncentiveTotal: 0
+      })
     },
     therapistSummary: {
       totalAssignedCallCount: therapistSettlements.settlements.reduce((sum, settlement) => sum + settlement.totalCallCount, 0),
@@ -655,7 +807,7 @@ export async function getTodayDashboardMetrics(input: {
     sourceBasis: {
       callLedgerSummary: "getDailyCallLedgerSummary",
       therapistDailySettlements: "listTherapistDailySettlements",
-      amountBasis: "calculated_completed_service_calls_only",
+      amountBasis: "prepaid_revenue_and_completed_settlements",
       readOnly: true
     }
   };
@@ -745,6 +897,8 @@ export async function getMonthlyDashboardMetrics(input: {
   let snapshot: MonthlyDashboardMetricsDto["snapshot"] = null;
   let settlementWarnings: MonthlyDashboardMetricsDto["warningCounts"]["settlement"] = null;
   let settlementExcludedCallCount = 0;
+  let financialBasis: MonthlyClosingPreviewDto["financials"] | null = financials;
+  let dashboardFinancialsBasis: TodayDashboardMetricsDto["financials"] | null = null;
 
   if (isClosedMonth(operatingMonth.status)) {
     try {
@@ -752,19 +906,47 @@ export async function getMonthlyDashboardMetrics(input: {
         operatingMonthId: parsed.data.operatingMonthId,
         prismaClient: client as Parameters<typeof getMonthlyClosingSnapshot>[0]["prismaClient"]
       });
-      sourceBasis = {
-        kind: "closed_snapshot",
-        label: "확정 스냅샷 기준",
-        closeVersion: closing.closeVersion,
-        confirmedAt: closing.confirmedAt,
-        calculationBasis: "getDailyCallLedgerSummary_range",
-        settlementBasis: "getMonthlyClosingSnapshot",
-        readOnly: true
-      };
+      const snapshotDashboardFinancials = (closing.snapshot as { dashboardFinancials?: unknown }).dashboardFinancials;
+      const snapshotFinancials = (closing.snapshot as { financials?: unknown }).financials;
       snapshot = toSnapshotReference(closing, "latest");
       settlementSummary = toSettlementSummary(closing.snapshot);
       settlementWarnings = closing.snapshot.warningCounts;
       settlementExcludedCallCount = closing.snapshot.evidence.excludedCallCount;
+      if (hasMonthlyClosingDashboardFinancials(snapshotDashboardFinancials)) {
+        sourceBasis = {
+          kind: "closed_snapshot",
+          label: "확정 스냅샷 기준",
+          closeVersion: closing.closeVersion,
+          confirmedAt: closing.confirmedAt,
+          calculationBasis: "getMonthlyClosingSnapshot.dashboardFinancials",
+          settlementBasis: "getMonthlyClosingSnapshot",
+          readOnly: true
+        };
+        dashboardFinancialsBasis = snapshotDashboardFinancials;
+        financialBasis = null;
+      } else if (hasMonthlyClosingFinancials(snapshotFinancials)) {
+        sourceBasis = {
+          kind: "closed_snapshot",
+          label: "확정 스냅샷 기준",
+          closeVersion: closing.closeVersion,
+          confirmedAt: closing.confirmedAt,
+          calculationBasis: "getMonthlyClosingSnapshot.financials",
+          settlementBasis: "getMonthlyClosingSnapshot",
+          readOnly: true
+        };
+        financialBasis = snapshotFinancials;
+      } else {
+        sourceBasis = {
+          kind: "closed_snapshot",
+          label: "확정 스냅샷 기준",
+          closeVersion: closing.closeVersion,
+          confirmedAt: closing.confirmedAt,
+          calculationBasis: "getMonthlyClosingSnapshot.financials",
+          settlementBasis: "getMonthlyClosingSnapshot",
+          readOnly: true
+        };
+        financialBasis = null;
+      }
     } catch (error) {
       if (!isSnapshotNotFound(error)) throw error;
       sourceBasis = {
@@ -804,12 +986,44 @@ export async function getMonthlyDashboardMetrics(input: {
     }
   }
 
+  let enrichedFinancials: MonthlyDashboardMetricsDto["financials"] = dashboardFinancialsBasis;
+  if (settlementSummary && financialBasis) {
+    const therapistPayoutTotal = settlementSummary.therapistPayoutAmount;
+    const earcarePayoutTotal = settlementSummary.earcarePayoutAmount;
+    const opsDailyIncentiveTotal = settlementSummary.opsDailyIncentiveAmount;
+    const opsMonthlyIncentiveTotal = settlementSummary.opsMonthlyIncentiveAmount;
+    const fullAttendanceAllowanceTotal = settlementSummary.fullAttendanceAllowanceTotal;
+    const countKingBonusTotal = settlementSummary.countKingBonusTotal;
+    const dailyCostTotal = financialBasis.expenseTotal + financialBasis.therapistCommissionTotal + earcarePayoutTotal + opsDailyIncentiveTotal;
+    const monthlyCostTotal = fullAttendanceAllowanceTotal + countKingBonusTotal + opsMonthlyIncentiveTotal;
+    enrichedFinancials = {
+      ...financialBasis,
+      earcarePayoutTotal,
+      opsDailyIncentiveTotal,
+      opsMonthlyIncentiveTotal,
+      fullAttendanceAllowanceTotal,
+      countKingBonusTotal,
+      therapistPayoutTotal,
+      dailyCostTotal,
+      monthlyCostTotal,
+      settlementPayoutTotal: therapistPayoutTotal + earcarePayoutTotal + opsDailyIncentiveTotal + opsMonthlyIncentiveTotal,
+      netProfit: netProfit({
+        paymentTotal: financialBasis.paymentTotal,
+        expenseTotal: financialBasis.expenseTotal,
+        therapistPayoutTotal,
+        earcarePayoutTotal,
+        opsDailyIncentiveTotal,
+        opsMonthlyIncentiveTotal
+      })
+    };
+  }
+
   const warningTotal = callLedgerWarnings.coursePolicyMissing + callLedgerWarnings.therapistRateMissing + callLedgerWarnings.secondTherapistRequired;
   return {
     operatingMonth,
     sourceBasis,
     statusCounts,
-    financials,
+    financials: enrichedFinancials,
     courseCompletions,
     warningCounts: {
       callLedger: callLedgerWarnings,
@@ -858,69 +1072,28 @@ export async function getDashboardGraphReport(input: {
 
   const dependencies = { ...defaultGraphReportDependencies, ...input.dependencies };
   const serviceDates = dateRange(operatingMonth.startDate, operatingMonth.endDate);
-  const [dailySummaries, completedCalculations, therapistDailyResults, roomStatuses] = await Promise.all([
-    Promise.all(
-      serviceDates.map((serviceDate) =>
-        dependencies.getDailyCallLedgerSummary({
-          operatingMonthId: parsed.data.operatingMonthId,
-          serviceDate,
-          prismaClient: client as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
-        })
-      )
-    ),
-    dependencies.listCompletedServiceCallCalculationsForOperatingMonth({
-      operatingMonthId: parsed.data.operatingMonthId,
-      startDate: operatingMonth.startDate,
-      endDate: operatingMonth.endDate,
-      prismaClient: client as Parameters<typeof listCompletedServiceCallCalculationsForOperatingMonth>[0]["prismaClient"]
-    }),
-    Promise.all(
-      serviceDates.map((serviceDate) =>
-        dependencies.listTherapistDailySettlements({
-          operatingMonthId: parsed.data.operatingMonthId,
-          serviceDate,
-          prismaClient: client as Parameters<typeof listTherapistDailySettlements>[0]["prismaClient"]
-        })
-      )
-    ),
-    dependencies.listRoomStatuses({
-      operatingMonthId: parsed.data.operatingMonthId,
-      serviceDate: parsed.data.serviceDate,
-      prismaClient: client as Parameters<typeof listRoomStatuses>[0]["prismaClient"]
-    })
-  ]);
-
-  const dailyRevenueTrend = serviceDates.map((serviceDate, index) => {
-    const summary = dailySummaries[index];
-    return {
-      serviceDate,
-      paymentTotal: summary.paymentTotal,
-      netSales: summary.netSales,
-      completedCount: summary.completedCount
-    };
+  const roomStatuses = await dependencies.listRoomStatuses({
+    operatingMonthId: parsed.data.operatingMonthId,
+    serviceDate: parsed.data.serviceDate,
+    prismaClient: client as Parameters<typeof listRoomStatuses>[0]["prismaClient"]
   });
-  const noShowCancelTrend = serviceDates.map((serviceDate, index) => {
-    const summary = dailySummaries[index];
-    return {
-      serviceDate,
-      noShowCount: summary.noShowCount,
-      canceledCount: summary.canceledCount
-    };
-  });
-  const callLedgerWarnings = dailySummaries.reduce(
-    (totals, summary) => ({
-      coursePolicyMissing: totals.coursePolicyMissing + summary.warningCounts.coursePolicyMissing,
-      therapistRateMissing: totals.therapistRateMissing + summary.warningCounts.therapistRateMissing,
-      secondTherapistRequired: totals.secondTherapistRequired + summary.warningCounts.secondTherapistRequired
-    }),
-    { coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 }
-  );
+  let dailyRevenueTrend: DashboardGraphReportDto["dailyRevenueTrend"] = [];
+  let courseMix: DashboardGraphReportDto["courseMix"] = emptyCourseMix();
+  let therapistCallRanking: DashboardGraphReportDto["therapistCallRanking"] = [];
+  let noShowCancelTrend: DashboardGraphReportDto["noShowCancelTrend"] = [];
+  let callLedgerWarnings: DailyDashboardWarningCounts = {
+    coursePolicyMissing: 0,
+    therapistRateMissing: 0,
+    secondTherapistRequired: 0
+  };
+  let totalStatusCount = 0;
 
   let settlementSource: MonthlyClosingPreviewDto | MonthlyClosingDto | null = null;
   let sourceBasis: MonthlyDashboardMetricsDto["sourceBasis"];
   let settlementWarnings: MonthlyClosingPreviewDto["warningCounts"] | null = null;
   let settlementExcludedCallCount = 0;
   let snapshotMissing = false;
+  let graphReportSnapshotMissing = false;
 
   if (isClosedMonth(operatingMonth.status)) {
     try {
@@ -931,17 +1104,91 @@ export async function getDashboardGraphReport(input: {
       settlementSource = closing;
       settlementWarnings = closing.snapshot.warningCounts;
       settlementExcludedCallCount = closing.snapshot.evidence.excludedCallCount;
-      sourceBasis = toGraphSourceBasis({ operatingMonthStatus: operatingMonth.status, closing, snapshotMissing: false });
+      sourceBasis = toGraphSourceBasis({
+        operatingMonthStatus: operatingMonth.status,
+        closing,
+        snapshotMissing: false,
+        calculationBasis: "getMonthlyClosingSnapshot.graphReport"
+      });
+      const snapshotGraphReport = (closing.snapshot as { graphReport?: unknown }).graphReport;
+      if (hasMonthlyClosingGraphReport(snapshotGraphReport)) {
+        dailyRevenueTrend = snapshotGraphReport.dailyRevenueTrend;
+        courseMix = snapshotGraphReport.courseMix;
+        therapistCallRanking = snapshotGraphReport.therapistCallRanking;
+        noShowCancelTrend = snapshotGraphReport.noShowCancelTrend;
+        callLedgerWarnings = snapshotGraphReport.callLedgerWarnings;
+        totalStatusCount = snapshotGraphReport.totalStatusCount;
+      } else {
+        graphReportSnapshotMissing = true;
+      }
     } catch (error) {
       if (!isSnapshotNotFound(error)) throw error;
       snapshotMissing = true;
       sourceBasis = toGraphSourceBasis({ operatingMonthStatus: operatingMonth.status, closing: null, snapshotMissing: true });
     }
   } else {
-    const preview = await dependencies.listMonthlyClosingPreview({
-      operatingMonthId: parsed.data.operatingMonthId,
-      prismaClient: client as Parameters<typeof listMonthlyClosingPreview>[0]["prismaClient"]
+    const [dailySummaries, completedCalculations, therapistDailyResults, preview] = await Promise.all([
+      Promise.all(
+        serviceDates.map((serviceDate) =>
+          dependencies.getDailyCallLedgerSummary({
+            operatingMonthId: parsed.data.operatingMonthId,
+            serviceDate,
+            prismaClient: client as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
+          })
+        )
+      ),
+      dependencies.listCompletedServiceCallCalculationsForOperatingMonth({
+        operatingMonthId: parsed.data.operatingMonthId,
+        startDate: operatingMonth.startDate,
+        endDate: operatingMonth.endDate,
+        prismaClient: client as Parameters<typeof listCompletedServiceCallCalculationsForOperatingMonth>[0]["prismaClient"]
+      }),
+      Promise.all(
+        serviceDates.map((serviceDate) =>
+          dependencies.listTherapistDailySettlements({
+            operatingMonthId: parsed.data.operatingMonthId,
+            serviceDate,
+            prismaClient: client as Parameters<typeof listTherapistDailySettlements>[0]["prismaClient"]
+          })
+        )
+      ),
+      dependencies.listMonthlyClosingPreview({
+        operatingMonthId: parsed.data.operatingMonthId,
+        prismaClient: client as Parameters<typeof listMonthlyClosingPreview>[0]["prismaClient"]
+      })
+    ]);
+    dailyRevenueTrend = serviceDates.map((serviceDate, index) => {
+      const summary = dailySummaries[index];
+      return {
+        serviceDate,
+        paymentTotal: summary.paymentTotal,
+        netSales: summary.netSales,
+        completedCount: summary.completedCount
+      };
     });
+    noShowCancelTrend = serviceDates.map((serviceDate, index) => {
+      const summary = dailySummaries[index];
+      return {
+        serviceDate,
+        noShowCount: summary.noShowCount,
+        canceledCount: summary.canceledCount
+      };
+    });
+    callLedgerWarnings = dailySummaries.reduce(
+      (totals, summary) => ({
+        coursePolicyMissing: totals.coursePolicyMissing + summary.warningCounts.coursePolicyMissing,
+        therapistRateMissing: totals.therapistRateMissing + summary.warningCounts.therapistRateMissing,
+        secondTherapistRequired: totals.secondTherapistRequired + summary.warningCounts.secondTherapistRequired
+      }),
+      { coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 }
+    );
+    totalStatusCount = dailySummaries.reduce(
+      (sum, summary) =>
+        sum + summary.reservationCount + summary.inUseCount + summary.cleaningCount + summary.completedCount + summary.noShowCount + summary.canceledCount,
+      0
+    );
+    courseMix = aggregateCourseMix(completedCalculations);
+    therapistCallRanking = aggregateTherapistCallRanking(therapistDailyResults);
     settlementSource = preview;
     settlementWarnings = preview.warningCounts;
     settlementExcludedCallCount = preview.evidence.excludedCallCount;
@@ -955,19 +1202,16 @@ export async function getDashboardGraphReport(input: {
     if (target) target.count += 1;
   }
 
-  const totalStatusCount = dailySummaries.reduce(
-    (sum, summary) =>
-      sum + summary.reservationCount + summary.inUseCount + summary.cleaningCount + summary.completedCount + summary.noShowCount + summary.canceledCount,
-    0
-  );
+  const calculatedCompletedCallCount = courseMix.reduce((sum, row) => sum + row.completedCount, 0);
+  const hasRevenueTrendData = dailyRevenueTrend.some((row) => row.paymentTotal > 0 || row.netSales > 0);
 
   return {
     operatingMonth,
     serviceDate: parsed.data.serviceDate,
     sourceBasis,
     dailyRevenueTrend,
-    courseMix: aggregateCourseMix(completedCalculations),
-    therapistCallRanking: aggregateTherapistCallRanking(therapistDailyResults),
+    courseMix,
+    therapistCallRanking,
     therapistSettlementRanking: settlementRowsFromSource(settlementSource),
     roomStatusDistribution,
     noShowCancelTrend,
@@ -979,10 +1223,12 @@ export async function getDashboardGraphReport(input: {
     },
     emptyStates: {
       noCallsInPeriod: totalStatusCount === 0,
-      noCalculatedCompletedCalls: completedCalculations.length === 0,
+      noRevenueTrendData: !hasRevenueTrendData,
+      noCalculatedCompletedCalls: calculatedCompletedCallCount === 0,
       noRoomStatuses: roomStatuses.length === 0,
       noSettlementSource: settlementSource === null,
-      snapshotMissing
+      snapshotMissing,
+      graphReportSnapshotMissing
     }
   };
 }

@@ -123,13 +123,17 @@ function toFieldError(error: z.ZodError) {
   );
 }
 
+function isCompletedStatus(status: string) {
+  return status === "방문완료" || status === "VISIT_COMPLETE";
+}
+
 function effectiveForMonth(rule: OpsDailyIncentiveRuleRecord, monthKey: string) {
   return rule.isActive && rule.effectiveFromMonth <= monthKey && (!rule.effectiveToMonth || rule.effectiveToMonth >= monthKey);
 }
 
 function warningCounts(rows: Awaited<ReturnType<typeof listServiceCallsForDate>>): OpsDailyIncentiveWarningCounts {
   return {
-    notCompleted: rows.filter((row) => row.calculationStatus === "not_completed").length,
+    notCompleted: rows.filter((row) => !isCompletedStatus(row.status)).length,
     coursePolicyMissing: rows.filter((row) => row.calculationStatus === "course_policy_missing").length,
     therapistRateMissing: rows.filter((row) => row.calculationStatus === "therapist_rate_missing").length,
     secondTherapistRequired: rows.filter((row) => row.calculationStatus === "second_therapist_required").length

@@ -22,14 +22,17 @@ function readJson(path) {
   "src/modules/settlements/therapist-daily-settlement-service.ts",
   "src/modules/settlements/therapist-daily-settlement-service.test.ts",
   "src/app/(erp)/settlements/page.tsx",
+  "src/app/(erp)/settlements/actions.ts",
+  "src/app/(erp)/settlements/therapist-daily-settlement-payment-form.tsx",
+  "prisma/migrations/20260615130000_add_therapist_daily_settlement_payment_histories/migration.sql",
   "tests/e2e/story-4-2-therapist-daily-settlement.spec.ts",
   "src/modules/settlements/README.md",
   "_bmad-output/implementation-artifacts/4-2-마사지사-일일정산.md"
 ].forEach(requireFile);
 
 const packageJson = readJson("package.json");
-if (!packageJson.scripts?.lint?.includes("validate-story-3-5.mjs && node scripts/validate-story-4-2.mjs")) {
-  errors.push("package.json lint script must run scripts/validate-story-4-2.mjs immediately after validate-story-3-5.mjs");
+if (!packageJson.scripts?.lint?.includes("validate-story-4-1.mjs && node scripts/validate-story-4-2.mjs")) {
+  errors.push("package.json lint script must run scripts/validate-story-4-2.mjs immediately after validate-story-4-1.mjs");
 }
 
 const dependencies = { ...packageJson.dependencies, ...packageJson.devDependencies };
@@ -93,6 +96,43 @@ for (const required of [
 }
 for (const forbidden of ["use server", "revalidatePath", "requirePermission(\"payout:write\")", "Server Action"]) {
   if (page.includes(forbidden)) errors.push(`settlements/page.tsx must stay read-only and not include ${forbidden}`);
+}
+
+const actions = read("src/app/(erp)/settlements/actions.ts");
+for (const required of [
+  "export type TherapistDailySettlementPaymentActionState",
+  "function mapPaymentActionError",
+  "setTherapistDailySettlementPaymentAction",
+  "_previousState: TherapistDailySettlementPaymentActionState",
+  "Promise<TherapistDailySettlementPaymentActionState>",
+  "return mapPaymentActionError(error)"
+]) {
+  if (!actions.includes(required)) errors.push(`settlements/actions.ts missing ${required}`);
+}
+
+const paymentForm = read("src/app/(erp)/settlements/therapist-daily-settlement-payment-form.tsx");
+for (const required of [
+  "\"use client\"",
+  "useActionState",
+  "setTherapistDailySettlementPaymentAction",
+  "TherapistDailySettlementPaymentActionState",
+  "role=\"alert\"",
+  "formError"
+]) {
+  if (!paymentForm.includes(required)) errors.push(`therapist-daily-settlement-payment-form.tsx missing ${required}`);
+}
+
+const paymentHistoryMigration = read("prisma/migrations/20260615130000_add_therapist_daily_settlement_payment_histories/migration.sql");
+for (const required of [
+  "CREATE TABLE \"therapist_daily_settlement_payment_histories\"",
+  "idx_tdsp_histories_payment_changed",
+  "idx_tdsp_histories_month_date_emp",
+  "idx_tdsp_histories_actor_changed",
+  "uq_tdsp_id_month_date_employee",
+  "FOREIGN KEY (\"payment_id\", \"operating_month_id\", \"service_date\", \"employee_id\")",
+  "FOREIGN KEY (\"changed_by_account_id\") REFERENCES \"user_accounts\""
+]) {
+  if (!paymentHistoryMigration.includes(required)) errors.push(`payment history migration missing ${required}`);
 }
 
 const unitTest = read("src/modules/settlements/therapist-daily-settlement-service.test.ts");

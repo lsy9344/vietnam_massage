@@ -71,11 +71,11 @@ function PolicyInputs({ course, policy, monthKey }: { course: CourseDto; policy:
       </label>
       <label className="grid gap-1 text-xs text-muted">
         시작월
-        <input className="h-8 w-28 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.effectiveFromMonth ?? monthKey} name="effectiveFromMonth" pattern="\\d{4}-\\d{2}" required />
+        <input className="h-8 w-28 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.effectiveFromMonth ?? monthKey} name="effectiveFromMonth" pattern="\d{4}-\d{2}" required />
       </label>
       <label className="grid gap-1 text-xs text-muted">
         종료월
-        <input className="h-8 w-28 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.effectiveToMonth ?? ""} name="effectiveToMonth" pattern="\\d{4}-\\d{2}" />
+        <input className="h-8 w-28 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.effectiveToMonth ?? ""} name="effectiveToMonth" pattern="\d{4}-\d{2}" />
       </label>
       <label className="flex h-12 items-end gap-2 text-xs text-muted">
         <input className="h-4 w-4 accent-brand" defaultChecked={policy?.requiresSecondTherapist ?? course.code === "D"} name="requiresSecondTherapist" type="checkbox" value="true" />
@@ -205,7 +205,7 @@ function RateCell({
       </form>
       <form action={endAction} className="flex items-center gap-1">
         <input name="rateId" type="hidden" value={rate.id} />
-        <input className="h-7 w-24 border border-border bg-background px-2 text-xs text-foreground" defaultValue={rate.effectiveToMonth ?? monthKey} name="effectiveToMonth" pattern="\\d{4}-\\d{2}" />
+        <input className="h-7 w-24 border border-border bg-background px-2 text-xs text-foreground" defaultValue={rate.effectiveToMonth ?? monthKey} name="effectiveToMonth" pattern="\d{4}-\d{2}" />
         <Button className="h-7 px-2 text-xs" disabled={endPending} type="submit" variant="ghost">
           정책 종료
         </Button>
@@ -276,8 +276,8 @@ function DailyRuleForm({ rule, monthKey }: { rule?: OpsDailyIncentiveRuleDto; mo
       {rule ? <input name="ruleId" type="hidden" value={rule.id} /> : null}
       <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={rule?.thresholdCallCount ?? 30} min={1} name="thresholdCallCount" type="number" />
       <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={rule?.personalAmount ?? 0} min={0} name="personalAmount" type="number" />
-      <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={rule?.effectiveFromMonth ?? monthKey} name="effectiveFromMonth" pattern="\\d{4}-\\d{2}" />
-      <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={rule?.effectiveToMonth ?? ""} name="effectiveToMonth" pattern="\\d{4}-\\d{2}" />
+      <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={rule?.effectiveFromMonth ?? monthKey} name="effectiveFromMonth" pattern="\d{4}-\d{2}" />
+      <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={rule?.effectiveToMonth ?? ""} name="effectiveToMonth" pattern="\d{4}-\d{2}" />
       <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant={rule ? "secondary" : "default"}>
         {rule ? "일일 저장" : "일일 추가"}
       </Button>
@@ -297,8 +297,8 @@ function MonthlyRuleForm({ rule, monthKey }: { rule?: OpsMonthlyIncentiveRuleDto
       <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={rule?.leadShare ?? 0.3} max={1} min={0} name="leadShare" step="0.01" type="number" />
       <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={rule?.counterTeamShare ?? 0.35} max={1} min={0} name="counterTeamShare" step="0.01" type="number" />
       <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={rule?.waiterTeamShare ?? 0.35} max={1} min={0} name="waiterTeamShare" step="0.01" type="number" />
-      <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={rule?.effectiveFromMonth ?? monthKey} name="effectiveFromMonth" pattern="\\d{4}-\\d{2}" />
-      <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={rule?.effectiveToMonth ?? ""} name="effectiveToMonth" pattern="\\d{4}-\\d{2}" />
+      <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={rule?.effectiveFromMonth ?? monthKey} name="effectiveFromMonth" pattern="\d{4}-\d{2}" />
+      <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={rule?.effectiveToMonth ?? ""} name="effectiveToMonth" pattern="\d{4}-\d{2}" />
       <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant={rule ? "secondary" : "default"}>
         {rule ? "월 저장" : "월 추가"}
       </Button>

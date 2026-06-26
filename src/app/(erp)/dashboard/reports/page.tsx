@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/domain/page-header";
 import { StatusBadge } from "@/components/domain/status-badge";
 import { requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
@@ -52,7 +53,7 @@ function SourceBasisPanel({ report }: { report: DashboardGraphReportDto }) {
           <h2 className="mt-1 text-base font-semibold text-foreground">{report.sourceBasis.label}</h2>
         </div>
         <p className="max-w-2xl text-sm text-muted">
-          매출/코스/노쇼 추이는 완료 계산 콜 기준이고, 객실 상태는 선택 날짜의 객실 상태 DTO 기준입니다.
+          매출은 결제수단 선택 시점 선결제 기준이고, 코스/노쇼 추이는 완료 계산 콜과 상태 집계 기준입니다. 객실 상태는 선택 날짜의 객실 상태 DTO 기준입니다.
         </p>
       </div>
     </section>
@@ -62,8 +63,12 @@ function SourceBasisPanel({ report }: { report: DashboardGraphReportDto }) {
 function EmptyStatePanel({ report }: { report: DashboardGraphReportDto }) {
   const messages = [
     report.emptyStates.noCallsInPeriod ? "운영월 기간 전체에 콜 원장 데이터가 없습니다." : null,
+    report.emptyStates.noRevenueTrendData ? "매출 추이 데이터가 없어 매출 그래프를 표시하지 않습니다." : null,
     report.emptyStates.noCalculatedCompletedCalls
-      ? "calculated 방문완료 콜이 없어 매출/코스 비중 그래프를 성공처럼 표시하지 않습니다. 이 기간의 데이터가 없습니다."
+      ? "calculated 방문완료 콜이 없어 코스 비중 그래프를 성공처럼 표시하지 않습니다."
+      : null,
+    report.emptyStates.graphReportSnapshotMissing
+      ? "확정 스냅샷은 있지만 구버전 데이터라 그래프 리포트 항목이 없습니다. 현재 값으로 대체하지 않습니다."
       : null,
     report.emptyStates.noRoomStatuses ? "선택 날짜의 객실 상태 데이터가 없습니다." : null,
     report.emptyStates.noSettlementSource ? "정산 source가 없어 정산 순위와 지급 구성을 표시하지 않습니다." : null
@@ -112,15 +117,15 @@ function RevenueTrendChart({ report }: { report: DashboardGraphReportDto }) {
         <h2 id="daily-revenue-title" className="text-base font-semibold text-foreground">
           일별 매출 추이
         </h2>
-        <p className="text-xs text-muted">방문완료 calculated 콜만 포함</p>
+        <p className="text-xs text-muted">결제수단 선택 시점 선결제 매출 기준</p>
       </div>
       <svg className="mt-4 h-56 w-full overflow-visible" role="img" aria-labelledby="daily-revenue-chart-title" viewBox="0 0 100 110" preserveAspectRatio="none">
-        <title id="daily-revenue-chart-title">일별 방문완료 매출과 순매출 추이</title>
+        <title id="daily-revenue-chart-title">일별 선결제 매출과 순매출 추이</title>
         <polyline fill="none" points={paymentPoints} stroke="var(--color-brand)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
         <polyline fill="none" points={netSalesPoints} stroke="var(--color-danger)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
       </svg>
       <div className="mt-3 flex flex-wrap gap-4 text-sm">
-        <span className="font-medium text-brand">방문완료 매출</span>
+        <span className="font-medium text-brand">매출(선결제 반영)</span>
         <span className="font-medium text-danger">순매출</span>
       </div>
       <div className="mt-4 overflow-x-auto">
@@ -128,7 +133,7 @@ function RevenueTrendChart({ report }: { report: DashboardGraphReportDto }) {
           <thead>
             <tr className="border-b border-border text-left text-xs font-semibold text-muted">
               <th className="py-2 pr-3">날짜</th>
-              <th className="py-2 pr-3 text-right">방문완료 매출</th>
+              <th className="py-2 pr-3 text-right">매출(선결제 반영)</th>
               <th className="py-2 pr-3 text-right">순매출</th>
               <th className="py-2 text-right">방문완료 콜</th>
             </tr>
@@ -347,11 +352,11 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   if (!selectedMonth) {
     return (
       <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-        <div className="mb-5">
-          <p className="mb-2 text-xs font-semibold uppercase text-muted">대시보드</p>
-          <h1 className="text-2xl font-semibold text-foreground">그래프 리포트</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">운영월과 조회날짜 기준으로 매출, 코스, 마사지사, 객실, 노쇼/취소 흐름을 조회한다.</p>
-        </div>
+        <PageHeader
+          eyebrow="대시보드"
+          title="그래프 리포트"
+          description="운영월과 조회날짜 기준으로 매출, 코스, 마사지사, 객실, 노쇼/취소 흐름을 조회한다."
+        />
         <section className="border border-border bg-surface px-4 py-8">
           <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
           <p className="mt-2 max-w-2xl text-sm text-muted">그래프 리포트는 운영월 날짜 범위와 선택 조회날짜를 기준으로 조회한다.</p>
@@ -383,19 +388,19 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase text-muted">대시보드</p>
-          <h1 className="text-2xl font-semibold text-foreground">그래프 리포트</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">매출, 코스, 마사지사, 객실, 노쇼/취소 흐름을 그래프로 조회한다.</p>
-        </div>
-        <div className="text-right text-xs text-muted">
-          <div>운영월 상태: {report.operatingMonth.status}</div>
-          <div>
-            날짜 범위: {report.operatingMonth.startDate} ~ {report.operatingMonth.endDate}
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="대시보드"
+        title="그래프 리포트"
+        description="매출, 코스, 마사지사, 객실, 노쇼/취소 흐름을 그래프로 조회한다."
+        meta={
+          <>
+            <div>운영월 상태: {report.operatingMonth.status}</div>
+            <div>
+              날짜 범위: {report.operatingMonth.startDate} ~ {report.operatingMonth.endDate}
+            </div>
+          </>
+        }
+      />
 
       <form className="mb-5 flex flex-wrap items-end gap-3" method="get">
         <label className="grid gap-1 text-xs font-medium text-muted">
@@ -433,7 +438,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       <div className="space-y-4">
         <SourceBasisPanel report={report} />
         <EmptyStatePanel report={report} />
-        {report.emptyStates.noCalculatedCompletedCalls ? <CompletedChartEmptyPanel /> : <RevenueTrendChart report={report} />}
+        {report.emptyStates.noRevenueTrendData ? <CompletedChartEmptyPanel /> : <RevenueTrendChart report={report} />}
         {report.emptyStates.noCalculatedCompletedCalls ? (
           <PayoutCompositionChart report={report} />
         ) : (

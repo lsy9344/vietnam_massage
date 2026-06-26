@@ -1,6 +1,6 @@
 export const MIGRATION_SOURCE_REFERENCES = {
   realtimeLedger:
-    "sheet_erp_design.md §7.2 실시간콜입력: 방문완료만 결제/마사지사수당/귀케어풀/콜인정 계산, 할인구분 있으면 100000 VND. Evidence range: A:S, U:X.",
+    "sheet_erp_design.md §7.2 실시간콜입력 + 2026-06-15 수정요청: 예약건수는 원장 전체, 선결제 매출은 결제수단 선택 시점을 단일 기준으로 반영(결제수단 없는 사용중은 미반영), 취소/노쇼는 매출에서 즉시 제외, 마사지사수당/귀케어풀/콜인정은 방문완료 정산 기준. Evidence range: A:S, U:X.",
   roomStatus:
     "sheet_erp_design.md §11 웨이터리스트/TV현황판: 예약/사용중/청소중은 점유, 방문완료/노쇼/취소는 점유 제외, 사용중 종료시 종료확인.",
   dCourse:
@@ -197,7 +197,7 @@ export const MIGRATION_EXPECTED_RESULTS = {
       "call-complete-b-no-discount": { basePrice: 1800000, discountAmount: 0, paymentAmount: 1800000, earcarePoolAmount: 200000, opsCallCredit: 20 },
       "call-complete-d-two-therapists": { basePrice: 3200000, discountAmount: 0, paymentAmount: 3200000, earcarePoolAmount: 0, opsCallCredit: 10 }
     },
-    dailySummary: { reservationCount: 1, inUseCount: 1, cleaningCount: 1, completedCount: 5, noShowCount: 1, canceledCount: 1, paymentTotal: 7900000, discountTotal: 100000, earcarePoolTotal: 400000, therapistCommissionTotal: 3400000, expenseTotal: 50000, netSales: 7850000 }
+    dailySummary: { reservationCount: 10, inUseCount: 1, cleaningCount: 1, completedCount: 5, noShowCount: 1, canceledCount: 1, paymentTotal: 7900000, discountTotal: 100000, earcarePoolTotal: 400000, therapistCommissionTotal: 3400000, expenseTotal: 50000, netSales: 7850000 }
   },
   roomStatus: [
     { roomId: "room-101", activeCallId: "call-reserved", displayStatus: "예약" },

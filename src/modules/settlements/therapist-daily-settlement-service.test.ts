@@ -1,12 +1,25 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { listTherapistDailySettlements } from "@/modules/settlements/therapist-daily-settlement-service";
+import {
+  listTherapistDailySettlements,
+  setTherapistDailySettlementPayment
+} from "@/modules/settlements/therapist-daily-settlement-service";
 
 function dbDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
-function createSettlementPrisma() {
+function createSettlementPrisma(
+  options: {
+    operatingMonthStatus?: string;
+    extraEmployees?: any[];
+    failPaymentHistory?: boolean;
+    omitPaymentHistory?: boolean;
+    includeExistingPaymentHistory?: boolean;
+    lockBeforePaymentTransaction?: boolean;
+    cancelTherapist2CallsBeforePaymentTransaction?: boolean;
+  } = {}
+) {
   const createdAt = new Date("2026-06-09T00:00:00.000Z");
   const updatedAt = new Date("2026-06-09T00:10:00.000Z");
   const operatingMonth = {
@@ -14,7 +27,7 @@ function createSettlementPrisma() {
     monthKey: "2026-06",
     startDate: dbDate("2026-06-01"),
     endDate: dbDate("2026-06-30"),
-    status: "작성중",
+    status: options.operatingMonthStatus ?? "작성중",
     createdAt,
     updatedAt
   };
@@ -37,7 +50,8 @@ function createSettlementPrisma() {
   const employees = new Map<string, any>([
     [therapist1.id, therapist1],
     [therapist2.id, therapist2],
-    [therapist3.id, therapist3]
+    [therapist3.id, therapist3],
+    ...(options.extraEmployees ?? []).map((employee) => [employee.id, employee] as const)
   ]);
   const rates = [
     rate("rate-t1-a", therapist1.id, "course-a", 700000),
@@ -75,6 +89,49 @@ function createSettlementPrisma() {
     call("call-reserved", "course-a", "예약", [assignment("call-reserved", "THERAPIST_1", therapist1.id)]),
     call("call-canceled", "course-a", "CANCELED", [assignment("call-canceled", "THERAPIST_1", therapist1.id)])
   ];
+  const settlementPayments = new Map<string, any>([
+    [
+      paymentKey(operatingMonth.id, "2026-06-10", therapist1.id),
+      {
+        id: "payment-therapist-1",
+        operatingMonthId: operatingMonth.id,
+        serviceDate: dbDate("2026-06-10"),
+        employeeId: therapist1.id,
+        isPaid: true,
+        paidAt: new Date("2026-06-10T13:00:00.000Z"),
+        paidByAccountId: "account-admin",
+        paidByAccount: {
+          id: "account-admin",
+          accountId: "admin",
+          employee: { displayName: "관리자", staffCode: "ADM-001" }
+        },
+        createdAt,
+        updatedAt
+      }
+    ]
+  ]);
+  const settlementPaymentHistories: any[] = options.includeExistingPaymentHistory
+    ? [
+        {
+          id: "payment-history-existing-1",
+          paymentId: "payment-therapist-1",
+          operatingMonthId: operatingMonth.id,
+          serviceDate: dbDate("2026-06-10"),
+          employeeId: therapist1.id,
+          previousIsPaid: null,
+          newIsPaid: true,
+          changedByAccountId: "account-admin",
+          changedByAccount: {
+            id: "account-admin",
+            accountId: "admin",
+            employee: { displayName: "관리자", staffCode: "ADM-001" }
+          },
+          changedAt: new Date("2026-06-10T13:00:00.000Z"),
+          createdAt
+        }
+      ]
+    : [];
+  const transactionOptions: unknown[] = [];
 
   function policy(id: string, courseId: string, name: string, basePrice: number, requiresSecondTherapist: boolean) {
     return {
@@ -140,7 +197,22 @@ function createSettlementPrisma() {
     return a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10);
   }
 
-  return {
+  function paymentKey(operatingMonthId: string, serviceDate: string, employeeId: string) {
+    return `${operatingMonthId}:${serviceDate}:${employeeId}`;
+  }
+
+  function cloneSettlementPayments() {
+    return new Map([...settlementPayments.entries()].map(([key, value]) => [key, { ...value }]));
+  }
+
+  function restoreSettlementPayments(snapshot: Map<string, any>) {
+    settlementPayments.clear();
+    for (const [key, value] of snapshot.entries()) {
+      settlementPayments.set(key, value);
+    }
+  }
+
+  const client: any = {
     operatingMonth: {
       async findUnique({ where }: any) {
         return where.id === operatingMonth.id ? operatingMonth : null;
@@ -188,9 +260,100 @@ function createSettlementPrisma() {
               (where?.isActive === undefined || employee.isActive === where.isActive)
           )
           .sort((a, b) => a.sortOrder - b.sortOrder);
+      },
+      async findUnique({ where }: any) {
+        return employees.get(where.id) ?? null;
       }
-    }
-  } as any;
+    },
+    therapistDailySettlementPayment: {
+      async findMany({ where }: any = {}) {
+        return [...settlementPayments.values()].filter(
+          (record) =>
+            (where?.operatingMonthId === undefined || record.operatingMonthId === where.operatingMonthId) &&
+            (where?.serviceDate === undefined || sameDate(record.serviceDate, where.serviceDate)) &&
+            (where?.employeeId?.in === undefined || where.employeeId.in.includes(record.employeeId))
+        );
+      },
+      async findUnique({ where }: any) {
+        const unique = where.operatingMonthId_serviceDate_employeeId;
+        const key = paymentKey(unique.operatingMonthId, unique.serviceDate.toISOString().slice(0, 10), unique.employeeId);
+        return settlementPayments.get(key) ?? null;
+      },
+      async upsert({ where, update, create }: any) {
+        const unique = where.operatingMonthId_serviceDate_employeeId;
+        const key = paymentKey(unique.operatingMonthId, unique.serviceDate.toISOString().slice(0, 10), unique.employeeId);
+        const current = settlementPayments.get(key);
+        const next = {
+          id: current?.id ?? `payment-${settlementPayments.size + 1}`,
+          createdAt: current?.createdAt ?? createdAt,
+          updatedAt: new Date("2026-06-10T14:00:00.000Z"),
+          ...(current ?? create),
+          ...(current ? update : create)
+        };
+        settlementPayments.set(key, next);
+        return next;
+      }
+    },
+    async $transaction(callback: (tx: any) => Promise<unknown>, optionsArg?: unknown) {
+      transactionOptions.push(optionsArg);
+      const paymentSnapshot = cloneSettlementPayments();
+      const historySnapshotLength = settlementPaymentHistories.length;
+      const callStatusSnapshot = serviceCalls.map((record) => ({ record, status: record.status }));
+      try {
+        if (options.lockBeforePaymentTransaction) {
+          operatingMonth.status = "잠금";
+        }
+        if (options.cancelTherapist2CallsBeforePaymentTransaction) {
+          for (const record of serviceCalls) {
+            if (record.assignments.some((row: any) => row.employeeId === therapist2.id)) {
+              record.status = "CANCELED";
+            }
+          }
+        }
+        return await callback(client);
+      } catch (error) {
+        restoreSettlementPayments(paymentSnapshot);
+        settlementPaymentHistories.splice(historySnapshotLength);
+        for (const snapshot of callStatusSnapshot) {
+          snapshot.record.status = snapshot.status;
+        }
+        if (options.lockBeforePaymentTransaction) {
+          operatingMonth.status = options.operatingMonthStatus ?? "작성중";
+        }
+        throw error;
+      }
+    },
+    settlementPayments,
+    settlementPaymentHistories,
+    transactionOptions
+  };
+
+  if (!options.omitPaymentHistory) {
+    client.therapistDailySettlementPaymentHistory = {
+      async findMany({ where }: any = {}) {
+        return settlementPaymentHistories
+          .filter(
+            (record) =>
+              (where?.operatingMonthId === undefined || record.operatingMonthId === where.operatingMonthId) &&
+              (where?.serviceDate === undefined || sameDate(record.serviceDate, where.serviceDate)) &&
+              (where?.employeeId?.in === undefined || where.employeeId.in.includes(record.employeeId))
+          )
+          .sort((a, b) => b.changedAt.getTime() - a.changedAt.getTime());
+      },
+      async create({ data }: any) {
+        if (options.failPaymentHistory) throw new Error("payment history failed");
+        const record = {
+          id: `payment-history-${settlementPaymentHistories.length + 1}`,
+          createdAt: new Date("2026-06-10T14:00:00.000Z"),
+          ...data
+        };
+        settlementPaymentHistories.push(record);
+        return record;
+      }
+    };
+  }
+
+  return client;
 }
 
 const therapist1 = {
@@ -288,6 +451,336 @@ describe("listTherapistDailySettlements", () => {
     assert.equal(result.excludedCallCount, 3);
     assert.equal(result.settlements.some((row) => row.assignmentEvidence.some((evidence) => evidence.serviceCallId === "call-invalid-d")), false);
     assert.equal(result.settlements.some((row) => row.assignmentEvidence.some((evidence) => evidence.serviceCallId === "call-reserved")), false);
+  });
+
+  it("지급완료 상태를 마사지사별 일일정산 행에 함께 반환한다", async () => {
+    const result = await listTherapistDailySettlements({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient: createSettlementPrisma()
+    });
+
+    const paidTherapist = result.settlements.find((row) => row.employeeId === therapist1.id);
+    const unpaidTherapist = result.settlements.find((row) => row.employeeId === therapist2.id);
+    assert.ok(paidTherapist);
+    assert.ok(unpaidTherapist);
+    assert.equal(paidTherapist.paymentStatus.isPaid, true);
+    assert.equal(paidTherapist.paymentStatus.paidAt, "2026-06-10T13:00:00.000Z");
+    assert.equal(paidTherapist.paymentStatus.paidByAccountId, "account-admin");
+    assert.equal(unpaidTherapist.paymentStatus.isPaid, false);
+    assert.equal(unpaidTherapist.paymentStatus.paidAt, null);
+  });
+
+  it("지급완료 처리자와 변경 이력 상세를 마사지사별 일일정산 행에 함께 반환한다", async () => {
+    const result = await listTherapistDailySettlements({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient: createSettlementPrisma({ includeExistingPaymentHistory: true })
+    });
+
+    const paidTherapist = result.settlements.find((row) => row.employeeId === therapist1.id);
+    assert.ok(paidTherapist);
+    assert.deepEqual(paidTherapist.paymentStatus.paidBy, {
+      accountId: "admin",
+      employeeDisplayName: "관리자",
+      employeeStaffCode: "ADM-001"
+    });
+    assert.deepEqual(paidTherapist.paymentStatus.history, [
+      {
+        previousIsPaid: null,
+        newIsPaid: true,
+        changedAt: "2026-06-10T13:00:00.000Z",
+        changedByAccountId: "account-admin",
+        changedBy: {
+          accountId: "admin",
+          employeeDisplayName: "관리자",
+          employeeStaffCode: "ADM-001"
+        }
+      }
+    ]);
+  });
+
+  it("지급완료 상태를 저장하고 다시 해제할 수 있다", async () => {
+    const prismaClient = createSettlementPrisma();
+
+    const paid = await setTherapistDailySettlementPayment({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: therapist2.id,
+      isPaid: true,
+      actorId: "account-admin",
+      prismaClient
+    });
+
+    assert.equal(paid.paymentStatus.isPaid, true);
+    assert.equal(paid.paymentStatus.paidByAccountId, "account-admin");
+
+    const unpaid = await setTherapistDailySettlementPayment({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: therapist2.id,
+      isPaid: false,
+      actorId: "account-admin",
+      prismaClient
+    });
+
+    assert.equal(unpaid.paymentStatus.isPaid, false);
+    assert.equal(unpaid.paymentStatus.paidAt, null);
+    assert.equal(unpaid.paymentStatus.paidByAccountId, null);
+
+    // REQ-010: 지급/해제 변경마다 처리자·이전/다음 상태가 이력으로 남는다.
+    const histories = (prismaClient as any).settlementPaymentHistories;
+    assert.equal(histories.length, 2);
+    assert.deepEqual(
+      histories.map((row: any) => ({ previousIsPaid: row.previousIsPaid, newIsPaid: row.newIsPaid, changedByAccountId: row.changedByAccountId })),
+      [
+        { previousIsPaid: null, newIsPaid: true, changedByAccountId: "account-admin" },
+        { previousIsPaid: true, newIsPaid: false, changedByAccountId: "account-admin" }
+      ]
+    );
+    assert.equal(histories[0].employeeId, therapist2.id);
+  });
+
+  it("지급완료 상태가 그대로면 변경 이력을 중복으로 남기지 않는다", async () => {
+    const prismaClient = createSettlementPrisma();
+
+    const first = await setTherapistDailySettlementPayment({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: therapist2.id,
+      isPaid: true,
+      actorId: "account-admin",
+      prismaClient
+    });
+    // 동일 상태(true -> true) 재요청은 이력에 추가되지 않는다.
+    const second = await setTherapistDailySettlementPayment({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: therapist2.id,
+      isPaid: true,
+      actorId: "account-other",
+      prismaClient
+    });
+
+    assert.equal((prismaClient as any).settlementPaymentHistories.length, 1);
+    assert.equal(second.paymentStatus.paidAt, first.paymentStatus.paidAt);
+    assert.equal(second.paymentStatus.paidByAccountId, "account-admin");
+  });
+
+  it("지급완료 변경 트랜잭션은 동시 요청 이력 중복을 막기 위해 Serializable isolation을 사용한다", async () => {
+    const prismaClient = createSettlementPrisma();
+
+    await setTherapistDailySettlementPayment({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: therapist2.id,
+      isPaid: true,
+      actorId: "account-admin",
+      prismaClient
+    });
+
+    assert.deepEqual((prismaClient as any).transactionOptions, [{ isolationLevel: "Serializable" }]);
+  });
+
+  it("지급완료 변경 이력 저장에 실패하면 지급 상태도 함께 롤백한다", async () => {
+    const prismaClient = createSettlementPrisma({ failPaymentHistory: true });
+
+    await assert.rejects(
+      () =>
+        setTherapistDailySettlementPayment({
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-06-10",
+          employeeId: therapist2.id,
+          isPaid: true,
+          actorId: "account-admin",
+          prismaClient
+        }),
+      /payment history failed/
+    );
+
+    assert.equal((prismaClient as any).settlementPayments.has(`month-2026-06:2026-06-10:${therapist2.id}`), false);
+    assert.equal((prismaClient as any).settlementPaymentHistories.length, 0);
+  });
+
+  it("지급완료 변경 이력 저장소가 없으면 상태를 변경하지 않는다", async () => {
+    const prismaClient = createSettlementPrisma({ omitPaymentHistory: true });
+
+    await assert.rejects(
+      () =>
+        setTherapistDailySettlementPayment({
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-06-10",
+          employeeId: therapist2.id,
+          isPaid: true,
+          actorId: "account-admin",
+          prismaClient
+        }),
+      /지급완료 변경 이력 저장소를 사용할 수 없습니다/
+    );
+
+    assert.equal((prismaClient as any).settlementPayments.has(`month-2026-06:2026-06-10:${therapist2.id}`), false);
+    assert.equal((prismaClient as any).settlementPaymentHistories.length, 0);
+  });
+
+  it("잠긴 운영월에는 지급완료 상태를 변경하지 않는다", async () => {
+    await assert.rejects(
+      () =>
+        setTherapistDailySettlementPayment({
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-06-10",
+          employeeId: therapist2.id,
+          isPaid: true,
+          actorId: "account-admin",
+          prismaClient: createSettlementPrisma({ operatingMonthStatus: "잠금" })
+        }),
+      /지급완료 상태는 변경할 수 없습니다/
+    );
+  });
+
+  it("지급완료 저장 직전 운영월이 잠기면 트랜잭션 안에서 다시 차단한다", async () => {
+    const prismaClient = createSettlementPrisma({ lockBeforePaymentTransaction: true });
+
+    await assert.rejects(
+      () =>
+        setTherapistDailySettlementPayment({
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-06-10",
+          employeeId: therapist2.id,
+          isPaid: true,
+          actorId: "account-admin",
+          prismaClient
+        }),
+      /지급완료 상태는 변경할 수 없습니다/
+    );
+
+    assert.equal((prismaClient as any).settlementPayments.has(`month-2026-06:2026-06-10:${therapist2.id}`), false);
+    assert.equal((prismaClient as any).settlementPaymentHistories.length, 0);
+  });
+
+  it("지급완료 저장 직전 정산 대상 콜이 사라지면 트랜잭션 안에서 다시 차단한다", async () => {
+    const prismaClient = createSettlementPrisma({ cancelTherapist2CallsBeforePaymentTransaction: true });
+
+    await assert.rejects(
+      () =>
+        setTherapistDailySettlementPayment({
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-06-10",
+          employeeId: therapist2.id,
+          isPaid: true,
+          actorId: "account-admin",
+          prismaClient
+        }),
+      /정산 대상 콜이 없는 마사지사/
+    );
+
+    assert.equal((prismaClient as any).settlementPayments.has(`month-2026-06:2026-06-10:${therapist2.id}`), false);
+    assert.equal((prismaClient as any).settlementPaymentHistories.length, 0);
+  });
+
+  it("운영월 범위 밖 날짜와 활성 마사지사가 아닌 직원의 지급완료 저장을 거절한다", async () => {
+    await assert.rejects(
+      () =>
+        setTherapistDailySettlementPayment({
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-07-01",
+          employeeId: therapist2.id,
+          isPaid: true,
+          actorId: "account-admin",
+          prismaClient: createSettlementPrisma()
+        }),
+      /운영월 범위를 벗어난 날짜입니다/
+    );
+
+    await assert.rejects(
+      () =>
+        setTherapistDailySettlementPayment({
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-06-10",
+          employeeId: "ops-1",
+          isPaid: true,
+          actorId: "account-admin",
+          prismaClient: createSettlementPrisma({
+            extraEmployees: [
+              { id: "ops-1", displayName: "운영팀1", staffCode: "OPS-001", employeeGroup: "OPERATIONS", sortOrder: 1, isActive: true }
+            ]
+          })
+        }),
+      /활성 마사지사만 지급완료 상태를 변경할 수 있습니다/
+    );
+  });
+
+  it("해당 날짜에 담당 콜이 없는 마사지사의 지급완료 저장을 거절한다", async () => {
+    const idleTherapist = {
+      id: "therapist-idle",
+      displayName: "휴무 마사지사",
+      staffCode: "THR-IDLE",
+      employeeGroup: "THERAPIST",
+      sortOrder: 9,
+      isActive: true
+    };
+
+    await assert.rejects(
+      () =>
+        setTherapistDailySettlementPayment({
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-06-10",
+          employeeId: idleTherapist.id,
+          isPaid: true,
+          actorId: "account-admin",
+          prismaClient: createSettlementPrisma({ extraEmployees: [idleTherapist] })
+        }),
+      /정산 대상 콜이 없는 마사지사/
+    );
+  });
+
+  it("담당 콜이 없어도 지급완료 해제는 허용한다", async () => {
+    const idleTherapist = {
+      id: "therapist-idle",
+      displayName: "휴무 마사지사",
+      staffCode: "THR-IDLE",
+      employeeGroup: "THERAPIST",
+      sortOrder: 9,
+      isActive: true
+    };
+
+    const unpaid = await setTherapistDailySettlementPayment({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: idleTherapist.id,
+      isPaid: false,
+      actorId: "account-admin",
+      prismaClient: createSettlementPrisma({ extraEmployees: [idleTherapist] })
+    });
+
+    assert.equal(unpaid.paymentStatus.isPaid, false);
+    assert.equal((unpaid as any).paymentStatus.paidAt, null);
+    assert.equal((unpaid as any).paymentStatus.paidByAccountId, null);
+    assert.equal((unpaid as any).employeeId, idleTherapist.id);
+  });
+
+  it("기존 지급 row가 없는 미지급 해제 요청은 빈 payment row와 이력을 만들지 않는다", async () => {
+    const idleTherapist = {
+      id: "therapist-idle",
+      displayName: "휴무 마사지사",
+      staffCode: "THR-IDLE",
+      employeeGroup: "THERAPIST",
+      sortOrder: 9,
+      isActive: true
+    };
+    const prismaClient = createSettlementPrisma({ extraEmployees: [idleTherapist] });
+
+    const unpaid = await setTherapistDailySettlementPayment({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: idleTherapist.id,
+      isPaid: false,
+      actorId: "account-admin",
+      prismaClient
+    });
+
+    assert.equal(unpaid.paymentStatus.isPaid, false);
+    assert.equal((prismaClient as any).settlementPayments.has(`month-2026-06:2026-06-10:${idleTherapist.id}`), false);
+    assert.equal((prismaClient as any).settlementPaymentHistories.length, 0);
   });
 
   it("조회 날짜는 YYYY-MM-DD만 허용한다", async () => {
