@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
 import { AuthorizationError, requirePermission } from "@/lib/authorization";
 import { AuditDomainError } from "@/modules/audit/audit-event";
+import { t } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n/config";
+import { getLocale } from "@/lib/i18n/server";
+import { resolveDomainErrorMessage } from "@/lib/i18n/errors";
 import {
   autosaveServiceCallRow,
   createDailyExpense,
@@ -39,14 +43,17 @@ function formValue(formData: FormData, key: string) {
 
 function mapActionError<T>(
   error: unknown,
+  locale: Locale,
   fieldMap: { dateField: "serviceDate" | "expenseDate"; handlerField?: "handledByEmployeeId" } = { dateField: "serviceDate" }
 ): ActionResult<T> {
   if (error instanceof ServiceCallDomainError) {
+    const message = resolveDomainErrorMessage(locale, error.code, error.message);
+
     if (error.code === "D_COURSE_SECOND_THERAPIST_REQUIRED") {
       return {
         ok: false,
-        fieldErrors: { therapist2Id: [error.message] },
-        formError: error.message,
+        fieldErrors: { therapist2Id: [message] },
+        formError: message,
         domainErrorCode: error.code
       };
     }
@@ -54,7 +61,7 @@ function mapActionError<T>(
     if (error.code === "INVALID_DAILY_EXPENSE_INPUT") {
       return {
         ok: false,
-        formError: error.message,
+        formError: message,
         domainErrorCode: error.code
       };
     }
@@ -62,8 +69,8 @@ function mapActionError<T>(
     if (error.code === "EMPLOYEE_NOT_ACTIVE" && fieldMap.handlerField) {
       return {
         ok: false,
-        fieldErrors: { [fieldMap.handlerField]: [error.message] },
-        formError: error.message,
+        fieldErrors: { [fieldMap.handlerField]: [message] },
+        formError: message,
         domainErrorCode: error.code
       };
     }
@@ -71,8 +78,8 @@ function mapActionError<T>(
     if (error.code === "OPERATING_MONTH_DATE_OUT_OF_RANGE") {
       return {
         ok: false,
-        fieldErrors: { [fieldMap.dateField]: [error.message] },
-        formError: error.message,
+        fieldErrors: { [fieldMap.dateField]: [message] },
+        formError: message,
         domainErrorCode: error.code
       };
     }
@@ -80,15 +87,15 @@ function mapActionError<T>(
     if (error.code === "ROOM_REQUIRED_FOR_STATUS") {
       return {
         ok: false,
-        fieldErrors: { roomId: [error.message] },
-        formError: error.message,
+        fieldErrors: { roomId: [message] },
+        formError: message,
         domainErrorCode: error.code
       };
     }
 
     return {
       ok: false,
-      formError: error.message,
+      formError: message,
       domainErrorCode: error.code
     };
   }
@@ -96,21 +103,21 @@ function mapActionError<T>(
   if (error instanceof AuthorizationError) {
     return {
       ok: false,
-      formError: "권한이 없습니다."
+      formError: t(locale, "action.error.noPermission")
     };
   }
 
   if (error instanceof AuditDomainError) {
     return {
       ok: false,
-      formError: "감사 로그 기록 중 오류가 발생했습니다.",
+      formError: t(locale, "action.error.auditFailed"),
       domainErrorCode: error.code
     };
   }
 
   return {
     ok: false,
-    formError: "콜 원장 저장 중 오류가 발생했습니다."
+    formError: t(locale, "action.error.saveFailed")
   };
 }
 
@@ -126,6 +133,7 @@ export async function saveBasicServiceCallRowAction(
   _previousState: ServiceCallActionState,
   formData: FormData
 ): Promise<ServiceCallActionState> {
+  const locale = await getLocale();
   const parsed = serviceCallInputSchema.safeParse({
     serviceCallId: formValue(formData, "serviceCallId"),
     operatingMonthId: formValue(formData, "operatingMonthId"),
@@ -148,7 +156,7 @@ export async function saveBasicServiceCallRowAction(
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -158,18 +166,19 @@ export async function saveBasicServiceCallRowAction(
     revalidatePath("/calls");
     return { ok: true, data: visibleServiceCallRowForRole(data, account.role) };
   } catch (error) {
-    return mapActionError<ServiceCallRowDto>(error);
+    return mapActionError<ServiceCallRowDto>(error, locale);
   }
 }
 
 export async function autosaveServiceCallRowAction(input: ServiceCallAutosaveInput): Promise<ActionResult<ServiceCallRowDto>> {
+  const locale = await getLocale();
   const parsed = serviceCallAutosaveInputSchema.safeParse(input);
 
   if (!parsed.success) {
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -182,7 +191,7 @@ export async function autosaveServiceCallRowAction(input: ServiceCallAutosaveInp
     revalidatePath("/calls");
     return { ok: true, data: visibleServiceCallRowForRole(data, account.role) };
   } catch (error) {
-    return mapActionError<ServiceCallRowDto>(error);
+    return mapActionError<ServiceCallRowDto>(error, locale);
   }
 }
 
@@ -190,6 +199,7 @@ export async function createDailyExpenseAction(
   _previousState: DailyExpenseActionState,
   formData: FormData
 ): Promise<DailyExpenseActionState> {
+  const locale = await getLocale();
   const parsed = dailyExpenseInputSchema.safeParse({
     operatingMonthId: formValue(formData, "operatingMonthId"),
     expenseDate: formValue(formData, "expenseDate"),
@@ -203,7 +213,7 @@ export async function createDailyExpenseAction(
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -213,7 +223,7 @@ export async function createDailyExpenseAction(
     revalidatePath("/calls");
     return { ok: true, data };
   } catch (error) {
-    return mapActionError<DailyExpenseDto>(error, { dateField: "expenseDate", handlerField: "handledByEmployeeId" });
+    return mapActionError<DailyExpenseDto>(error, locale, { dateField: "expenseDate", handlerField: "handledByEmployeeId" });
   }
 }
 
@@ -221,6 +231,7 @@ export async function updateDailyExpenseAction(
   _previousState: DailyExpenseActionState,
   formData: FormData
 ): Promise<DailyExpenseActionState> {
+  const locale = await getLocale();
   const parsed = dailyExpenseUpdateSchema.safeParse({
     dailyExpenseId: formValue(formData, "dailyExpenseId"),
     operatingMonthId: formValue(formData, "operatingMonthId"),
@@ -235,7 +246,7 @@ export async function updateDailyExpenseAction(
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -245,7 +256,7 @@ export async function updateDailyExpenseAction(
     revalidatePath("/calls");
     return { ok: true, data };
   } catch (error) {
-    return mapActionError<DailyExpenseDto>(error, { dateField: "expenseDate", handlerField: "handledByEmployeeId" });
+    return mapActionError<DailyExpenseDto>(error, locale, { dateField: "expenseDate", handlerField: "handledByEmployeeId" });
   }
 }
 
@@ -253,6 +264,7 @@ export async function deactivateDailyExpenseAction(
   _previousState: DailyExpenseActionState,
   formData: FormData
 ): Promise<DailyExpenseActionState> {
+  const locale = await getLocale();
   const parsed = dailyExpenseDeactivateSchema.safeParse({
     dailyExpenseId: formValue(formData, "dailyExpenseId")
   });
@@ -261,7 +273,7 @@ export async function deactivateDailyExpenseAction(
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -271,6 +283,6 @@ export async function deactivateDailyExpenseAction(
     revalidatePath("/calls");
     return { ok: true, data };
   } catch (error) {
-    return mapActionError<DailyExpenseDto>(error, { dateField: "expenseDate", handlerField: "handledByEmployeeId" });
+    return mapActionError<DailyExpenseDto>(error, locale, { dateField: "expenseDate", handlerField: "handledByEmployeeId" });
   }
 }

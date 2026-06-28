@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
 import { AuthorizationError, requirePermission } from "@/lib/authorization";
+import { t } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n/config";
+import { getLocale } from "@/lib/i18n/server";
+import { resolveDomainErrorMessage } from "@/lib/i18n/errors";
 import {
   MigrationVerificationDomainError,
   migrationVerificationIssueKinds,
@@ -32,11 +36,11 @@ function nullableString(value: string) {
   return trimmed ? trimmed : null;
 }
 
-function mapActionError(error: unknown): MigrationVerificationIssueActionState {
+function mapActionError(error: unknown, locale: Locale): MigrationVerificationIssueActionState {
   if (error instanceof MigrationVerificationDomainError) {
     return {
       ok: false,
-      formError: error.message,
+      formError: resolveDomainErrorMessage(locale, error.code, error.message),
       domainErrorCode: error.code
     };
   }
@@ -44,13 +48,13 @@ function mapActionError(error: unknown): MigrationVerificationIssueActionState {
   if (error instanceof AuthorizationError) {
     return {
       ok: false,
-      formError: "권한이 없습니다."
+      formError: t(locale, "action.error.noPermission")
     };
   }
 
   return {
     ok: false,
-    formError: "이관 검증 상태 저장 중 오류가 발생했습니다."
+    formError: t(locale, "action.error.saveFailed")
   };
 }
 
@@ -58,6 +62,7 @@ export async function updateMigrationVerificationIssueStatusAction(
   _previousState: MigrationVerificationIssueActionState,
   formData: FormData
 ): Promise<MigrationVerificationIssueActionState> {
+  const locale = await getLocale();
   const itemKey = toStringValue(formData.get("itemKey")).trim();
   const kind = toStringValue(formData.get("kind")).trim();
   const status = toStringValue(formData.get("status")).trim();
@@ -71,7 +76,7 @@ export async function updateMigrationVerificationIssueStatusAction(
     return {
       ok: false,
       fieldErrors,
-      formError: "이관 검증 상태 입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -95,6 +100,6 @@ export async function updateMigrationVerificationIssueStatusAction(
     revalidatePath("/masters/sheet-mapping");
     return { ok: true, data };
   } catch (error) {
-    return mapActionError(error);
+    return mapActionError(error, locale);
   }
 }

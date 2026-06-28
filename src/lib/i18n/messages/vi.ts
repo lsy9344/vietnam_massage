@@ -21,6 +21,12 @@ export const vi: Messages = {
   // 언어 전환
   "locale.switch.aria": "Chuyển ngôn ngữ hiển thị",
 
+  // 공통 서버 액션 에러 (action 경계에서 번역; 사용자 입력 에러 중심)
+  "action.error.invalidInput": "Vui lòng kiểm tra giá trị nhập.",
+  "action.error.noPermission": "Bạn không có quyền.",
+  "action.error.auditFailed": "Đã xảy ra lỗi khi ghi nhật ký kiểm tra.",
+  "action.error.saveFailed": "Đã xảy ra lỗi khi lưu.",
+
   // 공통 운영월/조회 컨트롤 (여러 화면 공유)
   "common.operatingMonth": "Tháng vận hành",
   "common.queryDate": "Ngày tra cứu",

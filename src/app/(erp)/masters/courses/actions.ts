@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
 import { AuthorizationError, requirePermission } from "@/lib/authorization";
+import { t } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n/config";
+import { getLocale } from "@/lib/i18n/server";
+import { resolveDomainErrorMessage } from "@/lib/i18n/errors";
 import {
   CourseDomainError,
   createCoursePolicy,
@@ -92,14 +96,14 @@ function monthlyRulePayload(formData: FormData) {
   };
 }
 
-function mapCourseActionError(error: unknown): CourseActionState {
+function mapCourseActionError(error: unknown, locale: Locale): CourseActionState {
   if (error instanceof CourseDomainError) {
-    return { ok: false, formError: error.message, domainErrorCode: error.code };
+    return { ok: false, formError: resolveDomainErrorMessage(locale, error.code, error.message), domainErrorCode: error.code };
   }
   if (error instanceof AuthorizationError) {
-    return { ok: false, formError: "권한이 없습니다." };
+    return { ok: false, formError: t(locale, "action.error.noPermission") };
   }
-  return { ok: false, formError: "코스/정책 저장 중 오류가 발생했습니다." };
+  return { ok: false, formError: t(locale, "action.error.saveFailed") };
 }
 
 async function withPolicyPermission<T>(callback: (actorId: string) => Promise<T>) {
@@ -110,111 +114,121 @@ async function withPolicyPermission<T>(callback: (actorId: string) => Promise<T>
 }
 
 export async function createCoursePolicyAction(_previousState: CourseActionState, formData: FormData): Promise<CourseActionState> {
+  const locale = await getLocale();
   const parsed = createCoursePolicySchema.safeParse(coursePolicyPayload(formData));
-  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: "코스 정책 입력값을 확인하세요." };
+  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: t(locale, "action.error.invalidInput") };
 
   try {
     return await withPolicyPermission((actorId) => createCoursePolicy({ actorId, ...parsed.data }));
   } catch (error) {
-    return mapCourseActionError(error);
+    return mapCourseActionError(error, locale);
   }
 }
 
 export async function updateCoursePolicyAction(_previousState: CourseActionState, formData: FormData): Promise<CourseActionState> {
+  const locale = await getLocale();
   const parsed = updateCoursePolicySchema.safeParse(coursePolicyPayload(formData));
-  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: "코스 정책 입력값을 확인하세요." };
+  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: t(locale, "action.error.invalidInput") };
 
   try {
     return await withPolicyPermission((actorId) => updateCoursePolicy({ actorId, ...parsed.data }));
   } catch (error) {
-    return mapCourseActionError(error);
+    return mapCourseActionError(error, locale);
   }
 }
 
 export async function deactivateCourseAction(_previousState: CourseActionState, formData: FormData): Promise<CourseActionState> {
+  const locale = await getLocale();
   const parsed = deactivateCourseSchema.safeParse({ courseId: formData.get("courseId") });
-  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: "비활성 처리 입력값을 확인하세요." };
+  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: t(locale, "action.error.invalidInput") };
 
   try {
     return await withPolicyPermission((actorId) => deactivateCourse({ actorId, ...parsed.data }));
   } catch (error) {
-    return mapCourseActionError(error);
+    return mapCourseActionError(error, locale);
   }
 }
 
 export async function createTherapistCourseRateAction(_previousState: CourseActionState, formData: FormData): Promise<CourseActionState> {
+  const locale = await getLocale();
   const parsed = createTherapistCourseRateSchema.safeParse(therapistRatePayload(formData));
-  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: "수당 정책 입력값을 확인하세요." };
+  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: t(locale, "action.error.invalidInput") };
 
   try {
     return await withPolicyPermission((actorId) => createTherapistCourseRate({ actorId, ...parsed.data }));
   } catch (error) {
-    return mapCourseActionError(error);
+    return mapCourseActionError(error, locale);
   }
 }
 
 export async function updateTherapistCourseRateAction(_previousState: CourseActionState, formData: FormData): Promise<CourseActionState> {
+  const locale = await getLocale();
   const parsed = updateTherapistCourseRateSchema.safeParse(therapistRatePayload(formData));
-  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: "수당 정책 입력값을 확인하세요." };
+  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: t(locale, "action.error.invalidInput") };
 
   try {
     return await withPolicyPermission((actorId) => updateTherapistCourseRate({ actorId, ...parsed.data }));
   } catch (error) {
-    return mapCourseActionError(error);
+    return mapCourseActionError(error, locale);
   }
 }
 
 export async function endTherapistCourseRateAction(_previousState: CourseActionState, formData: FormData): Promise<CourseActionState> {
+  const locale = await getLocale();
   const parsed = endTherapistCourseRateSchema.safeParse({ rateId: formData.get("rateId"), effectiveToMonth: formData.get("effectiveToMonth") });
-  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: "정책 종료 입력값을 확인하세요." };
+  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: t(locale, "action.error.invalidInput") };
 
   try {
     return await withPolicyPermission((actorId) => endTherapistCourseRate({ actorId, ...parsed.data }));
   } catch (error) {
-    return mapCourseActionError(error);
+    return mapCourseActionError(error, locale);
   }
 }
 
 export async function createOpsDailyIncentiveRuleAction(_previousState: CourseActionState, formData: FormData): Promise<CourseActionState> {
+  const locale = await getLocale();
   const parsed = createOpsDailyIncentiveRuleSchema.safeParse(dailyRulePayload(formData));
-  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: "일일 인센 정책 입력값을 확인하세요." };
+  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: t(locale, "action.error.invalidInput") };
 
   try {
     return await withPolicyPermission((actorId) => createOpsDailyIncentiveRule({ actorId, ...parsed.data }));
   } catch (error) {
-    return mapCourseActionError(error);
+    return mapCourseActionError(error, locale);
   }
 }
 
 export async function updateOpsDailyIncentiveRuleAction(_previousState: CourseActionState, formData: FormData): Promise<CourseActionState> {
+  const locale = await getLocale();
   const parsed = updateOpsDailyIncentiveRuleSchema.safeParse(dailyRulePayload(formData));
-  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: "일일 인센 정책 입력값을 확인하세요." };
+  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: t(locale, "action.error.invalidInput") };
 
   try {
     return await withPolicyPermission((actorId) => updateOpsDailyIncentiveRule({ actorId, ...parsed.data }));
   } catch (error) {
-    return mapCourseActionError(error);
+    return mapCourseActionError(error, locale);
   }
 }
 
 export async function createOpsMonthlyIncentiveRuleAction(_previousState: CourseActionState, formData: FormData): Promise<CourseActionState> {
+  const locale = await getLocale();
   const parsed = createOpsMonthlyIncentiveRuleSchema.safeParse(monthlyRulePayload(formData));
-  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: "월 인센 정책 입력값을 확인하세요." };
+  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: t(locale, "action.error.invalidInput") };
 
   try {
     return await withPolicyPermission((actorId) => createOpsMonthlyIncentiveRule({ actorId, ...parsed.data }));
   } catch (error) {
-    return mapCourseActionError(error);
+    return mapCourseActionError(error, locale);
   }
 }
 
 export async function updateOpsMonthlyIncentiveRuleAction(_previousState: CourseActionState, formData: FormData): Promise<CourseActionState> {
+  const locale = await getLocale();
   const parsed = updateOpsMonthlyIncentiveRuleSchema.safeParse(monthlyRulePayload(formData));
-  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: "월 인센 정책 입력값을 확인하세요." };
+  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: t(locale, "action.error.invalidInput") };
 
   try {
     return await withPolicyPermission((actorId) => updateOpsMonthlyIncentiveRule({ actorId, ...parsed.data }));
   } catch (error) {
-    return mapCourseActionError(error);
+    return mapCourseActionError(error, locale);
   }
 }

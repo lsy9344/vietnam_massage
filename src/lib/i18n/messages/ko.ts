@@ -20,6 +20,12 @@ export const ko = {
   // 언어 전환
   "locale.switch.aria": "화면 언어 전환",
 
+  // 공통 서버 액션 에러 (action 경계에서 번역; 사용자 입력 에러 중심)
+  "action.error.invalidInput": "입력값을 확인하세요.",
+  "action.error.noPermission": "권한이 없습니다.",
+  "action.error.auditFailed": "감사 로그 기록 중 오류가 발생했습니다.",
+  "action.error.saveFailed": "저장 중 오류가 발생했습니다.",
+
   // 공통 운영월/조회 컨트롤 (여러 화면 공유)
   "common.operatingMonth": "운영월",
   "common.queryDate": "조회날짜",

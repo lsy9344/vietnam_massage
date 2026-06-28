@@ -149,7 +149,8 @@ for (const required of [
   "revalidatePath(\"/masters/courses\")",
   "fieldErrors",
   "formError",
-  "권한이 없습니다.",
+  // i18n 전환: 액션 에러 문구는 t() key로 참조하고 한국어 원문은 messages/ko.ts에 보존한다.
+  "action.error.noPermission",
   "CourseDomainError"
 ]) {
   if (!actions.includes(required)) errors.push(`courses actions missing ${required}`);
@@ -158,6 +159,9 @@ for (const required of [
 const page = `${read("src/app/(erp)/masters/courses/page.tsx")}\n${read("src/app/(erp)/masters/courses/course-forms.tsx")}`;
 // i18n 전환: 화면 문구는 t() key로 참조하고 한국어 원문은 messages/ko.ts에 보존한다.
 const koMessages18 = read("src/lib/i18n/messages/ko.ts");
+if (!koMessages18.includes("권한이 없습니다.")) {
+  errors.push("messages/ko.ts missing action error original 권한이 없습니다.");
+}
 for (const required of [
   "requireRouteAccess(\"/masters/courses\")",
   "ensureDefaultCoursesAndPolicies",
