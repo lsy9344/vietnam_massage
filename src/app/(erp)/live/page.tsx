@@ -3,6 +3,9 @@ import { PageHeader } from "@/components/domain/page-header";
 import { RoomStatusCard } from "@/components/domain/room-status-card";
 import { requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
+import { getServerTranslator } from "@/lib/i18n/server";
+import { formatCurrencyVnd, formatNumber } from "@/lib/i18n/format";
+import { codeLabel, operatingMonthStatusLabel } from "@/lib/i18n/codes";
 import { getDailyCallLedgerSummary } from "@/modules/calls/service-call-service";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import { latestRoomStatusUpdatedAt } from "@/modules/rooms/room-status-refresh";
@@ -14,14 +17,6 @@ type LivePageSearchParams = {
   operatingMonthId?: string;
   serviceDate?: string;
 };
-
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("ko-KR").format(value);
-}
-
-function formatVnd(value: number) {
-  return `${formatNumber(value)} VND`;
-}
 
 function floorGridClass(count: number) {
   return count === 2 ? "grid grid-cols-1 gap-3 sm:grid-cols-2" : "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3";
@@ -38,24 +33,28 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
 
 export default async function LivePage({ searchParams }: { searchParams: Promise<LivePageSearchParams> }) {
   const account = await requireRouteAccess("/live");
+  const { locale, t } = await getServerTranslator();
   const params = await searchParams;
   const operatingMonths = await listOperatingMonths();
   const selectedMonth = selectedOperatingMonthFor(operatingMonths, params.operatingMonthId);
+
+  const formatVnd = (value: number) => `${formatCurrencyVnd(locale, value)} ${t("live.vndSuffix")}`;
+  const formatCount = (value: number) => `${formatNumber(locale, value)}${t("live.countSuffix")}`;
 
   if (!selectedMonth) {
     return (
       <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
         <PageHeader
-          eyebrow="운영 현황"
-          title="첫화면 실시간 현황"
-          description="객실 상태와 오늘 콜/매출 요약을 조회한다."
+          eyebrow={t("nav.group.operations")}
+          title={t("nav.item.live")}
+          description={t("live.description")}
         />
         <section className="border border-border bg-surface px-4 py-8">
-          <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
-          <p className="mt-2 max-w-2xl text-sm text-muted">첫 화면은 운영월 날짜 범위 안의 객실 상태와 콜 요약을 조회한다.</p>
+          <h2 className="text-base font-semibold text-foreground">{t("common.createOperatingMonthFirst")}</h2>
+          <p className="mt-2 max-w-2xl text-sm text-muted">{t("live.empty.description")}</p>
           {account.role === "administrator" ? (
             <Link className="mt-4 inline-flex text-sm font-semibold text-brand underline-offset-4 hover:underline" href="/masters/operating-months">
-              운영월 관리로 이동
+              {t("common.goToOperatingMonths")}
             </Link>
           ) : null}
         </section>
@@ -74,47 +73,47 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
 
   const statusSummary = [
     // REQ-009: 예약건수는 상태가 아니라 원장에 등록된 전체 건수다(방문완료·노쇼·취소로 바뀌어도 빠지지 않음).
-    ["예약건수", summary.reservationCount],
-    ["사용중", summary.inUseCount],
-    ["청소중", summary.cleaningCount],
-    ["방문완료", summary.completedCount],
-    ["노쇼", summary.noShowCount],
-    ["취소", summary.canceledCount]
+    [t("live.summary.reservationCount"), summary.reservationCount],
+    [t("live.summary.inUse"), summary.inUseCount],
+    [t("live.summary.cleaning"), summary.cleaningCount],
+    [t("live.summary.completed"), summary.completedCount],
+    [t("live.summary.noShow"), summary.noShowCount],
+    [t("live.summary.canceled"), summary.canceledCount]
   ] as const;
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
       <PageHeader
-        eyebrow="운영 현황"
-        title="첫화면 실시간 현황"
-        description="객실 상태와 오늘 콜/매출 요약을 조회한다."
+        eyebrow={t("nav.group.operations")}
+        title={t("nav.item.live")}
+        description={t("live.description")}
         meta={
           <>
-            <RoomStatusRefreshController lastUpdatedAt={lastUpdatedAt} />
+            <RoomStatusRefreshController lastUpdatedAt={lastUpdatedAt} locale={locale} />
           </>
         }
       />
 
       <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
         <label className="grid gap-1 text-xs font-medium text-muted">
-          운영월
+          {t("common.operatingMonth")}
           <select
-            aria-label="운영월"
+            aria-label={t("common.operatingMonth")}
             className="h-9 min-w-44 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
             defaultValue={selectedMonth.id}
             name="operatingMonthId"
           >
             {operatingMonths.map((month) => (
               <option key={month.id} value={month.id}>
-                {month.monthKey} ({month.status})
+                {t("common.monthOption", { monthKey: month.monthKey, status: operatingMonthStatusLabel(locale, month.status) })}
               </option>
             ))}
           </select>
         </label>
         <label className="grid gap-1 text-xs font-medium text-muted">
-          조회날짜
+          {t("common.queryDate")}
           <input
-            aria-label="조회날짜"
+            aria-label={t("common.queryDate")}
             className="h-9 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
             defaultValue={serviceDate}
             max={selectedMonth.endDate}
@@ -124,57 +123,60 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
           />
         </label>
         <button className="h-9 border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
-          조회
+          {t("common.query")}
         </button>
         <div className="ml-auto text-right text-xs text-muted">
-          <div>운영월 상태: {selectedMonth.status}</div>
+          <div>{t("common.operatingMonthStatusPrefix")}: {operatingMonthStatusLabel(locale, selectedMonth.status)}</div>
           <div>
-            날짜 범위: {selectedMonth.startDate} ~ {selectedMonth.endDate}
+            {t("common.dateRange")}: {selectedMonth.startDate} ~ {selectedMonth.endDate}
           </div>
         </div>
       </form>
 
-      <section className="grid grid-cols-4 gap-3" aria-label="객실 상태">
+      <section className="grid grid-cols-4 gap-3" aria-label={t("common.roomStatusAria")}>
         {roomFloorGroups(roomStatuses).map((group) => (
           <div className={`col-span-full ${floorGridClass(group.statuses.length)}`} key={group.floor}>
             {group.statuses.map((status) => (
-              <RoomStatusCard key={status.roomId} status={status} />
+              <RoomStatusCard key={status.roomId} status={status} locale={locale} />
             ))}
           </div>
         ))}
       </section>
 
-      <section className="mt-4 grid grid-cols-6 gap-3" aria-label="오늘 상태 요약">
+      <section className="mt-4 grid grid-cols-6 gap-3" aria-label={t("live.summary.aria")}>
         {statusSummary.map(([label, count]) => (
-          <SummaryTile key={label} label={label} value={`${formatNumber(count)}건`} />
+          <SummaryTile key={label} label={label} value={formatCount(count)} />
         ))}
       </section>
 
-      <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="결제수단별 집계">
+      <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label={t("live.payment.aria")}>
         {/* REQ-004: 카운터 직원이 돈통 현금 흐름을 한눈에 보도록 결제수단별 집계를 첫화면에도 노출한다. */}
-        <SummaryTile label="현금" value={formatVnd(summary.paymentMethodTotals.cash)} />
-        <SummaryTile label="카드" value={formatVnd(summary.paymentMethodTotals.card)} />
-        <SummaryTile label="계좌" value={formatVnd(summary.paymentMethodTotals.bank)} />
-        <SummaryTile label="기타" value={formatVnd(summary.paymentMethodTotals.other)} />
+        <SummaryTile label={codeLabel(locale, "PAYMENT_METHOD", "CASH", true)} value={formatVnd(summary.paymentMethodTotals.cash)} />
+        <SummaryTile label={codeLabel(locale, "PAYMENT_METHOD", "CARD", true)} value={formatVnd(summary.paymentMethodTotals.card)} />
+        <SummaryTile label={codeLabel(locale, "PAYMENT_METHOD", "BANK_TRANSFER", true)} value={formatVnd(summary.paymentMethodTotals.bank)} />
+        <SummaryTile label={codeLabel(locale, "PAYMENT_METHOD", "OTHER", true)} value={formatVnd(summary.paymentMethodTotals.other)} />
       </section>
 
-      <section className="mt-4 grid grid-cols-[1fr_1fr_2fr] gap-3" aria-label="오늘 KPI">
-        <SummaryTile label="결제합계" value={formatVnd(summary.paymentTotal)} />
-        <SummaryTile label="순매출" value={formatVnd(summary.netSales)} />
+      <section className="mt-4 grid grid-cols-[1fr_1fr_2fr] gap-3" aria-label={t("live.kpi.aria")}>
+        <SummaryTile label={t("live.kpi.paymentTotal")} value={formatVnd(summary.paymentTotal)} />
+        <SummaryTile label={t("live.kpi.netSales")} value={formatVnd(summary.netSales)} />
         <div className="border border-border bg-surface px-4 py-3">
-          <p className="text-xs font-medium text-muted">코스별 방문완료</p>
+          <p className="text-xs font-medium text-muted">{t("live.kpi.courseCompleted")}</p>
           <div className="mt-2 grid grid-cols-5 gap-2">
             {summary.courseSummaries.map((course) => (
               <div className="border border-border bg-background px-3 py-2 text-center" key={course.courseCode}>
                 <p className="text-xs font-semibold text-muted">{course.courseCode}</p>
-                <p className="text-lg font-semibold text-foreground [font-variant-numeric:tabular-nums]">{formatNumber(course.completedCount)}</p>
+                <p className="text-lg font-semibold text-foreground [font-variant-numeric:tabular-nums]">{formatNumber(locale, course.completedCount)}</p>
               </div>
             ))}
           </div>
           {warningTotal > 0 ? (
             <p className="mt-3 text-xs text-danger">
-              정책 누락 {summary.warningCounts.coursePolicyMissing}건, 수당 누락 {summary.warningCounts.therapistRateMissing}건, 마사지사2 필요{" "}
-              {summary.warningCounts.secondTherapistRequired}건은 금액/코스별 집계에서 제외됐다.
+              {t("live.warning.excluded", {
+                policy: summary.warningCounts.coursePolicyMissing,
+                rate: summary.warningCounts.therapistRateMissing,
+                second: summary.warningCounts.secondTherapistRequired
+              })}
             </p>
           ) : null}
         </div>

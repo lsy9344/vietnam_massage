@@ -79,27 +79,34 @@ if (actions.includes("recordAuditEvent(") || actions.includes("monthly_close.loc
   errors.push("closing actions.ts must call the domain service instead of implementing audit payloads");
 }
 
+// ko/vi i18n migration: closing/settlement UI strings moved to t() keys in the ko catalog.
+const koCatalog = read("src/lib/i18n/messages/ko.ts");
+function requireMoved(contents, fileLabel, key, korean) {
+  if (!contents.includes(key)) errors.push(`${fileLabel} missing t() key ${key}`);
+  if (!koCatalog.includes(korean)) errors.push(`ko.ts missing ${korean}`);
+}
+
 const actionPanel = read("src/app/(erp)/closing/closing-action-panel.tsx");
 for (const required of [
   "lockMonthlyCloseAction",
   "status === \"마감확정\"",
-  "잠금은 먼저 마감확정이 필요합니다.",
-  "잠금 상태입니다. 확정 스냅샷 조회는 계속 가능합니다.",
   "Story 5.6"
 ]) {
   if (!actionPanel.includes(required)) errors.push(`closing-action-panel.tsx missing ${required}`);
 }
+requireMoved(actionPanel, "closing-action-panel.tsx", "closing.disabled.needConfirmFirst", "잠금은 먼저 마감확정이 필요합니다.");
+requireMoved(actionPanel, "closing-action-panel.tsx", "closing.disabled.locked", "잠금 상태입니다. 확정 스냅샷 조회는 계속 가능합니다.");
 
 const opsMonthlyPage = read("src/app/(erp)/settlements/operations/monthly/page.tsx");
 for (const required of [
   "getMonthlyClosingSnapshot",
   "SnapshotSummary",
-  "확정 스냅샷",
-  "현재 기준 미리보기",
   "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND"
 ]) {
   if (!opsMonthlyPage.includes(required)) errors.push(`operations monthly page missing ${required}`);
 }
+requireMoved(opsMonthlyPage, "operations monthly page", "settlements.opsMonthly.snapshot.confirmed", "확정 스냅샷");
+requireMoved(opsMonthlyPage, "operations monthly page", "settlements.opsMonthly.preview.current", "현재 기준 미리보기");
 
 const guard = read("src/modules/closing/month-lock-guard.ts");
 for (const required of [

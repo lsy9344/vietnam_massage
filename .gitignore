@@ -25,3 +25,6 @@ package-lock.json
 
 .agents/.story-automator-active
 .vercel
+
+# Playwright CLI debug artifacts
+.playwright-cli/

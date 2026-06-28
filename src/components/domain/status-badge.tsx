@@ -39,16 +39,24 @@ const statusBadgeConfig: Record<
 
 export function StatusBadge({
   state,
+  label,
+  ariaLabel,
   className
 }: {
+  /** RoomDisplayStatus 한국어 stable key (색/glyph 조회 + 비교용). */
   state: StatusBadgeState;
+  /** 화면에 보일 번역 라벨. 미지정 시 state(한국어)로 fallback. */
+  label?: string;
+  /** 접근성 라벨. 미지정 시 한국어 "상태: {state}"로 fallback. */
+  ariaLabel?: string;
   className?: string;
 }) {
   const config = statusBadgeConfig[state];
+  const displayLabel = label ?? state;
 
   return (
     <span
-      aria-label={`상태: ${state}`}
+      aria-label={ariaLabel ?? `상태: ${state}`}
       className={cn(
         "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-sm font-semibold leading-none",
         config.className,
@@ -56,7 +64,7 @@ export function StatusBadge({
       )}
     >
       <span aria-hidden="true">{config.glyph}</span>
-      {state}
+      {displayLabel}
     </span>
   );
 }

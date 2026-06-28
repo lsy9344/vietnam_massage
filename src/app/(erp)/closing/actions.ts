@@ -5,6 +5,10 @@ import { z } from "zod";
 import type { ActionResult } from "@/lib/action-result";
 import { AuditDomainError } from "@/modules/audit/audit-event";
 import { AuthorizationError, requirePermission } from "@/lib/authorization";
+import { t } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n/config";
+import { getLocale } from "@/lib/i18n/server";
+import { resolveDomainErrorMessage, resolveKoreanMessage } from "@/lib/i18n/errors";
 import {
   MonthlyClosingDomainError,
   confirmMonthlyClose,
@@ -25,17 +29,20 @@ const reopenMonthlyClosingActionSchema = monthlyClosingActionSchema.extend({
   reason: z.string().trim().min(5, "재오픈 사유를 5자 이상 입력하세요.")
 });
 
-function toFieldErrors(fieldErrors: Partial<Record<string, string[]>>) {
+function toFieldErrors(fieldErrors: Partial<Record<string, string[]>>, locale: Locale) {
   return Object.fromEntries(
-    Object.entries(fieldErrors).filter((entry): entry is [string, string[]] => Array.isArray(entry[1]) && entry[1].length > 0)
+    Object.entries(fieldErrors)
+      .filter((entry): entry is [string, string[]] => Array.isArray(entry[1]) && entry[1].length > 0)
+      // Zod 한국어 메시지를 inline field error 표시 직전에 locale로 번역한다.
+      .map(([field, messages]) => [field, messages.map((message) => resolveKoreanMessage(locale, message))])
   );
 }
 
-function mapActionError(error: unknown): MonthlyClosingActionState {
+function mapActionError(error: unknown, locale: Locale): MonthlyClosingActionState {
   if (error instanceof MonthlyClosingDomainError || error instanceof AuditDomainError) {
     return {
       ok: false,
-      formError: error.message,
+      formError: resolveDomainErrorMessage(locale, error.code, error.message),
       domainErrorCode: error.code
     };
   }
@@ -43,13 +50,13 @@ function mapActionError(error: unknown): MonthlyClosingActionState {
   if (error instanceof AuthorizationError) {
     return {
       ok: false,
-      formError: "권한이 없습니다."
+      formError: t(locale, "action.error.noPermission")
     };
   }
 
   return {
     ok: false,
-    formError: "월마감 처리 중 오류가 발생했습니다."
+    formError: t(locale, "action.error.saveFailed")
   };
 }
 
@@ -57,6 +64,7 @@ export async function startMonthlyCloseReviewAction(
   _previousState: MonthlyClosingActionState,
   formData: FormData
 ): Promise<MonthlyClosingActionState> {
+  const locale = await getLocale();
   const parsed = monthlyClosingActionSchema.safeParse({
     operatingMonthId: formData.get("operatingMonthId")
   });
@@ -64,8 +72,8 @@ export async function startMonthlyCloseReviewAction(
   if (!parsed.success) {
     return {
       ok: false,
-      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "상태 변경 입력값을 확인하세요."
+      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors, locale),
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -78,7 +86,7 @@ export async function startMonthlyCloseReviewAction(
     revalidatePath("/closing");
     return { ok: true, data };
   } catch (error) {
-    return mapActionError(error);
+    return mapActionError(error, locale);
   }
 }
 
@@ -86,6 +94,7 @@ export async function confirmMonthlyCloseAction(
   _previousState: MonthlyClosingActionState,
   formData: FormData
 ): Promise<MonthlyClosingActionState> {
+  const locale = await getLocale();
   const parsed = monthlyClosingActionSchema.safeParse({
     operatingMonthId: formData.get("operatingMonthId")
   });
@@ -93,8 +102,8 @@ export async function confirmMonthlyCloseAction(
   if (!parsed.success) {
     return {
       ok: false,
-      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "마감 확정 입력값을 확인하세요."
+      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors, locale),
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -107,7 +116,7 @@ export async function confirmMonthlyCloseAction(
     revalidatePath("/closing");
     return { ok: true, data };
   } catch (error) {
-    return mapActionError(error);
+    return mapActionError(error, locale);
   }
 }
 
@@ -115,6 +124,7 @@ export async function lockMonthlyCloseAction(
   _previousState: MonthlyClosingActionState,
   formData: FormData
 ): Promise<MonthlyClosingActionState> {
+  const locale = await getLocale();
   const parsed = monthlyClosingActionSchema.safeParse({
     operatingMonthId: formData.get("operatingMonthId")
   });
@@ -122,8 +132,8 @@ export async function lockMonthlyCloseAction(
   if (!parsed.success) {
     return {
       ok: false,
-      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "잠금 입력값을 확인하세요."
+      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors, locale),
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -136,7 +146,7 @@ export async function lockMonthlyCloseAction(
     revalidatePath("/closing");
     return { ok: true, data };
   } catch (error) {
-    return mapActionError(error);
+    return mapActionError(error, locale);
   }
 }
 
@@ -144,6 +154,7 @@ export async function reopenMonthlyCloseAction(
   _previousState: MonthlyClosingActionState,
   formData: FormData
 ): Promise<MonthlyClosingActionState> {
+  const locale = await getLocale();
   const parsed = reopenMonthlyClosingActionSchema.safeParse({
     operatingMonthId: formData.get("operatingMonthId"),
     reason: formData.get("reason")
@@ -152,8 +163,8 @@ export async function reopenMonthlyCloseAction(
   if (!parsed.success) {
     return {
       ok: false,
-      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "재오픈 입력값을 확인하세요."
+      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors, locale),
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -167,6 +178,6 @@ export async function reopenMonthlyCloseAction(
     revalidatePath("/closing");
     return { ok: true, data };
   } catch (error) {
-    return mapActionError(error);
+    return mapActionError(error, locale);
   }
 }

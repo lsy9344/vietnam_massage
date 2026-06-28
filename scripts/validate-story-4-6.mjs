@@ -102,29 +102,36 @@ for (const forbidden of [
   if (service.includes(forbidden)) errors.push(`ops-monthly-incentive-service.ts must remain read-only/no-persistence: ${forbidden}`);
 }
 
+// ko/vi i18n migration: settlement UI strings moved to t() keys in the ko catalog.
+const koCatalog = read("src/lib/i18n/messages/ko.ts");
+function requireMoved(contents, fileLabel, key, korean) {
+  if (!contents.includes(key)) errors.push(`${fileLabel} missing t() key ${key}`);
+  if (!koCatalog.includes(korean)) errors.push(`ko.ts missing ${korean}`);
+}
+
 const page = read("src/app/(erp)/settlements/operations/monthly/page.tsx");
 for (const required of [
   "requireRouteAccess(\"/settlements/operations/monthly\")",
   "selectedOperatingMonthFor",
   "listOperatingMonths",
   "listOpsMonthlyIncentivePreview",
-  "운영팀 월인센",
-  "운영월",
-  "월 총콜",
-  "적용 threshold",
-  "전체 월인센",
-  "팀별 분배",
-  "직원별 월 인센 미리보기",
-  "월 총콜 산출 근거",
-  "정책 없음",
-  "최저 구간 미달",
-  "미확정 미리보기",
-  "현재 기준 미리보기",
-  "확정값은 월마감 스냅샷 기준",
   "role=\"alert\""
 ]) {
   if (!page.includes(required)) errors.push(`monthly page.tsx missing ${required}`);
 }
+requireMoved(page, "monthly page.tsx", "settlements.opsMonthly.title", "운영팀 월인센");
+requireMoved(page, "monthly page.tsx", "common.operatingMonth", "운영월");
+requireMoved(page, "monthly page.tsx", "settlements.opsMonthly.summary.monthlyTotalCalls", "월 총콜");
+requireMoved(page, "monthly page.tsx", "settlements.opsMonthly.summary.appliedThreshold", "적용 threshold");
+requireMoved(page, "monthly page.tsx", "settlements.opsMonthly.summary.totalMonthly", "전체 월인센");
+requireMoved(page, "monthly page.tsx", "settlements.opsMonthly.share.title", "팀별 분배");
+requireMoved(page, "monthly page.tsx", "settlements.opsMonthly.employeeTable.title", "직원별 월 인센 미리보기");
+requireMoved(page, "monthly page.tsx", "settlements.opsMonthly.callEvidence.title", "월 총콜 산출 근거");
+requireMoved(page, "monthly page.tsx", "settlements.opsMonthly.threshold.missingPolicy", "정책 없음");
+requireMoved(page, "monthly page.tsx", "settlements.opsMonthly.threshold.belowThreshold", "최저 구간 미달");
+requireMoved(page, "monthly page.tsx", "settlements.opsMonthly.preview.draft", "미확정 미리보기");
+requireMoved(page, "monthly page.tsx", "settlements.opsMonthly.preview.current", "현재 기준 미리보기");
+requireMoved(page, "monthly page.tsx", "settlements.opsMonthly.preview.closedDescription", "확정값은 월마감 스냅샷 기준");
 for (const forbidden of ["use server", "action=", "saveOps", "revalidatePath", "recordAuditEvent", "snapshot 생성"]) {
   if (page.includes(forbidden)) errors.push(`monthly page.tsx must not add write/closing behavior: ${forbidden}`);
 }
@@ -135,10 +142,11 @@ for (const tabPath of [
   "src/app/(erp)/settlements/operations/page.tsx"
 ]) {
   const contents = read(tabPath);
-  if (!contents.includes("/settlements/operations/monthly") || !contents.includes("운영팀 월인센")) {
+  if (!contents.includes("/settlements/operations/monthly") || !contents.includes("settlements.tabs.opsMonthly")) {
     errors.push(`${tabPath} must include 운영팀 월인센 tab link`);
   }
 }
+if (!koCatalog.includes("운영팀 월인센")) errors.push("ko.ts missing 운영팀 월인센");
 
 const unitTest = read("src/modules/settlements/ops-monthly-incentive-service.test.ts");
 for (const required of [

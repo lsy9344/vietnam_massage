@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
 import { AuthorizationError, requirePermission } from "@/lib/authorization";
+import { t } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n/config";
+import { getLocale } from "@/lib/i18n/server";
+import { resolveDomainErrorMessage } from "@/lib/i18n/errors";
 import {
   CodeDomainError,
   createCodeItem,
@@ -36,11 +40,11 @@ function toFieldErrors(fieldErrors: Partial<Record<string, string[]>>) {
   );
 }
 
-function mapCodeActionError(error: unknown): ActionResult<CodeItemDto> {
+function mapCodeActionError(error: unknown, locale: Locale): ActionResult<CodeItemDto> {
   if (error instanceof CodeDomainError) {
     return {
       ok: false,
-      formError: error.message,
+      formError: resolveDomainErrorMessage(locale, error.code, error.message),
       domainErrorCode: error.code
     };
   }
@@ -48,21 +52,21 @@ function mapCodeActionError(error: unknown): ActionResult<CodeItemDto> {
   if (error instanceof AuthorizationError) {
     return {
       ok: false,
-      formError: "권한이 없습니다."
+      formError: t(locale, "action.error.noPermission")
     };
   }
 
   return {
     ok: false,
-    formError: "코드 저장 중 오류가 발생했습니다."
+    formError: t(locale, "action.error.saveFailed")
   };
 }
 
-function mapTimeSlotActionError(error: unknown): ActionResult<TimeSlotDto> {
+function mapTimeSlotActionError(error: unknown, locale: Locale): ActionResult<TimeSlotDto> {
   if (error instanceof CodeDomainError) {
     return {
       ok: false,
-      formError: error.message,
+      formError: resolveDomainErrorMessage(locale, error.code, error.message),
       domainErrorCode: error.code
     };
   }
@@ -70,17 +74,18 @@ function mapTimeSlotActionError(error: unknown): ActionResult<TimeSlotDto> {
   if (error instanceof AuthorizationError) {
     return {
       ok: false,
-      formError: "권한이 없습니다."
+      formError: t(locale, "action.error.noPermission")
     };
   }
 
   return {
     ok: false,
-    formError: "시간 슬롯 저장 중 오류가 발생했습니다."
+    formError: t(locale, "action.error.saveFailed")
   };
 }
 
 export async function createCodeItemAction(_previousState: CodeActionState, formData: FormData): Promise<CodeActionState> {
+  const locale = await getLocale();
   const parsed = createCodeItemSchema.safeParse({
     codeType: formData.get("codeType"),
     code: formData.get("code"),
@@ -92,7 +97,7 @@ export async function createCodeItemAction(_previousState: CodeActionState, form
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "코드 입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -102,7 +107,7 @@ export async function createCodeItemAction(_previousState: CodeActionState, form
     revalidatePath("/masters/codes");
     return { ok: true, data };
   } catch (error) {
-    return mapCodeActionError(error);
+    return mapCodeActionError(error, locale);
   }
 }
 
@@ -110,6 +115,7 @@ export async function updateCodeItemDisplayNameAction(
   _previousState: CodeActionState,
   formData: FormData
 ): Promise<CodeActionState> {
+  const locale = await getLocale();
   const parsed = updateCodeItemDisplayNameSchema.safeParse({
     codeItemId: formData.get("codeItemId"),
     displayName: formData.get("displayName")
@@ -119,7 +125,7 @@ export async function updateCodeItemDisplayNameAction(
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "표시명 입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -129,7 +135,7 @@ export async function updateCodeItemDisplayNameAction(
     revalidatePath("/masters/codes");
     return { ok: true, data };
   } catch (error) {
-    return mapCodeActionError(error);
+    return mapCodeActionError(error, locale);
   }
 }
 
@@ -137,6 +143,7 @@ export async function updateCodeItemSortOrderAction(
   _previousState: CodeActionState,
   formData: FormData
 ): Promise<CodeActionState> {
+  const locale = await getLocale();
   const parsed = updateCodeItemSortOrderSchema.safeParse({
     codeItemId: formData.get("codeItemId"),
     sortOrder: formData.get("sortOrder")
@@ -146,7 +153,7 @@ export async function updateCodeItemSortOrderAction(
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "정렬 순서 입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -156,11 +163,12 @@ export async function updateCodeItemSortOrderAction(
     revalidatePath("/masters/codes");
     return { ok: true, data };
   } catch (error) {
-    return mapCodeActionError(error);
+    return mapCodeActionError(error, locale);
   }
 }
 
 export async function deactivateCodeItemAction(_previousState: CodeActionState, formData: FormData): Promise<CodeActionState> {
+  const locale = await getLocale();
   const parsed = deactivateCodeItemSchema.safeParse({
     codeItemId: formData.get("codeItemId")
   });
@@ -169,7 +177,7 @@ export async function deactivateCodeItemAction(_previousState: CodeActionState, 
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "비활성 처리 입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -179,11 +187,12 @@ export async function deactivateCodeItemAction(_previousState: CodeActionState, 
     revalidatePath("/masters/codes");
     return { ok: true, data };
   } catch (error) {
-    return mapCodeActionError(error);
+    return mapCodeActionError(error, locale);
   }
 }
 
 export async function createTimeSlotAction(_previousState: TimeSlotActionState, formData: FormData): Promise<TimeSlotActionState> {
+  const locale = await getLocale();
   const parsed = createTimeSlotSchema.safeParse({
     value: formData.get("value"),
     sortOrder: formData.get("sortOrder")
@@ -193,7 +202,7 @@ export async function createTimeSlotAction(_previousState: TimeSlotActionState, 
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "시간 슬롯 입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -203,7 +212,7 @@ export async function createTimeSlotAction(_previousState: TimeSlotActionState, 
     revalidatePath("/masters/codes");
     return { ok: true, data };
   } catch (error) {
-    return mapTimeSlotActionError(error);
+    return mapTimeSlotActionError(error, locale);
   }
 }
 
@@ -211,6 +220,7 @@ export async function updateTimeSlotValueAction(
   _previousState: TimeSlotActionState,
   formData: FormData
 ): Promise<TimeSlotActionState> {
+  const locale = await getLocale();
   const parsed = updateTimeSlotValueSchema.safeParse({
     timeSlotId: formData.get("timeSlotId"),
     value: formData.get("value")
@@ -220,7 +230,7 @@ export async function updateTimeSlotValueAction(
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "시간 슬롯 값 입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -230,7 +240,7 @@ export async function updateTimeSlotValueAction(
     revalidatePath("/masters/codes");
     return { ok: true, data };
   } catch (error) {
-    return mapTimeSlotActionError(error);
+    return mapTimeSlotActionError(error, locale);
   }
 }
 
@@ -238,6 +248,7 @@ export async function updateTimeSlotSortOrderAction(
   _previousState: TimeSlotActionState,
   formData: FormData
 ): Promise<TimeSlotActionState> {
+  const locale = await getLocale();
   const parsed = updateTimeSlotSortOrderSchema.safeParse({
     timeSlotId: formData.get("timeSlotId"),
     sortOrder: formData.get("sortOrder")
@@ -247,7 +258,7 @@ export async function updateTimeSlotSortOrderAction(
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "시간 슬롯 정렬 순서 입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -257,7 +268,7 @@ export async function updateTimeSlotSortOrderAction(
     revalidatePath("/masters/codes");
     return { ok: true, data };
   } catch (error) {
-    return mapTimeSlotActionError(error);
+    return mapTimeSlotActionError(error, locale);
   }
 }
 
@@ -265,6 +276,7 @@ export async function deactivateTimeSlotAction(
   _previousState: TimeSlotActionState,
   formData: FormData
 ): Promise<TimeSlotActionState> {
+  const locale = await getLocale();
   const parsed = deactivateTimeSlotSchema.safeParse({
     timeSlotId: formData.get("timeSlotId")
   });
@@ -273,7 +285,7 @@ export async function deactivateTimeSlotAction(
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "비활성 처리 입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -283,6 +295,6 @@ export async function deactivateTimeSlotAction(
     revalidatePath("/masters/codes");
     return { ok: true, data };
   } catch (error) {
-    return mapTimeSlotActionError(error);
+    return mapTimeSlotActionError(error, locale);
   }
 }

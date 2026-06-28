@@ -53,6 +53,7 @@ for (const forbidden of ["@tanstack/react-query", "swr", "redis", "ioredis", "so
   if (dependencies[forbidden]) errors.push(`Story 3.4 must not add ${forbidden}`);
 }
 
+const koMessagesTv = read("src/lib/i18n/messages/ko.ts");
 const tvPage = read("src/app/tv/page.tsx");
 for (const required of [
   "requireRouteAccess(\"/tv\")",
@@ -67,13 +68,17 @@ for (const required of [
   "latestRoomStatusUpdatedAt",
   "operatingMonthId",
   "serviceDate",
-  "TV 현황판",
+  // i18n 전환: 한국어 UI 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
+  "nav.item.tv",
   "fullscreen",
-  "읽기 전용",
+  "tv.eyebrowFull",
   "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4",
-  "객실 상태"
+  "common.roomStatusAria"
 ]) {
   if (!tvPage.includes(required)) errors.push(`src/app/tv/page.tsx missing ${required}`);
+}
+for (const label of ["TV 현황판", "읽기 전용", "객실 상태"]) {
+  if (!koMessagesTv.includes(label)) errors.push(`messages/ko.ts missing tv label: ${label}`);
 }
 for (const forbidden of [
   "ErpEmptyState",
@@ -90,9 +95,10 @@ for (const forbidden of [
 }
 
 const loading = read("src/app/tv/loading.tsx");
-for (const required of ["Skeleton", "TV 현황판 로딩", "Array.from({ length: 11 }", "min-h-screen", "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"]) {
+for (const required of ["Skeleton", "tv.loading.boardAria", "Array.from({ length: 11 }", "min-h-screen", "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"]) {
   if (!loading.includes(required)) errors.push(`src/app/tv/loading.tsx missing ${required}`);
 }
+if (!koMessagesTv.includes("TV 현황판 로딩")) errors.push("messages/ko.ts missing tv loading label: TV 현황판 로딩");
 
 const refresh = read("src/components/domain/room-status-refresh-controller.tsx");
 for (const required of [
@@ -103,14 +109,19 @@ for (const required of [
   "setInterval",
   "15_000",
   "45_000",
-  "마지막 갱신",
-  "갱신 중",
-  "갱신 지연",
-  "새로고침",
-  "실시간 갱신 상태",
+  "roomRefresh.lastUpdated",
+  "roomRefresh.refreshing",
+  "roomRefresh.stale",
+  "roomRefresh.refresh",
+  "roomRefresh.aria",
   "text-status-complete-check"
 ]) {
   if (!refresh.includes(required)) errors.push(`room-status-refresh-controller.tsx missing ${required}`);
+}
+// i18n 전환: 컴포넌트 한국어 문구는 messages/ko.ts로 이동.
+const koMessages = read("src/lib/i18n/messages/ko.ts");
+for (const label of ["마지막 갱신", "갱신 중", "갱신 지연", "새로고침", "실시간 갱신 상태"]) {
+  if (!koMessages.includes(label)) errors.push(`messages/ko.ts missing refresh label: ${label}`);
 }
 if (refresh.includes("@tanstack/react-query")) {
   errors.push("room status refresh must not import @tanstack/react-query");
@@ -132,12 +143,15 @@ for (const required of [
   "status.therapist1",
   "status.therapist2",
   "status.earcare",
-  "결제·확인 필요",
-  "즉시 가능",
+  "roomCard.guidance.completeCheck",
+  "roomCard.guidance.empty",
   "status-attention",
   "data-testid=\"room-status-card\""
 ]) {
   if (!card.includes(required)) errors.push(`room-status-card.tsx missing ${required}`);
+}
+for (const label of ["결제·확인 필요", "즉시 가능"]) {
+  if (!koMessages.includes(label)) errors.push(`messages/ko.ts missing room-card label: ${label}`);
 }
 
 const statusBadge = read("src/components/domain/status-badge.tsx");
@@ -157,12 +171,16 @@ for (const required of [
 
 const navigation = read("src/lib/navigation.ts");
 for (const required of [
-  "TV 현황판",
+  "nav.item.tv",
   "href: \"/tv\"",
   "allowedRoles: [\"administrator\", \"read_only_viewer\"]",
   "getNavigationForRole"
 ]) {
   if (!navigation.includes(required)) errors.push(`navigation.ts missing ${required}`);
+}
+// i18n 전환: "TV 현황판" 한국어 문구는 messages/ko.ts로 이동.
+if (!read("src/lib/i18n/messages/ko.ts").includes("TV 현황판")) {
+  errors.push("messages/ko.ts missing nav label: TV 현황판");
 }
 
 const e2e = read("tests/e2e/story-3-4-tv-fullscreen-board.spec.ts");

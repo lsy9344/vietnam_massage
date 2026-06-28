@@ -96,13 +96,27 @@ if (mapping.includes("workbookEvidence: [\"이관됨\"]") || mapping.includes("p
 }
 
 const page = read("src/app/(erp)/masters/sheet-mapping/page.tsx");
+// i18n 전환: 화면 문구는 t() key로 참조하고 한국어 원문은 messages/ko.ts에 보존한다.
+const koMessages71 = read("src/lib/i18n/messages/ko.ts");
 for (const required of [
   "requireRouteAccess(\"/masters/sheet-mapping\")",
   "getSheetMappingSummary()",
+  "masters.sheetMapping.meta.preservationGoal",
+  "masters.sheetMapping.summary.missingItemsNote",
+  "masters.sheetMapping.description",
+  "StatusBadge",
+  "masters.sheetMapping.evidence.workbook",
+  "masters.sheetMapping.evidence.erpSurfaces",
+  "masters.sheetMapping.evidence.preservedRules",
+  "masters.sheetMapping.evidence.verificationItems",
+  "masters.sheetMapping.meta.noWriteNote"
+]) {
+  if (!page.includes(required)) errors.push(`sheet mapping page missing required marker: ${required}`);
+}
+for (const ko of [
   "기능 보존율 100%",
   "누락된 시트",
   "visible sheet와 숨김 목록 sheet",
-  "StatusBadge",
   "원본 근거",
   "ERP 연결",
   "보존 규칙",
@@ -110,7 +124,7 @@ for (const required of [
   "쓰기 작업 없음",
   "DB 변경 없음"
 ]) {
-  if (!page.includes(required)) errors.push(`sheet mapping page missing required marker: ${required}`);
+  if (!koMessages71.includes(ko)) errors.push(`messages/ko.ts missing sheet-mapping string: ${ko}`);
 }
 for (const forbidden of ["\"use server\"", "recordAuditEvent", "createDailyExpense", "updateDailyExpense", "deactivateDailyExpense"]) {
   if (page.includes(forbidden)) errors.push(`sheet mapping page must stay read-only and not include: ${forbidden}`);
@@ -139,7 +153,7 @@ for (const required of [
 }
 
 const navigation = read("src/lib/navigation.ts");
-for (const required of ["시트 기능 매핑표", "/masters/sheet-mapping", "\"administrator\", \"read_only_viewer\""]) {
+for (const required of ["nav.item.mastersSheetMapping", "/masters/sheet-mapping", "\"administrator\", \"read_only_viewer\""]) {
   if (!navigation.includes(required)) errors.push(`navigation.ts missing Story 7.1 sidebar marker: ${required}`);
 }
 

@@ -144,21 +144,42 @@ if (!authorization.includes("redirect(")) {
 }
 
 const navigation = read("src/lib/navigation.ts");
+// i18n 전환: 사이드바 라벨은 메시지 key(navigation.ts)와 한국어 문구(messages/ko.ts)로 분리됐다.
+const koMessages = read("src/lib/i18n/messages/ko.ts");
+const sidebarGroupKeys = [
+  "nav.group.operations",
+  "nav.group.calls",
+  "nav.group.settlements",
+  "nav.group.closing",
+  "nav.group.dashboard",
+  "nav.group.masters",
+  "nav.group.audit"
+];
 const sidebarOrder = ["운영 현황", "콜 원장", "정산", "월마감", "대시보드", "마스터 설정", "감사 로그"];
 let previousIndex = -1;
-for (const label of sidebarOrder) {
-  const index = navigation.indexOf(label);
+for (const key of sidebarGroupKeys) {
+  const index = navigation.indexOf(key);
   if (index === -1) {
-    errors.push(`navigation.ts missing sidebar group: ${label}`);
+    errors.push(`navigation.ts missing sidebar group key: ${key}`);
   }
   if (index !== -1 && index < previousIndex) {
-    errors.push(`navigation.ts sidebar group out of order: ${label}`);
+    errors.push(`navigation.ts sidebar group out of order: ${key}`);
   }
   previousIndex = index;
 }
-for (const required of ["getNavigationForRole", "allowedRoles", "TV 현황판", "오늘 대시보드"]) {
+for (const label of sidebarOrder) {
+  if (!koMessages.includes(label)) {
+    errors.push(`messages/ko.ts missing sidebar group label: ${label}`);
+  }
+}
+for (const required of ["getNavigationForRole", "allowedRoles"]) {
   if (!navigation.includes(required)) {
     errors.push(`navigation.ts missing ${required}`);
+  }
+}
+for (const label of ["TV 현황판", "오늘 대시보드"]) {
+  if (!koMessages.includes(label)) {
+    errors.push(`messages/ko.ts missing navigation label: ${label}`);
   }
 }
 if (navigation.includes("disabled")) {

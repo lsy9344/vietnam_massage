@@ -97,17 +97,34 @@ if (!css.includes("@media (prefers-reduced-motion: reduce)")) {
 const page = read("src/app/page.tsx");
 const navigation = read("src/lib/navigation.ts");
 const emptyState = read("src/components/domain/erp-empty-state.tsx");
+// i18n 전환: 사이드바 라벨은 navigation.ts에서 메시지 key로, 한국어 문구는 messages/ko.ts로 이동했다.
+// 그룹 순서는 navigation.ts의 labelKey 등장 순서로, 한국어 문구 존재는 ko.ts로 검증한다.
+const koMessages = read("src/lib/i18n/messages/ko.ts");
+const sidebarGroupKeys = [
+  "nav.group.operations",
+  "nav.group.calls",
+  "nav.group.settlements",
+  "nav.group.closing",
+  "nav.group.dashboard",
+  "nav.group.masters",
+  "nav.group.audit"
+];
 const sidebarOrder = ["운영 현황", "콜 원장", "정산", "월마감", "대시보드", "마스터 설정", "감사 로그"];
 let previousIndex = -1;
-for (const label of sidebarOrder) {
-  const index = navigation.indexOf(label);
+for (const key of sidebarGroupKeys) {
+  const index = navigation.indexOf(key);
   if (index === -1) {
-    errors.push(`navigation.ts missing sidebar label: ${label}`);
+    errors.push(`navigation.ts missing sidebar group key: ${key}`);
   }
   if (index !== -1 && index < previousIndex) {
-    errors.push(`Sidebar label is out of order: ${label}`);
+    errors.push(`Sidebar group key is out of order: ${key}`);
   }
   previousIndex = index;
+}
+for (const label of sidebarOrder) {
+  if (!koMessages.includes(label)) {
+    errors.push(`messages/ko.ts missing sidebar label: ${label}`);
+  }
 }
 
 for (const prohibited of ["fake", "dummy", "샘플 고객", "가짜"]) {

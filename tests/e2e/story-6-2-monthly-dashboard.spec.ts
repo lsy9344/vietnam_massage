@@ -630,11 +630,16 @@ test.describe("Story 6.2 monthly dashboard", () => {
   test("loading UI presence and retry/error affordance are wired", async () => {
     const loading = readFileSync("src/app/(erp)/dashboard/monthly/loading.tsx", "utf8");
     const errorBoundary = readFileSync("src/app/(erp)/dashboard/monthly/error.tsx", "utf8");
+    // i18n 전환: 한국어 문구는 messages/ko.ts로 이동했고 컴포넌트는 t() key로 참조한다.
+    const koMessages = readFileSync("src/lib/i18n/messages/ko.ts", "utf8");
 
-    expect(loading).toContain("월간 KPI 대시보드 로딩 중");
+    expect(loading).toContain("dashboard.monthly.loading.aria");
+    expect(koMessages).toContain("월간 KPI 대시보드 로딩 중");
     expect(loading).toContain("Skeleton");
-    expect(errorBoundary).toContain("월간 KPI를 불러오지 못했습니다");
-    expect(errorBoundary).toContain("다시 시도");
+    expect(errorBoundary).toContain("dashboard.monthly.error.title");
+    expect(koMessages).toContain("월간 KPI를 불러오지 못했습니다");
+    expect(errorBoundary).toContain("dashboard.error.retry");
+    expect(koMessages).toContain("다시 시도");
     expect(errorBoundary).toContain("role=\"alert\"");
     expect(errorBoundary.includes("error.message")).toBe(false);
   });

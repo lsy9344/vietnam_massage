@@ -107,6 +107,8 @@ for (const prohibited of [
 }
 
 const auditPage = read("src/app/(erp)/audit/page.tsx");
+// i18n 전환: /audit 화면 문구는 t() key로 참조하고 한국어 원문은 messages/ko.ts에 보존한다.
+const koMessagesAudit = read("src/lib/i18n/messages/ko.ts");
 for (const required of [
   "requireRouteAccess(\"/audit\")",
   "requirePermission(\"audit:read\")",
@@ -116,15 +118,26 @@ for (const required of [
   "to",
   "type=\"date\"",
   "lastDayOfMonth",
-  "종료일은 시작일과 같거나 이후여야 합니다.",
-  "감사 로그를 불러오지 못했습니다.",
-  "변경 이력 조회",
-  "변경 전",
-  "변경 후",
+  "audit.error.rangeOrder",
+  "audit.error.queryFailed",
+  "audit.title",
+  "audit.column.before",
+  "audit.column.after",
   "<details>"
 ]) {
   if (!auditPage.includes(required)) {
     errors.push(`audit page missing ${required}`);
+  }
+}
+for (const ko of [
+  "종료일은 시작일과 같거나 이후여야 합니다.",
+  "감사 로그를 불러오지 못했습니다.",
+  "변경 이력 조회",
+  "변경 전",
+  "변경 후"
+]) {
+  if (!koMessagesAudit.includes(ko)) {
+    errors.push(`messages/ko.ts missing audit string: ${ko}`);
   }
 }
 if (auditPage.includes("ErpEmptyState") || auditPage.includes("Story 1.3에서 연결")) {
@@ -140,8 +153,12 @@ if (/counter:[^\n]+\baudit:read\b/.test(authorization)) {
 }
 
 const navigation = read("src/lib/navigation.ts");
-if (!navigation.includes("감사 로그") || !navigation.includes("administrator")) {
+// i18n 전환: "감사 로그" 한국어 라벨은 messages/ko.ts로, nav 항목은 key로 표현된다.
+if (!navigation.includes("nav.item.audit") || !navigation.includes("administrator")) {
   errors.push("navigation.ts must keep administrator-only audit sidebar entry");
+}
+if (!read("src/lib/i18n/messages/ko.ts").includes("감사 로그")) {
+  errors.push("messages/ko.ts missing audit label: 감사 로그");
 }
 if (navigation.includes("disabled")) {
   errors.push("navigation must hide unauthorized audit links, not disable them");

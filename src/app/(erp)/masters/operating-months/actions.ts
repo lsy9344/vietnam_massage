@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
 import { AuthorizationError, requirePermission } from "@/lib/authorization";
+import { t } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n/config";
+import { getLocale } from "@/lib/i18n/server";
+import { resolveDomainErrorMessage } from "@/lib/i18n/errors";
 import {
   changeOperatingMonthStatus,
   createOperatingMonth,
@@ -22,11 +26,11 @@ function toFieldErrors(fieldErrors: Partial<Record<string, string[]>>) {
   );
 }
 
-function mapActionError(error: unknown): ActionResult<OperatingMonthDto> {
+function mapActionError(error: unknown, locale: Locale): ActionResult<OperatingMonthDto> {
   if (error instanceof OperatingMonthDomainError) {
     return {
       ok: false,
-      formError: error.message,
+      formError: resolveDomainErrorMessage(locale, error.code, error.message),
       domainErrorCode: error.code
     };
   }
@@ -34,13 +38,13 @@ function mapActionError(error: unknown): ActionResult<OperatingMonthDto> {
   if (error instanceof AuthorizationError) {
     return {
       ok: false,
-      formError: "권한이 없습니다."
+      formError: t(locale, "action.error.noPermission")
     };
   }
 
   return {
     ok: false,
-    formError: "운영월 저장 중 오류가 발생했습니다."
+    formError: t(locale, "action.error.saveFailed")
   };
 }
 
@@ -48,6 +52,7 @@ export async function createOperatingMonthAction(
   _previousState: OperatingMonthActionState,
   formData: FormData
 ): Promise<OperatingMonthActionState> {
+  const locale = await getLocale();
   const parsed = createOperatingMonthSchema.safeParse({
     monthKey: formData.get("monthKey")
   });
@@ -56,7 +61,7 @@ export async function createOperatingMonthAction(
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -69,7 +74,7 @@ export async function createOperatingMonthAction(
     revalidatePath("/masters/operating-months");
     return { ok: true, data };
   } catch (error) {
-    return mapActionError(error);
+    return mapActionError(error, locale);
   }
 }
 
@@ -77,6 +82,7 @@ export async function changeOperatingMonthStatusAction(
   _previousState: OperatingMonthActionState,
   formData: FormData
 ): Promise<OperatingMonthActionState> {
+  const locale = await getLocale();
   const parsed = changeOperatingMonthStatusSchema.safeParse({
     monthKey: formData.get("monthKey"),
     status: formData.get("status")
@@ -86,7 +92,7 @@ export async function changeOperatingMonthStatusAction(
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "상태 변경 입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -100,6 +106,6 @@ export async function changeOperatingMonthStatusAction(
     revalidatePath("/masters/operating-months");
     return { ok: true, data };
   } catch (error) {
-    return mapActionError(error);
+    return mapActionError(error, locale);
   }
 }

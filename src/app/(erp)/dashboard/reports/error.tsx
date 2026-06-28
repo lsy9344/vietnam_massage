@@ -2,19 +2,19 @@
 
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/domain/page-header";
+import { useT } from "@/lib/i18n/client";
 
 export default function ReportsError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const router = useRouter();
+  const t = useT();
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <PageHeader eyebrow="대시보드" title="그래프 리포트" />
+      <PageHeader eyebrow={t("dashboard.eyebrow")} title={t("dashboard.reports.title")} />
       <section className="border border-danger bg-surface px-4 py-6" role="alert">
-        <h2 className="text-base font-semibold text-foreground">그래프 리포트를 불러오지 못했습니다</h2>
-        <p className="mt-2 max-w-2xl text-sm text-muted">
-          현재 계산값과 확정 스냅샷 값을 섞어 표시하지 않도록 조회를 중단했습니다. 운영월과 조회날짜를 확인한 뒤 다시 시도하세요.
-        </p>
-        <p className="mt-3 text-sm font-medium text-danger">대시보드 조회 중 오류가 발생했습니다.</p>
+        <h2 className="text-base font-semibold text-foreground">{t("dashboard.reports.error.title")}</h2>
+        <p className="mt-2 max-w-2xl text-sm text-muted">{t("dashboard.reports.error.description")}</p>
+        <p className="mt-3 text-sm font-medium text-danger">{t("dashboard.error.generic")}</p>
         <div className="mt-5 flex flex-wrap gap-2">
           <button
             className="h-9 border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-readonly"
@@ -23,7 +23,7 @@ export default function ReportsError({ reset }: { error: Error & { digest?: stri
             }}
             type="button"
           >
-            다시 시도
+            {t("dashboard.error.retry")}
           </button>
           <button
             className="h-9 border border-border bg-background px-3 text-sm font-semibold text-foreground hover:bg-readonly"
@@ -32,7 +32,7 @@ export default function ReportsError({ reset }: { error: Error & { digest?: stri
             }}
             type="button"
           >
-            현재 조건 새로고침
+            {t("dashboard.error.refresh")}
           </button>
         </div>
       </section>

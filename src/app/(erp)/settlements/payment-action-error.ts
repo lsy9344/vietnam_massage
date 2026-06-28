@@ -1,6 +1,9 @@
 import type { ActionResult } from "@/lib/action-result";
 import { AuthorizationError } from "@/lib/authorization";
 import { AuditDomainError } from "@/modules/audit/audit-event";
+import { type Locale } from "@/lib/i18n/config";
+import { t } from "@/lib/i18n";
+import { resolveKoreanMessage } from "@/lib/i18n/errors";
 
 const safePaymentActionMessages = new Set([
   "운영월을 선택하세요.",
@@ -16,18 +19,18 @@ const safePaymentActionMessages = new Set([
   "지급완료 상태값이 올바르지 않습니다."
 ]);
 
-export function mapTherapistDailySettlementPaymentActionError<T>(error: unknown): ActionResult<T> {
+export function mapTherapistDailySettlementPaymentActionError<T>(error: unknown, locale: Locale): ActionResult<T> {
   if (error instanceof AuthorizationError) {
     return {
       ok: false,
-      formError: "권한이 없습니다."
+      formError: t(locale, "action.error.noPermission")
     };
   }
 
   if (error instanceof AuditDomainError) {
     return {
       ok: false,
-      formError: "감사 로그 기록 중 오류가 발생했습니다.",
+      formError: t(locale, "action.error.auditFailed"),
       domainErrorCode: error.code
     };
   }
@@ -35,12 +38,12 @@ export function mapTherapistDailySettlementPaymentActionError<T>(error: unknown)
   if (error instanceof Error && safePaymentActionMessages.has(error.message)) {
     return {
       ok: false,
-      formError: error.message
+      formError: resolveKoreanMessage(locale, error.message)
     };
   }
 
   return {
     ok: false,
-    formError: "지급완료 상태 저장 중 오류가 발생했습니다."
+    formError: t(locale, "settlements.payment.saveFailed")
   };
 }

@@ -12,6 +12,20 @@ export const argon2idOptions = {
 } as const;
 
 /**
+ * 화면 언어 쿠키를 page context에 설정한다.
+ *
+ * 기본 locale은 베트남어(vi)지만, 기존 E2E 스펙들은 한국어 라벨을 locator로 쓴다.
+ * 따라서 login()을 비롯한 한국어-locator 기반 스펙은 "ko" 쿠키를 강제해 한국어 UI로 동작시킨다.
+ * 베트남어 기본 동작은 별도의 i18n 전용 스펙에서 검증한다.
+ */
+export async function setLocaleCookie(page: Page, locale: "ko" | "vi") {
+  // page가 이미 한 번 navigate된 상태여야 origin을 알 수 있다. login()은 /sign-in 진입 후 호출한다.
+  const current = page.url();
+  const origin = current && current !== "about:blank" ? new URL(current).origin : "http://127.0.0.1:3000";
+  await page.context().addCookies([{ name: "locale", value: locale, url: origin }]);
+}
+
+/**
  * cold-compile(force-reset 직후 등)이나 직전 페이지의 in-flight fetch와 충돌해 page.goto가
  * net::ERR_ABORTED로 취소될 때 최대 3회 재시도하는 안전 navigation 헬퍼.
  */
@@ -47,6 +61,9 @@ export async function login(page: Page, accountId: string, password: string) {
       if (attempt === 2) throw error;
     }
   }
+  // 기본 locale은 vi. 기존 스펙은 한국어 라벨을 locator로 쓰므로 ko 쿠키를 강제하고 다시 로드한다.
+  await setLocaleCookie(page, "ko");
+  await page.reload().catch(() => undefined);
   await page.getByLabel("이메일 또는 계정 ID").fill(accountId);
   await page.getByLabel("비밀번호").fill(password);
 

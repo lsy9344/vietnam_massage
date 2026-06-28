@@ -3,6 +3,7 @@
 import {
   useActionState,
   useCallback,
+  useEffect,
   useId,
   useLayoutEffect,
   useMemo,
@@ -14,7 +15,11 @@ import {
 import { createPortal } from "react-dom";
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
-import type { ServiceCallFormOptions, ServiceCallOption, ServiceCallRowDto } from "@/modules/calls/service-call-service";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { formatDateTime, formatNumber } from "@/lib/i18n/format";
+import type { Locale } from "@/lib/i18n/config";
+import type { MessageKey } from "@/lib/i18n/types";
+import type { ServiceCallCalculationStatus, ServiceCallFormOptions, ServiceCallOption, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 import type { ServiceCallAutosaveInput } from "@/modules/calls/service-call-schema";
 import { autosaveServiceCallRowAction, saveBasicServiceCallRowAction, type ServiceCallActionState } from "@/app/(erp)/calls/actions";
 import {
@@ -32,29 +37,30 @@ type RowSaveState = "idle" | "saving" | "saved" | "error";
 type FieldErrors = Record<string, string[]>;
 
 // Shared fixed column widths so the data table and the add-row table align
-// column-for-column. Order matches the header arrays below.
+// column-for-column. `id` is a stable English key (React key); `labelKey` points
+// at the localized header text in the message catalog.
 const CALL_GRID_COLUMNS = [
-  { header: "날짜", width: "5.5rem" },
-  { header: "시간", width: "9rem" },
-  { header: "객실", width: "9rem" },
-  { header: "코스", width: "10rem" },
-  { header: "고객/메모", width: "12rem" },
-  { header: "마사지사1", width: "9rem" },
-  { header: "마사지사2", width: "9rem" },
-  { header: "귀케어 담당", width: "9rem" },
-  { header: "예약상태", width: "8rem" },
-  { header: "할인구분", width: "9rem" },
-  { header: "결제수단", width: "9rem" },
-  { header: "비고", width: "11rem" },
-  { header: "확인값", width: "9rem" },
-  { header: "결제금액", width: "8rem" },
-  { header: "할인", width: "6rem" },
-  { header: "마사지사1수당", width: "7rem", settlement: true },
-  { header: "마사지사2수당", width: "7rem", settlement: true },
-  { header: "귀케어풀", width: "6.5rem", settlement: true },
-  { header: "콜인정", width: "6rem", settlement: true },
-  { header: "저장상태", width: "10rem" }
-] as const;
+  { id: "date", labelKey: "calls.column.date", width: "5.5rem" },
+  { id: "time", labelKey: "calls.column.time", width: "9rem" },
+  { id: "room", labelKey: "calls.column.room", width: "9rem" },
+  { id: "course", labelKey: "calls.column.course", width: "10rem" },
+  { id: "customerMemo", labelKey: "calls.column.customerMemo", width: "12rem" },
+  { id: "therapist1", labelKey: "calls.column.therapist1", width: "9rem" },
+  { id: "therapist2", labelKey: "calls.column.therapist2", width: "9rem" },
+  { id: "earcare", labelKey: "calls.column.earcare", width: "9rem" },
+  { id: "reservationStatus", labelKey: "calls.column.reservationStatus", width: "8rem" },
+  { id: "discountType", labelKey: "calls.column.discountType", width: "9rem" },
+  { id: "paymentMethod", labelKey: "calls.column.paymentMethod", width: "9rem" },
+  { id: "note", labelKey: "calls.column.note", width: "11rem" },
+  { id: "confirmation", labelKey: "calls.column.confirmation", width: "9rem" },
+  { id: "paymentAmount", labelKey: "calls.column.paymentAmount", width: "8rem" },
+  { id: "discount", labelKey: "calls.column.discount", width: "6rem" },
+  { id: "therapist1Commission", labelKey: "calls.column.therapist1Commission", width: "7rem", settlement: true },
+  { id: "therapist2Commission", labelKey: "calls.column.therapist2Commission", width: "7rem", settlement: true },
+  { id: "earcarePool", labelKey: "calls.column.earcarePool", width: "6.5rem", settlement: true },
+  { id: "opsCallCredit", labelKey: "calls.column.opsCallCredit", width: "6rem", settlement: true },
+  { id: "saveStatus", labelKey: "calls.column.saveStatus", width: "10rem" }
+] as const satisfies ReadonlyArray<{ id: string; labelKey: MessageKey; width: string; settlement?: boolean }>;
 
 function visibleCallGridColumns(showSettlementColumns: boolean) {
   return CALL_GRID_COLUMNS.filter((column) => showSettlementColumns || !("settlement" in column && column.settlement));
@@ -68,19 +74,20 @@ function CallGridColgroup({ showSettlementColumns }: { showSettlementColumns: bo
   return (
     <colgroup>
       {visibleCallGridColumns(showSettlementColumns).map((column) => (
-        <col key={column.header} style={{ width: column.width }} />
+        <col key={column.id} style={{ width: column.width }} />
       ))}
     </colgroup>
   );
 }
 
 function CallGridHead({ showSettlementColumns }: { showSettlementColumns: boolean }) {
+  const t = useT();
   return (
     <thead className="bg-readonly text-xs font-semibold text-foreground">
       <tr>
         {visibleCallGridColumns(showSettlementColumns).map((column) => (
-          <th className="whitespace-nowrap border-b border-border px-2 py-2 align-middle" key={column.header}>
-            {column.header}
+          <th className="whitespace-nowrap border-b border-border px-2 py-2 align-middle" key={column.id}>
+            {t(column.labelKey)}
           </th>
         ))}
       </tr>
@@ -240,6 +247,7 @@ function SelectCell({
   rowIndex?: number;
   value?: string;
 }) {
+  const t = useT();
   const invalid = Boolean(errorMessage);
   const reactId = useId();
   const listboxId = `${reactId}-listbox`;
@@ -250,6 +258,16 @@ function SelectCell({
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const skipNextBlurCommit = useRef(false);
+  // 언어 전환(router.refresh) 등으로 options의 표시 라벨이나 selectedValue가 바뀌면,
+  // 팝업이 닫혀 있고 사용자가 입력 중이 아닐 때 표시값을 현재 라벨로 다시 동기화한다.
+  const resolvedLabel = optionLabel(options, selectedValue, emptyLabel);
+  useEffect(() => {
+    if (!open) {
+      setInputValue(resolvedLabel);
+    }
+    // open 중에는 사용자의 타이핑/필터를 덮어쓰지 않는다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedLabel, open]);
   const [inputEl, setInputEl] = useState<HTMLInputElement | null>(null);
   const { position: listboxPosition, measureRef } = useListboxPosition(inputEl, open);
   const filteredOptions = options.filter((option) => {
@@ -422,7 +440,7 @@ function SelectCell({
               <span>{option.label}</span>
             </li>
           ))}
-              {filteredOptions.length === 0 ? <li className="px-2 py-1.5 text-muted">검색 결과 없음</li> : null}
+              {filteredOptions.length === 0 ? <li className="px-2 py-1.5 text-muted">{t("calls.placeholder.searchEmpty")}</li> : null}
             </ul>,
             document.body
           )
@@ -492,6 +510,7 @@ function AddRowForm({
   serviceDate: string;
   showSettlementColumns: boolean;
 }) {
+  const t = useT();
   const [state, formAction, pending] = useActionState<ServiceCallActionState, FormData>(saveBasicServiceCallRowAction, null);
   const disabled = isLocked || pending;
   const rowIndex = existingRowCount;
@@ -533,7 +552,7 @@ function AddRowForm({
                 <SelectCell
                   columnId="startTime"
                   disabled={disabled}
-                  label="시간"
+                  label={t("calls.column.time")}
                   name="startTime"
                   onGridKeyDown={(event) => handleAddRowKeyDown("startTime", event)}
                   options={options.timeSlots}
@@ -546,8 +565,8 @@ function AddRowForm({
                 <SelectCell
                   columnId="roomId"
                   disabled={disabled}
-                  emptyLabel="미배정"
-                  label="객실"
+                  emptyLabel={t("calls.placeholder.roomUnassigned")}
+                  label={t("calls.column.room")}
                   name="roomId"
                   onGridKeyDown={(event) => handleAddRowKeyDown("roomId", event)}
                   options={options.rooms}
@@ -559,7 +578,7 @@ function AddRowForm({
                 <SelectCell
                   columnId="courseId"
                   disabled={disabled}
-                  label="코스"
+                  label={t("calls.column.course")}
                   name="courseId"
                   onGridKeyDown={(event) => handleAddRowKeyDown("courseId", event)}
                   options={options.courses}
@@ -572,10 +591,10 @@ function AddRowForm({
                 <TextCell
                   columnId="customerMemo"
                   disabled={disabled}
-                  label="고객/메모"
+                  label={t("calls.column.customerMemo")}
                   name="customerMemo"
                   onKeyDown={(event) => handleAddRowKeyDown("customerMemo", event)}
-                  placeholder="고객/메모"
+                  placeholder={t("calls.column.customerMemo")}
                   rowIndex={rowIndex}
                 />
               </td>
@@ -583,7 +602,7 @@ function AddRowForm({
                 <SelectCell
                   columnId="therapist1Id"
                   disabled={disabled}
-                  label="마사지사1"
+                  label={t("calls.column.therapist1")}
                   name="therapist1Id"
                   onGridKeyDown={(event) => handleAddRowKeyDown("therapist1Id", event)}
                   options={options.therapists}
@@ -596,7 +615,7 @@ function AddRowForm({
                   errorId="add-call-therapist2-error"
                   errorMessage={fieldError(state, "therapist2Id")}
                   columnId="therapist2Id"
-                  label="마사지사2"
+                  label={t("calls.column.therapist2")}
                   name="therapist2Id"
                   onGridKeyDown={(event) => handleAddRowKeyDown("therapist2Id", event)}
                   options={options.therapists}
@@ -607,7 +626,7 @@ function AddRowForm({
                 <SelectCell
                   columnId="earcareEmployeeId"
                   disabled={disabled}
-                  label="귀케어 담당"
+                  label={t("calls.column.earcare")}
                   name="earcareEmployeeId"
                   onGridKeyDown={(event) => handleAddRowKeyDown("earcareEmployeeId", event)}
                   options={options.earcareEmployees}
@@ -617,9 +636,9 @@ function AddRowForm({
               <td className="border-b border-border px-2 py-2">
                 <SelectCell
                   columnId="status"
-                  defaultValue="예약"
+                  defaultValue="RESERVED"
                   disabled={disabled}
-                  label="상태"
+                  label={t("calls.column.status")}
                   name="status"
                   onGridKeyDown={(event) => handleAddRowKeyDown("status", event)}
                   options={options.statuses}
@@ -632,7 +651,7 @@ function AddRowForm({
                 <SelectCell
                   columnId="discountTypeCode"
                   disabled={disabled}
-                  label="할인구분"
+                  label={t("calls.column.discountType")}
                   name="discountTypeCode"
                   onGridKeyDown={(event) => handleAddRowKeyDown("discountTypeCode", event)}
                   options={options.discountTypes}
@@ -643,7 +662,7 @@ function AddRowForm({
                 <SelectCell
                   columnId="paymentMethodCode"
                   disabled={disabled}
-                  label="결제수단"
+                  label={t("calls.column.paymentMethod")}
                   name="paymentMethodCode"
                   onGridKeyDown={(event) => handleAddRowKeyDown("paymentMethodCode", event)}
                   options={options.paymentMethods}
@@ -654,10 +673,10 @@ function AddRowForm({
                 <TextCell
                   columnId="note"
                   disabled={disabled}
-                  label="비고"
+                  label={t("calls.column.note")}
                   name="note"
                   onKeyDown={(event) => handleAddRowKeyDown("note", event)}
-                  placeholder="비고"
+                  placeholder={t("calls.column.note")}
                   rowIndex={rowIndex}
                 />
               </td>
@@ -665,7 +684,7 @@ function AddRowForm({
                 <SelectCell
                   columnId="confirmationCode"
                   disabled={disabled}
-                  label="확인값"
+                  label={t("calls.column.confirmation")}
                   name="confirmationCode"
                   onGridKeyDown={(event) => handleAddRowKeyDown("confirmationCode", event)}
                   options={options.confirmationCodes}
@@ -675,10 +694,10 @@ function AddRowForm({
               <td className="border-b border-border bg-readonly px-2 py-2" colSpan={showSettlementColumns ? 7 : 3}>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button className="h-8 whitespace-nowrap px-3 text-xs" disabled={disabled} type="submit">
-                    새 콜 행 추가
+                    {t("calls.addRow.submit")}
                   </Button>
                   <InlineError state={state} />
-                  {state?.ok ? <span className="text-xs text-muted">저장됨</span> : null}
+                  {state?.ok ? <span className="text-xs text-muted">{t("calls.save.saved")}</span> : null}
                 </div>
               </td>
             </tr>
@@ -713,10 +732,10 @@ function nullableValue(value: string) {
   return value.trim() === "" ? null : value;
 }
 
-function saveStateLabel(state: RowSaveState) {
-  if (state === "saving") return "저장중";
-  if (state === "saved") return "저장됨";
-  if (state === "error") return "저장 보류";
+function saveStateLabel(state: RowSaveState, t: (key: MessageKey) => string) {
+  if (state === "saving") return t("calls.save.saving");
+  if (state === "saved") return t("calls.save.saved");
+  if (state === "error") return t("calls.save.error");
   return "idle";
 }
 
@@ -727,12 +746,21 @@ function saveStateClassName(state: RowSaveState) {
   return "text-muted";
 }
 
+// 서비스가 만든 한국어 calculationErrorMessage 대신, 안정적인 calculationStatus(kind)로
+// 번역 키를 골라 표시한다. 화면이 i18n 경계를 직접 통과시키도록 한다.
+function calcMessage(t: (key: MessageKey) => string, status: ServiceCallCalculationStatus) {
+  if (status === "course_policy_missing") return t("calls.calc.coursePolicyMissing");
+  if (status === "therapist_rate_missing") return t("calls.calc.therapistRateMissing");
+  if (status === "second_therapist_required") return t("calls.calc.secondTherapistRequired");
+  return t("calls.calc.policyMissing");
+}
+
 function firstFieldError(fieldErrors: FieldErrors, field: string) {
   return fieldErrors[field]?.[0] ?? null;
 }
 
-function formatVnd(value: number) {
-  return new Intl.NumberFormat("ko-KR").format(value);
+function formatVnd(locale: Locale, value: number) {
+  return formatNumber(locale, value);
 }
 
 function PaymentAmountCell({
@@ -746,9 +774,15 @@ function PaymentAmountCell({
   rowIndex: number;
   saveStatus: RowSaveState;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const isStaleFailedDraft = saveStatus === "error";
   const canShowAmount = row.calculationStatus === "calculated" && !isStaleFailedDraft;
-  const title = isStaleFailedDraft ? "저장 보류 중인 draft는 재계산값으로 표시하지 않습니다." : row.calculationErrorMessage ?? undefined;
+  const title = isStaleFailedDraft
+    ? t("calls.calc.staleDraftTitle")
+    : row.calculationStatus === "calculated" || row.calculationStatus === "not_completed"
+      ? undefined
+      : calcMessage(t, row.calculationStatus);
 
   return (
     <td
@@ -758,13 +792,13 @@ function PaymentAmountCell({
       onKeyDown={onKeyDown}
       tabIndex={-1}
     >
-      <span className="sr-only">결제금액</span>
+      <span className="sr-only">{t("calls.column.paymentAmount")}</span>
       <span className="grid gap-0.5" title={title}>
         {canShowAmount && row.discountAmount > 0 && row.basePrice > row.paymentAmount ? (
-          <span className="text-[11px] text-muted line-through">{formatVnd(row.basePrice)}</span>
+          <span className="text-[11px] text-muted line-through">{formatVnd(locale, row.basePrice)}</span>
         ) : null}
         <span className={canShowAmount && row.discountAmount > 0 ? "font-bold text-foreground" : ""}>
-          {canShowAmount ? formatVnd(row.paymentAmount) : "—"}
+          {canShowAmount ? formatVnd(locale, row.paymentAmount) : "—"}
         </span>
       </span>
     </td>
@@ -788,8 +822,10 @@ function ComputedCell({
   saveStatus: RowSaveState;
   value: number;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const isStaleFailedDraft = saveStatus === "error";
-  const displayValue = row.calculationStatus === "calculated" && !isStaleFailedDraft ? formatVnd(value) : "—";
+  const displayValue = row.calculationStatus === "calculated" && !isStaleFailedDraft ? formatVnd(locale, value) : "—";
   return (
     <td
       className="border-b border-border bg-readonly px-2 py-2 text-right text-xs font-medium text-foreground outline-none focus:ring-1 focus:ring-brand [font-variant-numeric:tabular-nums]"
@@ -799,7 +835,15 @@ function ComputedCell({
       tabIndex={-1}
     >
       <span className="sr-only">{label}</span>
-      <span title={isStaleFailedDraft ? "저장 보류 중인 draft는 재계산값으로 표시하지 않습니다." : row.calculationErrorMessage ?? undefined}>
+      <span
+        title={
+          isStaleFailedDraft
+            ? t("calls.calc.staleDraftTitle")
+            : row.calculationStatus === "calculated" || row.calculationStatus === "not_completed"
+              ? undefined
+              : calcMessage(t, row.calculationStatus)
+        }
+      >
         {displayValue}
       </span>
     </td>
@@ -821,6 +865,8 @@ function EditableCallRow({
   rowIndex: number;
   showSettlementColumns: boolean;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const [draft, setDraft] = useState<ServiceCallAutosaveInput>(() => draftFromRow(row));
   const [serverRow, setServerRow] = useState<ServiceCallRowDto>(row);
   const [saveStatus, setSaveStatus] = useState<RowSaveState>("idle");
@@ -869,7 +915,7 @@ function EditableCallRow({
           return;
         }
 
-        setErrorMessage(result.formError ?? "콜 행 자동저장에 실패했습니다.");
+        setErrorMessage(result.formError ?? t("calls.save.autosaveFailed"));
         setFieldErrors(result.fieldErrors ?? {});
         setSaveStatus("error");
       })();
@@ -932,7 +978,7 @@ function EditableCallRow({
         <SelectCell
           columnId="startTime"
           disabled={isLocked || saveStatus === "saving"}
-          label="시간"
+          label={t("calls.column.time")}
           name="startTime"
           onBlur={() => commit()}
           onChange={(value) => updateDraft("startTime", value)}
@@ -948,8 +994,8 @@ function EditableCallRow({
         <SelectCell
           columnId="roomId"
           disabled={isLocked || saveStatus === "saving"}
-          emptyLabel="미배정"
-          label="객실"
+          emptyLabel={t("calls.placeholder.roomUnassigned")}
+          label={t("calls.column.room")}
           name="roomId"
           onBlur={() => commit()}
           onChange={(value) => updateDraft("roomId", nullableValue(value))}
@@ -964,7 +1010,7 @@ function EditableCallRow({
         <SelectCell
           columnId="courseId"
           disabled={isLocked || saveStatus === "saving"}
-          label="코스"
+          label={t("calls.column.course")}
           name="courseId"
           onBlur={() => commit()}
           onChange={(value) => updateDraft("courseId", value)}
@@ -980,12 +1026,12 @@ function EditableCallRow({
         <TextCell
           columnId="customerMemo"
           disabled={isLocked || saveStatus === "saving"}
-          label="고객/메모"
+          label={t("calls.column.customerMemo")}
           name="customerMemo"
           onBlur={() => commit()}
           onChange={(value) => updateDraft("customerMemo", nullableValue(value))}
           onKeyDown={(event) => handleGridKeyDown("customerMemo", event)}
-          placeholder="고객/메모"
+          placeholder={t("calls.column.customerMemo")}
           rowIndex={rowIndex}
           value={draft.customerMemo ?? ""}
         />
@@ -995,7 +1041,7 @@ function EditableCallRow({
         <SelectCell
           columnId="therapist1Id"
           disabled={isLocked || saveStatus === "saving"}
-          label="마사지사1"
+          label={t("calls.column.therapist1")}
           name="therapist1Id"
           onBlur={() => commit()}
           onChange={(value) => updateDraft("therapist1Id", nullableValue(value))}
@@ -1012,7 +1058,7 @@ function EditableCallRow({
           disabled={isLocked || saveStatus === "saving"}
           errorId={`call-${row.id}-therapist2-error`}
           errorMessage={firstFieldError(fieldErrors, "therapist2Id")}
-          label="마사지사2"
+          label={t("calls.column.therapist2")}
           name="therapist2Id"
           onBlur={() => commit()}
           onChange={(value) => updateDraft("therapist2Id", nullableValue(value))}
@@ -1027,7 +1073,7 @@ function EditableCallRow({
         <SelectCell
           columnId="earcareEmployeeId"
           disabled={isLocked || saveStatus === "saving"}
-          label="귀케어 담당"
+          label={t("calls.column.earcare")}
           name="earcareEmployeeId"
           onBlur={() => commit()}
           onChange={(value) => updateDraft("earcareEmployeeId", nullableValue(value))}
@@ -1042,7 +1088,7 @@ function EditableCallRow({
         <SelectCell
           columnId="status"
           disabled={isLocked || saveStatus === "saving"}
-          label="상태"
+          label={t("calls.column.status")}
           name="status"
           onBlur={() => commit()}
           onChange={(value) => updateDraft("status", value)}
@@ -1058,7 +1104,7 @@ function EditableCallRow({
         <SelectCell
           columnId="discountTypeCode"
           disabled={isLocked || saveStatus === "saving"}
-          label="할인구분"
+          label={t("calls.column.discountType")}
           name="discountTypeCode"
           onBlur={() => commit()}
           onChange={(value) => updateDraft("discountTypeCode", nullableValue(value))}
@@ -1073,7 +1119,7 @@ function EditableCallRow({
         <SelectCell
           columnId="paymentMethodCode"
           disabled={isLocked || saveStatus === "saving"}
-          label="결제수단"
+          label={t("calls.column.paymentMethod")}
           name="paymentMethodCode"
           onBlur={() => commit()}
           onChange={(value) => updateDraft("paymentMethodCode", nullableValue(value))}
@@ -1088,12 +1134,12 @@ function EditableCallRow({
         <TextCell
           columnId="note"
           disabled={isLocked || saveStatus === "saving"}
-          label="비고"
+          label={t("calls.column.note")}
           name="note"
           onBlur={() => commit()}
           onChange={(value) => updateDraft("note", nullableValue(value))}
           onKeyDown={(event) => handleGridKeyDown("note", event)}
-          placeholder="비고"
+          placeholder={t("calls.column.note")}
           rowIndex={rowIndex}
           value={draft.note ?? ""}
         />
@@ -1102,7 +1148,7 @@ function EditableCallRow({
         <SelectCell
           columnId="confirmationCode"
           disabled={isLocked || saveStatus === "saving"}
-          label="확인값"
+          label={t("calls.column.confirmation")}
           name="confirmationCode"
           onBlur={() => commit()}
           onChange={(value) => updateDraft("confirmationCode", nullableValue(value))}
@@ -1121,7 +1167,7 @@ function EditableCallRow({
       />
       <ComputedCell
         columnId="discountAmount"
-        label="할인"
+        label={t("calls.column.discount")}
         onKeyDown={(event) => handleReadonlyKeyDown("discountAmount", event)}
         row={serverRow}
         rowIndex={rowIndex}
@@ -1132,7 +1178,7 @@ function EditableCallRow({
         <>
           <ComputedCell
             columnId="therapist1Commission"
-            label="마사지사1수당"
+            label={t("calls.column.therapist1Commission")}
             onKeyDown={(event) => handleReadonlyKeyDown("therapist1Commission", event)}
             row={serverRow}
             rowIndex={rowIndex}
@@ -1141,7 +1187,7 @@ function EditableCallRow({
           />
           <ComputedCell
             columnId="therapist2Commission"
-            label="마사지사2수당"
+            label={t("calls.column.therapist2Commission")}
             onKeyDown={(event) => handleReadonlyKeyDown("therapist2Commission", event)}
             row={serverRow}
             rowIndex={rowIndex}
@@ -1150,7 +1196,7 @@ function EditableCallRow({
           />
           <ComputedCell
             columnId="earcarePoolAmount"
-            label="귀케어풀"
+            label={t("calls.column.earcarePool")}
             onKeyDown={(event) => handleReadonlyKeyDown("earcarePoolAmount", event)}
             row={serverRow}
             rowIndex={rowIndex}
@@ -1159,7 +1205,7 @@ function EditableCallRow({
           />
           <ComputedCell
             columnId="opsCallCredit"
-            label="콜인정"
+            label={t("calls.column.opsCallCredit")}
             onKeyDown={(event) => handleReadonlyKeyDown("opsCallCredit", event)}
             row={serverRow}
             rowIndex={rowIndex}
@@ -1176,24 +1222,24 @@ function EditableCallRow({
         tabIndex={-1}
       >
         <div className="grid w-full gap-1">
-          {saveStatus === "error" ? <span className="text-danger">저장 보류 계산 대기</span> : null}
-          {serverRow.calculationStatus === "calculated" && saveStatus !== "error" ? <span>계산됨</span> : null}
-          {serverRow.calculationStatus === "not_completed" && saveStatus !== "error" ? <span>비완료 제외</span> : null}
+          {saveStatus === "error" ? <span className="text-danger">{t("calls.calc.errorPending")}</span> : null}
+          {serverRow.calculationStatus === "calculated" && saveStatus !== "error" ? <span>{t("calls.calc.calculated")}</span> : null}
+          {serverRow.calculationStatus === "not_completed" && saveStatus !== "error" ? <span>{t("calls.calc.notCompleted")}</span> : null}
           {(serverRow.calculationStatus === "course_policy_missing" ||
             serverRow.calculationStatus === "therapist_rate_missing" ||
             serverRow.calculationStatus === "second_therapist_required") &&
           saveStatus !== "error" ? (
-            <span className="text-danger">{serverRow.calculationErrorMessage ?? "정책 없음"}</span>
+            <span className="text-danger">{calcMessage(t, serverRow.calculationStatus)}</span>
           ) : null}
           <span aria-live="polite" className={saveStateClassName(saveStatus)}>
-            {saveStateLabel(saveStatus)}
-            {saveStatus === "saved" ? ` ${new Date(savedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}` : ""}
+            {saveStateLabel(saveStatus, t)}
+            {saveStatus === "saved" ? ` ${formatDateTime(locale, savedAt, { hour: "2-digit", minute: "2-digit" })}` : ""}
           </span>
           {saveStatus === "error" ? (
             <span className="grid gap-1">
-              <span className="text-danger">{errorMessage ?? "저장 보류"}</span>
+              <span className="text-danger">{errorMessage ?? t("calls.save.error")}</span>
               <Button className="h-7 justify-self-start px-2 text-xs" onClick={() => commit()} type="button" variant="secondary">
-                재시도
+                {t("calls.save.retry")}
               </Button>
             </span>
           ) : null}
@@ -1218,21 +1264,25 @@ export function EditableCallGrid({
   serviceDate: string;
   showSettlementColumns: boolean;
 }) {
+  const t = useT();
+  // TanStack column defs back the row model only; visible header text is rendered
+  // by <CallGridHead> from the localized CALL_GRID_COLUMNS catalog, so these
+  // `header` values are never shown — accessorKey stays the stable field name.
   const columns = useMemo<ColumnDef<ServiceCallRowDto>[]>(
     () => [
-      { accessorKey: "serviceDate", header: "날짜" },
+      { accessorKey: "serviceDate", header: "serviceDate" },
       ...EDITABLE_CALL_FIELDS.map((field) => ({ accessorKey: field, header: field })),
-      { accessorKey: "paymentAmount", header: "결제금액" },
-      { accessorKey: "discountAmount", header: "할인" },
+      { accessorKey: "paymentAmount", header: "paymentAmount" },
+      { accessorKey: "discountAmount", header: "discountAmount" },
       ...(showSettlementColumns
         ? [
-            { accessorKey: "therapist1Commission", header: "마사지사1수당" },
-            { accessorKey: "therapist2Commission", header: "마사지사2수당" },
-            { accessorKey: "earcarePoolAmount", header: "귀케어풀" },
-            { accessorKey: "opsCallCredit", header: "콜인정" }
+            { accessorKey: "therapist1Commission", header: "therapist1Commission" },
+            { accessorKey: "therapist2Commission", header: "therapist2Commission" },
+            { accessorKey: "earcarePoolAmount", header: "earcarePoolAmount" },
+            { accessorKey: "opsCallCredit", header: "opsCallCredit" }
           ]
         : []),
-      { accessorKey: "calculationStatus", header: "저장상태" }
+      { accessorKey: "calculationStatus", header: "calculationStatus" }
     ],
     [showSettlementColumns]
   );
@@ -1246,22 +1296,22 @@ export function EditableCallGrid({
     <section className="border border-border bg-surface">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div>
-          <h2 className="text-base font-semibold text-foreground">콜 원장 그리드</h2>
+          <h2 className="text-base font-semibold text-foreground">{t("calls.grid.title")}</h2>
           {isLocked ? (
             <div className="mt-1 text-xs text-danger">
-              <p className="font-medium">잠긴 운영월입니다.</p>
-              <p>마감확정 또는 잠금 운영월입니다. 새 콜 행 추가와 수정이 차단됩니다.</p>
+              <p className="font-medium">{t("calls.grid.lockedTitle")}</p>
+              <p>{t("calls.grid.lockedCallDescription")}</p>
             </div>
           ) : null}
         </div>
-        <span className="text-xs text-muted">{rows.length}개 행</span>
+        <span className="text-xs text-muted">{t("calls.grid.rowCount", { count: rows.length })}</span>
       </div>
 
       {rows.length === 0 ? (
         <div className="grid gap-3 px-4 py-8">
           <div>
-            <p className="text-sm font-medium text-foreground">이 날짜의 콜이 없습니다</p>
-            <p className="mt-1 text-xs text-muted">아래 입력 행에서 원본 실시간콜입력 A:S 의미의 기본 필드를 기록한다.</p>
+            <p className="text-sm font-medium text-foreground">{t("calls.grid.empty.title")}</p>
+            <p className="mt-1 text-xs text-muted">{t("calls.grid.empty.description")}</p>
           </div>
         </div>
       ) : (

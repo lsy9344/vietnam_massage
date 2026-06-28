@@ -4,6 +4,8 @@ import { RoomStatusCard } from "@/components/domain/room-status-card";
 import { RoomStatusRefreshController } from "@/components/domain/room-status-refresh-controller";
 import { requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
+import { getServerTranslator } from "@/lib/i18n/server";
+import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import { latestRoomStatusUpdatedAt } from "@/modules/rooms/room-status-refresh";
 import { roomFloorGroups } from "@/modules/rooms/room-floor-groups";
@@ -20,6 +22,7 @@ function floorGridClass(count: number) {
 
 export default async function RoomsPage({ searchParams }: { searchParams: Promise<RoomsPageSearchParams> }) {
   const account = await requireRouteAccess("/rooms");
+  const { locale, t } = await getServerTranslator();
   const params = await searchParams;
   const operatingMonths = await listOperatingMonths();
   const selectedMonth = selectedOperatingMonthFor(operatingMonths, params.operatingMonthId);
@@ -28,16 +31,16 @@ export default async function RoomsPage({ searchParams }: { searchParams: Promis
     return (
       <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
         <PageHeader
-          eyebrow="운영 현황"
-          title="객실 현황"
-          description="객실별 상태와 웨이터 안내 문구를 읽기 전용으로 조회한다."
+          eyebrow={t("nav.group.operations")}
+          title={t("nav.item.rooms")}
+          description={t("rooms.description.short")}
         />
         <section className="border border-border bg-surface px-4 py-8">
-          <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
-          <p className="mt-2 max-w-2xl text-sm text-muted">객실 현황은 운영월 날짜 범위 안의 객실 상태를 조회한다.</p>
+          <h2 className="text-base font-semibold text-foreground">{t("common.createOperatingMonthFirst")}</h2>
+          <p className="mt-2 max-w-2xl text-sm text-muted">{t("rooms.empty.description")}</p>
           {account.role === "administrator" ? (
             <Link className="mt-4 inline-flex text-sm font-semibold text-brand underline-offset-4 hover:underline" href="/masters/operating-months">
-              운영월 관리로 이동
+              {t("common.goToOperatingMonths")}
             </Link>
           ) : null}
         </section>
@@ -52,36 +55,36 @@ export default async function RoomsPage({ searchParams }: { searchParams: Promis
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
       <PageHeader
-        eyebrow="운영 현황"
-        title="객실 현황"
-        description="객실별 상태, 남은 시간, 종료확인, 웨이터 안내 문구를 읽기 전용으로 조회한다."
+        eyebrow={t("nav.group.operations")}
+        title={t("nav.item.rooms")}
+        description={t("rooms.description.full")}
         meta={
           <>
-            <RoomStatusRefreshController lastUpdatedAt={lastUpdatedAt} />
+            <RoomStatusRefreshController lastUpdatedAt={lastUpdatedAt} locale={locale} />
           </>
         }
       />
 
       <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
         <label className="grid gap-1 text-xs font-medium text-muted">
-          운영월
+          {t("common.operatingMonth")}
           <select
-            aria-label="운영월"
+            aria-label={t("common.operatingMonth")}
             className="h-9 min-w-44 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
             defaultValue={selectedMonth.id}
             name="operatingMonthId"
           >
             {operatingMonths.map((month) => (
               <option key={month.id} value={month.id}>
-                {month.monthKey} ({month.status})
+                {t("common.monthOption", { monthKey: month.monthKey, status: operatingMonthStatusLabel(locale, month.status) })}
               </option>
             ))}
           </select>
         </label>
         <label className="grid gap-1 text-xs font-medium text-muted">
-          조회날짜
+          {t("common.queryDate")}
           <input
-            aria-label="조회날짜"
+            aria-label={t("common.queryDate")}
             className="h-9 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
             defaultValue={serviceDate}
             max={selectedMonth.endDate}
@@ -91,21 +94,21 @@ export default async function RoomsPage({ searchParams }: { searchParams: Promis
           />
         </label>
         <button className="h-9 border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
-          조회
+          {t("common.query")}
         </button>
         <div className="ml-auto text-right text-xs text-muted">
-          <div>운영월 상태: {selectedMonth.status}</div>
+          <div>{t("common.operatingMonthStatusPrefix")}: {operatingMonthStatusLabel(locale, selectedMonth.status)}</div>
           <div>
-            날짜 범위: {selectedMonth.startDate} ~ {selectedMonth.endDate}
+            {t("common.dateRange")}: {selectedMonth.startDate} ~ {selectedMonth.endDate}
           </div>
         </div>
       </form>
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="객실 상태">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={t("common.roomStatusAria")}>
         {roomFloorGroups(roomStatuses).map((group) => (
           <div className={`col-span-full ${floorGridClass(group.statuses.length)}`} key={group.floor}>
             {group.statuses.map((status) => (
-              <RoomStatusCard key={status.roomId} status={status} />
+              <RoomStatusCard key={status.roomId} status={status} locale={locale} />
             ))}
           </div>
         ))}

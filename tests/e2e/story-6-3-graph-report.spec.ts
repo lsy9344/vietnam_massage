@@ -405,10 +405,15 @@ test.describe("Story 6.3 graph report", () => {
   test("loading and error files keep safe Korean copy and do not expose error.message", async () => {
     const loading = readFileSync("src/app/(erp)/dashboard/reports/loading.tsx", "utf8");
     const errorBoundary = readFileSync("src/app/(erp)/dashboard/reports/error.tsx", "utf8");
+    // i18n 전환: 한국어 문구는 messages/ko.ts로 이동했고 컴포넌트는 t() key로 참조한다.
+    const koMessages = readFileSync("src/lib/i18n/messages/ko.ts", "utf8");
 
-    expect(loading).toContain("그래프 리포트 로딩 중");
-    expect(errorBoundary).toContain("그래프 리포트를 불러오지 못했습니다");
+    expect(loading).toContain("dashboard.reports.loading.aria");
+    expect(koMessages).toContain("그래프 리포트 로딩 중");
+    expect(errorBoundary).toContain("dashboard.reports.error.title");
+    expect(koMessages).toContain("그래프 리포트를 불러오지 못했습니다");
     expect(errorBoundary).not.toContain("error.message");
-    expect(errorBoundary).toContain("다시 시도");
+    expect(errorBoundary).toContain("dashboard.error.retry");
+    expect(koMessages).toContain("다시 시도");
   });
 });

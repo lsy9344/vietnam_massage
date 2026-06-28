@@ -119,19 +119,26 @@ for (const forbidden of ["monthly_close.reopened", "recordAuditEvent("]) {
   if (actions.includes(forbidden)) errors.push(`closing actions.ts must not implement domain audit directly: ${forbidden}`);
 }
 
+// ko/vi i18n migration: closing UI strings moved to t() keys in the ko catalog.
+const koCatalog = read("src/lib/i18n/messages/ko.ts");
+function requireMoved(contents, fileLabel, key, korean) {
+  if (!contents.includes(key)) errors.push(`${fileLabel} missing t() key ${key}`);
+  if (!koCatalog.includes(korean)) errors.push(`ko.ts missing ${korean}`);
+}
+
 const panel = read("src/app/(erp)/closing/closing-action-panel.tsx");
 for (const required of [
   "reopenMonthlyCloseAction",
   "canReopen",
   "status === \"잠금\"",
-  "재오픈 사유",
-  "관리자만 재오픈할 수 있습니다.",
   "aria-invalid",
   "aria-describedby",
   "role=\"alert\""
 ]) {
   if (!panel.includes(required)) errors.push(`closing-action-panel.tsx missing ${required}`);
 }
+requireMoved(panel, "closing-action-panel.tsx", "closing.reopen.label", "재오픈 사유");
+requireMoved(panel, "closing-action-panel.tsx", "closing.reopen.adminOnly", "관리자만 재오픈할 수 있습니다.");
 if (panel.includes("canWrite && status === \"잠금\"")) {
   errors.push("reopen UI must not use canWrite as reopen permission");
 }
@@ -140,13 +147,13 @@ const page = read("src/app/(erp)/closing/page.tsx");
 for (const required of [
   "canPerform(account.role, \"closing:reopen\")",
   "canReopen={canReopenClosing}",
-  "이전 확정 스냅샷",
-  "재오픈 전 확정값",
-  "현재 기준 미리보기",
   "closeVersion"
 ]) {
   if (!page.includes(required)) errors.push(`closing page.tsx missing ${required}`);
 }
+requireMoved(page, "closing page.tsx", "closing.snapshot.previous", "이전 확정 스냅샷");
+requireMoved(page, "closing page.tsx", "closing.snapshot.headingPrevious", "재오픈 전 확정값");
+requireMoved(page, "closing page.tsx", "closing.preview.current", "현재 기준 미리보기");
 
 const guard = read("src/modules/closing/month-lock-guard.ts");
 if (!guard.includes("status === \"마감확정\" || status === \"잠금\"")) {

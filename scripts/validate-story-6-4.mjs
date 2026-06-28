@@ -16,16 +16,17 @@ function readJson(path) {
   return contents ? JSON.parse(contents) : {};
 }
 
+// i18n 전환: loading aria-label과 error 제목/버튼은 t() key로 참조하고 한국어 원문은 messages/ko.ts에 보존한다.
 const loadingFiles = [
-  ["today", "src/app/(erp)/dashboard/today/loading.tsx", "오늘 KPI 대시보드 로딩 중"],
-  ["monthly", "src/app/(erp)/dashboard/monthly/loading.tsx", "월간 KPI 대시보드 로딩 중"],
-  ["reports", "src/app/(erp)/dashboard/reports/loading.tsx", "그래프 리포트 로딩 중"]
+  ["today", "src/app/(erp)/dashboard/today/loading.tsx", "dashboard.today.loading.aria", "오늘 KPI 대시보드 로딩 중"],
+  ["monthly", "src/app/(erp)/dashboard/monthly/loading.tsx", "dashboard.monthly.loading.aria", "월간 KPI 대시보드 로딩 중"],
+  ["reports", "src/app/(erp)/dashboard/reports/loading.tsx", "dashboard.reports.loading.aria", "그래프 리포트 로딩 중"]
 ];
 
 const errorFiles = [
-  ["today", "src/app/(erp)/dashboard/today/error.tsx", "오늘 KPI를 불러오지 못했습니다"],
-  ["monthly", "src/app/(erp)/dashboard/monthly/error.tsx", "월간 KPI를 불러오지 못했습니다"],
-  ["reports", "src/app/(erp)/dashboard/reports/error.tsx", "그래프 리포트를 불러오지 못했습니다"]
+  ["today", "src/app/(erp)/dashboard/today/error.tsx", "dashboard.today.error.title", "오늘 KPI를 불러오지 못했습니다"],
+  ["monthly", "src/app/(erp)/dashboard/monthly/error.tsx", "dashboard.monthly.error.title", "월간 KPI를 불러오지 못했습니다"],
+  ["reports", "src/app/(erp)/dashboard/reports/error.tsx", "dashboard.reports.error.title", "그래프 리포트를 불러오지 못했습니다"]
 ];
 
 [
@@ -45,6 +46,8 @@ const errorFiles = [
 ].forEach(requireFile);
 for (const [, path] of [...loadingFiles, ...errorFiles]) requireFile(path);
 
+const koMessages = read("src/lib/i18n/messages/ko.ts");
+
 const packageJson = readJson("package.json");
 if (!packageJson.scripts?.lint?.includes("validate-story-6-3.mjs && node scripts/validate-story-6-4.mjs")) {
   errors.push("package.json lint script must run scripts/validate-story-6-4.mjs immediately after validate-story-6-3.mjs");
@@ -56,21 +59,26 @@ for (const dependency of ["recharts", "chart.js", "@nivo/core", "victory", "d3"]
   }
 }
 
-for (const [route, path, label] of loadingFiles) {
+for (const [route, path, ariaKey, ariaKo] of loadingFiles) {
   const contents = read(path);
-  for (const required of ["Skeleton", "aria-busy=\"true\"", `aria-label=\"${label}\"`, "border border-border", "bg-surface"]) {
+  for (const required of ["Skeleton", "aria-busy=\"true\"", `aria-label={t("${ariaKey}")}`, "border border-border", "bg-surface"]) {
     if (!contents.includes(required)) errors.push(`${route} loading.tsx missing layout-preserving loading marker: ${required}`);
   }
+  if (!koMessages.includes(ariaKo)) errors.push(`messages/ko.ts missing ${ariaKo}`);
 }
 
-for (const [route, path, heading] of errorFiles) {
+for (const [route, path, headingKey, headingKo] of errorFiles) {
   const contents = read(path);
-  for (const required of ["\"use client\"", "role=\"alert\"", heading, "다시 시도", "현재 조건 새로고침", "router.refresh", "reset()"]) {
+  for (const required of ["\"use client\"", "role=\"alert\"", `t("${headingKey}")`, "dashboard.error.retry", "dashboard.error.refresh", "router.refresh", "reset()"]) {
     if (!contents.includes(required)) errors.push(`${route} error.tsx missing safe error-boundary marker: ${required}`);
   }
+  if (!koMessages.includes(headingKo)) errors.push(`messages/ko.ts missing ${headingKo}`);
   for (const forbidden of ["error.message", "error.stack"]) {
     if (contents.includes(forbidden)) errors.push(`${route} error.tsx must not expose raw ${forbidden}`);
   }
+}
+for (const ko of ["다시 시도", "현재 조건 새로고침"]) {
+  if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 
 const reportsPage = read("src/app/(erp)/dashboard/reports/page.tsx");
@@ -80,17 +88,25 @@ for (const required of [
   "role=\"img\"",
   "<title id=\"daily-revenue-chart-title\"",
   "<table",
-  "범례: 노쇼는 브랜드색, 취소는 위험색",
-  "StatusBadge state={row.displayStatus}",
+  // i18n 전환 후 StatusBadge가 label/ariaLabel prop과 함께 멀티라인으로 렌더되므로
+  // 공백 의존 매칭 대신 핵심 마커(room status를 stable key로 전달)만 검사한다.
+  "state={row.displayStatus}",
   "snapshot_missing",
-  "확정 스냅샷을 찾을 수 없습니다",
-  "정산 source가 없어 순위를 표시하지 않습니다.",
-  "확정 스냅샷이 없어 지급 구성 그래프를 표시하지 않습니다.",
-  "완료 콜 그래프 없음",
-  "report.emptyStates.noRevenueTrendData ? <CompletedChartEmptyPanel /> : <RevenueTrendChart report={report} />",
+  "report.emptyStates.noRevenueTrendData ? <CompletedChartEmptyPanel t={t} /> : <RevenueTrendChart {...viewProps} />",
   "report.emptyStates.noCalculatedCompletedCalls ? ("
 ]) {
   if (!reportsPage.includes(required)) errors.push(`reports page missing Story 6.4 state/color marker: ${required}`);
+}
+// i18n: 한국어 UI 문구는 t() key로 참조하고 원문은 messages/ko.ts에 보존한다.
+for (const [key, ko] of [
+  ["dashboard.reports.noShow.legend", "범례: 노쇼는 브랜드색, 취소는 위험색"],
+  ["dashboard.reports.snapshotMissing.title", "확정 스냅샷을 찾을 수 없습니다"],
+  ["dashboard.reports.ranking.settlementEmpty", "정산 source가 없어 순위를 표시하지 않습니다."],
+  ["dashboard.reports.payout.empty", "확정 스냅샷이 없어 지급 구성 그래프를 표시하지 않습니다."],
+  ["dashboard.reports.completedEmpty.aria", "완료 콜 그래프 없음"]
+]) {
+  if (!reportsPage.includes(`"${key}"`)) errors.push(`reports page missing Story 6.4 t() key: ${key}`);
+  if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 
 const statusBadgeReferences = reportsPage.match(/StatusBadge/g)?.length ?? 0;
@@ -107,13 +123,28 @@ for (const required of ["bg-brand", "bg-danger", "var(--color-brand)", "var(--co
 }
 
 const todayPage = read("src/app/(erp)/dashboard/today/page.tsx");
-for (const required of ["이 날짜의 콜이 없습니다", "집계 제외 항목이 있습니다", "StatusBadge state=\"예약\""]) {
-  if (!todayPage.includes(required)) errors.push(`today page missing distinct empty/status marker: ${required}`);
+if (!todayPage.includes("StatusBadge state=\"예약\"")) {
+  errors.push("today page missing distinct status marker: StatusBadge state=\"예약\"");
+}
+for (const [key, ko] of [
+  ["dashboard.today.empty.noCallsTitle", "이 날짜의 콜이 없습니다"],
+  ["dashboard.today.warning.excludedTitle", "집계 제외 항목이 있습니다"]
+]) {
+  if (!todayPage.includes(`"${key}"`)) errors.push(`today page missing distinct empty/status t() key: ${key}`);
+  if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 
 const monthlyPage = read("src/app/(erp)/dashboard/monthly/page.tsx");
-for (const required of ["이 운영월의 콜이 없습니다", "확정 스냅샷을 찾을 수 없습니다", "현재 재계산값으로 대체하지 않습니다", "StatusBadge state={label}"]) {
-  if (!monthlyPage.includes(required)) errors.push(`monthly page missing distinct empty/snapshot/status marker: ${required}`);
+if (!monthlyPage.includes("state={badgeState}")) {
+  errors.push("monthly page missing distinct status marker: state={badgeState}");
+}
+for (const [key, ko] of [
+  ["dashboard.monthly.empty.noCallsTitle", "이 운영월의 콜이 없습니다"],
+  ["dashboard.monthly.snapshotMissing.title", "확정 스냅샷을 찾을 수 없습니다"],
+  ["dashboard.monthly.snapshotMissing.description", "현재 재계산값으로 대체하지 않습니다"]
+]) {
+  if (!monthlyPage.includes(`"${key}"`)) errors.push(`monthly page missing distinct empty/snapshot t() key: ${key}`);
+  if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 
 const authorization = read("src/lib/authorization.ts");

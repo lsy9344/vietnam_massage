@@ -68,18 +68,23 @@ for (const required of [
   "[font-variant-numeric:tabular-nums]",
   "formatVnd",
   "saveStatus === \"error\"",
-  "저장 보류 계산 대기",
   "calculationStatus",
-  "계산됨",
-  "비완료 제외",
-  "정책 없음",
-  "결제금액",
-  "마사지사1수당",
-  "마사지사2수당",
-  "귀케어풀",
-  "콜인정"
+  // i18n 전환: 계산/컬럼 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
+  "calls.calc.errorPending",
+  "calls.calc.calculated",
+  "calls.calc.notCompleted",
+  "calls.calc.policyMissing",
+  "calls.column.paymentAmount",
+  "calls.column.therapist1Commission",
+  "calls.column.therapist2Commission",
+  "calls.column.earcarePool",
+  "calls.column.opsCallCredit"
 ]) {
   if (!grid.includes(required)) errors.push(`editable-call-grid.tsx missing ${required}`);
+}
+const koMessages = read("src/lib/i18n/messages/ko.ts");
+for (const label of ["저장 보류 계산 대기", "계산됨", "비완료 제외", "정책 없음", "결제금액", "마사지사1수당", "마사지사2수당", "귀케어풀", "콜인정"]) {
+  if (!koMessages.includes(label)) errors.push(`messages/ko.ts missing calls grid label: ${label}`);
 }
 
 const summaryStrip = read("src/app/(erp)/calls/daily-summary-strip.tsx");

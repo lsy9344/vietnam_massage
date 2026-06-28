@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { hash } from "@node-rs/argon2";
 import { prisma } from "./support/db";
-import { argon2idOptions, login } from "./support/auth";
+import { argon2idOptions, login, setLocaleCookie } from "./support/auth";
 
 const users = [
   {
@@ -173,6 +173,9 @@ test.describe("Story 1.2 직원 로그인과 RBAC", () => {
 
   test("public signup affordance가 없고 실패 메시지는 안전한 문구로 통일된다", async ({ page }) => {
     await page.goto("/sign-in");
+    // 기본 locale은 vi. 이 테스트는 한국어 라벨/문구를 검증하므로 ko 쿠키를 강제하고 다시 로드한다.
+    await setLocaleCookie(page, "ko");
+    await page.reload().catch(() => undefined);
     await expect(page.getByText(/signup|sign up|회원가입|가입하기|계정 만들기/i)).toHaveCount(0);
     await page.getByLabel("이메일 또는 계정 ID").fill("unknown");
     await page.getByLabel("비밀번호").fill("wrong-password");

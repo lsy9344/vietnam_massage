@@ -149,32 +149,41 @@ for (const required of [
   "revalidatePath(\"/masters/courses\")",
   "fieldErrors",
   "formError",
-  "권한이 없습니다.",
+  // i18n 전환: 액션 에러 문구는 t() key로 참조하고 한국어 원문은 messages/ko.ts에 보존한다.
+  "action.error.noPermission",
   "CourseDomainError"
 ]) {
   if (!actions.includes(required)) errors.push(`courses actions missing ${required}`);
 }
 
 const page = `${read("src/app/(erp)/masters/courses/page.tsx")}\n${read("src/app/(erp)/masters/courses/course-forms.tsx")}`;
+// i18n 전환: 화면 문구는 t() key로 참조하고 한국어 원문은 messages/ko.ts에 보존한다.
+const koMessages18 = read("src/lib/i18n/messages/ko.ts");
+if (!koMessages18.includes("권한이 없습니다.")) {
+  errors.push("messages/ko.ts missing action error original 권한이 없습니다.");
+}
 for (const required of [
   "requireRouteAccess(\"/masters/courses\")",
   "ensureDefaultCoursesAndPolicies",
   "CoursePolicyManager",
-  "코스/수당/인센",
-  "마사지사2",
-  "TV 표시명",
-  "0원 수당",
-  "운영팀 일일 인센",
-  "운영팀 월 인센",
-  "비활성 처리",
-  "정책 종료"
+  "masters.courses.title",
+  "masters.courses.secondTherapistRequired",
+  "masters.courses.field.tvDisplayName",
+  "masters.courses.therapistRateNote",
+  "masters.courses.dailyIncentiveTitle",
+  "masters.courses.monthlyIncentiveTitle",
+  "masters.common.deactivate",
+  "masters.courses.endPolicy"
 ]) {
   if (!page.includes(required)) errors.push(`courses page missing ${required}`);
+}
+for (const ko of ["코스/수당/인센", "마사지사2", "TV 표시명", "0원 수당", "운영팀 일일 인센", "운영팀 월 인센", "비활성 처리", "정책 종료"]) {
+  if (!koMessages18.includes(ko)) errors.push(`messages/ko.ts missing courses string: ${ko}`);
 }
 if (page.includes("삭제")) errors.push("/masters/courses page must not present physical delete wording");
 
 const navigation = read("src/lib/navigation.ts");
-for (const required of ["코스/수당/인센", "/masters/courses", "administrator"]) {
+for (const required of ["nav.item.mastersCourses", "/masters/courses", "administrator"]) {
   if (!navigation.includes(required)) errors.push(`navigation.ts missing ${required}`);
 }
 if (navigation.includes("disabled")) errors.push("navigation must hide unauthorized course links, not disable them");

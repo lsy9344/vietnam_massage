@@ -84,6 +84,18 @@ None. This module is the source of reference data for other modules.
 - Policy and course mutations write audit events with plain JSON snapshots: `course.created`, `course.policy_changed`, `course.deactivated`, `therapist_course_rate.created`, `therapist_course_rate.changed`, `therapist_course_rate.ended`, `ops_daily_incentive_rule.created`, `ops_daily_incentive_rule.changed`, `ops_monthly_incentive_rule.created`, and `ops_monthly_incentive_rule.changed`.
 - Downstream calls and settlement stories must use `Course.id`, `Employee.id`, and effective-month policy services. They must not infer D-course behavior from Korean course names or TV labels.
 
+## i18n Display Label Policy (ko/vi)
+
+화면 기본 언어가 베트남어(`vi`, fallback `ko`)로 전환된 뒤의 코드/마스터 표시명 정책이다. `defaultCodeItems`의 stable `code`와 DB 저장값은 번역하지 않고, 표시 문구만 번역한다.
+
+- **시스템 기본 코드(`isSystemDefault=true`)**: 표시 라벨은 DB `CodeItem.displayName`이 아니라 `src/lib/i18n/codes.ts`의 `SYSTEM_CODE_LABELS` 사전(`code` 키 기반)에서 locale별로 가져온다. `codeLabel(locale, codeType, code, isSystemDefault, dbDisplayName)`를 사용한다.
+  - 이유: `scripts/seed-master-data.ts`의 `seedCodeItems()`(및 `ensureDefaultCodeItems()`)가 재실행 시 system 코드의 `displayName`을 한국어로 다시 덮어쓰므로, DB displayName을 베트남어로 migration해도 재시드 때 되돌아간다.
+- **사용자 생성 custom 코드(`isSystemDefault=false`)**: 사용자가 입력한 DB `displayName`을 그대로 보여준다(임의 번역하지 않음).
+- **DB migration 없음(결정됨)**: 기존 `CodeItem.displayName`(한국어)을 베트남어로 덮어쓰는 DB migration은 수행하지 않는다. `defaultCodeItems`의 한국어 `displayName`은 그대로 두며, 이는 `ko` 표시/검증 fallback과 seed 멱등성의 기준이 된다.
+- **저장값 정책 유지**: 콜 원장 등에서 선택 옵션의 **값**은 항상 stable code(`RESERVED`/`CASH`/...)로 저장한다. 표시 **라벨만** locale별로 번역한다(`listServiceCallFormOptions(locale)`).
+- **직원/객실/코스 등 업무 데이터**: 직원명·객실명·코스명·custom displayName 같은 운영 입력 데이터는 업무 데이터로 보고 임의 번역하지 않는다.
+- **새 시스템 코드 추가 시**: stable code를 `defaultCodeItems`에 추가하고, 표시 라벨은 `SYSTEM_CODE_LABELS`에 `{ko, vi}`로 추가한다(누락 시 code 값으로 안전 fallback).
+
 ## Does Not Own
 
 - service-call transactions

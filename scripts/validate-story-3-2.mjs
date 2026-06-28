@@ -43,6 +43,7 @@ if (!packageJson.scripts?.lint?.includes("validate-story-3-2.mjs")) {
   errors.push("package.json lint script must include scripts/validate-story-3-2.mjs");
 }
 
+const koMessagesLive = read("src/lib/i18n/messages/ko.ts");
 const livePage = read("src/app/(erp)/live/page.tsx");
 for (const required of [
   "requireRouteAccess(\"/live\")",
@@ -54,30 +55,42 @@ for (const required of [
   "getDailyCallLedgerSummary",
   "RoomStatusCard",
   "RoomStatusRefreshController",
-  "운영월 관리로 이동",
+  // i18n 전환: 한국어 UI 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
+  "common.goToOperatingMonths",
   "grid grid-cols-4",
-  "오늘 상태 요약",
+  "live.summary.aria",
   "summary.inUseCount",
   "summary.cleaningCount",
-  "결제합계",
-  "순매출",
+  "live.kpi.paymentTotal",
+  "live.kpi.netSales",
   "courseSummaries",
   "warningCounts"
 ]) {
   if (!livePage.includes(required)) errors.push(`live/page.tsx missing ${required}`);
+}
+for (const label of ["운영월 관리로 이동", "오늘 상태 요약", "결제합계", "순매출"]) {
+  if (!koMessagesLive.includes(label)) errors.push(`messages/ko.ts missing live label: ${label}`);
 }
 for (const forbidden of ["ErpEmptyState", "EditableCallGrid", "DailyExpensePanel", "autosaveServiceCallRow", "saveBasicServiceCallRow"]) {
   if (livePage.includes(forbidden)) errors.push(`live/page.tsx must stay read-only and not include ${forbidden}`);
 }
 
 const loading = read("src/app/(erp)/live/loading.tsx");
-for (const required of ["Skeleton", "객실 상태 로딩", "오늘 요약 로딩", "Array.from({ length: 11 }", "grid grid-cols-4"]) {
+for (const required of ["Skeleton", "live.loading.roomsAria", "live.loading.summaryAria", "Array.from({ length: 11 }", "grid grid-cols-4"]) {
   if (!loading.includes(required)) errors.push(`live/loading.tsx missing ${required}`);
 }
+for (const label of ["객실 상태 로딩", "오늘 요약 로딩"]) {
+  if (!koMessagesLive.includes(label)) errors.push(`messages/ko.ts missing live loading label: ${label}`);
+}
 
+// i18n 전환: 컴포넌트의 한국어 문구는 messages/ko.ts로 이동했고, 컴포넌트는 t()로 참조한다.
+const koMessages = read("src/lib/i18n/messages/ko.ts");
 const refresh = read("src/components/domain/room-status-refresh-controller.tsx");
-for (const required of ["useRouter", "router.refresh", "setInterval", "15_000", "45_000", "마지막 갱신", "갱신 중", "갱신 지연", "새로고침"]) {
+for (const required of ["useRouter", "router.refresh", "setInterval", "15_000", "45_000", "roomRefresh.lastUpdated", "roomRefresh.refreshing", "roomRefresh.stale", "roomRefresh.refresh"]) {
   if (!refresh.includes(required)) errors.push(`room-status-refresh-controller.tsx missing ${required}`);
+}
+for (const label of ["마지막 갱신", "갱신 중", "갱신 지연", "새로고침"]) {
+  if (!koMessages.includes(label)) errors.push(`messages/ko.ts missing refresh label: ${label}`);
 }
 if (refresh.includes("@tanstack/react-query")) {
   errors.push("live refresh must not import @tanstack/react-query");
@@ -95,12 +108,15 @@ for (const required of [
   "status.therapist1",
   "status.therapist2",
   "status.earcare",
-  "결제·확인 필요",
-  "즉시 가능",
+  "roomCard.guidance.completeCheck",
+  "roomCard.guidance.empty",
   "status-attention",
   "data-testid=\"room-status-card\""
 ]) {
   if (!card.includes(required)) errors.push(`room-status-card.tsx missing ${required}`);
+}
+for (const label of ["결제·확인 필요", "즉시 가능"]) {
+  if (!koMessages.includes(label)) errors.push(`messages/ko.ts missing room-card label: ${label}`);
 }
 
 const helper = `${read("src/lib/operating-date.ts")}\n${read("src/app/(erp)/calls/page.tsx")}`;

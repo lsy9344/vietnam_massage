@@ -1,14 +1,19 @@
 import { StatusBadge, statusBadgeStates } from "@/components/domain/status-badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { defaultLocale, type Locale } from "@/lib/i18n/config";
+import { createTranslator } from "@/lib/i18n";
+import { roomStatusLabel } from "@/lib/i18n/codes";
 
 type ErpEmptyStateProps = {
   eyebrow: string;
   title: string;
   description: string;
+  locale?: Locale;
 };
 
-export function ErpEmptyState({ eyebrow, title, description }: ErpEmptyStateProps) {
+export function ErpEmptyState({ eyebrow, title, description, locale = defaultLocale }: ErpEmptyStateProps) {
+  const t = createTranslator(locale);
   return (
     <div className="grid flex-1 grid-cols-[minmax(0,1fr)_340px] gap-6 p-6">
       <section className="space-y-6">
@@ -23,26 +28,31 @@ export function ErpEmptyState({ eyebrow, title, description }: ErpEmptyStateProp
           <Separator className="my-5" />
           <p className="text-sm leading-6 text-muted">{description}</p>
           <div className="mt-5 rounded-md border border-dashed border-border bg-readonly p-4 text-sm text-muted">
-            데이터 연결 대기
+            {t("emptyState.dataWaiting")}
           </div>
         </div>
 
         <div className="rounded-md border border-border bg-surface p-5">
-          <p className="text-sm font-medium text-muted">상태 토큰</p>
-          <h3 className="mt-1 text-xl font-semibold">객실/콜 상태 표시 규칙</h3>
-          <div className="mt-5 flex flex-wrap gap-3" aria-label="상태 배지 토큰">
+          <p className="text-sm font-medium text-muted">{t("emptyState.statusToken")}</p>
+          <h3 className="mt-1 text-xl font-semibold">{t("emptyState.statusRuleTitle")}</h3>
+          <div className="mt-5 flex flex-wrap gap-3" aria-label={t("emptyState.statusBadgeTokensAria")}>
             {statusBadgeStates.map((state) => (
-              <StatusBadge key={state} state={state} />
+              <StatusBadge
+                key={state}
+                state={state}
+                label={roomStatusLabel(locale, state)}
+                ariaLabel={t("roomStatus.aria", { status: roomStatusLabel(locale, state) })}
+              />
             ))}
           </div>
         </div>
       </section>
 
-      <aside className="rounded-md border border-border bg-surface p-5" aria-label="연결 대기 영역">
-        <p className="text-sm font-medium text-muted">데이터 연결 상태</p>
-        <h3 className="mt-1 text-lg font-semibold">후속 기능 연결 대기</h3>
-        <p className="mt-3 text-sm leading-6 text-muted">실제 원장, 객실, 정산 데이터는 연결 대기 중이다.</p>
-        <div className="mt-5 space-y-3" aria-label="로딩 상태 예시">
+      <aside className="rounded-md border border-border bg-surface p-5" aria-label={t("emptyState.connectionAreaAria")}>
+        <p className="text-sm font-medium text-muted">{t("emptyState.connectionStatus")}</p>
+        <h3 className="mt-1 text-lg font-semibold">{t("emptyState.followUpTitle")}</h3>
+        <p className="mt-3 text-sm leading-6 text-muted">{t("emptyState.followUpDescription")}</p>
+        <div className="mt-5 space-y-3" aria-label={t("emptyState.loadingExampleAria")}>
           <Skeleton className="h-4 w-5/6" />
           <Skeleton className="h-4 w-2/3" />
           <Skeleton className="h-4 w-4/5" />

@@ -2,6 +2,12 @@ import Link from "next/link";
 import { PageHeader } from "@/components/domain/page-header";
 import { requireRouteAccess } from "@/lib/authorization";
 import { selectedOperatingMonthFor } from "@/lib/operating-date";
+import { getServerTranslator } from "@/lib/i18n/server";
+import { formatCurrencyVnd } from "@/lib/i18n/format";
+import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
+import { resolveKoreanMessage } from "@/lib/i18n/errors";
+import type { Locale } from "@/lib/i18n/config";
+import type { Translator } from "@/lib/i18n";
 import {
   getMonthlyClosingSnapshot,
   MonthlyClosingDomainError,
@@ -10,38 +16,71 @@ import {
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import {
   listOpsMonthlyIncentivePreview,
-  type OpsMonthlyIncentiveResultDto
+  type OpsMonthlyIncentiveResultDto,
+  type OpsMonthlyIncentiveTeamRole
 } from "@/modules/settlements/ops-monthly-incentive-service";
 
 type OpsMonthlyIncentivePageSearchParams = {
   operatingMonthId?: string;
 };
 
-function SettlementTabs() {
+// 팀 역할 라벨은 stable teamRole 키로 번역한다(서비스의 한국어 teamShareLabel 대신).
+function teamRoleLabel(t: Translator, role: OpsMonthlyIncentiveTeamRole) {
+  return t(`settlements.opsMonthly.team.${role}`);
+}
+
+function SettlementTabs({ t }: { t: Translator }) {
   return (
-    <nav aria-label="정산 화면" className="mb-4 flex flex-wrap gap-2">
+    <nav aria-label={t("settlements.tabs.aria")} className="mb-4 flex flex-wrap gap-2">
       <Link className="border border-border bg-surface px-3 py-2 text-sm font-semibold text-muted hover:bg-readonly" href="/settlements">
-        마사지사 일일정산
+        {t("settlements.tabs.therapistDaily")}
       </Link>
       <Link className="border border-border bg-surface px-3 py-2 text-sm font-semibold text-muted hover:bg-readonly" href="/settlements/earcare">
-        귀케어 일일정산
+        {t("settlements.tabs.earcareDaily")}
       </Link>
       <Link className="border border-border bg-surface px-3 py-2 text-sm font-semibold text-muted hover:bg-readonly" href="/settlements/operations">
-        운영팀 근무/일일인센
+        {t("settlements.tabs.opsDaily")}
       </Link>
       <Link className="border border-brand bg-brand px-3 py-2 text-sm font-semibold text-brand-foreground" href="/settlements/operations/monthly">
-        운영팀 월인센
+        {t("settlements.tabs.opsMonthly")}
       </Link>
     </nav>
   );
 }
 
-function formatVnd(amount: number) {
-  return `${new Intl.NumberFormat("ko-KR").format(amount)} VND`;
+function formatVnd(locale: Locale, t: Translator, amount: number) {
+  return `${formatCurrencyVnd(locale, amount)} ${t("settlements.vndSuffix")}`;
 }
 
 function formatShare(value: number) {
   return `${Math.round(value * 10000) / 100}%`;
+}
+
+// Dynamic-threshold ops warning ("{n}콜 미만으로 운영팀 월 인센이 없습니다.") has a runtime number, so the
+// fixed Korean→vi map can't match it; rebuild from the captured threshold. Localized to this page.
+const OPS_BELOW_THRESHOLD_PATTERN = /^(\d+)콜 미만으로 운영팀 월 인센이 없습니다\.$/;
+
+function opsMonthlyWarningPart(locale: Locale, message: string) {
+  if (locale === "vi") {
+    const match = OPS_BELOW_THRESHOLD_PATTERN.exec(message);
+    if (match) {
+      return `Dưới ${match[1]} cuộc gọi nên không có thưởng tháng nhóm vận hành.`;
+    }
+  }
+  return resolveKoreanMessage(locale, message);
+}
+
+/**
+ * Translates the ops-monthly warning string at the display boundary. The service may join several
+ * fixed warnings with " " (mergeWarningMessages), so split on the sentence boundary, translate each
+ * part (dynamic-threshold regex first, then the fixed Korean→vi map), then re-join.
+ */
+function opsMonthlyWarningText(locale: Locale, message: string) {
+  if (locale !== "vi") return message;
+  return message
+    .split(/(?<=다\.)\s+/)
+    .map((part) => opsMonthlyWarningPart(locale, part))
+    .join(" ");
 }
 
 function warningTotal(result: OpsMonthlyIncentiveResultDto) {
@@ -53,123 +92,129 @@ function warningTotal(result: OpsMonthlyIncentiveResultDto) {
   );
 }
 
-function thresholdLabel(result: OpsMonthlyIncentiveResultDto) {
-  if (result.ruleStatus === "missing_policy") return "정책 없음";
-  if (result.ruleStatus === "below_threshold") return "최저 구간 미달";
-  return `${result.appliedThresholdCallCount}콜 이상`;
+function thresholdLabel(t: Translator, result: OpsMonthlyIncentiveResultDto) {
+  if (result.ruleStatus === "missing_policy") return t("settlements.opsMonthly.threshold.missingPolicy");
+  if (result.ruleStatus === "below_threshold") return t("settlements.opsMonthly.threshold.belowThreshold");
+  return t("settlements.opsMonthly.threshold.applied", { count: result.appliedThresholdCallCount ?? 0 });
 }
 
-function PreviewNotice({ selectedMonth, result }: { selectedMonth: { status: string }; result: OpsMonthlyIncentiveResultDto }) {
+function PreviewNotice({ locale, t, selectedMonth, result }: { locale: Locale; t: Translator; selectedMonth: { status: string }; result: OpsMonthlyIncentiveResultDto }) {
   const isClosed = result.isClosedOrLocked;
   const isReopenedReview = selectedMonth.status === "검토중";
   return (
     <section className="mb-4 border border-border bg-surface px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="inline-flex border border-border bg-readonly px-2 py-1 text-xs font-semibold text-muted">
-          {isClosed ? "현재 기준 미리보기" : "미확정 미리보기"}
+          {isClosed ? t("settlements.opsMonthly.preview.current") : t("settlements.opsMonthly.preview.draft")}
         </span>
-        <span className="text-sm font-semibold text-foreground">운영월 상태: {selectedMonth.status}</span>
+        <span className="text-sm font-semibold text-foreground">{t("common.operatingMonthStatusPrefix")}: {operatingMonthStatusLabel(locale, selectedMonth.status)}</span>
       </div>
       <p className="mt-2 text-sm text-muted">
         {isClosed
-          ? "마감확정/잠금 운영월의 확정값은 월마감 스냅샷 기준이며, 이 화면은 현재 콜 원장과 현재 정책 기준의 재계산 미리보기입니다."
+          ? t("settlements.opsMonthly.preview.closedDescription")
           : isReopenedReview
-            ? "검토중 운영월의 현재 미리보기가 수정 가능한 현재값입니다. 이전 확정 스냅샷이 있으면 historical reference로만 표시합니다."
-            : "작성중/검토중 운영월의 현재 콜 원장과 현재 정책 기준 미확정 미리보기입니다."}
+            ? t("settlements.opsMonthly.preview.reviewDescription")
+            : t("settlements.opsMonthly.preview.draftDescription")}
       </p>
     </section>
   );
 }
 
-function SnapshotSummary({ closing, currentStatus }: { closing: MonthlyClosingDto; currentStatus: string }) {
+function SnapshotSummary({ locale, t, closing, currentStatus }: { locale: Locale; t: Translator; closing: MonthlyClosingDto; currentStatus: string }) {
   const operations = closing.snapshot.operations;
   const isHistoricalAfterReopen = currentStatus === "검토중" && closing.reopenedAt !== null;
-  const label = isHistoricalAfterReopen ? "이전 확정 스냅샷" : "확정 스냅샷";
-  const heading = isHistoricalAfterReopen ? `${closing.snapshot.month.monthKey} 재오픈 전 운영팀 확정 지급값` : `${closing.snapshot.month.monthKey} 운영팀 확정 지급값`;
+  const label = isHistoricalAfterReopen ? t("settlements.opsMonthly.snapshot.previous") : t("settlements.opsMonthly.snapshot.confirmed");
+  const heading = isHistoricalAfterReopen
+    ? t("settlements.opsMonthly.snapshot.headingPrevious", { monthKey: closing.snapshot.month.monthKey })
+    : t("settlements.opsMonthly.snapshot.headingConfirmed", { monthKey: closing.snapshot.month.monthKey });
   return (
-    <section className="mb-4 border border-border bg-surface px-4 py-3" aria-label={`운영팀 월인센 ${label}`}>
+    <section className="mb-4 border border-border bg-surface px-4 py-3" aria-label={t("settlements.opsMonthly.snapshot.aria", { label })}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="inline-flex border border-success bg-success/10 px-2 py-1 text-xs font-semibold text-success">{label}</div>
           <h2 className="mt-2 text-base font-semibold text-foreground">{heading}</h2>
           <p className="mt-1 text-sm text-muted">
-            snapshot id {closing.snapshot.id} / version {closing.closeVersion} / 확정시각 {closing.confirmedAt}
+            {t("settlements.opsMonthly.snapshot.meta", { id: closing.snapshot.id, version: closing.closeVersion, confirmedAt: closing.confirmedAt })}
           </p>
-          {isHistoricalAfterReopen ? <p className="mt-1 text-sm text-muted">현재 기준 미리보기가 수정 가능한 현재값입니다.</p> : null}
+          {isHistoricalAfterReopen ? <p className="mt-1 text-sm text-muted">{t("settlements.opsMonthly.snapshot.currentEditable")}</p> : null}
         </div>
         <div className="text-right">
-          <div className="text-xs font-medium text-muted">운영팀 확정 지급 합계</div>
-          <div className="text-lg font-semibold text-foreground tabular-nums">{formatVnd(operations.totalOpsPayoutAmount)}</div>
+          <div className="text-xs font-medium text-muted">{t("settlements.opsMonthly.snapshot.totalPayout")}</div>
+          <div className="text-lg font-semibold text-foreground tabular-nums">{formatVnd(locale, t, operations.totalOpsPayoutAmount)}</div>
         </div>
       </div>
       <div className="mt-3 grid gap-2 text-sm md:grid-cols-3">
         <div className="border border-border bg-background px-3 py-2">
-          <div className="text-xs text-muted">일일인센</div>
-          <div className="font-semibold tabular-nums">{formatVnd(operations.dailyIncentiveAmount)}</div>
+          <div className="text-xs text-muted">{t("settlements.opsMonthly.snapshot.dailyIncentive")}</div>
+          <div className="font-semibold tabular-nums">{formatVnd(locale, t, operations.dailyIncentiveAmount)}</div>
         </div>
         <div className="border border-border bg-background px-3 py-2">
-          <div className="text-xs text-muted">월인센</div>
-          <div className="font-semibold tabular-nums">{formatVnd(operations.monthlyIncentiveAmount)}</div>
+          <div className="text-xs text-muted">{t("settlements.opsMonthly.snapshot.monthlyIncentive")}</div>
+          <div className="font-semibold tabular-nums">{formatVnd(locale, t, operations.monthlyIncentiveAmount)}</div>
         </div>
         <div className="border border-border bg-background px-3 py-2">
-          <div className="text-xs text-muted">월 총콜</div>
-          <div className="font-semibold tabular-nums">{operations.monthlyOpsCallCredit}콜</div>
+          <div className="text-xs text-muted">{t("settlements.opsMonthly.snapshot.monthlyTotalCalls")}</div>
+          <div className="font-semibold tabular-nums">{operations.monthlyOpsCallCredit}{t("settlements.callSuffix")}</div>
         </div>
       </div>
     </section>
   );
 }
 
-function OpsMonthlySummary({ result }: { result: OpsMonthlyIncentiveResultDto }) {
+function OpsMonthlySummary({ locale, t, result }: { locale: Locale; t: Translator; result: OpsMonthlyIncentiveResultDto }) {
   return (
-    <section aria-label="운영팀 월 인센 요약" className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <section aria-label={t("settlements.opsMonthly.summary.aria")} className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <div className="border border-border bg-surface px-4 py-3">
-        <div className="text-xs font-medium text-muted">월 총콜</div>
-        <div className="mt-1 text-xl font-semibold text-foreground">{result.monthlyOpsCallCredit}콜</div>
-        <div className="mt-1 text-xs text-muted">calculated 방문완료 콜 {result.sourceCallCount}건의 opsCallCredit 합계</div>
+        <div className="text-xs font-medium text-muted">{t("settlements.opsMonthly.summary.monthlyTotalCalls")}</div>
+        <div className="mt-1 text-xl font-semibold text-foreground">{result.monthlyOpsCallCredit}{t("settlements.callSuffix")}</div>
+        <div className="mt-1 text-xs text-muted">{t("settlements.opsMonthly.summary.monthlyTotalCallsBasis", { count: result.sourceCallCount })}</div>
       </div>
       <div className="border border-border bg-surface px-4 py-3">
-        <div className="text-xs font-medium text-muted">적용 threshold</div>
-        <div className="mt-1 text-xl font-semibold text-foreground">{thresholdLabel(result)}</div>
-        <div className="mt-1 text-xs text-muted">전체 월인센 {formatVnd(result.totalMonthlyIncentiveAmount)}</div>
+        <div className="text-xs font-medium text-muted">{t("settlements.opsMonthly.summary.appliedThreshold")}</div>
+        <div className="mt-1 text-xl font-semibold text-foreground">{thresholdLabel(t, result)}</div>
+        <div className="mt-1 text-xs text-muted">{t("settlements.opsMonthly.summary.totalMonthly", { amount: formatVnd(locale, t, result.totalMonthlyIncentiveAmount) })}</div>
       </div>
       <div className="border border-border bg-surface px-4 py-3">
-        <div className="text-xs font-medium text-muted">직원 지급 합계</div>
+        <div className="text-xs font-medium text-muted">{t("settlements.opsMonthly.summary.employeeTotal")}</div>
         <div className="mt-1 text-xl font-semibold text-foreground">
-          {formatVnd(result.rows.reduce((sum, row) => sum + row.payoutAmount, 0))}
+          {formatVnd(locale, t, result.rows.reduce((sum, row) => sum + row.payoutAmount, 0))}
         </div>
-        <div className="mt-1 text-xs text-muted">미배분 {formatVnd(result.shares.undistributedAmount)}</div>
+        <div className="mt-1 text-xs text-muted">{t("settlements.opsMonthly.summary.undistributed", { amount: formatVnd(locale, t, result.shares.undistributedAmount) })}</div>
       </div>
       <div className="border border-border bg-surface px-4 py-3">
-        <div className="text-xs font-medium text-muted">제외 warning</div>
-        <div className="mt-1 text-xl font-semibold text-foreground">{warningTotal(result)}건</div>
+        <div className="text-xs font-medium text-muted">{t("settlements.opsMonthly.summary.warningExcluded")}</div>
+        <div className="mt-1 text-xl font-semibold text-foreground">{warningTotal(result)}{t("settlements.countSuffix")}</div>
         <div className="mt-1 text-xs text-muted">
-          비완료 {result.warningCounts.notCompleted}, 정책없음 {result.warningCounts.coursePolicyMissing}, 수당없음{" "}
-          {result.warningCounts.therapistRateMissing}, D코스누락 {result.warningCounts.secondTherapistRequired}
+          {t("settlements.opsMonthly.summary.warningBreakdown", {
+            notCompleted: result.warningCounts.notCompleted,
+            policyMissing: result.warningCounts.coursePolicyMissing,
+            rateMissing: result.warningCounts.therapistRateMissing,
+            secondRequired: result.warningCounts.secondTherapistRequired
+          })}
         </div>
       </div>
     </section>
   );
 }
 
-function ShareSummary({ result }: { result: OpsMonthlyIncentiveResultDto }) {
+function ShareSummary({ locale, t, result }: { locale: Locale; t: Translator; result: OpsMonthlyIncentiveResultDto }) {
   const rows = [
-    ["팀장", result.shares.leadShare, result.shares.leadAmount],
-    ["카운터팀", result.shares.counterTeamShare, result.shares.counterTeamAmount],
-    ["웨이터팀", result.shares.waiterTeamShare, result.shares.waiterTeamAmount]
+    [t("settlements.opsMonthly.share.lead"), result.shares.leadShare, result.shares.leadAmount],
+    [t("settlements.opsMonthly.share.counterTeam"), result.shares.counterTeamShare, result.shares.counterTeamAmount],
+    [t("settlements.opsMonthly.share.waiterTeam"), result.shares.waiterTeamShare, result.shares.waiterTeamAmount]
   ] as const;
   return (
     <section className="mb-4 border border-border bg-surface">
       <div className="border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-foreground">팀별 분배</h2>
-        <p className="mt-1 text-sm text-muted">DB 정책 row의 분배율을 적용하고 integer VND 결과로 확정한다.</p>
+        <h2 className="text-base font-semibold text-foreground">{t("settlements.opsMonthly.share.title")}</h2>
+        <p className="mt-1 text-sm text-muted">{t("settlements.opsMonthly.share.description")}</p>
       </div>
       <div className="grid gap-0 sm:grid-cols-3">
         {rows.map(([label, share, amount]) => (
           <div key={label} className="border-b border-border px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
             <div className="text-xs font-medium text-muted">{label}</div>
-            <div className="mt-1 text-lg font-semibold text-foreground">{formatVnd(amount)}</div>
-            <div className="mt-1 text-xs text-muted">분배율 {formatShare(share)}</div>
+            <div className="mt-1 text-lg font-semibold text-foreground">{formatVnd(locale, t, amount)}</div>
+            <div className="mt-1 text-xs text-muted">{t("settlements.opsMonthly.share.ratio", { value: formatShare(share) })}</div>
           </div>
         ))}
       </div>
@@ -177,12 +222,12 @@ function ShareSummary({ result }: { result: OpsMonthlyIncentiveResultDto }) {
   );
 }
 
-function EmployeePayoutTable({ result }: { result: OpsMonthlyIncentiveResultDto }) {
+function EmployeePayoutTable({ locale, t, result }: { locale: Locale; t: Translator; result: OpsMonthlyIncentiveResultDto }) {
   if (result.rows.length === 0) {
     return (
       <section className="mb-4 border border-border bg-surface px-4 py-5">
-        <h2 className="text-base font-semibold text-foreground">활성 운영팀 직원이 없습니다</h2>
-        <p className="mt-2 text-sm text-muted">월 인센 금액은 미배분으로 표시됩니다.</p>
+        <h2 className="text-base font-semibold text-foreground">{t("settlements.opsMonthly.employeeTable.empty.title")}</h2>
+        <p className="mt-2 text-sm text-muted">{t("settlements.opsMonthly.employeeTable.empty.description")}</p>
       </section>
     );
   }
@@ -190,18 +235,18 @@ function EmployeePayoutTable({ result }: { result: OpsMonthlyIncentiveResultDto 
   return (
     <section className="mb-4 overflow-x-auto border border-border bg-surface">
       <div className="border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-foreground">직원별 월 인센 미리보기</h2>
-        <p className="mt-1 text-sm text-muted">직원 식별과 row key는 Employee.id를 사용한다.</p>
+        <h2 className="text-base font-semibold text-foreground">{t("settlements.opsMonthly.employeeTable.title")}</h2>
+        <p className="mt-1 text-sm text-muted">{t("settlements.opsMonthly.employeeTable.description")}</p>
       </div>
       <table className="min-w-[980px] w-full border-collapse text-sm">
         <thead className="bg-readonly text-left text-xs font-semibold uppercase text-muted">
           <tr>
-            <th className="border-b border-border px-3 py-2">운영팀 직원</th>
-            <th className="border-b border-border px-3 py-2">직책</th>
-            <th className="border-b border-border px-3 py-2">팀 역할</th>
-            <th className="border-b border-border px-3 py-2">분배율/팀 몫</th>
-            <th className="border-b border-border px-3 py-2 text-right">지급 예상액</th>
-            <th className="border-b border-border px-3 py-2">산출 근거</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.opsMonthly.column.opsStaff")}</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.opsMonthly.column.position")}</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.opsMonthly.column.teamRole")}</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.opsMonthly.column.shareTeamPortion")}</th>
+            <th className="border-b border-border px-3 py-2 text-right">{t("settlements.opsMonthly.column.expectedPayout")}</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.opsMonthly.column.basis")}</th>
           </tr>
         </thead>
         <tbody>
@@ -212,10 +257,10 @@ function EmployeePayoutTable({ result }: { result: OpsMonthlyIncentiveResultDto 
                 <div className="text-xs text-muted">{row.staffCode}</div>
               </td>
               <td className="px-3 py-2">{row.position}</td>
-              <td className="px-3 py-2">{row.teamShareLabel}</td>
-              <td className="px-3 py-2">{row.calculationBasis}</td>
-              <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(row.payoutAmount)}</td>
-              <td className="px-3 py-2 text-muted">{row.calculationBasis}</td>
+              <td className="px-3 py-2">{teamRoleLabel(t, row.teamRole)}</td>
+              <td className="px-3 py-2">{resolveKoreanMessage(locale, row.calculationBasis)}</td>
+              <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(locale, t, row.payoutAmount)}</td>
+              <td className="px-3 py-2 text-muted">{resolveKoreanMessage(locale, row.calculationBasis)}</td>
             </tr>
           ))}
         </tbody>
@@ -224,12 +269,12 @@ function EmployeePayoutTable({ result }: { result: OpsMonthlyIncentiveResultDto 
   );
 }
 
-function CallEvidenceTable({ result }: { result: OpsMonthlyIncentiveResultDto }) {
+function CallEvidenceTable({ t, result }: { t: Translator; result: OpsMonthlyIncentiveResultDto }) {
   if (result.callEvidence.length === 0) {
     return (
       <section className="mb-4 border border-border bg-surface px-4 py-5">
-        <h2 className="text-base font-semibold text-foreground">월 총콜 산출 근거가 없습니다</h2>
-        <p className="mt-2 text-sm text-muted">calculated 방문완료 콜이 없거나 opsCallCredit 합계가 0콜입니다.</p>
+        <h2 className="text-base font-semibold text-foreground">{t("settlements.opsMonthly.callEvidence.empty.title")}</h2>
+        <p className="mt-2 text-sm text-muted">{t("settlements.opsMonthly.callEvidence.empty.description")}</p>
       </section>
     );
   }
@@ -238,16 +283,16 @@ function CallEvidenceTable({ result }: { result: OpsMonthlyIncentiveResultDto })
   return (
     <section className="mb-4 overflow-x-auto border border-border bg-surface">
       <div className="border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-foreground">월 총콜 산출 근거</h2>
+        <h2 className="text-base font-semibold text-foreground">{t("settlements.opsMonthly.callEvidence.title")}</h2>
         <p className="mt-1 text-sm text-muted">
-          service DTO는 전체 evidence를 제공하며 화면에는 최대 50건만 표시한다. 총 {result.callEvidence.length}건.
+          {t("settlements.opsMonthly.callEvidence.description", { count: result.callEvidence.length })}
         </p>
       </div>
       <table className="min-w-[640px] w-full border-collapse text-sm">
         <thead className="bg-readonly text-left text-xs font-semibold uppercase text-muted">
           <tr>
-            <th className="border-b border-border px-3 py-2">콜 ID</th>
-            <th className="border-b border-border px-3 py-2">서비스 날짜</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.opsMonthly.callEvidence.callId")}</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.opsMonthly.callEvidence.serviceDate")}</th>
             <th className="border-b border-border px-3 py-2 text-right">opsCallCredit</th>
           </tr>
         </thead>
@@ -256,7 +301,7 @@ function CallEvidenceTable({ result }: { result: OpsMonthlyIncentiveResultDto })
             <tr key={evidence.serviceCallId} className="border-b border-border last:border-b-0">
               <td className="px-3 py-2 font-mono text-xs text-muted">{evidence.serviceCallId}</td>
               <td className="px-3 py-2">{evidence.serviceDate}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{evidence.opsCallCredit}콜</td>
+              <td className="px-3 py-2 text-right tabular-nums">{evidence.opsCallCredit}{t("settlements.callSuffix")}</td>
             </tr>
           ))}
         </tbody>
@@ -271,6 +316,7 @@ export default async function OperationsMonthlyIncentivePage({
   searchParams: Promise<OpsMonthlyIncentivePageSearchParams>;
 }) {
   const account = await requireRouteAccess("/settlements/operations/monthly");
+  const { locale, t } = await getServerTranslator();
   const params = await searchParams;
   const operatingMonths = await listOperatingMonths();
   const selectedMonth = selectedOperatingMonthFor(operatingMonths, params.operatingMonthId);
@@ -279,17 +325,17 @@ export default async function OperationsMonthlyIncentivePage({
     return (
       <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
         <PageHeader
-          eyebrow="정산"
-          title="운영팀 월인센"
-          description="운영월 전체 방문완료 콜 기준 운영팀 월 인센을 조회한다."
+          eyebrow={t("nav.group.settlements")}
+          title={t("settlements.opsMonthly.title")}
+          description={t("settlements.opsMonthly.emptyDescription")}
         />
-        <SettlementTabs />
+        <SettlementTabs t={t} />
         <section className="border border-border bg-surface px-4 py-8">
-          <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
-          <p className="mt-2 max-w-2xl text-sm text-muted">운영팀 월 인센 미리보기는 운영월 전체 날짜 범위로만 조회할 수 있다.</p>
+          <h2 className="text-base font-semibold text-foreground">{t("common.createOperatingMonthFirst")}</h2>
+          <p className="mt-2 max-w-2xl text-sm text-muted">{t("settlements.opsMonthly.emptyMonthDescription")}</p>
           {account.role === "administrator" ? (
             <Link className="mt-4 inline-flex text-sm font-semibold text-brand underline-offset-4 hover:underline" href="/masters/operating-months">
-              운영월 관리로 이동
+              {t("common.goToOperatingMonths")}
             </Link>
           ) : null}
         </section>
@@ -314,86 +360,86 @@ export default async function OperationsMonthlyIncentivePage({
         closingSnapshot = result.isClosedOrLocked || snapshot.reopenedAt !== null ? snapshot : null;
       } catch (error) {
         if (error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND") {
-          snapshotErrorMessage = "확정 스냅샷을 찾을 수 없습니다. 현재 기준 미리보기와 확정값을 혼동하지 마세요.";
+          snapshotErrorMessage = t("settlements.opsMonthly.snapshotNotFound");
         } else {
           throw error;
         }
       }
     }
   } catch (error) {
-    errorMessage = error instanceof Error ? error.message : "운영팀 월 인센을 조회하지 못했습니다.";
+    errorMessage = error instanceof Error ? error.message : t("settlements.opsMonthly.error.fallback");
   }
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
       <PageHeader
-        eyebrow="정산"
-        title="운영팀 월인센"
-        description="운영월 총콜과 정책 threshold 기준으로 월 인센 예상액과 직원별 분배 근거를 조회한다."
+        eyebrow={t("nav.group.settlements")}
+        title={t("settlements.opsMonthly.title")}
+        description={t("settlements.opsMonthly.description")}
         meta={
           <>
-            <div>운영월 상태: {selectedMonth.status}</div>
+            <div>{t("common.operatingMonthStatusPrefix")}: {operatingMonthStatusLabel(locale, selectedMonth.status)}</div>
             <div>
-              날짜 범위: {selectedMonth.startDate} ~ {selectedMonth.endDate}
+              {t("common.dateRange")}: {selectedMonth.startDate} ~ {selectedMonth.endDate}
             </div>
           </>
         }
       />
 
-      <SettlementTabs />
+      <SettlementTabs t={t} />
 
       <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
         <label className="grid gap-1 text-xs font-medium text-muted">
-          운영월
+          {t("common.operatingMonth")}
           <select
-            aria-label="운영월"
+            aria-label={t("common.operatingMonth")}
             className="h-9 min-w-44 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
             defaultValue={selectedMonth.id}
             name="operatingMonthId"
           >
             {operatingMonths.map((month) => (
               <option key={month.id} value={month.id}>
-                {month.monthKey} ({month.status})
+                {t("common.monthOption", { monthKey: month.monthKey, status: operatingMonthStatusLabel(locale, month.status) })}
               </option>
             ))}
           </select>
         </label>
         <button className="h-9 border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
-          조회
+          {t("common.query")}
         </button>
       </form>
 
       {errorMessage ? (
         <section className="border border-danger bg-surface px-4 py-5" role="alert">
-          <h2 className="text-base font-semibold text-danger">운영팀 월 인센 조회 실패</h2>
+          <h2 className="text-base font-semibold text-danger">{t("settlements.opsMonthly.error.title")}</h2>
           <p className="mt-2 text-sm text-muted">{errorMessage}</p>
           <form className="mt-4" method="get">
             <input name="operatingMonthId" type="hidden" value={selectedMonth.id} />
             <button className="h-9 border border-border bg-background px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
-              재조회
+              {t("settlements.requery")}
             </button>
           </form>
         </section>
       ) : result ? (
         <>
-          {closingSnapshot ? <SnapshotSummary closing={closingSnapshot} currentStatus={selectedMonth.status} /> : null}
+          {closingSnapshot ? <SnapshotSummary locale={locale} t={t} closing={closingSnapshot} currentStatus={selectedMonth.status} /> : null}
           {snapshotErrorMessage ? (
             <section className="mb-4 border border-warning bg-surface px-4 py-3" role="status">
-              <h2 className="text-sm font-semibold text-warning">확정 스냅샷 없음</h2>
+              <h2 className="text-sm font-semibold text-warning">{t("settlements.opsMonthly.snapshotMissing.title")}</h2>
               <p className="mt-1 text-sm text-muted">{snapshotErrorMessage}</p>
             </section>
           ) : null}
-          <PreviewNotice result={result} selectedMonth={selectedMonth} />
+          <PreviewNotice locale={locale} t={t} result={result} selectedMonth={selectedMonth} />
           {result.warningMessage ? (
             <section className="mb-4 border border-warning bg-surface px-4 py-3" role="status">
-              <h2 className="text-sm font-semibold text-warning">미리보기 warning</h2>
-              <p className="mt-1 text-sm text-muted">{result.warningMessage}</p>
+              <h2 className="text-sm font-semibold text-warning">{t("settlements.opsMonthly.warning.title")}</h2>
+              <p className="mt-1 text-sm text-muted">{opsMonthlyWarningText(locale, result.warningMessage)}</p>
             </section>
           ) : null}
-          <OpsMonthlySummary result={result} />
-          <ShareSummary result={result} />
-          <EmployeePayoutTable result={result} />
-          <CallEvidenceTable result={result} />
+          <OpsMonthlySummary locale={locale} t={t} result={result} />
+          <ShareSummary locale={locale} t={t} result={result} />
+          <EmployeePayoutTable locale={locale} t={t} result={result} />
+          <CallEvidenceTable t={t} result={result} />
         </>
       ) : null}
     </main>

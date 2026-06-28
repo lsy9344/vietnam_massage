@@ -10,9 +10,11 @@ import {
 } from "@/modules/masters/course-service";
 import { CoursePolicyManager } from "@/app/(erp)/masters/courses/course-forms";
 import { PageHeader } from "@/components/domain/page-header";
+import { getServerTranslator } from "@/lib/i18n/server";
 
 export default async function CourseMasterPage() {
   const account = await requireRouteAccess("/masters/courses");
+  const { t } = await getServerTranslator();
   await ensureDefaultCoursesAndPolicies({ actorId: account.id });
 
   const operatingMonths = await listOperatingMonths();
@@ -29,14 +31,14 @@ export default async function CourseMasterPage() {
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
       <PageHeader
-        eyebrow="마스터 설정"
-        title="코스/수당/인센"
-        description="코스와 지급 정책은 코스 ID, 직원 ID, 적용월 이력으로 관리한다. 표시명 변경은 stable ID와 코스 코드를 바꾸지 않는다."
+        eyebrow={t("masters.eyebrow")}
+        title={t("masters.courses.title")}
+        description={t("masters.courses.description")}
         meta={
           <>
-            <div>기준 적용월: {monthKey}</div>
-            <div>코스: {courses.length}개</div>
-            <div>마사지사 수당: {therapistRates.length}개</div>
+            <div>{t("masters.courses.meta.baseMonth", { monthKey })}</div>
+            <div>{t("masters.courses.meta.courseCount", { count: courses.length })}</div>
+            <div>{t("masters.courses.meta.therapistRateCount", { count: therapistRates.length })}</div>
           </>
         }
       />

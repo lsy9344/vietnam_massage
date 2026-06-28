@@ -305,10 +305,11 @@ test.describe("Story 5.2 monthly closing bonuses", () => {
     await expect(page.getByRole("heading", { name: "월마감 미리보기" })).toBeVisible();
     await expect(page.getByText(`날짜 범위: ${seededData.startDate} ~ ${seededData.endDate}`)).toBeVisible();
     await expect(page.getByText("마사지사 지급 합계")).toBeVisible();
-    await expect(page.locator("section").filter({ hasText: "마사지사 지급 합계" })).toContainText(formatVnd(28800000));
+    // 언어 전환 버튼 추가로 외곽 shell <section>도 hasText에 걸리므로, 요약 region으로 한정한다.
+    await expect(page.getByRole("region", { name: "월마감 미리보기 요약" })).toContainText(formatVnd(28800000));
     await expect(page.getByRole("columnheader", { name: "만근 인정일" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "만근수당" })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "갯수왕" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "갯수왕", exact: true })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "갯수왕 수당" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "최종지급액" })).toBeVisible();
 

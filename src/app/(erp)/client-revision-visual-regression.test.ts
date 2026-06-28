@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
+import { LocaleProvider } from "@/lib/i18n/client";
 import { PageHeader } from "@/components/domain/page-header";
 import type { ServiceCallFormOptions, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 
@@ -79,30 +80,37 @@ describe("client revision visual regression guards", () => {
     assert.match(css, /\.page-header-band\s*\{/);
     assert.match(css, /\.page-header-eyebrow\s*\{/);
 
-    for (const [path, title] of [
-      ["src/app/(erp)/calls/page.tsx", "콜/예약 입력 원장"],
-      ["src/app/(erp)/dashboard/today/page.tsx", "오늘 KPI 대시보드"],
-      ["src/app/(erp)/dashboard/monthly/page.tsx", "월간 KPI 대시보드"],
-      ["src/app/(erp)/dashboard/reports/page.tsx", "그래프 리포트"],
-      ["src/app/(erp)/live/page.tsx", "첫화면 실시간 현황"],
-      ["src/app/(erp)/rooms/page.tsx", "객실 현황"],
-      ["src/app/(erp)/settlements/page.tsx", "마사지사 일일정산"]
+    // i18n 전환된 화면(/live·/rooms·/calls·/settlements·/closing·/dashboard)은 제목을 t() key로 참조하고, 한국어 원문은 messages/ko.ts에 보존한다.
+    const koMessages = source("src/lib/i18n/messages/ko.ts");
+    for (const [path, titleKey, koTitle] of [
+      ["src/app/(erp)/live/page.tsx", "nav.item.live", "첫화면 실시간 현황"],
+      ["src/app/(erp)/rooms/page.tsx", "nav.item.rooms", "객실 현황"],
+      ["src/app/(erp)/calls/page.tsx", "calls.title", "콜/예약 입력 원장"],
+      ["src/app/(erp)/settlements/page.tsx", "settlements.therapist.title", "마사지사 일일정산"],
+      ["src/app/(erp)/dashboard/today/page.tsx", "dashboard.today.title", "오늘 KPI 대시보드"],
+      ["src/app/(erp)/dashboard/monthly/page.tsx", "dashboard.monthly.title", "월간 KPI 대시보드"],
+      ["src/app/(erp)/dashboard/reports/page.tsx", "dashboard.reports.title", "그래프 리포트"]
     ] as const) {
       const page = source(path);
       assert.match(page, /<PageHeader/);
-      assert.match(page, new RegExp(`title="${title}"`));
+      assert.match(page, new RegExp(`title=\\{t\\("${titleKey}"\\)\\}`));
+      assert.ok(koMessages.includes(koTitle), `messages/ko.ts must keep ${koTitle}`);
     }
   });
 
   it("renders discounted call payment with base price strike-through and actual payment emphasis", () => {
+    // i18n 전환: 그리드 금액 포맷은 locale 기반이므로 ko locale을 시드해 기존 천단위(,) 표기를 검증한다.
     const html = renderToStaticMarkup(
-      createElement(EditableCallGrid, {
-        isLocked: true,
-        operatingMonthId: "month-1",
-        options: callGridOptions,
-        rows: [discountedCallRow],
-        serviceDate: "2026-06-20",
-        showSettlementColumns: false
+      createElement(LocaleProvider, {
+        locale: "ko",
+        children: createElement(EditableCallGrid, {
+          isLocked: true,
+          operatingMonthId: "month-1",
+          options: callGridOptions,
+          rows: [discountedCallRow],
+          serviceDate: "2026-06-20",
+          showSettlementColumns: false
+        })
       })
     );
 
@@ -112,25 +120,51 @@ describe("client revision visual regression guards", () => {
 
   it("keeps today dashboard revenue strong and cost amounts danger toned", () => {
     const todayPage = source("src/app/(erp)/dashboard/today/page.tsx");
+    // i18n 전환: KPI 라벨은 t() key로 참조하고 한국어 원문은 messages/ko.ts에 보존한다. 톤 색상 구조는 그대로 유지한다.
+    const koMessages = source("src/lib/i18n/messages/ko.ts");
 
     assert.match(todayPage, /tone === "strong"\s*\?\s*"mt-1 text-3xl font-bold text-brand/);
     assert.match(todayPage, /tone === "cost"\s*\?\s*"mt-1 text-2xl font-semibold text-danger/);
-    assert.match(todayPage, /<KpiTile label="결제합계" value=\{formatVnd\(metrics\.financials\.paymentTotal\)\} tone="strong" \/>/);
-    assert.match(todayPage, /<KpiTile label="순이익" value=\{formatVnd\(metrics\.financials\.netProfit\)\} note="결제합계 - 일일 비용" tone="strong" \/>/);
-    for (const label of ["일일인센 합계", "지출합계", "마사지사 정산", "귀케어 정산", "일일비용 합계"]) {
-      assert.match(todayPage, new RegExp(`<KpiTile label="${label}"[^\\n]+tone="cost"`));
+    assert.match(todayPage, /<KpiTile label=\{t\("dashboard\.today\.kpi\.paymentTotal"\)\} value=\{formatVnd\(metrics\.financials\.paymentTotal\)\} tone="strong" \/>/);
+    assert.match(todayPage, /<KpiTile label=\{t\("dashboard\.today\.kpi\.netProfit"\)\} value=\{formatVnd\(metrics\.financials\.netProfit\)\} note=\{t\("dashboard\.today\.kpi\.netProfitNote"\)\} tone="strong" \/>/);
+    for (const ko of ["결제합계", "순이익", "결제합계 - 일일 비용"]) {
+      assert.ok(koMessages.includes(ko), `messages/ko.ts must keep ${ko}`);
+    }
+    for (const [labelKey, ko] of [
+      ["dashboard.today.kpi.opsDailyIncentiveTotal", "일일인센 합계"],
+      ["dashboard.today.kpi.expenseTotal", "지출합계"],
+      ["dashboard.today.kpi.therapistPayoutTotal", "마사지사 정산"],
+      ["dashboard.today.kpi.earcarePayoutTotal", "귀케어 정산"],
+      ["dashboard.today.kpi.dailyCostTotal", "일일비용 합계"]
+    ] as const) {
+      assert.match(todayPage, new RegExp(`<KpiTile label=\\{t\\("${labelKey.replace(/\./g, "\\.")}"\\)\\}[^\\n]+tone="cost"`));
+      assert.ok(koMessages.includes(ko), `messages/ko.ts must keep ${ko}`);
     }
   });
 
   it("keeps monthly dashboard revenue strong and daily/monthly costs danger toned", () => {
     const monthlyPage = source("src/app/(erp)/dashboard/monthly/page.tsx");
+    // i18n 전환: KPI 라벨은 t() key로 참조하고 한국어 원문은 messages/ko.ts에 보존한다. 톤 색상 구조는 그대로 유지한다.
+    const koMessages = source("src/lib/i18n/messages/ko.ts");
 
     assert.match(monthlyPage, /tone === "strong"\s*\?\s*"mt-1 text-3xl font-bold text-brand/);
     assert.match(monthlyPage, /tone === "cost"\s*\?\s*"mt-1 text-2xl font-semibold text-danger/);
-    assert.match(monthlyPage, /<KpiTile label="결제합계" value=\{formatVnd\(financials\.paymentTotal\)\} tone="strong" \/>/);
-    assert.match(monthlyPage, /<KpiTile label="월간 순이익" value=\{formatVnd\(financials\.netProfit\)\} note="결제합계 - 일일비용 - 월간비용" tone="strong" \/>/);
-    for (const label of ["지출합계", "일일비용 합계", "월간비용 합계", "운영팀 월인센", "만근수당", "갯수왕", "전체 지급 합계"]) {
-      assert.match(monthlyPage, new RegExp(`<KpiTile label="${label}"[^\\n]+tone="cost"`));
+    assert.match(monthlyPage, /<KpiTile label=\{t\("dashboard\.monthly\.kpi\.paymentTotal"\)\} value=\{formatVnd\(financials\.paymentTotal\)\} tone="strong" \/>/);
+    assert.match(monthlyPage, /<KpiTile label=\{t\("dashboard\.monthly\.kpi\.netProfit"\)\} value=\{formatVnd\(financials\.netProfit\)\} note=\{t\("dashboard\.monthly\.kpi\.netProfitNote"\)\} tone="strong" \/>/);
+    for (const ko of ["결제합계", "월간 순이익", "결제합계 - 일일비용 - 월간비용"]) {
+      assert.ok(koMessages.includes(ko), `messages/ko.ts must keep ${ko}`);
+    }
+    for (const [labelKey, ko] of [
+      ["dashboard.monthly.kpi.expenseTotal", "지출합계"],
+      ["dashboard.monthly.kpi.dailyCostTotal", "일일비용 합계"],
+      ["dashboard.monthly.kpi.monthlyCostTotal", "월간비용 합계"],
+      ["dashboard.monthly.kpi.opsMonthlyIncentiveTotal", "운영팀 월인센"],
+      ["dashboard.monthly.kpi.fullAttendanceAllowanceTotal", "만근수당"],
+      ["dashboard.monthly.kpi.countKingBonusTotal", "갯수왕"],
+      ["dashboard.monthly.kpi.settlementPayoutTotal", "전체 지급 합계"]
+    ] as const) {
+      assert.match(monthlyPage, new RegExp(`<KpiTile label=\\{t\\("${labelKey.replace(/\./g, "\\.")}"\\)\\}[^\\n]+tone="cost"`));
+      assert.ok(koMessages.includes(ko), `messages/ko.ts must keep ${ko}`);
     }
   });
 });

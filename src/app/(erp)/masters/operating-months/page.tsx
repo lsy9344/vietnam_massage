@@ -2,6 +2,7 @@ import { requireRouteAccess } from "@/lib/authorization";
 import { listOperatingMonths, type OperatingMonthDto } from "@/modules/masters/operating-month-service";
 import { OperatingMonthManager } from "@/app/(erp)/masters/operating-months/operating-month-forms";
 import { PageHeader } from "@/components/domain/page-header";
+import { getServerTranslator } from "@/lib/i18n/server";
 
 function kstTodayIsoDate() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -26,18 +27,19 @@ function getHighlightedMonthKey(months: OperatingMonthDto[]) {
 export default async function OperatingMonthsPage() {
   await requireRouteAccess("/masters/operating-months");
 
+  const { t } = await getServerTranslator();
   const months = await listOperatingMonths();
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
       <PageHeader
-        eyebrow="마스터 설정"
-        title="운영월 관리"
-        description="모든 콜 입력, 정산, 대시보드, 월마감이 공유할 운영월과 날짜 범위를 관리한다."
+        eyebrow={t("masters.eyebrow")}
+        title={t("masters.operatingMonths.title")}
+        description={t("masters.operatingMonths.description")}
         meta={
           <>
-            <div>기본 상태: 작성중</div>
-            <div>날짜 형식: YYYY-MM-DD</div>
+            <div>{t("masters.operatingMonths.meta.defaultStatus")}</div>
+            <div>{t("masters.operatingMonths.meta.dateFormat")}</div>
           </>
         }
       />

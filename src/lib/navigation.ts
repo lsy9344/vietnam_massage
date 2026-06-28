@@ -1,13 +1,14 @@
 import type { Role } from "@/lib/authorization";
+import type { MessageKey } from "@/lib/i18n/types";
 
 export type NavigationItem = {
-  label: string;
+  labelKey: MessageKey;
   href: string;
   allowedRoles: Role[];
 };
 
 export type NavigationGroup = {
-  label: string;
+  labelKey: MessageKey;
   items: NavigationItem[];
 };
 
@@ -15,47 +16,47 @@ const allRoles: Role[] = ["administrator", "counter", "waiter", "settlement_mana
 
 export const navigationGroups: NavigationGroup[] = [
   {
-    label: "운영 현황",
+    labelKey: "nav.group.operations",
     items: [
-      { label: "첫화면 실시간 현황", href: "/live", allowedRoles: ["administrator", "counter"] },
-      { label: "객실 현황", href: "/rooms", allowedRoles: ["administrator", "counter", "waiter", "read_only_viewer"] },
-      { label: "TV 현황판", href: "/tv", allowedRoles: ["administrator", "read_only_viewer"] }
+      { labelKey: "nav.item.live", href: "/live", allowedRoles: ["administrator", "counter"] },
+      { labelKey: "nav.item.rooms", href: "/rooms", allowedRoles: ["administrator", "counter", "waiter", "read_only_viewer"] },
+      { labelKey: "nav.item.tv", href: "/tv", allowedRoles: ["administrator", "read_only_viewer"] }
     ]
   },
   {
-    label: "콜 원장",
-    items: [{ label: "콜/예약 입력 원장", href: "/calls", allowedRoles: ["administrator", "counter"] }]
+    labelKey: "nav.group.calls",
+    items: [{ labelKey: "nav.item.calls", href: "/calls", allowedRoles: ["administrator", "counter"] }]
   },
   {
-    label: "정산",
-    items: [{ label: "정산 화면", href: "/settlements", allowedRoles: ["administrator", "settlement_manager"] }]
+    labelKey: "nav.group.settlements",
+    items: [{ labelKey: "nav.item.settlements", href: "/settlements", allowedRoles: ["administrator", "settlement_manager"] }]
   },
   {
-    label: "월마감",
-    items: [{ label: "월마감", href: "/closing", allowedRoles: ["administrator", "settlement_manager"] }]
+    labelKey: "nav.group.closing",
+    items: [{ labelKey: "nav.item.closing", href: "/closing", allowedRoles: ["administrator", "settlement_manager"] }]
   },
   {
-    label: "대시보드",
+    labelKey: "nav.group.dashboard",
     items: [
-      { label: "오늘 대시보드", href: "/dashboard/today", allowedRoles: allRoles.filter((role) => role !== "waiter") },
-      { label: "월간 대시보드", href: "/dashboard/monthly", allowedRoles: allRoles.filter((role) => role !== "waiter") },
-      { label: "그래프 리포트", href: "/dashboard/reports", allowedRoles: allRoles.filter((role) => role !== "waiter") }
+      { labelKey: "nav.item.dashboardToday", href: "/dashboard/today", allowedRoles: allRoles.filter((role) => role !== "waiter") },
+      { labelKey: "nav.item.dashboardMonthly", href: "/dashboard/monthly", allowedRoles: allRoles.filter((role) => role !== "waiter") },
+      { labelKey: "nav.item.dashboardReports", href: "/dashboard/reports", allowedRoles: allRoles.filter((role) => role !== "waiter") }
     ]
   },
   {
-    label: "마스터 설정",
+    labelKey: "nav.group.masters",
     items: [
-      { label: "운영월", href: "/masters/operating-months", allowedRoles: ["administrator"] },
-      { label: "객실", href: "/masters/rooms", allowedRoles: ["administrator"] },
-      { label: "코드/시간 슬롯", href: "/masters/codes", allowedRoles: ["administrator"] },
-      { label: "직원", href: "/masters/employees", allowedRoles: ["administrator"] },
-      { label: "코스/수당/인센", href: "/masters/courses", allowedRoles: ["administrator"] },
-      { label: "시트 기능 매핑표", href: "/masters/sheet-mapping", allowedRoles: ["administrator", "read_only_viewer"] }
+      { labelKey: "nav.item.mastersOperatingMonths", href: "/masters/operating-months", allowedRoles: ["administrator"] },
+      { labelKey: "nav.item.mastersRooms", href: "/masters/rooms", allowedRoles: ["administrator"] },
+      { labelKey: "nav.item.mastersCodes", href: "/masters/codes", allowedRoles: ["administrator"] },
+      { labelKey: "nav.item.mastersEmployees", href: "/masters/employees", allowedRoles: ["administrator"] },
+      { labelKey: "nav.item.mastersCourses", href: "/masters/courses", allowedRoles: ["administrator"] },
+      { labelKey: "nav.item.mastersSheetMapping", href: "/masters/sheet-mapping", allowedRoles: ["administrator", "read_only_viewer"] }
     ]
   },
   {
-    label: "감사 로그",
-    items: [{ label: "감사 로그", href: "/audit", allowedRoles: ["administrator"] }]
+    labelKey: "nav.group.audit",
+    items: [{ labelKey: "nav.item.audit", href: "/audit", allowedRoles: ["administrator"] }]
   }
 ];
 

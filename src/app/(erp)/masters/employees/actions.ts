@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
 import { AuthorizationError, requirePermission } from "@/lib/authorization";
+import { t } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n/config";
+import { getLocale } from "@/lib/i18n/server";
+import { resolveDomainErrorMessage } from "@/lib/i18n/errors";
 import { AccountDomainError, linkUserAccountToEmployee } from "@/modules/masters/account-service";
 import {
   EmployeeDomainError,
@@ -46,35 +50,37 @@ function employeePayload(formData: FormData) {
   };
 }
 
-function mapEmployeeActionError(error: unknown): ActionResult<EmployeeDto> {
+function mapEmployeeActionError(error: unknown, locale: Locale): ActionResult<EmployeeDto> {
   if (error instanceof EmployeeDomainError) {
-    return { ok: false, formError: error.message, domainErrorCode: error.code };
+    return { ok: false, formError: resolveDomainErrorMessage(locale, error.code, error.message), domainErrorCode: error.code };
   }
   if (error instanceof AuthorizationError) {
-    return { ok: false, formError: "권한이 없습니다." };
+    return { ok: false, formError: t(locale, "action.error.noPermission") };
   }
-  return { ok: false, formError: "직원 저장 중 오류가 발생했습니다." };
+  return { ok: false, formError: t(locale, "action.error.saveFailed") };
 }
 
 function mapAccountActionError(
-  error: unknown
+  error: unknown,
+  locale: Locale
 ): ActionResult<{ id: string; accountId: string; email: string; role: string; employeeId: string | null }> {
   if (error instanceof AccountDomainError) {
-    return { ok: false, formError: error.message, domainErrorCode: error.code };
+    return { ok: false, formError: resolveDomainErrorMessage(locale, error.code, error.message), domainErrorCode: error.code };
   }
   if (error instanceof AuthorizationError) {
-    return { ok: false, formError: "권한이 없습니다." };
+    return { ok: false, formError: t(locale, "action.error.noPermission") };
   }
-  return { ok: false, formError: "계정 연결 중 오류가 발생했습니다." };
+  return { ok: false, formError: t(locale, "action.error.saveFailed") };
 }
 
 export async function createEmployeeAction(_previousState: EmployeeActionState, formData: FormData): Promise<EmployeeActionState> {
+  const locale = await getLocale();
   const parsed = createEmployeeSchema.safeParse(employeePayload(formData));
   if (!parsed.success) {
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "직원 입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -84,7 +90,7 @@ export async function createEmployeeAction(_previousState: EmployeeActionState, 
     revalidatePath("/masters/employees");
     return { ok: true, data };
   } catch (error) {
-    return mapEmployeeActionError(error);
+    return mapEmployeeActionError(error, locale);
   }
 }
 
@@ -92,12 +98,13 @@ export async function updateEmployeeProfileAction(
   _previousState: EmployeeActionState,
   formData: FormData
 ): Promise<EmployeeActionState> {
+  const locale = await getLocale();
   const parsed = updateEmployeeProfileSchema.safeParse(employeePayload(formData));
   if (!parsed.success) {
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "직원 입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -107,7 +114,7 @@ export async function updateEmployeeProfileAction(
     revalidatePath("/masters/employees");
     return { ok: true, data };
   } catch (error) {
-    return mapEmployeeActionError(error);
+    return mapEmployeeActionError(error, locale);
   }
 }
 
@@ -115,6 +122,7 @@ export async function updateEmployeeSortOrderAction(
   _previousState: EmployeeActionState,
   formData: FormData
 ): Promise<EmployeeActionState> {
+  const locale = await getLocale();
   const parsed = updateEmployeeSortOrderSchema.safeParse({
     employeeId: formData.get("employeeId"),
     sortOrder: formData.get("sortOrder")
@@ -123,7 +131,7 @@ export async function updateEmployeeSortOrderAction(
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "정렬 순서 입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -133,11 +141,12 @@ export async function updateEmployeeSortOrderAction(
     revalidatePath("/masters/employees");
     return { ok: true, data };
   } catch (error) {
-    return mapEmployeeActionError(error);
+    return mapEmployeeActionError(error, locale);
   }
 }
 
 export async function deactivateEmployeeAction(_previousState: EmployeeActionState, formData: FormData): Promise<EmployeeActionState> {
+  const locale = await getLocale();
   const parsed = deactivateEmployeeSchema.safeParse({
     employeeId: formData.get("employeeId")
   });
@@ -145,7 +154,7 @@ export async function deactivateEmployeeAction(_previousState: EmployeeActionSta
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "비활성 처리 입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -155,7 +164,7 @@ export async function deactivateEmployeeAction(_previousState: EmployeeActionSta
     revalidatePath("/masters/employees");
     return { ok: true, data };
   } catch (error) {
-    return mapEmployeeActionError(error);
+    return mapEmployeeActionError(error, locale);
   }
 }
 
@@ -163,6 +172,7 @@ export async function linkUserAccountToEmployeeAction(
   _previousState: AccountLinkActionState,
   formData: FormData
 ): Promise<AccountLinkActionState> {
+  const locale = await getLocale();
   const parsed = linkUserAccountToEmployeeSchema.safeParse({
     employeeId: formData.get("employeeId"),
     email: formData.get("email"),
@@ -174,7 +184,7 @@ export async function linkUserAccountToEmployeeAction(
     return {
       ok: false,
       fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
-      formError: "계정 연결 입력값을 확인하세요."
+      formError: t(locale, "action.error.invalidInput")
     };
   }
 
@@ -184,6 +194,6 @@ export async function linkUserAccountToEmployeeAction(
     revalidatePath("/masters/employees");
     return { ok: true, data };
   } catch (error) {
-    return mapAccountActionError(error);
+    return mapAccountActionError(error, locale);
   }
 }

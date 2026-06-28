@@ -133,13 +133,17 @@ for (const required of [
   "listMigrationVerificationIssues",
   "parseMigrationVerificationFilters",
   "MigrationIssueStatusForm",
-  "기능 보존율",
-  "누락 항목",
-  "계산 불일치",
-  "열린 추적",
-  "숨김 목록 100% gate"
+  "masters.sheetMapping.summary.preservationRate",
+  "masters.sheetMapping.summary.missingItems",
+  "masters.sheetMapping.summary.calcMismatch",
+  "masters.sheetMapping.summary.openIssues",
+  "masters.sheetMapping.gate.title"
 ]) {
   if (!page.includes(required)) errors.push(`sheet mapping page missing report marker: ${required}`);
+}
+// i18n 전환: 위 마커의 한국어 원문은 messages/ko.ts에 보존한다.
+for (const ko of ["기능 보존율", "누락 항목", "계산 불일치", "열린 추적", "숨김 목록 100% gate"]) {
+  if (!read("src/lib/i18n/messages/ko.ts").includes(ko)) errors.push(`messages/ko.ts missing sheet-mapping report string: ${ko}`);
 }
 
 if (!action.includes("requirePermission(\"migration:write\")")) errors.push("sheet mapping action must require migration:write");
@@ -149,7 +153,7 @@ if (!auth.includes("read_only_viewer: [\"/masters/sheet-mapping\"]")) errors.pus
 if (auth.includes("read_only_viewer: [\"/rooms\", \"/tv\", \"/dashboard/today\", \"/dashboard/monthly\", \"/dashboard/reports\", \"/masters")) {
   errors.push("authorization.ts must not open /masters prefix to read_only_viewer");
 }
-if (!nav.includes("{ label: \"시트 기능 매핑표\", href: \"/masters/sheet-mapping\", allowedRoles: [\"administrator\", \"read_only_viewer\"] }")) {
+if (!nav.includes("{ labelKey: \"nav.item.mastersSheetMapping\", href: \"/masters/sheet-mapping\", allowedRoles: [\"administrator\", \"read_only_viewer\"] }")) {
   errors.push("navigation.ts must keep 시트 기능 매핑표 for administrator/read_only_viewer only");
 }
 

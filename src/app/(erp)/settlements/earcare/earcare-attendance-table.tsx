@@ -1,6 +1,10 @@
 "use client";
 
 import { useActionState, useId } from "react";
+import { useLocale, useT } from "@/lib/i18n/client";
+import type { Translator } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n/config";
+import { codeLabel } from "@/lib/i18n/codes";
 import { saveEarcareAttendanceAction, type EarcareAttendanceActionState } from "@/app/(erp)/settlements/earcare/actions";
 import type { AttendanceStatusOptionDto, EarcareAttendanceDto } from "@/modules/settlements/earcare-attendance-service";
 
@@ -9,14 +13,18 @@ function inlineError(state: EarcareAttendanceActionState, field?: string) {
   return field ? state.fieldErrors?.[field]?.[0] ?? null : state.formError ?? null;
 }
 
-function EligibilityBadge({ row }: { row: EarcareAttendanceDto }) {
+function attendanceLabel(locale: Locale, code: string, dbDisplayName: string) {
+  return codeLabel(locale, "ATTENDANCE_STATUS", code, true, dbDisplayName);
+}
+
+function EligibilityBadge({ row, t, locale }: { row: EarcareAttendanceDto; t: Translator; locale: Locale }) {
   if (row.isPayoutEligible) {
-    return <span className="inline-flex border border-success bg-success/10 px-2 py-1 text-xs font-semibold text-success">지급 대상</span>;
+    return <span className="inline-flex border border-success bg-success/10 px-2 py-1 text-xs font-semibold text-success">{t("settlements.earcare.payoutEligible")}</span>;
   }
 
   return (
     <span className="inline-flex border border-border bg-readonly px-2 py-1 text-xs font-semibold text-muted">
-      제외: {row.exclusionReason ?? row.statusDisplayName}
+      {t("settlements.earcare.excluded", { reason: attendanceLabel(locale, row.statusCode, row.statusDisplayName) })}
     </span>
   );
 }
@@ -34,6 +42,8 @@ function EarcareAttendanceRowForm({
   row: EarcareAttendanceDto;
   statusOptions: AttendanceStatusOptionDto[];
 }) {
+  const t = useT();
+  const locale = useLocale();
   const [state, formAction, pending] = useActionState<EarcareAttendanceActionState, FormData>(saveEarcareAttendanceAction, null);
   const formId = useId();
   const formError = inlineError(state);
@@ -53,7 +63,7 @@ function EarcareAttendanceRowForm({
       </td>
       <td className="px-3 py-2">
         <label className="grid max-w-48 gap-1">
-          <span className="sr-only">{row.displayName} 근무상태</span>
+          <span className="sr-only">{t("settlements.earcare.attendance.workStatusAria", { name: row.displayName })}</span>
           <select
             aria-invalid={statusError ? "true" : undefined}
             className="h-9 border border-border bg-background px-2 text-sm text-foreground outline-none disabled:bg-readonly disabled:text-muted focus:border-brand"
@@ -64,7 +74,7 @@ function EarcareAttendanceRowForm({
           >
             {statusOptions.map((option) => (
               <option key={option.code} value={option.code}>
-                {option.displayName}
+                {attendanceLabel(locale, option.code, option.displayName)}
               </option>
             ))}
           </select>
@@ -76,7 +86,7 @@ function EarcareAttendanceRowForm({
         </label>
       </td>
       <td className="px-3 py-2">
-        <EligibilityBadge row={savedRow ?? row} />
+        <EligibilityBadge row={savedRow ?? row} t={t} locale={locale} />
       </td>
       <td className="px-3 py-2">
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -86,15 +96,15 @@ function EarcareAttendanceRowForm({
             form={formId}
             type="submit"
           >
-            {pending ? "저장중" : formError ? "재시도" : "저장"}
+            {pending ? t("settlements.therapist.attendance.action.saving") : formError ? t("settlements.therapist.attendance.action.retry") : t("settlements.therapist.attendance.action.save")}
           </button>
           <span className="min-w-16 text-right text-xs text-muted" aria-live="polite">
-            {pending ? "저장중" : savedRow ? "저장됨" : disabled ? "잠금" : "대기"}
+            {pending ? t("settlements.therapist.attendance.action.saving") : savedRow ? t("settlements.therapist.attendance.status.saved") : disabled ? t("settlements.therapist.attendance.status.locked") : t("settlements.therapist.attendance.status.waiting")}
           </span>
         </div>
         {formError ? (
           <div className="mt-1 text-right text-xs text-danger" role="alert">
-            저장 실패: {formError}
+            {t("settlements.therapist.attendance.saveFailed", { message: formError })}
           </div>
         ) : null}
       </td>
@@ -115,11 +125,12 @@ export function EarcareAttendanceTable({
   rows: EarcareAttendanceDto[];
   statusOptions: AttendanceStatusOptionDto[];
 }) {
+  const t = useT();
   if (rows.length === 0) {
     return (
       <section className="border border-border bg-surface px-4 py-8">
-        <h2 className="text-base font-semibold text-foreground">활성 귀케어사가 없습니다</h2>
-        <p className="mt-2 text-sm text-muted">직원 마스터에서 귀케어팀 직원을 활성화한 뒤 다시 조회하세요.</p>
+        <h2 className="text-base font-semibold text-foreground">{t("settlements.earcare.attendance.empty.title")}</h2>
+        <p className="mt-2 text-sm text-muted">{t("settlements.earcare.attendance.empty.description")}</p>
       </section>
     );
   }
@@ -129,10 +140,10 @@ export function EarcareAttendanceTable({
       <table className="min-w-[760px] w-full border-collapse text-sm">
         <thead className="bg-readonly text-left text-xs font-semibold uppercase text-muted">
           <tr>
-            <th className="border-b border-border px-3 py-2">귀케어사</th>
-            <th className="border-b border-border px-3 py-2">근무상태</th>
-            <th className="border-b border-border px-3 py-2">지급 판정</th>
-            <th className="border-b border-border px-3 py-2 text-right">저장 상태</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.earcare.attendance.column.earcareStaff")}</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.earcare.attendance.column.workStatus")}</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.earcare.attendance.column.payoutDecision")}</th>
+            <th className="border-b border-border px-3 py-2 text-right">{t("settlements.earcare.attendance.column.saveStatus")}</th>
           </tr>
         </thead>
         <tbody>
