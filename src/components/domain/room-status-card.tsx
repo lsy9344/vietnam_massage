@@ -37,14 +37,17 @@ export function RoomStatusCard({
   const isTv = variant === "tv";
   const statusLabel = roomStatusLabel(locale, status.displayStatus);
 
+  // 안내 문구는 전부 표시 경계에서 번역한다. 서비스의 status.guidanceText(한국어)는
+  // 더 이상 화면에 직접 노출하지 않는다. 종료확인/종료임박/빈방은 짧은 표시 변형을 쓰고,
+  // 예약/사용중/청소중은 status 키 기반 guidance 메시지로 번역한다.
   const guidance =
     status.displayStatus === "종료확인"
       ? t("roomCard.guidance.completeCheck")
-      : isEndingSoon
+      : status.displayStatus === "종료임박"
         ? t("roomCard.guidance.endingSoon")
-        : isEmpty
+        : status.displayStatus === "빈방"
           ? t("roomCard.guidance.empty")
-          : status.guidanceText;
+          : t(`roomCard.guidance.${status.displayStatus}`);
 
   return (
     <article

@@ -7,7 +7,8 @@ import { mapTherapistDailySettlementPaymentActionError } from "@/app/(erp)/settl
 describe("mapTherapistDailySettlementPaymentActionError", () => {
   it("내부 DB 오류 메시지는 사용자에게 노출하지 않는다", () => {
     const result = mapTherapistDailySettlementPaymentActionError(
-      new Error('relation "therapist_daily_settlement_payment_histories" does not exist')
+      new Error('relation "therapist_daily_settlement_payment_histories" does not exist'),
+      "ko"
     );
 
     assert.equal(result.ok, false);
@@ -15,16 +16,24 @@ describe("mapTherapistDailySettlementPaymentActionError", () => {
     assert.equal(result.formError.includes("relation"), false);
   });
 
-  it("허용된 업무 오류 메시지는 그대로 돌려준다", () => {
-    const result = mapTherapistDailySettlementPaymentActionError(new Error("운영월을 찾을 수 없습니다."));
+  it("허용된 업무 오류 메시지는 ko에서 한국어 원문으로 돌려준다", () => {
+    const result = mapTherapistDailySettlementPaymentActionError(new Error("운영월을 찾을 수 없습니다."), "ko");
 
     assert.equal(result.ok, false);
     assert.equal(result.formError, "운영월을 찾을 수 없습니다.");
   });
 
-  it("권한과 감사 로그 오류는 정해진 사용자 문구로 매핑한다", () => {
-    const authorization = mapTherapistDailySettlementPaymentActionError(new AuthorizationError());
-    const audit = mapTherapistDailySettlementPaymentActionError(new AuditDomainError("raw audit failure", "INVALID_AUDIT_ACTION"));
+  it("허용된 업무 오류 메시지는 vi에서 베트남어로 번역한다", () => {
+    const result = mapTherapistDailySettlementPaymentActionError(new Error("운영월을 찾을 수 없습니다."), "vi");
+
+    assert.equal(result.ok, false);
+    assert.equal(result.formError, "Không tìm thấy tháng vận hành.");
+    assert.equal((result.formError ?? "").includes("운영월"), false);
+  });
+
+  it("권한과 감사 로그 오류는 정해진 locale 문구로 매핑한다", () => {
+    const authorization = mapTherapistDailySettlementPaymentActionError(new AuthorizationError(), "ko");
+    const audit = mapTherapistDailySettlementPaymentActionError(new AuditDomainError("raw audit failure", "INVALID_AUDIT_ACTION"), "ko");
 
     assert.equal(authorization.ok, false);
     assert.equal(authorization.formError, "권한이 없습니다.");

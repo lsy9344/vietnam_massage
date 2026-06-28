@@ -82,10 +82,14 @@ export const ko = {
   "roomStatus.빈방": "빈방",
   "roomStatus.aria": "상태: {status}",
 
-  // 객실 카드 안내 문구
+  // 객실 카드 안내 문구 (종료확인/종료임박/빈방은 짧은 표시 변형)
   "roomCard.guidance.completeCheck": "결제·확인 필요",
   "roomCard.guidance.endingSoon": "곧 종료",
   "roomCard.guidance.empty": "즉시 가능",
+  // 예약/사용중/청소중 안내 (서비스 ROOM_STATUS_GUIDANCE_TEXT 한국어를 표시 경계에서 번역)
+  "roomCard.guidance.예약": "예약 고객 입실 준비가 필요합니다.",
+  "roomCard.guidance.사용중": "서비스가 진행 중입니다.",
+  "roomCard.guidance.청소중": "정리 후 입실 가능합니다.",
 
   // 객실 카드 필드 라벨
   "roomCard.field.course": "코스",
@@ -207,6 +211,9 @@ export const ko = {
   "calls.calc.calculated": "계산됨",
   "calls.calc.notCompleted": "비완료 제외",
   "calls.calc.policyMissing": "정책 없음",
+  "calls.calc.coursePolicyMissing": "선택 운영월에 적용되는 코스 정책이 없습니다.",
+  "calls.calc.therapistRateMissing": "마사지사 수당 정책을 찾을 수 없습니다.",
+  "calls.calc.secondTherapistRequired": "D코스는 마사지사2 필수입니다. 마사지사2를 배정해야 저장됩니다.",
   "calls.calc.staleDraftTitle": "저장 보류 중인 draft는 재계산값으로 표시하지 않습니다.",
 
   // 일별 지출 패널
@@ -274,6 +281,7 @@ export const ko = {
   "settlements.requery": "재조회",
 
   // 마사지사 일일정산
+  "settlements.payment.saveFailed": "지급완료 상태 저장 중 오류가 발생했습니다.",
   "settlements.therapist.title": "마사지사 일일정산",
   "settlements.therapist.emptyMonthDescription": "마사지사 일일정산은 운영월 날짜 범위 안에서만 조회할 수 있다.",
   "settlements.therapist.description": "방문완료 콜 기준으로 마사지사별 담당 콜, 코스별 수당, 정책 상태 근거를 조회하고 출퇴근 시간과 만근 인정을 함께 관리한다.",
@@ -400,6 +408,8 @@ export const ko = {
   "settlements.ops.emptyMonthDescription": "운영팀 일일 인센은 운영월 날짜 범위 안에서만 조회할 수 있다.",
   "settlements.ops.locked.description": "이 운영월의 운영팀 근무상태는 수정할 수 없습니다. 입력 항목은 읽기 전용으로 표시됩니다.",
   "settlements.ops.warningNotice.title": "일일 인센 근거 확인",
+  "settlements.ops.warningNotice.missingPolicy": "적용월에 활성 운영팀 일일 인센 정책이 없습니다.",
+  "settlements.ops.warningNotice.belowThreshold": "최소 threshold 미만으로 운영팀 일일 인센이 없습니다.",
   "settlements.ops.error.title": "운영팀 일일 인센 조회 실패",
   "settlements.ops.error.fallback": "운영팀 일일 인센을 조회하지 못했습니다.",
   "settlements.ops.threshold.missingPolicy": "정책 없음",
@@ -626,6 +636,7 @@ export const ko = {
   "dashboard.today.empty.noCallsDescription": "조회 날짜를 바꾸거나 콜 원장에서 해당 날짜 데이터를 확인하세요.",
   "dashboard.today.goToCalls": "콜 원장으로 이동",
   "dashboard.today.warning.excludedTitle": "집계 제외 항목이 있습니다",
+  "dashboard.today.warning.excludedSummary": "정책/수당/D코스 검증 문제로 금액 또는 코스별 집계에서 제외된 콜이 있습니다.",
   "dashboard.today.warning.excludedDetail": "정책 누락 {policy}건, 수당 누락 {rate}건, D코스 마사지사2 필요 {second}건",
   "dashboard.today.status.reservationCount": "예약건수",
   "dashboard.today.status.completed": "방문완료",
@@ -683,6 +694,7 @@ export const ko = {
   "dashboard.monthly.empty.noCallsTitle": "이 운영월의 콜이 없습니다",
   "dashboard.monthly.empty.noCallsDescription": "운영월을 바꾸거나 콜 원장에서 해당 월 데이터를 확인하세요.",
   "dashboard.monthly.warning.excludedTitle": "집계 제외 항목이 있습니다",
+  "dashboard.monthly.warning.excludedSummary": "정책/수당/D코스 검증 문제로 금액 또는 코스별 집계에서 제외된 콜이 있습니다.",
   "dashboard.monthly.warning.excludedDetail": "정책 누락 {policy}건, 수당 누락 {rate}건, D코스 마사지사2 필요 {second}건",
   "dashboard.monthly.money.withheldAria": "월간 금액 KPI 표시 보류",
   "dashboard.monthly.money.withheldTitle": "월간 금액 KPI를 표시하지 않습니다",

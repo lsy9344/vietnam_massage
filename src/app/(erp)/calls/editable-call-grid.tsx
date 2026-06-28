@@ -3,6 +3,7 @@
 import {
   useActionState,
   useCallback,
+  useEffect,
   useId,
   useLayoutEffect,
   useMemo,
@@ -18,7 +19,7 @@ import { useLocale, useT } from "@/lib/i18n/client";
 import { formatDateTime, formatNumber } from "@/lib/i18n/format";
 import type { Locale } from "@/lib/i18n/config";
 import type { MessageKey } from "@/lib/i18n/types";
-import type { ServiceCallFormOptions, ServiceCallOption, ServiceCallRowDto } from "@/modules/calls/service-call-service";
+import type { ServiceCallCalculationStatus, ServiceCallFormOptions, ServiceCallOption, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 import type { ServiceCallAutosaveInput } from "@/modules/calls/service-call-schema";
 import { autosaveServiceCallRowAction, saveBasicServiceCallRowAction, type ServiceCallActionState } from "@/app/(erp)/calls/actions";
 import {
@@ -257,6 +258,16 @@ function SelectCell({
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const skipNextBlurCommit = useRef(false);
+  // 언어 전환(router.refresh) 등으로 options의 표시 라벨이나 selectedValue가 바뀌면,
+  // 팝업이 닫혀 있고 사용자가 입력 중이 아닐 때 표시값을 현재 라벨로 다시 동기화한다.
+  const resolvedLabel = optionLabel(options, selectedValue, emptyLabel);
+  useEffect(() => {
+    if (!open) {
+      setInputValue(resolvedLabel);
+    }
+    // open 중에는 사용자의 타이핑/필터를 덮어쓰지 않는다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedLabel, open]);
   const [inputEl, setInputEl] = useState<HTMLInputElement | null>(null);
   const { position: listboxPosition, measureRef } = useListboxPosition(inputEl, open);
   const filteredOptions = options.filter((option) => {
@@ -735,6 +746,15 @@ function saveStateClassName(state: RowSaveState) {
   return "text-muted";
 }
 
+// 서비스가 만든 한국어 calculationErrorMessage 대신, 안정적인 calculationStatus(kind)로
+// 번역 키를 골라 표시한다. 화면이 i18n 경계를 직접 통과시키도록 한다.
+function calcMessage(t: (key: MessageKey) => string, status: ServiceCallCalculationStatus) {
+  if (status === "course_policy_missing") return t("calls.calc.coursePolicyMissing");
+  if (status === "therapist_rate_missing") return t("calls.calc.therapistRateMissing");
+  if (status === "second_therapist_required") return t("calls.calc.secondTherapistRequired");
+  return t("calls.calc.policyMissing");
+}
+
 function firstFieldError(fieldErrors: FieldErrors, field: string) {
   return fieldErrors[field]?.[0] ?? null;
 }
@@ -758,7 +778,11 @@ function PaymentAmountCell({
   const locale = useLocale();
   const isStaleFailedDraft = saveStatus === "error";
   const canShowAmount = row.calculationStatus === "calculated" && !isStaleFailedDraft;
-  const title = isStaleFailedDraft ? t("calls.calc.staleDraftTitle") : row.calculationErrorMessage ?? undefined;
+  const title = isStaleFailedDraft
+    ? t("calls.calc.staleDraftTitle")
+    : row.calculationStatus === "calculated" || row.calculationStatus === "not_completed"
+      ? undefined
+      : calcMessage(t, row.calculationStatus);
 
   return (
     <td
@@ -811,7 +835,15 @@ function ComputedCell({
       tabIndex={-1}
     >
       <span className="sr-only">{label}</span>
-      <span title={isStaleFailedDraft ? t("calls.calc.staleDraftTitle") : row.calculationErrorMessage ?? undefined}>
+      <span
+        title={
+          isStaleFailedDraft
+            ? t("calls.calc.staleDraftTitle")
+            : row.calculationStatus === "calculated" || row.calculationStatus === "not_completed"
+              ? undefined
+              : calcMessage(t, row.calculationStatus)
+        }
+      >
         {displayValue}
       </span>
     </td>
@@ -1197,7 +1229,7 @@ function EditableCallRow({
             serverRow.calculationStatus === "therapist_rate_missing" ||
             serverRow.calculationStatus === "second_therapist_required") &&
           saveStatus !== "error" ? (
-            <span className="text-danger">{serverRow.calculationErrorMessage ?? t("calls.calc.policyMissing")}</span>
+            <span className="text-danger">{calcMessage(t, serverRow.calculationStatus)}</span>
           ) : null}
           <span aria-live="polite" className={saveStateClassName(saveStatus)}>
             {saveStateLabel(saveStatus, t)}

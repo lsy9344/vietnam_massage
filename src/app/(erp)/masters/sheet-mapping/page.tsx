@@ -14,6 +14,7 @@ import {
 import { PageHeader } from "@/components/domain/page-header";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { formatDateTime, formatNumber } from "@/lib/i18n/format";
+import { roomStatusLabel } from "@/lib/i18n/codes";
 import type { Locale } from "@/lib/i18n/config";
 import { type Translator } from "@/lib/i18n";
 
@@ -403,11 +404,14 @@ export default async function SheetMappingPage({ searchParams }: { searchParams:
             <p className="mt-1 text-sm text-muted">{t("masters.sheetMapping.statusTokens.description")}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <StatusBadge state="사용중" />
-            <StatusBadge state="예약" />
-            <StatusBadge state="청소중" />
-            <StatusBadge state="종료확인" />
-            <StatusBadge state="빈방" />
+            {(["사용중", "예약", "청소중", "종료확인", "빈방"] as const).map((state) => (
+              <StatusBadge
+                key={state}
+                state={state}
+                label={roomStatusLabel(locale, state)}
+                ariaLabel={t("roomStatus.aria", { status: roomStatusLabel(locale, state) })}
+              />
+            ))}
           </div>
         </div>
       </section>

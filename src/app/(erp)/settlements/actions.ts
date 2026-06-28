@@ -90,8 +90,8 @@ function mapActionError(error: unknown, locale: Locale): ActionResult<TherapistA
   };
 }
 
-function mapPaymentActionError(error: unknown): ActionResult<TherapistDailySettlementPaymentActionData> {
-  return mapTherapistDailySettlementPaymentActionError(error);
+function mapPaymentActionError(error: unknown, locale: Locale): ActionResult<TherapistDailySettlementPaymentActionData> {
+  return mapTherapistDailySettlementPaymentActionError(error, locale);
 }
 
 export async function saveTherapistAttendanceAction(
@@ -140,6 +140,7 @@ export async function setTherapistDailySettlementPaymentAction(
   _previousState: TherapistDailySettlementPaymentActionState,
   formData: FormData
 ): Promise<TherapistDailySettlementPaymentActionState> {
+  const locale = await getLocale();
   try {
     const account = await requirePermission("payout:write");
     const data = await setTherapistDailySettlementPayment({
@@ -152,6 +153,6 @@ export async function setTherapistDailySettlementPaymentAction(
     revalidatePath("/settlements");
     return { ok: true, data };
   } catch (error) {
-    return mapPaymentActionError(error);
+    return mapPaymentActionError(error, locale);
   }
 }

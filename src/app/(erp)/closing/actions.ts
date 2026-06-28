@@ -8,7 +8,7 @@ import { AuthorizationError, requirePermission } from "@/lib/authorization";
 import { t } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
 import { getLocale } from "@/lib/i18n/server";
-import { resolveDomainErrorMessage } from "@/lib/i18n/errors";
+import { resolveDomainErrorMessage, resolveKoreanMessage } from "@/lib/i18n/errors";
 import {
   MonthlyClosingDomainError,
   confirmMonthlyClose,
@@ -29,9 +29,12 @@ const reopenMonthlyClosingActionSchema = monthlyClosingActionSchema.extend({
   reason: z.string().trim().min(5, "재오픈 사유를 5자 이상 입력하세요.")
 });
 
-function toFieldErrors(fieldErrors: Partial<Record<string, string[]>>) {
+function toFieldErrors(fieldErrors: Partial<Record<string, string[]>>, locale: Locale) {
   return Object.fromEntries(
-    Object.entries(fieldErrors).filter((entry): entry is [string, string[]] => Array.isArray(entry[1]) && entry[1].length > 0)
+    Object.entries(fieldErrors)
+      .filter((entry): entry is [string, string[]] => Array.isArray(entry[1]) && entry[1].length > 0)
+      // Zod 한국어 메시지를 inline field error 표시 직전에 locale로 번역한다.
+      .map(([field, messages]) => [field, messages.map((message) => resolveKoreanMessage(locale, message))])
   );
 }
 
@@ -69,7 +72,7 @@ export async function startMonthlyCloseReviewAction(
   if (!parsed.success) {
     return {
       ok: false,
-      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
+      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors, locale),
       formError: t(locale, "action.error.invalidInput")
     };
   }
@@ -99,7 +102,7 @@ export async function confirmMonthlyCloseAction(
   if (!parsed.success) {
     return {
       ok: false,
-      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
+      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors, locale),
       formError: t(locale, "action.error.invalidInput")
     };
   }
@@ -129,7 +132,7 @@ export async function lockMonthlyCloseAction(
   if (!parsed.success) {
     return {
       ok: false,
-      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
+      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors, locale),
       formError: t(locale, "action.error.invalidInput")
     };
   }
@@ -160,7 +163,7 @@ export async function reopenMonthlyCloseAction(
   if (!parsed.success) {
     return {
       ok: false,
-      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors),
+      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors, locale),
       formError: t(locale, "action.error.invalidInput")
     };
   }

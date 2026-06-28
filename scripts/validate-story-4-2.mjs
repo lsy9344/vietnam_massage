@@ -112,7 +112,7 @@ for (const required of [
   "setTherapistDailySettlementPaymentAction",
   "_previousState: TherapistDailySettlementPaymentActionState",
   "Promise<TherapistDailySettlementPaymentActionState>",
-  "return mapPaymentActionError(error)"
+  "return mapPaymentActionError(error, locale)"
 ]) {
   if (!actions.includes(required)) errors.push(`settlements/actions.ts missing ${required}`);
 }

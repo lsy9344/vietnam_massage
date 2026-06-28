@@ -4,7 +4,7 @@ import { requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { formatCurrencyVnd } from "@/lib/i18n/format";
-import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
+import { codeLabel, operatingMonthStatusLabel } from "@/lib/i18n/codes";
 import type { Locale } from "@/lib/i18n/config";
 import type { Translator } from "@/lib/i18n";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
@@ -56,6 +56,13 @@ function thresholdLabel(t: Translator, result: OpsDailyIncentiveResultDto) {
   if (result.ruleStatus === "missing_policy") return t("settlements.ops.threshold.missingPolicy");
   if (result.ruleStatus === "below_threshold") return t("settlements.ops.threshold.belowThreshold");
   return t("settlements.ops.threshold.applied", { count: result.appliedThresholdCallCount ?? 0 });
+}
+
+// 서비스가 만든 한국어 warningMessage 대신, 안정적인 ruleStatus(kind)로 번역 키를 골라 표시한다.
+function opsWarningNoticeMessage(t: Translator, result: OpsDailyIncentiveResultDto) {
+  if (result.ruleStatus === "missing_policy") return t("settlements.ops.warningNotice.missingPolicy");
+  if (result.ruleStatus === "below_threshold") return t("settlements.ops.warningNotice.belowThreshold");
+  return null;
 }
 
 function OpsIncentiveSummary({ locale, t, result }: { locale: Locale; t: Translator; result: OpsDailyIncentiveResultDto }) {
@@ -118,13 +125,17 @@ function OpsIncentiveTable({ locale, t, result }: { locale: Locale; t: Translato
                 <div className="text-xs text-muted">{row.staffCode}</div>
               </td>
               <td className="px-3 py-2">{row.position}</td>
-              <td className="px-3 py-2">{row.statusDisplayName}</td>
+              <td className="px-3 py-2">{codeLabel(locale, "ATTENDANCE_STATUS", row.statusCode, true, row.statusDisplayName)}</td>
               <td className="px-3 py-2">
                 {row.isPayoutEligible && result.ruleStatus === "applied" ? (
                   <span className="inline-flex border border-success bg-success/10 px-2 py-1 text-xs font-semibold text-success">{t("settlements.ops.payoutEligible")}</span>
                 ) : (
                   <span className="inline-flex border border-border bg-readonly px-2 py-1 text-xs font-semibold text-muted">
-                    {row.isPayoutEligible ? thresholdLabel(t, result) : t("settlements.ops.excluded", { reason: row.exclusionReason ?? row.statusDisplayName })}
+                    {row.isPayoutEligible
+                      ? thresholdLabel(t, result)
+                      : t("settlements.ops.excluded", {
+                          reason: codeLabel(locale, "ATTENDANCE_STATUS", row.statusCode, true, row.statusDisplayName)
+                        })}
                   </span>
                 )}
               </td>
@@ -286,7 +297,7 @@ export default async function OperationsAttendancePage({ searchParams }: { searc
       {incentiveResult?.warningMessage ? (
         <section className="mb-4 border border-border bg-surface px-4 py-3" role="status">
           <h2 className="text-sm font-semibold text-foreground">{t("settlements.ops.warningNotice.title")}</h2>
-          <p className="mt-1 text-sm text-muted">{incentiveResult.warningMessage}</p>
+          <p className="mt-1 text-sm text-muted">{opsWarningNoticeMessage(t, incentiveResult) ?? incentiveResult.warningMessage}</p>
         </section>
       ) : null}
 

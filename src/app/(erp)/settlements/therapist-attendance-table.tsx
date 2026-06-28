@@ -19,7 +19,7 @@ function RecognitionBadge({ row, t }: { row: TherapistAttendanceDto; t: Translat
   if (!row.isComplete) {
     return (
       <span className="inline-flex border border-border bg-readonly px-2 py-1 text-xs font-semibold text-muted">
-        {row.incompleteReason ?? t("settlements.therapist.attendance.checkInMissing")}
+        {t("settlements.therapist.attendance.checkInMissing")}
       </span>
     );
   }

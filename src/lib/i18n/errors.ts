@@ -65,3 +65,45 @@ export function resolveDomainErrorMessage(locale: Locale, code: string | undefin
 export function hasDomainErrorTranslation(code: string): boolean {
   return Boolean(DOMAIN_ERROR_VI[code]);
 }
+
+/**
+ * code가 없는(plain Error) 사용자 표시 메시지를 한국어 원문 자체를 key로 vi 번역한다.
+ * 일부 서비스는 stable code 없이 한국어 메시지만 throw하므로, action 경계에서 안전한
+ * 화이트리스트(한국어→vi)로 매핑한다. 매핑이 없으면 한국어 원문을 그대로 반환한다.
+ */
+const KOREAN_MESSAGE_VI: Record<string, string> = {
+  // 지급완료(마사지사 일일정산) action 안전 메시지
+  "운영월을 선택하세요.": "Vui lòng chọn tháng vận hành.",
+  "조회 날짜는 YYYY-MM-DD 형식이어야 합니다.": "Ngày tra cứu phải theo định dạng YYYY-MM-DD.",
+  "마사지사를 선택하세요.": "Vui lòng chọn kỹ thuật viên.",
+  "처리자를 확인할 수 없습니다.": "Không xác định được người xử lý.",
+  "운영월을 찾을 수 없습니다.": "Không tìm thấy tháng vận hành.",
+  "마감확정 또는 잠금 운영월의 지급완료 상태는 변경할 수 없습니다.": "Không thể đổi trạng thái đã thanh toán của tháng đã chốt hoặc đã khóa.",
+  "운영월 범위를 벗어난 날짜입니다.": "Ngày nằm ngoài phạm vi tháng vận hành.",
+  "마사지사를 찾을 수 없습니다.": "Không tìm thấy kỹ thuật viên.",
+  "활성 마사지사만 지급완료 상태를 변경할 수 있습니다.": "Chỉ kỹ thuật viên đang hoạt động mới có thể đổi trạng thái đã thanh toán.",
+  "해당 날짜에 정산 대상 콜이 없는 마사지사는 지급완료로 표시할 수 없습니다.": "Không thể đánh dấu đã thanh toán cho kỹ thuật viên không có cuộc gọi cần đối soát trong ngày.",
+  "지급완료 상태값이 올바르지 않습니다.": "Giá trị trạng thái đã thanh toán không hợp lệ.",
+  // 월마감 재오픈 등 Zod field-level 메시지
+  "재오픈 사유를 5자 이상 입력하세요.": "Vui lòng nhập lý do mở lại từ 5 ký tự trở lên.",
+  // 콜 원장/일별 지출 Zod field-level 메시지 (inline 표시)
+  "날짜는 YYYY-MM-DD 형식이어야 합니다.": "Ngày phải theo định dạng YYYY-MM-DD.",
+  "시간은 HH:mm 형식이어야 합니다.": "Giờ phải theo định dạng HH:mm.",
+  "코스를 선택하세요.": "Vui lòng chọn gói dịch vụ.",
+  "상태를 선택하세요.": "Vui lòng chọn trạng thái.",
+  "담당자를 선택하세요.": "Vui lòng chọn người phụ trách.",
+  "내용을 입력하세요.": "Vui lòng nhập nội dung.",
+  "금액은 정수로 입력하세요.": "Vui lòng nhập số tiền là số nguyên.",
+  "금액은 0보다 커야 합니다.": "Số tiền phải lớn hơn 0.",
+  "금액이 올바르지 않습니다.": "Số tiền không hợp lệ.",
+  "500자 이하로 입력하세요.": "Vui lòng nhập tối đa 500 ký tự.",
+  "200자 이하로 입력하세요.": "Vui lòng nhập tối đa 200 ký tự.",
+  "선택값이 올바르지 않습니다.": "Giá trị lựa chọn không hợp lệ."
+};
+
+export function resolveKoreanMessage(locale: Locale, koMessage: string): string {
+  if (locale === "vi" && KOREAN_MESSAGE_VI[koMessage]) {
+    return KOREAN_MESSAGE_VI[koMessage];
+  }
+  return koMessage;
+}

@@ -1,8 +1,10 @@
 "use client";
 
 import { useActionState, useId } from "react";
-import { useT } from "@/lib/i18n/client";
+import { useLocale, useT } from "@/lib/i18n/client";
 import type { Translator } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n/config";
+import { codeLabel } from "@/lib/i18n/codes";
 import { saveEarcareAttendanceAction, type EarcareAttendanceActionState } from "@/app/(erp)/settlements/earcare/actions";
 import type { AttendanceStatusOptionDto, EarcareAttendanceDto } from "@/modules/settlements/earcare-attendance-service";
 
@@ -11,14 +13,18 @@ function inlineError(state: EarcareAttendanceActionState, field?: string) {
   return field ? state.fieldErrors?.[field]?.[0] ?? null : state.formError ?? null;
 }
 
-function EligibilityBadge({ row, t }: { row: EarcareAttendanceDto; t: Translator }) {
+function attendanceLabel(locale: Locale, code: string, dbDisplayName: string) {
+  return codeLabel(locale, "ATTENDANCE_STATUS", code, true, dbDisplayName);
+}
+
+function EligibilityBadge({ row, t, locale }: { row: EarcareAttendanceDto; t: Translator; locale: Locale }) {
   if (row.isPayoutEligible) {
     return <span className="inline-flex border border-success bg-success/10 px-2 py-1 text-xs font-semibold text-success">{t("settlements.earcare.payoutEligible")}</span>;
   }
 
   return (
     <span className="inline-flex border border-border bg-readonly px-2 py-1 text-xs font-semibold text-muted">
-      {t("settlements.earcare.excluded", { reason: row.exclusionReason ?? row.statusDisplayName })}
+      {t("settlements.earcare.excluded", { reason: attendanceLabel(locale, row.statusCode, row.statusDisplayName) })}
     </span>
   );
 }
@@ -37,6 +43,7 @@ function EarcareAttendanceRowForm({
   statusOptions: AttendanceStatusOptionDto[];
 }) {
   const t = useT();
+  const locale = useLocale();
   const [state, formAction, pending] = useActionState<EarcareAttendanceActionState, FormData>(saveEarcareAttendanceAction, null);
   const formId = useId();
   const formError = inlineError(state);
@@ -67,7 +74,7 @@ function EarcareAttendanceRowForm({
           >
             {statusOptions.map((option) => (
               <option key={option.code} value={option.code}>
-                {option.displayName}
+                {attendanceLabel(locale, option.code, option.displayName)}
               </option>
             ))}
           </select>
@@ -79,7 +86,7 @@ function EarcareAttendanceRowForm({
         </label>
       </td>
       <td className="px-3 py-2">
-        <EligibilityBadge row={savedRow ?? row} t={t} />
+        <EligibilityBadge row={savedRow ?? row} t={t} locale={locale} />
       </td>
       <td className="px-3 py-2">
         <div className="flex flex-wrap items-center justify-end gap-2">

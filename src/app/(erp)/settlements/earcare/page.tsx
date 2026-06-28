@@ -4,7 +4,7 @@ import { requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { formatCurrencyVnd } from "@/lib/i18n/format";
-import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
+import { codeLabel, operatingMonthStatusLabel } from "@/lib/i18n/codes";
 import type { Locale } from "@/lib/i18n/config";
 import type { Translator } from "@/lib/i18n";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
@@ -114,13 +114,13 @@ function EarcareSettlementTable({ locale, t, result }: { locale: Locale; t: Tran
                 <div className="font-semibold text-foreground">{row.displayName}</div>
                 <div className="text-xs text-muted">{row.staffCode}</div>
               </td>
-              <td className="px-3 py-2">{row.statusDisplayName}</td>
+              <td className="px-3 py-2">{codeLabel(locale, "ATTENDANCE_STATUS", row.statusCode, true, row.statusDisplayName)}</td>
               <td className="px-3 py-2">
                 {row.isPayoutEligible ? (
                   <span className="inline-flex border border-success bg-success/10 px-2 py-1 text-xs font-semibold text-success">{t("settlements.earcare.payoutEligible")}</span>
                 ) : (
                   <span className="inline-flex border border-border bg-readonly px-2 py-1 text-xs font-semibold text-muted">
-                    {t("settlements.earcare.excluded", { reason: row.exclusionReason ?? row.statusDisplayName })}
+                    {t("settlements.earcare.excluded", { reason: codeLabel(locale, "ATTENDANCE_STATUS", row.statusCode, true, row.statusDisplayName) })}
                   </span>
                 )}
               </td>

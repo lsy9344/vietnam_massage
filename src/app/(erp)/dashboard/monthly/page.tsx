@@ -125,7 +125,8 @@ function EmptyOrWarningState({ metrics, locale, t }: { metrics: MonthlyDashboard
   return (
     <section className="border border-danger bg-surface px-4 py-5" role="alert">
       <h2 className="text-base font-semibold text-foreground">{t("dashboard.monthly.warning.excludedTitle")}</h2>
-      <p className="mt-2 text-sm text-muted">{metrics.emptyState.message}</p>
+      {/* 서비스의 emptyState.message(한국어)는 화면에 직접 노출하지 않는다. 제목 + 아래 상세(번역됨)로 대체. */}
+      <p className="mt-2 text-sm text-muted">{t("dashboard.monthly.warning.excludedSummary")}</p>
       <p className="mt-3 text-sm font-medium text-danger">
         {t("dashboard.monthly.warning.excludedDetail", {
           policy: formatNumber(locale, metrics.warningCounts.callLedger.coursePolicyMissing),

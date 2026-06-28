@@ -134,7 +134,11 @@ test.describe("Story 7.1 sheet mapping source guardrails", () => {
     expect(pageSource).toContain("masters.sheetMapping.meta.noWriteNote");
     expect(koMessages).toContain("쓰기 작업 없음");
     expect(koMessages).toContain("DB 변경 없음");
-    expect(pageSource).toContain("<StatusBadge state=\"사용중\"");
+    // i18n 전환: 상태 배지 샘플은 state={state} 매핑 + 번역 label/ariaLabel을 넘긴다.
+    expect(pageSource).toContain("StatusBadge");
+    expect(pageSource).toContain("state={state}");
+    expect(pageSource).toContain("roomStatusLabel(locale, state)");
+    expect(pageSource).toContain("\"사용중\"");
     expect(pageSource).not.toContain('"use server"');
     expect(pageSource).not.toContain("recordAuditEvent");
     expect(pageSource).not.toContain("createDailyExpense");

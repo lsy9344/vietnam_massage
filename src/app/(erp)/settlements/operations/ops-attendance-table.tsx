@@ -2,8 +2,10 @@
 
 import { useActionState, useEffect, useId } from "react";
 import { useRouter } from "next/navigation";
-import { useT } from "@/lib/i18n/client";
+import { useLocale, useT } from "@/lib/i18n/client";
 import type { Translator } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n/config";
+import { codeLabel } from "@/lib/i18n/codes";
 import { saveOpsAttendanceAction, type OpsAttendanceActionState } from "@/app/(erp)/settlements/operations/actions";
 import type { OpsAttendanceDto, OpsAttendanceStatusOptionDto } from "@/modules/settlements/ops-attendance-service";
 
@@ -12,14 +14,18 @@ function inlineError(state: OpsAttendanceActionState, field?: string) {
   return field ? state.fieldErrors?.[field]?.[0] ?? null : state.formError ?? null;
 }
 
-function EligibilityBadge({ row, t }: { row: OpsAttendanceDto; t: Translator }) {
+function attendanceLabel(locale: Locale, code: string, dbDisplayName: string) {
+  return codeLabel(locale, "ATTENDANCE_STATUS", code, true, dbDisplayName);
+}
+
+function EligibilityBadge({ row, t, locale }: { row: OpsAttendanceDto; t: Translator; locale: Locale }) {
   if (row.isPayoutEligible) {
     return <span className="inline-flex border border-success bg-success/10 px-2 py-1 text-xs font-semibold text-success">{t("settlements.ops.payoutEligible")}</span>;
   }
 
   return (
     <span className="inline-flex border border-border bg-readonly px-2 py-1 text-xs font-semibold text-muted">
-      {t("settlements.ops.excluded", { reason: row.exclusionReason ?? row.statusDisplayName })}
+      {t("settlements.ops.excluded", { reason: attendanceLabel(locale, row.statusCode, row.statusDisplayName) })}
     </span>
   );
 }
@@ -38,6 +44,7 @@ function OpsAttendanceRowForm({
   statusOptions: OpsAttendanceStatusOptionDto[];
 }) {
   const t = useT();
+  const locale = useLocale();
   const [state, formAction, pending] = useActionState<OpsAttendanceActionState, FormData>(saveOpsAttendanceAction, null);
   const router = useRouter();
   const formId = useId();
@@ -76,7 +83,7 @@ function OpsAttendanceRowForm({
           >
             {statusOptions.map((option) => (
               <option key={option.code} value={option.code}>
-                {option.displayName}
+                {attendanceLabel(locale, option.code, option.displayName)}
               </option>
             ))}
           </select>
@@ -88,7 +95,7 @@ function OpsAttendanceRowForm({
         </label>
       </td>
       <td className="px-3 py-2">
-        <EligibilityBadge row={savedRow ?? row} t={t} />
+        <EligibilityBadge row={savedRow ?? row} t={t} locale={locale} />
       </td>
       <td className="px-3 py-2">
         <div className="flex flex-wrap items-center justify-end gap-2">

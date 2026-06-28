@@ -87,6 +87,9 @@ export const vi: Messages = {
   "roomCard.guidance.completeCheck": "Cần thanh toán·xác nhận",
   "roomCard.guidance.endingSoon": "Sắp kết thúc",
   "roomCard.guidance.empty": "Có thể vào ngay",
+  "roomCard.guidance.예약": "Cần chuẩn bị đón khách đã đặt trước.",
+  "roomCard.guidance.사용중": "Dịch vụ đang diễn ra.",
+  "roomCard.guidance.청소중": "Có thể vào sau khi dọn dẹp.",
 
   // 객실 카드 필드 라벨
   "roomCard.field.course": "Gói dịch vụ",
@@ -208,6 +211,9 @@ export const vi: Messages = {
   "calls.calc.calculated": "Đã tính toán",
   "calls.calc.notCompleted": "Loại trừ chưa hoàn tất",
   "calls.calc.policyMissing": "Thiếu chính sách",
+  "calls.calc.coursePolicyMissing": "Không có chính sách liệu trình áp dụng cho tháng vận hành đã chọn.",
+  "calls.calc.therapistRateMissing": "Không tìm thấy chính sách hoa hồng của kỹ thuật viên.",
+  "calls.calc.secondTherapistRequired": "Liệu trình D bắt buộc có kỹ thuật viên 2. Phải phân công kỹ thuật viên 2 mới lưu được.",
   "calls.calc.staleDraftTitle": "Bản nháp đang tạm hoãn lưu sẽ không hiển thị theo giá trị tính lại.",
 
   // 일별 지출 패널
@@ -275,6 +281,7 @@ export const vi: Messages = {
   "settlements.requery": "Tra cứu lại",
 
   // 마사지사 일일정산
+  "settlements.payment.saveFailed": "Đã xảy ra lỗi khi lưu trạng thái đã thanh toán.",
   "settlements.therapist.title": "Đối soát ngày KTV massage",
   "settlements.therapist.emptyMonthDescription": "Đối soát ngày KTV massage chỉ có thể tra cứu trong khoảng ngày của tháng vận hành.",
   "settlements.therapist.description": "Theo cuộc gọi đã hoàn tất, tra cứu cuộc gọi phụ trách theo KTV, phụ cấp theo gói dịch vụ, căn cứ trạng thái chính sách và quản lý kèm giờ chuyên cần cùng công nhận đủ công.",
@@ -401,6 +408,8 @@ export const vi: Messages = {
   "settlements.ops.emptyMonthDescription": "Thưởng ngày nhóm vận hành chỉ có thể tra cứu trong khoảng ngày của tháng vận hành.",
   "settlements.ops.locked.description": "Không thể chỉnh sửa trạng thái làm việc nhóm vận hành của tháng vận hành này. Các mục nhập hiển thị ở chế độ chỉ đọc.",
   "settlements.ops.warningNotice.title": "Kiểm tra căn cứ thưởng ngày",
+  "settlements.ops.warningNotice.missingPolicy": "Không có chính sách thưởng ngày nhóm vận hành đang hoạt động trong tháng áp dụng.",
+  "settlements.ops.warningNotice.belowThreshold": "Dưới ngưỡng tối thiểu nên không có thưởng ngày nhóm vận hành.",
   "settlements.ops.error.title": "Tra cứu thưởng ngày nhóm vận hành thất bại",
   "settlements.ops.error.fallback": "Không thể tra cứu thưởng ngày nhóm vận hành.",
   "settlements.ops.threshold.missingPolicy": "Thiếu chính sách",
@@ -627,6 +636,7 @@ export const vi: Messages = {
   "dashboard.today.empty.noCallsDescription": "Hãy đổi ngày tra cứu hoặc kiểm tra dữ liệu ngày đó trong sổ cuộc gọi.",
   "dashboard.today.goToCalls": "Đi tới sổ cuộc gọi",
   "dashboard.today.warning.excludedTitle": "Có mục bị loại khỏi tổng hợp",
+  "dashboard.today.warning.excludedSummary": "Có cuộc gọi bị loại khỏi tổng hợp số tiền hoặc theo gói dịch vụ do vấn đề kiểm tra chính sách/phụ cấp/gói D.",
   "dashboard.today.warning.excludedDetail": "Thiếu chính sách {policy} ca, thiếu phụ cấp {rate} ca, cần KTV 2 gói D là {second} ca",
   "dashboard.today.status.reservationCount": "Số lượt đặt trước",
   "dashboard.today.status.completed": "Hoàn tất",
@@ -684,6 +694,7 @@ export const vi: Messages = {
   "dashboard.monthly.empty.noCallsTitle": "Không có cuộc gọi trong tháng vận hành này",
   "dashboard.monthly.empty.noCallsDescription": "Hãy đổi tháng vận hành hoặc kiểm tra dữ liệu tháng đó trong sổ cuộc gọi.",
   "dashboard.monthly.warning.excludedTitle": "Có mục bị loại khỏi tổng hợp",
+  "dashboard.monthly.warning.excludedSummary": "Có cuộc gọi bị loại khỏi tổng hợp số tiền hoặc theo gói dịch vụ do vấn đề kiểm tra chính sách/phụ cấp/gói D.",
   "dashboard.monthly.warning.excludedDetail": "Thiếu chính sách {policy} ca, thiếu phụ cấp {rate} ca, cần KTV 2 gói D là {second} ca",
   "dashboard.monthly.money.withheldAria": "Tạm hoãn hiển thị KPI số tiền theo tháng",
   "dashboard.monthly.money.withheldTitle": "Không hiển thị KPI số tiền theo tháng",
