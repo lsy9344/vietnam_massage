@@ -139,7 +139,7 @@ for (const required of [
 }
 
 const navigation = read("src/lib/navigation.ts");
-for (const required of ["시트 기능 매핑표", "/masters/sheet-mapping", "\"administrator\", \"read_only_viewer\""]) {
+for (const required of ["nav.item.mastersSheetMapping", "/masters/sheet-mapping", "\"administrator\", \"read_only_viewer\""]) {
   if (!navigation.includes(required)) errors.push(`navigation.ts missing Story 7.1 sidebar marker: ${required}`);
 }
 

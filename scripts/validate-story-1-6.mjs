@@ -204,7 +204,7 @@ if (page.includes("삭제")) {
 }
 
 const navigation = read("src/lib/navigation.ts");
-for (const required of ["코드/시간 슬롯", "/masters/codes", "administrator"]) {
+for (const required of ["nav.item.mastersCodes", "/masters/codes", "administrator"]) {
   if (!navigation.includes(required)) {
     errors.push(`navigation.ts missing ${required}`);
   }

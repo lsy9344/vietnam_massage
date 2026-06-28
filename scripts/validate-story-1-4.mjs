@@ -152,7 +152,7 @@ if (/counter:[^\n]+\bemployee:write\b/.test(authorization)) {
 }
 
 const navigation = read("src/lib/navigation.ts");
-for (const required of ["운영월", "/masters/operating-months", "administrator"]) {
+for (const required of ["nav.item.mastersOperatingMonths", "/masters/operating-months", "administrator"]) {
   if (!navigation.includes(required)) {
     errors.push(`navigation.ts missing ${required}`);
   }

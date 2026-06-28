@@ -157,12 +157,16 @@ for (const required of [
 
 const navigation = read("src/lib/navigation.ts");
 for (const required of [
-  "TV 현황판",
+  "nav.item.tv",
   "href: \"/tv\"",
   "allowedRoles: [\"administrator\", \"read_only_viewer\"]",
   "getNavigationForRole"
 ]) {
   if (!navigation.includes(required)) errors.push(`navigation.ts missing ${required}`);
+}
+// i18n 전환: "TV 현황판" 한국어 문구는 messages/ko.ts로 이동.
+if (!read("src/lib/i18n/messages/ko.ts").includes("TV 현황판")) {
+  errors.push("messages/ko.ts missing nav label: TV 현황판");
 }
 
 const e2e = read("tests/e2e/story-3-4-tv-fullscreen-board.spec.ts");

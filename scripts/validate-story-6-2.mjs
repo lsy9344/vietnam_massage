@@ -124,7 +124,7 @@ if (!authorization.includes("waiter: [\"/rooms\"]")) {
 }
 
 const navigation = read("src/lib/navigation.ts");
-for (const required of ["월간 대시보드", "/dashboard/monthly", "role !== \"waiter\""]) {
+for (const required of ["nav.item.dashboardMonthly", "/dashboard/monthly", "role !== \"waiter\""]) {
   if (!navigation.includes(required)) errors.push(`navigation.ts missing ${required}`);
 }
 

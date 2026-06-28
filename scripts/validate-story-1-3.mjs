@@ -140,8 +140,12 @@ if (/counter:[^\n]+\baudit:read\b/.test(authorization)) {
 }
 
 const navigation = read("src/lib/navigation.ts");
-if (!navigation.includes("감사 로그") || !navigation.includes("administrator")) {
+// i18n 전환: "감사 로그" 한국어 라벨은 messages/ko.ts로, nav 항목은 key로 표현된다.
+if (!navigation.includes("nav.item.audit") || !navigation.includes("administrator")) {
   errors.push("navigation.ts must keep administrator-only audit sidebar entry");
+}
+if (!read("src/lib/i18n/messages/ko.ts").includes("감사 로그")) {
+  errors.push("messages/ko.ts missing audit label: 감사 로그");
 }
 if (navigation.includes("disabled")) {
   errors.push("navigation must hide unauthorized audit links, not disable them");

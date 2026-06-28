@@ -139,7 +139,7 @@ if (!authorization.includes("waiter: [\"/rooms\"]")) {
 }
 
 const navigation = read("src/lib/navigation.ts");
-for (const required of ["그래프 리포트", "/dashboard/reports", "role !== \"waiter\""]) {
+for (const required of ["nav.item.dashboardReports", "/dashboard/reports", "role !== \"waiter\""]) {
   if (!navigation.includes(required)) errors.push(`navigation.ts missing ${required}`);
 }
 

@@ -149,7 +149,7 @@ if (!auth.includes("read_only_viewer: [\"/masters/sheet-mapping\"]")) errors.pus
 if (auth.includes("read_only_viewer: [\"/rooms\", \"/tv\", \"/dashboard/today\", \"/dashboard/monthly\", \"/dashboard/reports\", \"/masters")) {
   errors.push("authorization.ts must not open /masters prefix to read_only_viewer");
 }
-if (!nav.includes("{ label: \"시트 기능 매핑표\", href: \"/masters/sheet-mapping\", allowedRoles: [\"administrator\", \"read_only_viewer\"] }")) {
+if (!nav.includes("{ labelKey: \"nav.item.mastersSheetMapping\", href: \"/masters/sheet-mapping\", allowedRoles: [\"administrator\", \"read_only_viewer\"] }")) {
   errors.push("navigation.ts must keep 시트 기능 매핑표 for administrator/read_only_viewer only");
 }
 

@@ -4,11 +4,12 @@ import { FormEvent, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { SAFE_AUTH_ERROR_MESSAGE } from "@/lib/auth-messages";
+import { useT } from "@/lib/i18n/client";
 
 export function SignInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const t = useT();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -32,7 +33,7 @@ export function SignInForm() {
     setIsSubmitting(false);
 
     if (!result?.ok) {
-      setErrorMessage(SAFE_AUTH_ERROR_MESSAGE);
+      setErrorMessage(t("auth.error.invalidCredentials"));
       return;
     }
 
@@ -44,7 +45,7 @@ export function SignInForm() {
     <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
       <div>
         <label className="text-sm font-medium" htmlFor="identity">
-          이메일 또는 계정 ID
+          {t("auth.signIn.identityLabel")}
         </label>
         <input
           autoComplete="username"
@@ -57,7 +58,7 @@ export function SignInForm() {
       </div>
       <div>
         <label className="text-sm font-medium" htmlFor="password">
-          비밀번호
+          {t("auth.signIn.passwordLabel")}
         </label>
         <input
           autoComplete="current-password"
@@ -74,7 +75,7 @@ export function SignInForm() {
         </p>
       ) : null}
       <Button className="w-full justify-center" disabled={isSubmitting} type="submit">
-        로그인
+        {t("auth.signIn.submit")}
       </Button>
     </form>
   );

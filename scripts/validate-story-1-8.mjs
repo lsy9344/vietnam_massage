@@ -174,7 +174,7 @@ for (const required of [
 if (page.includes("삭제")) errors.push("/masters/courses page must not present physical delete wording");
 
 const navigation = read("src/lib/navigation.ts");
-for (const required of ["코스/수당/인센", "/masters/courses", "administrator"]) {
+for (const required of ["nav.item.mastersCourses", "/masters/courses", "administrator"]) {
   if (!navigation.includes(required)) errors.push(`navigation.ts missing ${required}`);
 }
 if (navigation.includes("disabled")) errors.push("navigation must hide unauthorized course links, not disable them");

@@ -140,7 +140,7 @@ for (const required of [
 
 const navigation = read("src/lib/navigation.ts");
 for (const required of [
-  "객실 현황",
+  "nav.item.rooms",
   "allowedRoles: [\"administrator\", \"counter\", \"waiter\", \"read_only_viewer\"]",
   "getNavigationForRole",
   ".filter((group) => group.items.length > 0)"

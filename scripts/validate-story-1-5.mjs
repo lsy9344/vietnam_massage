@@ -152,7 +152,7 @@ if (page.includes("삭제")) {
 }
 
 const navigation = read("src/lib/navigation.ts");
-for (const required of ["객실", "/masters/rooms", "administrator"]) {
+for (const required of ["nav.item.mastersRooms", "/masters/rooms", "administrator"]) {
   if (!navigation.includes(required)) {
     errors.push(`navigation.ts missing ${required}`);
   }
