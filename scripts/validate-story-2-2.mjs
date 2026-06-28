@@ -109,16 +109,21 @@ for (const required of [
   "saving",
   "saved",
   "error",
-  "저장중",
-  "저장됨",
-  "저장 보류",
-  "재시도",
+  // i18n 전환: 저장 상태 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
+  "calls.save.saving",
+  "calls.save.saved",
+  "calls.save.error",
+  "calls.save.retry",
   "onBlur",
   "serviceCallId",
   "disabled={isLocked",
   "aria-live"
 ]) {
   if (!grid.includes(required)) errors.push(`editable-call-grid.tsx missing ${required}`);
+}
+const koMessages = read("src/lib/i18n/messages/ko.ts");
+for (const label of ["저장중", "저장됨", "저장 보류", "재시도"]) {
+  if (!koMessages.includes(label)) errors.push(`messages/ko.ts missing call save label: ${label}`);
 }
 
 const unitTest = read("src/modules/calls/service-call-service.test.ts");

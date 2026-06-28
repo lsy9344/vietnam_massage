@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
+import { LocaleProvider } from "@/lib/i18n/client";
 import { PageHeader } from "@/components/domain/page-header";
 import type { ServiceCallFormOptions, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 
@@ -80,7 +81,6 @@ describe("client revision visual regression guards", () => {
     assert.match(css, /\.page-header-eyebrow\s*\{/);
 
     for (const [path, title] of [
-      ["src/app/(erp)/calls/page.tsx", "콜/예약 입력 원장"],
       ["src/app/(erp)/dashboard/today/page.tsx", "오늘 KPI 대시보드"],
       ["src/app/(erp)/dashboard/monthly/page.tsx", "월간 KPI 대시보드"],
       ["src/app/(erp)/dashboard/reports/page.tsx", "그래프 리포트"],
@@ -91,11 +91,12 @@ describe("client revision visual regression guards", () => {
       assert.match(page, new RegExp(`title="${title}"`));
     }
 
-    // i18n 전환된 /live·/rooms는 제목을 t() key로 참조하고, 한국어 원문은 messages/ko.ts에 보존한다.
+    // i18n 전환된 /live·/rooms·/calls는 제목을 t() key로 참조하고, 한국어 원문은 messages/ko.ts에 보존한다.
     const koMessages = source("src/lib/i18n/messages/ko.ts");
     for (const [path, titleKey, koTitle] of [
       ["src/app/(erp)/live/page.tsx", "nav.item.live", "첫화면 실시간 현황"],
-      ["src/app/(erp)/rooms/page.tsx", "nav.item.rooms", "객실 현황"]
+      ["src/app/(erp)/rooms/page.tsx", "nav.item.rooms", "객실 현황"],
+      ["src/app/(erp)/calls/page.tsx", "calls.title", "콜/예약 입력 원장"]
     ] as const) {
       const page = source(path);
       assert.match(page, /<PageHeader/);
@@ -105,14 +106,18 @@ describe("client revision visual regression guards", () => {
   });
 
   it("renders discounted call payment with base price strike-through and actual payment emphasis", () => {
+    // i18n 전환: 그리드 금액 포맷은 locale 기반이므로 ko locale을 시드해 기존 천단위(,) 표기를 검증한다.
     const html = renderToStaticMarkup(
-      createElement(EditableCallGrid, {
-        isLocked: true,
-        operatingMonthId: "month-1",
-        options: callGridOptions,
-        rows: [discountedCallRow],
-        serviceDate: "2026-06-20",
-        showSettlementColumns: false
+      createElement(LocaleProvider, {
+        locale: "ko",
+        children: createElement(EditableCallGrid, {
+          isLocked: true,
+          operatingMonthId: "month-1",
+          options: callGridOptions,
+          rows: [discountedCallRow],
+          serviceDate: "2026-06-20",
+          showSettlementColumns: false
+        })
       })
     );
 

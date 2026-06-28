@@ -129,12 +129,17 @@ for (const required of [
   "listServiceCallsForDate",
   "listServiceCallFormOptions",
   "EditableCallGrid",
-  "이 날짜의 콜이 없습니다",
-  "새 콜 행 추가",
-  "잠긴 운영월입니다.",
+  // i18n 전환: 한국어 UI 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
+  "calls.grid.empty.title",
+  "calls.addRow.submit",
+  "calls.grid.lockedTitle",
   "Skeleton"
 ]) {
   if (!page.includes(required)) errors.push(`calls page/grid/loading missing ${required}`);
+}
+const koMessages = read("src/lib/i18n/messages/ko.ts");
+for (const label of ["이 날짜의 콜이 없습니다", "새 콜 행 추가", "잠긴 운영월입니다."]) {
+  if (!koMessages.includes(label)) errors.push(`messages/ko.ts missing calls label: ${label}`);
 }
 
 const unitTest = read("src/modules/calls/service-call-service.test.ts");

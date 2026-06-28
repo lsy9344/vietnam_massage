@@ -2,6 +2,8 @@
 
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { formatNumber } from "@/lib/i18n/format";
 import type { DailyExpenseDto, ServiceCallOption } from "@/modules/calls/service-call-service";
 import {
   createDailyExpenseAction,
@@ -9,10 +11,6 @@ import {
   updateDailyExpenseAction,
   type DailyExpenseActionState
 } from "@/app/(erp)/calls/actions";
-
-function formatVnd(value: number) {
-  return new Intl.NumberFormat("ko-KR").format(value);
-}
 
 function fieldError(state: DailyExpenseActionState, field: string) {
   if (!state || state.ok) {
@@ -47,6 +45,7 @@ function HandlerSelect({
   label: string;
   name: string;
 }) {
+  const t = useT();
   return (
     <select
       aria-label={label}
@@ -56,7 +55,7 @@ function HandlerSelect({
       name={name}
       required
     >
-      <option value="">담당자</option>
+      <option value="">{t("calls.expense.field.handlerPlaceholder")}</option>
       {handlers.map((handler) => (
         <option key={handler.value} value={handler.value}>
           {handler.label}
@@ -79,6 +78,8 @@ function ExpenseRow({
   operatingMonthId: string;
   serviceDate: string;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const [updateState, updateAction, updatePending] = useActionState<DailyExpenseActionState, FormData>(updateDailyExpenseAction, null);
   const [deactivateState, deactivateAction, deactivatePending] = useActionState<DailyExpenseActionState, FormData>(deactivateDailyExpenseAction, null);
   const disabled = isLocked || updatePending || deactivatePending;
@@ -91,7 +92,7 @@ function ExpenseRow({
           <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
           <input name="expenseDate" type="hidden" value={serviceDate} />
           <label className="grid gap-1">
-            <span className="sr-only">지출금액</span>
+            <span className="sr-only">{t("calls.expense.field.amount")}</span>
             <input
               className="h-8 w-32 border border-border bg-background px-2 text-xs text-foreground outline-none [font-variant-numeric:tabular-nums] focus:border-brand disabled:bg-readonly"
               defaultValue={expense.amount}
@@ -105,46 +106,46 @@ function ExpenseRow({
             <InlineError field="amount" state={updateState} />
           </label>
           <label className="grid gap-1">
-            <span className="sr-only">내용</span>
+            <span className="sr-only">{t("calls.expense.field.description")}</span>
             <input
               className="h-8 w-48 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
               defaultValue={expense.description}
               disabled={disabled}
               maxLength={200}
               name="description"
-              placeholder="내용"
+              placeholder={t("calls.expense.field.description")}
               required
             />
             <InlineError field="description" state={updateState} />
           </label>
-          <HandlerSelect defaultValue={expense.handledByEmployee.id} disabled={disabled} handlers={handlers} label="지출 담당자" name="handledByEmployeeId" />
+          <HandlerSelect defaultValue={expense.handledByEmployee.id} disabled={disabled} handlers={handlers} label={t("calls.expense.field.handler")} name="handledByEmployeeId" />
           <label className="grid gap-1">
-            <span className="sr-only">비고</span>
+            <span className="sr-only">{t("calls.expense.field.note")}</span>
             <input
               className="h-8 w-48 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
               defaultValue={expense.note ?? ""}
               disabled={disabled}
               maxLength={500}
               name="note"
-              placeholder="비고"
+              placeholder={t("calls.expense.field.note")}
             />
             <InlineError field="note" state={updateState} />
           </label>
           <Button className="h-8 px-2 text-xs" disabled={disabled} type="submit">
-            수정
+            {t("calls.expense.action.update")}
           </Button>
-          {updateState?.ok ? <span className="self-center text-xs text-muted">저장됨</span> : <InlineError state={updateState} />}
+          {updateState?.ok ? <span className="self-center text-xs text-muted">{t("calls.save.saved")}</span> : <InlineError state={updateState} />}
         </form>
       </td>
-      <td className="border-b border-border px-2 py-2 text-right text-xs [font-variant-numeric:tabular-nums]">{formatVnd(expense.amount)} VND</td>
+      <td className="border-b border-border px-2 py-2 text-right text-xs [font-variant-numeric:tabular-nums]">{formatNumber(locale, expense.amount)} {t("calls.summary.vndSuffix")}</td>
       <td className="border-b border-border px-2 py-2 text-xs text-muted">{expense.handledByEmployee.displayName}</td>
       <td className="border-b border-border px-2 py-2">
         <form action={deactivateAction} className="grid justify-items-end gap-1">
           <input name="dailyExpenseId" type="hidden" value={expense.id} />
           <Button className="h-8 px-2 text-xs" disabled={disabled} type="submit" variant="secondary">
-            비활성
+            {t("calls.expense.action.deactivate")}
           </Button>
-          {deactivateState?.ok ? <span className="text-xs text-muted">비활성됨</span> : <InlineError state={deactivateState} />}
+          {deactivateState?.ok ? <span className="text-xs text-muted">{t("calls.expense.action.deactivated")}</span> : <InlineError state={deactivateState} />}
         </form>
       </td>
     </tr>
@@ -162,6 +163,7 @@ function AddExpenseForm({
   operatingMonthId: string;
   serviceDate: string;
 }) {
+  const t = useT();
   const [state, formAction, pending] = useActionState<DailyExpenseActionState, FormData>(createDailyExpenseAction, null);
   const disabled = isLocked || pending;
 
@@ -170,13 +172,13 @@ function AddExpenseForm({
       <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
       <input name="expenseDate" type="hidden" value={serviceDate} />
       <label className="grid gap-1">
-        <span className="sr-only">지출금액</span>
+        <span className="sr-only">{t("calls.expense.field.amount")}</span>
         <input
           className="h-8 w-32 border border-border bg-background px-2 text-xs text-foreground outline-none [font-variant-numeric:tabular-nums] focus:border-brand disabled:bg-readonly"
           disabled={disabled}
           min={1}
           name="amount"
-          placeholder="금액"
+          placeholder={t("calls.expense.field.amountPlaceholder")}
           required
           step={1}
           type="number"
@@ -184,33 +186,33 @@ function AddExpenseForm({
         <InlineError field="amount" state={state} />
       </label>
       <label className="grid gap-1">
-        <span className="sr-only">내용</span>
+        <span className="sr-only">{t("calls.expense.field.description")}</span>
         <input
           className="h-8 w-56 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
           disabled={disabled}
           maxLength={200}
           name="description"
-          placeholder="내용"
+          placeholder={t("calls.expense.field.description")}
           required
         />
         <InlineError field="description" state={state} />
       </label>
-      <HandlerSelect disabled={disabled} handlers={handlers} label="지출 담당자" name="handledByEmployeeId" />
+      <HandlerSelect disabled={disabled} handlers={handlers} label={t("calls.expense.field.handler")} name="handledByEmployeeId" />
       <label className="grid gap-1">
-        <span className="sr-only">비고</span>
+        <span className="sr-only">{t("calls.expense.field.note")}</span>
         <input
           className="h-8 w-56 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
           disabled={disabled}
           maxLength={500}
           name="note"
-          placeholder="비고"
+          placeholder={t("calls.expense.field.note")}
         />
         <InlineError field="note" state={state} />
       </label>
       <Button className="h-8 px-2 text-xs" disabled={disabled} type="submit">
-        지출 추가
+        {t("calls.expense.action.add")}
       </Button>
-      {state?.ok ? <span className="self-center text-xs text-muted">저장됨</span> : <InlineError state={state} />}
+      {state?.ok ? <span className="self-center text-xs text-muted">{t("calls.save.saved")}</span> : <InlineError state={state} />}
     </form>
   );
 }
@@ -228,31 +230,32 @@ export function DailyExpensePanel({
   operatingMonthId: string;
   serviceDate: string;
 }) {
+  const t = useT();
   return (
-    <section className="mb-4 border border-border bg-surface" aria-label="일별 지출">
+    <section className="mb-4 border border-border bg-surface" aria-label={t("calls.expense.aria")}>
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">일별 지출</h2>
+          <h2 className="text-sm font-semibold text-foreground">{t("calls.expense.title")}</h2>
           {isLocked ? (
             <div className="mt-1 text-xs text-danger">
-              <p className="font-medium">잠긴 운영월입니다.</p>
-              <p>마감확정 또는 잠금 운영월입니다. 지출 입력과 수정이 차단됩니다.</p>
+              <p className="font-medium">{t("calls.grid.lockedTitle")}</p>
+              <p>{t("calls.expense.lockedDescription")}</p>
             </div>
           ) : null}
         </div>
-        <span className="text-xs text-muted">{expenses.length}개 항목</span>
+        <span className="text-xs text-muted">{t("calls.expense.itemCount", { count: expenses.length })}</span>
       </div>
       {expenses.length === 0 ? (
-        <div className="px-3 py-4 text-sm text-muted">이 날짜에 등록된 지출이 없습니다.</div>
+        <div className="px-3 py-4 text-sm text-muted">{t("calls.expense.empty")}</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] border-collapse text-left text-sm">
             <thead className="bg-readonly text-xs font-semibold text-foreground">
               <tr>
-                <th className="border-b border-border px-2 py-2">입력</th>
-                <th className="border-b border-border px-2 py-2 text-right">표시금액</th>
-                <th className="border-b border-border px-2 py-2">담당자</th>
-                <th className="border-b border-border px-2 py-2 text-right">처리</th>
+                <th className="border-b border-border px-2 py-2">{t("calls.expense.column.input")}</th>
+                <th className="border-b border-border px-2 py-2 text-right">{t("calls.expense.column.displayAmount")}</th>
+                <th className="border-b border-border px-2 py-2">{t("calls.expense.column.handler")}</th>
+                <th className="border-b border-border px-2 py-2 text-right">{t("calls.expense.column.actions")}</th>
               </tr>
             </thead>
             <tbody>

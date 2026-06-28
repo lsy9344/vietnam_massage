@@ -33,7 +33,7 @@ function summary(overrides: Partial<DailyCallLedgerSummaryDto> = {}): DailyCallL
 
 describe("DailySummaryStrip", () => {
   it("keeps no-show and canceled counts as separate status summary items", () => {
-    const html = renderToStaticMarkup(<DailySummaryStrip summary={summary()} showSettlementAmounts={false} />);
+    const html = renderToStaticMarkup(<DailySummaryStrip summary={summary()} showSettlementAmounts={false} locale="ko" />);
 
     assert.match(html, /노쇼/);
     assert.match(html, /취소/);
@@ -41,21 +41,21 @@ describe("DailySummaryStrip", () => {
   });
 
   it("hides settlement-only warning wording from non-settlement call ledger users", () => {
-    const html = renderToStaticMarkup(<DailySummaryStrip summary={summary()} showSettlementAmounts={false} />);
+    const html = renderToStaticMarkup(<DailySummaryStrip summary={summary()} showSettlementAmounts={false} locale="ko" />);
 
     assert.doesNotMatch(html, /수당 누락/);
     assert.doesNotMatch(html, /마사지사2 필요/);
   });
 
   it("shows settlement warning details to settlement amount viewers", () => {
-    const html = renderToStaticMarkup(<DailySummaryStrip summary={summary()} showSettlementAmounts />);
+    const html = renderToStaticMarkup(<DailySummaryStrip summary={summary()} showSettlementAmounts locale="ko" />);
 
     assert.match(html, /수당 누락 1건/);
     assert.match(html, /마사지사2 필요 1건/);
   });
 
   it("shows payment method totals for cash, card, bank, and other buckets", () => {
-    const html = renderToStaticMarkup(<DailySummaryStrip summary={summary()} showSettlementAmounts={false} />);
+    const html = renderToStaticMarkup(<DailySummaryStrip summary={summary()} showSettlementAmounts={false} locale="ko" />);
 
     assert.match(html, /현금/);
     assert.match(html, /1,500,000 VND/);

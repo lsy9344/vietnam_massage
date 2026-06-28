@@ -67,12 +67,17 @@ for (const required of [
   "ring-danger",
   "!",
   "therapist2Id",
-  "저장 보류",
-  "재시도",
-  "저장 보류 계산 대기",
+  // i18n 전환: 저장/계산 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
+  "calls.save.error",
+  "calls.save.retry",
+  "calls.calc.errorPending",
   "second_therapist_required"
 ]) {
   if (!grid.includes(required)) errors.push(`editable-call-grid.tsx missing ${required}`);
+}
+const koMessages = read("src/lib/i18n/messages/ko.ts");
+for (const label of ["저장 보류", "재시도", "저장 보류 계산 대기"]) {
+  if (!koMessages.includes(label)) errors.push(`messages/ko.ts missing calls grid label: ${label}`);
 }
 
 const unitTest = read("src/modules/calls/service-call-service.test.ts");

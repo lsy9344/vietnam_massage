@@ -14,6 +14,8 @@ import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
 import { PageHeader } from "@/components/domain/page-header";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
+import { getServerTranslator } from "@/lib/i18n/server";
+import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
 
 type CallsPageSearchParams = {
   operatingMonthId?: string;
@@ -22,6 +24,7 @@ type CallsPageSearchParams = {
 
 export default async function CallsPage({ searchParams }: { searchParams: Promise<CallsPageSearchParams> }) {
   const account = await requireRouteAccess("/calls");
+  const { locale, t } = await getServerTranslator();
 
   const params = await searchParams;
   const operatingMonths = await listOperatingMonths();
@@ -31,16 +34,16 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
     return (
       <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
         <PageHeader
-          eyebrow="콜 원장"
-          title="콜/예약 입력 원장"
-          description="운영월과 날짜별로 실시간콜입력 A:S 의미의 기본 콜 정보를 기록한다."
+          eyebrow={t("nav.group.calls")}
+          title={t("calls.title")}
+          description={t("calls.description")}
         />
         <section className="border border-border bg-surface px-4 py-8">
-          <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
-          <p className="mt-2 max-w-2xl text-sm text-muted">콜 원장은 운영월 날짜 범위 안에서만 조회하고 저장할 수 있다.</p>
+          <h2 className="text-base font-semibold text-foreground">{t("common.createOperatingMonthFirst")}</h2>
+          <p className="mt-2 max-w-2xl text-sm text-muted">{t("calls.empty.description")}</p>
           {account.role === "administrator" ? (
             <Link className="mt-4 inline-flex text-sm font-semibold text-brand underline-offset-4 hover:underline" href="/masters/operating-months">
-              운영월 관리로 이동
+              {t("common.goToOperatingMonths")}
             </Link>
           ) : null}
         </section>
@@ -51,7 +54,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
   const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
   const [rows, options, expenses, summary] = await Promise.all([
     listServiceCallsForDate({ operatingMonthId: selectedMonth.id, serviceDate }),
-    listServiceCallFormOptions({ operatingMonthId: selectedMonth.id }),
+    listServiceCallFormOptions({ operatingMonthId: selectedMonth.id, locale }),
     listDailyExpensesForDate({ operatingMonthId: selectedMonth.id, expenseDate: serviceDate }),
     getDailyCallLedgerSummary({ operatingMonthId: selectedMonth.id, serviceDate })
   ]);
@@ -62,14 +65,14 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
       <PageHeader
-        eyebrow="콜 원장"
-        title="콜/예약 입력 원장"
-        description="운영월과 날짜별로 실시간콜입력 A:S 의미의 기본 콜 정보를 기록한다."
+        eyebrow={t("nav.group.calls")}
+        title={t("calls.title")}
+        description={t("calls.description")}
         meta={
           <>
-            <div>운영월 상태: {selectedMonth.status}</div>
+            <div>{t("common.operatingMonthStatusPrefix")}: {operatingMonthStatusLabel(locale, selectedMonth.status)}</div>
             <div>
-              날짜 범위: {selectedMonth.startDate} ~ {selectedMonth.endDate}
+              {t("common.dateRange")}: {selectedMonth.startDate} ~ {selectedMonth.endDate}
             </div>
           </>
         }
@@ -77,24 +80,24 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
 
       <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
         <label className="grid gap-1 text-xs font-medium text-muted">
-          운영월
+          {t("common.operatingMonth")}
           <select
-            aria-label="운영월"
+            aria-label={t("common.operatingMonth")}
             className="h-9 min-w-44 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
             defaultValue={selectedMonth.id}
             name="operatingMonthId"
           >
             {operatingMonths.map((month) => (
               <option key={month.id} value={month.id}>
-                {month.monthKey} ({month.status})
+                {t("common.monthOption", { monthKey: month.monthKey, status: operatingMonthStatusLabel(locale, month.status) })}
               </option>
             ))}
           </select>
         </label>
         <label className="grid gap-1 text-xs font-medium text-muted">
-          조회날짜
+          {t("common.queryDate")}
           <input
-            aria-label="조회날짜"
+            aria-label={t("common.queryDate")}
             className="h-9 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
             defaultValue={serviceDate}
             max={selectedMonth.endDate}
@@ -104,11 +107,11 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
           />
         </label>
         <button className="h-9 border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
-          조회
+          {t("common.query")}
         </button>
       </form>
 
-      <DailySummaryStrip summary={summary} showSettlementAmounts={canViewSettlementAmounts} />
+      <DailySummaryStrip summary={summary} showSettlementAmounts={canViewSettlementAmounts} locale={locale} />
       <DailyExpensePanel
         expenses={expenses}
         handlers={options.expenseHandlers}
