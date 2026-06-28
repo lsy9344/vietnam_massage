@@ -501,6 +501,8 @@ export const ko = {
   "settlements.opsMonthly.team.waiter": "웨이터팀",
   "settlements.opsMonthly.team.unassigned": "미분류",
   "settlements.opsMonthly.column.shareTeamPortion": "분배율/팀 몫",
+  "settlements.opsMonthly.shareTeamPortion.value": "{percent}% / {amount} VND",
+  "settlements.opsMonthly.shareTeamPortion.none": "-",
   "settlements.opsMonthly.column.expectedPayout": "지급 예상액",
   "settlements.opsMonthly.column.basis": "산출 근거",
   "settlements.opsMonthly.callEvidence.empty.title": "월 총콜 산출 근거가 없습니다",

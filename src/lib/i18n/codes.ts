@@ -63,6 +63,21 @@ export function codeLabel(
 }
 
 /**
+ * 한국어 표시 라벨(예: "휴무")만 가진 상황에서 codeType dictionary로 역매핑해 locale 라벨을 반환한다.
+ * 일부 서비스가 코드가 아니라 한국어 displayName을 합성 문자열에 넣을 때(예: "{근태상태} 제외")
+ * 표시 경계에서 사용한다. dictionary에 ko가 매칭되지 않으면(커스텀 라벨 등) 원문 koLabel을 그대로 반환한다.
+ */
+export function codeLabelFromKoreanLabel(locale: Locale, codeType: CodeType, koLabel: string): string {
+  const entries = SYSTEM_CODE_LABELS[codeType];
+  for (const code of Object.keys(entries)) {
+    if (entries[code].ko === koLabel) {
+      return entries[code][locale];
+    }
+  }
+  return koLabel;
+}
+
+/**
  * RoomDisplayStatus(한국어 stable key)를 화면 라벨로 번역한다.
  * 비교 로직은 여전히 한국어 key를 쓰고, 표시 직전에만 이 함수를 통과시킨다.
  */

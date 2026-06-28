@@ -37,9 +37,15 @@ describe("settlementBasisText", () => {
     assert.match(settlementBasisText("vi", "일 총콜 50콜 / 40콜 이상 개인 200000 VND"), /Tổng cuộc gọi ngày 50 ca \/ từ 40 ca, cá nhân .*VND/);
   });
 
-  it("'{상태} 제외' 문구는 상태를 번역하고 제외를 vi로 표기한다", () => {
-    // 상태 라벨이 화이트리스트에 없으면 원문 상태 + vi 제외.
-    assert.equal(settlementBasisText("vi", "결근 제외"), "결근 (loại trừ)");
+  it("'{근태상태} 제외' 문구는 ATTENDANCE_STATUS dictionary로 상태를 vi 번역한다", () => {
+    assert.equal(settlementBasisText("vi", "결근 제외"), "Vắng mặt (loại trừ)");
+    assert.equal(settlementBasisText("vi", "휴무 제외"), "Ngày nghỉ (loại trừ)");
+    assert.equal(settlementBasisText("vi", "지각 제외"), "Đi muộn (loại trừ)");
+    assert.equal(settlementBasisText("vi", "조퇴 제외"), "Về sớm (loại trừ)");
+    // ko면 원문 유지.
+    assert.equal(settlementBasisText("ko", "결근 제외"), "결근 제외");
+    // dictionary에 없는 커스텀 라벨은 원문 상태 + vi 제외.
+    assert.equal(settlementBasisText("vi", "특별휴가 제외"), "특별휴가 (loại trừ)");
   });
 
   it("동적 threshold 경고를 vi로 번역한다", () => {

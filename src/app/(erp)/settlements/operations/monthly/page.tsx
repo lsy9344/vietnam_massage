@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/domain/page-header";
 import { requireRouteAccess } from "@/lib/authorization";
 import { selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
-import { formatCurrencyVnd } from "@/lib/i18n/format";
+import { formatCurrencyVnd, formatNumber } from "@/lib/i18n/format";
 import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
 import { resolveDomainErrorMessage, resolveKoreanMessage } from "@/lib/i18n/errors";
 import { settlementBasisText } from "@/lib/i18n/settlement-basis";
@@ -28,6 +28,22 @@ type OpsMonthlyIncentivePageSearchParams = {
 // 팀 역할 라벨은 stable teamRole 키로 번역한다(서비스의 한국어 teamShareLabel 대신).
 function teamRoleLabel(t: Translator, role: OpsMonthlyIncentiveTeamRole) {
   return t(`settlements.opsMonthly.team.${role}`);
+}
+
+// 분배율/팀 몫 컬럼: row의 teamRole에 해당하는 share(비율)·team amount를 result.shares에서 재구성한다.
+// (이전엔 산출근거와 동일 문구가 중복 표시됐음)
+function shareTeamPortionText(locale: Locale, t: Translator, shares: OpsMonthlyIncentiveResultDto["shares"], role: OpsMonthlyIncentiveTeamRole) {
+  const byRole = {
+    lead: { share: shares.leadShare, amount: shares.leadAmount },
+    counter: { share: shares.counterTeamShare, amount: shares.counterTeamAmount },
+    waiter: { share: shares.waiterTeamShare, amount: shares.waiterTeamAmount }
+  } as const;
+  if (role === "unassigned") return t("settlements.opsMonthly.shareTeamPortion.none");
+  const { share, amount } = byRole[role];
+  return t("settlements.opsMonthly.shareTeamPortion.value", {
+    percent: formatNumber(locale, Math.round(share * 100)),
+    amount: formatNumber(locale, amount)
+  });
 }
 
 function SettlementTabs({ t }: { t: Translator }) {
@@ -259,7 +275,7 @@ function EmployeePayoutTable({ locale, t, result }: { locale: Locale; t: Transla
               </td>
               <td className="px-3 py-2">{row.position}</td>
               <td className="px-3 py-2">{teamRoleLabel(t, row.teamRole)}</td>
-              <td className="px-3 py-2">{settlementBasisText(locale, row.calculationBasis)}</td>
+              <td className="px-3 py-2 tabular-nums">{shareTeamPortionText(locale, t, result.shares, row.teamRole)}</td>
               <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(locale, t, row.payoutAmount)}</td>
               <td className="px-3 py-2 text-muted">{settlementBasisText(locale, row.calculationBasis)}</td>
             </tr>

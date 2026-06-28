@@ -501,6 +501,8 @@ export const vi: Messages = {
   "settlements.opsMonthly.team.waiter": "Nhóm phục vụ",
   "settlements.opsMonthly.team.unassigned": "Chưa phân loại",
   "settlements.opsMonthly.column.shareTeamPortion": "Tỷ lệ phân bổ/Phần nhóm",
+  "settlements.opsMonthly.shareTeamPortion.value": "{percent}% / {amount} VND",
+  "settlements.opsMonthly.shareTeamPortion.none": "-",
   "settlements.opsMonthly.column.expectedPayout": "Số tiền chi trả dự kiến",
   "settlements.opsMonthly.column.basis": "Căn cứ tính",
   "settlements.opsMonthly.callEvidence.empty.title": "Không có căn cứ tính tổng cuộc gọi tháng",

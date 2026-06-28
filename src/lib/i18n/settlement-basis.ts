@@ -1,6 +1,7 @@
 import { type Locale } from "@/lib/i18n/config";
 import { formatNumber } from "@/lib/i18n/format";
 import { resolveKoreanMessage } from "@/lib/i18n/errors";
+import { codeLabelFromKoreanLabel } from "@/lib/i18n/codes";
 
 /**
  * 정산/월마감 "산출 근거(calculationBasis/monthlyCalculationBasis)" 표시 경계 번역기.
@@ -85,15 +86,16 @@ const FIXED_BASIS_VI: Record<string, string> = {
 };
 
 /**
- * "{근무상태} 제외" 형태 처리: 캡처한 상태 라벨을 화이트리스트로 번역하고 "제외"를 vi로.
- * 상태 라벨이 번역 사전에 없으면 원문 상태 + vi "제외"로 둔다.
+ * "{근무상태} 제외" 형태 처리: 캡처한 한국어 근태 라벨(정상/휴무/지각/조퇴/결근 등)을
+ * ATTENDANCE_STATUS dictionary로 역매핑해 locale 라벨로 바꾸고 "제외"를 vi로 표기한다.
+ * dictionary에 없는 커스텀 라벨은 원문 그대로 두고 "제외"만 번역한다.
  */
 function translateExclusion(locale: Locale, koBasis: string): string | null {
   const match = /^(.+) 제외$/.exec(koBasis);
   if (!match) return null;
   const statusKo = match[1];
-  const statusVi = resolveKoreanMessage(locale, statusKo);
-  return `${statusVi} (loại trừ)`;
+  const statusLabel = codeLabelFromKoreanLabel(locale, "ATTENDANCE_STATUS", statusKo);
+  return locale === "vi" ? `${statusLabel} (loại trừ)` : `${statusLabel} 제외`;
 }
 
 export function settlementBasisText(locale: Locale, koBasis: string | null | undefined): string {
