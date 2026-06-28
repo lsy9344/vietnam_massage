@@ -1,6 +1,6 @@
 # Spine Pair Review — DESIGN.md + EXPERIENCE.md
 
-**Run:** `ux-vietnam_massage-2026-06-07/` · **Reviewed:** 2026-06-07 · **Reviewer:** source-extraction rubric (validate spec)
+**Run:** `ux-vietnam_aesthetic-2026-06-07/` · **Reviewed:** 2026-06-07 · **Reviewer:** source-extraction rubric (validate spec)
 
 ## Overall verdict
 

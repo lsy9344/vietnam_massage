@@ -10,7 +10,7 @@ packageManager: 'pnpm@10.12.1'
 e2eStrategy: 'separate-job-non-blocking'
 ---
 
-# CI/CD 파이프라인 설정 — vietnam_massage
+# CI/CD 파이프라인 설정 — vietnam_aesthetic
 
 - **설정자:** Master Test Architect (Murat)
 - **언어:** Korean
@@ -25,7 +25,7 @@ e2eStrategy: 'separate-job-non-blocking'
 ### 1. Git 저장소 ✅
 
 - `.git/` 존재
-- 원격: `https://github.com/lsy9344/vietnam_massage.git` (origin)
+- 원격: `https://github.com/lsy9344/vietnam_aesthetic.git` (origin)
 
 ### 2. 테스트 스택 ✅
 
@@ -59,7 +59,7 @@ e2eStrategy: 'separate-job-non-blocking'
 | 패키지 매니저 | **pnpm@10.12.1** (`package.json` packageManager) |
 | Node 버전 | local v22.16.0 (`.nvmrc` 없음 → CI는 Node 22 LTS 고정) |
 | Prisma | 7 + `@prisma/adapter-pg`, `prisma generate`는 `predev`/`prebuild`/`pretest:*`에 연결 |
-| E2E DB URL | `postgresql://postgres:postgres@localhost:5432/vietnam_massage` (support/db.ts 폴백) |
+| E2E DB URL | `postgresql://postgres:postgres@localhost:5432/vietnam_aesthetic` (support/db.ts 폴백) |
 
 ### 7. E2E 전략 결정 (사용자)
 

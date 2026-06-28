@@ -1,23 +1,23 @@
 ---
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8]
 inputDocuments:
-  - _bmad-output/planning-artifacts/briefs/brief-vietnam_massage-2026-06-07/.decision-log.md
-  - _bmad-output/planning-artifacts/briefs/brief-vietnam_massage-2026-06-07/addendum.md
-  - _bmad-output/planning-artifacts/briefs/brief-vietnam_massage-2026-06-07/brief.md
-  - _bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/.decision-log.md
-  - _bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/addendum.md
-  - _bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/prd.md
-  - _bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/reconcile-brief.md
-  - _bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/reconcile-client-spec.md
-  - _bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/reconcile-modules.md
-  - _bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/reconcile-sheet-design.md
-  - _bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/review-rubric.md
-  - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/.decision-log.md
-  - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/DESIGN.md
-  - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/EXPERIENCE.md
-  - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/review-accessibility.md
-  - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/review-rubric.md
-  - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/validation-report.md
+  - _bmad-output/planning-artifacts/briefs/brief-vietnam_aesthetic-2026-06-07/.decision-log.md
+  - _bmad-output/planning-artifacts/briefs/brief-vietnam_aesthetic-2026-06-07/addendum.md
+  - _bmad-output/planning-artifacts/briefs/brief-vietnam_aesthetic-2026-06-07/brief.md
+  - _bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/.decision-log.md
+  - _bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/addendum.md
+  - _bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/prd.md
+  - _bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/reconcile-brief.md
+  - _bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/reconcile-client-spec.md
+  - _bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/reconcile-modules.md
+  - _bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/reconcile-sheet-design.md
+  - _bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/review-rubric.md
+  - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/.decision-log.md
+  - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/DESIGN.md
+  - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/EXPERIENCE.md
+  - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/review-accessibility.md
+  - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/review-rubric.md
+  - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/validation-report.md
   - docs/modules/README.md
   - docs/modules/audit.md
   - docs/modules/calls.md
@@ -30,7 +30,7 @@ inputDocuments:
   - docs/plans/2026-06-07-module-structure.md
   - _bmad-output/project-context.md
 workflowType: 'architecture'
-project_name: 'vietnam_massage'
+project_name: 'vietnam_aesthetic'
 user_name: 'noah'
 date: '2026-06-07'
 lastStep: 8
@@ -140,7 +140,7 @@ UX 측면에서는 데스크톱 웹이 1차 표면이고, TV 현황판 풀스크
 **Initialization Command:**
 
 ```bash
-pnpm create next-app@latest vietnam_massage_app \
+pnpm create next-app@latest vietnam_aesthetic_app \
   --ts \
   --tailwind \
   --eslint \
@@ -344,10 +344,10 @@ Project initialization using this selected starter should be the first implement
 
 | Concern | Applied value |
 | --- | --- |
-| App host | Vercel project `erp_vietnam_massage` (`prj_Clxkks3vDpagQLiFk4PNISPEh0L6`), team `noah's projects` (`team_fGZaevoOIWwaUq9Nlstf7QpO`) |
+| App host | Vercel project `erp_vietnam_aesthetic` (`prj_Clxkks3vDpagQLiFk4PNISPEh0L6`), team `noah's projects` (`team_fGZaevoOIWwaUq9Nlstf7QpO`) |
 | App region | `sin1` (Singapore) — pinned in `vercel.json` |
 | Build command | `pnpm run vercel-build` (= `prisma generate && prisma migrate deploy && next build`) — set on the Vercel project (the project setting, not only `vercel.json`, is what runs) |
-| Database | Neon project `erp-vietnam-massage-sg` (Neon id `rapid-forest-91070214`, Vercel store `store_E2eQztb7zw0uI5Wb`) |
+| Database | Neon project `erp-vietnam-aesthetic-sg` (Neon id `rapid-forest-91070214`, Vercel store `store_E2eQztb7zw0uI5Wb`) |
 | DB region | AWS `ap-southeast-1` (Singapore) — co-located with the app |
 | DB engine | PostgreSQL 17 |
 | Runtime conn | `DATABASE_URL` = Neon **pooled** string (`...-pooler.ap-southeast-1.aws.neon.tech/...?sslmode=require`), read by `src/lib/prisma.ts` |
@@ -549,7 +549,7 @@ type ActionResult<T> =
 ### Complete Project Directory Structure
 
 ```text
-vietnam_massage/
+vietnam_aesthetic/
 ├── AGENTS.md
 ├── README.md
 ├── package.json

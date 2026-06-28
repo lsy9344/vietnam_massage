@@ -1,6 +1,6 @@
 ---
 title: "Sprint Change Proposal: Epic 4 순서 조정"
-project: "vietnam_massage"
+project: "vietnam_aesthetic"
 date: "2026-06-08"
 status: "approved"
 workflow: "bmad-correct-course"

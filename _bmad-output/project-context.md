@@ -1,5 +1,5 @@
 ---
-project_name: 'vietnam_massage'
+project_name: 'vietnam_aesthetic'
 user_name: 'noah'
 date: '2026-06-07'
 sections_completed: ['technology_stack', 'language_rules', 'framework_rules', 'testing_rules', 'code_quality_rules', 'workflow_rules', 'critical_rules']
@@ -87,7 +87,7 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - E2E 테스트 baseline은 Playwright `@playwright/test@1.60.0`이며, 실행 스크립트는 `npm run test:e2e`다.
 - Story 1.2 E2E는 역할별 로그인, landing, sidebar 숨김, direct route 차단을 검증한다. 실행 전 `DATABASE_URL` 설정, Prisma migration/generate, `scripts/seed-dev-accounts.ts` 기반 local 계정 seed가 필요하다.
 - 현재 산출물은 Markdown 문서, 원본 Excel 파일 `sheet.xlsx`, 설계 이미지 PNG, 도메인 모듈 README 스캐폴드로 구성된다.
-- BMad 설정은 `6.8.0` installer 기반이며, 프로젝트명은 `vietnam_massage`, 문서 출력 언어는 Korean이다.
+- BMad 설정은 `6.8.0` installer 기반이며, 프로젝트명은 `vietnam_aesthetic`, 문서 출력 언어는 Korean이다.
 - 코드 구현을 시작하기 전에는 새로 선택한 기술 스택의 버전 제약, package/config/test 파일, lint/format 규칙을 이 문서에 먼저 반영해야 한다.
 - 현재 모듈 구조는 `masters`, `calls`, `rooms`, `settlements`, `closing`, `dashboard`, `audit`, `shared`를 기준으로 한다.
 
@@ -155,7 +155,7 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 ### 개발 워크플로우 규칙
 
 - BMad 산출물은 `_bmad-output/` 아래에 두고, 프로젝트 지식 문서는 `docs/` 아래에 둔다.
-- 현재 기획 산출물의 기준 위치는 `_bmad-output/planning-artifacts/briefs/brief-vietnam_massage-2026-06-07/`이다.
+- 현재 기획 산출물의 기준 위치는 `_bmad-output/planning-artifacts/briefs/brief-vietnam_aesthetic-2026-06-07/`이다.
 - 모듈 참조 문서는 `docs/modules/`, 소스 모듈 스캐폴드는 `src/modules/`와 `src/shared/`를 기준으로 한다.
 - 구현 전 새 기술 스택을 도입하면 package/config/test 파일과 함께 `project-context.md`를 갱신한다.
 - 주요 정책 결정은 관련 문서 또는 결정 로그에 남긴다. 특히 시간 슬롯, 할인 정책, D코스 2인 필수, 귀케어 0명 처리, 월마감 재오픈 정책은 임의 확정하지 않는다.

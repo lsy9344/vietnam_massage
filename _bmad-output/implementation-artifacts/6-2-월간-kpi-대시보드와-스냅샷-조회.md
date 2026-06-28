@@ -173,7 +173,7 @@ GPT-5 Codex
 
 - Create-story workflow activation on 2026-06-10: `python3 _bmad/scripts/resolve_customization.py --skill .agents/skills/bmad-create-story --key workflow` failed because local Python lacks `tomllib`; customization resolved manually from `.agents/skills/bmad-create-story/customize.toml`.
 - Activation customization: prepend/append steps were empty; persistent fact loaded from `_bmad-output/project-context.md`; `on_complete = ""`.
-- Config resolved from `_bmad/bmm/config.yaml`: user `noah`, project `vietnam_massage`, communication/document language Korean, implementation artifacts `_bmad-output/implementation-artifacts`.
+- Config resolved from `_bmad/bmm/config.yaml`: user `noah`, project `vietnam_aesthetic`, communication/document language Korean, implementation artifacts `_bmad-output/implementation-artifacts`.
 - Required skill files loaded in order: `.agents/skills/bmad-create-story/SKILL.md`, `.agents/skills/bmad-create-story/discover-inputs.md`, `.agents/skills/bmad-create-story/template.md`, `.agents/skills/bmad-create-story/checklist.md`.
 - Discovery results: `{epics_content}` from `_bmad-output/planning-artifacts/epics.md`; `{architecture_content}` from `_bmad-output/planning-artifacts/architecture.md`; `{prd_content}` no separate PRD file found under current planning artifacts, relevant FR context was available in epics and architecture; `{ux_content}` no separate UX file found under current planning artifacts; persistent facts from `_bmad-output/project-context.md`.
 - Story target: user explicitly requested Story 6.2. Sprint status key matched `6-2-월간-kpi-대시보드와-스냅샷-조회: backlog`.

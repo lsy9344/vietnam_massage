@@ -1,16 +1,16 @@
 ---
-stateFile: "/Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/story-automator/orchestration-1-20260607-165702.md"
+stateFile: "/Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/story-automator/orchestration-1-20260607-165702.md"
 createdAt: "2026-06-07T16:57:46Z"
 ---
 
-# Agents Plan: vietnam_massage - Epic Breakdown
+# Agents Plan: vietnam_aesthetic - Epic Breakdown
 
 ```json
 {
   "version": "1.0.0",
-  "stateFile": "/Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/story-automator/orchestration-1-20260607-165702.md",
+  "stateFile": "/Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/story-automator/orchestration-1-20260607-165702.md",
   "epic": "1",
-  "epicName": "vietnam_massage - Epic Breakdown",
+  "epicName": "vietnam_aesthetic - Epic Breakdown",
   "createdAt": "2026-06-07T16:57:46Z",
   "stories": [
     {

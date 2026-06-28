@@ -6,7 +6,7 @@ status: in-progress
 baseline: 'PASS 87 / FAIL 47 / SKIP 59 (clean DB, --workers=1)'
 ---
 
-# E2E 안정화 가이드 — vietnam_massage
+# E2E 안정화 가이드 — vietnam_aesthetic
 
 ## 핵심 결론 (먼저 읽으세요)
 
@@ -20,7 +20,7 @@ baseline: 'PASS 87 / FAIL 47 / SKIP 59 (clean DB, --workers=1)'
 
 ```bash
 # 1) DB 깨끗하게
-export DATABASE_URL="postgresql://postgres:erp_fish_local_pw@localhost:5432/vietnam_massage"
+export DATABASE_URL="postgresql://postgres:erp_fish_local_pw@localhost:5432/vietnam_aesthetic"
 PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION="reset" npx prisma db push --force-reset
 npx tsx scripts/seed-dev-accounts.ts
 

@@ -10,12 +10,12 @@ oracleConfidence: 'high'
 oracleResolutionMode: 'formal_requirements'
 oracleSources:
   - '_bmad-output/planning-artifacts/epics.md'
-  - '_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/prd.md'
+  - '_bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/prd.md'
   - '_bmad-output/project-context.md'
 externalPointerStatus: 'not_used'
 ---
 
-# 커버리지 추적 매트릭스 — vietnam_massage
+# 커버리지 추적 매트릭스 — vietnam_aesthetic
 
 - **리뷰어:** Master Test Architect (Murat)
 - **언어:** Korean

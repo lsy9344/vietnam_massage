@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"[Environment]::SetEnvironmentVariable('PROJECT_ROOT', 'C:\\Users\\KimYS\\Desktop\\개발외주\\erp_vietnam_massage', 'Process'); [Environment]::SetEnvironmentVariable('PYTHONPATH', 'C:\\Users\\KimYS\\Desktop\\개발외주\\erp_vietnam_massage\\.agents\\skills\\bmad-story-automator\\src', 'Process'); python -m story_automator stop-hook\"",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"[Environment]::SetEnvironmentVariable('PROJECT_ROOT', 'C:\\Users\\KimYS\\Desktop\\개발외주\\erp_vietnam_aesthetic', 'Process'); [Environment]::SetEnvironmentVariable('PYTHONPATH', 'C:\\Users\\KimYS\\Desktop\\개발외주\\erp_vietnam_aesthetic\\.agents\\skills\\bmad-story-automator\\src', 'Process'); python -m story_automator stop-hook\"",
             "timeout": 10,
             "statusMessage": "Checking story automator state"
           }

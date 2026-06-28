@@ -20,7 +20,7 @@ inputDocuments:
   - 'knowledge/selector-resilience.md'
 ---
 
-# 테스트 품질 리뷰 — vietnam_massage
+# 테스트 품질 리뷰 — vietnam_aesthetic
 
 - **리뷰 범위(scope):** suite (전체 스위트, 우선순위 필터 없음)
 - **리뷰어:** Master Test Architect (Murat)

@@ -11,7 +11,7 @@ updated: 2026-06-07
 
 이 PRD는 기존 `sheet.xlsx`로 운영 중인 베트남 에스테틱/마사지 매장 업무를 웹 기반 ERP로 전환하기 위한 제품 요구사항 문서다. 대상 독자는 의사결정자, PM, UX 설계자, 아키텍트, 개발자, QA 담당자이며, 이 문서는 기능 보존 범위, 사용자 여정, 기능 요구사항, 비기능 요구사항, 성공 기준을 정의한다.
 
-본 PRD는 원본 엑셀의 12개 시트와 숨김 시트 `목록`, 그리고 기존 분석 문서 `client_erp_specification.md`, `sheet_erp_design.md`, `_bmad-output/planning-artifacts/briefs/brief-vietnam_massage-2026-06-07/brief.md`를 기준으로 한다. 기술스택과 구현 제약은 `addendum.md`에 별도 보존한다.
+본 PRD는 원본 엑셀의 12개 시트와 숨김 시트 `목록`, 그리고 기존 분석 문서 `client_erp_specification.md`, `sheet_erp_design.md`, `_bmad-output/planning-artifacts/briefs/brief-vietnam_aesthetic-2026-06-07/brief.md`를 기준으로 한다. 기술스택과 구현 제약은 `addendum.md`에 별도 보존한다.
 
 ## 1. 비전
 

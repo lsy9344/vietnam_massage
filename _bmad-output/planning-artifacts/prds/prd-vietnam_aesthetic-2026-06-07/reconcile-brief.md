@@ -1,6 +1,6 @@
 # Input Reconciliation — Product Brief
 
-Source: `_bmad-output/planning-artifacts/briefs/brief-vietnam_massage-2026-06-07/brief.md`
+Source: `_bmad-output/planning-artifacts/briefs/brief-vietnam_aesthetic-2026-06-07/brief.md`
 Target: `prd.md`
 
 ## Verdict

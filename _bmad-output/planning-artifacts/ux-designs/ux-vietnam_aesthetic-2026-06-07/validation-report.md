@@ -1,7 +1,7 @@
-# UX Design Validation Report — vietnam_massage
+# UX Design Validation Report — vietnam_aesthetic
 
-- **DESIGN.md:** `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/DESIGN.md`
-- **EXPERIENCE.md:** `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/EXPERIENCE.md`
+- **DESIGN.md:** `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/DESIGN.md`
+- **EXPERIENCE.md:** `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/EXPERIENCE.md`
 - **Run timestamp:** 2026-06-07
 - **Reviewer files:**
   - `review-rubric.md` (source-extraction rubric / validate spec)

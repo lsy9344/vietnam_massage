@@ -1,6 +1,6 @@
 {
-  "epic_path": "/Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/epics.md",
-  "epic_name": "vietnam_massage - Epic Breakdown",
+  "epic_path": "/Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/epics.md",
+  "epic_name": "vietnam_aesthetic - Epic Breakdown",
   "story_count": 38,
   "story_ids_csv": "1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,2.1,2.2,2.3,2.4,2.5,2.6,3.1,3.2,3.3,3.4,3.5,4.1,4.2,4.3,4.4,4.5,4.6,5.1,5.2,5.3,5.4,5.5,5.6,6.1,6.2,6.3,6.4,7.1,7.2,7.3",
   "range_json": {
@@ -522,7 +522,7 @@
     }
   ],
   "custom_instructions": "",
-  "preflight_snapshot": "/Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/story-automator/preflight-1-20260607T164813Z.md",
+  "preflight_snapshot": "/Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/story-automator/preflight-1-20260607T164813Z.md",
   "skip_automate": false,
   "max_parallel": 5,
   "agent_choice": "U",
@@ -532,10 +532,10 @@
   },
   "primary_agent": "codex",
   "saved_agent_preset": "all-codex",
-  "state_path": "/Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/story-automator/orchestration-1-20260607-165702.md",
+  "state_path": "/Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/story-automator/orchestration-1-20260607-165702.md",
   "state_config_json": {
     "epic": "1",
-    "epicName": "vietnam_massage - Epic Breakdown",
+    "epicName": "vietnam_aesthetic - Epic Breakdown",
     "storyRange": [
       "1.1",
       "1.2",
@@ -590,8 +590,8 @@
       "defaultFallback": false
     }
   },
-  "complexity_path": "/Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/story-automator/complexity-orchestration-1-20260607-165702.json",
-  "agents_path": "/Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/story-automator/agents/agents-orchestration-1-20260607-165702.md",
+  "complexity_path": "/Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/story-automator/complexity-orchestration-1-20260607-165702.json",
+  "agents_path": "/Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/story-automator/agents/agents-orchestration-1-20260607-165702.md",
   "marker_entry": ".agents/.story-automator-active",
   "project_slug": "vietnamm",
   "execution_started_at": "2026-06-07T16:57:57Z"

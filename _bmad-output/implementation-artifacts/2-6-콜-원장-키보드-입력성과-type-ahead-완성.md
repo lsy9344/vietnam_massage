@@ -144,9 +144,9 @@ so that 엑셀의 입력 속도를 잃지 않고 예약/방문 처리를 할 수
 
 - `sprint_status`: `_bmad-output/implementation-artifacts/sprint-status.yaml`
 - `epics`: `_bmad-output/planning-artifacts/epics.md`
-- `prd`: `_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/prd.md`
+- `prd`: `_bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/prd.md`
 - `architecture`: `_bmad-output/planning-artifacts/architecture.md`
-- `ux`: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/DESIGN.md`, `EXPERIENCE.md`, `review-accessibility.md`, `validation-report.md`
+- `ux`: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/DESIGN.md`, `EXPERIENCE.md`, `review-accessibility.md`, `validation-report.md`
 - Persistent project facts: `_bmad-output/project-context.md`
 - Previous story: `_bmad-output/implementation-artifacts/2-5-일별-지출-입력과-요약-계산.md`
 - Current implementation files read: `package.json`, `src/app/(erp)/calls/editable-call-grid.tsx`, `src/app/(erp)/calls/page.tsx`, `src/app/(erp)/calls/actions.ts`, `src/modules/calls/service-call-schema.ts`, `src/modules/calls/service-call-service.ts`, `docs/modules/calls.md`, `src/modules/calls/README.md`, `tests/e2e/story-2-4-d-course-second-therapist.spec.ts`, `tests/e2e/story-2-5-daily-expense-summary.spec.ts`.
@@ -155,16 +155,16 @@ so that 엑셀의 입력 속도를 잃지 않고 예약/방문 처리를 할 수
 ### Discovery Results
 
 - Loaded `{epics_content}` from 1 whole file: `_bmad-output/planning-artifacts/epics.md`.
-- Loaded `{prd_content}` from relevant PRD shard: `_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/prd.md`.
+- Loaded `{prd_content}` from relevant PRD shard: `_bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/prd.md`.
 - Loaded `{architecture_content}` from 1 whole file: `_bmad-output/planning-artifacts/architecture.md`.
-- Loaded `{ux_content}` from UX shard directory: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/`.
+- Loaded `{ux_content}` from UX shard directory: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/`.
 - Loaded `{project_context}` from `_bmad-output/project-context.md`.
 
 ### Epic 2 Context
 
 - Epic 2 makes the call ledger the source for reservation/visit state, payment inputs, discounts, assignments, daily expenses, and completed-call calculations. Story 2.6 finishes the hot data-entry surface so counters can use the ledger at Excel speed. [Source: `_bmad-output/planning-artifacts/epics.md` - Epic 2, Story 2.6]
 - FR10 requires fast service-call ledger input. FR11-FR15 are already implemented around autosave, status history, completed-call calculation, D-course validation, and daily expenses/summary; Story 2.6 must not break those contracts. [Source: `_bmad-output/planning-artifacts/epics.md` - FR10-FR15; `_bmad-output/project-context.md` - Story 2.1-2.5 rules]
-- The UX spec treats keyboard-first grid input as the product's core interaction. Loss of keyboard speed is a product failure, not a polish issue. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/EXPERIENCE.md` - Interaction Primitives]
+- The UX spec treats keyboard-first grid input as the product's core interaction. Loss of keyboard speed is a product failure, not a polish issue. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/EXPERIENCE.md` - Interaction Primitives]
 
 ### Architecture Guardrails
 
@@ -173,7 +173,7 @@ so that 엑셀의 입력 속도를 잃지 않고 예약/방문 처리를 할 수
 - `/calls` continues to use Server Components/Server Actions: page loads selected month/date data, client grid manages transient edit state, actions call domain services and return `ActionResult<T>`. [Source: `_bmad-output/planning-artifacts/architecture.md` - State Management Patterns, Action Response Format]
 - Store selected operating month/date in URL params. Do not introduce Redux/Zustand or month-wide client global state for this story. [Source: `_bmad-output/planning-artifacts/architecture.md` - State Management Patterns]
 - Render the call ledger by selected date within an operating month. Do not render full monthly editable volume. [Source: `_bmad-output/planning-artifacts/architecture.md` - Performance]
-- UI must remain dense, desktop-first, Korean-only, light-mode-only, and operational. Avoid dashboard visuals, heavy animation, and decorative surfaces inside the call-entry workflow. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/EXPERIENCE.md`; `DESIGN.md` - Do's and Don'ts]
+- UI must remain dense, desktop-first, Korean-only, light-mode-only, and operational. Avoid dashboard visuals, heavy animation, and decorative surfaces inside the call-entry workflow. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/EXPERIENCE.md`; `DESIGN.md` - Do's and Don'ts]
 
 ### Current Code State to Preserve
 
@@ -197,8 +197,8 @@ so that 엑셀의 입력 속도를 잃지 않고 예약/방문 처리를 할 수
 
 ### UX and Accessibility Requirements
 
-- Keyboard model: `Tab`/`Shift+Tab` cell movement, `Enter` below-row commit, arrow movement, `Esc` cancel, type-ahead filtering, blur autosave, computed readonly cells, D-course inline error. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/EXPERIENCE.md` - Component Behavior and Interaction Primitives]
-- Dropdown open-state model must be explicit: arrow-key option traversal, `Enter` select, `Esc` close and return to cell, no keyboard trap, active option exposed through roving focus or `aria-activedescendant`. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/review-accessibility.md`; `validation-report.md`]
+- Keyboard model: `Tab`/`Shift+Tab` cell movement, `Enter` below-row commit, arrow movement, `Esc` cancel, type-ahead filtering, blur autosave, computed readonly cells, D-course inline error. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/EXPERIENCE.md` - Component Behavior and Interaction Primitives]
+- Dropdown open-state model must be explicit: arrow-key option traversal, `Enter` select, `Esc` close and return to cell, no keyboard trap, active option exposed through roving focus or `aria-activedescendant`. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/review-accessibility.md`; `validation-report.md`]
 - Status/dropdown visual cues must not be color-only. If swatches are rendered, keep label text and preferably the project status glyphs with them. [Source: `DESIGN.md` - Do's and Don'ts; `EXPERIENCE.md` - Accessibility Floor]
 - Computed cells must use readonly tint and must not look editable. This prevents accidental attempts to overwrite server-derived values. [Source: `DESIGN.md` - Do's and Don'ts; `_bmad-output/planning-artifacts/epics.md` - Story 2.6 AC]
 - The grid is desktop web first with a minimum practical width assumption. Do not spend Story 2.6 optimizing touch/mobile targets for the call ledger. [Source: `EXPERIENCE.md` - Responsive & Platform]
@@ -236,11 +236,11 @@ so that 엑셀의 입력 속도를 잃지 않고 예약/방문 처리를 할 수
 ### References
 
 - `_bmad-output/planning-artifacts/epics.md` - Epic 2, Story 2.6
-- `_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/prd.md` - FR10-FR15 call ledger requirements
+- `_bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/prd.md` - FR10-FR15 call ledger requirements
 - `_bmad-output/planning-artifacts/architecture.md` - Frontend Architecture, API & Communication Patterns, State Management Patterns, Performance
-- `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/EXPERIENCE.md` - Component Behavior, Interaction Primitives, Accessibility Floor
-- `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/DESIGN.md` - Do's and Don'ts, computed cell and status cue rules
-- `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/review-accessibility.md` - type-ahead dropdown keyboard model gap
+- `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/EXPERIENCE.md` - Component Behavior, Interaction Primitives, Accessibility Floor
+- `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/DESIGN.md` - Do's and Don'ts, computed cell and status cue rules
+- `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/review-accessibility.md` - type-ahead dropdown keyboard model gap
 - `_bmad-output/project-context.md` - Story 2.1-2.5 calls ledger contracts
 - `_bmad-output/implementation-artifacts/2-5-일별-지출-입력과-요약-계산.md` - previous story learnings
 - `package.json` - current dependency and lint/test script baseline

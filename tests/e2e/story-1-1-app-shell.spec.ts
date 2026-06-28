@@ -20,7 +20,7 @@ test.describe("Story 1.1 ERP 앱 쉘", () => {
   });
 
   test("기본 데스크톱 shell과 sidebar 도메인 순서를 렌더링한다", async ({ page }) => {
-    await expect(page).toHaveTitle("Vietnam Massage ERP");
+    await expect(page).toHaveTitle("Vietnam Aesthetic ERP");
     await expect(page.getByRole("heading", { name: "ERP 운영", level: 1 })).toBeVisible();
     await expect(page.getByRole("heading", { name: "역할별 ERP 업무", level: 2 })).toBeVisible();
 

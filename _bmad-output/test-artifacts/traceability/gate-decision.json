@@ -1,10 +1,10 @@
 {
   "schema_version": "0.1.0",
   "evaluated_at": "2026-06-12T00:44:04Z",
-  "repo": "vietnam_massage",
+  "repo": "vietnam_aesthetic",
   "target": {
     "type": "release",
-    "id": "vietnam_massage-v1",
+    "id": "vietnam_aesthetic-v1",
     "label": "Excel ERP 이전 v1 (Epic 1~7 전체)"
   },
   "collection_status": "COLLECTED",

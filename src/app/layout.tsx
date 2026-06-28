@@ -8,7 +8,7 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Vietnam Massage ERP",
+  title: "Vietnam Aesthetic ERP",
   description: "운영 원장, 객실 현황, 정산, 월마감을 위한 ERP 앱 쉘"
 };
 

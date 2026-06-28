@@ -160,9 +160,9 @@ export type RoomStatusDto = {
 
 ### UX and Accessibility Guardrails
 
-- DTO의 `displayStatus`는 status badge의 잠긴 상태값과 일치해야 한다: `사용중`, `예약`, `청소중`, `종료확인`, `빈방`. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/DESIGN.md` - Status Tokens]
-- 상태 의미는 색상만으로 전달하지 않는다. 후속 UI는 라벨과 글리프를 함께 표시해야 하므로 DTO는 화면이 라벨을 안정적으로 선택할 수 있는 상태값을 제공해야 한다. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/EXPERIENCE.md` - Accessibility Floor]
-- `종료확인`의 밝은 glow 토큰은 비텍스트 장식 전용이고, 텍스트 배지는 어두운 `status-종료확인` 토큰을 쓴다. Story 3.1은 토큰을 바꾸지 않되 downstream UI가 상태를 오판하지 않게 DTO 상태를 정확히 반환한다. [Source: `src/app/globals.css`; `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/DESIGN.md`]
+- DTO의 `displayStatus`는 status badge의 잠긴 상태값과 일치해야 한다: `사용중`, `예약`, `청소중`, `종료확인`, `빈방`. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/DESIGN.md` - Status Tokens]
+- 상태 의미는 색상만으로 전달하지 않는다. 후속 UI는 라벨과 글리프를 함께 표시해야 하므로 DTO는 화면이 라벨을 안정적으로 선택할 수 있는 상태값을 제공해야 한다. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/EXPERIENCE.md` - Accessibility Floor]
+- `종료확인`의 밝은 glow 토큰은 비텍스트 장식 전용이고, 텍스트 배지는 어두운 `status-종료확인` 토큰을 쓴다. Story 3.1은 토큰을 바꾸지 않되 downstream UI가 상태를 오판하지 않게 DTO 상태를 정확히 반환한다. [Source: `src/app/globals.css`; `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/DESIGN.md`]
 
 ### Previous Story Intelligence
 
@@ -220,9 +220,9 @@ Avoid unless explicitly justified:
 - `_bmad-output/planning-artifacts/epics.md` - Epic 3, Story 3.1, FR16-FR19
 - `_bmad-output/planning-artifacts/architecture.md` - Domain service boundary, Room/TV refresh, Service Boundaries, Project Organization
 - `_bmad-output/project-context.md` - stable ID, calls, room, time slot, course policy, testing rules
-- `_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/prd.md` - UJ-1, UJ-3, FR1, FR2, FR16-FR19
-- `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/DESIGN.md` - status tokens, room card, TV typography
-- `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/EXPERIENCE.md` - waiter flow, TV flow, accessibility floor
+- `_bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/prd.md` - UJ-1, UJ-3, FR1, FR2, FR16-FR19
+- `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/DESIGN.md` - status tokens, room card, TV typography
+- `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/EXPERIENCE.md` - waiter flow, TV flow, accessibility floor
 - `docs/modules/rooms.md`
 - `src/modules/rooms/README.md`
 - `prisma/schema.prisma`

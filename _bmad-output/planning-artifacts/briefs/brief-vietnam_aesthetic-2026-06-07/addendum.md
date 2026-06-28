@@ -9,9 +9,9 @@ updated: 2026-06-07
 
 ## 참고한 자료
 
-- `/Users/sooyeol/Desktop/dev_busi/vietnam_massage/sheet.xlsx`
-- `/Users/sooyeol/Desktop/dev_busi/vietnam_massage/client_erp_specification.md`
-- `/Users/sooyeol/Desktop/dev_busi/vietnam_massage/sheet_erp_design.md`
+- `/Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/sheet.xlsx`
+- `/Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/client_erp_specification.md`
+- `/Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/sheet_erp_design.md`
 
 ## 원본 워크북 인벤토리
 

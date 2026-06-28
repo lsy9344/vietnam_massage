@@ -28,8 +28,8 @@ env:
   CI: "true"
   NODE_VERSION: "22"
   PNPM_VERSION: "10.12.1"
-  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/vietnam_massage
-  DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/vietnam_massage
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/vietnam_aesthetic
+  DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/vietnam_aesthetic
   NEXTAUTH_SECRET: test-nextauth-secret-at-least-32-characters
   NEXTAUTH_URL: http://127.0.0.1:3000
   PLAYWRIGHT_PORT: "3000"
@@ -142,20 +142,20 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: vietnam_massage
+          POSTGRES_DB: vietnam_aesthetic
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d vietnam_massage"
+          --health-cmd "pg_isready -U postgres -d vietnam_aesthetic"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
 
     env:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vietnam_massage
-      DIRECT_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vietnam_massage
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vietnam_aesthetic
+      DIRECT_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vietnam_aesthetic
       SMOKE_GROUP: ${{ matrix.group }}
 
     steps:
@@ -235,20 +235,20 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: vietnam_massage
+          POSTGRES_DB: vietnam_aesthetic
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d vietnam_massage"
+          --health-cmd "pg_isready -U postgres -d vietnam_aesthetic"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
 
     env:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vietnam_massage
-      DIRECT_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vietnam_massage
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vietnam_aesthetic
+      DIRECT_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vietnam_aesthetic
       E2E_GREP: ${{ github.event_name == 'workflow_dispatch' && inputs.e2e_grep || '' }}
       SHARD: ${{ matrix.shard }}
 
@@ -313,20 +313,20 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: vietnam_massage
+          POSTGRES_DB: vietnam_aesthetic
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d vietnam_massage"
+          --health-cmd "pg_isready -U postgres -d vietnam_aesthetic"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
 
     env:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vietnam_massage
-      DIRECT_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vietnam_massage
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vietnam_aesthetic
+      DIRECT_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vietnam_aesthetic
 
     steps:
       - name: Checkout

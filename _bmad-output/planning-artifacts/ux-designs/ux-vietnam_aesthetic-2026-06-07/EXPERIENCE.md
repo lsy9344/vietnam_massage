@@ -1,9 +1,9 @@
 ---
 status: final
 updated: 2026-06-07
-project: vietnam_massage
+project: vietnam_aesthetic
 sources:
-  - prds/prd-vietnam_massage-2026-06-07/prd.md
+  - prds/prd-vietnam_aesthetic-2026-06-07/prd.md
   - .decision-log.md
   - mockups/key-live-status.html
   - mockups/key-call-grid.html

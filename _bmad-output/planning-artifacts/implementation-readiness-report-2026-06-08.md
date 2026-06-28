@@ -8,35 +8,35 @@ stepsCompleted:
   - step-06-final-assessment
 includedFiles:
   prd:
-    primary: /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/prd.md
+    primary: /Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/prd.md
     supporting:
-      - /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/addendum.md
-      - /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/reconcile-brief.md
-      - /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/reconcile-client-spec.md
-      - /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/reconcile-modules.md
-      - /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/reconcile-sheet-design.md
-      - /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/review-rubric.md
+      - /Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/addendum.md
+      - /Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/reconcile-brief.md
+      - /Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/reconcile-client-spec.md
+      - /Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/reconcile-modules.md
+      - /Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/reconcile-sheet-design.md
+      - /Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/review-rubric.md
   architecture:
-    primary: /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/architecture.md
+    primary: /Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/architecture.md
   epics:
-    primary: /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/epics.md
+    primary: /Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/epics.md
   ux:
     primary:
-      - /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/DESIGN.md
-      - /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/EXPERIENCE.md
+      - /Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/DESIGN.md
+      - /Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/EXPERIENCE.md
     supporting:
-      - /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/review-accessibility.md
-      - /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/review-rubric.md
-      - /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/validation-report.md
-      - /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/mockups/color-themes-1.html
-      - /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/mockups/key-call-grid.html
-      - /Users/sooyeol/Desktop/dev_busi/vietnam_massage/_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/mockups/key-live-status.html
+      - /Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/review-accessibility.md
+      - /Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/review-rubric.md
+      - /Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/validation-report.md
+      - /Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/mockups/color-themes-1.html
+      - /Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/mockups/key-call-grid.html
+      - /Users/sooyeol/Desktop/dev_busi/vietnam_aesthetic/_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/mockups/key-live-status.html
 ---
 
 # Implementation Readiness Assessment Report
 
 **Date:** 2026-06-08
-**Project:** vietnam_massage
+**Project:** vietnam_aesthetic
 
 ## 1단계: 문서 발견 인벤토리
 
@@ -46,7 +46,7 @@ includedFiles:
 - 없음
 
 **Folder Documents:**
-- `prds/prd-vietnam_massage-2026-06-07/`
+- `prds/prd-vietnam_aesthetic-2026-06-07/`
   - `prd.md` (32.90 KB, modified 2026-06-07 17:41 KST)
   - `addendum.md`
   - `reconcile-brief.md`
@@ -78,7 +78,7 @@ includedFiles:
 - 없음
 
 **Folder Documents:**
-- `ux-designs/ux-vietnam_massage-2026-06-07/`
+- `ux-designs/ux-vietnam_aesthetic-2026-06-07/`
   - `DESIGN.md` (23.46 KB, modified 2026-06-07 19:57 KST)
   - `EXPERIENCE.md` (19.77 KB, modified 2026-06-07 19:57 KST)
   - `review-accessibility.md`
@@ -305,8 +305,8 @@ Total FRs in epics: 37
 Found.
 
 Primary UX documents:
-- `ux-designs/ux-vietnam_massage-2026-06-07/DESIGN.md` — status `final`
-- `ux-designs/ux-vietnam_massage-2026-06-07/EXPERIENCE.md` — status `final`
+- `ux-designs/ux-vietnam_aesthetic-2026-06-07/DESIGN.md` — status `final`
+- `ux-designs/ux-vietnam_aesthetic-2026-06-07/EXPERIENCE.md` — status `final`
 
 Supporting UX documents:
 - `.decision-log.md`

@@ -15,7 +15,7 @@
 
 이 작업지시서의 검증 보강 항목을 코드와 E2E에 적용했습니다.
 
-- E2E DB 환경은 `.env` 우선 로딩과 `PLAYWRIGHT_PORT` 지원으로 복구했고, 로컬 `vietnam_massage` DB에 migration을 적용해 브라우저 E2E가 seed 단계에서 중단되지 않게 했습니다.
+- E2E DB 환경은 `.env` 우선 로딩과 `PLAYWRIGHT_PORT` 지원으로 복구했고, 로컬 `vietnam_aesthetic` DB에 migration을 적용해 브라우저 E2E가 seed 단계에서 중단되지 않게 했습니다.
 - 객실 순서, `종료임박`, 콜원장 정산정보 숨김, 미배정 예약, 결제수단 요약, 오늘/월간 대시보드 금액 tone 검증을 브라우저 E2E로 보강했습니다.
 - 미배정 예약 저장 후 객실 셀이 `미배정`으로 보이도록 콜원장 UI 표시를 수정했습니다.
 - 범위 밖 조회날짜는 운영월 시작/종료 경계로 보정되도록 `clampDateToOperatingMonth`를 수정하고 단위 테스트를 갱신했습니다.

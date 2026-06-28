@@ -13,7 +13,7 @@ export default async function ErpLayout({ children }: Readonly<{ children: React
     <main className="erp-shell bg-background text-foreground">
       <aside className="border-r border-border bg-surface px-4 py-5">
         <div className="mb-6">
-          <p className="text-sm font-semibold text-muted">Vietnam Massage</p>
+          <p className="text-sm font-semibold text-muted">Vietnam Aesthetic</p>
           <h1 className="mt-1 text-2xl font-semibold">ERP 운영</h1>
         </div>
         <RoleAwareSidebar role={account.role} />

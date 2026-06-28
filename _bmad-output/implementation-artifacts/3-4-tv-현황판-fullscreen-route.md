@@ -4,12 +4,12 @@ created_at: 2026-06-09T00:00:00+0900
 discovery:
   epics: _bmad-output/planning-artifacts/epics.md
   architecture: _bmad-output/planning-artifacts/architecture.md
-  prd: _bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/prd.md
+  prd: _bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/prd.md
   ux:
-    - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/DESIGN.md
-    - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/EXPERIENCE.md
-    - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/validation-report.md
-    - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/review-accessibility.md
+    - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/DESIGN.md
+    - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/EXPERIENCE.md
+    - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/validation-report.md
+    - _bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/review-accessibility.md
   previous_story: _bmad-output/implementation-artifacts/3-3-객실-현황-화면과-웨이터-안내-문구.md
 ---
 
@@ -117,7 +117,7 @@ so that 매장 안에서 멀리서도 객실 상태와 종료확인을 빠르게
 ### Discovery Results
 
 - `{epics_content}`: 단일 `_bmad-output/planning-artifacts/epics.md`에서 Epic 3 전체와 Story 3.4 AC를 로드했다.
-- `{prd_content}`: `_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/prd.md`에서 UJ-3, FR-16~FR-19, TV 현황판 조회 전용 요구를 로드했다.
+- `{prd_content}`: `_bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/prd.md`에서 UJ-3, FR-16~FR-19, TV 현황판 조회 전용 요구를 로드했다.
 - `{architecture_content}`: 단일 `_bmad-output/planning-artifacts/architecture.md`에서 App Router, route/layout 경계, `rooms` DTO + polling, frontend/domain service boundary, TV fullscreen route 요구를 로드했다.
 - `{ux_content}`: UX `DESIGN.md`, `EXPERIENCE.md`, `validation-report.md`, `review-accessibility.md`에서 TV typography ramp, 상태 token, 라벨+글리프, 종료확인/reduced-motion, stale state 요구를 로드했다.
 - Persistent facts: `_bmad-output/project-context.md`를 로드했고 Story 3.1/3.2/3.3 확정 규칙이 포함되어 있다.
@@ -125,7 +125,7 @@ so that 매장 안에서 멀리서도 객실 상태와 종료확인을 빠르게
 ### Story Scope
 
 - 이번 story는 `/tv` fullscreen 현황판이다. `/live` 첫 화면은 Story 3.2, `/rooms` 웨이터 객실 현황은 Story 3.3에서 완료됐다. [Source: `_bmad-output/planning-artifacts/epics.md` - Epic 3 Story 3.2~3.4]
-- `/tv`는 카운터/매장 TV에 띄우는 조회 전용 화면이며, 입력/수정/콜 원장 편집 affordance를 포함하지 않는다. [Source: `_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/prd.md` - TV 현황판]
+- `/tv`는 카운터/매장 TV에 띄우는 조회 전용 화면이며, 입력/수정/콜 원장 편집 affordance를 포함하지 않는다. [Source: `_bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/prd.md` - TV 현황판]
 - `/tv`는 `RoomStatusDto`와 `listRoomStatuses()`를 재사용한다. 화면에서 활성 콜 선택, 남은분, 종료예정, `종료확인`을 다시 계산하지 않는다. [Source: `_bmad-output/project-context.md` - Story 3.1/3.2/3.3 rules]
 - 이번 story에서 정산, 월마감, 대시보드, 콜 원장 mutation, 신규 Prisma 모델, 신규 외부 realtime infrastructure는 범위가 아니다.
 
@@ -160,11 +160,11 @@ so that 매장 안에서 멀리서도 객실 상태와 종료확인을 빠르게
 
 ### UX and Accessibility Guardrails
 
-- TV 현황판은 chrome/sidebar/input이 없는 fullscreen mode다. 11개 객실을 대형 카드 grid로 채우고 자동 갱신, 마지막 갱신 시각, 갱신 지연 상태를 제공한다. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/EXPERIENCE.md` - Responsive & Platform]
-- TV typography ramp 기준은 객실명 40px/900, 상태 28px/900, 코스/담당/남은시간 22px/700이다. Tailwind class로 정확히 맞추거나 근접하게 구현하되, 작은 ERP card typography를 그대로 쓰지 않는다. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/DESIGN.md` - Typography]
-- 상태는 색상만으로 전달하지 않는다. TV에서도 라벨과 글리프가 항상 보여야 한다. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/EXPERIENCE.md` - Accessibility Floor]
+- TV 현황판은 chrome/sidebar/input이 없는 fullscreen mode다. 11개 객실을 대형 카드 grid로 채우고 자동 갱신, 마지막 갱신 시각, 갱신 지연 상태를 제공한다. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/EXPERIENCE.md` - Responsive & Platform]
+- TV typography ramp 기준은 객실명 40px/900, 상태 28px/900, 코스/담당/남은시간 22px/700이다. Tailwind class로 정확히 맞추거나 근접하게 구현하되, 작은 ERP card typography를 그대로 쓰지 않는다. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/DESIGN.md` - Typography]
+- 상태는 색상만으로 전달하지 않는다. TV에서도 라벨과 글리프가 항상 보여야 한다. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/EXPERIENCE.md` - Accessibility Floor]
 - `종료확인`은 TV에서도 강한 주의 상태여야 한다. pulse를 추가/유지한다면 `prefers-reduced-motion: reduce`에서 정적 ring + `⚠`로 대체하고 3Hz를 넘지 않는다. 현재 `globals.css`의 `status-attention`과 reduced-motion fallback을 재사용한다.
-- TV mode는 같은 라이트 캔버스를 쓴다. 다크 캔버스를 새로 만들지 말고 큰 글자, locked status token, status block, glyph로 거리 가독성을 만든다. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/DESIGN.md` - TV mode]
+- TV mode는 같은 라이트 캔버스를 쓴다. 다크 캔버스를 새로 만들지 말고 큰 글자, locked status token, status block, glyph로 거리 가독성을 만든다. [Source: `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/DESIGN.md` - TV mode]
 - in-app 설명문으로 기능 사용법을 길게 설명하지 않는다. TV board 문구는 "마지막 갱신", "갱신 지연", "결제·확인 필요", "즉시 가능"처럼 짧은 상태/행동 라벨이어야 한다.
 
 ### Previous Story Intelligence
@@ -260,10 +260,10 @@ Avoid unless explicitly justified:
 ### References
 
 - `_bmad-output/planning-artifacts/epics.md` - Epic 3, Story 3.4, FR16-FR19
-- `_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/prd.md` - UJ-3, TV 현황판, 객실 현황 source-of-truth
+- `_bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/prd.md` - UJ-3, TV 현황판, 객실 현황 source-of-truth
 - `_bmad-output/planning-artifacts/architecture.md` - route layout, rooms DTO + polling, frontend/domain service boundary
-- `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/DESIGN.md` - TV typography ramp, locked status tokens, room-card variants
-- `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_massage-2026-06-07/EXPERIENCE.md` - TV fullscreen surface, status badge, stale state, accessibility floor
+- `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/DESIGN.md` - TV typography ramp, locked status tokens, room-card variants
+- `_bmad-output/planning-artifacts/ux-designs/ux-vietnam_aesthetic-2026-06-07/EXPERIENCE.md` - TV fullscreen surface, status badge, stale state, accessibility floor
 - `_bmad-output/project-context.md` - Story 3.1/3.2/3.3 room status and read-only rules
 - `_bmad-output/implementation-artifacts/3-1-객실-상태-dto와-최신-활성-콜-계산.md`
 - `_bmad-output/implementation-artifacts/3-2-첫-화면-실시간-객실-콜-현황.md`

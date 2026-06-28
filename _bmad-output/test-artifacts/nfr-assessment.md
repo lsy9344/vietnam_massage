@@ -6,7 +6,7 @@ overallRisk: 'MEDIUM'
 nfrStatusSummary: { PASS: 7, CONCERNS: 4, FAIL: 1 }
 inputDocuments:
   - '_bmad-output/planning-artifacts/epics.md'
-  - '_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/prd.md'
+  - '_bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/prd.md'
   - '_bmad-output/project-context.md'
   - 'playwright.config.ts'
   - 'prisma/schema.prisma'
@@ -15,7 +15,7 @@ inputDocuments:
   - 'knowledge/error-handling.md'
 ---
 
-# NFR 증거 감사 — vietnam_massage
+# NFR 증거 감사 — vietnam_aesthetic
 
 - **감사자:** Master Test Architect (Murat)
 - **언어:** Korean

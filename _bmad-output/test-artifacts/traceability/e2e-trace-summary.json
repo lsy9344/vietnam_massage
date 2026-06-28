@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "snapshot_at": "2026-06-12T00:44:04Z",
-  "repo": "vietnam_massage",
+  "repo": "vietnam_aesthetic",
   "collection_mode": "sequential",
   "collection_status": "COLLECTED",
   "inventory_basis": "acceptance_criteria",
@@ -9,7 +9,7 @@
   "source_sha": "8c6ef8cb60ab745161ec9d7de377a46bc9a405d4",
   "target": {
     "type": "release",
-    "id": "vietnam_massage-v1",
+    "id": "vietnam_aesthetic-v1",
     "label": "Excel ERP 이전 v1 (Epic 1~7 전체)"
   },
   "decision_mode": "automated",
@@ -20,7 +20,7 @@
     "confidence": "high",
     "sources": [
       "_bmad-output/planning-artifacts/epics.md",
-      "_bmad-output/planning-artifacts/prds/prd-vietnam_massage-2026-06-07/prd.md",
+      "_bmad-output/planning-artifacts/prds/prd-vietnam_aesthetic-2026-06-07/prd.md",
       "_bmad-output/project-context.md"
     ],
     "external_pointer_status": "not_used",
