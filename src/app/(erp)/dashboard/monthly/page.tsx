@@ -1,31 +1,20 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/domain/page-header";
-import { StatusBadge } from "@/components/domain/status-badge";
+import { StatusBadge, type StatusBadgeState } from "@/components/domain/status-badge";
 import { requireRouteAccess } from "@/lib/authorization";
 import { selectedOperatingMonthFor } from "@/lib/operating-date";
+import { getServerTranslator } from "@/lib/i18n/server";
+import { formatCurrencyVnd, formatDateTime, formatNumber } from "@/lib/i18n/format";
+import { operatingMonthStatusLabel, roomStatusLabel } from "@/lib/i18n/codes";
+import type { Locale } from "@/lib/i18n/config";
+import type { Translator } from "@/lib/i18n";
 import { getMonthlyDashboardMetrics, type MonthlyDashboardMetricsDto } from "@/modules/dashboard/dashboard-query-service";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 
 type MonthlyDashboardSearchParams = {
   operatingMonthId?: string;
 };
-
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("ko-KR").format(value);
-}
-
-function formatVnd(value: number) {
-  return `${formatNumber(value)} VND`;
-}
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("ko-KR", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Seoul"
-  }).format(new Date(value));
-}
 
 function KpiTile({ label, value, note, tone = "default" }: { label: string; value: string; note?: string; tone?: "default" | "strong" | "cost" }) {
   return (
@@ -47,33 +36,49 @@ function KpiTile({ label, value, note, tone = "default" }: { label: string; valu
   );
 }
 
-function StatusCountTile({ label, value }: { label: string; value: number }) {
+function StatusCountTile({
+  label,
+  value,
+  badgeState,
+  locale,
+  t
+}: {
+  label: string;
+  value: string;
+  badgeState: StatusBadgeState | null;
+  locale: Locale;
+  t: Translator;
+}) {
   return (
     <div className="border border-border bg-surface px-4 py-3">
       <div className="flex items-center justify-between gap-3">
-        {label === "예약" || label === "사용중" || label === "청소중" ? (
-          <StatusBadge state={label} />
+        {badgeState ? (
+          <StatusBadge
+            state={badgeState}
+            label={roomStatusLabel(locale, badgeState)}
+            ariaLabel={t("roomStatus.aria", { status: roomStatusLabel(locale, badgeState) })}
+          />
         ) : (
           <p className="text-sm font-semibold text-foreground">{label}</p>
         )}
-        <p className="text-2xl font-semibold text-foreground [font-variant-numeric:tabular-nums]">{formatNumber(value)}건</p>
+        <p className="text-2xl font-semibold text-foreground [font-variant-numeric:tabular-nums]">{value}</p>
       </div>
     </div>
   );
 }
 
-function SourceBasisPanel({ metrics }: { metrics: MonthlyDashboardMetricsDto }) {
+function SourceBasisPanel({ metrics, locale, t }: { metrics: MonthlyDashboardMetricsDto; locale: Locale; t: Translator }) {
   if (metrics.sourceBasis.kind === "closed_snapshot") {
     return (
-      <section className="border border-border bg-surface px-4 py-4" aria-label="월간 KPI 기준">
+      <section className="border border-border bg-surface px-4 py-4" aria-label={t("dashboard.monthly.basis.aria")}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase text-muted">조회 기준</p>
-            <h2 className="mt-1 text-base font-semibold text-foreground">확정 스냅샷 기준</h2>
+            <p className="text-xs font-semibold uppercase text-muted">{t("dashboard.monthly.basis.label")}</p>
+            <h2 className="mt-1 text-base font-semibold text-foreground">{t("dashboard.monthly.basis.closedSnapshot")}</h2>
           </div>
           <div className="text-right text-sm text-muted">
             <div>closeVersion {metrics.sourceBasis.closeVersion}</div>
-            <div>확정 {formatDateTime(metrics.sourceBasis.confirmedAt)}</div>
+            <div>{t("dashboard.monthly.basis.confirmed", { value: formatDateTime(locale, metrics.sourceBasis.confirmedAt, { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }) })}</div>
           </div>
         </div>
       </section>
@@ -83,37 +88,35 @@ function SourceBasisPanel({ metrics }: { metrics: MonthlyDashboardMetricsDto }) 
   if (metrics.sourceBasis.kind === "snapshot_missing") {
     return (
       <section className="border border-danger bg-surface px-4 py-5" role="alert">
-        <h2 className="text-base font-semibold text-foreground">확정 스냅샷을 찾을 수 없습니다</h2>
-        <p className="mt-2 text-sm text-muted">
-          마감확정 또는 잠금 상태의 운영월은 현재 재계산값으로 대체하지 않습니다. 월마감 확정 이력을 확인하세요.
-        </p>
+        <h2 className="text-base font-semibold text-foreground">{t("dashboard.monthly.snapshotMissing.title")}</h2>
+        <p className="mt-2 text-sm text-muted">{t("dashboard.monthly.snapshotMissing.description")}</p>
       </section>
     );
   }
 
   return (
-    <section className="border border-border bg-surface px-4 py-4" aria-label="월간 KPI 기준">
+    <section className="border border-border bg-surface px-4 py-4" aria-label={t("dashboard.monthly.basis.aria")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase text-muted">조회 기준</p>
-          <h2 className="mt-1 text-base font-semibold text-foreground">미확정 현재 기준</h2>
+          <p className="text-xs font-semibold uppercase text-muted">{t("dashboard.monthly.basis.label")}</p>
+          <h2 className="mt-1 text-base font-semibold text-foreground">{t("dashboard.monthly.basis.currentTitle")}</h2>
         </div>
-        <p className="max-w-xl text-sm text-muted">현재 콜 원장과 현재 정책 기준의 월간 미리보기이며 확정 스냅샷과 섞어 표시하지 않습니다.</p>
+        <p className="max-w-xl text-sm text-muted">{t("dashboard.monthly.basis.currentDescription")}</p>
       </div>
     </section>
   );
 }
 
-function EmptyOrWarningState({ metrics }: { metrics: MonthlyDashboardMetricsDto }) {
+function EmptyOrWarningState({ metrics, locale, t }: { metrics: MonthlyDashboardMetricsDto; locale: Locale; t: Translator }) {
   if (metrics.emptyState.kind === "none" || metrics.emptyState.kind === "snapshot_missing") return null;
 
   if (metrics.emptyState.kind === "no_calls") {
     return (
-      <section className="border border-border bg-surface px-4 py-5" aria-label="데이터 없음">
-        <h2 className="text-base font-semibold text-foreground">이 운영월의 콜이 없습니다</h2>
-        <p className="mt-2 text-sm text-muted">운영월을 바꾸거나 콜 원장에서 해당 월 데이터를 확인하세요.</p>
+      <section className="border border-border bg-surface px-4 py-5" aria-label={t("dashboard.today.noData.aria")}>
+        <h2 className="text-base font-semibold text-foreground">{t("dashboard.monthly.empty.noCallsTitle")}</h2>
+        <p className="mt-2 text-sm text-muted">{t("dashboard.monthly.empty.noCallsDescription")}</p>
         <Link className="mt-4 inline-flex text-sm font-semibold text-brand underline-offset-4 hover:underline" href="/calls">
-          콜 원장으로 이동
+          {t("dashboard.today.goToCalls")}
         </Link>
       </section>
     );
@@ -121,26 +124,27 @@ function EmptyOrWarningState({ metrics }: { metrics: MonthlyDashboardMetricsDto 
 
   return (
     <section className="border border-danger bg-surface px-4 py-5" role="alert">
-      <h2 className="text-base font-semibold text-foreground">집계 제외 항목이 있습니다</h2>
+      <h2 className="text-base font-semibold text-foreground">{t("dashboard.monthly.warning.excludedTitle")}</h2>
       <p className="mt-2 text-sm text-muted">{metrics.emptyState.message}</p>
       <p className="mt-3 text-sm font-medium text-danger">
-        정책 누락 {metrics.warningCounts.callLedger.coursePolicyMissing}건, 수당 누락 {metrics.warningCounts.callLedger.therapistRateMissing}건,
-        D코스 마사지사2 필요 {metrics.warningCounts.callLedger.secondTherapistRequired}건
+        {t("dashboard.monthly.warning.excludedDetail", {
+          policy: formatNumber(locale, metrics.warningCounts.callLedger.coursePolicyMissing),
+          rate: formatNumber(locale, metrics.warningCounts.callLedger.therapistRateMissing),
+          second: formatNumber(locale, metrics.warningCounts.callLedger.secondTherapistRequired)
+        })}
       </p>
     </section>
   );
 }
 
-function MonthlyMoneyKpis({ metrics }: { metrics: MonthlyDashboardMetricsDto }) {
+function MonthlyMoneyKpis({ metrics, t, formatVnd }: { metrics: MonthlyDashboardMetricsDto; t: Translator; formatVnd: (value: number) => string }) {
   // 마감확정/잠금 월인데 확정 스냅샷이 없으면, 현재 재계산값으로 금액 KPI를 대체하지 않는다.
   // (잠금 월은 확정 스냅샷만이 신뢰 가능한 금액 기준이다.)
   if (metrics.sourceBasis.kind === "snapshot_missing" || !metrics.financials) {
     return (
-      <section className="border border-danger bg-surface px-4 py-5" role="alert" aria-label="월간 금액 KPI 표시 보류">
-        <h2 className="text-base font-semibold text-foreground">월간 금액 KPI를 표시하지 않습니다</h2>
-        <p className="mt-2 text-sm text-muted">
-          마감확정 또는 잠금 운영월의 결제합계·순이익·비용 지표는 확정 스냅샷에서만 산출합니다. 스냅샷이 없어 현재 재계산값으로 대체하지 않았습니다.
-        </p>
+      <section className="border border-danger bg-surface px-4 py-5" role="alert" aria-label={t("dashboard.monthly.money.withheldAria")}>
+        <h2 className="text-base font-semibold text-foreground">{t("dashboard.monthly.money.withheldTitle")}</h2>
+        <p className="mt-2 text-sm text-muted">{t("dashboard.monthly.money.withheldDescription")}</p>
       </section>
     );
   }
@@ -148,60 +152,63 @@ function MonthlyMoneyKpis({ metrics }: { metrics: MonthlyDashboardMetricsDto }) 
   const financials = metrics.financials;
 
   return (
-    <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-4" aria-label="월간 금액 KPI">
-      <KpiTile label="결제합계" value={formatVnd(financials.paymentTotal)} tone="strong" />
-      <KpiTile label="월간 순이익" value={formatVnd(financials.netProfit)} note="결제합계 - 일일비용 - 월간비용" tone="strong" />
-      <KpiTile label="할인합계" value={formatVnd(financials.discountTotal)} />
-      <KpiTile label="지출합계" value={formatVnd(financials.expenseTotal)} tone="cost" />
-      <KpiTile label="일일비용 합계" value={formatVnd(financials.dailyCostTotal)} note="지출, 마사지사 정산, 귀케어, 일일인센" tone="cost" />
-      <KpiTile label="월간비용 합계" value={formatVnd(financials.monthlyCostTotal)} note="운영팀 월인센, 만근수당, 갯수왕" tone="cost" />
-      <KpiTile label="운영팀 월인센" value={formatVnd(financials.opsMonthlyIncentiveTotal)} tone="cost" />
-      <KpiTile label="만근수당" value={formatVnd(financials.fullAttendanceAllowanceTotal)} tone="cost" />
-      <KpiTile label="갯수왕" value={formatVnd(financials.countKingBonusTotal)} tone="cost" />
-      <KpiTile label="전체 지급 합계" value={formatVnd(financials.settlementPayoutTotal)} tone="cost" />
-      <KpiTile label="귀케어 풀" value={formatVnd(financials.earcarePoolTotal)} />
+    <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-4" aria-label={t("dashboard.monthly.money.aria")}>
+      <KpiTile label={t("dashboard.monthly.kpi.paymentTotal")} value={formatVnd(financials.paymentTotal)} tone="strong" />
+      <KpiTile label={t("dashboard.monthly.kpi.netProfit")} value={formatVnd(financials.netProfit)} note={t("dashboard.monthly.kpi.netProfitNote")} tone="strong" />
+      <KpiTile label={t("dashboard.monthly.kpi.discountTotal")} value={formatVnd(financials.discountTotal)} />
+      <KpiTile label={t("dashboard.monthly.kpi.expenseTotal")} value={formatVnd(financials.expenseTotal)} tone="cost" />
+      <KpiTile label={t("dashboard.monthly.kpi.dailyCostTotal")} value={formatVnd(financials.dailyCostTotal)} note={t("dashboard.monthly.kpi.dailyCostNote")} tone="cost" />
+      <KpiTile label={t("dashboard.monthly.kpi.monthlyCostTotal")} value={formatVnd(financials.monthlyCostTotal)} note={t("dashboard.monthly.kpi.monthlyCostNote")} tone="cost" />
+      <KpiTile label={t("dashboard.monthly.kpi.opsMonthlyIncentiveTotal")} value={formatVnd(financials.opsMonthlyIncentiveTotal)} tone="cost" />
+      <KpiTile label={t("dashboard.monthly.kpi.fullAttendanceAllowanceTotal")} value={formatVnd(financials.fullAttendanceAllowanceTotal)} tone="cost" />
+      <KpiTile label={t("dashboard.monthly.kpi.countKingBonusTotal")} value={formatVnd(financials.countKingBonusTotal)} tone="cost" />
+      <KpiTile label={t("dashboard.monthly.kpi.settlementPayoutTotal")} value={formatVnd(financials.settlementPayoutTotal)} tone="cost" />
+      <KpiTile label={t("dashboard.monthly.kpi.earcarePoolTotal")} value={formatVnd(financials.earcarePoolTotal)} />
     </section>
   );
 }
 
-function SettlementSummary({ metrics }: { metrics: MonthlyDashboardMetricsDto }) {
+function SettlementSummary({ metrics, locale, t, formatVnd }: { metrics: MonthlyDashboardMetricsDto; locale: Locale; t: Translator; formatVnd: (value: number) => string }) {
   if (!metrics.settlementSummary) {
     return (
-      <section className="border border-border bg-surface px-4 py-5" aria-label="지급 요약 없음">
-        <h2 className="text-base font-semibold text-foreground">지급/정산 요약을 표시하지 않습니다</h2>
-        <p className="mt-2 text-sm text-muted">확정 스냅샷이 없어 현재 지급 계산값으로 대체하지 않았습니다.</p>
+      <section className="border border-border bg-surface px-4 py-5" aria-label={t("dashboard.monthly.settlement.emptyAria")}>
+        <h2 className="text-base font-semibold text-foreground">{t("dashboard.monthly.settlement.emptyTitle")}</h2>
+        <p className="mt-2 text-sm text-muted">{t("dashboard.monthly.settlement.emptyDescription")}</p>
       </section>
     );
   }
 
   return (
-    <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-5" aria-label="월간 지급 정산 KPI">
-      <KpiTile label="마사지사 지급" value={formatVnd(metrics.settlementSummary.therapistPayoutAmount)} />
-      <KpiTile label="운영팀 일일 인센" value={formatVnd(metrics.settlementSummary.opsDailyIncentiveAmount)} />
-      <KpiTile label="운영팀 월 인센" value={formatVnd(metrics.settlementSummary.opsMonthlyIncentiveAmount)} />
-      <KpiTile label="귀케어 지급" value={formatVnd(metrics.settlementSummary.earcarePayoutAmount)} />
+    <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-5" aria-label={t("dashboard.monthly.settlement.aria")}>
+      <KpiTile label={t("dashboard.monthly.settlement.therapistPayout")} value={formatVnd(metrics.settlementSummary.therapistPayoutAmount)} />
+      <KpiTile label={t("dashboard.monthly.settlement.opsDailyIncentive")} value={formatVnd(metrics.settlementSummary.opsDailyIncentiveAmount)} />
+      <KpiTile label={t("dashboard.monthly.settlement.opsMonthlyIncentive")} value={formatVnd(metrics.settlementSummary.opsMonthlyIncentiveAmount)} />
+      <KpiTile label={t("dashboard.monthly.settlement.earcarePayout")} value={formatVnd(metrics.settlementSummary.earcarePayoutAmount)} />
       <KpiTile
-        label="전체 지급 합계"
+        label={t("dashboard.monthly.settlement.grandPayout")}
         value={formatVnd(metrics.settlementSummary.grandPayoutAmount)}
-        note={`포함 ${formatNumber(metrics.settlementSummary.includedCallCount)}건 · 제외 ${formatNumber(metrics.settlementSummary.excludedCallCount)}건`}
+        note={t("dashboard.monthly.settlement.grandPayoutNote", {
+          included: formatNumber(locale, metrics.settlementSummary.includedCallCount),
+          excluded: formatNumber(locale, metrics.settlementSummary.excludedCallCount)
+        })}
       />
     </section>
   );
 }
 
-function PreviousSnapshotReference({ metrics }: { metrics: MonthlyDashboardMetricsDto }) {
+function PreviousSnapshotReference({ metrics, locale, t, formatVnd }: { metrics: MonthlyDashboardMetricsDto; locale: Locale; t: Translator; formatVnd: (value: number) => string }) {
   if (!metrics.snapshot || metrics.snapshot.kind !== "previous") return null;
 
   return (
-    <section className="border border-border bg-surface px-4 py-4" aria-label="이전 확정 스냅샷">
+    <section className="border border-border bg-surface px-4 py-4" aria-label={t("dashboard.monthly.previousSnapshot.aria")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-foreground">이전 확정 스냅샷</h2>
-          <p className="mt-1 text-sm text-muted">재오픈된 검토중 월의 참고 정보이며 현재 KPI 기준에는 섞지 않습니다.</p>
+          <h2 className="text-base font-semibold text-foreground">{t("dashboard.monthly.previousSnapshot.title")}</h2>
+          <p className="mt-1 text-sm text-muted">{t("dashboard.monthly.previousSnapshot.description")}</p>
         </div>
         <div className="text-right text-sm text-muted">
           <div>closeVersion {metrics.snapshot.closeVersion}</div>
-          <div>{formatDateTime(metrics.snapshot.confirmedAt)}</div>
+          <div>{formatDateTime(locale, metrics.snapshot.confirmedAt, { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" })}</div>
           <div className="font-medium text-foreground">{formatVnd(metrics.snapshot.totals.grandPayoutAmount)}</div>
         </div>
       </div>
@@ -211,27 +218,31 @@ function PreviousSnapshotReference({ metrics }: { metrics: MonthlyDashboardMetri
 
 export default async function MonthlyDashboardPage({ searchParams }: { searchParams: Promise<MonthlyDashboardSearchParams> }) {
   const account = await requireRouteAccess("/dashboard/monthly");
+  const { locale, t } = await getServerTranslator();
   const params = await searchParams;
   const operatingMonths = await listOperatingMonths();
   const selectedMonth = selectedOperatingMonthFor(operatingMonths, params.operatingMonthId);
+
+  const formatVnd = (value: number) => `${formatCurrencyVnd(locale, value)} ${t("dashboard.vndSuffix")}`;
+  const formatCount = (value: number) => `${formatNumber(locale, value)}${t("dashboard.countSuffix")}`;
 
   if (!selectedMonth) {
     return (
       <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
         <PageHeader
-          eyebrow="대시보드"
-          title="월간 KPI 대시보드"
-          description="운영월 전체 날짜 범위 기준으로 월간 상태, 매출, 지급 요약을 조회한다."
+          eyebrow={t("dashboard.eyebrow")}
+          title={t("dashboard.monthly.title")}
+          description={t("dashboard.monthly.emptyDescription")}
         />
         <section className="border border-border bg-surface px-4 py-8">
-          <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
-          <p className="mt-2 max-w-2xl text-sm text-muted">월간 KPI는 운영월 날짜 범위와 운영월 ID를 기준으로 조회한다.</p>
+          <h2 className="text-base font-semibold text-foreground">{t("common.createOperatingMonthFirst")}</h2>
+          <p className="mt-2 max-w-2xl text-sm text-muted">{t("dashboard.monthly.empty.description")}</p>
           {account.role === "administrator" ? (
             <Link className="mt-4 inline-flex text-sm font-semibold text-brand underline-offset-4 hover:underline" href="/masters/operating-months">
-              운영월 관리로 이동
+              {t("common.goToOperatingMonths")}
             </Link>
           ) : (
-            <p className="mt-4 text-sm text-muted">관리자에게 운영월 생성을 요청하세요.</p>
+            <p className="mt-4 text-sm text-muted">{t("dashboard.empty.requestAdmin")}</p>
           )}
         </section>
       </main>
@@ -246,27 +257,27 @@ export default async function MonthlyDashboardPage({ searchParams }: { searchPar
   const metrics = await getMonthlyDashboardMetrics({
     operatingMonthId: selectedMonth.id
   });
-  const statusCounts = [
+  const statusCounts: ReadonlyArray<readonly [string, number, StatusBadgeState | null]> = [
     // REQ-009: 예약건수는 상태가 아니라 원장에 등록된 전체 건수다(방문완료·노쇼·취소로 바뀌어도 빠지지 않음).
-    ["예약건수", metrics.statusCounts.reservation],
-    ["사용중", metrics.statusCounts.inUse],
-    ["청소중", metrics.statusCounts.cleaning],
-    ["방문완료", metrics.statusCounts.completed],
-    ["노쇼", metrics.statusCounts.noShow],
-    ["취소", metrics.statusCounts.canceled]
-  ] as const;
+    [t("dashboard.monthly.status.reservationCount"), metrics.statusCounts.reservation, null],
+    [t("dashboard.monthly.status.inUse"), metrics.statusCounts.inUse, "사용중"],
+    [t("dashboard.monthly.status.cleaning"), metrics.statusCounts.cleaning, "청소중"],
+    [t("dashboard.monthly.status.completed"), metrics.statusCounts.completed, null],
+    [t("dashboard.monthly.status.noShow"), metrics.statusCounts.noShow, null],
+    [t("dashboard.monthly.status.canceled"), metrics.statusCounts.canceled, null]
+  ];
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
       <PageHeader
-        eyebrow="대시보드"
-        title="월간 KPI 대시보드"
-        description="운영월 전체 기준의 콜 상태, 선결제 반영 매출, 지급 스냅샷 흐름을 조회한다."
+        eyebrow={t("dashboard.eyebrow")}
+        title={t("dashboard.monthly.title")}
+        description={t("dashboard.monthly.description")}
         meta={
           <>
-            <div>운영월 상태: {metrics.operatingMonth.status}</div>
+            <div>{t("common.operatingMonthStatusPrefix")}: {operatingMonthStatusLabel(locale, metrics.operatingMonth.status)}</div>
             <div>
-              날짜 범위: {metrics.operatingMonth.startDate} ~ {metrics.operatingMonth.endDate}
+              {t("common.dateRange")}: {metrics.operatingMonth.startDate} ~ {metrics.operatingMonth.endDate}
             </div>
           </>
         }
@@ -274,57 +285,59 @@ export default async function MonthlyDashboardPage({ searchParams }: { searchPar
 
       <form className="mb-5 flex flex-wrap items-end gap-3" method="get">
         <label className="grid gap-1 text-xs font-medium text-muted">
-          운영월
+          {t("common.operatingMonth")}
           <select
-            aria-label="운영월"
+            aria-label={t("common.operatingMonth")}
             className="h-9 min-w-44 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
             defaultValue={selectedMonth.id}
             name="operatingMonthId"
           >
             {operatingMonths.map((month) => (
               <option key={month.id} value={month.id}>
-                {month.monthKey} ({month.status})
+                {t("common.monthOption", { monthKey: month.monthKey, status: operatingMonthStatusLabel(locale, month.status) })}
               </option>
             ))}
           </select>
         </label>
         <button className="h-9 border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
-          조회
+          {t("common.query")}
         </button>
       </form>
 
       <div className="space-y-4">
-        <SourceBasisPanel metrics={metrics} />
-        <EmptyOrWarningState metrics={metrics} />
-        <PreviousSnapshotReference metrics={metrics} />
+        <SourceBasisPanel metrics={metrics} locale={locale} t={t} />
+        <EmptyOrWarningState metrics={metrics} locale={locale} t={t} />
+        <PreviousSnapshotReference metrics={metrics} locale={locale} t={t} formatVnd={formatVnd} />
 
-        <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-6" aria-label="월간 상태 건수">
-          {statusCounts.map(([label, count]) => (
-            <StatusCountTile key={label} label={label} value={count} />
+        <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-6" aria-label={t("dashboard.monthly.statusCounts.aria")}>
+          {statusCounts.map(([label, count, badgeState]) => (
+            <StatusCountTile key={label} label={label} value={formatCount(count)} badgeState={badgeState} locale={locale} t={t} />
           ))}
         </section>
 
-        <MonthlyMoneyKpis metrics={metrics} />
+        <MonthlyMoneyKpis metrics={metrics} t={t} formatVnd={formatVnd} />
 
-        <SettlementSummary metrics={metrics} />
+        <SettlementSummary metrics={metrics} locale={locale} t={t} formatVnd={formatVnd} />
 
-        <section className="border border-border bg-surface px-4 py-4" aria-label="월간 코스별 방문완료">
+        <section className="border border-border bg-surface px-4 py-4" aria-label={t("dashboard.monthly.course.aria")}>
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-base font-semibold text-foreground">코스별 방문완료</h2>
-            <p className="text-xs text-muted">calculated 완료 콜 기준</p>
+            <h2 className="text-base font-semibold text-foreground">{t("dashboard.monthly.course.title")}</h2>
+            <p className="text-xs text-muted">{t("dashboard.monthly.course.basis")}</p>
           </div>
           <div className="mt-4 grid grid-cols-5 gap-2">
             {metrics.courseCompletions.map((course) => (
               <div
-                aria-label={`${course.courseCode} 코스 방문완료`}
+                aria-label={t("dashboard.monthly.course.completedAria", { code: course.courseCode })}
                 className="border border-border bg-background px-3 py-3 text-center"
                 key={course.courseCode}
               >
                 <p className="text-xs font-semibold text-muted">{course.courseCode}</p>
                 <p className="mt-1 text-2xl font-semibold text-foreground [font-variant-numeric:tabular-nums]">
-                  {formatNumber(course.completedCount)}
+                  {formatNumber(locale, course.completedCount)}
                 </p>
-                <p className="mt-1 text-xs text-muted">담당 {formatNumber(course.therapistAssignmentCount)}건</p>
+                <p className="mt-1 text-xs text-muted">
+                  {t("dashboard.monthly.course.assignment", { count: formatNumber(locale, course.therapistAssignmentCount) })}
+                </p>
               </div>
             ))}
           </div>

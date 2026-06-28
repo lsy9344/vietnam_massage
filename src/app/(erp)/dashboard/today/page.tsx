@@ -4,6 +4,11 @@ import { PageHeader } from "@/components/domain/page-header";
 import { StatusBadge } from "@/components/domain/status-badge";
 import { requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
+import { getServerTranslator } from "@/lib/i18n/server";
+import { formatCurrencyVnd, formatNumber } from "@/lib/i18n/format";
+import { operatingMonthStatusLabel, roomStatusLabel } from "@/lib/i18n/codes";
+import type { Locale } from "@/lib/i18n/config";
+import type { Translator } from "@/lib/i18n";
 import { getTodayDashboardMetrics, type TodayDashboardMetricsDto } from "@/modules/dashboard/dashboard-query-service";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 
@@ -11,14 +16,6 @@ type TodayDashboardSearchParams = {
   operatingMonthId?: string;
   serviceDate?: string;
 };
-
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("ko-KR").format(value);
-}
-
-function formatVnd(value: number) {
-  return `${formatNumber(value)} VND`;
-}
 
 function KpiTile({ label, value, note, tone = "default" }: { label: string; value: string; note?: string; tone?: "default" | "strong" | "cost" }) {
   return (
@@ -40,27 +37,51 @@ function KpiTile({ label, value, note, tone = "default" }: { label: string; valu
   );
 }
 
-function StatusCountTile({ label, value }: { label: string; value: number }) {
+function StatusCountTile({
+  label,
+  value,
+  isReservation,
+  locale,
+  t
+}: {
+  label: string;
+  value: string;
+  isReservation: boolean;
+  locale: Locale;
+  t: Translator;
+}) {
   return (
     <div className="border border-border bg-surface px-4 py-3">
       <div className="flex items-center justify-between gap-3">
-        {label === "예약" ? <StatusBadge state="예약" /> : <p className="text-sm font-semibold text-foreground">{label}</p>}
-        <p className="text-2xl font-semibold text-foreground [font-variant-numeric:tabular-nums]">{formatNumber(value)}건</p>
+        {isReservation ? (
+          <StatusBadge state="예약" label={roomStatusLabel(locale, "예약")} ariaLabel={t("roomStatus.aria", { status: roomStatusLabel(locale, "예약") })} />
+        ) : (
+          <p className="text-sm font-semibold text-foreground">{label}</p>
+        )}
+        <p className="text-2xl font-semibold text-foreground [font-variant-numeric:tabular-nums]">{value}</p>
       </div>
     </div>
   );
 }
 
-function EmptyOrWarningState({ metrics }: { metrics: TodayDashboardMetricsDto }) {
+function EmptyOrWarningState({
+  metrics,
+  locale,
+  t
+}: {
+  metrics: TodayDashboardMetricsDto;
+  locale: Locale;
+  t: Translator;
+}) {
   if (metrics.emptyState.kind === "none") return null;
 
   if (metrics.emptyState.kind === "no_calls") {
     return (
-      <section className="border border-border bg-surface px-4 py-5" aria-label="데이터 없음">
-        <h2 className="text-base font-semibold text-foreground">이 날짜의 콜이 없습니다</h2>
-        <p className="mt-2 text-sm text-muted">조회 날짜를 바꾸거나 콜 원장에서 해당 날짜 데이터를 확인하세요.</p>
+      <section className="border border-border bg-surface px-4 py-5" aria-label={t("dashboard.today.noData.aria")}>
+        <h2 className="text-base font-semibold text-foreground">{t("dashboard.today.empty.noCallsTitle")}</h2>
+        <p className="mt-2 text-sm text-muted">{t("dashboard.today.empty.noCallsDescription")}</p>
         <Link className="mt-4 inline-flex text-sm font-semibold text-brand underline-offset-4 hover:underline" href="/calls">
-          콜 원장으로 이동
+          {t("dashboard.today.goToCalls")}
         </Link>
       </section>
     );
@@ -68,11 +89,14 @@ function EmptyOrWarningState({ metrics }: { metrics: TodayDashboardMetricsDto })
 
   return (
     <section className="border border-danger bg-surface px-4 py-5" role="alert">
-      <h2 className="text-base font-semibold text-foreground">집계 제외 항목이 있습니다</h2>
+      <h2 className="text-base font-semibold text-foreground">{t("dashboard.today.warning.excludedTitle")}</h2>
       <p className="mt-2 text-sm text-muted">{metrics.emptyState.message}</p>
       <p className="mt-3 text-sm font-medium text-danger">
-        정책 누락 {metrics.warningCounts.coursePolicyMissing}건, 수당 누락 {metrics.warningCounts.therapistRateMissing}건, D코스 마사지사2 필요{" "}
-        {metrics.warningCounts.secondTherapistRequired}건
+        {t("dashboard.today.warning.excludedDetail", {
+          policy: formatNumber(locale, metrics.warningCounts.coursePolicyMissing),
+          rate: formatNumber(locale, metrics.warningCounts.therapistRateMissing),
+          second: formatNumber(locale, metrics.warningCounts.secondTherapistRequired)
+        })}
       </p>
     </section>
   );
@@ -80,29 +104,31 @@ function EmptyOrWarningState({ metrics }: { metrics: TodayDashboardMetricsDto })
 
 export default async function TodayDashboardPage({ searchParams }: { searchParams: Promise<TodayDashboardSearchParams> }) {
   const account = await requireRouteAccess("/dashboard/today");
+  const { locale, t } = await getServerTranslator();
   const params = await searchParams;
   const operatingMonths = await listOperatingMonths();
   const selectedMonth = selectedOperatingMonthFor(operatingMonths, params.operatingMonthId);
+
+  const formatVnd = (value: number) => `${formatCurrencyVnd(locale, value)} ${t("dashboard.vndSuffix")}`;
+  const formatCount = (value: number) => `${formatNumber(locale, value)}${t("dashboard.countSuffix")}`;
 
   if (!selectedMonth) {
     return (
       <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
         <PageHeader
-          eyebrow="대시보드"
-          title="오늘 KPI 대시보드"
-          description="운영월과 조회날짜 기준으로 오늘 예약, 방문완료, 매출, 정산 흐름을 조회한다."
+          eyebrow={t("dashboard.eyebrow")}
+          title={t("dashboard.today.title")}
+          description={t("dashboard.today.emptyDescription")}
         />
         <section className="border border-border bg-surface px-4 py-8">
-          <h2 className="text-base font-semibold text-foreground">운영월을 먼저 생성해 주세요</h2>
-          <p className="mt-2 max-w-2xl text-sm text-muted">
-            오늘 KPI는 운영월 날짜 범위 안의 콜 원장과 정산 데이터를 기준으로 조회한다.
-          </p>
+          <h2 className="text-base font-semibold text-foreground">{t("common.createOperatingMonthFirst")}</h2>
+          <p className="mt-2 max-w-2xl text-sm text-muted">{t("dashboard.empty.description")}</p>
           {account.role === "administrator" ? (
             <Link className="mt-4 inline-flex text-sm font-semibold text-brand underline-offset-4 hover:underline" href="/masters/operating-months">
-              운영월 관리로 이동
+              {t("common.goToOperatingMonths")}
             </Link>
           ) : (
-            <p className="mt-4 text-sm text-muted">관리자에게 운영월 생성을 요청하세요.</p>
+            <p className="mt-4 text-sm text-muted">{t("dashboard.empty.requestAdmin")}</p>
           )}
         </section>
       </main>
@@ -124,23 +150,23 @@ export default async function TodayDashboardPage({ searchParams }: { searchParam
   });
   const statusCounts = [
     // REQ-009: 예약건수는 상태가 아니라 원장에 등록된 전체 건수다(방문완료·노쇼·취소로 바뀌어도 빠지지 않음).
-    ["예약건수", metrics.statusCounts.reservation],
-    ["방문완료", metrics.statusCounts.completed],
-    ["노쇼", metrics.statusCounts.noShow],
-    ["취소", metrics.statusCounts.canceled]
+    [t("dashboard.today.status.reservationCount"), metrics.statusCounts.reservation, true],
+    [t("dashboard.today.status.completed"), metrics.statusCounts.completed, false],
+    [t("dashboard.today.status.noShow"), metrics.statusCounts.noShow, false],
+    [t("dashboard.today.status.canceled"), metrics.statusCounts.canceled, false]
   ] as const;
 
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
       <PageHeader
-        eyebrow="대시보드"
-        title="오늘 KPI 대시보드"
-        description="선택 날짜 기준의 콜 상태, 매출, 지출, 정산 흐름을 조회한다."
+        eyebrow={t("dashboard.eyebrow")}
+        title={t("dashboard.today.title")}
+        description={t("dashboard.today.description")}
         meta={
           <>
-            <div>운영월 상태: {metrics.operatingMonth.status}</div>
+            <div>{t("common.operatingMonthStatusPrefix")}: {operatingMonthStatusLabel(locale, metrics.operatingMonth.status)}</div>
             <div>
-              날짜 범위: {metrics.operatingMonth.startDate} ~ {metrics.operatingMonth.endDate}
+              {t("common.dateRange")}: {metrics.operatingMonth.startDate} ~ {metrics.operatingMonth.endDate}
             </div>
           </>
         }
@@ -148,24 +174,24 @@ export default async function TodayDashboardPage({ searchParams }: { searchParam
 
       <form className="mb-5 flex flex-wrap items-end gap-3" method="get">
         <label className="grid gap-1 text-xs font-medium text-muted">
-          운영월
+          {t("common.operatingMonth")}
           <select
-            aria-label="운영월"
+            aria-label={t("common.operatingMonth")}
             className="h-9 min-w-44 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
             defaultValue={selectedMonth.id}
             name="operatingMonthId"
           >
             {operatingMonths.map((month) => (
               <option key={month.id} value={month.id}>
-                {month.monthKey} ({month.status})
+                {t("common.monthOption", { monthKey: month.monthKey, status: operatingMonthStatusLabel(locale, month.status) })}
               </option>
             ))}
           </select>
         </label>
         <label className="grid gap-1 text-xs font-medium text-muted">
-          조회날짜
+          {t("common.queryDate")}
           <input
-            aria-label="조회날짜"
+            aria-label={t("common.queryDate")}
             className="h-9 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
             defaultValue={serviceDate}
             max={selectedMonth.endDate}
@@ -175,48 +201,50 @@ export default async function TodayDashboardPage({ searchParams }: { searchParam
           />
         </label>
         <button className="h-9 border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
-          조회
+          {t("common.query")}
         </button>
       </form>
 
       <div className="space-y-4">
-        <EmptyOrWarningState metrics={metrics} />
+        <EmptyOrWarningState metrics={metrics} locale={locale} t={t} />
 
-        <section className="grid gap-3 md:grid-cols-4" aria-label="오늘 상태 건수">
-          {statusCounts.map(([label, count]) => (
-            <StatusCountTile key={label} label={label} value={count} />
+        <section className="grid gap-3 md:grid-cols-4" aria-label={t("dashboard.today.statusCounts.aria")}>
+          {statusCounts.map(([label, count, isReservation]) => (
+            <StatusCountTile key={label} label={label} value={formatCount(count)} isReservation={isReservation} locale={locale} t={t} />
           ))}
         </section>
 
-        <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-4" aria-label="오늘 금액 KPI">
-          <KpiTile label="결제합계" value={formatVnd(metrics.financials.paymentTotal)} tone="strong" />
-          <KpiTile label="순이익" value={formatVnd(metrics.financials.netProfit)} note="결제합계 - 일일 비용" tone="strong" />
-          <KpiTile label="할인합계" value={formatVnd(metrics.financials.discountTotal)} />
-          <KpiTile label="일일인센 합계" value={formatVnd(metrics.financials.opsDailyIncentiveTotal)} tone="cost" />
-          <KpiTile label="지출합계" value={formatVnd(metrics.financials.expenseTotal)} tone="cost" />
-          <KpiTile label="마사지사 정산" value={formatVnd(metrics.financials.therapistPayoutTotal)} tone="cost" />
-          <KpiTile label="귀케어 정산" value={formatVnd(metrics.financials.earcarePayoutTotal)} tone="cost" />
-          <KpiTile label="일일비용 합계" value={formatVnd(metrics.financials.dailyCostTotal)} tone="cost" />
+        <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-4" aria-label={t("dashboard.today.moneyKpi.aria")}>
+          <KpiTile label={t("dashboard.today.kpi.paymentTotal")} value={formatVnd(metrics.financials.paymentTotal)} tone="strong" />
+          <KpiTile label={t("dashboard.today.kpi.netProfit")} value={formatVnd(metrics.financials.netProfit)} note={t("dashboard.today.kpi.netProfitNote")} tone="strong" />
+          <KpiTile label={t("dashboard.today.kpi.discountTotal")} value={formatVnd(metrics.financials.discountTotal)} />
+          <KpiTile label={t("dashboard.today.kpi.opsDailyIncentiveTotal")} value={formatVnd(metrics.financials.opsDailyIncentiveTotal)} tone="cost" />
+          <KpiTile label={t("dashboard.today.kpi.expenseTotal")} value={formatVnd(metrics.financials.expenseTotal)} tone="cost" />
+          <KpiTile label={t("dashboard.today.kpi.therapistPayoutTotal")} value={formatVnd(metrics.financials.therapistPayoutTotal)} tone="cost" />
+          <KpiTile label={t("dashboard.today.kpi.earcarePayoutTotal")} value={formatVnd(metrics.financials.earcarePayoutTotal)} tone="cost" />
+          <KpiTile label={t("dashboard.today.kpi.dailyCostTotal")} value={formatVnd(metrics.financials.dailyCostTotal)} tone="cost" />
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-[1fr_1.4fr]" aria-label="상세 요약">
+        <section className="grid gap-4 lg:grid-cols-[1fr_1.4fr]" aria-label={t("dashboard.today.detailSummary.aria")}>
           <div className="border border-border bg-surface px-4 py-4">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-base font-semibold text-foreground">코스별 방문완료</h2>
-              <p className="text-xs text-muted">계산 가능 완료 콜 기준</p>
+              <h2 className="text-base font-semibold text-foreground">{t("dashboard.today.course.title")}</h2>
+              <p className="text-xs text-muted">{t("dashboard.today.course.basis")}</p>
             </div>
             <div className="mt-4 grid grid-cols-5 gap-2">
               {metrics.courseCompletions.map((course) => (
                 <div
-                  aria-label={`${course.courseCode} 코스 방문완료`}
+                  aria-label={t("dashboard.today.course.completedAria", { code: course.courseCode })}
                   className="border border-border bg-background px-3 py-3 text-center"
                   key={course.courseCode}
                 >
                   <p className="text-xs font-semibold text-muted">{course.courseCode}</p>
                   <p className="mt-1 text-2xl font-semibold text-foreground [font-variant-numeric:tabular-nums]">
-                    {formatNumber(course.completedCount)}
+                    {formatNumber(locale, course.completedCount)}
                   </p>
-                  <p className="mt-1 text-xs text-muted">담당 {formatNumber(course.therapistAssignmentCount)}건</p>
+                  <p className="mt-1 text-xs text-muted">
+                    {t("dashboard.today.course.assignment", { count: formatNumber(locale, course.therapistAssignmentCount) })}
+                  </p>
                 </div>
               ))}
             </div>
@@ -224,10 +252,12 @@ export default async function TodayDashboardPage({ searchParams }: { searchParam
 
           <div className="border border-border bg-surface px-4 py-4">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-base font-semibold text-foreground">마사지사 담당콜/정산</h2>
+              <h2 className="text-base font-semibold text-foreground">{t("dashboard.today.therapist.title")}</h2>
               <p className="text-xs text-muted">
-                총 {formatNumber(metrics.therapistSummary.totalAssignedCallCount)}건 ·{" "}
-                {formatVnd(metrics.therapistSummary.totalCommissionAmount)}
+                {t("dashboard.today.therapist.summary", {
+                  count: formatNumber(locale, metrics.therapistSummary.totalAssignedCallCount),
+                  amount: formatVnd(metrics.therapistSummary.totalCommissionAmount)
+                })}
               </p>
             </div>
             {metrics.therapistSummary.therapists.length > 0 ? (
@@ -235,10 +265,10 @@ export default async function TodayDashboardPage({ searchParams }: { searchParam
                 <table className="w-full min-w-[520px] border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-border text-left text-xs font-semibold text-muted">
-                      <th className="py-2 pr-3">마사지사</th>
-                      <th className="py-2 pr-3 text-right">담당콜</th>
-                      <th className="py-2 pr-3 text-right">정산 합계</th>
-                      <th className="py-2 text-right">주의</th>
+                      <th className="py-2 pr-3">{t("dashboard.today.therapist.column.therapist")}</th>
+                      <th className="py-2 pr-3 text-right">{t("dashboard.today.therapist.column.assignedCalls")}</th>
+                      <th className="py-2 pr-3 text-right">{t("dashboard.today.therapist.column.settlementTotal")}</th>
+                      <th className="py-2 text-right">{t("dashboard.today.therapist.column.warning")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -249,14 +279,16 @@ export default async function TodayDashboardPage({ searchParams }: { searchParam
                           <span className="ml-2 text-xs text-muted">{therapist.staffCode}</span>
                         </td>
                         <td className="py-2 pr-3 text-right [font-variant-numeric:tabular-nums]">
-                          {formatNumber(therapist.totalAssignedCallCount)}건
+                          {t("dashboard.today.therapist.assignedCount", { count: formatNumber(locale, therapist.totalAssignedCallCount) })}
                         </td>
                         <td className="py-2 pr-3 text-right [font-variant-numeric:tabular-nums]">
                           {formatVnd(therapist.totalCommissionAmount)}
                         </td>
                         <td className="py-2 text-right text-xs text-muted">
-                          0원 정책 {formatNumber(therapist.warningCounts.zeroPolicy)} · 수당 누락{" "}
-                          {formatNumber(therapist.warningCounts.missingPolicy)}
+                          {t("dashboard.today.therapist.warningCell", {
+                            zero: formatNumber(locale, therapist.warningCounts.zeroPolicy),
+                            missing: formatNumber(locale, therapist.warningCounts.missingPolicy)
+                          })}
                         </td>
                       </tr>
                     ))}
@@ -264,7 +296,7 @@ export default async function TodayDashboardPage({ searchParams }: { searchParam
                 </table>
               </div>
             ) : (
-              <p className="mt-4 text-sm text-muted">표시할 마사지사 정산 항목이 없습니다.</p>
+              <p className="mt-4 text-sm text-muted">{t("dashboard.today.therapist.empty")}</p>
             )}
           </div>
         </section>

@@ -61,6 +61,8 @@ for (const forbidden of ["recordAuditEvent", ".create(", ".update(", ".delete(",
   if (service.includes(forbidden)) errors.push(`dashboard-query-service.ts must remain read-only and avoid ${forbidden}`);
 }
 
+const koMessages = read("src/lib/i18n/messages/ko.ts");
+
 const page = read("src/app/(erp)/dashboard/today/page.tsx");
 for (const required of [
   "requireRouteAccess(\"/dashboard/today\")",
@@ -68,16 +70,22 @@ for (const required of [
   "listOperatingMonths",
   "selectedOperatingMonthFor",
   "clampDateToOperatingMonth",
-  "redirect(`/dashboard/today?",
-  "운영월 관리로 이동",
-  "오늘 상태 건수",
-  "오늘 금액 KPI",
-  "코스별 방문완료",
-  "마사지사 담당콜/정산",
-  "이 날짜의 콜이 없습니다",
-  "집계 제외 항목이 있습니다"
+  "redirect(`/dashboard/today?"
 ]) {
   if (!page.includes(required)) errors.push(`today dashboard page missing ${required}`);
+}
+// i18n: 한국어 UI 문구는 t() key로 참조하고 원문은 messages/ko.ts에 보존한다.
+for (const [key, ko] of [
+  ["common.goToOperatingMonths", "운영월 관리로 이동"],
+  ["dashboard.today.statusCounts.aria", "오늘 상태 건수"],
+  ["dashboard.today.moneyKpi.aria", "오늘 금액 KPI"],
+  ["dashboard.today.course.title", "코스별 방문완료"],
+  ["dashboard.today.therapist.title", "마사지사 담당콜/정산"],
+  ["dashboard.today.empty.noCallsTitle", "이 날짜의 콜이 없습니다"],
+  ["dashboard.today.warning.excludedTitle", "집계 제외 항목이 있습니다"]
+]) {
+  if (!page.includes(`"${key}"`)) errors.push(`today dashboard page missing t() key ${key}`);
+  if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 for (const forbidden of [
   "getDailyCallLedgerSummary",
@@ -93,13 +101,27 @@ for (const forbidden of [
 }
 
 const loading = read("src/app/(erp)/dashboard/today/loading.tsx");
-for (const required of ["Skeleton", "오늘 KPI 대시보드 로딩 중", "오늘 상태 건수 로딩", "오늘 금액 KPI 로딩", "상세 요약 로딩"]) {
-  if (!loading.includes(required)) errors.push(`today loading.tsx missing ${required}`);
+if (!loading.includes("Skeleton")) errors.push("today loading.tsx missing Skeleton");
+for (const [key, ko] of [
+  ["dashboard.today.loading.aria", "오늘 KPI 대시보드 로딩 중"],
+  ["dashboard.today.loading.statusCountsAria", "오늘 상태 건수 로딩"],
+  ["dashboard.today.loading.moneyKpiAria", "오늘 금액 KPI 로딩"],
+  ["dashboard.today.loading.detailSummaryAria", "상세 요약 로딩"]
+]) {
+  if (!loading.includes(`"${key}"`)) errors.push(`today loading.tsx missing t() key ${key}`);
+  if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 
 const errorBoundary = read("src/app/(erp)/dashboard/today/error.tsx");
-for (const required of ["\"use client\"", "role=\"alert\"", "다시 시도", "현재 조건 새로고침", "router.refresh", "reset()"]) {
+for (const required of ["\"use client\"", "role=\"alert\"", "router.refresh", "reset()"]) {
   if (!errorBoundary.includes(required)) errors.push(`today error.tsx missing ${required}`);
+}
+for (const [key, ko] of [
+  ["dashboard.error.retry", "다시 시도"],
+  ["dashboard.error.refresh", "현재 조건 새로고침"]
+]) {
+  if (!errorBoundary.includes(`"${key}"`)) errors.push(`today error.tsx missing t() key ${key}`);
+  if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 if (errorBoundary.includes("error.message")) {
   errors.push("today error.tsx must not expose raw server error.message to users");

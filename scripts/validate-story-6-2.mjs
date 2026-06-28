@@ -66,24 +66,32 @@ for (const forbidden of ["recordAuditEvent", ".create(", ".update(", ".delete(",
   if (service.includes(forbidden)) errors.push(`dashboard-query-service.ts must remain read-only and avoid ${forbidden}`);
 }
 
+const koMessages = read("src/lib/i18n/messages/ko.ts");
+
 const page = read("src/app/(erp)/dashboard/monthly/page.tsx");
 for (const required of [
   "requireRouteAccess(\"/dashboard/monthly\")",
   "getMonthlyDashboardMetrics",
   "listOperatingMonths",
   "selectedOperatingMonthFor",
-  "redirect(`/dashboard/monthly?",
-  "운영월 관리로 이동",
-  "월간 상태 건수",
-  "월간 금액 KPI",
-  "월간 지급 정산 KPI",
-  "월간 코스별 방문완료",
-  "미확정 현재 기준",
-  "확정 스냅샷 기준",
-  "이전 확정 스냅샷",
-  "확정 스냅샷을 찾을 수 없습니다"
+  "redirect(`/dashboard/monthly?"
 ]) {
   if (!page.includes(required)) errors.push(`monthly dashboard page missing ${required}`);
+}
+// i18n: 한국어 UI 문구는 t() key로 참조하고 원문은 messages/ko.ts에 보존한다.
+for (const [key, ko] of [
+  ["common.goToOperatingMonths", "운영월 관리로 이동"],
+  ["dashboard.monthly.statusCounts.aria", "월간 상태 건수"],
+  ["dashboard.monthly.money.aria", "월간 금액 KPI"],
+  ["dashboard.monthly.settlement.aria", "월간 지급 정산 KPI"],
+  ["dashboard.monthly.course.aria", "월간 코스별 방문완료"],
+  ["dashboard.monthly.basis.currentTitle", "미확정 현재 기준"],
+  ["dashboard.monthly.basis.closedSnapshot", "확정 스냅샷 기준"],
+  ["dashboard.monthly.previousSnapshot.title", "이전 확정 스냅샷"],
+  ["dashboard.monthly.snapshotMissing.title", "확정 스냅샷을 찾을 수 없습니다"]
+]) {
+  if (!page.includes(`"${key}"`)) errors.push(`monthly dashboard page missing t() key ${key}`);
+  if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 for (const forbidden of [
   "getDailyCallLedgerSummary",
@@ -101,13 +109,27 @@ for (const forbidden of [
 }
 
 const loading = read("src/app/(erp)/dashboard/monthly/loading.tsx");
-for (const required of ["Skeleton", "월간 KPI 대시보드 로딩 중", "월간 상태 건수 로딩", "월간 금액 KPI 로딩", "월간 지급 정산 KPI 로딩"]) {
-  if (!loading.includes(required)) errors.push(`monthly loading.tsx missing ${required}`);
+if (!loading.includes("Skeleton")) errors.push("monthly loading.tsx missing Skeleton");
+for (const [key, ko] of [
+  ["dashboard.monthly.loading.aria", "월간 KPI 대시보드 로딩 중"],
+  ["dashboard.monthly.loading.statusCountsAria", "월간 상태 건수 로딩"],
+  ["dashboard.monthly.loading.moneyKpiAria", "월간 금액 KPI 로딩"],
+  ["dashboard.monthly.loading.settlementAria", "월간 지급 정산 KPI 로딩"]
+]) {
+  if (!loading.includes(`"${key}"`)) errors.push(`monthly loading.tsx missing t() key ${key}`);
+  if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 
 const errorBoundary = read("src/app/(erp)/dashboard/monthly/error.tsx");
-for (const required of ["\"use client\"", "role=\"alert\"", "다시 시도", "현재 조건 새로고침", "router.refresh", "reset()"]) {
+for (const required of ["\"use client\"", "role=\"alert\"", "router.refresh", "reset()"]) {
   if (!errorBoundary.includes(required)) errors.push(`monthly error.tsx missing ${required}`);
+}
+for (const [key, ko] of [
+  ["dashboard.error.retry", "다시 시도"],
+  ["dashboard.error.refresh", "현재 조건 새로고침"]
+]) {
+  if (!errorBoundary.includes(`"${key}"`)) errors.push(`monthly error.tsx missing t() key ${key}`);
+  if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 if (errorBoundary.includes("error.message")) {
   errors.push("monthly error.tsx must not expose raw server error.message to users");

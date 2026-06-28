@@ -72,6 +72,8 @@ for (const required of ["CompletedServiceCallCalculationDto", "courseCode: strin
   if (!callsService.includes(required)) errors.push(`service-call-service.ts missing calculated course code extension: ${required}`);
 }
 
+const koMessages = read("src/lib/i18n/messages/ko.ts");
+
 const page = read("src/app/(erp)/dashboard/reports/page.tsx");
 for (const required of [
   "requireRouteAccess(\"/dashboard/reports\")",
@@ -80,23 +82,29 @@ for (const required of [
   "selectedOperatingMonthFor",
   "clampDateToOperatingMonth",
   "redirect(`/dashboard/reports?",
-  "그래프 리포트",
-  "일별 매출 추이",
-  "코스별 콜/매출 비중",
-  "마사지사 담당 콜 순위",
-  "마사지사 정산 순위",
-  "객실 상태 분포",
-  "노쇼/취소 추이",
-  "운영팀 인센/월마감 지급 구성",
-  "매출은 결제수단 선택 시점 선결제 기준",
   "role=\"img\"",
   "scaledY",
-  "노쇼와 취소 건수 그래프",
   "<table",
-  "StatusBadge",
-  "확정 스냅샷을 찾을 수 없습니다"
+  "StatusBadge"
 ]) {
   if (!page.includes(required)) errors.push(`reports page missing ${required}`);
+}
+// i18n: 한국어 UI 문구는 t() key로 참조하고 원문은 messages/ko.ts에 보존한다.
+for (const [key, ko] of [
+  ["dashboard.reports.title", "그래프 리포트"],
+  ["dashboard.reports.revenue.title", "일별 매출 추이"],
+  ["dashboard.reports.courseMix.title", "코스별 콜/매출 비중"],
+  ["dashboard.reports.ranking.callTitle", "마사지사 담당 콜 순위"],
+  ["dashboard.reports.ranking.settlementTitle", "마사지사 정산 순위"],
+  ["dashboard.reports.room.title", "객실 상태 분포"],
+  ["dashboard.reports.noShow.title", "노쇼/취소 추이"],
+  ["dashboard.reports.payout.title", "운영팀 인센/월마감 지급 구성"],
+  ["dashboard.reports.basis.description", "매출은 결제수단 선택 시점 선결제 기준"],
+  ["dashboard.reports.noShow.chartAria", "노쇼와 취소 건수 그래프"],
+  ["dashboard.reports.snapshotMissing.title", "확정 스냅샷을 찾을 수 없습니다"]
+]) {
+  if (!page.includes(`"${key}"`)) errors.push(`reports page missing t() key ${key}`);
+  if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 for (const forbidden of [
   "getDailyCallLedgerSummary",
@@ -116,13 +124,27 @@ for (const forbidden of [
 }
 
 const loading = read("src/app/(erp)/dashboard/reports/loading.tsx");
-for (const required of ["Skeleton", "그래프 리포트 로딩 중", "코스와 지급 구성 그래프 로딩", "마사지사 순위 그래프 로딩", "객실 상태와 노쇼 취소 그래프 로딩"]) {
-  if (!loading.includes(required)) errors.push(`reports loading.tsx missing ${required}`);
+if (!loading.includes("Skeleton")) errors.push("reports loading.tsx missing Skeleton");
+for (const [key, ko] of [
+  ["dashboard.reports.loading.aria", "그래프 리포트 로딩 중"],
+  ["dashboard.reports.loading.courseAndPayoutAria", "코스와 지급 구성 그래프 로딩"],
+  ["dashboard.reports.loading.rankingAria", "마사지사 순위 그래프 로딩"],
+  ["dashboard.reports.loading.roomNoShowAria", "객실 상태와 노쇼 취소 그래프 로딩"]
+]) {
+  if (!loading.includes(`"${key}"`)) errors.push(`reports loading.tsx missing t() key ${key}`);
+  if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 
 const errorBoundary = read("src/app/(erp)/dashboard/reports/error.tsx");
-for (const required of ["\"use client\"", "role=\"alert\"", "다시 시도", "현재 조건 새로고침", "router.refresh", "reset()"]) {
+for (const required of ["\"use client\"", "role=\"alert\"", "router.refresh", "reset()"]) {
   if (!errorBoundary.includes(required)) errors.push(`reports error.tsx missing ${required}`);
+}
+for (const [key, ko] of [
+  ["dashboard.error.retry", "다시 시도"],
+  ["dashboard.error.refresh", "현재 조건 새로고침"]
+]) {
+  if (!errorBoundary.includes(`"${key}"`)) errors.push(`reports error.tsx missing t() key ${key}`);
+  if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 if (errorBoundary.includes("error.message")) {
   errors.push("reports error.tsx must not expose raw server error.message to users");
