@@ -440,10 +440,15 @@ test.describe("Story 5.1 monthly closing preview", () => {
     await expect(page.getByRole("heading", { name: "월마감 미리보기" })).toBeVisible();
     await expect(page.getByText("미확정 미리보기")).toBeVisible();
     await expect(page.getByText(`날짜 범위: ${seededData.previewStartDate} ~ ${seededData.previewEndDate}`)).toBeVisible();
-    await expect(page.locator("section").filter({ hasText: "마사지사 지급 합계" })).toContainText("1,400,000 VND");
+    // 언어 전환 버튼 추가로 외곽 shell <section>도 hasText에 걸리므로, 요약 region으로 한정한다.
+    const previewSummary = page.getByRole("region", { name: "월마감 미리보기 요약" });
+    await expect(previewSummary.getByText("마사지사 지급 합계")).toBeVisible();
+    await expect(previewSummary).toContainText("1,400,000 VND");
     await expect(page.getByText("운영팀 일일인센")).toBeVisible();
-    await expect(page.locator("section").filter({ hasText: "운영팀 월인센" })).toContainText("3,000,000 VND");
-    await expect(page.locator("section").filter({ hasText: "귀케어 지급 합계" })).toContainText("100,000 VND");
+    await expect(previewSummary.getByText("운영팀 월인센")).toBeVisible();
+    await expect(previewSummary).toContainText("3,000,000 VND");
+    await expect(previewSummary.getByText("귀케어 지급 합계")).toBeVisible();
+    await expect(previewSummary).toContainText("100,000 VND");
     await expect(page.getByText("전체 지급 합계")).toBeVisible();
     await expect(page.getByRole("heading", { name: "마사지사" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "운영팀" })).toBeVisible();
