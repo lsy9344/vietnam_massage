@@ -5,6 +5,7 @@ import { selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { formatCurrencyVnd } from "@/lib/i18n/format";
 import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
+import { resolveKoreanMessage } from "@/lib/i18n/errors";
 import type { Locale } from "@/lib/i18n/config";
 import type { Translator } from "@/lib/i18n";
 import {
@@ -15,12 +16,18 @@ import {
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import {
   listOpsMonthlyIncentivePreview,
-  type OpsMonthlyIncentiveResultDto
+  type OpsMonthlyIncentiveResultDto,
+  type OpsMonthlyIncentiveTeamRole
 } from "@/modules/settlements/ops-monthly-incentive-service";
 
 type OpsMonthlyIncentivePageSearchParams = {
   operatingMonthId?: string;
 };
+
+// 팀 역할 라벨은 stable teamRole 키로 번역한다(서비스의 한국어 teamShareLabel 대신).
+function teamRoleLabel(t: Translator, role: OpsMonthlyIncentiveTeamRole) {
+  return t(`settlements.opsMonthly.team.${role}`);
+}
 
 function SettlementTabs({ t }: { t: Translator }) {
   return (
@@ -47,6 +54,33 @@ function formatVnd(locale: Locale, t: Translator, amount: number) {
 
 function formatShare(value: number) {
   return `${Math.round(value * 10000) / 100}%`;
+}
+
+// Dynamic-threshold ops warning ("{n}콜 미만으로 운영팀 월 인센이 없습니다.") has a runtime number, so the
+// fixed Korean→vi map can't match it; rebuild from the captured threshold. Localized to this page.
+const OPS_BELOW_THRESHOLD_PATTERN = /^(\d+)콜 미만으로 운영팀 월 인센이 없습니다\.$/;
+
+function opsMonthlyWarningPart(locale: Locale, message: string) {
+  if (locale === "vi") {
+    const match = OPS_BELOW_THRESHOLD_PATTERN.exec(message);
+    if (match) {
+      return `Dưới ${match[1]} cuộc gọi nên không có thưởng tháng nhóm vận hành.`;
+    }
+  }
+  return resolveKoreanMessage(locale, message);
+}
+
+/**
+ * Translates the ops-monthly warning string at the display boundary. The service may join several
+ * fixed warnings with " " (mergeWarningMessages), so split on the sentence boundary, translate each
+ * part (dynamic-threshold regex first, then the fixed Korean→vi map), then re-join.
+ */
+function opsMonthlyWarningText(locale: Locale, message: string) {
+  if (locale !== "vi") return message;
+  return message
+    .split(/(?<=다\.)\s+/)
+    .map((part) => opsMonthlyWarningPart(locale, part))
+    .join(" ");
 }
 
 function warningTotal(result: OpsMonthlyIncentiveResultDto) {
@@ -223,10 +257,10 @@ function EmployeePayoutTable({ locale, t, result }: { locale: Locale; t: Transla
                 <div className="text-xs text-muted">{row.staffCode}</div>
               </td>
               <td className="px-3 py-2">{row.position}</td>
-              <td className="px-3 py-2">{row.teamShareLabel}</td>
-              <td className="px-3 py-2">{row.calculationBasis}</td>
+              <td className="px-3 py-2">{teamRoleLabel(t, row.teamRole)}</td>
+              <td className="px-3 py-2">{resolveKoreanMessage(locale, row.calculationBasis)}</td>
               <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(locale, t, row.payoutAmount)}</td>
-              <td className="px-3 py-2 text-muted">{row.calculationBasis}</td>
+              <td className="px-3 py-2 text-muted">{resolveKoreanMessage(locale, row.calculationBasis)}</td>
             </tr>
           ))}
         </tbody>
@@ -399,7 +433,7 @@ export default async function OperationsMonthlyIncentivePage({
           {result.warningMessage ? (
             <section className="mb-4 border border-warning bg-surface px-4 py-3" role="status">
               <h2 className="text-sm font-semibold text-warning">{t("settlements.opsMonthly.warning.title")}</h2>
-              <p className="mt-1 text-sm text-muted">{result.warningMessage}</p>
+              <p className="mt-1 text-sm text-muted">{opsMonthlyWarningText(locale, result.warningMessage)}</p>
             </section>
           ) : null}
           <OpsMonthlySummary locale={locale} t={t} result={result} />

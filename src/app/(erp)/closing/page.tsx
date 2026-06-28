@@ -4,8 +4,9 @@ import { PageHeader } from "@/components/domain/page-header";
 import { ClosingActionPanel, type ConfirmDialogSummary } from "@/app/(erp)/closing/closing-action-panel";
 import { selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
-import { formatCurrencyVnd } from "@/lib/i18n/format";
+import { formatCurrencyVnd, formatNumber } from "@/lib/i18n/format";
 import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
+import { resolveKoreanMessage } from "@/lib/i18n/errors";
 import type { Locale } from "@/lib/i18n/config";
 import type { Translator } from "@/lib/i18n";
 import {
@@ -15,7 +16,8 @@ import {
 } from "@/modules/closing/monthly-closing-service";
 import {
   listMonthlyClosingPreview,
-  type MonthlyClosingPreviewDto
+  type MonthlyClosingPreviewDto,
+  type MonthlyClosingTherapistRowDto
 } from "@/modules/closing/monthly-closing-preview-service";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 
@@ -25,6 +27,77 @@ type ClosingPageSearchParams = {
 
 function formatVnd(locale: Locale, t: Translator, amount: number) {
   return `${formatCurrencyVnd(locale, amount)} ${t("settlements.vndSuffix")}`;
+}
+
+// The count-king tie-breaker literal mirrors the closing service constant. It stays English
+// (audit-stable) and is appended verbatim to the reconstructed basis, exactly like the service does.
+const COUNT_KING_TIE_BREAKER_BASIS =
+  "tie-breaker: totalCallCount desc, monthlySettlementAmount desc, staffCode asc, Employee.id asc";
+
+// Count-king eligibility threshold; matches COUNT_KING_MIN_CALLS in monthly-closing-preview-service.
+const COUNT_KING_MIN_CALLS = 40;
+
+/**
+ * Reconstructs the localized full-attendance basis text from the row's structured fields,
+ * instead of rendering the Korean `row.fullAttendanceBasis` the service produces for audit/snapshot.
+ */
+function fullAttendanceBasisText(locale: Locale, t: Translator, row: MonthlyClosingTherapistRowDto) {
+  if (row.fullAttendanceDays === null) {
+    return t("closing.therapist.basis.fullAttendance.sourceMissing");
+  }
+  if (row.fullAttendanceDays >= 20) {
+    return t("closing.therapist.basis.fullAttendance.eligible", {
+      days: row.fullAttendanceDays,
+      amount: formatCurrencyVnd(locale, row.fullAttendanceAllowanceAmount)
+    });
+  }
+  return t("closing.therapist.basis.fullAttendance.belowThreshold", { days: row.fullAttendanceDays });
+}
+
+/**
+ * Reconstructs the localized count-king basis text from the row's structured fields, appending
+ * the English tie-breaker literal where the service does (ranked / eligible-no-rank branches).
+ */
+function countKingBasisText(locale: Locale, t: Translator, row: MonthlyClosingTherapistRowDto) {
+  if (row.countKingRank) {
+    const text = t("closing.therapist.basis.countKing.ranked", {
+      count: row.totalCallCount,
+      rank: row.countKingRank,
+      amount: formatNumber(locale, row.countKingBonusAmount)
+    });
+    return `${text} / ${COUNT_KING_TIE_BREAKER_BASIS}`;
+  }
+  if (row.totalCallCount >= COUNT_KING_MIN_CALLS) {
+    const text = t("closing.therapist.basis.countKing.eligibleNoRank", { count: row.totalCallCount });
+    return `${text} / ${COUNT_KING_TIE_BREAKER_BASIS}`;
+  }
+  return t("closing.therapist.basis.countKing.excluded", { count: row.totalCallCount });
+}
+
+// Dynamic-threshold ops warning ("{n}콜 미만으로 운영팀 월 인센이 없습니다.") cannot be matched by the
+// fixed Korean→vi map, so it is rebuilt from the captured threshold number. Localized to the page.
+const OPS_BELOW_THRESHOLD_PATTERN = /^(\d+)콜 미만으로 운영팀 월 인센이 없습니다\.$/;
+
+function opsWarningTextSingle(locale: Locale, message: string) {
+  if (locale === "vi") {
+    const match = OPS_BELOW_THRESHOLD_PATTERN.exec(message);
+    if (match) {
+      return `Dưới ${match[1]} cuộc gọi nên không có thưởng tháng nhóm vận hành.`;
+    }
+  }
+  return resolveKoreanMessage(locale, message);
+}
+
+/**
+ * Translates an ops warning message. The closing service may join several fixed warnings with " ",
+ * so we split on the sentence boundary, translate each part, then re-join.
+ */
+function opsWarningText(locale: Locale, message: string) {
+  if (locale !== "vi") return message;
+  return message
+    .split(/(?<=다\.)\s+/)
+    .map((part) => opsWarningTextSingle(locale, part))
+    .join(" ");
 }
 
 function PreviewNotice({ locale, t, result }: { locale: Locale; t: Translator; result: MonthlyClosingPreviewDto }) {
@@ -218,12 +291,16 @@ function TherapistTable({ locale, t, result }: { locale: Locale; t: Translator; 
               <td className="px-3 py-2 text-right tabular-nums">{formatVnd(locale, t, row.countKingBonusAmount)}</td>
               <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(locale, t, row.finalPayoutAmount)}</td>
               <td className="px-3 py-2 text-muted">
-                <div>{row.fullAttendanceBasis}</div>
-                <div>{row.countKingBasis}</div>
+                <div>{fullAttendanceBasisText(locale, t, row)}</div>
+                <div>{countKingBasisText(locale, t, row)}</div>
                 <div>
                   {t("closing.therapist.evidenceLine", { evidence: row.assignmentEvidenceCount, zero: row.warningCounts.zeroPolicy, missing: row.warningCounts.missingPolicy })}
                 </div>
-                {row.bonusWarningMessages.length > 0 ? <div className="mt-1 font-medium text-danger">{row.bonusWarningMessages.join(" / ")}</div> : null}
+                {row.bonusWarningMessages.length > 0 ? (
+                  <div className="mt-1 font-medium text-danger">
+                    {row.bonusWarningMessages.map((message) => resolveKoreanMessage(locale, message)).join(" / ")}
+                  </div>
+                ) : null}
               </td>
             </tr>
           ))}
@@ -308,7 +385,7 @@ function EarcareTable({ locale, t, result }: { locale: Locale; t: Translator; re
   );
 }
 
-function EvidenceSection({ t, result }: { t: Translator; result: MonthlyClosingPreviewDto }) {
+function EvidenceSection({ locale, t, result }: { locale: Locale; t: Translator; result: MonthlyClosingPreviewDto }) {
   return (
     <section className="mb-4 border border-border bg-surface">
       <div className="border-b border-border px-4 py-3">
@@ -376,7 +453,7 @@ function EvidenceSection({ t, result }: { t: Translator; result: MonthlyClosingP
           <div className="text-xs font-medium text-muted">{t("closing.evidence.opsWarning")}</div>
           <ul className="mt-1 list-inside list-disc text-sm text-muted">
             {result.operations.warningMessages.map((message) => (
-              <li key={message}>{message}</li>
+              <li key={message}>{opsWarningText(locale, message)}</li>
             ))}
           </ul>
         </div>
@@ -499,7 +576,7 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
           <TherapistTable locale={locale} t={t} result={result} />
           <OperationsTable locale={locale} t={t} result={result} />
           <EarcareTable locale={locale} t={t} result={result} />
-          <EvidenceSection t={t} result={result} />
+          <EvidenceSection locale={locale} t={t} result={result} />
         </>
       ) : null}
     </main>

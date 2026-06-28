@@ -98,7 +98,21 @@ const KOREAN_MESSAGE_VI: Record<string, string> = {
   "금액이 올바르지 않습니다.": "Số tiền không hợp lệ.",
   "500자 이하로 입력하세요.": "Vui lòng nhập tối đa 500 ký tự.",
   "200자 이하로 입력하세요.": "Vui lòng nhập tối đa 200 ký tự.",
-  "선택값이 올바르지 않습니다.": "Giá trị lựa chọn không hợp lệ."
+  "선택값이 올바르지 않습니다.": "Giá trị lựa chọn không hợp lệ.",
+  // 운영팀 월 인센/월마감 보너스 고정 warning (표시 직전 번역; 서비스는 한국어 원문 유지)
+  "적용월에 활성 운영팀 월 인센 정책이 없습니다.": "Không có chính sách thưởng tháng nhóm vận hành đang hoạt động trong tháng áp dụng.",
+  "활성 운영팀 직원이 없어 전체 월 인센을 미배분으로 남겼습니다.": "Không có nhân viên nhóm vận hành đang hoạt động nên toàn bộ thưởng tháng được để chưa phân bổ.",
+  "팀장 대상자가 없어 팀장 몫을 미배분으로 남겼습니다.": "Không có đối tượng trưởng nhóm nên phần của trưởng nhóm được để chưa phân bổ.",
+  "팀장 대상자가 2명 이상이라 deterministic order의 첫 번째 직원에게 팀장 몫을 배정했습니다.": "Có từ 2 đối tượng trưởng nhóm trở lên nên phần của trưởng nhóm được phân cho nhân viên đầu tiên theo deterministic order.",
+  "카운터팀 대상자가 없어 카운터팀 몫을 미배분으로 남겼습니다.": "Không có đối tượng nhóm quầy nên phần của nhóm quầy được để chưa phân bổ.",
+  "웨이터팀 대상자가 없어 웨이터팀 몫을 미배분으로 남겼습니다.": "Không có đối tượng nhóm phục vụ nên phần của nhóm phục vụ được để chưa phân bổ.",
+  "Story 4.1 마사지사 출퇴근/만근 인정 source가 없어 만근수당을 계산하지 않았습니다.": "Không có source chấm công/công nhận đủ công của KTV massage Story 4.1 nên không tính phụ cấp đủ công.",
+  // 운영팀 월 인센 calculationBasis 고정 문구 (표시 직전 번역)
+  "월 인센 지급 조건 미충족": "Chưa đạt điều kiện chi thưởng tháng",
+  "팀장 중복 대상 / deterministic order 후순위": "Trùng đối tượng trưởng nhóm / xếp sau theo deterministic order",
+  "팀장 대상 아님": "Không thuộc đối tượng trưởng nhóm",
+  "미분류 지급": "Chi chưa phân loại",
+  "월 인센 팀 분류 대상 아님": "Không thuộc đối tượng phân loại nhóm thưởng tháng"
 };
 
 export function resolveKoreanMessage(locale: Locale, koMessage: string): string {
