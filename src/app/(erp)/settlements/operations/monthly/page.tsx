@@ -5,7 +5,8 @@ import { selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { formatCurrencyVnd } from "@/lib/i18n/format";
 import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
-import { resolveKoreanMessage } from "@/lib/i18n/errors";
+import { resolveDomainErrorMessage, resolveKoreanMessage } from "@/lib/i18n/errors";
+import { settlementBasisText } from "@/lib/i18n/settlement-basis";
 import type { Locale } from "@/lib/i18n/config";
 import type { Translator } from "@/lib/i18n";
 import {
@@ -258,9 +259,9 @@ function EmployeePayoutTable({ locale, t, result }: { locale: Locale; t: Transla
               </td>
               <td className="px-3 py-2">{row.position}</td>
               <td className="px-3 py-2">{teamRoleLabel(t, row.teamRole)}</td>
-              <td className="px-3 py-2">{resolveKoreanMessage(locale, row.calculationBasis)}</td>
+              <td className="px-3 py-2">{settlementBasisText(locale, row.calculationBasis)}</td>
               <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(locale, t, row.payoutAmount)}</td>
-              <td className="px-3 py-2 text-muted">{resolveKoreanMessage(locale, row.calculationBasis)}</td>
+              <td className="px-3 py-2 text-muted">{settlementBasisText(locale, row.calculationBasis)}</td>
             </tr>
           ))}
         </tbody>
@@ -367,7 +368,10 @@ export default async function OperationsMonthlyIncentivePage({
       }
     }
   } catch (error) {
-    errorMessage = error instanceof Error ? error.message : t("settlements.opsMonthly.error.fallback");
+    if (error instanceof Error) console.error("[settlements/operations/monthly] load error", error);
+    const code = error && typeof error === "object" && "code" in error ? String((error as { code: unknown }).code) : undefined;
+    const koFallback = error instanceof Error ? error.message : t("settlements.opsMonthly.error.fallback");
+    errorMessage = resolveDomainErrorMessage(locale, code, koFallback);
   }
 
   return (

@@ -5,6 +5,8 @@ import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/oper
 import { getServerTranslator } from "@/lib/i18n/server";
 import { formatCurrencyVnd } from "@/lib/i18n/format";
 import { codeLabel, operatingMonthStatusLabel } from "@/lib/i18n/codes";
+import { settlementBasisText } from "@/lib/i18n/settlement-basis";
+import { resolveDomainErrorMessage } from "@/lib/i18n/errors";
 import type { Locale } from "@/lib/i18n/config";
 import type { Translator } from "@/lib/i18n";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
@@ -140,7 +142,7 @@ function OpsIncentiveTable({ locale, t, result }: { locale: Locale; t: Translato
                 )}
               </td>
               <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(locale, t, row.payoutAmount)}</td>
-              <td className="px-3 py-2 text-muted">{row.calculationBasis}</td>
+              <td className="px-3 py-2 text-muted">{settlementBasisText(locale, row.calculationBasis)}</td>
             </tr>
           ))}
         </tbody>
@@ -233,7 +235,10 @@ export default async function OperationsAttendancePage({ searchParams }: { searc
       })
     ]);
   } catch (error) {
-    errorMessage = error instanceof Error ? error.message : t("settlements.ops.error.fallback");
+    if (error instanceof Error) console.error("[settlements/operations] load error", error);
+    const code = error && typeof error === "object" && "code" in error ? String((error as { code: unknown }).code) : undefined;
+    const koFallback = error instanceof Error ? error.message : t("settlements.ops.error.fallback");
+    errorMessage = resolveDomainErrorMessage(locale, code, koFallback);
   }
 
   return (

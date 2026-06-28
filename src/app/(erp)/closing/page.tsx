@@ -6,7 +6,8 @@ import { selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { formatCurrencyVnd, formatNumber } from "@/lib/i18n/format";
 import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
-import { resolveKoreanMessage } from "@/lib/i18n/errors";
+import { resolveDomainErrorMessage, resolveKoreanMessage } from "@/lib/i18n/errors";
+import { settlementBasisText } from "@/lib/i18n/settlement-basis";
 import type { Locale } from "@/lib/i18n/config";
 import type { Translator } from "@/lib/i18n";
 import {
@@ -341,7 +342,7 @@ function OperationsTable({ locale, t, result }: { locale: Locale; t: Translator;
               <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(locale, t, row.totalOpsPayoutAmount)}</td>
               <td className="px-3 py-2 text-muted">
                 {t("closing.operations.dailyEvidence", { count: row.dailyEvidenceCount })}
-                {row.monthlyCalculationBasis ? ` / ${row.monthlyCalculationBasis}` : ""}
+                {row.monthlyCalculationBasis ? ` / ${settlementBasisText(locale, row.monthlyCalculationBasis)}` : ""}
               </td>
             </tr>
           ))}
@@ -376,7 +377,7 @@ function EarcareTable({ locale, t, result }: { locale: Locale; t: Translator; re
               </td>
               <td className="px-3 py-2 text-right tabular-nums">{row.eligibleDayCount}{t("settlements.daySuffix")}</td>
               <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(locale, t, row.payoutAmount)}</td>
-              <td className="px-3 py-2 text-muted">{row.calculationBasis}</td>
+              <td className="px-3 py-2 text-muted">{settlementBasisText(locale, row.calculationBasis)}</td>
             </tr>
           ))}
         </tbody>
@@ -505,7 +506,11 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
     if (error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND") {
       closingSnapshot = null;
     } else {
-      errorMessage = error instanceof Error ? error.message : t("closing.error.fallback");
+      // 사용자에게는 locale 메시지(매핑 없는 code는 한국어 fallback)만 노출하고, 원문은 서버 로그로만 남긴다.
+      const code = error instanceof MonthlyClosingDomainError ? error.code : undefined;
+      const koFallback = error instanceof Error ? error.message : t("closing.error.fallback");
+      if (error instanceof Error) console.error("[closing] preview error", error);
+      errorMessage = resolveDomainErrorMessage(locale, code, koFallback);
     }
   }
   const canWriteClosing = canPerform(account.role, "closing:write");
