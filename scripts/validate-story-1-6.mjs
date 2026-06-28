@@ -169,25 +169,27 @@ for (const required of [
 }
 
 const page = `${read("src/app/(erp)/masters/codes/page.tsx")}\n${read("src/app/(erp)/masters/codes/code-forms.tsx")}`;
+// i18n 전환: 화면 문구는 t() key로 참조하고 한국어 원문은 messages/ko.ts에 보존한다.
+const koMessages16 = read("src/lib/i18n/messages/ko.ts");
 for (const required of [
   "requireRouteAccess(\"/masters/codes\")",
   "ensureDefaultCodeItems",
   "ensureDefaultTimeSlots",
   "listCodeItems",
   "listTimeSlots",
-  "코드/시간 슬롯",
-  "상태",
-  "결제수단",
-  "할인구분",
-  "근무상태",
-  "확인값",
-  "시간 슬롯",
-  "안정 코드",
-  "표시명",
-  "정렬 순서",
-  "시스템 기본",
-  "활성 여부",
-  "비활성 처리",
+  "masters.codes.title",
+  "masters.codes.type.SERVICE_STATUS",
+  "masters.codes.type.PAYMENT_METHOD",
+  "masters.codes.type.DISCOUNT_TYPE",
+  "masters.codes.type.ATTENDANCE_STATUS",
+  "masters.codes.type.CONFIRMATION",
+  "masters.codes.timeSlot",
+  "masters.codes.stableCode",
+  "masters.common.displayName",
+  "masters.common.sortOrder",
+  "masters.codes.column.systemDefault",
+  "masters.common.activeColumn",
+  "masters.common.deactivate",
   "updateCodeItemDisplayNameAction",
   "updateCodeItemSortOrderAction",
   "deactivateCodeItemAction",
@@ -197,6 +199,11 @@ for (const required of [
 ]) {
   if (!page.includes(required)) {
     errors.push(`codes page missing ${required}`);
+  }
+}
+for (const ko of ["코드/시간 슬롯", "상태", "결제수단", "할인구분", "근무상태", "확인값", "시간 슬롯", "안정 코드", "표시명", "정렬 순서", "시스템 기본", "활성 여부", "비활성 처리"]) {
+  if (!koMessages16.includes(ko)) {
+    errors.push(`messages/ko.ts missing codes string: ${ko}`);
   }
 }
 if (page.includes("삭제")) {

@@ -156,20 +156,25 @@ for (const required of [
 }
 
 const page = `${read("src/app/(erp)/masters/courses/page.tsx")}\n${read("src/app/(erp)/masters/courses/course-forms.tsx")}`;
+// i18n 전환: 화면 문구는 t() key로 참조하고 한국어 원문은 messages/ko.ts에 보존한다.
+const koMessages18 = read("src/lib/i18n/messages/ko.ts");
 for (const required of [
   "requireRouteAccess(\"/masters/courses\")",
   "ensureDefaultCoursesAndPolicies",
   "CoursePolicyManager",
-  "코스/수당/인센",
-  "마사지사2",
-  "TV 표시명",
-  "0원 수당",
-  "운영팀 일일 인센",
-  "운영팀 월 인센",
-  "비활성 처리",
-  "정책 종료"
+  "masters.courses.title",
+  "masters.courses.secondTherapistRequired",
+  "masters.courses.field.tvDisplayName",
+  "masters.courses.therapistRateNote",
+  "masters.courses.dailyIncentiveTitle",
+  "masters.courses.monthlyIncentiveTitle",
+  "masters.common.deactivate",
+  "masters.courses.endPolicy"
 ]) {
   if (!page.includes(required)) errors.push(`courses page missing ${required}`);
+}
+for (const ko of ["코스/수당/인센", "마사지사2", "TV 표시명", "0원 수당", "운영팀 일일 인센", "운영팀 월 인센", "비활성 처리", "정책 종료"]) {
+  if (!koMessages18.includes(ko)) errors.push(`messages/ko.ts missing courses string: ${ko}`);
 }
 if (page.includes("삭제")) errors.push("/masters/courses page must not present physical delete wording");
 

@@ -23,10 +23,8 @@ import {
   updateTherapistCourseRateAction,
   type CourseActionState
 } from "@/app/(erp)/masters/courses/actions";
-
-function formatVnd(value: number) {
-  return new Intl.NumberFormat("ko-KR").format(value);
-}
+import { useLocale, useT } from "@/lib/i18n/client";
+import { formatNumber } from "@/lib/i18n/format";
 
 function InlineError({ state, field }: { state: CourseActionState; field?: string }) {
   if (!state || state.ok) return null;
@@ -41,51 +39,54 @@ function InlineError({ state, field }: { state: CourseActionState; field?: strin
 }
 
 function PolicyInputs({ course, policy, monthKey }: { course: CourseDto; policy: CoursePolicyDto | null; monthKey: string }) {
+  const t = useT();
   return (
     <>
       <input name="courseId" type="hidden" value={course.id} />
       {policy ? <input name="policyId" type="hidden" value={policy.id} /> : null}
       <label className="grid gap-1 text-xs text-muted">
-        코스명
+        {t("masters.courses.field.courseName")}
         <input className="h-8 min-w-52 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.name ?? ""} name="name" required />
       </label>
       <label className="grid gap-1 text-xs text-muted">
-        시간
+        {t("masters.courses.field.duration")}
         <input className="h-8 w-20 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.durationMinutes ?? 60} min={1} name="durationMinutes" type="number" />
       </label>
       <label className="grid gap-1 text-xs text-muted">
-        기본판매가
+        {t("masters.courses.field.basePrice")}
         <input className="h-8 w-28 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.basePrice ?? 0} min={0} name="basePrice" type="number" />
       </label>
       <label className="grid gap-1 text-xs text-muted">
-        콜인정
+        {t("masters.courses.field.opsCallCredit")}
         <input className="h-8 w-20 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.opsCallCredit ?? 1} min={0} name="opsCallCredit" type="number" />
       </label>
       <label className="grid gap-1 text-xs text-muted">
-        귀케어 풀/콜
+        {t("masters.courses.field.earcarePoolPerCall")}
         <input className="h-8 w-28 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.earcarePoolAmount ?? 0} min={0} name="earcarePoolAmount" type="number" />
       </label>
       <label className="grid gap-1 text-xs text-muted">
-        TV 표시명
+        {t("masters.courses.field.tvDisplayName")}
         <input className="h-8 w-32 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.tvDisplayName ?? ""} name="tvDisplayName" required />
       </label>
       <label className="grid gap-1 text-xs text-muted">
-        시작월
+        {t("masters.courses.field.fromMonth")}
         <input className="h-8 w-28 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.effectiveFromMonth ?? monthKey} name="effectiveFromMonth" pattern="\d{4}-\d{2}" required />
       </label>
       <label className="grid gap-1 text-xs text-muted">
-        종료월
+        {t("masters.courses.field.toMonth")}
         <input className="h-8 w-28 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.effectiveToMonth ?? ""} name="effectiveToMonth" pattern="\d{4}-\d{2}" />
       </label>
       <label className="flex h-12 items-end gap-2 text-xs text-muted">
         <input className="h-4 w-4 accent-brand" defaultChecked={policy?.requiresSecondTherapist ?? course.code === "D"} name="requiresSecondTherapist" type="checkbox" value="true" />
-        마사지사2 필요
+        {t("masters.courses.secondTherapistRequired")}
       </label>
     </>
   );
 }
 
 function CoursePolicyRow({ course, monthKey }: { course: CourseDto; monthKey: string }) {
+  const t = useT();
+  const locale = useLocale();
   const [updateState, updateAction, updatePending] = useActionState<CourseActionState, FormData>(updateCoursePolicyAction, null);
   const [createState, createAction, createPending] = useActionState<CourseActionState, FormData>(createCoursePolicyAction, null);
   const [deactivateState, deactivateAction, deactivatePending] = useActionState<CourseActionState, FormData>(deactivateCourseAction, null);
@@ -102,7 +103,7 @@ function CoursePolicyRow({ course, monthKey }: { course: CourseDto; monthKey: st
           <PolicyInputs course={course} monthKey={monthKey} policy={policy} />
           <div className="flex items-end">
             <Button className="h-8 px-2 text-xs" disabled={updatePending || createPending} type="submit" variant="secondary">
-              현재 정책 저장
+              {t("masters.courses.saveCurrentPolicy")}
             </Button>
           </div>
           <InlineError state={policy ? updateState : createState} />
@@ -110,20 +111,20 @@ function CoursePolicyRow({ course, monthKey }: { course: CourseDto; monthKey: st
         <form action={createAction} className="mt-2 flex min-w-[760px] items-end gap-2">
           <PolicyInputs course={course} monthKey={monthKey} policy={policy} />
           <Button className="h-8 px-2 text-xs" disabled={createPending} type="submit">
-            새 정책 이력 저장
+            {t("masters.courses.saveNewPolicyHistory")}
           </Button>
         </form>
       </td>
       <td className="border-b border-border px-3 py-2 text-xs text-muted">
-        <div>{policy ? `${formatVnd(policy.basePrice)} VND` : "정책 없음"}</div>
-        <div>{policy?.requiresSecondTherapist ? "마사지사2 필요: Y" : "마사지사2 필요: N"}</div>
-        <div>{course.isActive ? "활성" : "비활성"}</div>
+        <div>{policy ? `${formatNumber(locale, policy.basePrice)} VND` : t("masters.courses.noPolicy")}</div>
+        <div>{policy?.requiresSecondTherapist ? t("masters.courses.secondTherapistRequiredYes") : t("masters.courses.secondTherapistRequiredNo")}</div>
+        <div>{course.isActive ? t("masters.common.active") : t("masters.common.inactive")}</div>
       </td>
       <td className="border-b border-border px-3 py-2">
         <form action={deactivateAction} className="grid gap-1">
           <input name="courseId" type="hidden" value={course.id} />
           <Button className="h-8 px-2 text-xs" disabled={deactivatePending || !course.isActive} type="submit" variant="ghost">
-            비활성 처리
+            {t("masters.common.deactivate")}
           </Button>
           <InlineError state={deactivateState} />
         </form>
@@ -133,19 +134,20 @@ function CoursePolicyRow({ course, monthKey }: { course: CourseDto; monthKey: st
 }
 
 function CourseSection({ courses, monthKey }: { courses: CourseDto[]; monthKey: string }) {
+  const t = useT();
   return (
     <section className="border border-border bg-surface">
       <div className="border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-foreground">기본 코스 마스터</h2>
+        <h2 className="text-base font-semibold text-foreground">{t("masters.courses.baseCourseMaster")}</h2>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1520px] border-collapse text-left text-sm">
           <thead className="bg-readonly text-xs font-semibold text-muted">
             <tr>
-              <th className="w-40 border-b border-border px-3 py-2">코드 / stable ID</th>
-              <th className="border-b border-border px-3 py-2">코스 정책</th>
-              <th className="w-44 border-b border-border px-3 py-2">현재 요약</th>
-              <th className="w-32 border-b border-border px-3 py-2">작업</th>
+              <th className="w-40 border-b border-border px-3 py-2">{t("masters.courses.column.codeStableId")}</th>
+              <th className="border-b border-border px-3 py-2">{t("masters.courses.column.coursePolicy")}</th>
+              <th className="w-44 border-b border-border px-3 py-2">{t("masters.courses.column.currentSummary")}</th>
+              <th className="w-32 border-b border-border px-3 py-2">{t("masters.common.actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -170,6 +172,7 @@ function RateCell({
   rate: TherapistCourseRateDto | undefined;
   therapist: EmployeeDto;
 }) {
+  const t = useT();
   const [createState, createAction, createPending] = useActionState<CourseActionState, FormData>(createTherapistCourseRateAction, null);
   const [state, action, pending] = useActionState<CourseActionState, FormData>(updateTherapistCourseRateAction, null);
   const [endState, endAction, endPending] = useActionState<CourseActionState, FormData>(endTherapistCourseRateAction, null);
@@ -184,7 +187,7 @@ function RateCell({
         <div className="flex items-center gap-1">
           <input className="h-8 w-24 border border-border bg-background px-2 text-right text-sm text-foreground" defaultValue={0} min={0} name="amount" type="number" />
           <Button className="h-8 px-2 text-xs" disabled={createPending} type="submit" variant="secondary">
-            생성
+            {t("masters.courses.create")}
           </Button>
         </div>
         <InlineError state={createState} />
@@ -200,14 +203,14 @@ function RateCell({
         <input name="effectiveToMonth" type="hidden" value={rate.effectiveToMonth ?? ""} />
         <input className="h-8 w-24 border border-border bg-background px-2 text-right text-sm text-foreground" defaultValue={rate.amount} min={0} name="amount" type="number" />
         <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant="secondary">
-          저장
+          {t("masters.common.save")}
         </Button>
       </form>
       <form action={endAction} className="flex items-center gap-1">
         <input name="rateId" type="hidden" value={rate.id} />
         <input className="h-7 w-24 border border-border bg-background px-2 text-xs text-foreground" defaultValue={rate.effectiveToMonth ?? monthKey} name="effectiveToMonth" pattern="\d{4}-\d{2}" />
         <Button className="h-7 px-2 text-xs" disabled={endPending} type="submit" variant="ghost">
-          정책 종료
+          {t("masters.courses.endPolicy")}
         </Button>
       </form>
       <InlineError state={state} />
@@ -227,19 +230,20 @@ function TherapistRateSection({
   therapistRates: TherapistCourseRateDto[];
   therapists: EmployeeDto[];
 }) {
+  const t = useT();
   const rates = new Map(therapistRates.map((rate) => [`${rate.therapistId}:${rate.courseId}`, rate]));
 
   return (
     <section className="border border-border bg-surface">
       <div className="border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-foreground">마사지사 개인별 코스 수당</h2>
-        <p className="mt-1 text-xs text-muted">0원 수당은 누락값이 아니라 원본 이관 초기값이다.</p>
+        <h2 className="text-base font-semibold text-foreground">{t("masters.courses.therapistRateTitle")}</h2>
+        <p className="mt-1 text-xs text-muted">{t("masters.courses.therapistRateNote")}</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[980px] border-collapse text-left text-sm">
           <thead className="bg-readonly text-xs font-semibold text-muted">
             <tr>
-              <th className="w-48 border-b border-border px-3 py-2">마사지사</th>
+              <th className="w-48 border-b border-border px-3 py-2">{t("masters.courses.column.therapist")}</th>
               {courses.map((course) => (
                 <th className="w-40 border-b border-border px-3 py-2" key={course.id}>
                   {course.code}
@@ -269,6 +273,7 @@ function TherapistRateSection({
 }
 
 function DailyRuleForm({ rule, monthKey }: { rule?: OpsDailyIncentiveRuleDto; monthKey: string }) {
+  const t = useT();
   const [state, action, pending] = useActionState<CourseActionState, FormData>(rule ? updateOpsDailyIncentiveRuleAction : createOpsDailyIncentiveRuleAction, null);
 
   return (
@@ -279,7 +284,7 @@ function DailyRuleForm({ rule, monthKey }: { rule?: OpsDailyIncentiveRuleDto; mo
       <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={rule?.effectiveFromMonth ?? monthKey} name="effectiveFromMonth" pattern="\d{4}-\d{2}" />
       <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={rule?.effectiveToMonth ?? ""} name="effectiveToMonth" pattern="\d{4}-\d{2}" />
       <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant={rule ? "secondary" : "default"}>
-        {rule ? "일일 저장" : "일일 추가"}
+        {rule ? t("masters.courses.dailySave") : t("masters.courses.dailyAdd")}
       </Button>
       <InlineError state={state} />
     </form>
@@ -287,6 +292,7 @@ function DailyRuleForm({ rule, monthKey }: { rule?: OpsDailyIncentiveRuleDto; mo
 }
 
 function MonthlyRuleForm({ rule, monthKey }: { rule?: OpsMonthlyIncentiveRuleDto; monthKey: string }) {
+  const t = useT();
   const [state, action, pending] = useActionState<CourseActionState, FormData>(rule ? updateOpsMonthlyIncentiveRuleAction : createOpsMonthlyIncentiveRuleAction, null);
 
   return (
@@ -300,7 +306,7 @@ function MonthlyRuleForm({ rule, monthKey }: { rule?: OpsMonthlyIncentiveRuleDto
       <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={rule?.effectiveFromMonth ?? monthKey} name="effectiveFromMonth" pattern="\d{4}-\d{2}" />
       <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={rule?.effectiveToMonth ?? ""} name="effectiveToMonth" pattern="\d{4}-\d{2}" />
       <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant={rule ? "secondary" : "default"}>
-        {rule ? "월 저장" : "월 추가"}
+        {rule ? t("masters.courses.monthlySave") : t("masters.courses.monthlyAdd")}
       </Button>
       <InlineError state={state} />
     </form>
@@ -316,17 +322,18 @@ function IncentiveSection({
   monthlyRules: OpsMonthlyIncentiveRuleDto[];
   monthKey: string;
 }) {
+  const t = useT();
   return (
     <section className="grid gap-4 border border-border bg-surface px-4 py-4">
       <div>
-        <h2 className="text-base font-semibold text-foreground">운영팀 일일 인센 정책</h2>
+        <h2 className="text-base font-semibold text-foreground">{t("masters.courses.dailyIncentiveTitle")}</h2>
         <div className="mt-3 grid gap-2">
           <div className="grid grid-cols-[110px_130px_110px_110px_auto] gap-2 text-xs font-semibold text-muted">
-            <span>일 총콜</span>
-            <span>개인 지급액</span>
-            <span>시작월</span>
-            <span>종료월</span>
-            <span>작업</span>
+            <span>{t("masters.courses.column.dailyTotalCalls")}</span>
+            <span>{t("masters.courses.column.personalAmount")}</span>
+            <span>{t("masters.courses.field.fromMonth")}</span>
+            <span>{t("masters.courses.field.toMonth")}</span>
+            <span>{t("masters.common.actions")}</span>
           </div>
           {dailyRules.map((rule) => (
             <DailyRuleForm key={rule.id} monthKey={monthKey} rule={rule} />
@@ -335,17 +342,17 @@ function IncentiveSection({
         </div>
       </div>
       <div className="border-t border-border pt-4">
-        <h2 className="text-base font-semibold text-foreground">운영팀 월 인센 정책</h2>
+        <h2 className="text-base font-semibold text-foreground">{t("masters.courses.monthlyIncentiveTitle")}</h2>
         <div className="mt-3 grid gap-2">
           <div className="grid grid-cols-[90px_120px_80px_80px_80px_110px_110px_auto] gap-2 text-xs font-semibold text-muted">
-            <span>월 총콜</span>
-            <span>전체 월인센</span>
-            <span>팀장</span>
-            <span>카운터팀</span>
-            <span>웨이터팀</span>
-            <span>시작월</span>
-            <span>종료월</span>
-            <span>작업</span>
+            <span>{t("masters.courses.column.monthlyTotalCalls")}</span>
+            <span>{t("masters.courses.column.totalMonthlyIncentive")}</span>
+            <span>{t("masters.courses.column.lead")}</span>
+            <span>{t("masters.courses.column.counterTeam")}</span>
+            <span>{t("masters.courses.column.waiterTeam")}</span>
+            <span>{t("masters.courses.field.fromMonth")}</span>
+            <span>{t("masters.courses.field.toMonth")}</span>
+            <span>{t("masters.common.actions")}</span>
           </div>
           {monthlyRules.map((rule) => (
             <MonthlyRuleForm key={rule.id} monthKey={monthKey} rule={rule} />

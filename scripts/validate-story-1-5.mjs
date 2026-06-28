@@ -127,24 +127,31 @@ for (const required of [
 }
 
 const page = `${read("src/app/(erp)/masters/rooms/page.tsx")}\n${read("src/app/(erp)/masters/rooms/room-forms.tsx")}`;
+// i18n 전환: 화면 문구는 t() key로 참조하고 한국어 원문은 messages/ko.ts에 보존한다.
+const koMessages15 = read("src/lib/i18n/messages/ko.ts");
 for (const required of [
   "requireRouteAccess(\"/masters/rooms\")",
   "ensureDefaultRooms",
   "listRooms",
-  "객실 마스터",
-  "표시명",
-  "이관 참조값",
-  "정렬 순서",
-  "활성 여부",
-  "생성 시각",
-  "수정 시각",
-  "비활성 처리",
+  "masters.rooms.title",
+  "masters.common.displayName",
+  "masters.rooms.column.migrationReference",
+  "masters.common.sortOrder",
+  "masters.common.activeColumn",
+  "masters.common.createdAt",
+  "masters.common.updatedAt",
+  "masters.common.deactivate",
   "updateRoomDisplayNameAction",
   "updateRoomSortOrderAction",
   "deactivateRoomAction"
 ]) {
   if (!page.includes(required)) {
     errors.push(`rooms page missing ${required}`);
+  }
+}
+for (const ko of ["객실 마스터", "표시명", "이관 참조값", "정렬 순서", "활성 여부", "생성 시각", "수정 시각", "비활성 처리"]) {
+  if (!koMessages15.includes(ko)) {
+    errors.push(`messages/ko.ts missing rooms string: ${ko}`);
   }
 }
 if (page.includes("삭제")) {

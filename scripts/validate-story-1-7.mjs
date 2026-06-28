@@ -174,21 +174,23 @@ for (const required of [
 }
 
 const page = `${read("src/app/(erp)/masters/employees/page.tsx")}\n${read("src/app/(erp)/masters/employees/employee-forms.tsx")}`;
+// i18n 전환: 화면 문구는 t() key로 참조하고 한국어 원문은 messages/ko.ts에 보존한다.
+const koMessages17 = read("src/lib/i18n/messages/ko.ts");
 for (const required of [
   "requireRouteAccess(\"/masters/employees\")",
   "ensureDefaultEmployees",
   "listEmployees",
   "EmployeeManager",
-  "직원",
-  "운영팀",
-  "귀케어팀",
-  "마사지사",
-  "직원 ID",
-  "staff code",
-  "주/야간",
-  "기본급",
-  "연결 계정",
-  "비활성 처리",
+  "masters.employees.title",
+  "masters.employees.group.OPERATIONS",
+  "masters.employees.group.EARCARE",
+  "masters.employees.group.THERAPIST",
+  "masters.employees.employeeId",
+  "masters.employees.field.staffCode",
+  "masters.employees.field.shiftType",
+  "masters.employees.field.baseSalary",
+  "masters.employees.column.linkedAccount",
+  "masters.common.deactivate",
   "updateEmployeeProfileAction",
   "updateEmployeeSortOrderAction",
   "deactivateEmployeeAction",
@@ -196,6 +198,11 @@ for (const required of [
 ]) {
   if (!page.includes(required)) {
     errors.push(`employees page missing ${required}`);
+  }
+}
+for (const ko of ["직원", "운영팀", "귀케어팀", "마사지사", "직원 ID", "주/야간", "기본급", "연결 계정", "비활성 처리"]) {
+  if (!koMessages17.includes(ko)) {
+    errors.push(`messages/ko.ts missing employees string: ${ko}`);
   }
 }
 if (page.includes("삭제")) {

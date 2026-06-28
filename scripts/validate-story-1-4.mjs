@@ -121,22 +121,29 @@ for (const required of [
 }
 
 const page = `${read("src/app/(erp)/masters/operating-months/page.tsx")}\n${read("src/app/(erp)/masters/operating-months/operating-month-forms.tsx")}`;
+// i18n 전환: 화면 문구는 t() key로 참조하고 한국어 원문은 messages/ko.ts에 보존한다.
+const koMessages14 = read("src/lib/i18n/messages/ko.ts");
 for (const required of [
   "requireRouteAccess(\"/masters/operating-months\")",
   "listOperatingMonths",
-  "운영월 관리",
+  "masters.operatingMonths.title",
   "YYYY-MM",
-  "시작일",
-  "종료일",
-  "현재 상태",
-  "생성 시각",
-  "수정 시각",
-  "검토중으로 변경",
+  "masters.operatingMonths.column.startDate",
+  "masters.operatingMonths.column.endDate",
+  "masters.operatingMonths.column.currentStatus",
+  "masters.common.createdAt",
+  "masters.common.updatedAt",
+  "masters.operatingMonths.changeToReview",
   "createOperatingMonthAction",
   "changeOperatingMonthStatusAction"
 ]) {
   if (!page.includes(required)) {
     errors.push(`operating-month page missing ${required}`);
+  }
+}
+for (const ko of ["운영월 관리", "시작일", "종료일", "현재 상태", "생성 시각", "수정 시각", "검토중으로 변경"]) {
+  if (!koMessages14.includes(ko)) {
+    errors.push(`messages/ko.ts missing operating-month string: ${ko}`);
   }
 }
 if (page.includes("ErpEmptyState") || page.includes("Story 1.4에서 연결")) {
