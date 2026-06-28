@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@node-rs/argon2";
 import { prisma } from "./support/db";
-import { argon2idOptions } from "./support/auth";
+import { argon2idOptions, setLocaleCookie } from "./support/auth";
 import { restoreUserAccount } from "./support/cleanup";
 
 
@@ -20,6 +20,8 @@ let seededData: SeededData;
 
 async function login(page: Page) {
   await page.goto("/sign-in");
+  await setLocaleCookie(page, "ko");
+  await page.reload().catch(() => undefined);
   await page.getByLabel("이메일 또는 계정 ID").fill("story23_counter");
   await page.getByLabel("비밀번호").fill("Story23!counter");
   await page.getByRole("button", { name: "로그인" }).click();

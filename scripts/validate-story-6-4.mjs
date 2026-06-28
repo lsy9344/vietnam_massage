@@ -88,7 +88,9 @@ for (const required of [
   "role=\"img\"",
   "<title id=\"daily-revenue-chart-title\"",
   "<table",
-  "StatusBadge\n                  state={row.displayStatus}",
+  // i18n 전환 후 StatusBadge가 label/ariaLabel prop과 함께 멀티라인으로 렌더되므로
+  // 공백 의존 매칭 대신 핵심 마커(room status를 stable key로 전달)만 검사한다.
+  "state={row.displayStatus}",
   "snapshot_missing",
   "report.emptyStates.noRevenueTrendData ? <CompletedChartEmptyPanel t={t} /> : <RevenueTrendChart {...viewProps} />",
   "report.emptyStates.noCalculatedCompletedCalls ? ("

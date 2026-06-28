@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { hash } from "@node-rs/argon2";
 import { prisma } from "./support/db";
-import { argon2idOptions } from "./support/auth";
+import { argon2idOptions, setLocaleCookie } from "./support/auth";
 import { expect, test, type Page } from "@playwright/test";
 
 
@@ -140,6 +140,8 @@ async function seedOpenTrackingIssue() {
 
 async function login(page: Page, account: StoryAccount) {
   await page.goto("/sign-in");
+  await setLocaleCookie(page, "ko");
+  await page.reload().catch(() => undefined);
   await page.getByLabel("이메일 또는 계정 ID").fill(account.accountId);
   await page.getByLabel("비밀번호").fill(account.password);
   await page.getByRole("button", { name: "로그인" }).click();
@@ -182,20 +184,29 @@ test.describe("Story 7.3 migration verification report source guardrails", () =>
     const action = readSource("src/app/(erp)/masters/sheet-mapping/actions.ts");
     const auth = readSource("src/lib/authorization.ts");
     const nav = readSource("src/lib/navigation.ts");
+    // i18n 전환: 한국어 문구는 messages/ko.ts로 이동했고 컴포넌트는 t() key로 참조한다.
+    const koMessages = readSource("src/lib/i18n/messages/ko.ts");
 
     for (const required of [
       "requireRouteAccess(\"/masters/sheet-mapping\")",
       "buildMigrationVerificationReport",
       "listMigrationVerificationIssues",
       "parseMigrationVerificationFilters",
-      "MigrationIssueStatusForm",
-      "기능 보존율",
-      "누락 항목",
-      "계산 불일치",
-      "열린 추적",
-      "숨김 목록 100% gate"
+      "MigrationIssueStatusForm"
     ]) {
       expect(page).toContain(required);
+    }
+
+    // 한국어 요약/게이트 문구는 t() key로 참조되고 원문은 ko.ts에 보존된다.
+    for (const [key, ko] of [
+      ["masters.sheetMapping.summary.preservationRate", "기능 보존율"],
+      ["masters.sheetMapping.summary.missingItems", "누락 항목"],
+      ["masters.sheetMapping.summary.calcMismatch", "계산 불일치"],
+      ["masters.sheetMapping.summary.openIssues", "열린 추적"],
+      ["masters.sheetMapping.gate.title", "숨김 목록 100% gate"]
+    ] as const) {
+      expect(page).toContain(key);
+      expect(koMessages).toContain(ko);
     }
 
     expect(action).toContain("requirePermission(\"migration:write\")");
@@ -203,7 +214,8 @@ test.describe("Story 7.3 migration verification report source guardrails", () =>
     expect(auth).toContain("\"migration:write\"");
     expect(auth).toContain("read_only_viewer: [\"/masters/sheet-mapping\"]");
     expect(auth).not.toContain("read_only_viewer: [\"/rooms\", \"/tv\", \"/dashboard/today\", \"/dashboard/monthly\", \"/dashboard/reports\", \"/masters");
-    expect(nav).toContain("{ label: \"시트 기능 매핑표\", href: \"/masters/sheet-mapping\", allowedRoles: [\"administrator\", \"read_only_viewer\"] }");
+    expect(nav).toContain("{ labelKey: \"nav.item.mastersSheetMapping\", href: \"/masters/sheet-mapping\", allowedRoles: [\"administrator\", \"read_only_viewer\"] }");
+    expect(koMessages).toContain("시트 기능 매핑표");
   });
 
   test("source guardrails: Prisma tracking tables and validator are wired", async () => {

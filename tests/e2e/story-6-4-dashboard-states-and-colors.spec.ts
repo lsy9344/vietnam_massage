@@ -146,6 +146,8 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
 
 test.describe("Story 6.4 dashboard source guardrails", () => {
   test("all dashboard loading and error boundaries keep safe Korean affordances", async () => {
+    // i18n 전환: 한국어 문구는 messages/ko.ts로 이동했고 컴포넌트는 t() key로 참조한다.
+    const koMessages = readFileSync("src/lib/i18n/messages/ko.ts", "utf8");
     const routes = [
       ["today", "오늘 KPI 대시보드 로딩 중", "오늘 KPI를 불러오지 못했습니다"],
       ["monthly", "월간 KPI 대시보드 로딩 중", "월간 KPI를 불러오지 못했습니다"],
@@ -158,11 +160,15 @@ test.describe("Story 6.4 dashboard source guardrails", () => {
 
       expect(loading).toContain("Skeleton");
       expect(loading).toContain('aria-busy="true"');
-      expect(loading).toContain(loadingLabel);
+      expect(loading).toContain(`dashboard.${route}.loading.aria`);
+      expect(koMessages).toContain(loadingLabel);
       expect(errorBoundary).toContain('role="alert"');
-      expect(errorBoundary).toContain(errorHeading);
-      expect(errorBoundary).toContain("다시 시도");
-      expect(errorBoundary).toContain("현재 조건 새로고침");
+      expect(errorBoundary).toContain(`dashboard.${route}.error.title`);
+      expect(koMessages).toContain(errorHeading);
+      expect(errorBoundary).toContain("dashboard.error.retry");
+      expect(koMessages).toContain("다시 시도");
+      expect(errorBoundary).toContain("dashboard.error.refresh");
+      expect(koMessages).toContain("현재 조건 새로고침");
       expect(errorBoundary).not.toContain("error.message");
       expect(errorBoundary).not.toContain("error.stack");
     }
@@ -170,11 +176,15 @@ test.describe("Story 6.4 dashboard source guardrails", () => {
 
   test("reports chart source keeps status tokens out of non-status series", async () => {
     const reportsPage = readFileSync("src/app/(erp)/dashboard/reports/page.tsx", "utf8");
+    // i18n 전환: 한국어 문구는 messages/ko.ts로 이동했고 컴포넌트는 t() key로 참조한다.
+    const koMessages = readFileSync("src/lib/i18n/messages/ko.ts", "utf8");
 
-    expect(reportsPage).toContain("StatusBadge state={row.displayStatus}");
+    // i18n 전환 후 StatusBadge가 label/ariaLabel과 함께 멀티라인으로 렌더되므로 핵심 마커만 검사한다.
+    expect(reportsPage).toContain("state={row.displayStatus}");
     expect(reportsPage).toContain("role=\"img\"");
     expect(reportsPage).toContain("<table");
-    expect(reportsPage).toContain("범례: 노쇼는 브랜드색, 취소는 위험색");
+    expect(reportsPage).toContain("dashboard.reports.noShow.legend");
+    expect(koMessages).toContain("범례: 노쇼는 브랜드색, 취소는 위험색");
     expect(reportsPage).toContain("bg-brand");
     expect(reportsPage).toContain("bg-danger");
     expect(reportsPage).toContain("var(--color-brand)");
@@ -188,9 +198,13 @@ test.describe("Story 6.4 dashboard source guardrails", () => {
 
   test("missing calculated completed calls do not render revenue or course charts as successful zero graphs", async () => {
     const reportsPage = readFileSync("src/app/(erp)/dashboard/reports/page.tsx", "utf8");
+    // i18n 전환: 한국어 문구는 messages/ko.ts로 이동했고 컴포넌트는 t() key로 참조한다.
+    const koMessages = readFileSync("src/lib/i18n/messages/ko.ts", "utf8");
 
-    expect(reportsPage).toContain("완료 콜 그래프 없음");
-    expect(reportsPage).toContain("누락된 완료 데이터를 0값 매출 또는 0값 코스 비중 그래프로 꾸미지 않습니다.");
+    expect(reportsPage).toContain("dashboard.reports.completedEmpty.aria");
+    expect(koMessages).toContain("완료 콜 그래프 없음");
+    expect(reportsPage).toContain("dashboard.reports.completedEmpty.description");
+    expect(koMessages).toContain("누락된 완료 데이터를 0값 매출 또는 0값 코스 비중 그래프로 꾸미지 않습니다.");
     expect(reportsPage).toContain("report.emptyStates.noCalculatedCompletedCalls ? <CompletedChartEmptyPanel /> : <RevenueTrendChart report={report} />");
     expect(reportsPage).toContain("report.emptyStates.noCalculatedCompletedCalls ? (");
   });

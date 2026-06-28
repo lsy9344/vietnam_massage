@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@node-rs/argon2";
 import { prisma } from "./support/db";
-import { argon2idOptions } from "./support/auth";
+import { argon2idOptions, setLocaleCookie } from "./support/auth";
 
 
 type StoryAccount = {
@@ -110,6 +110,8 @@ async function seedStoryAccounts(workerIndex: number): Promise<SeededAccounts> {
 
 async function login(page: Page, account: StoryAccount) {
   await page.goto("/sign-in");
+  await setLocaleCookie(page, "ko");
+  await page.reload().catch(() => undefined);
   await page.getByLabel("이메일 또는 계정 ID").fill(account.accountId);
   await page.getByLabel("비밀번호").fill(account.password);
   await page.getByRole("button", { name: "로그인" }).click();
@@ -118,11 +120,20 @@ async function login(page: Page, account: StoryAccount) {
 test.describe("Story 7.1 sheet mapping source guardrails", () => {
   test("route stays read-only and exposes mapping failure copy without requiring a database", async () => {
     const pageSource = readFileSync("src/app/(erp)/masters/sheet-mapping/page.tsx", "utf8");
+    // i18n 전환: 한국어 문구는 messages/ko.ts로 이동했고 컴포넌트는 t() key로 참조한다.
+    const koMessages = readFileSync("src/lib/i18n/messages/ko.ts", "utf8");
 
     expect(pageSource).toContain('requireRouteAccess("/masters/sheet-mapping")');
-    expect(pageSource).toContain("검증 실패: 누락된 시트");
-    expect(pageSource).toContain("검증 통과: 숨김 목록 포함 12개 원본 시트가 모두 매핑됐습니다.");
-    expect(pageSource).toContain("쓰기 작업 없음 · 감사 로그 없음 · DB 변경 없음");
+    // 검증 실패: 누락된 시트 → masters.sheetMapping.summary.missingItemsNote ("누락된 시트 · 숨김 목록 포함 원본 12개 기준")
+    expect(pageSource).toContain("masters.sheetMapping.summary.missingItemsNote");
+    expect(koMessages).toContain("누락된 시트");
+    // 검증 통과: 숨김 목록 포함 12개 원본 시트가 모두 매핑됐습니다. → 숨김 목록 게이트 문구로 통합
+    expect(pageSource).toContain("masters.sheetMapping.gate.title");
+    expect(koMessages).toContain("숨김 목록 포함 원본 12개");
+    // 쓰기 작업 없음 · 감사 로그 없음 · DB 변경 없음 → masters.sheetMapping.meta.noWriteNote
+    expect(pageSource).toContain("masters.sheetMapping.meta.noWriteNote");
+    expect(koMessages).toContain("쓰기 작업 없음");
+    expect(koMessages).toContain("DB 변경 없음");
     expect(pageSource).toContain("<StatusBadge state=\"사용중\"");
     expect(pageSource).not.toContain('"use server"');
     expect(pageSource).not.toContain("recordAuditEvent");

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { setLocaleCookie } from "./support/auth";
 
 const sidebarGroups = [
   "운영 현황",
@@ -13,6 +14,9 @@ const sidebarGroups = [
 test.describe("Story 1.1 ERP 앱 쉘", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/sign-in");
+    // 기본 locale은 vi. 이 스펙은 한국어 라벨을 locator로 쓰므로 ko 쿠키를 강제하고 다시 로드한다.
+    await setLocaleCookie(page, "ko");
+    await page.reload().catch(() => undefined);
     await page.getByLabel("이메일 또는 계정 ID").fill("administrator");
     await page.getByLabel("비밀번호").fill("Story12!administrator");
     await page.getByRole("button", { name: "로그인" }).click();
