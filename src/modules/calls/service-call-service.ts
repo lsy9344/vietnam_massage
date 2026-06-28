@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { defaultLocale, type Locale } from "@/lib/i18n/config";
+import { codeLabel } from "@/lib/i18n/codes";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
 import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
 import { assertOperatingMonthPayoutWritable } from "@/modules/closing/month-lock-guard";
@@ -1548,8 +1550,11 @@ export async function listServiceCallStatusHistory(
   return records.map(toHistoryDto);
 }
 
-export async function listServiceCallFormOptions(input: { operatingMonthId?: string; prismaClient?: ServiceCallPrismaClient } = {}) {
+export async function listServiceCallFormOptions(
+  input: { operatingMonthId?: string; locale?: Locale; prismaClient?: ServiceCallPrismaClient } = {}
+) {
   const client = getClient(input.prismaClient);
+  const locale = input.locale ?? defaultLocale;
   const operatingMonths = await client.operatingMonth.findMany({ orderBy: [{ monthKey: "desc" }, { createdAt: "desc" }] });
   const selectedMonth = input.operatingMonthId
     ? operatingMonths.find((month) => month.id === input.operatingMonthId)
@@ -1573,10 +1578,10 @@ export async function listServiceCallFormOptions(input: { operatingMonthId?: str
     rooms: rooms.map((room) => option(room.id, room.displayName)),
     timeSlots: timeSlots.map((slot) => option(slot.value, slot.value)),
     courses: courses.map((course) => option(course.id, `${course.code} ${course.currentPolicy.name}`)),
-    statuses: statuses.map((code) => option(code.code, code.displayName)),
-    discountTypes: discountTypes.map((code) => option(code.code, code.displayName)),
-    paymentMethods: paymentMethods.map((code) => option(code.code, code.displayName)),
-    confirmationCodes: confirmationCodes.map((code) => option(code.code, code.displayName)),
+    statuses: statuses.map((code) => option(code.code, codeLabel(locale, code.codeType, code.code, code.isSystemDefault, code.displayName))),
+    discountTypes: discountTypes.map((code) => option(code.code, codeLabel(locale, code.codeType, code.code, code.isSystemDefault, code.displayName))),
+    paymentMethods: paymentMethods.map((code) => option(code.code, codeLabel(locale, code.codeType, code.code, code.isSystemDefault, code.displayName))),
+    confirmationCodes: confirmationCodes.map((code) => option(code.code, codeLabel(locale, code.codeType, code.code, code.isSystemDefault, code.displayName))),
     therapists: therapists.map((employee) => option(employee.id, `${employee.displayName} (${employee.staffCode})`)),
     earcareEmployees: earcareEmployees.map((employee) => option(employee.id, `${employee.displayName} (${employee.staffCode})`)),
     expenseHandlers: expenseHandlers.map((employee) => option(employee.id, `${employee.displayName} (${employee.staffCode})`))

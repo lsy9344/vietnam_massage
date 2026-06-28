@@ -4,12 +4,14 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { defaultLocale, type Locale } from "@/lib/i18n/config";
+import { createTranslator } from "@/lib/i18n";
 
 const REFRESH_INTERVAL_MS = 15_000;
 const STALE_AFTER_MS = 45_000;
 
-function formatLastUpdated(value: string) {
-  return new Intl.DateTimeFormat("ko-KR", {
+function formatLastUpdated(locale: Locale, value: string) {
+  return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "ko-KR", {
     timeZone: "Asia/Seoul",
     hour: "2-digit",
     minute: "2-digit",
@@ -18,8 +20,17 @@ function formatLastUpdated(value: string) {
   }).format(new Date(value));
 }
 
-export function RoomStatusRefreshController({ lastUpdatedAt, variant = "default" }: { lastUpdatedAt: string; variant?: "default" | "tv" }) {
+export function RoomStatusRefreshController({
+  lastUpdatedAt,
+  variant = "default",
+  locale = defaultLocale
+}: {
+  lastUpdatedAt: string;
+  variant?: "default" | "tv";
+  locale?: Locale;
+}) {
   const router = useRouter();
+  const t = createTranslator(locale);
   const [isPending, startTransition] = useTransition();
   const [now, setNow] = useState(() => Date.now());
   const lastUpdatedMillis = useMemo(() => new Date(lastUpdatedAt).getTime(), [lastUpdatedAt]);
@@ -47,13 +58,13 @@ export function RoomStatusRefreshController({ lastUpdatedAt, variant = "default"
         "flex items-center justify-end gap-3 text-xs text-muted",
         variant === "tv" && "gap-5 text-lg font-semibold text-foreground"
       )}
-      aria-label="실시간 갱신 상태"
+      aria-label={t("roomRefresh.aria")}
     >
       <span className={cn(variant === "tv" && isStale && "text-status-complete-check")}>
-        {isPending ? "갱신 중" : isStale ? "갱신 지연" : "마지막 갱신"}: {formatLastUpdated(lastUpdatedAt)}
+        {isPending ? t("roomRefresh.refreshing") : isStale ? t("roomRefresh.stale") : t("roomRefresh.lastUpdated")}: {formatLastUpdated(locale, lastUpdatedAt)}
       </span>
       <Button className={cn("h-8 px-2 text-xs", variant === "tv" && "h-12 px-5 text-lg font-bold")} onClick={refresh} variant="secondary">
-        새로고침
+        {t("roomRefresh.refresh")}
       </Button>
     </div>
   );

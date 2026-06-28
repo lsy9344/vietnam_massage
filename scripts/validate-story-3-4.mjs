@@ -103,14 +103,19 @@ for (const required of [
   "setInterval",
   "15_000",
   "45_000",
-  "마지막 갱신",
-  "갱신 중",
-  "갱신 지연",
-  "새로고침",
-  "실시간 갱신 상태",
+  "roomRefresh.lastUpdated",
+  "roomRefresh.refreshing",
+  "roomRefresh.stale",
+  "roomRefresh.refresh",
+  "roomRefresh.aria",
   "text-status-complete-check"
 ]) {
   if (!refresh.includes(required)) errors.push(`room-status-refresh-controller.tsx missing ${required}`);
+}
+// i18n 전환: 컴포넌트 한국어 문구는 messages/ko.ts로 이동.
+const koMessages = read("src/lib/i18n/messages/ko.ts");
+for (const label of ["마지막 갱신", "갱신 중", "갱신 지연", "새로고침", "실시간 갱신 상태"]) {
+  if (!koMessages.includes(label)) errors.push(`messages/ko.ts missing refresh label: ${label}`);
 }
 if (refresh.includes("@tanstack/react-query")) {
   errors.push("room status refresh must not import @tanstack/react-query");
@@ -132,12 +137,15 @@ for (const required of [
   "status.therapist1",
   "status.therapist2",
   "status.earcare",
-  "결제·확인 필요",
-  "즉시 가능",
+  "roomCard.guidance.completeCheck",
+  "roomCard.guidance.empty",
   "status-attention",
   "data-testid=\"room-status-card\""
 ]) {
   if (!card.includes(required)) errors.push(`room-status-card.tsx missing ${required}`);
+}
+for (const label of ["결제·확인 필요", "즉시 가능"]) {
+  if (!koMessages.includes(label)) errors.push(`messages/ko.ts missing room-card label: ${label}`);
 }
 
 const statusBadge = read("src/components/domain/status-badge.tsx");

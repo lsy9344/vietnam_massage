@@ -130,8 +130,9 @@ for (const required of [
   "glyph: \"◐\"",
   "glyph: \"⚠\"",
   "glyph: \"○\"",
-  "aria-label={`상태: ${state}`}",
-  "{state}",
+  // i18n 전환: aria-label/표시 라벨은 번역 prop을 우선 쓰되 한국어 state로 fallback한다.
+  "`상태: ${state}`",
+  "displayLabel",
   "rounded-full",
   "bg-status-active text-status-active-foreground",
   "bg-status-reserved text-status-reserved-foreground",
@@ -157,14 +158,19 @@ for (const required of [
   "status.displayStatus === \"빈방\"",
   "status-attention border-status-complete-check",
   "isEmpty && \"border-dashed border-status-empty bg-surface",
-  "결제·확인 필요",
-  "즉시 가능",
+  "roomCard.guidance.completeCheck",
+  "roomCard.guidance.empty",
   "text-[40px]",
   "text-[28px]",
   "text-[22px]",
   "data-testid=\"room-status-card\""
 ]) {
   if (!roomCard.includes(required)) errors.push(`room-status-card.tsx missing ${required}`);
+}
+// i18n 전환: 안내 한국어 문구는 messages/ko.ts로 이동.
+const koMessages35 = read("src/lib/i18n/messages/ko.ts");
+for (const label of ["결제·확인 필요", "즉시 가능"]) {
+  if (!koMessages35.includes(label)) errors.push(`messages/ko.ts missing room-card label: ${label}`);
 }
 if (/remainingMinutes\s*<=\s*0[\s\S]{0,160}종료확인/.test(roomCard)) {
   errors.push("room-status-card.tsx must not recalculate 종료확인 from remainingMinutes");

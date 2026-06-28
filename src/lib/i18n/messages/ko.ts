@@ -70,6 +70,32 @@ export const ko = {
   "roomCard.guidance.endingSoon": "곧 종료",
   "roomCard.guidance.empty": "즉시 가능",
 
+  // 객실 카드 필드 라벨
+  "roomCard.field.course": "코스",
+  "roomCard.field.start": "시작",
+  "roomCard.field.remaining": "남은분",
+  "roomCard.field.expectedEnd": "종료예정",
+  "roomCard.field.assignee": "담당자",
+  "roomCard.minutes": "{value}분",
+
+  // 실시간 갱신 컨트롤러
+  "roomRefresh.aria": "실시간 갱신 상태",
+  "roomRefresh.refreshing": "갱신 중",
+  "roomRefresh.stale": "갱신 지연",
+  "roomRefresh.lastUpdated": "마지막 갱신",
+  "roomRefresh.refresh": "새로고침",
+
+  // ERP empty state (디자인 데모용)
+  "emptyState.dataWaiting": "데이터 연결 대기",
+  "emptyState.statusToken": "상태 토큰",
+  "emptyState.statusRuleTitle": "객실/콜 상태 표시 규칙",
+  "emptyState.statusBadgeTokensAria": "상태 배지 토큰",
+  "emptyState.connectionAreaAria": "연결 대기 영역",
+  "emptyState.connectionStatus": "데이터 연결 상태",
+  "emptyState.followUpTitle": "후속 기능 연결 대기",
+  "emptyState.followUpDescription": "실제 원장, 객실, 정산 데이터는 연결 대기 중이다.",
+  "emptyState.loadingExampleAria": "로딩 상태 예시",
+
   // 운영월 상태 (OperatingMonth.status 한국어 key → 라벨)
   "operatingMonthStatus.작성중": "작성중",
   "operatingMonthStatus.검토중": "검토중",

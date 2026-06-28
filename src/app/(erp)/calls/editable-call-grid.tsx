@@ -617,7 +617,7 @@ function AddRowForm({
               <td className="border-b border-border px-2 py-2">
                 <SelectCell
                   columnId="status"
-                  defaultValue="예약"
+                  defaultValue="RESERVED"
                   disabled={disabled}
                   label="상태"
                   name="status"

@@ -71,6 +71,32 @@ export const vi: Messages = {
   "roomCard.guidance.endingSoon": "Sắp kết thúc",
   "roomCard.guidance.empty": "Có thể vào ngay",
 
+  // 객실 카드 필드 라벨
+  "roomCard.field.course": "Gói dịch vụ",
+  "roomCard.field.start": "Bắt đầu",
+  "roomCard.field.remaining": "Số phút còn lại",
+  "roomCard.field.expectedEnd": "Dự kiến kết thúc",
+  "roomCard.field.assignee": "Người phụ trách",
+  "roomCard.minutes": "{value} phút",
+
+  // 실시간 갱신 컨트롤러
+  "roomRefresh.aria": "Trạng thái cập nhật thời gian thực",
+  "roomRefresh.refreshing": "Đang cập nhật",
+  "roomRefresh.stale": "Cập nhật trễ",
+  "roomRefresh.lastUpdated": "Cập nhật gần nhất",
+  "roomRefresh.refresh": "Làm mới",
+
+  // ERP empty state (디자인 데모용)
+  "emptyState.dataWaiting": "Chờ kết nối dữ liệu",
+  "emptyState.statusToken": "Token trạng thái",
+  "emptyState.statusRuleTitle": "Quy tắc hiển thị trạng thái phòng/cuộc gọi",
+  "emptyState.statusBadgeTokensAria": "Token huy hiệu trạng thái",
+  "emptyState.connectionAreaAria": "Khu vực chờ kết nối",
+  "emptyState.connectionStatus": "Trạng thái kết nối dữ liệu",
+  "emptyState.followUpTitle": "Chờ kết nối chức năng tiếp theo",
+  "emptyState.followUpDescription": "Dữ liệu sổ, phòng và đối soát thực tế đang chờ kết nối.",
+  "emptyState.loadingExampleAria": "Ví dụ trạng thái tải",
+
   // 운영월 상태
   "operatingMonthStatus.작성중": "Đang soạn",
   "operatingMonthStatus.검토중": "Đang xem xét",

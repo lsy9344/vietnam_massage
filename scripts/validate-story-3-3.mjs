@@ -77,6 +77,8 @@ for (const required of ["Skeleton", "객실 상태 로딩", "Array.from({ length
   if (!loading.includes(required)) errors.push(`rooms/loading.tsx missing ${required}`);
 }
 
+// i18n 전환: 컴포넌트 한국어 문구는 messages/ko.ts로 이동, 컴포넌트는 t() key로 참조.
+const koMessages = read("src/lib/i18n/messages/ko.ts");
 const refresh = read("src/components/domain/room-status-refresh-controller.tsx");
 for (const required of [
   "useRouter",
@@ -84,13 +86,16 @@ for (const required of [
   "setInterval",
   "15_000",
   "45_000",
-  "마지막 갱신",
-  "갱신 중",
-  "갱신 지연",
-  "새로고침",
-  "실시간 갱신 상태"
+  "roomRefresh.lastUpdated",
+  "roomRefresh.refreshing",
+  "roomRefresh.stale",
+  "roomRefresh.refresh",
+  "roomRefresh.aria"
 ]) {
   if (!refresh.includes(required)) errors.push(`room-status-refresh-controller.tsx missing ${required}`);
+}
+for (const label of ["마지막 갱신", "갱신 중", "갱신 지연", "새로고침", "실시간 갱신 상태"]) {
+  if (!koMessages.includes(label)) errors.push(`messages/ko.ts missing refresh label: ${label}`);
 }
 if (refresh.includes("@tanstack/react-query")) {
   errors.push("room status refresh must not import @tanstack/react-query");
@@ -116,12 +121,13 @@ for (const required of [
   "status.therapist1",
   "status.therapist2",
   "status.earcare",
-  "즉시 가능",
+  "roomCard.guidance.empty",
   "status-attention",
   "data-testid=\"room-status-card\""
 ]) {
   if (!card.includes(required)) errors.push(`room-status-card.tsx missing ${required}`);
 }
+if (!koMessages.includes("즉시 가능")) errors.push("messages/ko.ts missing room-card label: 즉시 가능");
 
 const guidance = read("src/modules/rooms/room-status-service.ts");
 for (const required of ["ROOM_STATUS_GUIDANCE_TEXT", "예약", "사용중", "청소중", "종료확인", "빈방"]) {
