@@ -53,6 +53,23 @@ async function seed() {
       status: "작성중"
     }
   });
+  // 운영팀(lead) 직원 1명을 둬서 ops-monthly preview가 산출근거 row를 만들게 한다.
+  // 해당 월에 월 인센 정책이 없으므로 basis는 "월 인센 지급 조건 미충족"(번역 대상)이 된다.
+  await (prisma as any).employee.upsert({
+    where: { staffCode: "E2E-I18N-OPS-LEAD" },
+    update: { displayName: "i18n ops lead", employeeGroup: "OPERATIONS", position: "팀장", isActive: true },
+    create: {
+      staffCode: "E2E-I18N-OPS-LEAD",
+      displayName: "i18n ops lead",
+      employeeGroup: "OPERATIONS",
+      position: "팀장",
+      shiftType: "전체",
+      baseSalary: 0,
+      employmentStatus: "재직",
+      sortOrder: 7996,
+      isActive: true
+    }
+  });
   return { monthId: month.id, serviceDate: `${MONTH_KEY}-10` };
 }
 
@@ -117,5 +134,17 @@ test.describe("i18n 업무 화면 베트남어(vi)", () => {
     // 조회 컨트롤 vi.
     await expect(page.getByLabel("Tháng vận hành")).toBeVisible();
     await expect(page.getByRole("button", { name: "Tra cứu" })).toBeVisible();
+  });
+
+  test("운영팀 월정산의 데이터 row 산출근거가 베트남어로 보인다", async ({ page }) => {
+    await loginVi(page);
+    await page.goto(`/settlements/operations/monthly?operatingMonthId=${seeded.monthId}`);
+    await expect(page.locator("html")).toHaveAttribute("lang", "vi");
+    // 운영팀 직원 row의 산출근거가 vi로 번역된다(서비스 한국어 "월 인센 지급 조건 미충족" → vi).
+    await expect(page.getByText("Chưa đạt điều kiện chi thưởng tháng").first()).toBeVisible();
+    // 팀 역할 라벨도 vi.
+    await expect(page.getByText("Trưởng nhóm").first()).toBeVisible();
+    // 한국어 산출근거가 row에 남아 있지 않다.
+    await expect(page.getByText("월 인센 지급 조건 미충족")).toHaveCount(0);
   });
 });
