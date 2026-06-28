@@ -20,6 +20,17 @@ export const ko = {
   // 언어 전환
   "locale.switch.aria": "화면 언어 전환",
 
+  // 공통 운영월/조회 컨트롤 (여러 화면 공유)
+  "common.operatingMonth": "운영월",
+  "common.queryDate": "조회날짜",
+  "common.query": "조회",
+  "common.operatingMonthStatusPrefix": "운영월 상태",
+  "common.dateRange": "날짜 범위",
+  "common.createOperatingMonthFirst": "운영월을 먼저 생성해 주세요",
+  "common.goToOperatingMonths": "운영월 관리로 이동",
+  "common.roomStatusAria": "객실 상태",
+  "common.monthOption": "{monthKey} ({status})",
+
   // 사이드바 그룹
   "nav.group.operations": "운영 현황",
   "nav.group.calls": "콜 원장",
@@ -100,5 +111,39 @@ export const ko = {
   "operatingMonthStatus.작성중": "작성중",
   "operatingMonthStatus.검토중": "검토중",
   "operatingMonthStatus.마감확정": "마감확정",
-  "operatingMonthStatus.잠금": "잠금"
+  "operatingMonthStatus.잠금": "잠금",
+
+  // /live /rooms /tv 화면
+  // 첫화면(실시간 현황)
+  "live.description": "객실 상태와 오늘 콜/매출 요약을 조회한다.",
+  "live.empty.description": "첫 화면은 운영월 날짜 범위 안의 객실 상태와 콜 요약을 조회한다.",
+  "live.summary.aria": "오늘 상태 요약",
+  "live.summary.reservationCount": "예약건수",
+  "live.summary.inUse": "사용중",
+  "live.summary.cleaning": "청소중",
+  "live.summary.completed": "방문완료",
+  "live.summary.noShow": "노쇼",
+  "live.summary.canceled": "취소",
+  "live.payment.aria": "결제수단별 집계",
+  "live.kpi.aria": "오늘 KPI",
+  "live.kpi.paymentTotal": "결제합계",
+  "live.kpi.netSales": "순매출",
+  "live.kpi.courseCompleted": "코스별 방문완료",
+  "live.warning.excluded": "정책 누락 {policy}건, 수당 누락 {rate}건, 마사지사2 필요 {second}건은 금액/코스별 집계에서 제외됐다.",
+  "live.countSuffix": "건",
+  "live.vndSuffix": "VND",
+  "live.loading.roomsAria": "객실 상태 로딩",
+  "live.loading.summaryAria": "오늘 요약 로딩",
+
+  // 객실 현황
+  "rooms.description.short": "객실별 상태와 웨이터 안내 문구를 읽기 전용으로 조회한다.",
+  "rooms.description.full": "객실별 상태, 남은 시간, 종료확인, 웨이터 안내 문구를 읽기 전용으로 조회한다.",
+  "rooms.empty.description": "객실 현황은 운영월 날짜 범위 안의 객실 상태를 조회한다.",
+  "rooms.loading.roomsAria": "객실 상태 로딩",
+
+  // TV 현황판
+  "tv.eyebrow": "운영 현황",
+  "tv.eyebrowFull": "운영 현황 · fullscreen · 읽기 전용",
+  "tv.empty.description": "운영월을 먼저 생성해 주세요. TV 현황판은 fullscreen 읽기 전용 화면입니다.",
+  "tv.loading.boardAria": "TV 현황판 로딩"
 } as const;

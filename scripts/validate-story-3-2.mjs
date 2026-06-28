@@ -43,6 +43,7 @@ if (!packageJson.scripts?.lint?.includes("validate-story-3-2.mjs")) {
   errors.push("package.json lint script must include scripts/validate-story-3-2.mjs");
 }
 
+const koMessagesLive = read("src/lib/i18n/messages/ko.ts");
 const livePage = read("src/app/(erp)/live/page.tsx");
 for (const required of [
   "requireRouteAccess(\"/live\")",
@@ -54,25 +55,32 @@ for (const required of [
   "getDailyCallLedgerSummary",
   "RoomStatusCard",
   "RoomStatusRefreshController",
-  "운영월 관리로 이동",
+  // i18n 전환: 한국어 UI 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
+  "common.goToOperatingMonths",
   "grid grid-cols-4",
-  "오늘 상태 요약",
+  "live.summary.aria",
   "summary.inUseCount",
   "summary.cleaningCount",
-  "결제합계",
-  "순매출",
+  "live.kpi.paymentTotal",
+  "live.kpi.netSales",
   "courseSummaries",
   "warningCounts"
 ]) {
   if (!livePage.includes(required)) errors.push(`live/page.tsx missing ${required}`);
+}
+for (const label of ["운영월 관리로 이동", "오늘 상태 요약", "결제합계", "순매출"]) {
+  if (!koMessagesLive.includes(label)) errors.push(`messages/ko.ts missing live label: ${label}`);
 }
 for (const forbidden of ["ErpEmptyState", "EditableCallGrid", "DailyExpensePanel", "autosaveServiceCallRow", "saveBasicServiceCallRow"]) {
   if (livePage.includes(forbidden)) errors.push(`live/page.tsx must stay read-only and not include ${forbidden}`);
 }
 
 const loading = read("src/app/(erp)/live/loading.tsx");
-for (const required of ["Skeleton", "객실 상태 로딩", "오늘 요약 로딩", "Array.from({ length: 11 }", "grid grid-cols-4"]) {
+for (const required of ["Skeleton", "live.loading.roomsAria", "live.loading.summaryAria", "Array.from({ length: 11 }", "grid grid-cols-4"]) {
   if (!loading.includes(required)) errors.push(`live/loading.tsx missing ${required}`);
+}
+for (const label of ["객실 상태 로딩", "오늘 요약 로딩"]) {
+  if (!koMessagesLive.includes(label)) errors.push(`messages/ko.ts missing live loading label: ${label}`);
 }
 
 // i18n 전환: 컴포넌트의 한국어 문구는 messages/ko.ts로 이동했고, 컴포넌트는 t()로 참조한다.

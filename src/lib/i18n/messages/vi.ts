@@ -21,6 +21,17 @@ export const vi: Messages = {
   // 언어 전환
   "locale.switch.aria": "Chuyển ngôn ngữ hiển thị",
 
+  // 공통 운영월/조회 컨트롤 (여러 화면 공유)
+  "common.operatingMonth": "Tháng vận hành",
+  "common.queryDate": "Ngày tra cứu",
+  "common.query": "Tra cứu",
+  "common.operatingMonthStatusPrefix": "Trạng thái tháng vận hành",
+  "common.dateRange": "Khoảng ngày",
+  "common.createOperatingMonthFirst": "Vui lòng tạo tháng vận hành trước",
+  "common.goToOperatingMonths": "Đi tới quản lý tháng vận hành",
+  "common.roomStatusAria": "Tình trạng phòng",
+  "common.monthOption": "{monthKey} ({status})",
+
   // 사이드바 그룹
   "nav.group.operations": "Tình hình vận hành",
   "nav.group.calls": "Sổ cuộc gọi",
@@ -101,5 +112,39 @@ export const vi: Messages = {
   "operatingMonthStatus.작성중": "Đang soạn",
   "operatingMonthStatus.검토중": "Đang xem xét",
   "operatingMonthStatus.마감확정": "Đã chốt",
-  "operatingMonthStatus.잠금": "Đã khóa"
+  "operatingMonthStatus.잠금": "Đã khóa",
+
+  // /live /rooms /tv 화면
+  // 첫화면(실시간 현황)
+  "live.description": "Tra cứu tình trạng phòng và tóm tắt cuộc gọi/doanh thu hôm nay.",
+  "live.empty.description": "Màn hình đầu tra cứu tình trạng phòng và tóm tắt cuộc gọi trong khoảng ngày của tháng vận hành.",
+  "live.summary.aria": "Tóm tắt trạng thái hôm nay",
+  "live.summary.reservationCount": "Số lượt đặt trước",
+  "live.summary.inUse": "Đang sử dụng",
+  "live.summary.cleaning": "Đang dọn",
+  "live.summary.completed": "Hoàn tất",
+  "live.summary.noShow": "Không đến",
+  "live.summary.canceled": "Đã hủy",
+  "live.payment.aria": "Tổng hợp theo phương thức thanh toán",
+  "live.kpi.aria": "KPI hôm nay",
+  "live.kpi.paymentTotal": "Tổng thanh toán",
+  "live.kpi.netSales": "Doanh thu thuần",
+  "live.kpi.courseCompleted": "Hoàn tất theo gói dịch vụ",
+  "live.warning.excluded": "Thiếu chính sách {policy} ca, thiếu phụ cấp {rate} ca, cần kỹ thuật viên 2 là {second} ca đã bị loại khỏi tổng hợp số tiền/gói dịch vụ.",
+  "live.countSuffix": "ca",
+  "live.vndSuffix": "VND",
+  "live.loading.roomsAria": "Đang tải tình trạng phòng",
+  "live.loading.summaryAria": "Đang tải tóm tắt hôm nay",
+
+  // 객실 현황
+  "rooms.description.short": "Tra cứu chỉ đọc tình trạng từng phòng và lời hướng dẫn cho phục vụ.",
+  "rooms.description.full": "Tra cứu chỉ đọc tình trạng từng phòng, thời gian còn lại, xác nhận kết thúc và lời hướng dẫn cho phục vụ.",
+  "rooms.empty.description": "Tình trạng phòng tra cứu tình trạng phòng trong khoảng ngày của tháng vận hành.",
+  "rooms.loading.roomsAria": "Đang tải tình trạng phòng",
+
+  // TV 현황판
+  "tv.eyebrow": "Tình hình vận hành",
+  "tv.eyebrowFull": "Tình hình vận hành · toàn màn hình · chỉ đọc",
+  "tv.empty.description": "Vui lòng tạo tháng vận hành trước. Bảng trạng thái TV là màn hình toàn màn hình chỉ đọc.",
+  "tv.loading.boardAria": "Đang tải bảng trạng thái TV"
 };

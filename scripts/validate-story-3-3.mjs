@@ -40,6 +40,7 @@ if (!packageJson.scripts?.lint?.includes("validate-story-3-3.mjs")) {
   errors.push("package.json lint script must include scripts/validate-story-3-3.mjs");
 }
 
+const koMessagesRooms = read("src/lib/i18n/messages/ko.ts");
 const roomsPage = read("src/app/(erp)/rooms/page.tsx");
 for (const required of [
   "requireRouteAccess(\"/rooms\")",
@@ -50,13 +51,17 @@ for (const required of [
   "listRoomStatuses",
   "RoomStatusCard",
   "RoomStatusRefreshController",
-  "운영월 관리로 이동",
+  // i18n 전환: 한국어 UI 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
+  "common.goToOperatingMonths",
   "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4",
-  "객실 상태",
-  "객실 현황",
-  "읽기 전용"
+  "common.roomStatusAria",
+  "nav.item.rooms",
+  "rooms.description.full"
 ]) {
   if (!roomsPage.includes(required)) errors.push(`rooms/page.tsx missing ${required}`);
+}
+for (const label of ["운영월 관리로 이동", "객실 상태", "객실 현황", "읽기 전용"]) {
+  if (!koMessagesRooms.includes(label)) errors.push(`messages/ko.ts missing rooms label: ${label}`);
 }
 for (const forbidden of [
   "ErpEmptyState",
@@ -73,9 +78,10 @@ for (const forbidden of [
 }
 
 const loading = read("src/app/(erp)/rooms/loading.tsx");
-for (const required of ["Skeleton", "객실 상태 로딩", "Array.from({ length: 11 }", "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"]) {
+for (const required of ["Skeleton", "rooms.loading.roomsAria", "Array.from({ length: 11 }", "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"]) {
   if (!loading.includes(required)) errors.push(`rooms/loading.tsx missing ${required}`);
 }
+if (!koMessagesRooms.includes("객실 상태 로딩")) errors.push("messages/ko.ts missing rooms loading label: 객실 상태 로딩");
 
 // i18n 전환: 컴포넌트 한국어 문구는 messages/ko.ts로 이동, 컴포넌트는 t() key로 참조.
 const koMessages = read("src/lib/i18n/messages/ko.ts");

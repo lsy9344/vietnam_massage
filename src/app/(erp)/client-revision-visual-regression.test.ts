@@ -84,13 +84,23 @@ describe("client revision visual regression guards", () => {
       ["src/app/(erp)/dashboard/today/page.tsx", "오늘 KPI 대시보드"],
       ["src/app/(erp)/dashboard/monthly/page.tsx", "월간 KPI 대시보드"],
       ["src/app/(erp)/dashboard/reports/page.tsx", "그래프 리포트"],
-      ["src/app/(erp)/live/page.tsx", "첫화면 실시간 현황"],
-      ["src/app/(erp)/rooms/page.tsx", "객실 현황"],
       ["src/app/(erp)/settlements/page.tsx", "마사지사 일일정산"]
     ] as const) {
       const page = source(path);
       assert.match(page, /<PageHeader/);
       assert.match(page, new RegExp(`title="${title}"`));
+    }
+
+    // i18n 전환된 /live·/rooms는 제목을 t() key로 참조하고, 한국어 원문은 messages/ko.ts에 보존한다.
+    const koMessages = source("src/lib/i18n/messages/ko.ts");
+    for (const [path, titleKey, koTitle] of [
+      ["src/app/(erp)/live/page.tsx", "nav.item.live", "첫화면 실시간 현황"],
+      ["src/app/(erp)/rooms/page.tsx", "nav.item.rooms", "객실 현황"]
+    ] as const) {
+      const page = source(path);
+      assert.match(page, /<PageHeader/);
+      assert.match(page, new RegExp(`title=\\{t\\("${titleKey}"\\)\\}`));
+      assert.ok(koMessages.includes(koTitle), `messages/ko.ts must keep ${koTitle}`);
     }
   });
 
