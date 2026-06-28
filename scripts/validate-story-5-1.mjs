@@ -81,39 +81,47 @@ for (const forbidden of [
   if (service.includes(forbidden)) errors.push(`monthly-closing-preview-service.ts must remain read-only/no snapshot/no persistence: ${forbidden}`);
 }
 
+// ko/vi i18n migration: closing UI strings moved to t() keys in the ko catalog.
+const koCatalog = read("src/lib/i18n/messages/ko.ts");
+function requireMoved(contents, fileLabel, key, korean) {
+  if (!contents.includes(key)) errors.push(`${fileLabel} missing t() key ${key}`);
+  if (!koCatalog.includes(korean)) errors.push(`ko.ts missing ${korean}`);
+}
+
 const page = read("src/app/(erp)/closing/page.tsx");
 for (const required of [
   "requireRouteAccess(\"/closing\")",
   "selectedOperatingMonthFor",
   "listOperatingMonths",
   "listMonthlyClosingPreview",
-  "월마감 미리보기",
-  "운영월",
-  "마사지사 지급 합계",
-  "운영팀 일일인센",
-  "운영팀 월인센",
-  "귀케어 지급 합계",
-  "전체 지급 합계",
-  "마사지사",
-  "운영팀",
-  "귀케어",
-  "산출 근거/warning",
-  "미확정 미리보기",
-  "현재 기준 미리보기",
-  "확정값은 월마감 스냅샷 기준",
-  "role=\"alert\"",
-  "재조회"
+  "role=\"alert\""
 ]) {
   if (!page.includes(required)) errors.push(`closing page.tsx missing ${required}`);
 }
+requireMoved(page, "closing page.tsx", "closing.title", "월마감 미리보기");
+requireMoved(page, "closing page.tsx", "common.operatingMonth", "운영월");
+requireMoved(page, "closing page.tsx", "closing.summary.therapistPayout", "마사지사 지급 합계");
+requireMoved(page, "closing page.tsx", "closing.summary.opsDaily", "운영팀 일일인센");
+requireMoved(page, "closing page.tsx", "closing.summary.opsMonthly", "운영팀 월인센");
+requireMoved(page, "closing page.tsx", "closing.summary.earcarePayout", "귀케어 지급 합계");
+requireMoved(page, "closing page.tsx", "closing.summary.grandPayout", "전체 지급 합계");
+requireMoved(page, "closing page.tsx", "closing.therapist.title", "마사지사");
+requireMoved(page, "closing page.tsx", "closing.operations.title", "운영팀");
+requireMoved(page, "closing page.tsx", "closing.earcare.title", "귀케어");
+requireMoved(page, "closing page.tsx", "closing.evidence.title", "산출 근거/warning");
+requireMoved(page, "closing page.tsx", "closing.preview.draftDescription", "미확정 미리보기");
+requireMoved(page, "closing page.tsx", "closing.preview.current", "현재 기준 미리보기");
+requireMoved(page, "closing page.tsx", "closing.preview.closedDescription", "확정값은 월마감 스냅샷 기준");
+requireMoved(page, "closing page.tsx", "settlements.requery", "재조회");
 for (const forbidden of ["use server", "action=", "recordAuditEvent", "revalidatePath", "MonthlyClose", "createMonthlyClose"]) {
   if (page.includes(forbidden)) errors.push(`closing page.tsx must not add write/snapshot behavior: ${forbidden}`);
 }
 
 const loading = read("src/app/(erp)/closing/loading.tsx");
-for (const required of ["Skeleton", "월마감", "Array.from({ length: 5 })"]) {
+for (const required of ["Skeleton", "Array.from({ length: 5 })"]) {
   if (!loading.includes(required)) errors.push(`closing loading.tsx missing ${required}`);
 }
+requireMoved(loading, "closing loading.tsx", "closing.loading.aria", "월마감");
 
 const unitTest = read("src/modules/closing/monthly-closing-preview-service.test.ts");
 for (const required of [

@@ -55,6 +55,13 @@ for (const required of [
   if (!alertDialog.includes(required)) errors.push(`alert-dialog.tsx missing ${required}`);
 }
 
+// ko/vi i18n migration: closing UI strings moved to t() keys in the ko catalog.
+const koCatalog = read("src/lib/i18n/messages/ko.ts");
+function requireMoved(contents, fileLabel, key, korean) {
+  if (!contents.includes(key)) errors.push(`${fileLabel} missing t() key ${key}`);
+  if (!koCatalog.includes(korean)) errors.push(`ko.ts missing ${korean}`);
+}
+
 const panel = read("src/app/(erp)/closing/closing-action-panel.tsx");
 for (const required of [
   "AlertDialog",
@@ -67,9 +74,6 @@ for (const required of [
   "confirmSummary",
   "type=\"button\"",
   "requestSubmit()",
-  "aria-label=\"닫기\"",
-  "확정 시 스냅샷이 고정되어 이후 설정 변경으로 재계산되지 않습니다.",
-  "지급 스냅샷 확정",
   "role=\"alert\"",
   "confirmCancelRef",
   "onOpenAutoFocus",
@@ -77,6 +81,9 @@ for (const required of [
 ]) {
   if (!panel.includes(required)) errors.push(`closing-action-panel.tsx missing ${required}`);
 }
+requireMoved(panel, "closing-action-panel.tsx", "closing.action.close", "닫기");
+requireMoved(panel, "closing-action-panel.tsx", "closing.confirmDialog.description", "확정 시 스냅샷이 고정되어 이후 설정 변경으로 재계산되지 않습니다.");
+requireMoved(panel, "closing-action-panel.tsx", "closing.action.confirmSnapshot", "지급 스냅샷 확정");
 if (panel.includes("<form action={confirmAction} className=\"grid gap-1\">")) {
   errors.push("ClosingActionPanel must not keep the old direct confirm submit form");
 }

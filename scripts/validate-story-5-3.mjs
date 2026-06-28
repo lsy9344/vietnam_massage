@@ -109,6 +109,13 @@ for (const forbidden of ["requirePermission(\"employee:write\")", "recordAuditEv
   if (actions.includes(forbidden)) errors.push(`closing actions.ts must not contain ${forbidden}`);
 }
 
+// ko/vi i18n migration: closing UI strings moved to t() keys in the ko catalog.
+const koCatalog = read("src/lib/i18n/messages/ko.ts");
+function requireMoved(contents, fileLabel, key, korean) {
+  if (!contents.includes(key)) errors.push(`${fileLabel} missing t() key ${key}`);
+  if (!koCatalog.includes(korean)) errors.push(`ko.ts missing ${korean}`);
+}
+
 const page = read("src/app/(erp)/closing/page.tsx");
 for (const required of [
   "requireRouteAccess(\"/closing\")",
@@ -116,26 +123,22 @@ for (const required of [
   "ClosingActionPanel",
   "getMonthlyClosingSnapshot",
   "SnapshotSummary",
-  "확정 스냅샷",
-  "현재 기준 미리보기",
   "listMonthlyClosingPreview"
 ]) {
   if (!page.includes(required)) errors.push(`closing page.tsx missing ${required}`);
 }
+requireMoved(page, "closing page.tsx", "closing.snapshot.confirmed", "확정 스냅샷");
+requireMoved(page, "closing page.tsx", "closing.preview.current", "현재 기준 미리보기");
 for (const forbidden of ["recordAuditEvent", "monthlyClosing.create", "updateMany({", "monthly_close.confirmed"]) {
   if (page.includes(forbidden)) errors.push(`closing page.tsx must not perform domain write/audit work: ${forbidden}`);
 }
 
 const actionPanel = read("src/app/(erp)/closing/closing-action-panel.tsx");
-for (const required of [
-  "useActionState",
-  "검토 시작",
-  "마감 확정",
-  "잠금은 먼저 마감확정이 필요합니다.",
-  "월마감 처리 권한이 없습니다."
-]) {
-  if (!actionPanel.includes(required)) errors.push(`closing-action-panel.tsx missing ${required}`);
-}
+if (!actionPanel.includes("useActionState")) errors.push("closing-action-panel.tsx missing useActionState");
+requireMoved(actionPanel, "closing-action-panel.tsx", "closing.action.startReview", "검토 시작");
+requireMoved(actionPanel, "closing-action-panel.tsx", "closing.action.confirm", "마감 확정");
+requireMoved(actionPanel, "closing-action-panel.tsx", "closing.disabled.needConfirmFirst", "잠금은 먼저 마감확정이 필요합니다.");
+requireMoved(actionPanel, "closing-action-panel.tsx", "closing.disabled.noPermission", "월마감 처리 권한이 없습니다.");
 
 const unitTest = read("src/modules/closing/monthly-closing-service.test.ts");
 for (const required of [

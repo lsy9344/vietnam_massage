@@ -72,28 +72,35 @@ for (const forbidden of ["recordAuditEvent", "payout:write"]) {
   if (service.includes(forbidden)) errors.push(`therapist-daily-settlement-service.ts must remain read-only and not include ${forbidden}`);
 }
 
+// ko/vi i18n migration: settlement UI strings moved to t() keys in the ko catalog.
+const koCatalog = read("src/lib/i18n/messages/ko.ts");
+function requireMoved(contents, fileLabel, key, korean) {
+  if (!contents.includes(key)) errors.push(`${fileLabel} missing t() key ${key}`);
+  if (!koCatalog.includes(korean)) errors.push(`ko.ts missing ${korean}`);
+}
+
 const page = read("src/app/(erp)/settlements/page.tsx");
 for (const required of [
   "requireRouteAccess(\"/settlements\")",
   "listTherapistDailySettlements",
   "selectedOperatingMonthFor",
   "clampDateToOperatingMonth",
-  "운영월 관리로 이동",
-  "마사지사 일일정산",
-  "이 날짜의 방문완료 콜이 없습니다",
-  "정산 조회 실패",
-  "재조회",
-  "콜별 산출 근거",
-  "담당 역할",
-  "정책 상태",
-  "정책 없음",
-  "0원 정책",
-  "정책 적용",
-  "courseCodes.map",
-  "수량/금액"
+  "courseCodes.map"
 ]) {
   if (!page.includes(required)) errors.push(`settlements/page.tsx missing ${required}`);
 }
+requireMoved(page, "settlements/page.tsx", "common.goToOperatingMonths", "운영월 관리로 이동");
+requireMoved(page, "settlements/page.tsx", "settlements.therapist.title", "마사지사 일일정산");
+requireMoved(page, "settlements/page.tsx", "settlements.therapist.empty.title", "이 날짜의 방문완료 콜이 없습니다");
+requireMoved(page, "settlements/page.tsx", "settlements.therapist.error.title", "정산 조회 실패");
+requireMoved(page, "settlements/page.tsx", "settlements.requery", "재조회");
+requireMoved(page, "settlements/page.tsx", "settlements.therapist.evidence.title", "콜별 산출 근거");
+requireMoved(page, "settlements/page.tsx", "settlements.therapist.evidence.role", "담당 역할");
+requireMoved(page, "settlements/page.tsx", "settlements.therapist.column.policyStatus", "정책 상태");
+requireMoved(page, "settlements/page.tsx", "settlements.therapist.rateStatus.missingPolicy", "정책 없음");
+requireMoved(page, "settlements/page.tsx", "settlements.therapist.rateStatus.zeroPolicy", "0원 정책");
+requireMoved(page, "settlements/page.tsx", "settlements.therapist.rateStatus.applied", "정책 적용");
+requireMoved(page, "settlements/page.tsx", "settlements.therapist.column.courseQtyAmount", "수량/금액");
 for (const forbidden of ["use server", "revalidatePath", "requirePermission(\"payout:write\")", "Server Action"]) {
   if (page.includes(forbidden)) errors.push(`settlements/page.tsx must stay read-only and not include ${forbidden}`);
 }

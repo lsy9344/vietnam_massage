@@ -130,6 +130,13 @@ for (const forbidden of ["recordAuditEvent", "opsDailyIncentivePayout", "payoutR
   if (incentiveService.includes(forbidden)) errors.push(`ops-daily-incentive-service.ts must not implement out-of-scope ${forbidden}`);
 }
 
+// ko/vi i18n migration: settlement UI strings moved to t() keys in the ko catalog.
+const koCatalog = read("src/lib/i18n/messages/ko.ts");
+function requireMoved(contents, fileLabel, key, korean) {
+  if (!contents.includes(key)) errors.push(`${fileLabel} missing t() key ${key}`);
+  if (!koCatalog.includes(korean)) errors.push(`ko.ts missing ${korean}`);
+}
+
 const page = read("src/app/(erp)/settlements/operations/page.tsx");
 for (const required of [
   "requireRouteAccess(\"/settlements/operations\")",
@@ -137,21 +144,21 @@ for (const required of [
   "clampDateToOperatingMonth",
   "listOpsAttendanceForDate",
   "listOpsDailyIncentives",
-  "운영팀 근무/일일인센",
   "OpsIncentiveSummary",
-  "일 총콜",
-  "적용 threshold",
-  "정상 지급 대상",
-  "지급 합계",
-  "운영팀 직원별 일일 인센",
-  "일 총콜 산출 근거",
-  "OpsAttendanceTable",
-  "잠긴 운영월입니다",
-  "정책 없음",
-  "30콜 미만"
+  "OpsAttendanceTable"
 ]) {
   if (!page.includes(required)) errors.push(`operations page.tsx missing ${required}`);
 }
+requireMoved(page, "operations page.tsx", "settlements.ops.title", "운영팀 근무/일일인센");
+requireMoved(page, "operations page.tsx", "settlements.ops.summary.dailyTotalCalls", "일 총콜");
+requireMoved(page, "operations page.tsx", "settlements.ops.summary.appliedThreshold", "적용 threshold");
+requireMoved(page, "operations page.tsx", "settlements.ops.summary.eligible", "정상 지급 대상");
+requireMoved(page, "operations page.tsx", "settlements.ops.summary.distributed", "지급 합계");
+requireMoved(page, "operations page.tsx", "settlements.ops.table.title", "운영팀 직원별 일일 인센");
+requireMoved(page, "operations page.tsx", "settlements.ops.callEvidence.title", "일 총콜 산출 근거");
+requireMoved(page, "operations page.tsx", "settlements.locked.title", "잠긴 운영월입니다");
+requireMoved(page, "operations page.tsx", "settlements.ops.threshold.missingPolicy", "정책 없음");
+requireMoved(page, "operations page.tsx", "settlements.ops.threshold.belowThreshold", "30콜 미만");
 for (const forbidden of ["saveOpsPayout", "payoutAmount: {", "closing", "snapshot", "monthly preview"]) {
   if (page.includes(forbidden)) errors.push(`operations page.tsx must not implement out-of-scope ${forbidden}`);
 }
@@ -168,17 +175,17 @@ const table = read("src/app/(erp)/settlements/operations/ops-attendance-table.ts
 for (const required of [
   "useActionState",
   "useRouter",
-  "router.refresh()",
-  "저장중",
-  "저장됨",
-  "재시도",
-  "저장 실패",
-  "지급 대상",
-  "제외:",
-  "disabled ? \"잠금\""
+  "router.refresh()"
 ]) {
   if (!table.includes(required)) errors.push(`ops-attendance-table.tsx missing existing save UX ${required}`);
 }
+requireMoved(table, "ops-attendance-table.tsx", "settlements.therapist.attendance.action.saving", "저장중");
+requireMoved(table, "ops-attendance-table.tsx", "settlements.therapist.attendance.status.saved", "저장됨");
+requireMoved(table, "ops-attendance-table.tsx", "settlements.therapist.attendance.action.retry", "재시도");
+requireMoved(table, "ops-attendance-table.tsx", "settlements.therapist.attendance.saveFailed", "저장 실패");
+requireMoved(table, "ops-attendance-table.tsx", "settlements.ops.payoutEligible", "지급 대상");
+requireMoved(table, "ops-attendance-table.tsx", "settlements.ops.excluded", "제외:");
+requireMoved(table, "ops-attendance-table.tsx", "settlements.therapist.attendance.status.locked", "잠금");
 
 const attendanceTest = read("src/modules/settlements/ops-attendance-service.test.ts");
 for (const required of [

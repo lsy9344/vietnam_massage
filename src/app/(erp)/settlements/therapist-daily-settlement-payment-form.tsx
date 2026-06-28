@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useId } from "react";
+import { useT } from "@/lib/i18n/client";
 import {
   setTherapistDailySettlementPaymentAction,
   type TherapistDailySettlementPaymentActionState
@@ -19,12 +20,13 @@ export function TherapistDailySettlementPaymentForm({
   employeeId,
   isPaid
 }: TherapistDailySettlementPaymentFormProps) {
+  const t = useT();
   const errorId = useId();
   const [state, formAction, pending] = useActionState<TherapistDailySettlementPaymentActionState, FormData>(
     setTherapistDailySettlementPaymentAction,
     null
   );
-  const formError = state && !state.ok ? state.formError ?? "지급완료 상태 저장 중 오류가 발생했습니다." : null;
+  const formError = state && !state.ok ? state.formError ?? t("settlements.therapist.payment.error") : null;
 
   return (
     <form action={formAction} className="mt-2">
@@ -38,7 +40,7 @@ export function TherapistDailySettlementPaymentForm({
         disabled={pending}
         type="submit"
       >
-        {pending ? "처리중" : isPaid ? "완료 취소" : "지급완료"}
+        {pending ? t("settlements.therapist.payment.processing") : isPaid ? t("settlements.therapist.payment.cancel") : t("settlements.therapist.payment.markPaid")}
       </button>
       {formError ? (
         <p id={errorId} role="alert" className="mt-1 text-xs text-danger">

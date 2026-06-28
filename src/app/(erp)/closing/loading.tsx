@@ -1,8 +1,10 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { getServerTranslator } from "@/lib/i18n/server";
 
-export default function ClosingLoading() {
+export default async function ClosingLoading() {
+  const { t } = await getServerTranslator();
   return (
-    <main aria-label="월마감 미리보기 로딩" className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
+    <main aria-label={t("closing.loading.aria")} className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
       <div className="mb-5 flex items-end justify-between gap-6">
         <div>
           <Skeleton className="mb-2 h-3 w-16" />

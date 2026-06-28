@@ -2,6 +2,8 @@
 
 import { useActionState, useEffect, useId } from "react";
 import { useRouter } from "next/navigation";
+import { useT } from "@/lib/i18n/client";
+import type { Translator } from "@/lib/i18n";
 import { saveOpsAttendanceAction, type OpsAttendanceActionState } from "@/app/(erp)/settlements/operations/actions";
 import type { OpsAttendanceDto, OpsAttendanceStatusOptionDto } from "@/modules/settlements/ops-attendance-service";
 
@@ -10,14 +12,14 @@ function inlineError(state: OpsAttendanceActionState, field?: string) {
   return field ? state.fieldErrors?.[field]?.[0] ?? null : state.formError ?? null;
 }
 
-function EligibilityBadge({ row }: { row: OpsAttendanceDto }) {
+function EligibilityBadge({ row, t }: { row: OpsAttendanceDto; t: Translator }) {
   if (row.isPayoutEligible) {
-    return <span className="inline-flex border border-success bg-success/10 px-2 py-1 text-xs font-semibold text-success">지급 대상</span>;
+    return <span className="inline-flex border border-success bg-success/10 px-2 py-1 text-xs font-semibold text-success">{t("settlements.ops.payoutEligible")}</span>;
   }
 
   return (
     <span className="inline-flex border border-border bg-readonly px-2 py-1 text-xs font-semibold text-muted">
-      제외: {row.exclusionReason ?? row.statusDisplayName}
+      {t("settlements.ops.excluded", { reason: row.exclusionReason ?? row.statusDisplayName })}
     </span>
   );
 }
@@ -35,6 +37,7 @@ function OpsAttendanceRowForm({
   row: OpsAttendanceDto;
   statusOptions: OpsAttendanceStatusOptionDto[];
 }) {
+  const t = useT();
   const [state, formAction, pending] = useActionState<OpsAttendanceActionState, FormData>(saveOpsAttendanceAction, null);
   const router = useRouter();
   const formId = useId();
@@ -62,7 +65,7 @@ function OpsAttendanceRowForm({
       <td className="px-3 py-2">{row.position}</td>
       <td className="px-3 py-2">
         <label className="grid max-w-48 gap-1">
-          <span className="sr-only">{row.displayName} 근무상태</span>
+          <span className="sr-only">{t("settlements.ops.attendance.workStatusAria", { name: row.displayName })}</span>
           <select
             aria-invalid={statusError ? "true" : undefined}
             className="h-9 border border-border bg-background px-2 text-sm text-foreground outline-none disabled:bg-readonly disabled:text-muted focus:border-brand"
@@ -85,7 +88,7 @@ function OpsAttendanceRowForm({
         </label>
       </td>
       <td className="px-3 py-2">
-        <EligibilityBadge row={savedRow ?? row} />
+        <EligibilityBadge row={savedRow ?? row} t={t} />
       </td>
       <td className="px-3 py-2">
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -95,15 +98,15 @@ function OpsAttendanceRowForm({
             form={formId}
             type="submit"
           >
-            {pending ? "저장중" : formError ? "재시도" : "저장"}
+            {pending ? t("settlements.therapist.attendance.action.saving") : formError ? t("settlements.therapist.attendance.action.retry") : t("settlements.therapist.attendance.action.save")}
           </button>
           <span className="min-w-16 text-right text-xs text-muted" aria-live="polite">
-            {pending ? "저장중" : savedRow ? "저장됨" : disabled ? "잠금" : "대기"}
+            {pending ? t("settlements.therapist.attendance.action.saving") : savedRow ? t("settlements.therapist.attendance.status.saved") : disabled ? t("settlements.therapist.attendance.status.locked") : t("settlements.therapist.attendance.status.waiting")}
           </span>
         </div>
         {formError ? (
           <div className="mt-1 text-right text-xs text-danger" role="alert">
-            저장 실패: {formError}
+            {t("settlements.therapist.attendance.saveFailed", { message: formError })}
           </div>
         ) : null}
       </td>
@@ -124,11 +127,12 @@ export function OpsAttendanceTable({
   rows: OpsAttendanceDto[];
   statusOptions: OpsAttendanceStatusOptionDto[];
 }) {
+  const t = useT();
   if (rows.length === 0) {
     return (
       <section className="border border-border bg-surface px-4 py-8">
-        <h2 className="text-base font-semibold text-foreground">활성 운영팀 직원이 없습니다</h2>
-        <p className="mt-2 text-sm text-muted">직원 마스터에서 운영팀 직원을 활성화한 뒤 다시 조회하세요.</p>
+        <h2 className="text-base font-semibold text-foreground">{t("settlements.ops.attendance.empty.title")}</h2>
+        <p className="mt-2 text-sm text-muted">{t("settlements.ops.attendance.empty.description")}</p>
       </section>
     );
   }
@@ -138,11 +142,11 @@ export function OpsAttendanceTable({
       <table className="min-w-[860px] w-full border-collapse text-sm">
         <thead className="bg-readonly text-left text-xs font-semibold uppercase text-muted">
           <tr>
-            <th className="border-b border-border px-3 py-2">운영팀 직원</th>
-            <th className="border-b border-border px-3 py-2">직책</th>
-            <th className="border-b border-border px-3 py-2">근무상태</th>
-            <th className="border-b border-border px-3 py-2">지급 판정</th>
-            <th className="border-b border-border px-3 py-2 text-right">저장 상태</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.ops.column.opsStaff")}</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.ops.column.position")}</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.ops.column.workStatus")}</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.ops.column.payoutDecision")}</th>
+            <th className="border-b border-border px-3 py-2 text-right">{t("settlements.ops.column.saveStatus")}</th>
           </tr>
         </thead>
         <tbody>

@@ -1,12 +1,14 @@
 import { PageHeader } from "@/components/domain/page-header";
+import { getServerTranslator } from "@/lib/i18n/server";
 
-export default function EarcareAttendanceLoading() {
+export default async function EarcareAttendanceLoading() {
+  const { t } = await getServerTranslator();
   return (
     <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <PageHeader eyebrow="정산" title="귀케어 일일정산" />
+      <PageHeader eyebrow={t("nav.group.settlements")} title={t("settlements.earcare.title")} />
       <section className="border border-border bg-surface px-4 py-8" role="status">
-        <h2 className="text-base font-semibold text-foreground">귀케어 일일정산을 불러오는 중입니다</h2>
-        <p className="mt-2 text-sm text-muted">운영월과 조회날짜가 바뀌는 동안 이전 날짜 값을 확정값처럼 표시하지 않습니다.</p>
+        <h2 className="text-base font-semibold text-foreground">{t("settlements.earcare.loading.title")}</h2>
+        <p className="mt-2 text-sm text-muted">{t("settlements.earcare.loading.description")}</p>
       </section>
     </main>
   );

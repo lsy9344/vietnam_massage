@@ -189,6 +189,14 @@ for (const required of [
   if (!actions.includes(required)) errors.push(`settlements/actions.ts missing ${required}`);
 }
 
+// ko/vi i18n migration: settlement/closing UI strings moved to t() keys in the ko catalog.
+// Repoint moved-string assertions to the t() key in the component AND the Korean original in ko.ts.
+const koCatalog = read("src/lib/i18n/messages/ko.ts");
+function requireMoved(contents, fileLabel, key, korean) {
+  if (!contents.includes(key)) errors.push(`${fileLabel} missing t() key ${key}`);
+  if (!koCatalog.includes(korean)) errors.push(`ko.ts missing ${korean}`);
+}
+
 // Client table
 const table = read("src/app/(erp)/settlements/therapist-attendance-table.tsx");
 for (const required of [
@@ -197,22 +205,22 @@ for (const required of [
   "saveTherapistAttendanceAction",
   // Review finding #3: table must expose a user-facing deactivate/clear path.
   "deactivateTherapistAttendanceAction",
-  "비우기",
   // Review finding R2-#2: table must resolve the most recent action and remount on persisted change.
   "lastAction",
   "checkInTime",
   "checkOutTime",
   "aria-invalid",
   "aria-describedby",
-  "role=\"alert\"",
-  "만근",
-  "저장중",
-  "저장됨",
-  "재시도",
-  "잠금"
+  "role=\"alert\""
 ]) {
   if (!table.includes(required)) errors.push(`therapist-attendance-table.tsx missing ${required}`);
 }
+requireMoved(table, "therapist-attendance-table.tsx", "settlements.therapist.attendance.action.clear", "비우기");
+requireMoved(table, "therapist-attendance-table.tsx", "settlements.therapist.attendance.fullRecognized", "만근");
+requireMoved(table, "therapist-attendance-table.tsx", "settlements.therapist.attendance.action.saving", "저장중");
+requireMoved(table, "therapist-attendance-table.tsx", "settlements.therapist.attendance.status.saved", "저장됨");
+requireMoved(table, "therapist-attendance-table.tsx", "settlements.therapist.attendance.action.retry", "재시도");
+requireMoved(table, "therapist-attendance-table.tsx", "settlements.therapist.attendance.status.locked", "잠금");
 // Review finding R3-#3: stale errors from the previous action must not remain after the opposite action wins.
 if (!table.includes("lastAction.current === \"save\" ? inlineError(state)") || !table.includes("lastAction.current === \"clear\" ? inlineError(clearState)")) {
   errors.push("therapist-attendance-table.tsx must gate save/clear errors by the latest action");
@@ -225,15 +233,15 @@ for (const required of [
   "listTherapistDailySettlements",
   "listTherapistAttendanceForDate",
   "TherapistAttendanceTable",
-  "마사지사 일일정산",
-  "콜별 산출 근거",
-  "잠긴 운영월입니다",
   // Review finding #6: attendance read must not be hidden when the settlement read fails.
   "Promise.allSettled",
   "attendanceErrorMessage"
 ]) {
   if (!page.includes(required)) errors.push(`settlements/page.tsx missing ${required}`);
 }
+requireMoved(page, "settlements/page.tsx", "settlements.therapist.title", "마사지사 일일정산");
+requireMoved(page, "settlements/page.tsx", "settlements.therapist.evidence.title", "콜별 산출 근거");
+requireMoved(page, "settlements/page.tsx", "settlements.locked.title", "잠긴 운영월입니다");
 
 // Closing preview default dependency wiring
 const closing = read("src/modules/closing/monthly-closing-preview-service.ts");

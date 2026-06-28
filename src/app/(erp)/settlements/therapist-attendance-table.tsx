@@ -1,6 +1,8 @@
 "use client";
 
 import { useActionState, useId, useRef } from "react";
+import { useT } from "@/lib/i18n/client";
+import type { Translator } from "@/lib/i18n";
 import {
   deactivateTherapistAttendanceAction,
   saveTherapistAttendanceAction,
@@ -13,11 +15,11 @@ function inlineError(state: TherapistAttendanceActionState, field?: string) {
   return field ? state.fieldErrors?.[field]?.[0] ?? null : state.formError ?? null;
 }
 
-function RecognitionBadge({ row }: { row: TherapistAttendanceDto }) {
+function RecognitionBadge({ row, t }: { row: TherapistAttendanceDto; t: Translator }) {
   if (!row.isComplete) {
     return (
       <span className="inline-flex border border-border bg-readonly px-2 py-1 text-xs font-semibold text-muted">
-        {row.incompleteReason ?? "출퇴근 미입력"}
+        {row.incompleteReason ?? t("settlements.therapist.attendance.checkInMissing")}
       </span>
     );
   }
@@ -25,14 +27,14 @@ function RecognitionBadge({ row }: { row: TherapistAttendanceDto }) {
   if (row.isFullAttendanceRecognized) {
     return (
       <span className="inline-flex border border-success bg-success/10 px-2 py-1 text-xs font-semibold text-success">
-        만근 인정 ({row.standbyMinutes}분)
+        {t("settlements.therapist.attendance.fullRecognized", { minutes: row.standbyMinutes ?? 0 })}
       </span>
     );
   }
 
   return (
     <span className="inline-flex border border-border bg-readonly px-2 py-1 text-xs font-semibold text-muted">
-      만근 미인정 ({row.standbyMinutes}분)
+      {t("settlements.therapist.attendance.fullNotRecognized", { minutes: row.standbyMinutes ?? 0 })}
     </span>
   );
 }
@@ -48,6 +50,7 @@ function TherapistAttendanceRowForm({
   operatingMonthId: string;
   row: TherapistAttendanceDto;
 }) {
+  const t = useT();
   const [state, formAction, pending] = useActionState<TherapistAttendanceActionState, FormData>(saveTherapistAttendanceAction, null);
   const [clearState, clearAction, clearPending] = useActionState<TherapistAttendanceActionState, FormData>(
     deactivateTherapistAttendanceAction,
@@ -98,7 +101,7 @@ function TherapistAttendanceRowForm({
       </td>
       <td className="px-3 py-2">
         <label className="grid max-w-32 gap-1">
-          <span className="sr-only">{row.displayName} 출근시간</span>
+          <span className="sr-only">{t("settlements.therapist.attendance.checkInTimeAria", { name: row.displayName })}</span>
           <input
             aria-describedby={checkInError ? checkInErrorId : undefined}
             aria-invalid={checkInError ? "true" : undefined}
@@ -118,7 +121,7 @@ function TherapistAttendanceRowForm({
       </td>
       <td className="px-3 py-2">
         <label className="grid max-w-32 gap-1">
-          <span className="sr-only">{row.displayName} 퇴근시간</span>
+          <span className="sr-only">{t("settlements.therapist.attendance.checkOutTimeAria", { name: row.displayName })}</span>
           <input
             aria-describedby={checkOutError ? checkOutErrorId : undefined}
             aria-invalid={checkOutError ? "true" : undefined}
@@ -138,7 +141,7 @@ function TherapistAttendanceRowForm({
       </td>
       <td className="px-3 py-2 text-right tabular-nums text-muted">{displayRow.standbyMinutes ?? "—"}</td>
       <td className="px-3 py-2">
-        <RecognitionBadge row={displayRow} />
+        <RecognitionBadge row={displayRow} t={t} />
       </td>
       <td className="px-3 py-2">
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -148,7 +151,7 @@ function TherapistAttendanceRowForm({
             form={formId}
             type="submit"
           >
-            {pending ? "저장중" : formError ? "재시도" : "저장"}
+            {pending ? t("settlements.therapist.attendance.action.saving") : formError ? t("settlements.therapist.attendance.action.retry") : t("settlements.therapist.attendance.action.save")}
           </button>
           {canClear ? (
             <button
@@ -157,33 +160,33 @@ function TherapistAttendanceRowForm({
               form={clearFormId}
               type="submit"
             >
-              {clearPending ? "비우는 중" : clearError ? "재시도" : "비우기"}
+              {clearPending ? t("settlements.therapist.attendance.action.clearing") : clearError ? t("settlements.therapist.attendance.action.retry") : t("settlements.therapist.attendance.action.clear")}
             </button>
           ) : null}
           <span className="min-w-16 text-right text-xs text-muted" aria-live="polite">
             {busy
-              ? "저장중"
+              ? t("settlements.therapist.attendance.action.saving")
               : lastAction.current === "clear" && clearedRow
-                ? "비워짐"
+                ? t("settlements.therapist.attendance.status.cleared")
                 : lastAction.current === "save" && savedRow
-                  ? "저장됨"
+                  ? t("settlements.therapist.attendance.status.saved")
                   : clearedRow
-                    ? "비워짐"
+                    ? t("settlements.therapist.attendance.status.cleared")
                     : savedRow
-                      ? "저장됨"
+                      ? t("settlements.therapist.attendance.status.saved")
                       : disabled
-                        ? "잠금"
-                        : "대기"}
+                        ? t("settlements.therapist.attendance.status.locked")
+                        : t("settlements.therapist.attendance.status.waiting")}
           </span>
         </div>
         {formError ? (
           <div className="mt-1 text-right text-xs text-danger" role="alert">
-            저장 실패: {formError}
+            {t("settlements.therapist.attendance.saveFailed", { message: formError })}
           </div>
         ) : null}
         {clearError ? (
           <div className="mt-1 text-right text-xs text-danger" role="alert">
-            비우기 실패: {clearError}
+            {t("settlements.therapist.attendance.clearFailed", { message: clearError })}
           </div>
         ) : null}
       </td>
@@ -202,11 +205,12 @@ export function TherapistAttendanceTable({
   operatingMonthId: string;
   rows: TherapistAttendanceDto[];
 }) {
+  const t = useT();
   if (rows.length === 0) {
     return (
       <section className="border border-border bg-surface px-4 py-8">
-        <h2 className="text-base font-semibold text-foreground">활성 마사지사가 없습니다</h2>
-        <p className="mt-2 text-sm text-muted">직원 마스터에서 마사지사를 활성화한 뒤 다시 조회하세요.</p>
+        <h2 className="text-base font-semibold text-foreground">{t("settlements.therapist.attendance.empty.title")}</h2>
+        <p className="mt-2 text-sm text-muted">{t("settlements.therapist.attendance.empty.description")}</p>
       </section>
     );
   }
@@ -214,20 +218,20 @@ export function TherapistAttendanceTable({
   return (
     <section className="overflow-x-auto border border-border bg-surface">
       <div className="border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-foreground">마사지사 출퇴근 입력</h2>
+        <h2 className="text-base font-semibold text-foreground">{t("settlements.therapist.attendance.title")}</h2>
         <p className="mt-1 text-sm text-muted">
-          출근/퇴근 시간을 저장하면 대기시간과 만근 인정 여부가 계산되어 저장된다. 대기시간 8시간(480분) 이상이면 만근 인정이다.
+          {t("settlements.therapist.attendance.description")}
         </p>
       </div>
       <table className="min-w-[820px] w-full border-collapse text-sm">
         <thead className="bg-readonly text-left text-xs font-semibold uppercase text-muted">
           <tr>
-            <th className="border-b border-border px-3 py-2">마사지사</th>
-            <th className="border-b border-border px-3 py-2">출근시간</th>
-            <th className="border-b border-border px-3 py-2">퇴근시간</th>
-            <th className="border-b border-border px-3 py-2 text-right">대기시간(분)</th>
-            <th className="border-b border-border px-3 py-2">만근 판정</th>
-            <th className="border-b border-border px-3 py-2 text-right">저장 상태</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.therapist.attendance.column.therapist")}</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.therapist.attendance.column.checkIn")}</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.therapist.attendance.column.checkOut")}</th>
+            <th className="border-b border-border px-3 py-2 text-right">{t("settlements.therapist.attendance.column.standbyMinutes")}</th>
+            <th className="border-b border-border px-3 py-2">{t("settlements.therapist.attendance.column.recognition")}</th>
+            <th className="border-b border-border px-3 py-2 text-right">{t("settlements.therapist.attendance.column.saveStatus")}</th>
           </tr>
         </thead>
         <tbody>

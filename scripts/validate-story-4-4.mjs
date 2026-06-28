@@ -80,6 +80,13 @@ for (const forbidden of [
   if (service.includes(forbidden)) errors.push(`earcare-daily-settlement-service.ts must not implement out-of-scope ${forbidden}`);
 }
 
+// ko/vi i18n migration: settlement UI strings moved to t() keys in the ko catalog.
+const koCatalog = read("src/lib/i18n/messages/ko.ts");
+function requireMoved(contents, fileLabel, key, korean) {
+  if (!contents.includes(key)) errors.push(`${fileLabel} missing t() key ${key}`);
+  if (!koCatalog.includes(korean)) errors.push(`ko.ts missing ${korean}`);
+}
+
 const page = read("src/app/(erp)/settlements/earcare/page.tsx");
 for (const required of [
   "requireRouteAccess(\"/settlements/earcare\")",
@@ -87,20 +94,20 @@ for (const required of [
   "clampDateToOperatingMonth",
   "listEarcareAttendanceForDate",
   "listEarcareDailySettlements",
-  "귀케어 일일정산",
   "EarcareSettlementSummary",
-  "방문완료 풀",
-  "정상 근무자",
-  "지급 합계",
-  "미분배",
-  "귀케어사별 지급액",
-  "풀 산출 근거",
-  "EarcareAttendanceTable",
-  "잠긴 운영월입니다",
-  "재조회"
+  "EarcareAttendanceTable"
 ]) {
   if (!page.includes(required)) errors.push(`earcare page.tsx missing ${required}`);
 }
+requireMoved(page, "earcare page.tsx", "settlements.earcare.title", "귀케어 일일정산");
+requireMoved(page, "earcare page.tsx", "settlements.earcare.summary.completedPool", "방문완료 풀");
+requireMoved(page, "earcare page.tsx", "settlements.earcare.summary.normalStaff", "정상 근무자");
+requireMoved(page, "earcare page.tsx", "settlements.earcare.summary.distributed", "지급 합계");
+requireMoved(page, "earcare page.tsx", "settlements.earcare.summary.undistributedWarning", "미분배");
+requireMoved(page, "earcare page.tsx", "settlements.earcare.table.title", "귀케어사별 지급액");
+requireMoved(page, "earcare page.tsx", "settlements.earcare.poolEvidence.title", "풀 산출 근거");
+requireMoved(page, "earcare page.tsx", "settlements.locked.title", "잠긴 운영월입니다");
+requireMoved(page, "earcare page.tsx", "settlements.requery", "재조회");
 for (const forbidden of ["saveEarcarePayout", "payoutAmount: {", "closing", "snapshot"]) {
   if (page.includes(forbidden)) errors.push(`earcare page.tsx must not implement out-of-scope ${forbidden}`);
 }
@@ -114,9 +121,13 @@ for (const forbidden of ["saveEarcarePayout", "listEarcareDailySettlements", "pa
 }
 
 const table = read("src/app/(erp)/settlements/earcare/earcare-attendance-table.tsx");
-for (const required of ["useActionState", "저장중", "저장됨", "재시도", "저장 실패", "지급 대상", "제외:"]) {
-  if (!table.includes(required)) errors.push(`earcare-attendance-table.tsx missing existing save UX ${required}`);
-}
+if (!table.includes("useActionState")) errors.push("earcare-attendance-table.tsx missing existing save UX useActionState");
+requireMoved(table, "earcare-attendance-table.tsx", "settlements.therapist.attendance.action.saving", "저장중");
+requireMoved(table, "earcare-attendance-table.tsx", "settlements.therapist.attendance.status.saved", "저장됨");
+requireMoved(table, "earcare-attendance-table.tsx", "settlements.therapist.attendance.action.retry", "재시도");
+requireMoved(table, "earcare-attendance-table.tsx", "settlements.therapist.attendance.saveFailed", "저장 실패");
+requireMoved(table, "earcare-attendance-table.tsx", "settlements.earcare.payoutEligible", "지급 대상");
+requireMoved(table, "earcare-attendance-table.tsx", "settlements.earcare.excluded", "제외:");
 
 const unitTest = read("src/modules/settlements/earcare-daily-settlement-service.test.ts");
 for (const required of [
