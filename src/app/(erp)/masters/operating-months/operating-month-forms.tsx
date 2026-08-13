@@ -116,10 +116,10 @@ export function OperatingMonthManager({
                       <td className="border-b border-border px-3 py-2">{month.endDate}</td>
                       <td className="border-b border-border px-3 py-2">{operatingMonthStatusLabel(locale, month.status)}</td>
                       <td className="border-b border-border px-3 py-2 text-xs text-muted">
-                        {formatDateTime(locale, month.createdAt, { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Seoul" })}
+                        {formatDateTime(locale, month.createdAt, { dateStyle: "short", timeStyle: "short" })}
                       </td>
                       <td className="border-b border-border px-3 py-2 text-xs text-muted">
-                        {formatDateTime(locale, month.updatedAt, { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Seoul" })}
+                        {formatDateTime(locale, month.updatedAt, { dateStyle: "short", timeStyle: "short" })}
                       </td>
                       <td className="border-b border-border px-3 py-2">
                         {month.status === "작성중" ? (

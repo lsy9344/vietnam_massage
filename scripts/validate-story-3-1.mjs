@@ -133,7 +133,7 @@ for (const required of [
   "NO_SHOW",
   "CANCELED",
   "expectedEndAt",
-  "2034-07-05T16:00:00.000Z",
+  "2034-07-05T18:00:00.000Z",
   "remainingMinutes",
   "종료확인",
   "course: null",

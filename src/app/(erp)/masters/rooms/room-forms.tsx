@@ -146,10 +146,10 @@ export function RoomManager({ rooms }: { rooms: RoomDto[] }) {
                     {room.isActive ? t("masters.common.active") : t("masters.common.inactive")}
                   </td>
                   <td className="border-b border-border px-3 py-2 text-xs text-muted">
-                    {formatDateTime(locale, room.createdAt, { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Seoul" })}
+                    {formatDateTime(locale, room.createdAt, { dateStyle: "short", timeStyle: "short" })}
                   </td>
                   <td className="border-b border-border px-3 py-2 text-xs text-muted">
-                    {formatDateTime(locale, room.updatedAt, { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Seoul" })}
+                    {formatDateTime(locale, room.updatedAt, { dateStyle: "short", timeStyle: "short" })}
                   </td>
                   <td className="border-b border-border px-3 py-2">
                     <DeactivateForm room={room} />

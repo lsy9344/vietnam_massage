@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { clampDateToOperatingMonth, kstTodayIsoDate, selectedOperatingMonthFor } from "@/lib/operating-date";
+import { businessTodayIsoDate, clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 
 const months = [
   {
@@ -20,10 +20,10 @@ const months = [
 ];
 
 describe("operating date helpers", () => {
-  it("formats today's date in Korea time as an ISO date", () => {
-    const now = new Date("2026-06-08T15:30:00.000Z");
+  it("formats today's date in Vietnam time as an ISO date", () => {
+    const now = new Date("2026-06-08T16:30:00.000Z");
 
-    assert.equal(kstTodayIsoDate(now), "2026-06-09");
+    assert.equal(businessTodayIsoDate(now), "2026-06-08");
   });
 
   it("selects the requested operating month or falls back to the first month", () => {
@@ -33,9 +33,9 @@ describe("operating date helpers", () => {
   });
 
   it("keeps an in-range service date and clamps missing or out-of-range dates", () => {
-    assert.equal(clampDateToOperatingMonth("2026-06-20", months[0], new Date("2026-06-09T00:00:00.000+09:00")), "2026-06-20");
-    assert.equal(clampDateToOperatingMonth(undefined, months[0], new Date("2026-06-09T00:00:00.000+09:00")), "2026-06-09");
-    assert.equal(clampDateToOperatingMonth("2026-05-31", months[0], new Date("2026-05-31T00:00:00.000+09:00")), "2026-06-01");
-    assert.equal(clampDateToOperatingMonth("2026-07-01", months[0], new Date("2026-07-01T00:00:00.000+09:00")), "2026-06-30");
+    assert.equal(clampDateToOperatingMonth("2026-06-20", months[0], new Date("2026-06-09T00:00:00.000+07:00")), "2026-06-20");
+    assert.equal(clampDateToOperatingMonth(undefined, months[0], new Date("2026-06-09T00:00:00.000+07:00")), "2026-06-09");
+    assert.equal(clampDateToOperatingMonth("2026-05-31", months[0], new Date("2026-05-31T00:00:00.000+07:00")), "2026-06-01");
+    assert.equal(clampDateToOperatingMonth("2026-07-01", months[0], new Date("2026-07-01T00:00:00.000+07:00")), "2026-06-30");
   });
 });

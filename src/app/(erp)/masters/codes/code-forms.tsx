@@ -36,7 +36,7 @@ const codeTypeLabelKeys: Record<CodeType, MessageKey> = {
 };
 
 function masterDateTime(locale: Locale, value: string) {
-  return formatDateTime(locale, value, { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Seoul" });
+  return formatDateTime(locale, value, { dateStyle: "short", timeStyle: "short" });
 }
 
 function InlineError({ state, field }: { state: CodeActionState | TimeSlotActionState; field?: string }) {

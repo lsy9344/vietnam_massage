@@ -120,11 +120,11 @@ for (const label of ["결제·확인 필요", "즉시 가능"]) {
 }
 
 const helper = `${read("src/lib/operating-date.ts")}\n${read("src/app/(erp)/calls/page.tsx")}`;
-for (const required of ["kstTodayIsoDate", "clampDateToOperatingMonth", "selectedOperatingMonthFor"]) {
+for (const required of ["businessTodayIsoDate", "clampDateToOperatingMonth", "selectedOperatingMonthFor"]) {
   if (!helper.includes(required)) errors.push(`operating date helper usage missing ${required}`);
 }
 const callsPage = read("src/app/(erp)/calls/page.tsx");
-for (const forbidden of ["function kstTodayIsoDate", "function clampDateToMonth", "function selectedMonthFor"]) {
+for (const forbidden of ["function businessTodayIsoDate", "function clampDateToMonth", "function selectedMonthFor"]) {
   if (callsPage.includes(forbidden)) errors.push(`calls/page.tsx must use shared helper, found ${forbidden}`);
 }
 

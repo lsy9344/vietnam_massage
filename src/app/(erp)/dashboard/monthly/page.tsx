@@ -78,7 +78,7 @@ function SourceBasisPanel({ metrics, locale, t }: { metrics: MonthlyDashboardMet
           </div>
           <div className="text-right text-sm text-muted">
             <div>closeVersion {metrics.sourceBasis.closeVersion}</div>
-            <div>{t("dashboard.monthly.basis.confirmed", { value: formatDateTime(locale, metrics.sourceBasis.confirmedAt, { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }) })}</div>
+            <div>{t("dashboard.monthly.basis.confirmed", { value: formatDateTime(locale, metrics.sourceBasis.confirmedAt, { dateStyle: "medium", timeStyle: "short" }) })}</div>
           </div>
         </div>
       </section>
@@ -209,7 +209,7 @@ function PreviousSnapshotReference({ metrics, locale, t, formatVnd }: { metrics:
         </div>
         <div className="text-right text-sm text-muted">
           <div>closeVersion {metrics.snapshot.closeVersion}</div>
-          <div>{formatDateTime(locale, metrics.snapshot.confirmedAt, { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" })}</div>
+          <div>{formatDateTime(locale, metrics.snapshot.confirmedAt, { dateStyle: "medium", timeStyle: "short" })}</div>
           <div className="font-medium text-foreground">{formatVnd(metrics.snapshot.totals.grandPayoutAmount)}</div>
         </div>
       </div>

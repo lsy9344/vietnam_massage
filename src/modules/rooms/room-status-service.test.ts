@@ -261,7 +261,7 @@ describe("room status service", () => {
     const statuses = await listRoomStatuses({
       operatingMonthId: "month-2034-06",
       serviceDate: "2034-06-05",
-      now: new Date("2034-06-05T12:00:00.000+09:00"),
+      now: new Date("2034-06-05T12:00:00.000+07:00"),
       prismaClient: client
     });
 
@@ -297,7 +297,7 @@ describe("room status service", () => {
     const statuses = await listRoomStatuses({
       operatingMonthId: "month-2034-06",
       serviceDate: "2034-06-05",
-      now: new Date("2034-06-05T11:15:00.000+09:00"),
+      now: new Date("2034-06-05T11:15:00.000+07:00"),
       prismaClient: client
     });
 
@@ -326,7 +326,7 @@ describe("room status service", () => {
     const statuses = await listRoomStatuses({
       operatingMonthId: "month-2034-06",
       serviceDate: "2034-06-05",
-      now: new Date("2034-06-05T11:15:00.000+09:00"),
+      now: new Date("2034-06-05T11:15:00.000+07:00"),
       prismaClient: client
     });
 
@@ -373,7 +373,7 @@ describe("room status service", () => {
     const statuses = await listRoomStatuses({
       operatingMonthId: "month-2034-06",
       serviceDate: "2034-06-05",
-      now: new Date("2034-06-06T00:15:00.000+09:00"),
+      now: new Date("2034-06-06T00:15:00.000+07:00"),
       prismaClient: client
     });
 
@@ -391,14 +391,14 @@ describe("room status service", () => {
     const statuses = await listRoomStatuses({
       operatingMonthId: "month-2034-06",
       serviceDate: "2034-06-05",
-      now: new Date("2034-06-06T00:15:00.000+09:00"),
+      now: new Date("2034-06-06T00:15:00.000+07:00"),
       prismaClient: client
     });
 
     const room101 = statusByRoom(statuses, "room-101");
     const room102 = statusByRoom(statuses, "room-102");
     assert.equal(room101.displayStatus, "사용중");
-    assert.equal(room101.expectedEndAt, "2034-06-05T16:00:00.000Z");
+    assert.equal(room101.expectedEndAt, "2034-06-05T18:00:00.000Z");
     assert.equal(room101.remainingMinutes, 45);
     assert.equal(room102.displayStatus, "종료확인");
     assert.equal(room102.sourceCallStatus, "사용중");
@@ -412,7 +412,7 @@ describe("room status service", () => {
     const statuses = await listRoomStatuses({
       operatingMonthId: "month-2034-06",
       serviceDate: "2034-06-05",
-      now: new Date("2034-06-05T11:50:00.000+09:00"),
+      now: new Date("2034-06-05T11:50:00.000+07:00"),
       prismaClient: client
     });
 
@@ -430,7 +430,7 @@ describe("room status service", () => {
     const statuses = await listRoomStatuses({
       operatingMonthId: "month-2034-06",
       serviceDate: "2034-06-05",
-      now: new Date("2034-06-05T11:49:00.000+09:00"),
+      now: new Date("2034-06-05T11:49:00.000+07:00"),
       prismaClient: client
     });
 
@@ -447,7 +447,7 @@ describe("room status service", () => {
     const statuses = await listRoomStatuses({
       operatingMonthId: "month-2034-06",
       serviceDate: "2034-06-05",
-      now: new Date("2034-06-05T11:15:00.000+09:00"),
+      now: new Date("2034-06-05T11:15:00.000+07:00"),
       prismaClient: client
     });
 
@@ -466,7 +466,7 @@ describe("room status service", () => {
     await listRoomStatuses({
       operatingMonthId: "month-2034-06",
       serviceDate: "2034-06-05",
-      now: new Date("2034-06-05T11:15:00.000+09:00"),
+      now: new Date("2034-06-05T11:15:00.000+07:00"),
       prismaClient: client
     });
 
@@ -482,7 +482,7 @@ describe("room status service", () => {
         listRoomStatuses({
           operatingMonthId: "month-2034-06",
           serviceDate: "2034-02-31",
-          now: new Date("2034-06-05T11:15:00.000+09:00"),
+          now: new Date("2034-06-05T11:15:00.000+07:00"),
           prismaClient: client
         }),
       (error) => error instanceof RoomStatusDomainError && error.code === "INVALID_SERVICE_DATE"
@@ -493,7 +493,7 @@ describe("room status service", () => {
         listRoomStatuses({
           operatingMonthId: "month-2034-06",
           serviceDate: "2034-06-05",
-          now: new Date("2034-06-05T11:15:00.000+09:00"),
+          now: new Date("2034-06-05T11:15:00.000+07:00"),
           prismaClient: client
         }),
       (error) => error instanceof RoomStatusDomainError && error.code === "INVALID_START_TIME"

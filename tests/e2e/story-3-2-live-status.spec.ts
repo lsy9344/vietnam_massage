@@ -4,17 +4,17 @@ import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 import { defaultRooms } from "@/modules/masters/room-schema";
 
-const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000;
 const OPERATING_DAY_START_MINUTES = 11 * 60;
 
 const expectedRoomOrder = ["401 호실", "402 호실", "301 호실", "302 호실", "303 호실", "201 호실", "202 호실", "203 호실", "101 호실", "102 호실", "103 호실"];
 const expectedRoomNamePattern = new RegExp(expectedRoomOrder.join("|"));
 
-function isoDateFromKst(date: Date) {
-  const kst = new Date(date.getTime() + KST_OFFSET_MS);
-  const year = kst.getUTCFullYear();
-  const month = String(kst.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(kst.getUTCDate()).padStart(2, "0");
+function isoDateFromVietnamTime(date: Date) {
+  const vietnamTime = new Date(date.getTime() + VIETNAM_OFFSET_MS);
+  const year = vietnamTime.getUTCFullYear();
+  const month = String(vietnamTime.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(vietnamTime.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
@@ -25,14 +25,14 @@ function addIsoDays(isoDate: string, days: number) {
 }
 
 function currentOperatingServiceDate(now = new Date()) {
-  const kst = new Date(now.getTime() + KST_OFFSET_MS);
-  const calendarDate = isoDateFromKst(now);
-  return kst.getUTCHours() < 11 ? addIsoDays(calendarDate, -1) : calendarDate;
+  const vietnamTime = new Date(now.getTime() + VIETNAM_OFFSET_MS);
+  const calendarDate = isoDateFromVietnamTime(now);
+  return vietnamTime.getUTCHours() < 11 ? addIsoDays(calendarDate, -1) : calendarDate;
 }
 
 function currentOperatingMinutes(now = new Date()) {
-  const kst = new Date(now.getTime() + KST_OFFSET_MS);
-  const wallMinutes = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+  const vietnamTime = new Date(now.getTime() + VIETNAM_OFFSET_MS);
+  const wallMinutes = vietnamTime.getUTCHours() * 60 + vietnamTime.getUTCMinutes();
   return wallMinutes < OPERATING_DAY_START_MINUTES ? wallMinutes + 24 * 60 : wallMinutes;
 }
 

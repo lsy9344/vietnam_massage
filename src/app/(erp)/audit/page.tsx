@@ -5,6 +5,7 @@ import { getServerTranslator } from "@/lib/i18n/server";
 import { formatDateTime } from "@/lib/i18n/format";
 import type { Locale } from "@/lib/i18n/config";
 import { type Translator } from "@/lib/i18n";
+import { BUSINESS_TIME_ZONE_OFFSET } from "@/lib/business-time";
 
 type AuditPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -14,7 +15,7 @@ function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function parseKstDayStart(value: string | undefined, fieldLabel: string, t: Translator) {
+function parseBusinessDayStart(value: string | undefined, fieldLabel: string, t: Translator) {
   if (!value) {
     return { date: null, error: null };
   }
@@ -28,7 +29,7 @@ function parseKstDayStart(value: string | undefined, fieldLabel: string, t: Tran
     return { date: null, error: t("audit.error.invalidDate", { field: fieldLabel }) };
   }
 
-  const date = new Date(`${value}T00:00:00.000+09:00`);
+  const date = new Date(`${value}T00:00:00.000${BUSINESS_TIME_ZONE_OFFSET}`);
   if (Number.isNaN(date.getTime())) {
     return { date: null, error: t("audit.error.unparseableDate", { field: fieldLabel }) };
   }
@@ -45,7 +46,7 @@ function nextDay(date: Date | null) {
 }
 
 function auditDateTime(locale: Locale, date: Date) {
-  return formatDateTime(locale, date, { dateStyle: "short", timeStyle: "medium", timeZone: "Asia/Seoul" });
+  return formatDateTime(locale, date, { dateStyle: "short", timeStyle: "medium" });
 }
 
 function formatJson(value: unknown) {
@@ -65,8 +66,8 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
   const targetType = firstParam(params.targetType)?.trim() ?? "";
   const fromValue = firstParam(params.from)?.trim() ?? "";
   const toValue = firstParam(params.to)?.trim() ?? "";
-  const from = parseKstDayStart(fromValue, t("audit.field.startDate"), t);
-  const to = parseKstDayStart(toValue, t("audit.field.endDate"), t);
+  const from = parseBusinessDayStart(fromValue, t("audit.field.startDate"), t);
+  const to = parseBusinessDayStart(toValue, t("audit.field.endDate"), t);
   const rangeError = from.date && to.date && from.date > to.date ? t("audit.error.rangeOrder") : null;
   const errors = [from.error, to.error, rangeError].filter((error): error is string => Boolean(error));
   let queryError: string | null = null;

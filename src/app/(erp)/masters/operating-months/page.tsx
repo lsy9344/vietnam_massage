@@ -3,23 +3,10 @@ import { listOperatingMonths, type OperatingMonthDto } from "@/modules/masters/o
 import { OperatingMonthManager } from "@/app/(erp)/masters/operating-months/operating-month-forms";
 import { PageHeader } from "@/components/domain/page-header";
 import { getServerTranslator } from "@/lib/i18n/server";
-
-function kstTodayIsoDate() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(new Date());
-
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-  return `${year}-${month}-${day}`;
-}
+import { businessTodayIsoDate } from "@/lib/operating-date";
 
 function getHighlightedMonthKey(months: OperatingMonthDto[]) {
-  const today = kstTodayIsoDate();
+  const today = businessTodayIsoDate();
   const currentMonth = months.find((month) => month.startDate <= today && month.endDate >= today);
   return currentMonth?.monthKey ?? months[0]?.monthKey ?? null;
 }

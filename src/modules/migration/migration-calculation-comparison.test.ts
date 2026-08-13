@@ -230,7 +230,7 @@ describe("Story 7.2 migration calculation comparison", () => {
     const statuses = await listRoomStatuses({
       operatingMonthId: monthId,
       serviceDate: comparisonDate,
-      now: new Date("2034-06-16T03:00:00.000+09:00"),
+      now: new Date("2034-06-16T03:00:00.000+07:00"),
       prismaClient: createMigrationCalculationPrisma()
     });
     const compact = statuses.map((status) => ({ roomId: status.roomId, activeCallId: status.activeCallId, displayStatus: status.displayStatus }));

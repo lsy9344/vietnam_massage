@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
+import { BUSINESS_TIME_ZONE_OFFSET_MINUTES } from "@/lib/business-time";
 import type { RoomDisplayStatus, RoomStatusAssigneeDto, RoomStatusCourseDto, RoomStatusDto } from "@/modules/rooms/dtos";
 
 const OPERATING_DAY_START_HOUR = 11;
-const SERVICE_TIMEZONE_OFFSET_MINUTES = 9 * 60;
 const ENDING_SOON_THRESHOLD_MINUTES = 10;
 
 export const ACTIVE_ROOM_OCCUPANCY_STATUSES = ["예약", "RESERVED", "사용중", "IN_USE", "USING", "청소중", "CLEANING"] as const;
@@ -164,7 +164,7 @@ function normalizeOperatingDateTime(serviceDate: string, startTime: string) {
   const { hour, minute } = parseStartTime(startTime);
   const nextCalendarDayOffset = hour < OPERATING_DAY_START_HOUR ? 1 : 0;
   const utcMillis =
-    Date.UTC(year, month - 1, day + nextCalendarDayOffset, hour, minute, 0, 0) - SERVICE_TIMEZONE_OFFSET_MINUTES * 60 * 1000;
+    Date.UTC(year, month - 1, day + nextCalendarDayOffset, hour, minute, 0, 0) - BUSINESS_TIME_ZONE_OFFSET_MINUTES * 60 * 1000;
 
   return new Date(utcMillis);
 }

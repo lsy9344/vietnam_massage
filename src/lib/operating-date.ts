@@ -1,12 +1,14 @@
+import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
+
 export type OperatingMonthDateRange = {
   id: string;
   startDate: string;
   endDate: string;
 };
 
-export function kstTodayIsoDate(now = new Date()) {
+export function businessTodayIsoDate(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Seoul",
+    timeZone: BUSINESS_TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit"
@@ -20,7 +22,7 @@ export function kstTodayIsoDate(now = new Date()) {
 
 export function clampDateToOperatingMonth(date: string | undefined, month: OperatingMonthDateRange, now = new Date()) {
   if (!date) {
-    const today = kstTodayIsoDate(now);
+    const today = businessTodayIsoDate(now);
     return today >= month.startDate && today <= month.endDate ? today : month.startDate;
   }
 

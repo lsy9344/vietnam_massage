@@ -1,10 +1,11 @@
 import type { Locale } from "@/lib/i18n/config";
+import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 
 /**
  * 숫자/날짜/금액 표시용 Intl locale.
  * - vi: "vi-VN", ko: "ko-KR"
  *
- * 주의: 업무 timezone(Asia/Seoul)과 VND 통화는 유지한다.
+ * 주의: 업무 timezone(Asia/Ho_Chi_Minh)과 VND 통화는 유지한다.
  * ISO 날짜 생성용 en-CA(src/lib/operating-date.ts)는 이 helper와 무관하며 건드리지 않는다.
  */
 function intlLocale(locale: Locale): string {
@@ -34,14 +35,14 @@ export function formatCurrencyVnd(locale: Locale, value: number, withSymbol = fa
 
 /** 날짜/시간 표시. 기존 `Intl.DateTimeFormat("ko-KR")` 대체. */
 export function formatDateTime(locale: Locale, value: string | number | Date, options?: Intl.DateTimeFormatOptions): string {
-  return new Intl.DateTimeFormat(intlLocale(locale), options).format(new Date(value));
+  return new Intl.DateTimeFormat(intlLocale(locale), { timeZone: BUSINESS_TIME_ZONE, ...options }).format(new Date(value));
 }
 
-/** Asia/Seoul 기준 HH:mm 시각. 기존 room-status-card formatKstTime 대체. */
-export function formatKstTime(locale: Locale, value: string | null): string {
+/** 베트남 업무 시간 기준 HH:mm 시각. */
+export function formatBusinessTime(locale: Locale, value: string | null): string {
   if (!value) return "-";
   return new Intl.DateTimeFormat(intlLocale(locale), {
-    timeZone: "Asia/Seoul",
+    timeZone: BUSINESS_TIME_ZONE,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false

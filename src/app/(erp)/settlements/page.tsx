@@ -39,10 +39,9 @@ function formatVnd(locale: Locale, t: Translator, amount: number) {
   return `${formatCurrencyVnd(locale, amount)} ${t("settlements.vndSuffix")}`;
 }
 
-function formatKstDateTime(locale: Locale, value: string | null) {
+function formatBusinessDateTime(locale: Locale, value: string | null) {
   if (!value) return null;
   return formatDateTime(locale, value, {
-    timeZone: "Asia/Seoul",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -307,7 +306,7 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
                         </div>
                         {settlement.paymentStatus.isPaid ? (
                           <div className="mt-1 space-y-0.5 text-xs text-muted">
-                            <div>{formatKstDateTime(locale, settlement.paymentStatus.paidAt)}</div>
+                            <div>{formatBusinessDateTime(locale, settlement.paymentStatus.paidAt)}</div>
                             {paymentActorAccountId(settlement.paymentStatus) ? (
                               <div>{t("settlements.therapist.handler", { actor: paymentActorAccountId(settlement.paymentStatus) ?? "" })}</div>
                             ) : null}
@@ -325,7 +324,7 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
                                   <div>
                                     {paymentStateLabel(t, history.previousIsPaid)} -&gt; {paymentStateLabel(t, history.newIsPaid)}
                                   </div>
-                                  <div>{formatKstDateTime(locale, history.changedAt)}</div>
+                                  <div>{formatBusinessDateTime(locale, history.changedAt)}</div>
                                   <div>{t("settlements.therapist.handler", { actor: paymentHistoryActorLabel(history) ?? "" })}</div>
                                 </li>
                               ))}

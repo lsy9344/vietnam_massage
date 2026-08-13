@@ -24,7 +24,7 @@ type SheetMappingSearchParams = Record<string, string | string[] | undefined>;
 
 function masterDateTime(locale: Locale, value: string | null) {
   if (!value) return "-";
-  return formatDateTime(locale, value, { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" });
+  return formatDateTime(locale, value, { dateStyle: "medium", timeStyle: "short" });
 }
 
 function formatEvidence(value: unknown) {

@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { defaultLocale, type Locale } from "@/lib/i18n/config";
 import { createTranslator } from "@/lib/i18n";
+import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 
 const REFRESH_INTERVAL_MS = 15_000;
 const STALE_AFTER_MS = 45_000;
 
 function formatLastUpdated(locale: Locale, value: string) {
   return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "ko-KR", {
-    timeZone: "Asia/Seoul",
+    timeZone: BUSINESS_TIME_ZONE,
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",

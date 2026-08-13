@@ -4,7 +4,7 @@ import type { RoomStatusDto } from "@/modules/rooms/dtos";
 
 const operatingMonthId = "story31-month";
 const serviceDate = "2034-07-05";
-const nowDuringCrossMidnight = new Date("2034-07-06T00:15:00.000+09:00");
+const nowDuringCrossMidnight = new Date("2034-07-06T00:15:00.000+07:00");
 
 function dbDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
@@ -249,7 +249,7 @@ test.describe("Story 3.1 room status DTO service", () => {
       displayStatus: "사용중",
       sourceCallStatus: "사용중",
       startTime: "23:30",
-      expectedEndAt: "2034-07-05T16:00:00.000Z",
+      expectedEndAt: "2034-07-05T18:00:00.000Z",
       remainingMinutes: 45
     });
     expect(statuses[1].remainingMinutes).toBeGreaterThanOrEqual(0);

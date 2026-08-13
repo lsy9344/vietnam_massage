@@ -4,7 +4,7 @@ import { StatusBadge } from "@/components/domain/status-badge";
 import { defaultLocale, type Locale } from "@/lib/i18n/config";
 import { createTranslator } from "@/lib/i18n";
 import { roomStatusLabel } from "@/lib/i18n/codes";
-import { formatKstTime } from "@/lib/i18n/format";
+import { formatBusinessTime } from "@/lib/i18n/format";
 
 function courseLabel(status: RoomStatusDto) {
   if (!status.course) return "-";
@@ -102,7 +102,7 @@ export function RoomStatusCard({
         </div>
         <div className="min-w-0">
           <p className={cn("text-xs font-medium text-muted", isTv && "text-base font-bold")}>{t("roomCard.field.expectedEnd")}</p>
-          <p className={cn("font-semibold text-foreground [font-variant-numeric:tabular-nums]", isTv && "text-[22px] font-bold")}>{formatKstTime(locale, status.expectedEndAt)}</p>
+          <p className={cn("font-semibold text-foreground [font-variant-numeric:tabular-nums]", isTv && "text-[22px] font-bold")}>{formatBusinessTime(locale, status.expectedEndAt)}</p>
         </div>
       </div>
 
