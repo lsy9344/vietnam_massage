@@ -86,7 +86,7 @@ for (const label of ["객실 상태 로딩", "오늘 요약 로딩"]) {
 // i18n 전환: 컴포넌트의 한국어 문구는 messages/ko.ts로 이동했고, 컴포넌트는 t()로 참조한다.
 const koMessages = read("src/lib/i18n/messages/ko.ts");
 const refresh = read("src/components/domain/room-status-refresh-controller.tsx");
-for (const required of ["useRouter", "router.refresh", "setInterval", "15_000", "45_000", "roomRefresh.lastUpdated", "roomRefresh.refreshing", "roomRefresh.stale", "roomRefresh.refresh"]) {
+for (const required of ["useRouter", "router.refresh", "setInterval", "30_000", "90_000", "isWithinLiveRefreshWindow", "visibilitychange", "roomRefresh.lastUpdated", "roomRefresh.refreshing", "roomRefresh.stale", "roomRefresh.refresh"]) {
   if (!refresh.includes(required)) errors.push(`room-status-refresh-controller.tsx missing ${required}`);
 }
 for (const label of ["마지막 갱신", "갱신 중", "갱신 지연", "새로고침"]) {

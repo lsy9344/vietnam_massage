@@ -104,6 +104,7 @@ export const vi: Messages = {
   "roomRefresh.refreshing": "Đang cập nhật",
   "roomRefresh.stale": "Cập nhật trễ",
   "roomRefresh.lastUpdated": "Cập nhật gần nhất",
+  "roomRefresh.paused": "Ngoài giờ làm việc · Đã dừng tự động cập nhật",
   "roomRefresh.refresh": "Làm mới",
 
   // ERP empty state (디자인 데모용)

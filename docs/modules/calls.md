@@ -116,7 +116,7 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 
 - `/tv` reads active call occupancy indirectly through the rooms module and `listRoomStatuses()`.
 - `/tv` is a fullscreen 조회 전용 / 읽기 전용 downstream board with ERP chrome 없음.
-- `/tv` renders `RoomStatusDto` through `RoomStatusCard variant="tv"` and uses shared 15초 refresh with `갱신 지연`; UI 계산 재구현 금지.
+- `/tv` renders `RoomStatusDto` through `RoomStatusCard variant="tv"` and uses shared 30초 refresh (영업시간 외·화면 비표시 시 자동 중지) with `갱신 지연`; UI 계산 재구현 금지.
 - `/tv` does not call call-ledger Server Actions, autosave, daily expense mutation, settlement mutation, closing mutation, or any write path. It is a consumer only and mutation을 수행하지 않는다.
 
 ## Story 3.5 Status Token Handoff

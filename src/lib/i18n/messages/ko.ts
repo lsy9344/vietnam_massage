@@ -104,6 +104,7 @@ export const ko = {
   "roomRefresh.refreshing": "갱신 중",
   "roomRefresh.stale": "갱신 지연",
   "roomRefresh.lastUpdated": "마지막 갱신",
+  "roomRefresh.paused": "영업 시간 외 · 자동 갱신 중지",
   "roomRefresh.refresh": "새로고침",
 
   // ERP empty state (디자인 데모용)
