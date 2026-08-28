@@ -4,6 +4,10 @@
 > 스택: Next.js 16 (App Router, Node 런타임) · PostgreSQL 17(Neon) · Prisma 7 (`@prisma/adapter-pg` + `pg` 8) · NextAuth v4 · pnpm
 > 플랫폼: **Vercel**(앱, 리전 `sin1`) + **Neon**(DB, AWS `ap-southeast-1`, PostgreSQL 17)
 
+> **이전 계획 있음:** 비용 구조 문제로 Cloudflare Workers + PlanetScale Postgres 이전을 계획 중이다.
+> 월 $32 → $15. 절차·근거·롤백은 `docs/plans/2026-08-28-cloudflare-migration-plan.md` 참고.
+> 이전이 완료될 때까지 이 문서가 운영 기준이다.
+
 이 문서는 단일 매장 운영 ERP를 Vercel + Neon에 배포하는 절차다.
 아키텍처 결정 근거는 `_bmad-output/planning-artifacts/architecture.md`의 "Infrastructure & Deployment" 참고.
 **현재 운영 환경의 실제 리소스 ID·적용 스택은 같은 문서의 "As-provisioned record (2026-06-21)" 표에 기록**돼 있다.
@@ -43,7 +47,7 @@
 
 1. Vercel 프로젝트 → **Storage → Create Database → Neon**.
 2. **Region: `Singapore (ap-southeast-1)` / `sin1`** 선택. (이게 가장 중요)
-3. 생성 후 Neon 콘솔에서 플랜을 **Launch**로 올리고, 컴퓨트는 **Autosuspend 끔(항상 켜기)** 으로 설정.
+3. 생성 후 요금제를 **Launch**로 올린다(`vercel integration update neon --plan launch_v3`). **Autosuspend는 켜 둔 채로 두고**, 대신 현황 화면이 영업시간 외에 폴링을 멈추게 한다 — 근거는 위 핵심 원칙 4.
 
 **(B) CLI/API로 리전 고정 생성 (자동화·재현용)**
 
@@ -57,7 +61,7 @@
 >   -d '{"name":"erp-vietnam-aesthetic-sg","metadata":{"region":"sin1","auth":false}}'
 > ```
 >
-> 허용 리전 enum: `cle1, iad1, pdx1, fra1, lhr1, syd1, sin1, gru1`. 생성 후 Neon 콘솔에서 Launch + Autosuspend off는 동일하게 수동 설정.
+> 허용 리전 enum: `cle1, iad1, pdx1, fra1, lhr1, syd1, sin1, gru1`. 생성 후 Launch 전환은 (A)와 동일. Autosuspend는 끄지 않는다.
 
 **연결 문자열 확보 (공통):** 생성된 DB에서 두 문자열을 얻는다 (Vercel Storage 화면 또는 `neonctl connection-string <project-id> --org-id <org> [--pooled]`):
    - **Pooled connection** (호스트에 `-pooler` 포함) → `DATABASE_URL`
