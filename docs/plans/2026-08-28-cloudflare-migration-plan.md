@@ -199,16 +199,18 @@ Prisma 7의 WASM 쿼리 컴파일러가 번들에 들어간다. 압축 후 크�
 
 ### 5단계 — 병행 운영 후 전환
 
-- Cloudflare 쪽을 임시 주소로 띄워두고, **매장 영업이 끝난 뒤(현지 새벽 3시 이후)** 실계정으로
-  전 화면을 점검한다
-- 통과하고 소스·대상 DB 데이터 비교가 일치하면 도메인을 Cloudflare로 전환한다
-- Vercel은 롤백 보존 기간 내내 `MAINTENANCE_MODE=read-only`를 유지하고, 직접 주소에서도 쓰기를 허용하지 않는다
-- **Vercel 배포는 지우지 않고 남겨둔다** (롤백 자산)
+- [x] Cloudflare 임시 주소에서 실제 운영 계정 로그인과 주요 화면 점검
+- [x] 최종 쓰기 차단 후 Neon → PlanetScale 복원 및 26개 전체 테이블 row count 일치 확인
+- [x] 2026-08-28T08:16:37Z에 Workers 주소 `https://vietnam-massage-erp.boothy-selectroom.workers.dev`를 운영 주소로 전환
+- [x] Vercel은 `MAINTENANCE_MODE=read-only`로 유지하고 직접 주소에서도 쓰기를 차단
+- [x] Vercel 배포와 Neon 원본은 롤백 자산으로 유지
 
 ### 6단계 — 정리 (전환 후 최소 1주 뒤)
 
-- Vercel 프로젝트 `erp_vietnam_massage` 제거
-- Neon 리소스 `erp-vietnam-massage-sg`(`rapid-forest-91070214`) 제거
+> 가장 빠른 정리 가능 시각: **2026-09-04T08:16:37Z**. 그 전에는 삭제하지 않는다.
+
+- [ ] Vercel 프로젝트 `erp_vietnam_massage` 제거
+- [ ] Neon 리소스 `erp-vietnam-massage-sg`(`rapid-forest-91070214`) 제거
 - ⚠️ **Neon 요금제는 리소스별이 아니라 installation 전체 범위다.** 이 창고를 지워도
   같은 installation의 `neon-cinnabar-horizon`(erp-fish)이 남아 있으면 Launch를 유지해야 한다.
   erp-fish를 Free로 되돌리면 같은 한도 소진 장애가 재발한다.
@@ -231,7 +233,7 @@ row count와 최종 갱신 시각이 다시 일치한 뒤에만 도메인을 되
 
 ## 이전 후 점검표
 
-- [ ] `/sign-in` 표시 + **기존 비밀번호로** 실제 로그인 성공 (비번 초기화 없이)
+- [x] `/sign-in` 표시 + **기존 비밀번호로** 실제 로그인 성공 (비번 초기화 없이)
 - [ ] 콜 원장 행 저장이 빠른가 (앱·DB가 같은 싱가포르 리전)
 - [ ] 객실/TV 현황이 30초마다 갱신, 영업시간 외에는 "영업 시간 외 · 자동 갱신 중지" 표시
 - [ ] 월마감 미리보기·확정, 대시보드 표시
@@ -273,6 +275,9 @@ row count와 최종 갱신 시각이 다시 일치한 뒤에만 도메인을 되
 | WASM argon2가 기존 해시 검증 | 통과 | 2026-08-28 | `@node-rs/argon2` PHC 회귀 fixture를 Node·workerd에서 검증하고, 복사된 운영 계정의 기존 비밀번호로 원격 Worker 로그인 성공 |
 | NextAuth v4 Workers 로그인 | 통과 | 2026-08-28 | 원격 Workers + Hyperdrive + PlanetScale에서 자동 Credentials callback·세션 왕복 및 사용자 운영 계정 로그인 성공. 일회성 테스트 계정과 로그인 기록은 삭제함 |
 | 초기 Neon → PlanetScale 복원 | 통과 | 2026-08-28 | PS-5 싱가포르에 초기 복원, 핵심 6개 테이블 건수·최종 갱신 시각·12개 migration 기록 일치, `migrate deploy` no-op 확인 |
+| 최종 DB 전환 | 통과 | 2026-08-28 | 쓰기 차단 후 최종 덤프·복원, 전체 26개 테이블 건수와 핵심 최종 갱신 시각 일치. PlanetScale 관리용 `hypopg`·named NOT NULL 외 의미상 스키마 동일 |
+| 운영 Worker 화면 | 통과 | 2026-08-28 | 로그인, 월간 대시보드, 코스/수당/인센, 직원, 정산, 월마감 표시 확인. 월마감 중복 조회 제거 후 약 20초 내 응답 |
+| 롤백 자산 | 유지 중 | 2026-08-28 | Vercel production은 read-only, Neon 원본은 보존. 2026-09-04T08:16:37Z 이전 삭제 금지 |
 
-> **게이트 상태: 통과.** 원격 빌드·DB·WASM·NextAuth와 운영 계정 로그인을 확인했다.
-> 최종 쓰기 차단·증분 데이터 복사·주소 전환은 별도 승인된 유지보수 시간에 진행하고, Vercel/Neon 정리는 안정화 기간 뒤에만 진행한다.
+> **게이트 상태: 통과 및 운영 전환 완료.** Workers + PlanetScale가 운영 쓰기를 담당한다.
+> Vercel/Neon은 최소 1주 안정화와 이전 후 점검표 완료 전까지 삭제하지 않는다.
