@@ -2,7 +2,6 @@ import { requireRouteAccess } from "@/lib/authorization";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import { listEmployees } from "@/modules/masters/employee-service";
 import {
-  ensureDefaultCoursesAndPolicies,
   listCourses,
   listOpsDailyIncentiveRulesForMonth,
   listOpsMonthlyIncentiveRulesForMonth,
@@ -13,9 +12,8 @@ import { PageHeader } from "@/components/domain/page-header";
 import { getServerTranslator } from "@/lib/i18n/server";
 
 export default async function CourseMasterPage() {
-  const account = await requireRouteAccess("/masters/courses");
+  await requireRouteAccess("/masters/courses");
   const { t } = await getServerTranslator();
-  await ensureDefaultCoursesAndPolicies({ actorId: account.id });
 
   const operatingMonths = await listOperatingMonths();
   const monthKey = operatingMonths.length > 0 ? [...operatingMonths].sort((a, b) => a.monthKey.localeCompare(b.monthKey))[0].monthKey : "2026-06";

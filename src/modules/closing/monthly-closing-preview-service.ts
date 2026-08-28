@@ -323,6 +323,52 @@ function getClient(client?: MonthlyClosingPreviewPrismaClient) {
   return client ?? (prisma as unknown as MonthlyClosingPreviewPrismaClient);
 }
 
+const MEMOIZED_READ_METHODS = new Set(["findUnique", "findFirst", "findMany", "count", "aggregate"]);
+
+function readCacheKey(model: string, method: string, args: unknown) {
+  return `${model}.${method}:${JSON.stringify(args, (_key, value) =>
+    typeof value === "bigint" ? `${value.toString()}n` : value
+  )}`;
+}
+
+function memoizePrismaReads<T extends object>(client: T): T {
+  const promises = new Map<string, Promise<unknown>>();
+  const delegates = new Map<PropertyKey, unknown>();
+
+  return new Proxy(client, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof property !== "string" || property.startsWith("$") || !value || typeof value !== "object") {
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+
+      const existingDelegate = delegates.get(property);
+      if (existingDelegate) return existingDelegate;
+
+      const delegate = new Proxy(value, {
+        get(delegateTarget, method, delegateReceiver) {
+          const delegateValue = Reflect.get(delegateTarget, method, delegateReceiver);
+          if (typeof method !== "string" || typeof delegateValue !== "function") return delegateValue;
+          if (!MEMOIZED_READ_METHODS.has(method)) return delegateValue.bind(delegateTarget);
+
+          return (args?: unknown) => {
+            const key = readCacheKey(property, method, args);
+            const existing = promises.get(key);
+            if (existing) return existing;
+
+            const promise = Promise.resolve(delegateValue.call(delegateTarget, args));
+            promises.set(key, promise);
+            promise.catch(() => promises.delete(key));
+            return promise;
+          };
+        }
+      });
+      delegates.set(property, delegate);
+      return delegate;
+    }
+  });
+}
+
 function toIsoDate(value: Date) {
   return value.toISOString().slice(0, 10);
 }
@@ -965,7 +1011,7 @@ export async function listMonthlyClosingPreview(input: {
   const parsed = previewQuerySchema.safeParse(input);
   if (!parsed.success) throw toFieldError(parsed.error);
 
-  const client = getClient(input.prismaClient);
+  const client = memoizePrismaReads(getClient(input.prismaClient));
   const dependencies = { ...defaultDependencies, ...input.dependencies };
   const [operatingMonth, activeTherapists] = await Promise.all([
     client.operatingMonth.findUnique({
