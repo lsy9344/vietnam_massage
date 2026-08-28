@@ -186,8 +186,13 @@ export async function verifyPassword(passwordHash: string, secret: string) {
   }
 
   try {
-    return await verify(passwordHash, secret);
-  } catch {
+    const matches = await verify(passwordHash, secret);
+    if (!matches) {
+      console.error("[auth] password verification returned false");
+    }
+    return matches;
+  } catch (error) {
+    console.error("[auth] password verification failed", error);
     return false;
   }
 }

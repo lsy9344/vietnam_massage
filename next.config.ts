@@ -1,7 +1,11 @@
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 import type { NextConfig } from "next";
 
-initOpenNextCloudflareForDev();
+const isCloudflareBuild = process.env.CLOUDFLARE_BUILD === "1";
+
+if (isCloudflareBuild) {
+  initOpenNextCloudflareForDev();
+}
 
 const nextConfig: NextConfig = {
   ...(process.env.VERCEL === "1"
@@ -13,7 +17,12 @@ const nextConfig: NextConfig = {
       }),
   serverExternalPackages: ["@prisma/client", ".prisma/client"],
   turbopack: {
-    root: process.cwd()
+    root: process.cwd(),
+    resolveAlias: isCloudflareBuild
+      ? {
+          "@node-rs/argon2": "./src/lib/node-rs-argon2-cloudflare-stub.ts"
+        }
+      : {}
   }
 };
 

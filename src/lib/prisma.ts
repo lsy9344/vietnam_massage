@@ -45,18 +45,23 @@ export function getPrismaClient() {
   const workerContext = getWorkerContext();
   if (workerContext) {
     const hyperdriveConnectionString = workerContext.env.HYPERDRIVE?.connectionString;
-    if (!hyperdriveConnectionString) {
+    if (hyperdriveConnectionString) {
+      const existing = workerClients.get(workerContext.ctx);
+      if (existing) {
+        return existing;
+      }
+
+      const client = createPrismaClient(hyperdriveConnectionString);
+      workerClients.set(workerContext.ctx, client);
+      return client;
+    }
+
+    // OpenNext dev also provides a Cloudflare context, but CI/Vercel Node requests use
+    // DATABASE_URL and do not have a Hyperdrive binding. A real Worker has neither direct
+    // URL nor a valid reason to continue when the binding is missing.
+    if (!process.env.DATABASE_URL) {
       throw new Error("Cloudflare Workers에서 HYPERDRIVE 바인딩을 찾을 수 없습니다.");
     }
-
-    const existing = workerClients.get(workerContext.ctx);
-    if (existing) {
-      return existing;
-    }
-
-    const client = createPrismaClient(hyperdriveConnectionString);
-    workerClients.set(workerContext.ctx, client);
-    return client;
   }
 
   const connectionString =
