@@ -1,4 +1,4 @@
-import { hash, verify } from "@node-rs/argon2";
+import { hash, verify } from "@/lib/password-hash";
 import { prisma } from "@/lib/prisma";
 import { SAFE_AUTH_ERROR_MESSAGE } from "@/lib/auth-messages";
 import type { Role } from "@/lib/authorization";

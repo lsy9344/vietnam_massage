@@ -47,8 +47,11 @@ function readJson(path) {
 ].forEach(requireFile);
 
 const packageJson = readJson("package.json");
-if (packageJson.dependencies?.["@node-rs/argon2"] === undefined) {
-  errors.push("package.json must include @node-rs/argon2 as a dependency");
+if (packageJson.dependencies?.["argon2-wasm-edge"] === undefined) {
+  errors.push("package.json must include argon2-wasm-edge as a dependency");
+}
+if (packageJson.dependencies?.["@node-rs/argon2"] !== undefined) {
+  errors.push("package.json must not include the Node-native @node-rs/argon2 dependency");
 }
 if (packageJson.dependencies?.["next-auth"] !== "4.24.14") {
   errors.push("Story 1.2 must keep next-auth@4.24.14 stable");
@@ -201,7 +204,7 @@ if (!rootPage.includes("getRoleLandingPath") || !rootPage.includes("redirect(\"/
 
 const accountService = read("src/modules/masters/account-service.ts");
 for (const required of [
-  "@node-rs/argon2",
+  "@/lib/password-hash",
   "hashPassword",
   "verifyPassword",
   "authenticateAccount",

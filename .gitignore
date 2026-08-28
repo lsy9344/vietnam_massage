@@ -8,7 +8,10 @@
 # Common generated files
 node_modules/
 .next/
+.open-next/
+.wrangler/
 .codex/
+.pi-subagents/
 src/generated/prisma/
 *.bak
 playwright-report/
@@ -21,6 +24,8 @@ __pycache__/
 .env
 .env.local
 .env.*.local
+.dev.vars
+.dev.vars.*
 package-lock.json
 
 .agents/.story-automator-active
@@ -28,3 +33,7 @@ package-lock.json
 
 # Playwright CLI debug artifacts
 .playwright-cli/
+.env*
+
+# Pi runtime artifacts
+.pi/

@@ -5,7 +5,8 @@
 > 플랫폼: **Vercel**(앱, 리전 `sin1`) + **Neon**(DB, AWS `ap-southeast-1`, PostgreSQL 17)
 
 > **이전 계획 있음:** 비용 구조 문제로 Cloudflare Workers + PlanetScale Postgres 이전을 계획 중이다.
-> 월 $32 → $15. 절차·근거·롤백은 `docs/plans/2026-08-28-cloudflare-migration-plan.md` 참고.
+> 월 $32 → $15. 절차·근거·롤백은 `docs/plans/2026-08-28-cloudflare-migration-plan.md`,
+> 실행 명령과 Secrets 설정은 `docs/cloudflare-deployment.md` 참고.
 > 이전이 완료될 때까지 이 문서가 운영 기준이다.
 
 이 문서는 단일 매장 운영 ERP를 Vercel + Neon에 배포하는 절차다.

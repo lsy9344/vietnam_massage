@@ -1,7 +1,7 @@
 # 이전 계획 — Vercel + Neon → Cloudflare Workers + PlanetScale Postgres
 
 > 작성일: 2026-08-28 · 상태: **계획 (0단계 사전 검증 전)** · 현행 운영은 `docs/deployment.md` 참고
-> 결론: **Cloudflare Workers + PlanetScale Postgres(싱가포르)** 로 옮긴다. 월 $32 → **$15**.
+> 결론: **Cloudflare Workers + PlanetScale Postgres(싱가포르)** 로 옮긴다. 적용 사양은 PS-5이며 월 $32 → **약 $10 + 스토리지**.
 > 단, **0단계 사전 검증을 통과하지 못하면 이 계획을 폐기하고 "차선책" 절의 AWS Lightsail로 간다.**
 
 ## 왜 옮기나
@@ -31,7 +31,7 @@
 
 | 후보 | 월 비용 | 관리형 | 폴링 추가요금 | 비고 |
 | --- | --- | --- | --- | --- |
-| **Cloudflare Workers + PlanetScale** | **$10 ~ $15** | ✅ | **0** | 선택안 |
+| **Cloudflare Workers + PlanetScale** | **약 $10 + 스토리지** | ✅ | **0** | 선택안(PS-5 적용) |
 | AWS Lightsail 1대 (앱+DB 합침) + 자동 스냅샷 | $8 | ❌ | 0 | 차선책. 백업·패치 직접 |
 | Hetzner 싱가포르 CPX11 | ~$8.5 | ❌ | 0 | 위와 같은 성격 |
 | AWS Lightsail + Lightsail 관리형 Postgres | $22 | ✅ | 0 | AWS의 관리형 최저가 |
@@ -46,16 +46,15 @@
   CPU는 렌더당 50ms로 잡아도 **월 875만 ms(한도의 29%)**.
 - → 실사용이 10배로 늘어도 $5에서 안 올라간다.
 
-**PlanetScale Postgres (싱가포르 `ap-southeast-1`) — $5 또는 $10/월 고정**
-- PS-5 $5: 1/16 vCPU, 512MB RAM
-- PS-10 $10: 1/8 vCPU, 1GB RAM ← **이걸 권장**
-- 두 등급 모두 **스토리지 10GB 포함, 백업 포함**(브랜치당 디스크 2배). 현재 DB는 10GB 근처도 아니다.
-- PS-5의 1/16 vCPU는 월마감 정산 계산 같은 무거운 작업에 빠듯하다. $5 아끼려다 마감이 느려지는 걸
-  피하려면 PS-10에서 시작하고, 실측 후 내리는 편이 낫다.
+**PlanetScale Postgres (싱가포르 `ap-southeast-1`) — 적용 PS-5 $5/월 + 스토리지**
+- PS-5 $5: 1/16 vCPU, 512MB RAM ← **2026-08-28 사용자 승인으로 적용**
+- PS-10은 싱가포르 AWS X86 단일 노드 기준 CLI 확인값 $16: 1/8 vCPU, 1GB RAM
+- 스토리지는 별도 과금이다. 첫 달 실제 사용량과 백업/PITR 비용을 확인한다.
+- PS-5는 월마감 정산 계산 같은 무거운 작업에 빠듯할 수 있으므로, 원격 검증에서 저장·월마감 지연을 실측하고 느리면 PS-10으로 올린다.
 
 **Hyperdrive (앱↔DB 연결 풀링) — 유료 플랜에 무제한 포함, 추가 $0**
 
-> **합계: $10(PS-5) ~ $15(PS-10). 권장 $15.**
+> **적용 합계: 약 $10/월(Workers $5 + PS-5 $5) + PlanetScale 스토리지.**
 
 ### AWS를 선택하지 않은 이유
 
@@ -178,12 +177,13 @@ Prisma 7의 WASM 쿼리 컴파일러가 번들에 들어간다. 압축 후 크�
 `docs/deployment.md`의 "기존 DB를 다른 리전으로 이전해야 할 때" 절차를 그대로 쓴다.
 2026-06-21에 us-east-1 → 싱가포르 이전에 이미 사용해 검증된 절차다.
 
-1. PlanetScale Postgres 클러스터 생성 — **리전 `ap-southeast-1`(싱가포르), PS-10 단일 노드**
-2. `pg_dump "<Neon Direct>" -Fc --no-owner --no-privileges -f erp.dump`
-3. `pg_restore --no-owner --no-privileges --exit-on-error -d "<PlanetScale>" erp.dump`
-4. `prisma migrate diff`로 스키마 일치 확인 (FK 이름 차이만 남는 건 무해)
-5. Hyperdrive 바인딩 생성 → Worker에 연결
-6. `_prisma_migrations` 테이블이 함께 넘어왔는지 확인 (넘어왔다면 baseline 처리 불필요)
+1. PlanetScale Postgres 클러스터 생성 — **리전 `ap-southeast-1`(싱가포르), PS-5 단일 노드**
+2. 이 변경을 Vercel에 먼저 배포하고, 영업 종료 후 `MAINTENANCE_MODE=read-only`로 재배포해 모든 쓰기 요청이 503으로 차단되는지 확인한다.
+3. 활성 저장 작업이 끝난 뒤 최종 `pg_dump`를 시작한다. 덤프 시작부터 도메인 전환 완료까지 쓰기 차단을 유지한다.
+4. `pg_restore --no-owner --no-privileges --exit-on-error`로 PlanetScale에 복원한다.
+5. `prisma migrate diff`로 스키마 일치 확인하고, 양쪽 핵심 테이블의 row count와 `max(updated_at)`을 비교한다 (FK 이름 차이만 남는 건 무해).
+6. Hyperdrive 바인딩 생성 → Worker에 연결
+7. `_prisma_migrations` 테이블이 함께 넘어왔는지 확인 (넘어왔다면 baseline 처리 불필요)와 덤프·전환 시각을 기록한다.
 
 > 이전은 **읽기만 하는 덤프**라 원본 Neon은 그대로 남는다. 롤백 자산이 된다.
 
@@ -191,16 +191,18 @@ Prisma 7의 WASM 쿼리 컴파일러가 번들에 들어간다. 압축 후 크�
 
 현재는 `vercel-build`가 `prisma migrate deploy`를 돌린다. Cloudflare 빌드에는 그 단계가 없다.
 
-- GitHub Actions 워크플로에 `prisma migrate deploy` 단계를 추가하고, `main` 푸시 시
-  **배포보다 먼저** 실행되게 한다
+- GitHub Actions 워크플로에서 설정 검증·OpenNext 빌드·Wrangler dry-run을 먼저 끝내고 배포 artifact를 고정한다
+- 사전 빌드가 성공한 경우에만 `prisma migrate deploy`를 실행하고, 성공 후 **동일 artifact**를 배포한다
 - `DIRECT_DATABASE_URL`을 GitHub Secrets에 등록
 - 마이그레이션이 없을 때 no-op으로 통과하는지 확인
+- 스키마 변경은 구버전 Vercel과 새 Worker가 동시에 사용할 수 있는 expand/contract 방식으로 나눈다
 
 ### 5단계 — 병행 운영 후 전환
 
 - Cloudflare 쪽을 임시 주소로 띄워두고, **매장 영업이 끝난 뒤(현지 새벽 3시 이후)** 실계정으로
   전 화면을 점검한다
-- 통과하면 도메인을 Cloudflare로 전환한다
+- 통과하고 소스·대상 DB 데이터 비교가 일치하면 도메인을 Cloudflare로 전환한다
+- Vercel은 롤백 보존 기간 내내 `MAINTENANCE_MODE=read-only`를 유지하고, 직접 주소에서도 쓰기를 허용하지 않는다
 - **Vercel 배포는 지우지 않고 남겨둔다** (롤백 자산)
 
 ### 6단계 — 정리 (전환 후 최소 1주 뒤)
@@ -218,12 +220,12 @@ Prisma 7의 WASM 쿼리 컴파일러가 번들에 들어간다. 압축 후 크�
 | 시점 | 롤백 방법 | 소요 |
 | --- | --- | --- |
 | 0~4단계 중 | 아무것도 안 바꾸면 됨. 운영은 Vercel에서 계속 돌고 있다 | 즉시 |
-| 5단계 직후 | 도메인을 Vercel로 되돌린다. Neon 원본이 그대로 살아 있다 | 수 분 |
+| 5단계 직후 | PlanetScale에 성공한 쓰기가 0건이면 도메인을 Vercel로 되돌리고 쓰기 차단을 해제한다. 1건이라도 있으면 Worker 쓰기 차단 → PlanetScale 변경분을 Neon에 역이전 → 데이터 재검증 후 복귀한다 | 수 분~수 시간 |
 | 6단계 이후 | 롤백 불가. **그래서 6단계는 최소 1주 안정 운영 후에만 한다** | — |
 
-**5단계 이후 PlanetScale에 쌓인 데이터는 Neon에 없다.** 5단계 전환 시점을 영업 종료 후로 잡고,
-롤백 판단도 그날 밤 안에 끝내는 이유가 이것이다. 하루 이상 운영한 뒤 롤백하려면 PlanetScale에서
-다시 덤프를 떠 Neon으로 되돌려야 한다.
+**5단계 이후 PlanetScale에 쌓인 데이터는 Neon에 없다.** 전환 직후라도 성공한 쓰기가 한 건이라도 있으면
+Cloudflare Worker 쓰기를 먼저 멈추고 PlanetScale 변경분을 Neon으로 역이전해야 한다. 핵심 테이블의
+row count와 최종 갱신 시각이 다시 일치한 뒤에만 도메인을 되돌리고 Vercel 쓰기 차단을 해제한다.
 
 ---
 
@@ -237,7 +239,7 @@ Prisma 7의 WASM 쿼리 컴파일러가 번들에 들어간다. 압축 후 크�
 - [ ] 감사 로그 기록
 - [ ] 한국어/베트남어 전환
 - [ ] GitHub Actions에서 `prisma migrate deploy`가 도는가 (빈 마이그레이션에도 통과)
-- [ ] 첫 달 실제 청구액이 $15 근처인가 (아니면 원인 파악)
+- [ ] 첫 달 실제 청구액이 $10 + 스토리지 근처인가 (아니면 원인 파악)
 
 ---
 
@@ -249,7 +251,7 @@ Prisma 7의 WASM 쿼리 컴파일러가 번들에 들어간다. 압축 후 크�
 | --- | --- | --- |
 | Cloudflare Workers 유료 | $5/월, 요청 1,000만·CPU 3,000만ms 포함 | [Workers 요금](https://developers.cloudflare.com/workers/platform/pricing/) |
 | Hyperdrive | 유료 플랜 무제한 쿼리 포함 | 위와 같음 |
-| PlanetScale Postgres | PS-5 $5 / PS-10 $10 (단일 노드), 10GB 스토리지·백업 포함, `ap-southeast-1` 지원 | [PlanetScale Postgres 요금](https://planetscale.com/docs/postgres/pricing) |
+| PlanetScale Postgres | `ap-southeast-1` PS-5 단일 노드 $5, PS-10 AWS X86 단일 노드 $16(CLI 실측). 스토리지 별도 | [PlanetScale Postgres 요금](https://planetscale.com/docs/postgres/pricing) |
 | Cloudflare↔PlanetScale 제휴 | Cloudflare 대시보드에서 생성·합산 청구 | [Cloudflare 블로그](https://blog.cloudflare.com/deploy-planetscale-postgres-with-workers/) |
 | OpenNext Next.js 16 지원 | 지원됨. Worker 크기 한도 무료 3 MiB / 유료 10 MiB | [OpenNext Cloudflare](https://opennext.js.org/cloudflare) |
 | 네이티브 애드온 미지원 | Workers는 `.node` 애드온을 지원하지 않으며 계획도 없음 | [workerd 논의](https://github.com/cloudflare/workerd/discussions/1905) |
@@ -267,6 +269,10 @@ Prisma 7의 WASM 쿼리 컴파일러가 번들에 들어간다. 압축 후 크�
 
 | 항목 | 결과 | 날짜 | 비고 |
 | --- | --- | --- | --- |
-| OpenNext 빌드 성공 / 번들 크기 | 미실시 | | |
-| WASM argon2가 기존 해시 검증 | 미실시 | | |
-| NextAuth v4 Workers 로그인 | 미실시 | | |
+| OpenNext 빌드 성공 / 번들 크기 | 통과 | 2026-08-28 | OpenNext 1.20.1 빌드 및 Cloudflare 유료 Workers 배포 성공. 원격 gzip 3.565 MiB(10 MiB 이하) |
+| WASM argon2가 기존 해시 검증 | 통과 | 2026-08-28 | `@node-rs/argon2` PHC 회귀 fixture를 Node·workerd에서 검증하고, 복사된 운영 계정의 기존 비밀번호로 원격 Worker 로그인 성공 |
+| NextAuth v4 Workers 로그인 | 통과 | 2026-08-28 | 원격 Workers + Hyperdrive + PlanetScale에서 자동 Credentials callback·세션 왕복 및 사용자 운영 계정 로그인 성공. 일회성 테스트 계정과 로그인 기록은 삭제함 |
+| 초기 Neon → PlanetScale 복원 | 통과 | 2026-08-28 | PS-5 싱가포르에 초기 복원, 핵심 6개 테이블 건수·최종 갱신 시각·12개 migration 기록 일치, `migrate deploy` no-op 확인 |
+
+> **게이트 상태: 통과.** 원격 빌드·DB·WASM·NextAuth와 운영 계정 로그인을 확인했다.
+> 최종 쓰기 차단·증분 데이터 복사·주소 전환은 별도 승인된 유지보수 시간에 진행하고, Vercel/Neon 정리는 안정화 기간 뒤에만 진행한다.

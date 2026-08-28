@@ -11,7 +11,7 @@
  *
  * 실행: npx tsx scripts/seed-master-data.ts
  */
-import { Prisma } from "@/generated/prisma";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { defaultEmployees } from "@/modules/masters/employee-schema";
 import { defaultRooms } from "@/modules/masters/room-schema";
