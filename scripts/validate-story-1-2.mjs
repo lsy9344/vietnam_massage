@@ -20,6 +20,8 @@ function readJson(path) {
 
 [
   ".env.example",
+  "next.config.ts",
+  "cloudflare-worker.ts",
   "prisma/schema.prisma",
   "src/app/page.tsx",
   "src/app/(auth)/sign-in/page.tsx",
@@ -40,6 +42,8 @@ function readJson(path) {
   "src/lib/auth.ts",
   "src/lib/authorization.ts",
   "src/lib/navigation.ts",
+  "src/lib/password-hash.ts",
+  "src/lib/node-rs-argon2-cloudflare-stub.ts",
   "src/lib/prisma.ts",
   "src/modules/masters/account-service.ts",
   "scripts/seed-dev-accounts.ts",
@@ -50,8 +54,31 @@ const packageJson = readJson("package.json");
 if (packageJson.dependencies?.["argon2-wasm-edge"] === undefined) {
   errors.push("package.json must include argon2-wasm-edge as a dependency");
 }
-if (packageJson.dependencies?.["@node-rs/argon2"] !== undefined) {
-  errors.push("package.json must not include the Node-native @node-rs/argon2 dependency");
+if (packageJson.dependencies?.["@node-rs/argon2"] !== "2.0.2") {
+  errors.push("Node/Vercel runtime must pin @node-rs/argon2@2.0.2 for existing PHC compatibility");
+}
+
+const nextConfig = read("next.config.ts");
+const passwordHash = read("src/lib/password-hash.ts");
+const nativeStub = read("src/lib/node-rs-argon2-cloudflare-stub.ts");
+const cloudflareWorker = read("cloudflare-worker.ts");
+for (const required of ["CLOUDFLARE_BUILD", "resolveAlias", "@node-rs/argon2", "node-rs-argon2-cloudflare-stub.ts"]) {
+  if (!nextConfig.includes(required)) {
+    errors.push(`next.config.ts must isolate native Argon2 during Cloudflare builds: ${required}`);
+  }
+}
+for (const required of ["import(\"@node-rs/argon2\")", "__CLOUDFLARE_ARGON2_RUNTIME__"]) {
+  if (!passwordHash.includes(required)) {
+    errors.push(`password-hash.ts missing split-runtime requirement: ${required}`);
+  }
+}
+if (!nativeStub.includes("Cloudflare Workers에서는 네이티브 Argon2를 사용할 수 없습니다.")) {
+  errors.push("Cloudflare native Argon2 stub must fail closed when invoked");
+}
+for (const required of ["argon2-wasm-edge", "__CLOUDFLARE_ARGON2_RUNTIME__"]) {
+  if (!cloudflareWorker.includes(required)) {
+    errors.push(`cloudflare-worker.ts missing WASM runtime requirement: ${required}`);
+  }
 }
 if (packageJson.dependencies?.["next-auth"] !== "4.24.14") {
   errors.push("Story 1.2 must keep next-auth@4.24.14 stable");
