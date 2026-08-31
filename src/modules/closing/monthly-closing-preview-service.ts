@@ -323,6 +323,52 @@ function getClient(client?: MonthlyClosingPreviewPrismaClient) {
   return client ?? (prisma as unknown as MonthlyClosingPreviewPrismaClient);
 }
 
+const MEMOIZED_READ_METHODS = new Set(["findUnique", "findFirst", "findMany", "count", "aggregate"]);
+
+function readCacheKey(model: string, method: string, args: unknown) {
+  return `${model}.${method}:${JSON.stringify(args, (_key, value) =>
+    typeof value === "bigint" ? `${value.toString()}n` : value
+  )}`;
+}
+
+function memoizePrismaReads<T extends object>(client: T): T {
+  const promises = new Map<string, Promise<unknown>>();
+  const delegates = new Map<PropertyKey, unknown>();
+
+  return new Proxy(client, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof property !== "string" || property.startsWith("$") || !value || typeof value !== "object") {
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+
+      const existingDelegate = delegates.get(property);
+      if (existingDelegate) return existingDelegate;
+
+      const delegate = new Proxy(value, {
+        get(delegateTarget, method, delegateReceiver) {
+          const delegateValue = Reflect.get(delegateTarget, method, delegateReceiver);
+          if (typeof method !== "string" || typeof delegateValue !== "function") return delegateValue;
+          if (!MEMOIZED_READ_METHODS.has(method)) return delegateValue.bind(delegateTarget);
+
+          return (args?: unknown) => {
+            const key = readCacheKey(property, method, args);
+            const existing = promises.get(key);
+            if (existing) return existing;
+
+            const promise = Promise.resolve(delegateValue.call(delegateTarget, args));
+            promises.set(key, promise);
+            promise.catch(() => promises.delete(key));
+            return promise;
+          };
+        }
+      });
+      delegates.set(property, delegate);
+      return delegate;
+    }
+  });
+}
+
 function toIsoDate(value: Date) {
   return value.toISOString().slice(0, 10);
 }
@@ -349,6 +395,30 @@ function dateRange(startDate: string, endDate: string) {
   }
 
   return dates;
+}
+
+const MONTHLY_CLOSING_QUERY_CONCURRENCY = 5;
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>
+) {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker())
+  );
+  return results;
 }
 
 function emptyCourseBreakdown(): Record<CourseCode, TherapistCourseSettlementSummary> {
@@ -941,7 +1011,7 @@ export async function listMonthlyClosingPreview(input: {
   const parsed = previewQuerySchema.safeParse(input);
   if (!parsed.success) throw toFieldError(parsed.error);
 
-  const client = getClient(input.prismaClient);
+  const client = memoizePrismaReads(getClient(input.prismaClient));
   const dependencies = { ...defaultDependencies, ...input.dependencies };
   const [operatingMonth, activeTherapists] = await Promise.all([
     client.operatingMonth.findUnique({
@@ -966,20 +1036,16 @@ export async function listMonthlyClosingPreview(input: {
   }
 
   const dates = dateRange(startDate, endDate);
-  const therapistDailyResults: TherapistDailySettlementResultDto[] = [];
-  const opsDailyResults: OpsDailyIncentiveResultDto[] = [];
-  const earcareDailyResults: EarcareDailySettlementResultDto[] = [];
-  const financialDailyResults: DailyCallLedgerSummaryDto[] = [];
-
-  for (const serviceDate of dates) {
-    therapistDailyResults.push(
-      await dependencies.listTherapistDailySettlements({
+  const therapistDailyResults: TherapistDailySettlementResultDto[] = await mapWithConcurrency(
+    dates,
+    MONTHLY_CLOSING_QUERY_CONCURRENCY,
+    (serviceDate) =>
+      dependencies.listTherapistDailySettlements({
         operatingMonthId: parsed.data.operatingMonthId,
         serviceDate,
         prismaClient: client as unknown as Parameters<typeof listTherapistDailySettlements>[0]["prismaClient"]
       })
-    );
-  }
+  );
 
   const fullAttendanceResult = dependencies.listTherapistFullAttendanceRecognitions
     ? await dependencies.listTherapistFullAttendanceRecognitions({
@@ -990,40 +1056,43 @@ export async function listMonthlyClosingPreview(input: {
       })
     : missingFullAttendanceResult();
 
-  for (const serviceDate of dates) {
-    opsDailyResults.push(
-      await dependencies.listOpsDailyIncentives({
+  const opsDailyResults: OpsDailyIncentiveResultDto[] = await mapWithConcurrency(
+    dates,
+    MONTHLY_CLOSING_QUERY_CONCURRENCY,
+    (serviceDate) =>
+      dependencies.listOpsDailyIncentives({
         operatingMonthId: parsed.data.operatingMonthId,
         serviceDate,
         prismaClient: client as unknown as Parameters<typeof listOpsDailyIncentives>[0]["prismaClient"]
       })
-    );
-  }
+  );
 
   const opsMonthlyResult = await dependencies.listOpsMonthlyIncentivePreview({
     operatingMonthId: parsed.data.operatingMonthId,
     prismaClient: client as unknown as Parameters<typeof listOpsMonthlyIncentivePreview>[0]["prismaClient"]
   });
 
-  for (const serviceDate of dates) {
-    earcareDailyResults.push(
-      await dependencies.listEarcareDailySettlements({
+  const earcareDailyResults: EarcareDailySettlementResultDto[] = await mapWithConcurrency(
+    dates,
+    MONTHLY_CLOSING_QUERY_CONCURRENCY,
+    (serviceDate) =>
+      dependencies.listEarcareDailySettlements({
         operatingMonthId: parsed.data.operatingMonthId,
         serviceDate,
         prismaClient: client as unknown as Parameters<typeof listEarcareDailySettlements>[0]["prismaClient"]
       })
-    );
-  }
+  );
 
-  for (const serviceDate of dates) {
-    financialDailyResults.push(
-      await dependencies.getDailyCallLedgerSummary({
+  const financialDailyResults: DailyCallLedgerSummaryDto[] = await mapWithConcurrency(
+    dates,
+    MONTHLY_CLOSING_QUERY_CONCURRENCY,
+    (serviceDate) =>
+      dependencies.getDailyCallLedgerSummary({
         operatingMonthId: parsed.data.operatingMonthId,
         serviceDate,
         prismaClient: client as unknown as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
       })
-    );
-  }
+  );
   const completedCalculations = await dependencies.listCompletedServiceCallCalculationsForOperatingMonth({
     operatingMonthId: parsed.data.operatingMonthId,
     startDate,

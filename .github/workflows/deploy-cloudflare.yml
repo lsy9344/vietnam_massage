@@ -1,0 +1,182 @@
+name: Deploy Cloudflare
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cloudflare-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  PNPM_VERSION: "10.12.1"
+
+jobs:
+  preflight:
+    name: Build deployment artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      HYPERDRIVE_ID: ${{ vars.CLOUDFLARE_HYPERDRIVE_ID }}
+      NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+      NEXTAUTH_URL: ${{ vars.NEXTAUTH_URL }}
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/vietnam_aesthetic
+      DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/vietnam_aesthetic
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$HYPERDRIVE_ID" =~ ^[0-9a-fA-F]{32}$ ]]; then
+            echo "CLOUDFLARE_HYPERDRIVE_ID repository variable must be a 32-character ID."
+            exit 1
+          fi
+          if [[ -z "$NEXTAUTH_SECRET" || -z "$NEXTAUTH_URL" ]]; then
+            echo "NEXTAUTH_SECRET secret and NEXTAUTH_URL repository variable are required."
+            exit 1
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+
+          path = Path("wrangler.jsonc")
+          marker = "00000000000000000000000000000000"
+          text = path.read_text()
+          if text.count(marker) != 1:
+              raise SystemExit("wrangler.jsonc Hyperdrive placeholder is missing or duplicated")
+          path.write_text(text.replace(marker, os.environ["HYPERDRIVE_ID"]))
+          PY
+
+      - name: Build Worker artifact
+        run: pnpm cf:build
+
+      - name: Validate Worker bundle
+        run: pnpm exec wrangler deploy --dry-run
+
+      - name: Upload Worker artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-worker-${{ github.sha }}
+          path: .open-next/
+          include-hidden-files: true
+          retention-days: 1
+          if-no-files-found: error
+
+  migrate:
+    name: Apply database migrations
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm prisma:generate
+
+      - name: Apply pending migrations
+        run: pnpm exec prisma migrate deploy
+
+  deploy:
+    name: Deploy validated Worker
+    needs: [preflight, migrate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      HYPERDRIVE_ID: ${{ vars.CLOUDFLARE_HYPERDRIVE_ID }}
+      NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+      NEXTAUTH_URL: ${{ vars.NEXTAUTH_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download validated Worker artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cloudflare-worker-${{ github.sha }}
+          path: .open-next/
+
+      - name: Prepare deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+            echo "Cloudflare deployment credentials are required."
+            exit 1
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+
+          path = Path("wrangler.jsonc")
+          marker = "00000000000000000000000000000000"
+          text = path.read_text()
+          if text.count(marker) != 1:
+              raise SystemExit("wrangler.jsonc Hyperdrive placeholder is missing or duplicated")
+          path.write_text(text.replace(marker, os.environ["HYPERDRIVE_ID"]))
+          PY
+
+      - name: Sync Worker runtime secrets
+        run: |
+          node -e 'process.stdout.write(JSON.stringify({ NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET, NEXTAUTH_URL: process.env.NEXTAUTH_URL }))' \
+            | pnpm exec wrangler secret bulk
+
+      - name: Deploy validated Worker artifact
+        run: pnpm exec wrangler deploy

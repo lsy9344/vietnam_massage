@@ -1,4 +1,4 @@
-import { hash, verify } from "@node-rs/argon2";
+import { hash, verify } from "@/lib/password-hash";
 import { prisma } from "@/lib/prisma";
 import { SAFE_AUTH_ERROR_MESSAGE } from "@/lib/auth-messages";
 import type { Role } from "@/lib/authorization";
@@ -186,8 +186,13 @@ export async function verifyPassword(passwordHash: string, secret: string) {
   }
 
   try {
-    return await verify(passwordHash, secret);
-  } catch {
+    const matches = await verify(passwordHash, secret);
+    if (!matches) {
+      console.error("[auth] password verification returned false");
+    }
+    return matches;
+  } catch (error) {
+    console.error("[auth] password verification failed", error);
     return false;
   }
 }

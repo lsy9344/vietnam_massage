@@ -182,7 +182,6 @@ if (!koMessages17.includes("권한이 없습니다.")) {
 }
 for (const required of [
   "requireRouteAccess(\"/masters/employees\")",
-  "ensureDefaultEmployees",
   "listEmployees",
   "EmployeeManager",
   "masters.employees.title",

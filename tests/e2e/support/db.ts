@@ -1,6 +1,6 @@
 import { config as loadEnv } from "dotenv";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../../../src/generated/prisma";
+import { PrismaClient } from "@prisma/client";
 
 loadEnv({ override: !process.env.CI, quiet: true });
 

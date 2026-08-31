@@ -1,30 +1,33 @@
-# 배포 가이드 — Vercel + Neon
+# 배포 가이드 — Cloudflare Workers + PlanetScale Postgres
 
-> 확정일: 2026-06-21 · 운영 환경 프로비저닝·검증 완료일: 2026-06-21
-> 스택: Next.js 16 (App Router, Node 런타임) · PostgreSQL 17(Neon) · Prisma 7 (`@prisma/adapter-pg` + `pg` 8) · NextAuth v4 · pnpm
-> 플랫폼: **Vercel**(앱, 리전 `sin1`) + **Neon**(DB, AWS `ap-southeast-1`, PostgreSQL 17)
+> 운영 전환일: 2026-08-28
+> 스택: Next.js 16 (App Router) · OpenNext Cloudflare 1.20.1 · PlanetScale Postgres · Prisma 7 · NextAuth v4 · pnpm
+> 운영 플랫폼: **Cloudflare Workers + Hyperdrive + PlanetScale Postgres(싱가포르)**
 
-> **이전 계획 있음:** 비용 구조 문제로 Cloudflare Workers + PlanetScale Postgres 이전을 계획 중이다.
-> 월 $32 → $15. 절차·근거·롤백은 `docs/plans/2026-08-28-cloudflare-migration-plan.md` 참고.
-> 이전이 완료될 때까지 이 문서가 운영 기준이다.
+절차·검증·롤백 기록은 `docs/plans/2026-08-28-cloudflare-migration-plan.md`, 실행 명령과 Secrets 설정은
+`docs/cloudflare-deployment.md`를 기준으로 한다.
 
-이 문서는 단일 매장 운영 ERP를 Vercel + Neon에 배포하는 절차다.
-아키텍처 결정 근거는 `_bmad-output/planning-artifacts/architecture.md`의 "Infrastructure & Deployment" 참고.
-**현재 운영 환경의 실제 리소스 ID·적용 스택은 같은 문서의 "As-provisioned record (2026-06-21)" 표에 기록**돼 있다.
-
-## 현재 운영 환경 (2026-06-21 적용 완료)
+## 현재 운영 환경 (2026-08-28 적용 완료)
 
 | 항목 | 값 |
 | --- | --- |
-| Vercel 프로젝트 | `erp_vietnam_aesthetic` (`prj_Clxkks3vDpagQLiFk4PNISPEh0L6`), 팀 `noah's projects` |
-| 앱 리전 | `sin1` (싱가포르) |
-| 빌드 커맨드 | `pnpm run vercel-build` (Vercel 프로젝트 설정에 적용됨) |
-| DB | Neon `erp-vietnam-aesthetic-sg` (Neon id `rapid-forest-91070214`, Vercel store `store_E2eQztb7zw0uI5Wb`) |
-| DB 리전 / 엔진 | AWS `ap-southeast-1` (싱가포르) / PostgreSQL 17 |
-| 운영 도메인 | https://erpvietnammassage.vercel.app |
+| Cloudflare Worker | `vietnam-massage-erp` |
+| 운영 주소 | https://vietnam-massage-erp.boothy-selectroom.workers.dev |
+| 런타임 DB 연결 | Hyperdrive binding `HYPERDRIVE` |
+| DB | PlanetScale `erp-vietnam-massage-sg`, branch `main`, PS-5 단일 노드 |
+| DB 리전 / 엔진 | AWS `ap-southeast-1` (싱가포르) / PostgreSQL |
+| 배포 파이프라인 | `.github/workflows/deploy-cloudflare.yml` — build 검증 → migration → 동일 artifact 배포 |
 | 적용 마이그레이션 | 12/12 |
 
-> 아래 1~6단계는 **백지 상태에서의 신규 구축 절차**다. 위 환경은 이미 이 절차로 구축·검증돼 있으므로, 일상 운영은 "이후 배포" 절을 따른다.
+## 롤백 보존 환경 (최소 2026-09-04T08:16:37Z까지)
+
+| 항목 | 상태 |
+| --- | --- |
+| Vercel `erp_vietnam_massage` | `MAINTENANCE_MODE=read-only`, 직접 주소 쓰기 차단 |
+| Neon `rapid-forest-91070214` | 최종 이전 시점 원본 보존 |
+
+> 아래 Vercel + Neon 1~6단계는 **레거시 환경의 구축·복구 참고 절차**다. 신규 배포와 일상 운영은
+> `docs/cloudflare-deployment.md` 및 이 문서의 "이후 배포" 절을 따른다.
 
 ## 핵심 원칙 (먼저 읽을 것)
 
@@ -72,8 +75,8 @@
 
 1. https://vercel.com 에서 **Add New → Project** → 이 GitHub 저장소를 import.
 2. Framework Preset은 자동으로 **Next.js**로 인식된다.
-3. 리포의 `vercel.json`이 `regions: ["sin1"]`(싱가포르 고정)과 `buildCommand: pnpm run vercel-build`(= `prisma generate && prisma migrate deploy && next build`)를 지정한다.
-   - ⚠️ **Vercel 프로젝트의 Build Command 설정이 `vercel.json`보다 우선한다.** Settings → Build & Development Settings에서 Build Command가 비어있거나(프레임워크 기본=`next build`) 다른 값이면 마이그레이션이 빌드 때 안 돈다. **반드시 `pnpm run vercel-build`로 설정**할 것. (이번 운영 환경의 최초 구축이 `next build`로 돼 있어 스키마 미적용 문제가 있었음 — As-provisioned record 참고.)
+3. 현재 `pnpm run vercel-build`는 롤백/Preview용으로 `prisma generate && next build`만 실행한다.
+   - 운영 migration은 Vercel Preview에 DB 비밀값을 노출하지 않고 GitHub Actions의 `migrate` job에서만 실행한다.
 4. 플랜이 **Pro**인지 확인 (팀/프로젝트 설정).
 
 ## 3단계 — 환경변수 등록 (Vercel)
@@ -147,20 +150,22 @@ DIRECT_DATABASE_URL="<대상>" pnpm exec prisma migrate deploy                  
 
 ## 이후 배포 (일상 운영)
 
-- `main`에 머지/푸시하면 Vercel이 자동 빌드·배포하며, `vercel-build`가 새 마이그레이션을 `migrate deploy`로 적용한다.
-- **마이그레이션 주의:** 새 스키마 변경은 반드시 로컬에서 `prisma migrate dev`로 마이그레이션 파일을 생성·커밋한 뒤 머지한다. 운영에는 절대 `migrate dev`를 돌리지 않는다 (빌드는 `migrate deploy`만 사용).
+- `main`에 머지/푸시하면 `.github/workflows/deploy-cloudflare.yml`이 OpenNext artifact를 검증하고 고정한다.
+- 사전 빌드 성공 후 PlanetScale Direct 연결로 `prisma migrate deploy`를 실행하며, 성공한 경우에만 같은 artifact를 Worker에 배포한다.
+- Vercel 자동 배포는 롤백 자산 갱신용이며 `MAINTENANCE_MODE=read-only`를 유지하고 migration을 실행하지 않는다.
+- **마이그레이션 주의:** 새 스키마 변경은 반드시 로컬에서 `prisma migrate dev`로 마이그레이션 파일을 생성·커밋한 뒤 머지한다. 운영에는 절대 `migrate dev`를 돌리지 않는다.
 
 ## 백업/복구 (운영 전 확정 필요)
 
 - 월마감 스냅샷·감사 로그는 사업상 핵심 기록이다. Neon 콘솔에서 **백업 보존기간(PITR window)** 을 운영 정책에 맞게 설정하고, 복구 테스트를 1회 수행한다.
 - Neon은 시점 복구(point-in-time restore)를 제공한다 — 플랜별 보존기간을 확인할 것.
 
-## 비용 요약 (2026-06 기준, 단일 매장)
+## 비용 요약 (2026-08 기준, 단일 매장)
 
 | 항목 | 플랜 | 예상 월 비용 |
 | --- | --- | --- |
-| Vercel | Pro | ~$20 (포함 크레딧 내에서 대부분 커버) |
-| Neon | Launch (항상 켜기, 최소 컴퓨트) | ~$5–15 (종량제) |
-| **합계** | | **~$25–35/월** |
+| Cloudflare Workers | Paid | $5 |
+| PlanetScale Postgres | PS-5 단일 노드 | $5 + 스토리지 |
+| **합계** | | **약 $10 + 스토리지/월** |
 
-가격·리전·플랜 정책은 변동될 수 있으므로 https://vercel.com/pricing 와 https://neon.com/pricing 에서 최종 확인할 것.
+Vercel/Neon 비용은 1주 롤백 보존 종료 후 정리한다. 가격·리전·플랜 정책은 변동될 수 있으므로 각 서비스의 최신 요금을 확인한다.

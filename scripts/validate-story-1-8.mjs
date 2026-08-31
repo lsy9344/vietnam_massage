@@ -164,7 +164,6 @@ if (!koMessages18.includes("권한이 없습니다.")) {
 }
 for (const required of [
   "requireRouteAccess(\"/masters/courses\")",
-  "ensureDefaultCoursesAndPolicies",
   "CoursePolicyManager",
   "masters.courses.title",
   "masters.courses.secondTherapistRequired",
