@@ -33,9 +33,16 @@ export function formatCurrencyVnd(locale: Locale, value: number, withSymbol = fa
   return new Intl.NumberFormat(intlLocale(locale), { maximumFractionDigits: 0 }).format(value);
 }
 
-/** 날짜/시간 표시. 기존 `Intl.DateTimeFormat("ko-KR")` 대체. */
+/**
+ * 날짜/시간 표시. 기존 `Intl.DateTimeFormat("ko-KR")` 대체.
+ *
+ * 24시간제로 고정한다. ko-KR 기본값인 12시간제는 오전/오후 문구를 만드는데, 서버(Node)와
+ * 브라우저(Chromium)의 ICU 데이터가 다르면 같은 시각이 "오후 7:42"와 "PM 7:42"로 갈려
+ * hydration mismatch가 난다. 그러면 React가 트리를 다시 그리면서 서버 액션 결과 메시지와
+ * 입력값이 사라져 "저장이 안 된 것처럼" 보인다. 자릿수 표기가 없으면 판정 문구도 없다.
+ */
 export function formatDateTime(locale: Locale, value: string | number | Date, options?: Intl.DateTimeFormatOptions): string {
-  return new Intl.DateTimeFormat(intlLocale(locale), { timeZone: BUSINESS_TIME_ZONE, ...options }).format(new Date(value));
+  return new Intl.DateTimeFormat(intlLocale(locale), { timeZone: BUSINESS_TIME_ZONE, hour12: false, ...options }).format(new Date(value));
 }
 
 /** 베트남 업무 시간 기준 HH:mm 시각. */
