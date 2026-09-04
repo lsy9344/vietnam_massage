@@ -139,7 +139,10 @@ test.describe("Story 1.4 운영월 관리", () => {
     await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: "운영월" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "생성 시각" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "수정 시각" })).toBeVisible();
-    await expect(page.getByRole("row", { name: /2031-05/ }).getByText("선택 기준")).toBeVisible();
+    // "선택 기준" 배지는 오늘이 포함된 운영월(없으면 목록 첫 행)에 붙는다. 공유 DB에는 다른 스펙의
+    // 운영월도 있으므로 어느 행인지 고정할 수 없다. 배지가 정확히 하나만 있는지로 확인한다.
+    await expect(page.getByRole("row", { name: /2031-05/ }).first()).toBeVisible();
+    await expect(page.getByText("선택 기준")).toHaveCount(1);
 
     const monthInput = page.getByLabel("새 운영월");
     await monthInput.fill("2031-13");
