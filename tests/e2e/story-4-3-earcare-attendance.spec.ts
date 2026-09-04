@@ -121,17 +121,17 @@ test.describe("Story 4.3 earcare attendance", () => {
     await login(page, "story43_settlement", "Story43!settlement");
     await page.goto(`/settlements/earcare?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2034-03-12`);
 
-    await expect(page.getByRole("heading", { name: "귀케어 일일정산" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "귀케어 일일정산", level: 1 })).toBeVisible();
     await expect(page.getByLabel("운영월")).toHaveValue(seededData.writableOperatingMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2034-03-12");
-    await expect(page.getByText("E2E43 귀케어1")).toBeVisible();
-    await expect(page.getByText("E2E43 귀케어2")).toBeVisible();
-    await expect(page.getByText("E2E43 귀케어3")).toBeVisible();
-    await expect(page.getByText("E2E43 귀케어4")).toBeVisible();
+    await expect(page.getByText("E2E43 귀케어1").first()).toBeVisible();
+    await expect(page.getByText("E2E43 귀케어2").first()).toBeVisible();
+    await expect(page.getByText("E2E43 귀케어3").first()).toBeVisible();
+    await expect(page.getByText("E2E43 귀케어4").first()).toBeVisible();
     await expect(page.getByText("E2E43 비활성 귀케어")).toHaveCount(0);
-    await expect(page.getByText("지급 대상")).toBeVisible();
+    await expect(page.getByText("지급 대상").first()).toBeVisible();
 
-    const earcare2Row = page.getByRole("row").filter({ hasText: "E2E43 귀케어2" });
+    const earcare2Row = page.getByRole("row").filter({ has: page.getByLabel("E2E43 귀케어2 근무상태") });
     await earcare2Row.getByLabel("E2E43 귀케어2 근무상태").selectOption("DAY_OFF");
     await earcare2Row.getByRole("button", { name: "저장" }).click();
 
@@ -181,7 +181,8 @@ test.describe("Story 4.3 earcare attendance", () => {
     await login(page, "story43_settlement", "Story43!settlement");
     await page.goto(`/settlements/earcare?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2034-03-14`);
 
-    const earcare3Row = page.getByRole("row").filter({ hasText: "E2E43 귀케어3" });
+    // 같은 직원이 출근 입력 표와 정산 표 양쪽에 나온다. 근무상태 입력이 있는 행(출근 입력 표)로 좁힌다.
+    const earcare3Row = page.getByRole("row").filter({ has: page.getByLabel("E2E43 귀케어3 근무상태") });
     await earcare3Row.getByLabel("E2E43 귀케어3 근무상태").selectOption("LATE");
     await earcare3Row.getByRole("button", { name: "저장" }).click();
     await expect(earcare3Row.getByText("저장됨")).toBeVisible();
@@ -189,7 +190,7 @@ test.describe("Story 4.3 earcare attendance", () => {
 
     await page.goto(`/settlements/earcare?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2034-03-15`);
 
-    const nextDateEarcare3Row = page.getByRole("row").filter({ hasText: "E2E43 귀케어3" });
+    const nextDateEarcare3Row = page.getByRole("row").filter({ has: page.getByLabel("E2E43 귀케어3 근무상태") });
     await expect(page.getByLabel("조회날짜")).toHaveValue("2034-03-15");
     await expect(nextDateEarcare3Row.getByLabel("E2E43 귀케어3 근무상태")).toHaveValue("NORMAL");
     await expect(nextDateEarcare3Row.getByText("지급 대상")).toBeVisible();

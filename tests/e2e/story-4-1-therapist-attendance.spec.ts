@@ -154,11 +154,13 @@ test.describe("Story 4.1 therapist attendance", () => {
 
     const therapist1Row = page.getByRole("row").filter({ hasText: "E2E41 마사지사1" }).first();
     await therapist1Row.getByLabel("E2E41 마사지사1 출근시간").fill("22:00");
-    await therapist1Row.getByLabel("E2E41 마사지사1 퇴근시간").fill("06:00");
+    // 만근 기준은 대기시간 600분(10시간)이다. 자정을 넘긴 22:00~08:00이 정확히 600분이다.
+    await therapist1Row.getByLabel("E2E41 마사지사1 퇴근시간").fill("08:00");
     await therapist1Row.getByRole("button", { name: "저장" }).click();
 
-    await expect(therapist1Row.getByText("저장됨")).toBeVisible();
-    await expect(therapist1Row.getByText("만근 인정 (480분)")).toBeVisible();
+    // 저장이 성공하면 행이 저장된 값으로 remount되므로 "저장됨" 배지는 남지 않는다. 결과로 확인한다.
+    await expect(therapist1Row.getByText("만근 인정 (600분)")).toBeVisible();
+    await expect(therapist1Row.getByLabel("E2E41 마사지사1 퇴근시간")).toHaveValue("08:00");
 
     await expect
       .poll(async () => {
@@ -173,7 +175,7 @@ test.describe("Story 4.1 therapist attendance", () => {
         });
         return attendance ? `${attendance.standbyMinutes}:${attendance.isFullAttendanceRecognized}` : null;
       })
-      .toBe("480:true");
+      .toBe("600:true");
 
     const savedAttendance = await (prisma as any).therapistAttendance.findUniqueOrThrow({
       where: {
@@ -186,7 +188,7 @@ test.describe("Story 4.1 therapist attendance", () => {
     });
     expect(savedAttendance.employeeId).toBe(seededData.therapistEmployeeIds[0]);
     expect(savedAttendance.checkInMinute).toBe(1320);
-    expect(savedAttendance.checkOutMinute).toBe(360);
+    expect(savedAttendance.checkOutMinute).toBe(480);
     await expect
       .poll(async () =>
         (prisma as any).auditLog.count({
@@ -209,7 +211,6 @@ test.describe("Story 4.1 therapist attendance", () => {
     await therapist2Row.getByLabel("E2E41 마사지사2 퇴근시간").fill("17:59");
     await therapist2Row.getByRole("button", { name: "저장" }).click();
 
-    await expect(therapist2Row.getByText("저장됨")).toBeVisible();
     await expect(therapist2Row.getByText("만근 미인정 (479분)")).toBeVisible();
   });
 
