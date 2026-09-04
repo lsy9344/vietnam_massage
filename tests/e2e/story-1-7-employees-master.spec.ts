@@ -176,9 +176,9 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await row.getByRole("button", { name: "계정 연결" }).click();
     // 계정 연결 server action 완료를 DB 폴링으로 먼저 확정해 revalidate race를 제거한다.
     await expect.poll(async () => (await (prisma as any).userAccount.findUnique({ where: { accountId: linkedAccountId }, select: { role: true } }))?.role).toBe("counter");
-    // "counter"는 역할 <select>의 selected option과 결과 표시 div("현재 역할: counter") 양쪽에 매칭(strict 위반).
-    // 계정 연결 결과는 표시 div로 확인한다.
-    await expect(row.getByText("현재 역할: counter")).toBeVisible();
+    // 역할은 화면에 한국어 라벨("카운터")로 표시된다. 라벨만으로는 역할 <select>의 selected option과
+    // 겹쳐 strict 위반이 나므로, 계정 연결 결과는 "현재 역할: " 접두사가 붙은 표시 div로 확인한다.
+    await expect(row.getByText("현재 역할: 카운터")).toBeVisible();
     const linkedAccount = await (prisma as any).userAccount.findUnique({
       where: { accountId: linkedAccountId },
       select: { employeeId: true, role: true, isActive: true }

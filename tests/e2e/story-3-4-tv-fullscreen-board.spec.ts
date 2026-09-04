@@ -342,7 +342,8 @@ test.describe("Story 3.4 TV fullscreen board", () => {
     await expect(page.getByLabel("실시간 갱신 상태")).toContainText(/마지막 갱신|갱신 중|갱신 지연/);
     await expect(page.getByLabel("실시간 갱신 상태")).toContainText(/갱신 지연|마지막 갱신|갱신 중/);
     await expect(page.getByRole("button", { name: "새로고침" })).toBeVisible();
-    await page.clock.fastForward(46_000);
+    // 지연 판정 임계값은 자동 갱신 주기(30초)의 3배인 90초다. 그 너머로 시계를 돌려야 "갱신 지연"이 뜬다.
+    await page.clock.fastForward(95_000);
     await expect(page.getByLabel("실시간 갱신 상태")).toContainText("갱신 지연");
 
     await page.getByTestId("room-status-card").first().click();

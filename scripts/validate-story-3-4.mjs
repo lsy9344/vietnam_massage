@@ -208,7 +208,7 @@ for (const required of [
   "결제·확인 필요",
   "실시간 갱신 상태",
   "갱신 지연",
-  "fastForward(46_000)",
+  "fastForward(95_000)",
   "새로고침",
   "콜 원장 그리드",
   "저장중",

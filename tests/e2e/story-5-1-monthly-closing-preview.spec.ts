@@ -11,6 +11,8 @@ type SeededData = {
   previewEndDate: string;
   lockedStartDate: string;
   memoPrefix: string;
+  therapistLabel: string;
+  earcareLabel: string;
   accounts: {
     admin: string;
     settlement: string;
@@ -330,8 +332,12 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
   await seedEmployee(`E2E51-${suffix}-OPS-001`, "E2E51 팀장", "OPERATIONS", "팀장", sortBase + 10);
   await seedEmployee(`E2E51-${suffix}-OPS-002`, "E2E51 카운터", "OPERATIONS", "카운터", sortBase + 11);
   await seedEmployee(`E2E51-${suffix}-OPS-003`, "E2E51 웨이터", "OPERATIONS", "웨이터", sortBase + 12);
-  const therapist = await seedEmployee(`E2E51-${suffix}-THR-001`, "E2E51 마사지사", "THERAPIST", "마사지사", sortBase + 20);
-  const earcare = await seedEmployee(`E2E51-${suffix}-EAR-001`, "E2E51 귀케어", "EARCARE", "귀케어", sortBase + 30);
+  // 표시명에 worker suffix를 붙인다. 테스트가 실패하면 Playwright가 worker를 새로 띄우고 다음
+  // workerIndex로 다시 시드하므로, 표시명이 같으면 행 locator가 strict 위반으로 연쇄 실패한다.
+  const therapistLabel = `E2E51 마사지사 ${suffix}`;
+  const earcareLabel = `E2E51 귀케어 ${suffix}`;
+  const therapist = await seedEmployee(`E2E51-${suffix}-THR-001`, therapistLabel, "THERAPIST", "마사지사", sortBase + 20);
+  const earcare = await seedEmployee(`E2E51-${suffix}-EAR-001`, earcareLabel, "EARCARE", "귀케어", sortBase + 30);
 
   const previewOperatingMonth = await (prisma as any).operatingMonth.upsert({
     where: { monthKey: previewMonthKey },
@@ -407,9 +413,15 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
     await seedAttendance("opsAttendance", previewOperatingMonth.id, utcDate(previewStartDate), employee.id, "NORMAL");
     await seedAttendance("opsAttendance", lockedOperatingMonth.id, utcDate(lockedStartDate), employee.id, "NORMAL");
   }
-  await seedAttendance("earcareAttendance", previewOperatingMonth.id, utcDate(previewStartDate), earcare.id, "NORMAL");
-  await seedAttendance("earcareAttendance", previewOperatingMonth.id, utcDate(previewEndDate), earcare.id, "OFF");
-  await seedAttendance("earcareAttendance", lockedOperatingMonth.id, utcDate(lockedStartDate), earcare.id, "NORMAL");
+  // 출근 입력이 없는 귀케어 직원은 정상근무로 간주되어 그날 귀케어 풀을 나눠 갖는다. 공용 마스터 시드가
+  // 만드는 기본 귀케어 직원까지 모두 상태를 명시해야 "하루는 이 스펙 직원 단독 분배, 하루는 미분배"라는
+  // 시나리오가 기본 직원 수와 무관하게 고정된다.
+  for (const earcareEmployee of await (prisma as any).employee.findMany({ where: { employeeGroup: "EARCARE", isActive: true } })) {
+    const workingStatus = earcareEmployee.id === earcare.id ? "NORMAL" : "OFF";
+    await seedAttendance("earcareAttendance", previewOperatingMonth.id, utcDate(previewStartDate), earcareEmployee.id, workingStatus);
+    await seedAttendance("earcareAttendance", previewOperatingMonth.id, utcDate(previewEndDate), earcareEmployee.id, "OFF");
+    await seedAttendance("earcareAttendance", lockedOperatingMonth.id, utcDate(lockedStartDate), earcareEmployee.id, workingStatus);
+  }
 
   return {
     previewOperatingMonthId: previewOperatingMonth.id,
@@ -418,6 +430,8 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
     previewEndDate,
     lockedStartDate,
     memoPrefix,
+    therapistLabel,
+    earcareLabel,
     accounts
   };
 }
@@ -455,13 +469,14 @@ test.describe("Story 5.1 monthly closing preview", () => {
     await expect(page.getByRole("heading", { name: "귀케어" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "산출 근거/warning" })).toBeVisible();
 
-    const therapistRow = page.getByRole("row").filter({ hasText: "E2E51 마사지사" });
+    const therapistRow = page.getByRole("row").filter({ hasText: seededData.therapistLabel });
     await expect(therapistRow).toContainText("THR-001");
     await expect(therapistRow).toContainText("2건");
     await expect(therapistRow).toContainText("1,400,000 VND");
-    await expect(page.getByText("Story 5.2 대기", { exact: false })).toBeVisible();
+    // Story 5.2에서 보너스 계산이 들어오며 마사지사 표 설명이 "Story 5.2 대기"에서 합산 문구로 바뀌었다.
+    await expect(page.getByText("최종지급액은 월 정산액과 만근/갯수왕 보너스를 합산한다.", { exact: false })).toBeVisible();
 
-    const earcareRow = page.getByRole("row").filter({ hasText: "E2E51 귀케어" });
+    const earcareRow = page.getByRole("row").filter({ hasText: seededData.earcareLabel });
     await expect(earcareRow).toContainText("1일");
     await expect(earcareRow).toContainText("100,000 VND");
     await expect(page.getByText(`기간 ${seededData.previewStartDate} ~ ${seededData.previewEndDate}, source day count 2`)).toBeVisible();
