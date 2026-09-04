@@ -118,7 +118,7 @@ for (const required of [
   "checkOutMinute",
   "standbyMinutes",
   "isFullAttendanceRecognized",
-  "480",
+  "600",
   "1440",
   "computeStandbyMinutes",
   "assertOperatingMonthPayoutWritable",
@@ -256,9 +256,9 @@ for (const required of [
 const unitTest = read("src/modules/settlements/therapist-attendance-service.test.ts");
 for (const required of [
   "22:00",
-  "06:00",
-  "05:59",
-  "480",
+  "08:00",
+  "07:59",
+  "600",
   "479",
   "10:00",
   "therapist_attendance.created",
@@ -308,7 +308,7 @@ for (const required of [
   "Therapist Attendance Service",
   "listTherapistFullAttendanceRecognitions",
   "checkInMinute",
-  "480",
+  "600",
   "Story 5.2"
 ]) {
   if (!readme.includes(required)) errors.push(`src/modules/settlements/README.md missing ${required}`);

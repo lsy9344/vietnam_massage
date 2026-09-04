@@ -114,6 +114,11 @@ jobs:
       - name: Generate Prisma client
         run: pnpm prisma:generate
 
+      # One-off recovery: the first 20260904100000 run failed mid-apply (P3018) and the
+      # failed record blocks deploy until it is marked rolled back. Remove after green.
+      - name: Recover failed migration attempt
+        run: pnpm exec prisma migrate resolve --rolled-back 20260904100000_full_attendance_10h_nullable_checkout || true
+
       - name: Apply pending migrations
         run: pnpm exec prisma migrate deploy
 
