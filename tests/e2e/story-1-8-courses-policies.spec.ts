@@ -91,6 +91,18 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
   });
 
   test.afterAll(async () => {
+    // ensureDefaultCoursesAndPolicies와 화면 저장이 만든 운영팀 인센 규칙은 종료월이 비어 있어
+    // 이후 모든 운영월에 적용된다. 다른 스펙의 지급액을 바꾸지 않도록 시작월로 한정한다.
+    for (const table of ["opsDailyIncentiveRule", "opsMonthlyIncentiveRule"] as const) {
+      const openEnded = (await (prisma as any)[table].findMany({
+        where: { effectiveToMonth: null },
+        select: { id: true, effectiveFromMonth: true }
+      })) as Array<{ id: string; effectiveFromMonth: string }>;
+      for (const rule of openEnded) {
+        await (prisma as any)[table].update({ where: { id: rule.id }, data: { effectiveToMonth: rule.effectiveFromMonth } });
+      }
+    }
+
     // 테스트가 코스 정책 tvDisplayName/name을 변경하므로(현재 정책 저장), 반복 실행 안정성을 위해
     // 각 코스의 활성 정책을 schema 기본값으로 복원한다(teardown 부재 시 다음 실행에서 원본 라벨 누락).
     for (const seed of defaultCourseSeeds) {
