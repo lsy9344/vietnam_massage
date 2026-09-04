@@ -37,3 +37,6 @@ package-lock.json
 
 # Pi runtime artifacts
 .pi/
+
+# Command Code local state
+.commandcode/

@@ -14,6 +14,7 @@ import {
   type EmployeeActionState
 } from "@/app/(erp)/masters/employees/actions";
 import { useLocale, useT } from "@/lib/i18n/client";
+import type { Translator } from "@/lib/i18n";
 import { formatDateTime, formatNumber } from "@/lib/i18n/format";
 import type { Locale } from "@/lib/i18n/config";
 import type { MessageKey } from "@/lib/i18n/types";
@@ -23,6 +24,20 @@ const groupLabelKeys: Record<EmployeeGroup, MessageKey> = {
   EARCARE: "masters.employees.group.EARCARE",
   THERAPIST: "masters.employees.group.THERAPIST"
 };
+
+const roleLabelKeys: Record<(typeof accountRoles)[number], MessageKey> = {
+  administrator: "masters.employees.role.administrator",
+  counter: "masters.employees.role.counter",
+  waiter: "masters.employees.role.waiter",
+  settlement_manager: "masters.employees.role.settlement_manager",
+  read_only_viewer: "masters.employees.role.read_only_viewer"
+};
+
+function roleDisplayName(t: Translator, role: string) {
+  return (accountRoles as readonly string[]).includes(role)
+    ? t(roleLabelKeys[role as (typeof accountRoles)[number]])
+    : role;
+}
 
 function masterDateTime(locale: Locale, value: string) {
   return formatDateTime(locale, value, { dateStyle: "short", timeStyle: "short" });
@@ -143,12 +158,17 @@ function EmployeeCreateForm() {
           <input className="h-9 border border-border bg-background px-2 text-sm text-foreground" min={1} name="sortOrder" required type="number" />
           <InlineError field="sortOrder" state={state} />
         </label>
-        <div className="flex items-end">
+        <div className="flex items-end gap-2">
           <Button className="h-9 px-3 text-xs" disabled={pending} type="submit">
             {t("masters.employees.create")}
           </Button>
+          <InlineError state={state} />
+          {state?.ok ? (
+            <span className="whitespace-nowrap text-xs font-semibold text-success" role="status">
+              {t("masters.employees.savedNotice")}
+            </span>
+          ) : null}
         </div>
-        <InlineError state={state} />
       </form>
     </section>
   );
@@ -197,7 +217,7 @@ function ProfileForm({ employee }: { employee: EmployeeDto }) {
       </label>
       <label className="grid gap-1 text-xs text-muted">
         {t("masters.employees.field.baseSalary")}
-        <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={employee.baseSalary} min={0} name="baseSalary" type="number" />
+        <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={employee.baseSalary} min={0} name="baseSalary" required type="number" />
         <InlineError field="baseSalary" state={state} />
       </label>
       <label className="grid gap-1 text-xs text-muted">
@@ -226,13 +246,18 @@ function ProfileForm({ employee }: { employee: EmployeeDto }) {
         </select>
         <InlineError field="employmentStatus" state={state} />
       </label>
-      <div className="flex items-end">
+      <div className="flex items-end gap-2">
         <input name="sortOrder" type="hidden" value={employee.sortOrder} />
         <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant="secondary">
           {t("masters.employees.saveProfile")}
         </Button>
+        <InlineError state={state} />
+        {state?.ok ? (
+          <span className="whitespace-nowrap text-xs font-semibold text-success" role="status">
+            {state.notice ?? t("masters.employees.savedNotice")}
+          </span>
+        ) : null}
       </div>
-      <InlineError state={state} />
     </form>
   );
 }
@@ -304,10 +329,11 @@ function AccountLinkForm({ employee }: { employee: EmployeeDto }) {
         <select className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={employee.account?.role ?? "counter"} name="role">
           {accountRoles.map((role) => (
             <option key={role} value={role}>
-              {role}
+              {t(roleLabelKeys[role])}
             </option>
           ))}
         </select>
+        <span className="text-[11px] leading-4 text-muted">{t("masters.employees.role.tvHint")}</span>
         <InlineError field="role" state={state} />
       </label>
       <label className="grid gap-1 text-xs text-muted">
@@ -315,12 +341,17 @@ function AccountLinkForm({ employee }: { employee: EmployeeDto }) {
         <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" name="initialSecret" type="password" />
         <InlineError field="initialSecret" state={state} />
       </label>
-      <div className="flex items-end">
+      <div className="flex items-end gap-2">
         <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant="secondary">
           {t("masters.employees.linkAccount")}
         </Button>
+        <InlineError state={state} />
+        {state?.ok ? (
+          <span className="whitespace-nowrap text-xs font-semibold text-success" role="status">
+            {t("masters.employees.savedNotice")}
+          </span>
+        ) : null}
       </div>
-      <InlineError state={state} />
     </form>
   );
 }
@@ -374,7 +405,7 @@ function EmployeeTable({ title, employees }: { title: string; employees: Employe
                 <td className="border-b border-border px-3 py-2">
                   <AccountLinkForm employee={employee} />
                   {employee.account ? (
-                    <div className="mt-1 text-xs text-muted">{t("masters.employees.currentRole", { role: employee.account.role })}</div>
+                    <div className="mt-1 text-xs text-muted">{t("masters.employees.currentRole", { role: roleDisplayName(t, employee.account.role) })}</div>
                   ) : null}
                 </td>
                 <td className="border-b border-border px-3 py-2 text-xs text-muted">

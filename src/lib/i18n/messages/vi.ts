@@ -72,7 +72,7 @@ export const vi: Messages = {
   "auth.signIn.identityLabel": "Email hoặc ID tài khoản",
   "auth.signIn.passwordLabel": "Mật khẩu",
   "auth.signIn.submit": "Đăng nhập",
-  "auth.error.invalidCredentials": "Thông tin tài khoản không đúng hoặc không thể sử dụng.",
+  "auth.error.invalidCredentials": "Thông tin tài khoản không đúng hoặc không thể sử dụng. Nhập sai mật khẩu 5 lần liên tiếp sẽ khiến tài khoản bị khóa trong 15 phút.",
 
   // 객실 상태 표시
   "roomStatus.사용중": "Đang sử dụng",
@@ -331,6 +331,7 @@ export const vi: Messages = {
 
   // 마사지사 출퇴근 입력 테이블
   "settlements.therapist.attendance.checkInMissing": "Chưa nhập chuyên cần",
+  "settlements.therapist.attendance.checkOutMissing": "Chưa nhập giờ ra (chưa xét đủ công)",
   "settlements.therapist.attendance.fullRecognized": "Công nhận đủ công ({minutes} phút)",
   "settlements.therapist.attendance.fullNotRecognized": "Chưa công nhận đủ công ({minutes} phút)",
   "settlements.therapist.attendance.checkInTimeAria": "Giờ vào của {name}",
@@ -338,7 +339,7 @@ export const vi: Messages = {
   "settlements.therapist.attendance.empty.title": "Không có KTV massage đang hoạt động",
   "settlements.therapist.attendance.empty.description": "Hãy kích hoạt KTV massage trong dữ liệu gốc nhân viên rồi tra cứu lại.",
   "settlements.therapist.attendance.title": "Nhập chuyên cần KTV massage",
-  "settlements.therapist.attendance.description": "Khi lưu giờ vào/giờ ra, thời gian chờ và việc công nhận đủ công được tính và lưu. Thời gian chờ từ 8 giờ (480 phút) trở lên là công nhận đủ công.",
+  "settlements.therapist.attendance.description": "Khi lưu giờ vào/giờ ra, thời gian chờ và việc công nhận đủ công được tính và lưu. Thời gian chờ từ 10 giờ (600 phút) trở lên là công nhận đủ công. Trước giờ ra có thể chỉ lưu giờ vào; khi lưu giờ ra, việc xét đủ công được tính lại.",
   "settlements.therapist.attendance.column.therapist": "KTV massage",
   "settlements.therapist.attendance.column.checkIn": "Giờ vào",
   "settlements.therapist.attendance.column.checkOut": "Giờ ra",
@@ -944,6 +945,14 @@ export const vi: Messages = {
   "masters.employees.employeeId": "ID nhân viên: {id}",
   "masters.employees.staffCodeLine": "staff code: {code}",
   "masters.employees.currentRole": "Vai trò hiện tại: {role}",
+  "masters.employees.savedNotice": "Đã lưu.",
+  "masters.employees.sortOrderAutoAdjusted": "Số thứ tự bị trùng nên đã tự động điều chỉnh thành {sortOrder}.",
+  "masters.employees.role.administrator": "Quản trị viên",
+  "masters.employees.role.counter": "Lễ tân",
+  "masters.employees.role.waiter": "Phục vụ",
+  "masters.employees.role.settlement_manager": "Quản lý đối soát",
+  "masters.employees.role.read_only_viewer": "Chỉ xem (bảng TV)",
+  "masters.employees.role.tvHint": "Bảng trạng thái TV (/tv) chỉ cho phép vai trò quản trị viên (administrator) hoặc chỉ xem (read_only_viewer) truy cập.",
   "masters.employees.createdLine": "Tạo {value}",
   "masters.employees.updatedLine": "Sửa {value}",
 

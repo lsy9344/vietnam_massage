@@ -329,10 +329,11 @@ model OpsAttendance {
 }
 
 // DB CHECK constraints (declared in the migration, not expressible in Prisma schema):
-//   - check_in_minute / check_out_minute are minute-of-day integers in 0..1439
-//   - standby_minutes is the overnight-aware difference in 0..1439 and equals
+//   - check_in_minute is a minute-of-day integer in 0..1439
+//   - check_out_minute is a nullable minute-of-day integer in 0..1439 (null = 퇴근 미입력)
+//   - standby_minutes is the nullable overnight-aware difference in 0..1439 and equals
 //     ((check_out_minute - check_in_minute + 1440) % 1440)
-//   - is_full_attendance_recognized equals (standby_minutes >= 480)
+//   - is_full_attendance_recognized equals (standby_minutes is not null and standby_minutes >= 600)
 model TherapistAttendance {
   id                         String         @id @default(cuid())
   operatingMonthId           String         @map("operating_month_id")
@@ -341,8 +342,8 @@ model TherapistAttendance {
   employeeId                 String         @map("employee_id")
   employee                   Employee       @relation(fields: [employeeId], references: [id])
   checkInMinute              Int            @map("check_in_minute")
-  checkOutMinute             Int            @map("check_out_minute")
-  standbyMinutes             Int            @map("standby_minutes")
+  checkOutMinute             Int?           @map("check_out_minute")
+  standbyMinutes             Int?           @map("standby_minutes")
   isFullAttendanceRecognized Boolean        @map("is_full_attendance_recognized")
   isActive                   Boolean        @default(true) @map("is_active")
   createdAt                  DateTime       @default(now()) @map("created_at")

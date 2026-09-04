@@ -415,18 +415,14 @@ export async function updateEmployeeProfile(input: UpdateEmployeeProfileInput) {
   const client = getClient(input.prismaClient);
 
   return runInTransaction(client, async (tx) => {
+    // Tolerated read: legacy rows with non-standard enum values must still be editable;
+    // the written values always come from the validated input, so the write normalizes them.
     const currentRecord = await findEmployeeOrThrow(tx, parsed.data.employeeId);
-    const before = toDto(currentRecord);
+    const before = toDto(currentRecord, { tolerateInvalidEnums: true });
 
     if (parsed.data.staffCode !== before.staffCode) {
       throw new EmployeeDomainError("staff code는 생성 후 변경할 수 없습니다.", "IMMUTABLE_EMPLOYEE_STAFF_CODE");
     }
-
-    await assertNoEmployeeConflict(tx, {
-      employeeGroup: parsed.data.employeeGroup,
-      sortOrder: parsed.data.sortOrder,
-      excludeId: parsed.data.employeeId
-    });
 
     const nextProfile = {
       ...before,
@@ -439,16 +435,35 @@ export async function updateEmployeeProfile(input: UpdateEmployeeProfileInput) {
       return before;
     }
 
+    // Group changes commonly collide with an existing sortOrder in the target group
+    // (defaults deliberately reuse the same numbers across groups). Instead of failing
+    // the save, fall back to the next free order at the end of the target group.
+    let nextSortOrder = parsed.data.sortOrder;
+    const sortOrderConflict = await tx.employee.findFirst({
+      where: {
+        employeeGroup: parsed.data.employeeGroup,
+        sortOrder: nextSortOrder,
+        NOT: { id: parsed.data.employeeId }
+      }
+    });
+    if (sortOrderConflict) {
+      const lastInGroup = await tx.employee.findFirst({
+        where: { employeeGroup: parsed.data.employeeGroup },
+        orderBy: { sortOrder: "desc" }
+      });
+      nextSortOrder = (lastInGroup?.sortOrder ?? 0) + 1;
+    }
+
     const updateResult = await tx.employee.updateMany({
       where: { id: parsed.data.employeeId },
-      data: employeeData(parsed.data)
+      data: employeeData({ ...parsed.data, sortOrder: nextSortOrder })
     });
     if (updateResult.count !== 1) {
       throw new EmployeeDomainError("직원을 찾을 수 없습니다.", "EMPLOYEE_NOT_FOUND");
     }
 
     const updatedRecord = await findEmployeeOrThrow(tx, parsed.data.employeeId);
-    const after = toDto(updatedRecord);
+    const after = toDto(updatedRecord, { tolerateInvalidEnums: true });
 
     await recordEmployeeAudit(tx, {
       actorId: input.actorId,
@@ -472,7 +487,7 @@ export async function updateEmployeeSortOrder(input: UpdateEmployeeSortOrderInpu
 
   return runInTransaction(client, async (tx) => {
     const currentRecord = await findEmployeeOrThrow(tx, parsed.data.employeeId);
-    const before = toDto(currentRecord);
+    const before = toDto(currentRecord, { tolerateInvalidEnums: true });
     await assertNoEmployeeConflict(tx, {
       employeeGroup: before.employeeGroup,
       sortOrder: parsed.data.sortOrder,
@@ -491,7 +506,7 @@ export async function updateEmployeeSortOrder(input: UpdateEmployeeSortOrderInpu
       throw new EmployeeDomainError("직원을 찾을 수 없습니다.", "EMPLOYEE_NOT_FOUND");
     }
 
-    const after = toDto(await findEmployeeOrThrow(tx, parsed.data.employeeId));
+    const after = toDto(await findEmployeeOrThrow(tx, parsed.data.employeeId), { tolerateInvalidEnums: true });
     await recordEmployeeAudit(tx, {
       actorId: input.actorId,
       action: "employee.sort_order_changed",
@@ -514,7 +529,7 @@ export async function deactivateEmployee(input: EmployeeMutationInput) {
 
   return runInTransaction(client, async (tx) => {
     const currentRecord = await findEmployeeOrThrow(tx, parsed.data.employeeId);
-    const before = toDto(currentRecord);
+    const before = toDto(currentRecord, { tolerateInvalidEnums: true });
     if (!before.isActive) {
       return before;
     }
@@ -527,7 +542,7 @@ export async function deactivateEmployee(input: EmployeeMutationInput) {
       throw new EmployeeDomainError("직원을 찾을 수 없습니다.", "EMPLOYEE_NOT_FOUND");
     }
 
-    const after = toDto(await findEmployeeOrThrow(tx, parsed.data.employeeId));
+    const after = toDto(await findEmployeeOrThrow(tx, parsed.data.employeeId), { tolerateInvalidEnums: true });
     await recordEmployeeAudit(tx, {
       actorId: input.actorId,
       action: "employee.deactivated",

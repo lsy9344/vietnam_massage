@@ -112,7 +112,13 @@ export async function updateEmployeeProfileAction(
     const account = await requirePermission("employee:write");
     const data = await updateEmployeeProfile({ actorId: account.id, ...parsed.data });
     revalidatePath("/masters/employees");
-    return { ok: true, data };
+    // The service silently moves a colliding sortOrder to the end of the target group
+    // (typical after a group change); tell the operator when that happened.
+    const notice =
+      data.sortOrder !== parsed.data.sortOrder
+        ? t(locale, "masters.employees.sortOrderAutoAdjusted", { sortOrder: data.sortOrder })
+        : undefined;
+    return notice ? { ok: true, data, notice } : { ok: true, data };
   } catch (error) {
     return mapEmployeeActionError(error, locale);
   }

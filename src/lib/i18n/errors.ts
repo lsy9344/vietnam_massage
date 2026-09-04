@@ -47,7 +47,21 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   TIME_SLOT_NOT_FOUND: "Không tìm thấy khung giờ.",
   ACCOUNT_ID_ALREADY_LINKED: "ID tài khoản đã được liên kết với nhân viên khác.",
   EMAIL_ALREADY_LINKED: "Email đã được liên kết với nhân viên khác.",
-  EMPLOYEE_NOT_FOUND: "Không tìm thấy nhân viên."
+  EMPLOYEE_NOT_FOUND: "Không tìm thấy nhân viên.",
+
+  // 직원/계정 마스터 입력 (직원정보·계정 연결 폼)
+  INVALID_EMPLOYEE_INPUT: "Dữ liệu nhân viên không hợp lệ.",
+  DUPLICATE_EMPLOYEE_STAFF_CODE: "Mã nhân viên (staff code) đã được sử dụng.",
+  DUPLICATE_EMPLOYEE_SORT_ORDER: "Thứ tự sắp xếp đã được dùng trong cùng nhóm.",
+  IMMUTABLE_EMPLOYEE_STAFF_CODE: "Không thể thay đổi staff code sau khi tạo nhân viên.",
+  INVALID_EMPLOYEE_GROUP: "Nhóm nhân viên không hợp lệ.",
+  INVALID_SHIFT_TYPE: "Giá trị ca làm việc không hợp lệ.",
+  INVALID_EMPLOYMENT_STATUS: "Trạng thái làm việc không hợp lệ.",
+  INITIAL_SECRET_REQUIRED: "Cần mật khẩu ban đầu để tạo tài khoản mới.",
+  INVALID_ACCOUNT_LINK_INPUT: "Dữ liệu liên kết tài khoản không hợp lệ.",
+  ACCOUNT_ID_CONFLICTS_WITH_EMPLOYEE_ACCOUNT: "ID tài khoản khác với tài khoản đã liên kết của nhân viên này.",
+  EMAIL_CONFLICTS_WITH_EMPLOYEE_ACCOUNT: "Email khác với tài khoản đã liên kết của nhân viên này.",
+  ACCOUNT_ID_EMAIL_MISMATCH: "ID tài khoản và email thuộc về các tài khoản khác nhau."
 };
 
 /**

@@ -17,6 +17,14 @@ function inlineError(state: TherapistAttendanceActionState, field?: string) {
 
 function RecognitionBadge({ row, t }: { row: TherapistAttendanceDto; t: Translator }) {
   if (!row.isComplete) {
+    if (row.checkInTime) {
+      // Check-in-only row: standby is unknown until checkout is saved.
+      return (
+        <span className="inline-flex border border-border bg-readonly px-2 py-1 text-xs font-semibold text-muted">
+          {t("settlements.therapist.attendance.checkOutMissing")}
+        </span>
+      );
+    }
     return (
       <span className="inline-flex border border-border bg-readonly px-2 py-1 text-xs font-semibold text-muted">
         {t("settlements.therapist.attendance.checkInMissing")}
@@ -81,7 +89,8 @@ function TherapistAttendanceRowForm({
   const displayRow =
     lastAction.current === "clear" ? clearedRow ?? savedRow ?? row : savedRow ?? clearedRow ?? row;
   const busy = pending || clearPending;
-  const canClear = !disabled && displayRow.isComplete;
+  // Clearable while a persisted row exists — even a check-in-only row (isComplete=false).
+  const canClear = !disabled && displayRow.id !== null;
 
   return (
     <tr className="border-b border-border last:border-b-0">

@@ -287,7 +287,7 @@ describe("Story 7.2 migration calculation comparison", () => {
     assert.ok(byTherapist.get("therapist-thr-001")?.assignmentEvidence.some((evidence) => evidence.role === "THERAPIST_2"));
   });
 
-  it("대조: 월마감 preview는 만근 8시간/20일, 갯수왕 40콜, 최종지급액을 계산한다", async () => {
+  it("대조: 월마감 preview는 만근 10시간/20일, 갯수왕 40콜, 최종지급액을 계산한다", async () => {
     const dependencies = {
       getDailyCallLedgerSummary,
       async listTherapistDailySettlements({ serviceDate }: { serviceDate: string }) {

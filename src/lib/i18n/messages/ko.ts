@@ -71,7 +71,7 @@ export const ko = {
   "auth.signIn.identityLabel": "이메일 또는 계정 ID",
   "auth.signIn.passwordLabel": "비밀번호",
   "auth.signIn.submit": "로그인",
-  "auth.error.invalidCredentials": "계정 정보가 올바르지 않거나 사용할 수 없습니다.",
+  "auth.error.invalidCredentials": "계정 정보가 올바르지 않거나 사용할 수 없습니다. 비밀번호를 연속 5회 잘못 입력하면 계정이 15분간 잠깁니다.",
 
   // 객실 상태 표시 (RoomDisplayStatus 한국어 key → 라벨)
   "roomStatus.사용중": "사용중",
@@ -331,6 +331,7 @@ export const ko = {
 
   // 마사지사 출퇴근 입력 테이블
   "settlements.therapist.attendance.checkInMissing": "출퇴근 미입력",
+  "settlements.therapist.attendance.checkOutMissing": "퇴근 미입력 (만근 미판정)",
   "settlements.therapist.attendance.fullRecognized": "만근 인정 ({minutes}분)",
   "settlements.therapist.attendance.fullNotRecognized": "만근 미인정 ({minutes}분)",
   "settlements.therapist.attendance.checkInTimeAria": "{name} 출근시간",
@@ -338,7 +339,7 @@ export const ko = {
   "settlements.therapist.attendance.empty.title": "활성 마사지사가 없습니다",
   "settlements.therapist.attendance.empty.description": "직원 마스터에서 마사지사를 활성화한 뒤 다시 조회하세요.",
   "settlements.therapist.attendance.title": "마사지사 출퇴근 입력",
-  "settlements.therapist.attendance.description": "출근/퇴근 시간을 저장하면 대기시간과 만근 인정 여부가 계산되어 저장된다. 대기시간 8시간(480분) 이상이면 만근 인정이다.",
+  "settlements.therapist.attendance.description": "출근/퇴근 시간을 저장하면 대기시간과 만근 인정 여부가 계산되어 저장된다. 대기시간 10시간(600분) 이상이면 만근 인정이다. 퇴근 전에는 출근시간만 저장할 수 있고, 퇴근시간을 저장하면 만근 여부가 다시 판정된다.",
   "settlements.therapist.attendance.column.therapist": "마사지사",
   "settlements.therapist.attendance.column.checkIn": "출근시간",
   "settlements.therapist.attendance.column.checkOut": "퇴근시간",
@@ -944,6 +945,14 @@ export const ko = {
   "masters.employees.employeeId": "직원 ID: {id}",
   "masters.employees.staffCodeLine": "staff code: {code}",
   "masters.employees.currentRole": "현재 역할: {role}",
+  "masters.employees.savedNotice": "저장되었습니다.",
+  "masters.employees.sortOrderAutoAdjusted": "정렬 순서가 중복되어 {sortOrder}로 자동 조정했습니다.",
+  "masters.employees.role.administrator": "관리자",
+  "masters.employees.role.counter": "카운터",
+  "masters.employees.role.waiter": "웨이터",
+  "masters.employees.role.settlement_manager": "정산 담당",
+  "masters.employees.role.read_only_viewer": "조회 전용 (TV 현황판)",
+  "masters.employees.role.tvHint": "TV 현황판(/tv)은 관리자(administrator) 또는 조회 전용(read_only_viewer) 역할만 접속할 수 있습니다.",
   "masters.employees.createdLine": "생성 {value}",
   "masters.employees.updatedLine": "수정 {value}",
 

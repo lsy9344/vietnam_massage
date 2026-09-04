@@ -83,9 +83,11 @@ function createMemoryPrisma() {
         if (where.staffCode) return withAccount([...employees.values()].find((employee) => employee.staffCode === where.staffCode) ?? null);
         return null;
       },
-      async findFirst({ where }: any) {
-        const record = [...employees.values()].find((employee) => matchesWhere(employee, where));
-        return record ? withAccount(record) : null;
+      async findFirst({ where, orderBy }: any) {
+        const matches = [...employees.values()].filter((employee) => matchesWhere(employee, where));
+        const ordered =
+          orderBy?.sortOrder === "desc" ? [...matches].sort((a, b) => b.sortOrder - a.sortOrder) : matches;
+        return ordered[0] ? withAccount(ordered[0]) : null;
       },
       async updateMany({ where, data }: any) {
         const record = employees.get(where.id);
@@ -217,6 +219,64 @@ describe("employee service", () => {
     assert.equal(after.id, before.id);
     assert.equal(after.staffCode, "THR-001");
     assert.equal(after.displayName, "마사지사1 변경");
+    assert.equal(prismaClient.auditEvents.at(-1).action, "employee.profile_changed");
+  });
+
+  it("auto-adjusts a colliding sortOrder to the end of the target group on a group change", async () => {
+    const prismaClient = createMemoryPrisma();
+    await ensureDefaultEmployees({ actorId: "admin-1", prismaClient });
+    const therapist = (await listEmployees({ prismaClient })).find((employee) => employee.staffCode === "THR-001");
+    assert.ok(therapist);
+
+    // OPERATIONS defaults occupy 10..50, so the requested 10 collides with OPS-LEAD-001.
+    const after = await updateEmployeeProfile({
+      actorId: "admin-1",
+      employeeId: therapist.id,
+      displayName: therapist.displayName,
+      staffCode: therapist.staffCode,
+      employeeGroup: "OPERATIONS",
+      position: therapist.position,
+      shiftType: therapist.shiftType,
+      baseSalary: therapist.baseSalary,
+      phone: therapist.phone,
+      birthday: therapist.birthday,
+      hireDate: therapist.hireDate,
+      employmentStatus: therapist.employmentStatus,
+      sortOrder: 10,
+      prismaClient
+    });
+
+    assert.equal(after.employeeGroup, "OPERATIONS");
+    assert.equal(after.sortOrder, 51);
+    assert.equal(prismaClient.auditEvents.at(-1).action, "employee.profile_changed");
+  });
+
+  it("allows saving a legacy row whose stored enum values are non-standard", async () => {
+    const prismaClient = createMemoryPrisma();
+    await ensureDefaultEmployees({ actorId: "admin-1", prismaClient });
+    const legacy = [...prismaClient.employees.values()].find((employee: any) => employee.staffCode === "THR-003");
+    assert.ok(legacy);
+    prismaClient.employees.set(legacy.id, { ...legacy, employeeGroup: "마사지팀(구데이터)", shiftType: "심야" });
+
+    const after = await updateEmployeeProfile({
+      actorId: "admin-1",
+      employeeId: legacy.id,
+      displayName: legacy.displayName,
+      staffCode: legacy.staffCode,
+      employeeGroup: "THERAPIST",
+      position: legacy.position,
+      shiftType: null,
+      baseSalary: legacy.baseSalary,
+      phone: legacy.phone,
+      birthday: legacy.birthday,
+      hireDate: legacy.hireDate,
+      employmentStatus: legacy.employmentStatus,
+      sortOrder: legacy.sortOrder,
+      prismaClient
+    });
+
+    assert.equal(after.employeeGroup, "THERAPIST");
+    assert.equal(after.shiftType, null);
     assert.equal(prismaClient.auditEvents.at(-1).action, "employee.profile_changed");
   });
 

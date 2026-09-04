@@ -32,8 +32,8 @@ function createMemoryPrisma(
       employeeId: string;
       attendanceDate: string;
       checkInMinute: number;
-      checkOutMinute: number;
-      standbyMinutes: number;
+      checkOutMinute: number | null;
+      standbyMinutes: number | null;
       isFullAttendanceRecognized: boolean;
       isActive?: boolean;
     }>;
@@ -240,8 +240,8 @@ describe("therapist attendance service", () => {
             employeeId: "thr-1",
             attendanceDate: "2026-06-10",
             checkInMinute: 600,
-            checkOutMinute: 1080,
-            standbyMinutes: 480,
+            checkOutMinute: 1200,
+            standbyMinutes: 600,
             isFullAttendanceRecognized: true
           }
         ]
@@ -250,10 +250,38 @@ describe("therapist attendance service", () => {
 
     const row = result.rows.find((entry) => entry.employeeId === "thr-1");
     assert.equal(row?.checkInTime, "10:00");
-    assert.equal(row?.checkOutTime, "18:00");
-    assert.equal(row?.standbyMinutes, 480);
+    assert.equal(row?.checkOutTime, "20:00");
+    assert.equal(row?.standbyMinutes, 600);
     assert.equal(row?.isFullAttendanceRecognized, true);
     assert.equal(row?.isComplete, true);
+  });
+
+  it("returns a check-in-only stored row as incomplete with the checkout-missing reason", async () => {
+    const result = await listTherapistAttendanceForDate({
+      operatingMonthId: "month-2026-06",
+      attendanceDate: "2026-06-10",
+      prismaClient: createMemoryPrisma({
+        seedAttendances: [
+          {
+            id: "att-seed-1",
+            employeeId: "thr-1",
+            attendanceDate: "2026-06-10",
+            checkInMinute: 600,
+            checkOutMinute: null,
+            standbyMinutes: null,
+            isFullAttendanceRecognized: false
+          }
+        ]
+      })
+    });
+
+    const row = result.rows.find((entry) => entry.employeeId === "thr-1");
+    assert.equal(row?.checkInTime, "10:00");
+    assert.equal(row?.checkOutTime, null);
+    assert.equal(row?.standbyMinutes, null);
+    assert.equal(row?.isFullAttendanceRecognized, false);
+    assert.equal(row?.isComplete, false);
+    assert.equal(row?.incompleteReason, "퇴근 미입력");
   });
 
   it("creates a new attendance row by Employee.id, stores minute values, and records created audit in the same transaction", async () => {
@@ -264,13 +292,13 @@ describe("therapist attendance service", () => {
       attendanceDate: "2026-06-10",
       employeeId: "thr-1",
       checkInTime: "10:00",
-      checkOutTime: "18:00",
+      checkOutTime: "20:00",
       actorId: "account-1",
       prismaClient
     });
 
     assert.equal(dto.employeeId, "thr-1");
-    assert.equal(dto.standbyMinutes, 480);
+    assert.equal(dto.standbyMinutes, 600);
     assert.equal(dto.isFullAttendanceRecognized, true);
     assert.equal(prismaClient.auditEvents.length, 1);
     assert.equal(prismaClient.auditEvents[0].actorId, "account-1");
@@ -284,8 +312,8 @@ describe("therapist attendance service", () => {
       attendanceDate: "2026-06-10",
       employeeId: "thr-1",
       checkInMinute: 600,
-      checkOutMinute: 1080,
-      standbyMinutes: 480,
+      checkOutMinute: 1200,
+      standbyMinutes: 600,
       isFullAttendanceRecognized: true,
       isActive: true,
       payoutImpact: true,
@@ -313,26 +341,136 @@ describe("therapist attendance service", () => {
       attendanceDate: "2026-06-10",
       employeeId: "thr-1",
       checkInTime: "10:00",
-      checkOutTime: "18:00",
+      checkOutTime: "20:00",
       actorId: "account-1",
       prismaClient
     });
 
-    assert.equal(dto.standbyMinutes, 480);
+    assert.equal(dto.standbyMinutes, 600);
     assert.equal(dto.isFullAttendanceRecognized, true);
     assert.equal(prismaClient.auditEvents[0].action, "therapist_attendance.changed");
     assert.equal(prismaClient.auditEvents[0].beforeValue.standbyMinutes, 479);
     assert.equal(prismaClient.auditEvents[0].beforeValue.isFullAttendanceRecognized, false);
-    assert.equal(prismaClient.auditEvents[0].afterValue.standbyMinutes, 480);
+    assert.equal(prismaClient.auditEvents[0].afterValue.standbyMinutes, 600);
     assert.equal(prismaClient.auditEvents[0].afterValue.isFullAttendanceRecognized, true);
+  });
+
+  it("stores a check-in-only row when the checkout is missing and defers the full-attendance judgment", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const dto = await upsertTherapistAttendance({
+      operatingMonthId: "month-2026-06",
+      attendanceDate: "2026-06-10",
+      employeeId: "thr-1",
+      checkInTime: "10:00",
+      checkOutTime: "",
+      actorId: "account-1",
+      prismaClient
+    });
+
+    assert.equal(dto.checkInTime, "10:00");
+    assert.equal(dto.checkOutTime, null);
+    assert.equal(dto.standbyMinutes, null);
+    assert.equal(dto.isFullAttendanceRecognized, false);
+    assert.equal(dto.isComplete, false);
+    assert.equal(dto.incompleteReason, "퇴근 미입력");
+    const stored = prismaClient.attendances.get("month-2026-06::2026-06-10::thr-1");
+    assert.equal(stored.checkOutMinute, null);
+    assert.equal(stored.standbyMinutes, null);
+    assert.equal(stored.isFullAttendanceRecognized, false);
+    assert.equal(prismaClient.auditEvents.length, 1);
+    assert.equal(prismaClient.auditEvents[0].action, "therapist_attendance.created");
+    assert.equal(prismaClient.auditEvents[0].afterValue.checkOutMinute, null);
+    assert.equal(prismaClient.auditEvents[0].afterValue.standbyMinutes, null);
+  });
+
+  it("re-evaluates the full-attendance flag when the checkout is saved after a check-in-only row", async () => {
+    const prismaClient = createMemoryPrisma({
+      seedAttendances: [
+        {
+          id: "att-seed-1",
+          employeeId: "thr-1",
+          attendanceDate: "2026-06-10",
+          checkInMinute: 600,
+          checkOutMinute: null,
+          standbyMinutes: null,
+          isFullAttendanceRecognized: false
+        }
+      ]
+    });
+
+    const dto = await upsertTherapistAttendance({
+      operatingMonthId: "month-2026-06",
+      attendanceDate: "2026-06-10",
+      employeeId: "thr-1",
+      checkInTime: "10:00",
+      checkOutTime: "20:00",
+      actorId: "account-1",
+      prismaClient
+    });
+
+    assert.equal(dto.checkOutTime, "20:00");
+    assert.equal(dto.standbyMinutes, 600);
+    assert.equal(dto.isFullAttendanceRecognized, true);
+    assert.equal(dto.isComplete, true);
+    assert.equal(dto.incompleteReason, null);
+    assert.equal(prismaClient.auditEvents[0].action, "therapist_attendance.changed");
+  });
+
+  it("keeps a complete row stored without checkout when the checkout input is cleared", async () => {
+    const prismaClient = createMemoryPrisma({
+      seedAttendances: [
+        {
+          id: "att-seed-1",
+          employeeId: "thr-1",
+          attendanceDate: "2026-06-10",
+          checkInMinute: 600,
+          checkOutMinute: 1200,
+          standbyMinutes: 600,
+          isFullAttendanceRecognized: true
+        }
+      ]
+    });
+
+    const dto = await upsertTherapistAttendance({
+      operatingMonthId: "month-2026-06",
+      attendanceDate: "2026-06-10",
+      employeeId: "thr-1",
+      checkInTime: "10:00",
+      checkOutTime: "",
+      actorId: "account-1",
+      prismaClient
+    });
+
+    assert.equal(dto.checkOutTime, null);
+    assert.equal(dto.standbyMinutes, null);
+    assert.equal(dto.isFullAttendanceRecognized, false);
+  });
+
+  it("rejects a malformed checkout value even though checkout is optional", async () => {
+    const prismaClient = createMemoryPrisma();
+    await assert.rejects(
+      upsertTherapistAttendance({
+        operatingMonthId: "month-2026-06",
+        attendanceDate: "2026-06-10",
+        employeeId: "thr-1",
+        checkInTime: "10:00",
+        checkOutTime: "25:00",
+        actorId: "account-1",
+        prismaClient
+      }),
+      (error) => error instanceof TherapistAttendanceDomainError && error.code === "INVALID_THERAPIST_ATTENDANCE_INPUT"
+    );
+    assert.equal(prismaClient.auditEvents.length, 0);
+    assert.equal(prismaClient.attendances.size, 0);
   });
 
   it("computes overnight standby minutes without negative results", async () => {
     const cases: Array<[string, string, number, boolean]> = [
-      ["22:00", "06:00", 480, true],
-      ["22:00", "05:59", 479, false],
-      ["10:00", "18:00", 480, true],
-      ["10:00", "17:59", 479, false],
+      ["22:00", "08:00", 600, true],
+      ["22:00", "07:59", 599, false],
+      ["10:00", "20:00", 600, true],
+      ["10:00", "19:59", 599, false],
       ["10:00", "10:00", 0, false]
     ];
 
@@ -496,8 +634,8 @@ describe("therapist attendance service", () => {
           employeeId: "thr-1",
           attendanceDate: "2026-06-10",
           checkInMinute: 600,
-          checkOutMinute: 1080,
-          standbyMinutes: 480,
+          checkOutMinute: 1200,
+          standbyMinutes: 600,
           isFullAttendanceRecognized: true
         }
       ]
@@ -524,8 +662,8 @@ describe("therapist attendance service", () => {
           employeeId: "thr-1",
           attendanceDate: "2026-06-10",
           checkInMinute: 600,
-          checkOutMinute: 1080,
-          standbyMinutes: 480,
+          checkOutMinute: 1200,
+          standbyMinutes: 600,
           isFullAttendanceRecognized: true,
           isActive: false
         }
@@ -548,14 +686,14 @@ describe("therapist attendance service", () => {
   it("aggregates full-attendance recognitions by Employee.id within the requested range only", async () => {
     const prismaClient = createMemoryPrisma({
       seedAttendances: [
-        { id: "a1", employeeId: "thr-1", attendanceDate: "2026-06-10", checkInMinute: 600, checkOutMinute: 1080, standbyMinutes: 480, isFullAttendanceRecognized: true },
-        { id: "a2", employeeId: "thr-1", attendanceDate: "2026-06-11", checkInMinute: 600, checkOutMinute: 1080, standbyMinutes: 480, isFullAttendanceRecognized: true },
-        { id: "a3", employeeId: "thr-1", attendanceDate: "2026-06-12", checkInMinute: 600, checkOutMinute: 1079, standbyMinutes: 479, isFullAttendanceRecognized: false },
-        { id: "a4", employeeId: "thr-2", attendanceDate: "2026-06-10", checkInMinute: 600, checkOutMinute: 1080, standbyMinutes: 480, isFullAttendanceRecognized: true },
+        { id: "a1", employeeId: "thr-1", attendanceDate: "2026-06-10", checkInMinute: 600, checkOutMinute: 1200, standbyMinutes: 600, isFullAttendanceRecognized: true },
+        { id: "a2", employeeId: "thr-1", attendanceDate: "2026-06-11", checkInMinute: 600, checkOutMinute: 1200, standbyMinutes: 600, isFullAttendanceRecognized: true },
+        { id: "a3", employeeId: "thr-1", attendanceDate: "2026-06-12", checkInMinute: 600, checkOutMinute: 1199, standbyMinutes: 599, isFullAttendanceRecognized: false },
+        { id: "a4", employeeId: "thr-2", attendanceDate: "2026-06-10", checkInMinute: 600, checkOutMinute: 1200, standbyMinutes: 600, isFullAttendanceRecognized: true },
         // out of requested range
-        { id: "a5", employeeId: "thr-1", attendanceDate: "2026-06-20", checkInMinute: 600, checkOutMinute: 1080, standbyMinutes: 480, isFullAttendanceRecognized: true },
+        { id: "a5", employeeId: "thr-1", attendanceDate: "2026-06-20", checkInMinute: 600, checkOutMinute: 1200, standbyMinutes: 600, isFullAttendanceRecognized: true },
         // inactive row must be excluded
-        { id: "a6", employeeId: "thr-2", attendanceDate: "2026-06-11", checkInMinute: 600, checkOutMinute: 1080, standbyMinutes: 480, isFullAttendanceRecognized: true, isActive: false }
+        { id: "a6", employeeId: "thr-2", attendanceDate: "2026-06-11", checkInMinute: 600, checkOutMinute: 1200, standbyMinutes: 600, isFullAttendanceRecognized: true, isActive: false }
       ]
     });
 

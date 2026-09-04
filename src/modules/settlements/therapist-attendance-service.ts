@@ -27,8 +27,8 @@ type TherapistAttendanceRecord = {
   attendanceDate: Date;
   employeeId: string;
   checkInMinute: number;
-  checkOutMinute: number;
-  standbyMinutes: number;
+  checkOutMinute: number | null;
+  standbyMinutes: number | null;
   isFullAttendanceRecognized: boolean;
   isActive: boolean;
   createdAt: Date;
@@ -98,7 +98,9 @@ export class TherapistAttendanceDomainError extends Error {
   }
 }
 
-const FULL_ATTENDANCE_STANDBY_MINUTES = 480;
+// Full attendance is recognized when standby >= 10 hours (600 minutes).
+// Kept in sync with the DB CHECK constraint chk_therapist_attendances_full_attendance_consistent.
+const FULL_ATTENDANCE_STANDBY_MINUTES = 600;
 const MINUTES_PER_DAY = 1440;
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -108,10 +110,15 @@ const attendanceQuerySchema = z.object({
   attendanceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "근무일자는 YYYY-MM-DD 형식이어야 합니다.")
 });
 
+// checkOutTime is optional: an empty value stores a check-in-only row (퇴근 미입력)
+// whose standby/full-attendance judgment stays unset until checkout is saved.
 const attendanceUpsertSchema = attendanceQuerySchema.extend({
   employeeId: z.string().trim().min(1, "마사지사를 선택하세요."),
   checkInTime: z.string().regex(timeRegex, "출근시간은 HH:mm 형식이어야 합니다."),
-  checkOutTime: z.string().regex(timeRegex, "퇴근시간은 HH:mm 형식이어야 합니다."),
+  checkOutTime: z
+    .string()
+    .trim()
+    .refine((value) => value === "" || timeRegex.test(value), "퇴근시간은 HH:mm 형식이어야 합니다."),
   actorId: z.string().trim().min(1, "행위자 계정이 필요합니다.")
 });
 
@@ -250,7 +257,8 @@ function toDto(input: {
   isLocked: boolean;
 }): TherapistAttendanceDto {
   const active = input.attendance?.isActive ? input.attendance : null;
-  const isComplete = active !== null;
+  const hasCheckout = active !== null && active.checkOutMinute !== null;
+  const isComplete = hasCheckout;
   return {
     id: active?.id ?? null,
     operatingMonthId: input.operatingMonthId,
@@ -260,11 +268,11 @@ function toDto(input: {
     displayName: input.employee.displayName,
     sortOrder: input.employee.sortOrder,
     checkInTime: active ? minuteToTime(active.checkInMinute) : null,
-    checkOutTime: active ? minuteToTime(active.checkOutMinute) : null,
+    checkOutTime: active && active.checkOutMinute !== null ? minuteToTime(active.checkOutMinute) : null,
     standbyMinutes: active ? active.standbyMinutes : null,
     isFullAttendanceRecognized: active ? active.isFullAttendanceRecognized : false,
     isComplete,
-    incompleteReason: isComplete ? null : "출퇴근 미입력",
+    incompleteReason: active === null ? "출퇴근 미입력" : hasCheckout ? null : "퇴근 미입력",
     isLocked: input.isLocked
   };
 }
@@ -353,9 +361,11 @@ export async function upsertTherapistAttendance(input: {
   assertValidParsedDate(parsed.data.attendanceDate);
 
   const checkInMinute = timeToMinute(parsed.data.checkInTime, "checkInTime");
-  const checkOutMinute = timeToMinute(parsed.data.checkOutTime, "checkOutTime");
-  const standbyMinutes = computeStandbyMinutes(checkInMinute, checkOutMinute);
-  const isFullAttendanceRecognized = isFullAttendance(standbyMinutes);
+  // Empty checkout stores a check-in-only row: standby stays unset and the full-attendance
+  // flag is never recognized until the checkout is saved (which re-evaluates it).
+  const checkOutMinute = parsed.data.checkOutTime === "" ? null : timeToMinute(parsed.data.checkOutTime, "checkOutTime");
+  const standbyMinutes = checkOutMinute === null ? null : computeStandbyMinutes(checkInMinute, checkOutMinute);
+  const isFullAttendanceRecognized = standbyMinutes !== null && isFullAttendance(standbyMinutes);
 
   const client = getClient(input.prismaClient);
   const [operatingMonth, employee] = await Promise.all([
