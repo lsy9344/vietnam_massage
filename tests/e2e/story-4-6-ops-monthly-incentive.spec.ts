@@ -269,44 +269,46 @@ test.describe("Story 4.6 operations monthly incentive", () => {
 
     await expect(page.getByRole("heading", { name: "운영팀 월인센" })).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`operatingMonthId=${seededData.writableOperatingMonthId}`));
-    await expect(page.getByText("미확정 미리보기")).toBeVisible();
-    await expect(page.getByText("월 총콜")).toBeVisible();
-    await expect(page.getByText("1100콜 이상")).toBeVisible();
-    await expect(page.getByText("5,000,000 VND")).toBeVisible();
-    await expect(page.getByText("분배율 30%")).toBeVisible();
+    await expect(page.getByText("미확정 미리보기").first()).toBeVisible();
+    // 같은 문구가 요약 타일과 근거 표 양쪽에 나오므로 요약 region으로 좁힌다.
+    const summary = page.getByRole("region", { name: "운영팀 월 인센 요약" });
+    await expect(summary.getByText("월 총콜")).toBeVisible();
+    await expect(summary.getByText("1100콜 이상")).toBeVisible();
+    await expect(summary.getByText("5,000,000 VND").first()).toBeVisible();
+    await expect(page.getByText("분배율 30%").first()).toBeVisible();
     await expect(page.getByText("분배율 35%")).toHaveCount(2);
-    await expect(page.getByText("E2E46 팀장")).toBeVisible();
-    await expect(page.getByText("E2E46 카운터1")).toBeVisible();
-    await expect(page.getByText("E2E46 웨이터1")).toBeVisible();
-    await expect(page.getByText("제외 warning")).toBeVisible();
-    await expect(page.getByText("비완료 1", { exact: false })).toBeVisible();
-    await expect(page.getByText("월 총콜 산출 근거")).toBeVisible();
+    await expect(page.getByText("E2E46 팀장").first()).toBeVisible();
+    await expect(page.getByText("E2E46 카운터1").first()).toBeVisible();
+    await expect(page.getByText("E2E46 웨이터1").first()).toBeVisible();
+    await expect(page.getByText("제외 warning").first()).toBeVisible();
+    await expect(page.getByText("비완료 1", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText("월 총콜 산출 근거").first()).toBeVisible();
   });
 
   test("shows below-threshold warning and zero monthly incentive", async ({ page }) => {
     await login(page, "story46_settlement", "Story46!settlement");
     await page.goto(`/settlements/operations/monthly?operatingMonthId=${seededData.belowThresholdOperatingMonthId}`);
 
-    await expect(page.getByText("최저 구간 미달")).toBeVisible();
+    await expect(page.getByText("최저 구간 미달").first()).toBeVisible();
     await expect(page.getByText("900콜").first()).toBeVisible();
-    await expect(page.getByText("전체 월인센 0 VND")).toBeVisible();
-    await expect(page.getByText("1000콜 미만으로 운영팀 월 인센이 없습니다.")).toBeVisible();
+    await expect(page.getByText("전체 월인센 0 VND").first()).toBeVisible();
+    await expect(page.getByText("1000콜 미만으로 운영팀 월 인센이 없습니다.").first()).toBeVisible();
   });
 
   test("shows missing monthly policy warning without assuming zero silently", async ({ page }) => {
     await login(page, "story46_settlement", "Story46!settlement");
     await page.goto(`/settlements/operations/monthly?operatingMonthId=${seededData.missingPolicyOperatingMonthId}`);
 
-    await expect(page.getByText("정책 없음")).toBeVisible();
-    await expect(page.getByText("적용월에 활성 운영팀 월 인센 정책이 없습니다.")).toBeVisible();
+    await expect(page.getByText("정책 없음").first()).toBeVisible();
+    await expect(page.getByText("적용월에 활성 운영팀 월 인센 정책이 없습니다.").first()).toBeVisible();
   });
 
   test("separates locked month current preview from closing snapshot values", async ({ page }) => {
     await login(page, "story46_settlement", "Story46!settlement");
     await page.goto(`/settlements/operations/monthly?operatingMonthId=${seededData.lockedOperatingMonthId}`);
 
-    await expect(page.getByText("현재 기준 미리보기")).toBeVisible();
-    await expect(page.getByText("확정값은 월마감 스냅샷 기준", { exact: false })).toBeVisible();
+    await expect(page.getByText("현재 기준 미리보기").first()).toBeVisible();
+    await expect(page.getByText("확정값은 월마감 스냅샷 기준", { exact: false }).first()).toBeVisible();
   });
 
   test("counter cannot access monthly settlement preview", async ({ page }) => {
