@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
-import { argon2idOptions, setLocaleCookie } from "./support/auth";
+import { argon2idOptions, login as loginAccount } from "./support/auth";
 
 
 type SeededData = {
@@ -17,13 +17,10 @@ type SeededData = {
 
 let seededData: SeededData;
 
+// 공유 login 헬퍼는 credentials POST 응답과 landing navigation까지 기다린다. 직접 구현하면
+// 클릭 직후의 page.goto가 그 POST를 취소해 세션 없이 /sign-in으로 튕긴다.
 async function loginAsCounter(page: Page) {
-  await page.goto("/sign-in");
-  await setLocaleCookie(page, "ko");
-  await page.reload().catch(() => undefined);
-  await page.getByLabel("이메일 또는 계정 ID").fill("story26_counter");
-  await page.getByLabel("비밀번호").fill("Story26!counter");
-  await page.getByRole("button", { name: "로그인" }).click();
+  await loginAccount(page, "story26_counter", "Story26!counter");
 }
 
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, position: string, sortOrder: number) {
@@ -187,13 +184,19 @@ test.describe("Story 2.6 keyboard-first call ledger type-ahead", () => {
     await loginAsCounter(page);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${seededData.serviceDate}`);
 
-    const grid = page.getByRole("heading", { name: "콜 원장 그리드" }).locator("..").locator("..");
+    // 제목의 조부모(`..` 두 번)는 헤더 div라 표를 포함하지 않는다. 제목을 가진 section으로 잡는다.
+    const grid = page.locator("section").filter({ has: page.getByRole("heading", { name: "콜 원장 그리드" }) });
     const roomCombobox = grid.getByRole("combobox", { name: "객실" }).first();
     await roomCombobox.focus();
     await expect(roomCombobox).toHaveAttribute("aria-expanded", "false");
 
+    // focus 시 컴포넌트가 현재 라벨을 넣고 전체 선택하는데, 첫 글자가 그 선택보다 먼저 도착하면
+    // 기존 라벨 뒤에 붙어 필터가 아무것도 못 찾는다. 직접 전체 선택한 뒤 타이핑한다.
+    await roomCombobox.press("ControlOrMeta+a");
     await roomCombobox.pressSequentially("E2E26");
     await expect(roomCombobox).toHaveAttribute("aria-expanded", "true");
+    // 필터 결과가 렌더되기 전에 방향키를 누르면 활성 옵션이 잡히지 않는다.
+    await expect(page.getByRole("listbox").getByRole("option")).not.toHaveCount(0);
     await roomCombobox.press("ArrowDown");
     await expect(roomCombobox).toHaveAttribute("aria-activedescendant", /option/);
     await roomCombobox.press("Enter");
@@ -215,8 +218,13 @@ test.describe("Story 2.6 keyboard-first call ledger type-ahead", () => {
     await expect(grid.getByText("저장중")).toHaveCount(0);
     await expect(grid.getByText("저장 보류 계산 대기")).toHaveCount(0);
 
+    // 앞선 셀의 blur 처리(120ms 지연)와 자동저장 후 재렌더가 겹치면 focus가 곧바로 풀린다.
+    // 포커스가 붙을 때까지 재시도한 뒤 방향키를 눌러야 셀 이동이 사라지지 않는다.
     const confirmationCombobox = grid.getByRole("combobox", { name: "확인값" }).first();
-    await confirmationCombobox.focus();
+    await expect(async () => {
+      await confirmationCombobox.focus();
+      await expect(confirmationCombobox).toBeFocused();
+    }).toPass();
     await page.keyboard.press("ArrowRight");
     await expect(page.locator('[data-call-cell-row="0"][data-call-cell-column="paymentAmount"]')).toBeFocused();
   });
@@ -225,21 +233,34 @@ test.describe("Story 2.6 keyboard-first call ledger type-ahead", () => {
     await loginAsCounter(page);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${seededData.serviceDate}`);
 
-    const grid = page.getByRole("heading", { name: "콜 원장 그리드" }).locator("..").locator("..");
-    const courseCombobox = grid.getByRole("combobox", { name: "코스" }).first();
+    // 제목의 조부모(`..` 두 번)는 헤더 div라 표를 포함하지 않는다. 제목을 가진 section으로 잡는다.
+    const grid = page.locator("section").filter({ has: page.getByRole("heading", { name: "콜 원장 그리드" }) });
+    const row = grid.locator("tr[data-service-call-id]").first();
+    const courseCombobox = row.getByRole("combobox", { name: "코스" });
     await courseCombobox.focus();
+    await courseCombobox.press("ControlOrMeta+a");
     await courseCombobox.pressSequentially("Story26 D");
     await expect(courseCombobox).toHaveAttribute("aria-expanded", "true");
+    // 필터 결과가 렌더되기 전에 Enter를 누르면 일치 항목이 없다고 보고 값이 되돌아간다.
+    await expect(page.getByRole("listbox").getByRole("option")).not.toHaveCount(0);
     await courseCombobox.press("Enter");
-    await expect(grid.getByText(/저장됨/).first()).toBeVisible();
 
-    const statusCombobox = grid.getByRole("combobox", { name: "상태" }).first();
-    await statusCombobox.focus();
+    // D코스로 바꾸는 순간 마사지사2가 없어 서버가 저장을 거부한다. 같은 문구가 계산 상태 셀에도
+    // 뜨므로 필드 오류는 id로 특정한다.
+    await expect(row.locator('[id$="-therapist2-error"]')).toContainText("D코스는 마사지사2 필수입니다. 마사지사2를 배정해야 저장됩니다.");
+    await expect(row.getByText("저장 보류", { exact: true })).toBeVisible();
+
+    const statusCombobox = row.getByRole("combobox", { name: "상태" });
+    await expect(async () => {
+      await statusCombobox.focus();
+      await expect(statusCombobox).toBeFocused();
+    }).toPass();
+    await statusCombobox.press("ControlOrMeta+a");
     await statusCombobox.pressSequentially("방문완료");
     await statusCombobox.press("Enter");
 
-    await expect(grid.getByText("D코스는 마사지사2 필수입니다. 마사지사2를 배정해야 저장됩니다.")).toBeVisible();
-    const therapist2 = grid.getByRole("combobox", { name: "마사지사2" }).first();
+    await expect(row.locator('[id$="-therapist2-error"]')).toBeVisible();
+    const therapist2 = row.getByRole("combobox", { name: "마사지사2" });
     await expect(therapist2).toHaveAttribute("aria-invalid", "true");
     await expect(therapist2).toHaveAttribute("aria-describedby", /therapist2-error/);
   });

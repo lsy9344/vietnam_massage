@@ -8,6 +8,7 @@ type SeededData = {
   openMonthId: string;
   lockedMonthId: string;
   accountId: string;
+  administratorAccountId: string;
   roomId: string;
   aCourseId: string;
   dCourseId: string;
@@ -33,6 +34,10 @@ async function login(page: Page) {
   await loginAccount(page, "story25_counter", "Story25!counter");
 }
 
+async function loginAsAdministrator(page: Page) {
+  await loginAccount(page, "story25_administrator", "Story25!administrator");
+}
+
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, position: string, sortOrder: number) {
   return (prisma as any).employee.upsert({
     where: { staffCode },
@@ -41,24 +46,24 @@ async function seedEmployee(staffCode: string, displayName: string, employeeGrou
   });
 }
 
-async function seedAuthAccount(handlerId: string) {
-  const passwordHash = await hash("Story25!counter", argon2idOptions);
+async function seedAuthAccount(handlerId: string, accountId = "story25_counter", role = "counter", secret = "Story25!counter") {
+  const passwordHash = await hash(secret, argon2idOptions);
   return (prisma as any).userAccount.upsert({
-    where: { accountId: "story25_counter" },
+    where: { accountId },
     update: {
-      email: "story25_counter@example.local",
+      email: `${accountId}@example.local`,
       passwordHash,
-      role: "counter",
+      role,
       employeeId: handlerId,
       isActive: true,
       lockedUntil: null,
       failedLoginCount: 0
     },
     create: {
-      email: "story25_counter@example.local",
-      accountId: "story25_counter",
+      email: `${accountId}@example.local`,
+      accountId,
       passwordHash,
-      role: "counter",
+      role,
       employeeId: handlerId,
       isActive: true,
       lockedUntil: null,
@@ -137,6 +142,10 @@ async function cleanupStoryData(openMonthId: string, lockedMonthId: string) {
 async function seedStoryData(): Promise<SeededData> {
   const handler = await seedEmployee("E2E25-OPS-001", "E2E25 카운터", "OPERATIONS", "카운터", 92500);
   const account = await seedAuthAccount(handler.id);
+  // 마사지사정산/귀케어풀 KPI는 관리자·정산 담당에게만 보이므로 요약 검증용 관리자 계정도 만든다.
+  // UserAccount.employeeId는 unique라 전용 직원이 필요하다.
+  const adminEmployee = await seedEmployee("E2E25-OPS-002", "E2E25 관리자", "OPERATIONS", "팀장", 92503);
+  const adminAccount = await seedAuthAccount(adminEmployee.id, "story25_administrator", "administrator", "Story25!administrator");
   const openMonth = await (prisma as any).operatingMonth.upsert({
     where: { monthKey: "2033-06" },
     update: { startDate: new Date("2033-06-01T00:00:00.000Z"), endDate: new Date("2033-06-30T00:00:00.000Z"), status: "작성중" },
@@ -177,6 +186,7 @@ async function seedStoryData(): Promise<SeededData> {
     openMonthId: openMonth.id,
     lockedMonthId: lockedMonth.id,
     accountId: account.id,
+    administratorAccountId: adminAccount.id,
     roomId: room.id,
     aCourseId: aCourse.id,
     dCourseId: dCourse.id,
@@ -189,14 +199,20 @@ async function seedStoryData(): Promise<SeededData> {
 async function countStoryDailyExpenseAuditEvents() {
   return (prisma as any).auditLog.count({
     where: {
-      actorId: seededData.accountId,
+      actorId: { in: [seededData.accountId, seededData.administratorAccountId] },
       targetType: "daily_expense",
       action: { in: ["daily_expense.created", "daily_expense.changed", "daily_expense.deactivated"] }
     }
   });
 }
 
-async function createCallRow(input: { courseId: string; status: string; discountTypeCode?: string | null; therapist2Id?: string | null }) {
+async function createCallRow(input: {
+  courseId: string;
+  status: string;
+  discountTypeCode?: string | null;
+  therapist2Id?: string | null;
+  paymentMethodCode?: string | null;
+}) {
   const call = await (prisma as any).serviceCall.create({
     data: {
       operatingMonthId: seededData.openMonthId,
@@ -206,7 +222,9 @@ async function createCallRow(input: { courseId: string; status: string; discount
       courseId: input.courseId,
       customerMemo: `Story 2.5 ${input.status}`,
       status: input.status,
-      discountTypeCode: input.discountTypeCode ?? null
+      discountTypeCode: input.discountTypeCode ?? null,
+      // REQ-007: 결제수단을 고른 행만 매출로 잡힌다. 미결제 예약/취소 행은 비워 둔다.
+      paymentMethodCode: input.paymentMethodCode ?? null
     }
   });
   await (prisma as any).serviceCallAssignment.create({
@@ -224,20 +242,33 @@ test.describe("Story 2.5 일별 지출 입력과 요약 계산", () => {
 
   test.beforeAll(async () => {
     seededData = await seedStoryData();
-    await createCallRow({ courseId: seededData.aCourseId, status: "VISIT_COMPLETE", discountTypeCode: "BIRTHDAY", therapist2Id: seededData.therapist2Id });
-    await createCallRow({ courseId: seededData.dCourseId, status: "VISIT_COMPLETE", therapist2Id: seededData.therapist2Id });
+    await createCallRow({
+      courseId: seededData.aCourseId,
+      status: "VISIT_COMPLETE",
+      discountTypeCode: "BIRTHDAY",
+      therapist2Id: seededData.therapist2Id,
+      paymentMethodCode: "CASH"
+    });
+    await createCallRow({
+      courseId: seededData.dCourseId,
+      status: "VISIT_COMPLETE",
+      therapist2Id: seededData.therapist2Id,
+      paymentMethodCode: "CASH"
+    });
     await createCallRow({ courseId: seededData.aCourseId, status: "RESERVED" });
     await createCallRow({ courseId: seededData.aCourseId, status: "CANCELED" });
   });
 
   test("지출 추가/수정/비활성과 지출합계/순매출 갱신을 확인한다", async ({ page }) => {
-    await login(page);
+    await loginAsAdministrator(page);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2033-06-05`);
     const auditCountBefore = await countStoryDailyExpenseAuditEvents();
 
-    await expectSummaryKpi(page, "예약건수", "1건");
+    // 예약건수는 상태와 무관하게 원장 행 수를 센다(Story 2.1 REQ-009). 노쇼/취소는 개별 KPI로 분리됐다.
+    await expectSummaryKpi(page, "예약건수", "4건");
     await expectSummaryKpi(page, "방문완료", "2건");
-    await expectSummaryKpi(page, "노쇼/취소", "0 / 1");
+    await expectSummaryKpi(page, "노쇼", "0건");
+    await expectSummaryKpi(page, "취소", "1건");
     await expectSummaryKpi(page, "결제합계", "4,600,000 VND");
     await expectSummaryKpi(page, "마사지사정산", "2,500,000 VND");
     await expectSummaryKpi(page, "귀케어풀", "100,000 VND");
@@ -261,12 +292,17 @@ test.describe("Story 2.5 일별 지출 입력과 요약 계산", () => {
     const row = expensePanel.getByRole("row", { name: /소모품/ });
     await row.getByLabel("지출금액").fill("300000");
     await row.getByLabel("내용").fill("소모품 수정");
+    // server action 완료를 기다리지 않고 reload하면 POST가 취소되어 수정이 반영되지 않는다.
     await row.getByRole("button", { name: "수정" }).click();
+    await expect(row.getByText("저장됨")).toBeVisible();
     await page.reload();
     await expect(page.getByLabel("일별 요약")).toContainText("300,000 VND");
     await expect(page.getByLabel("일별 요약")).toContainText("4,300,000 VND");
 
-    await page.getByRole("row", { name: /소모품 수정/ }).getByRole("button", { name: "비활성" }).click();
+    const updatedRow = page.getByRole("row", { name: /소모품 수정/ });
+    await updatedRow.getByRole("button", { name: "비활성" }).click();
+    // 비활성 처리된 지출은 목록에서 빠지므로 행이 사라지는 것으로 완료를 확인한다.
+    await expect(updatedRow).toHaveCount(0);
     await page.reload();
     await expect(page.getByLabel("일별 요약")).toContainText("4,600,000 VND");
     await expect(page.getByText("이 날짜에 등록된 지출이 없습니다.")).toBeVisible();
@@ -284,7 +320,9 @@ test.describe("Story 2.5 일별 지출 입력과 요약 계산", () => {
     await expect(page.getByText("금액은 0보다 커야 합니다.")).toBeVisible();
 
     await page.goto(`/calls?operatingMonthId=${seededData.lockedMonthId}&serviceDate=2033-07-05`);
-    await expect(page.getByText("잠긴 운영월입니다. 지출 입력과 수정이 차단됩니다.")).toBeVisible();
+    // 잠금 안내는 제목("잠긴 운영월입니다.")과 설명이 분리돼 있다.
+    await expect(page.getByLabel("일별 지출").getByText("잠긴 운영월입니다.")).toBeVisible();
+    await expect(page.getByText("마감확정 또는 잠금 운영월입니다. 지출 입력과 수정이 차단됩니다.")).toBeVisible();
     await expect(page.getByLabel("일별 지출").getByRole("button", { name: "지출 추가" })).toBeDisabled();
   });
 

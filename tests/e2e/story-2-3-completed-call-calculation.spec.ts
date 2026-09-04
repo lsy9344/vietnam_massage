@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login as loginAccount } from "./support/auth";
+import { selectGridOption } from "./support/call-grid";
 import { restoreUserAccount } from "./support/cleanup";
 
 
@@ -24,48 +25,53 @@ async function login(page: Page) {
   await loginAccount(page, "story23_counter", "Story23!counter");
 }
 
-async function seedAuthAccount() {
+// 수당/귀케어풀/콜인정 컬럼은 카운터에게 가려지므로, 계산값 표시를 확인할 때는 관리자로 본다.
+async function loginAsAdministrator(page: Page) {
+  await loginAccount(page, "story23_administrator", "Story23!administrator");
+}
+
+async function seedAuthAccount(input: { accountId: string; role: string; staffCode: string; sortOrder: number; secret: string }) {
   const employee = await (prisma as any).employee.upsert({
-    where: { staffCode: "E2E23-COUNTER" },
+    where: { staffCode: input.staffCode },
     update: {
-      displayName: "story23_counter",
+      displayName: input.accountId,
       employeeGroup: "OPERATIONS",
       position: "카운터",
       shiftType: "전체",
       baseSalary: 0,
       employmentStatus: "재직",
-      sortOrder: 92300,
+      sortOrder: input.sortOrder,
       isActive: true
     },
     create: {
-      staffCode: "E2E23-COUNTER",
-      displayName: "story23_counter",
+      staffCode: input.staffCode,
+      displayName: input.accountId,
       employeeGroup: "OPERATIONS",
       position: "카운터",
       shiftType: "전체",
       baseSalary: 0,
       employmentStatus: "재직",
-      sortOrder: 92300,
+      sortOrder: input.sortOrder,
       isActive: true
     }
   });
-  const passwordHash = await hash("Story23!counter", argon2idOptions);
+  const passwordHash = await hash(input.secret, argon2idOptions);
   await (prisma as any).userAccount.upsert({
-    where: { accountId: "story23_counter" },
+    where: { accountId: input.accountId },
     update: {
-      email: "story23_counter@example.local",
+      email: `${input.accountId}@example.local`,
       passwordHash,
-      role: "counter",
+      role: input.role,
       employeeId: employee.id,
       isActive: true,
       lockedUntil: null,
       failedLoginCount: 0
     },
     create: {
-      email: "story23_counter@example.local",
-      accountId: "story23_counter",
+      email: `${input.accountId}@example.local`,
+      accountId: input.accountId,
       passwordHash,
-      role: "counter",
+      role: input.role,
       employeeId: employee.id,
       isActive: true,
       lockedUntil: null,
@@ -282,7 +288,14 @@ test.describe("Story 2.3 방문완료 기준 계산 표시", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeAll(async () => {
-    await seedAuthAccount();
+    await seedAuthAccount({ accountId: "story23_counter", role: "counter", staffCode: "E2E23-COUNTER", sortOrder: 92300, secret: "Story23!counter" });
+    await seedAuthAccount({
+      accountId: "story23_administrator",
+      role: "administrator",
+      staffCode: "E2E23-ADMIN",
+      sortOrder: 92301,
+      secret: "Story23!administrator"
+    });
     seededData = await seedStoryData();
   });
 
@@ -290,16 +303,18 @@ test.describe("Story 2.3 방문완료 기준 계산 표시", () => {
     const memo = `E2E23 calculation ${Date.now().toString(36)}`;
     await createCallRow({ serviceDate: "2032-05-05", memo });
 
-    await login(page);
+    await loginAsAdministrator(page);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2032-05-05`);
 
     const row = rowByText(page, memo);
     await expect(row).toBeVisible();
-    await expect(row.getByText("비완료 제외")).toBeVisible();
-    await expect(row.getByText("1,500,000")).toHaveCount(0);
+    // REQ-007: 결제수단이 있으면 방문완료 전에도 선결제 매출로 결제금액이 잡힌다.
+    // 수당/귀케어풀/콜인정은 방문완료 이후에만 계산한다.
+    await expect(row.getByText("계산됨")).toBeVisible();
+    await expect(row.getByText("1,500,000")).toBeVisible();
+    await expect(row.getByText("700,000")).toHaveCount(0);
 
-    await row.getByLabel("상태").selectOption({ label: "방문완료" });
-    await row.getByLabel("상태").blur();
+    await selectGridOption(page, row, "상태", "방문완료");
     await expect(row.getByText("계산됨")).toBeVisible();
     await expect(row.getByText("1,500,000")).toBeVisible();
     await expect(row.getByText("700,000")).toBeVisible();
@@ -307,8 +322,7 @@ test.describe("Story 2.3 방문완료 기준 계산 표시", () => {
     await expect(row.getByText(/^100,000$/)).toHaveCount(1);
     await expect(row.getByText(/^1$/)).toHaveCount(1);
 
-    await row.getByLabel("할인구분").selectOption({ label: "생일자" });
-    await row.getByLabel("할인구분").blur();
+    await selectGridOption(page, row, "할인구분", "생일자");
     await expect(row.getByText("1,400,000")).toBeVisible();
     await expect(row.getByText(/^100,000$/)).toHaveCount(2);
   });
@@ -334,7 +348,9 @@ test.describe("Story 2.3 방문완료 기준 계산 표시", () => {
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2032-05-07`);
 
     const row = rowByText(page, memo);
-    await expect(row.getByText("마사지사1 수당 정책을 찾을 수 없습니다.")).toBeVisible();
+    // 서버 domain error는 "마사지사1 수당 정책을 찾을 수 없습니다."이지만 화면은 역할 번호 없는
+    // i18n 문구(calls.calc.therapistRateMissing)를 보여준다.
+    await expect(row.getByText("마사지사 수당 정책을 찾을 수 없습니다.")).toBeVisible();
     await expect(row.getByText("계산됨")).toHaveCount(0);
     await expect(row.getByText("1,800,000")).toHaveCount(0);
   });
