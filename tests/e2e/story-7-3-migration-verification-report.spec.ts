@@ -274,8 +274,9 @@ test.describe("Story 7.3 migration verification report browser access", () => {
     await expect(page.getByRole("status")).toContainText("숨김 시트 목록은 visible sheet와 동일 가중치");
     await expect(page.getByText("관리자 상태 변경 가능")).toBeVisible();
 
-    await page.getByLabel("상태").selectOption("재검증 필요");
-    await page.getByLabel("종류").selectOption("calculation_comparison");
+    // 각 이슈 행에도 "추적 상태" 선택이 있어 부분 일치로는 필터 선택을 특정할 수 없다.
+    await page.getByLabel("상태", { exact: true }).selectOption("재검증 필요");
+    await page.getByLabel("종류", { exact: true }).selectOption("calculation_comparison");
     await page.getByRole("button", { name: "필터 적용" }).click();
 
     await expect(page).toHaveURL(/status=%EC%9E%AC%EA%B2%80%EC%A6%9D\+%ED%95%84%EC%9A%94/);
