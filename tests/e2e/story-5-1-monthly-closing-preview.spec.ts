@@ -217,7 +217,7 @@ async function upsertRate(therapistId: string, courseId: string, effectiveFromMo
 
 async function upsertDailyRule(thresholdCallCount: number, personalAmount: number, effectiveFromMonth: string) {
   const existing = await (prisma as any).opsDailyIncentiveRule.findFirst({ where: { thresholdCallCount, effectiveFromMonth } });
-  const data = { personalAmount, effectiveToMonth: null, isActive: true };
+  const data = { personalAmount, effectiveToMonth: effectiveFromMonth, isActive: true };
   if (existing) return (prisma as any).opsDailyIncentiveRule.update({ where: { id: existing.id }, data });
   return (prisma as any).opsDailyIncentiveRule.create({ data: { thresholdCallCount, effectiveFromMonth, ...data } });
 }
@@ -229,7 +229,9 @@ async function upsertMonthlyRule(thresholdCallCount: number, totalAmount: number
     leadShare: 0.3,
     counterTeamShare: 0.35,
     waiterTeamShare: 0.35,
-    effectiveToMonth: null,
+    // 인센 규칙은 시드한 달로 한정한다. effectiveToMonth를 비워 두면 다른 스펙의 운영월까지 적용돼
+    // 지급액이 서로 오염된다.
+    effectiveToMonth: effectiveFromMonth,
     isActive: true
   };
   if (existing) return (prisma as any).opsMonthlyIncentiveRule.update({ where: { id: existing.id }, data });

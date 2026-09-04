@@ -205,7 +205,9 @@ test.describe("Story 6.4 dashboard source guardrails", () => {
     expect(koMessages).toContain("완료 콜 그래프 없음");
     expect(reportsPage).toContain("dashboard.reports.completedEmpty.description");
     expect(koMessages).toContain("누락된 완료 데이터를 0값 매출 또는 0값 코스 비중 그래프로 꾸미지 않습니다.");
-    expect(reportsPage).toContain("report.emptyStates.noCalculatedCompletedCalls ? <CompletedChartEmptyPanel /> : <RevenueTrendChart report={report} />");
+    // i18n 전환으로 차트 컴포넌트가 t/locale props를 받으면서 이 가드 라인의 모양이 바뀌었다.
+    // (validate-story-6-4.mjs가 pin하는 현재 문자열과 동일하게 맞춘다.)
+    expect(reportsPage).toContain("report.emptyStates.noRevenueTrendData ? <CompletedChartEmptyPanel t={t} /> : <RevenueTrendChart {...viewProps} />");
     expect(reportsPage).toContain("report.emptyStates.noCalculatedCompletedCalls ? (");
   });
 });
@@ -233,11 +235,12 @@ test.describe("Story 6.4 dashboard browser states and route access", () => {
     await login(page, seededData.accounts.administrator.accountId, seededData.accounts.administrator.password);
 
     await page.goto(`/dashboard/monthly?operatingMonthId=${seededData.months.lockedMissing}`);
-    await expect(page.getByRole("alert")).toContainText("확정 스냅샷을 찾을 수 없습니다");
+    // 화면에는 여러 alert(스냅샷 없음, 지급 요약 없음 등)가 함께 뜬다.
+    await expect(page.getByRole("alert").filter({ hasText: "확정 스냅샷을 찾을 수 없습니다" }).first()).toBeVisible();
     await expect(page.getByRole("region", { name: "지급 요약 없음" })).toContainText("현재 지급 계산값으로 대체하지 않았습니다");
 
     await page.goto(`/dashboard/reports?operatingMonthId=${seededData.months.lockedMissing}&serviceDate=${seededData.lockedDate}`);
-    await expect(page.getByRole("alert")).toContainText("확정 스냅샷을 찾을 수 없습니다");
+    await expect(page.getByRole("alert").filter({ hasText: "확정 스냅샷을 찾을 수 없습니다" }).first()).toBeVisible();
     await expect(page.getByText("정산 source가 없어 순위를 표시하지 않습니다.")).toBeVisible();
     await expect(page.getByText("확정 스냅샷이 없어 지급 구성 그래프를 표시하지 않습니다.")).toBeVisible();
   });
@@ -263,7 +266,8 @@ test.describe("Story 6.4 dashboard browser states and route access", () => {
       await page.goto(`/dashboard/reports?operatingMonthId=${seededData.months.draft}&serviceDate=${seededData.draftDate}`);
 
       await expect(page.getByRole("heading", { name: "그래프 리포트" })).toBeVisible();
-      await expect(page.getByRole("region", { name: "데이터 없음 상태" })).toContainText("정산 source가 없어 정산 순위와 지급 구성을 표시하지 않습니다.");
+      // 미확정 운영월에는 정산 미리보기가 있으므로 "정산 source 없음"이 아니라 콜 원장 데이터 없음이 뜬다.
+      await expect(page.getByRole("region", { name: "데이터 없음 상태" })).toContainText("운영월 기간 전체에 콜 원장 데이터가 없습니다.");
     });
   }
 });

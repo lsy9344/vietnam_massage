@@ -3,6 +3,7 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 import { defaultRooms } from "@/modules/masters/room-schema";
+import { deactivateNonDefaultRooms } from "./support/cleanup";
 
 
 const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000;
@@ -216,6 +217,10 @@ async function seedStoryData(): Promise<SeededData> {
       })
     )
   );
+
+  // 공유 DB에는 다른 스펙이 시드한 E2E 객실이 남아 있을 수 있고, /rooms·/tv는 활성 객실을 모두
+  // 카드로 그린다. 이 스펙의 "기본 객실 11개" 계약을 지키려면 나머지를 비활성화해야 한다.
+  await deactivateNonDefaultRooms(defaultRooms.map((room) => room.migrationReferenceName));
   const course = await (prisma as any).course.upsert({ where: { code: "A" }, update: { isActive: true }, create: { code: "A", isActive: true } });
   const policy = await (prisma as any).coursePolicy.findFirst({ where: { courseId: course.id, effectiveFromMonth: monthKey } });
   const policyData = {
@@ -359,9 +364,10 @@ test.describe("Story 3.3 rooms waiter guidance", () => {
     await expect(page.getByLabel("상태: 종료확인").filter({ hasText: "⚠" })).toBeVisible();
     await expect(page.getByLabel("상태: 청소중").filter({ hasText: "◐" })).toBeVisible();
     await expect(page.getByLabel("상태: 빈방").filter({ hasText: "○" }).first()).toBeVisible();
-    await expect(page.getByText("서비스가 진행 중입니다.")).toBeVisible();
-    await expect(page.getByText(/종료 확인|결제·확인|청소\/입실/)).toBeVisible();
-    await expect(page.getByText(/즉시 가능|입실 가능합니다/)).toBeVisible();
+    // 안내 문구는 상태가 같은 객실 카드마다 반복되므로 존재 여부만 확인한다.
+    await expect(page.getByText("서비스가 진행 중입니다.").first()).toBeVisible();
+    await expect(page.getByText(/종료 확인|결제·확인|청소\/입실/).first()).toBeVisible();
+    await expect(page.getByText(/즉시 가능|입실 가능합니다/).first()).toBeVisible();
     await expect(page.getByText("S33 A60").first()).toBeVisible();
     await expect(page.getByText("E2E33 마사지사").first()).toBeVisible();
 

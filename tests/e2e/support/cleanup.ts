@@ -53,3 +53,17 @@ export async function deactivateEmployeesByPrefix(staffCodePrefix: string): Prom
     data: { isActive: false }
   });
 }
+
+/**
+ * 기본 객실 11개만 남기고 다른 스펙이 시드한 객실을 비활성화한다.
+ *
+ * `/rooms`와 `/tv`는 활성 객실을 모두 카드로 그리므로, 공유 DB에 다른 스펙의 E2E 객실이 남아 있으면
+ * "객실 카드 11개" 같은 계약이 깨진다. 각 스펙은 자기 객실을 `isActive: true`로 upsert하며 시작하므로
+ * 여기서 비활성화해도 다음 실행에서 스스로 복구된다(파일 단위 순차 실행 기준).
+ */
+export async function deactivateNonDefaultRooms(defaultReferenceNames: string[]): Promise<void> {
+  await (prisma as any).room.updateMany({
+    where: { isActive: true, NOT: { migrationReferenceName: { in: defaultReferenceNames } } },
+    data: { isActive: false }
+  });
+}

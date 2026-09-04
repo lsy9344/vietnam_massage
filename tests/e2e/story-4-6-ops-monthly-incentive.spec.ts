@@ -79,7 +79,9 @@ async function upsertMonthlyRule(thresholdCallCount: number, totalAmount: number
     leadShare: 0.3,
     counterTeamShare: 0.35,
     waiterTeamShare: 0.35,
-    effectiveToMonth: null,
+    // 인센 규칙은 시드한 달로 한정한다. effectiveToMonth를 비워 두면 다른 스펙의 운영월까지 적용돼
+    // 지급액이 서로 오염된다.
+    effectiveToMonth: effectiveFromMonth,
     isActive: true
   };
   if (existing) return (prisma as any).opsMonthlyIncentiveRule.update({ where: { id: existing.id }, data });
@@ -190,6 +192,9 @@ async function seedStoryData(): Promise<SeededData> {
   await upsertMonthlyRule(1100, 5000000, "2036-07");
   await upsertMonthlyRule(1000, 3000000, "2036-08");
   await upsertMonthlyRule(1100, 5000000, "2036-08");
+  // 최저 구간 미달(2036-09) 시나리오도 규칙이 존재해야 "정책 없음"이 아니라 "최저 구간 미달"이 뜬다.
+  await upsertMonthlyRule(1000, 3000000, "2036-09");
+  await upsertMonthlyRule(1100, 5000000, "2036-09");
 
   await createCall({
     operatingMonthId: writableOperatingMonth.id,

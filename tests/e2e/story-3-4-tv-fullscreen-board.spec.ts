@@ -3,6 +3,7 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 import { defaultRooms } from "@/modules/masters/room-schema";
+import { deactivateNonDefaultRooms } from "./support/cleanup";
 
 
 const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000;
@@ -208,6 +209,10 @@ async function seedStoryData(): Promise<SeededData> {
       })
     )
   );
+
+  // 공유 DB에는 다른 스펙이 시드한 E2E 객실이 남아 있을 수 있고, /rooms·/tv는 활성 객실을 모두
+  // 카드로 그린다. 이 스펙의 "기본 객실 11개" 계약을 지키려면 나머지를 비활성화해야 한다.
+  await deactivateNonDefaultRooms(defaultRooms.map((room) => room.migrationReferenceName));
 
   const course = await (prisma as any).course.upsert({ where: { code: "A" }, update: { isActive: true }, create: { code: "A", isActive: true } });
   await upsertPolicy(course.id, {
