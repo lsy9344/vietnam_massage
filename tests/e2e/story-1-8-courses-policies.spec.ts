@@ -3,6 +3,7 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, gotoStable, login } from "./support/auth";
 import { defaultCourseSeeds } from "@/modules/masters/course-schema";
+import { ensureDefaultCoursesAndPolicies } from "@/modules/masters/course-service";
 
 
 const users = [
@@ -79,6 +80,14 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
         secret: user.password
       });
     }
+
+    // 공용 마스터 시드는 객실/직원/코드/시간 슬롯만 만든다. 이 스펙이 검증하는 기본 A~E 코스와
+    // 정책·수당·인센 규칙은 여기서 직접 보장한다(멱등).
+    const administrator = await (prisma as any).userAccount.findUniqueOrThrow({
+      where: { accountId: "story18_administrator" },
+      select: { id: true }
+    });
+    await ensureDefaultCoursesAndPolicies({ actorId: administrator.id });
   });
 
   test.afterAll(async () => {

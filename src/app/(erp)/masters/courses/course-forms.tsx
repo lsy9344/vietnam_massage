@@ -38,7 +38,19 @@ function InlineError({ state, field }: { state: CourseActionState; field?: strin
   return state.formError ? <span className="text-xs text-danger">{state.formError}</span> : null;
 }
 
-function PolicyInputs({ course, policy, monthKey }: { course: CourseDto; policy: CoursePolicyDto | null; monthKey: string }) {
+// 정책 저장 실패는 필드별 이유(예: "적용 종료월은 시작월보다 빠를 수 없습니다.")를 함께 보여야
+// 운영자가 무엇을 고쳐야 하는지 알 수 있다. 폼 전체 오류만 보여 주면 원인을 알 수 없다.
+function PolicyInputs({
+  course,
+  policy,
+  monthKey,
+  state
+}: {
+  course: CourseDto;
+  policy: CoursePolicyDto | null;
+  monthKey: string;
+  state: CourseActionState;
+}) {
   const t = useT();
   return (
     <>
@@ -47,34 +59,42 @@ function PolicyInputs({ course, policy, monthKey }: { course: CourseDto; policy:
       <label className="grid gap-1 text-xs text-muted">
         {t("masters.courses.field.courseName")}
         <input className="h-8 min-w-52 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.name ?? ""} name="name" required />
+        <InlineError field="name" state={state} />
       </label>
       <label className="grid gap-1 text-xs text-muted">
         {t("masters.courses.field.duration")}
         <input className="h-8 w-20 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.durationMinutes ?? 60} min={1} name="durationMinutes" type="number" />
+        <InlineError field="durationMinutes" state={state} />
       </label>
       <label className="grid gap-1 text-xs text-muted">
         {t("masters.courses.field.basePrice")}
         <input className="h-8 w-28 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.basePrice ?? 0} min={0} name="basePrice" type="number" />
+        <InlineError field="basePrice" state={state} />
       </label>
       <label className="grid gap-1 text-xs text-muted">
         {t("masters.courses.field.opsCallCredit")}
         <input className="h-8 w-20 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.opsCallCredit ?? 1} min={0} name="opsCallCredit" type="number" />
+        <InlineError field="opsCallCredit" state={state} />
       </label>
       <label className="grid gap-1 text-xs text-muted">
         {t("masters.courses.field.earcarePoolPerCall")}
         <input className="h-8 w-28 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.earcarePoolAmount ?? 0} min={0} name="earcarePoolAmount" type="number" />
+        <InlineError field="earcarePoolAmount" state={state} />
       </label>
       <label className="grid gap-1 text-xs text-muted">
         {t("masters.courses.field.tvDisplayName")}
         <input className="h-8 w-32 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.tvDisplayName ?? ""} name="tvDisplayName" required />
+        <InlineError field="tvDisplayName" state={state} />
       </label>
       <label className="grid gap-1 text-xs text-muted">
         {t("masters.courses.field.fromMonth")}
         <input className="h-8 w-28 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.effectiveFromMonth ?? monthKey} name="effectiveFromMonth" pattern="\d{4}-\d{2}" required />
+        <InlineError field="effectiveFromMonth" state={state} />
       </label>
       <label className="grid gap-1 text-xs text-muted">
         {t("masters.courses.field.toMonth")}
         <input className="h-8 w-28 border border-border bg-background px-2 text-sm text-foreground" defaultValue={policy?.effectiveToMonth ?? ""} name="effectiveToMonth" pattern="\d{4}-\d{2}" />
+        <InlineError field="effectiveToMonth" state={state} />
       </label>
       <label className="flex h-12 items-end gap-2 text-xs text-muted">
         <input className="h-4 w-4 accent-brand" defaultChecked={policy?.requiresSecondTherapist ?? course.code === "D"} name="requiresSecondTherapist" type="checkbox" value="true" />
@@ -100,7 +120,7 @@ function CoursePolicyRow({ course, monthKey }: { course: CourseDto; monthKey: st
       </td>
       <td className="border-b border-border px-3 py-2">
         <form action={policy ? updateAction : createAction} className="grid min-w-[1160px] grid-cols-[220px_80px_112px_80px_112px_128px_112px_112px_130px_auto] gap-2">
-          <PolicyInputs course={course} monthKey={monthKey} policy={policy} />
+          <PolicyInputs course={course} monthKey={monthKey} policy={policy} state={policy ? updateState : createState} />
           <div className="flex items-end">
             <Button className="h-8 px-2 text-xs" disabled={updatePending || createPending} type="submit" variant="secondary">
               {t("masters.courses.saveCurrentPolicy")}
@@ -109,7 +129,7 @@ function CoursePolicyRow({ course, monthKey }: { course: CourseDto; monthKey: st
           <InlineError state={policy ? updateState : createState} />
         </form>
         <form action={createAction} className="mt-2 flex min-w-[760px] items-end gap-2">
-          <PolicyInputs course={course} monthKey={monthKey} policy={policy} />
+          <PolicyInputs course={course} monthKey={monthKey} policy={policy} state={createState} />
           <Button className="h-8 px-2 text-xs" disabled={createPending} type="submit">
             {t("masters.courses.saveNewPolicyHistory")}
           </Button>
@@ -286,6 +306,7 @@ function DailyRuleForm({ rule, monthKey }: { rule?: OpsDailyIncentiveRuleDto; mo
       <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant={rule ? "secondary" : "default"}>
         {rule ? t("masters.courses.dailySave") : t("masters.courses.dailyAdd")}
       </Button>
+      <InlineError field="effectiveToMonth" state={state} />
       <InlineError state={state} />
     </form>
   );
@@ -308,6 +329,9 @@ function MonthlyRuleForm({ rule, monthKey }: { rule?: OpsMonthlyIncentiveRuleDto
       <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant={rule ? "secondary" : "default"}>
         {rule ? t("masters.courses.monthlySave") : t("masters.courses.monthlyAdd")}
       </Button>
+      {/* 분배율 합계·적용월 오류는 필드 메시지로 와야 어디를 고칠지 알 수 있다. */}
+      <InlineError field="leadShare" state={state} />
+      <InlineError field="effectiveToMonth" state={state} />
       <InlineError state={state} />
     </form>
   );
