@@ -32,8 +32,9 @@ const users = [
     landing: "/calls",
     visibleGroups: ["운영 현황", "콜 원장", "대시보드"],
     hiddenGroups: ["정산", "월마감", "마스터 설정", "감사 로그"],
-    visibleLinks: ["첫화면 실시간 현황", "객실 현황", "콜/예약 입력 원장", "오늘 대시보드"],
-    hiddenLinks: ["TV 현황판", "정산 화면", "월마감", "직원", "감사 로그"]
+    // 요구사항 9.1 권장 권한: 카운터에는 "TV 화면 조회"가 포함된다.
+    visibleLinks: ["첫화면 실시간 현황", "객실 현황", "TV 현황판", "콜/예약 입력 원장", "오늘 대시보드"],
+    hiddenLinks: ["정산 화면", "월마감", "직원", "감사 로그"]
   },
   {
     accountId: "settlement_manager",
