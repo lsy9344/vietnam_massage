@@ -56,7 +56,7 @@ The rooms module owns room-status presentation for operational use:
 - `/tv` must not recalculate active calls, remaining minutes, expected end, `종료확인`, course TV labels, or assignee display. UI 계산 재구현 금지.
 - `/tv` uses the shared `RoomStatusRefreshController variant="tv"` with 30초 polling (영업시간 11:00~03:00 밖이거나 화면이 보이지 않으면 자동 중지), manual refresh, last refresh time, `갱신 중`, and `갱신 지연`.
 - TV cards always show status color, text label, and glyph. `종료확인` uses a strong attention treatment and short copy such as `결제·확인 필요`.
-- `/tv` keeps `requireRouteAccess("/tv")`; administrator and read_only_viewer can access it, while waiter/counter/settlement_manager redirect to their role landing.
+- `/tv` keeps `requireRouteAccess("/tv")`; administrator, counter and read_only_viewer can access it (client spec 9.1 lists "TV 화면 조회" under 카운터), while waiter/settlement_manager redirect to their role landing.
 
 ## Story 3.5 Status Presentation Contract
 

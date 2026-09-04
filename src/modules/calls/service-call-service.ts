@@ -474,13 +474,84 @@ function emptyCalculation(status: ServiceCallCalculationStatus, error?: { code: 
   };
 }
 
-async function findCoursePolicyForCalculation(tx: ServiceCallPrismaClient, record: ServiceCallRecord, monthKey: string) {
+// 목록 조회는 행마다 정책/수당을 다시 조회하면 하루치만으로도 수십 번의 DB 왕복이 생긴다.
+// 배치 조회 결과를 이 묶음으로 넘겨 행 단위 조회를 없앤다. 단건 저장 경로는 넘기지 않으므로
+// 기존처럼 그때그때 조회한다.
+type ServiceCallCalculationSources = {
+  policiesByCourseId: Map<string, CoursePolicyRecord[]>;
+  ratesByTherapistCourse: Map<string, TherapistCourseRateRecord[]>;
+};
+
+function rateSourceKey(therapistId: string, courseId: string) {
+  return `${therapistId}::${courseId}`;
+}
+
+async function prefetchCalculationSources(
+  tx: ServiceCallPrismaClient,
+  records: ServiceCallRecord[]
+): Promise<ServiceCallCalculationSources> {
+  const courseIdsWithoutPolicy = new Set<string>();
+  const therapistIds = new Set<string>();
+  const rateCourseIds = new Set<string>();
+
+  for (const record of records) {
+    if (!requiresCalculation(record)) continue;
+    const monthKey = record.operatingMonth?.monthKey;
+    if (!monthKey) continue;
+    if (!record.course || !firstCurrentPolicy(record.course, monthKey)) {
+      courseIdsWithoutPolicy.add(record.courseId);
+    }
+    if (!isCompletedServiceCallStatus(record.status)) continue;
+    for (const role of ["THERAPIST_1", "THERAPIST_2"] as const) {
+      const assignment = assignmentByRole(record, role);
+      if (!assignment) continue;
+      therapistIds.add(assignment.employeeId);
+      rateCourseIds.add(record.courseId);
+    }
+  }
+
+  const [policies, rates] = await Promise.all([
+    courseIdsWithoutPolicy.size === 0
+      ? Promise.resolve([] as CoursePolicyRecord[])
+      : tx.coursePolicy.findMany({ where: { courseId: { in: [...courseIdsWithoutPolicy] }, isActive: true } }),
+    therapistIds.size === 0 || rateCourseIds.size === 0
+      ? Promise.resolve([] as TherapistCourseRateRecord[])
+      : tx.therapistCourseRate.findMany({
+          where: { therapistId: { in: [...therapistIds] }, courseId: { in: [...rateCourseIds] }, isActive: true }
+        })
+  ]);
+
+  const policiesByCourseId = new Map<string, CoursePolicyRecord[]>();
+  for (const policy of policies) {
+    const current = policiesByCourseId.get(policy.courseId) ?? [];
+    current.push(policy);
+    policiesByCourseId.set(policy.courseId, current);
+  }
+  const ratesByTherapistCourse = new Map<string, TherapistCourseRateRecord[]>();
+  for (const rate of rates) {
+    const key = rateSourceKey(rate.therapistId, rate.courseId);
+    const current = ratesByTherapistCourse.get(key) ?? [];
+    current.push(rate);
+    ratesByTherapistCourse.set(key, current);
+  }
+
+  return { policiesByCourseId, ratesByTherapistCourse };
+}
+
+async function findCoursePolicyForCalculation(
+  tx: ServiceCallPrismaClient,
+  record: ServiceCallRecord,
+  monthKey: string,
+  sources?: ServiceCallCalculationSources
+) {
   const includedPolicy = record.course ? firstCurrentPolicy(record.course, monthKey) : null;
   if (includedPolicy) {
     return includedPolicy;
   }
 
-  const policies = await tx.coursePolicy.findMany({ where: { courseId: record.courseId, isActive: true } });
+  const policies = sources
+    ? sources.policiesByCourseId.get(record.courseId) ?? []
+    : await tx.coursePolicy.findMany({ where: { courseId: record.courseId, isActive: true } });
   return [...policies]
     .filter((policy) => effectiveForMonth(policy, monthKey))
     .sort((a, b) => b.effectiveFromMonth.localeCompare(a.effectiveFromMonth))[0] ?? null;
@@ -488,15 +559,22 @@ async function findCoursePolicyForCalculation(tx: ServiceCallPrismaClient, recor
 
 async function findTherapistCourseRateForCalculation(
   tx: ServiceCallPrismaClient,
-  input: { therapistId: string; courseId: string; monthKey: string }
+  input: { therapistId: string; courseId: string; monthKey: string },
+  sources?: ServiceCallCalculationSources
 ) {
-  const rates = await tx.therapistCourseRate.findMany({
-    where: { therapistId: input.therapistId, courseId: input.courseId, isActive: true }
-  });
+  const rates = sources
+    ? sources.ratesByTherapistCourse.get(rateSourceKey(input.therapistId, input.courseId)) ?? []
+    : await tx.therapistCourseRate.findMany({
+        where: { therapistId: input.therapistId, courseId: input.courseId, isActive: true }
+      });
   return firstCurrentRate(rates, input.monthKey) ?? null;
 }
 
-async function calculateServiceCallCompletion(tx: ServiceCallPrismaClient, record: ServiceCallRecord) {
+async function calculateServiceCallCompletion(
+  tx: ServiceCallPrismaClient,
+  record: ServiceCallRecord,
+  sources?: ServiceCallCalculationSources
+) {
   if (!requiresCalculation(record)) {
     return emptyCalculation("not_completed");
   }
@@ -509,7 +587,7 @@ async function calculateServiceCallCompletion(tx: ServiceCallPrismaClient, recor
     });
   }
 
-  const policy = await findCoursePolicyForCalculation(tx, record, monthKey);
+  const policy = await findCoursePolicyForCalculation(tx, record, monthKey, sources);
   if (!policy) {
     return emptyCalculation("course_policy_missing", {
       code: "COURSE_POLICY_NOT_FOUND",
@@ -552,11 +630,11 @@ async function calculateServiceCallCompletion(tx: ServiceCallPrismaClient, recor
   }
 
   if (therapist1) {
-    const rate = await findTherapistCourseRateForCalculation(tx, {
-      therapistId: therapist1.employeeId,
-      courseId: record.courseId,
-      monthKey
-    });
+    const rate = await findTherapistCourseRateForCalculation(
+      tx,
+      { therapistId: therapist1.employeeId, courseId: record.courseId, monthKey },
+      sources
+    );
     if (!rate) {
       return {
         ...baseCalculation,
@@ -569,11 +647,11 @@ async function calculateServiceCallCompletion(tx: ServiceCallPrismaClient, recor
   }
 
   if (therapist2) {
-    const rate = await findTherapistCourseRateForCalculation(tx, {
-      therapistId: therapist2.employeeId,
-      courseId: record.courseId,
-      monthKey
-    });
+    const rate = await findTherapistCourseRateForCalculation(
+      tx,
+      { therapistId: therapist2.employeeId, courseId: record.courseId, monthKey },
+      sources
+    );
     if (!rate) {
       return {
         ...baseCalculation,
@@ -603,14 +681,18 @@ function assignmentByRole(record: ServiceCallRecord, role: ServiceCallAssignment
   });
 }
 
-async function toRowDto(tx: ServiceCallPrismaClient, record: ServiceCallRecord): Promise<ServiceCallRowDto> {
+async function toRowDto(
+  tx: ServiceCallPrismaClient,
+  record: ServiceCallRecord,
+  sources?: ServiceCallCalculationSources
+): Promise<ServiceCallRowDto> {
   const operatingMonth = record.operatingMonth;
   const course = record.course;
   const policy = operatingMonth && course ? firstCurrentPolicy(course, operatingMonth.monthKey) : null;
   const therapist1 = assignmentByRole(record, "THERAPIST_1")?.employee ?? null;
   const therapist2 = assignmentByRole(record, "THERAPIST_2")?.employee ?? null;
   const earcare = assignmentByRole(record, "EARCARE")?.employee ?? null;
-  const calculation = await calculateServiceCallCompletion(tx, record);
+  const calculation = await calculateServiceCallCompletion(tx, record, sources);
 
   return {
     id: record.id,
@@ -926,6 +1008,7 @@ export async function listServiceCallsForDate(input: {
     client.timeSlot.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] })
   ]);
   const sortOrderByTime = new Map(timeSlots.map((slot) => [slot.value, slot.sortOrder]));
+  const sources = await prefetchCalculationSources(client, records);
 
   return Promise.all(
     records
@@ -934,7 +1017,7 @@ export async function listServiceCallsForDate(input: {
         const rightOrder = sortOrderByTime.get(b.startTime) ?? 9999;
         return leftOrder - rightOrder || a.createdAt.getTime() - b.createdAt.getTime();
       })
-      .map((record) => toRowDto(client, record))
+      .map((record) => toRowDto(client, record, sources))
   );
 }
 
@@ -973,6 +1056,7 @@ export async function listServiceCallsForOperatingMonth(input: {
     client.timeSlot.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] })
   ]);
   const sortOrderByTime = new Map(timeSlots.map((slot) => [slot.value, slot.sortOrder]));
+  const sources = await prefetchCalculationSources(client, records);
 
   return Promise.all(
     records
@@ -983,7 +1067,7 @@ export async function listServiceCallsForOperatingMonth(input: {
         const rightOrder = sortOrderByTime.get(b.startTime) ?? 9999;
         return leftOrder - rightOrder || a.createdAt.getTime() - b.createdAt.getTime();
       })
-      .map((record) => toRowDto(client, record))
+      .map((record) => toRowDto(client, record, sources))
   );
 }
 

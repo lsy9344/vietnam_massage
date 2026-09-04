@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { mapWithConcurrency } from "@/lib/concurrency";
+import { memoizePrismaReads } from "@/lib/prisma-read-cache";
 import {
   getDailyCallLedgerSummary,
   listCompletedServiceCallCalculationsForOperatingMonth,
@@ -323,52 +325,6 @@ function getClient(client?: MonthlyClosingPreviewPrismaClient) {
   return client ?? (prisma as unknown as MonthlyClosingPreviewPrismaClient);
 }
 
-const MEMOIZED_READ_METHODS = new Set(["findUnique", "findFirst", "findMany", "count", "aggregate"]);
-
-function readCacheKey(model: string, method: string, args: unknown) {
-  return `${model}.${method}:${JSON.stringify(args, (_key, value) =>
-    typeof value === "bigint" ? `${value.toString()}n` : value
-  )}`;
-}
-
-function memoizePrismaReads<T extends object>(client: T): T {
-  const promises = new Map<string, Promise<unknown>>();
-  const delegates = new Map<PropertyKey, unknown>();
-
-  return new Proxy(client, {
-    get(target, property, receiver) {
-      const value = Reflect.get(target, property, receiver);
-      if (typeof property !== "string" || property.startsWith("$") || !value || typeof value !== "object") {
-        return typeof value === "function" ? value.bind(target) : value;
-      }
-
-      const existingDelegate = delegates.get(property);
-      if (existingDelegate) return existingDelegate;
-
-      const delegate = new Proxy(value, {
-        get(delegateTarget, method, delegateReceiver) {
-          const delegateValue = Reflect.get(delegateTarget, method, delegateReceiver);
-          if (typeof method !== "string" || typeof delegateValue !== "function") return delegateValue;
-          if (!MEMOIZED_READ_METHODS.has(method)) return delegateValue.bind(delegateTarget);
-
-          return (args?: unknown) => {
-            const key = readCacheKey(property, method, args);
-            const existing = promises.get(key);
-            if (existing) return existing;
-
-            const promise = Promise.resolve(delegateValue.call(delegateTarget, args));
-            promises.set(key, promise);
-            promise.catch(() => promises.delete(key));
-            return promise;
-          };
-        }
-      });
-      delegates.set(property, delegate);
-      return delegate;
-    }
-  });
-}
-
 function toIsoDate(value: Date) {
   return value.toISOString().slice(0, 10);
 }
@@ -398,28 +354,6 @@ function dateRange(startDate: string, endDate: string) {
 }
 
 const MONTHLY_CLOSING_QUERY_CONCURRENCY = 5;
-
-async function mapWithConcurrency<T, R>(
-  items: readonly T[],
-  concurrency: number,
-  mapper: (item: T, index: number) => Promise<R>
-) {
-  const results = new Array<R>(items.length);
-  let nextIndex = 0;
-
-  async function worker() {
-    while (nextIndex < items.length) {
-      const index = nextIndex;
-      nextIndex += 1;
-      results[index] = await mapper(items[index], index);
-    }
-  }
-
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => worker())
-  );
-  return results;
-}
 
 function emptyCourseBreakdown(): Record<CourseCode, TherapistCourseSettlementSummary> {
   return Object.fromEntries(

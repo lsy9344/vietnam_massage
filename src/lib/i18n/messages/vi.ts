@@ -952,7 +952,7 @@ export const vi: Messages = {
   "masters.employees.role.waiter": "Phục vụ",
   "masters.employees.role.settlement_manager": "Quản lý đối soát",
   "masters.employees.role.read_only_viewer": "Chỉ xem (bảng TV)",
-  "masters.employees.role.tvHint": "Bảng trạng thái TV (/tv) chỉ cho phép vai trò quản trị viên (administrator) hoặc chỉ xem (read_only_viewer) truy cập.",
+  "masters.employees.role.tvHint": "Bảng trạng thái TV (/tv) chỉ cho phép vai trò quản trị viên, lễ tân hoặc chỉ xem truy cập. Phục vụ và quản lý đối soát không truy cập được.",
   "masters.employees.createdLine": "Tạo {value}",
   "masters.employees.updatedLine": "Sửa {value}",
 

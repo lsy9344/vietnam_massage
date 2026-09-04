@@ -78,6 +78,11 @@ Owns the reservation and service-call ledger.
 
 - `masters` for operating months, rooms, courses, employees, time slots, and code values
 
+## Query cost
+
+- `listServiceCallsForDate()` and `listServiceCallsForOperatingMonth()` prefetch course policies and therapist course rates for the whole batch (`prefetchCalculationSources`) and hand them to `calculateServiceCallCompletion()`. Row-by-row rate lookups are an N+1: one month of ledger rows produced hundreds of extra round trips and made the monthly screens take ~10 seconds.
+- Single-row write paths call the calculation without prefetched sources and keep the original per-row lookup.
+
 ## Downstream
 
 - `rooms` for active room status

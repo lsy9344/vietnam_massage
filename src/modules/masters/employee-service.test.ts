@@ -251,6 +251,55 @@ describe("employee service", () => {
     assert.equal(prismaClient.auditEvents.at(-1).action, "employee.profile_changed");
   });
 
+  it("auto-adjusts a colliding sortOrder to the end of the group when creating an employee", async () => {
+    const prismaClient = createMemoryPrisma();
+    await ensureDefaultEmployees({ actorId: "admin-1", prismaClient });
+
+    // OPERATIONS defaults occupy 10..50, so the requested 10 collides with OPS-LEAD-001.
+    const created = await createEmployee({
+      actorId: "admin-1",
+      displayName: "신규 카운터",
+      staffCode: "OPS-COUNTER-DAY-002",
+      employeeGroup: "OPERATIONS",
+      position: "카운터",
+      shiftType: "주간",
+      baseSalary: 12000000,
+      phone: null,
+      birthday: null,
+      hireDate: null,
+      employmentStatus: "재직",
+      sortOrder: 10,
+      prismaClient
+    });
+
+    assert.equal(created.sortOrder, 51);
+    assert.equal(prismaClient.auditEvents.at(-1).action, "employee.created");
+  });
+
+  it("still rejects a duplicate staff code when creating an employee", async () => {
+    const prismaClient = createMemoryPrisma();
+    await ensureDefaultEmployees({ actorId: "admin-1", prismaClient });
+
+    await assert.rejects(
+      createEmployee({
+        actorId: "admin-1",
+        displayName: "중복 코드",
+        staffCode: "OPS-LEAD-001",
+        employeeGroup: "OPERATIONS",
+        position: "카운터",
+        shiftType: "주간",
+        baseSalary: 12000000,
+        phone: null,
+        birthday: null,
+        hireDate: null,
+        employmentStatus: "재직",
+        sortOrder: 9801,
+        prismaClient
+      }),
+      /이미 사용 중인 staff code입니다./
+    );
+  });
+
   it("allows saving a legacy row whose stored enum values are non-standard", async () => {
     const prismaClient = createMemoryPrisma();
     await ensureDefaultEmployees({ actorId: "admin-1", prismaClient });

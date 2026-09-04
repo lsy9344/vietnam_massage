@@ -952,7 +952,7 @@ export const ko = {
   "masters.employees.role.waiter": "웨이터",
   "masters.employees.role.settlement_manager": "정산 담당",
   "masters.employees.role.read_only_viewer": "조회 전용 (TV 현황판)",
-  "masters.employees.role.tvHint": "TV 현황판(/tv)은 관리자(administrator) 또는 조회 전용(read_only_viewer) 역할만 접속할 수 있습니다.",
+  "masters.employees.role.tvHint": "TV 현황판(/tv)은 관리자, 카운터, 조회 전용 역할만 접속할 수 있습니다. 웨이터와 정산 담당은 접속할 수 없습니다.",
   "masters.employees.createdLine": "생성 {value}",
   "masters.employees.updatedLine": "수정 {value}",
 

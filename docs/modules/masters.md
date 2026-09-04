@@ -60,6 +60,11 @@ The masters module owns all configurable data used by operational modules:
 - Deleted master values should usually become inactive, not removed.
 - Past monthly close results must not change when current master data changes.
 
+## Employee sort order
+
+- Group defaults deliberately reuse the same sort numbers across groups, so both employee creation and profile edits move a colliding sort order to the end of the target group instead of failing the save, and the action returns a notice with the applied number.
+- Duplicate staff codes stay a hard error; staff code is immutable after creation.
+
 ## Handoffs
 
 - `calls` reads rooms, courses, employees, status codes, payment codes, discount codes, and rates.

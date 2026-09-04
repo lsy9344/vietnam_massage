@@ -36,3 +36,20 @@ describe("authorization Story 7.1 sheet mapping route access", () => {
     assert.equal(canAccessRoute("waiter", "/masters/sheet-mapping"), false);
   });
 });
+
+describe("authorization TV board route access", () => {
+  // 요구사항 9.1 권장 권한: 카운터에는 "TV 화면 조회"가 포함된다.
+  it("lets administrator, counter and read_only_viewer open the TV board while waiter/settlement stay out", () => {
+    assert.equal(canAccessRoute("administrator", "/tv"), true);
+    assert.equal(canAccessRoute("counter", "/tv"), true);
+    assert.equal(canAccessRoute("read_only_viewer", "/tv"), true);
+    assert.equal(canAccessRoute("waiter", "/tv"), false);
+    assert.equal(canAccessRoute("settlement_manager", "/tv"), false);
+  });
+
+  it("keeps the counter TV grant read-only: no payout or closing permission comes with it", () => {
+    assert.equal(canPerform("counter", "payout:write"), false);
+    assert.equal(canPerform("counter", "closing:write"), false);
+    assert.equal(canPerform("counter", "employee:write"), false);
+  });
+});

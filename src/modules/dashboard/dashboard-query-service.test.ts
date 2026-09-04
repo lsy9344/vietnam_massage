@@ -221,6 +221,37 @@ function createDashboardPrisma(options: { operatingMonthMissing?: boolean; noCal
   } as any;
 }
 
+// 월 단위 화면은 하루씩 30번 조회를 반복한다. 행마다 수당을 다시 읽으면(N+1) 왕복이 수백 번으로
+// 불어나 실제 운영(Cloudflare -> Hyperdrive)에서 페이지가 10초씩 걸렸다. 조회 횟수를 세어 회귀를 막는다.
+function countingPrisma(client: any) {
+  const counts = new Map<string, number>();
+  const delegates = new Map<string, unknown>();
+  const proxy = new Proxy(client, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof property !== "string" || property.startsWith("$") || !value || typeof value !== "object") {
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+      const cached = delegates.get(property);
+      if (cached) return cached;
+      const delegate = new Proxy(value, {
+        get(delegateTarget, method, delegateReceiver) {
+          const delegateValue = Reflect.get(delegateTarget, method, delegateReceiver);
+          if (typeof method !== "string" || typeof delegateValue !== "function") return delegateValue;
+          return (args?: unknown) => {
+            const key = `${property}.${method}`;
+            counts.set(key, (counts.get(key) ?? 0) + 1);
+            return delegateValue.call(delegateTarget, args);
+          };
+        }
+      });
+      delegates.set(property, delegate);
+      return delegate;
+    }
+  });
+  return { proxy, counts };
+}
+
 function todayCostDependencies(overrides: { opsDailyIncentiveTotal?: number; earcarePayoutTotal?: number } = {}) {
   const opsDailyIncentiveTotal = overrides.opsDailyIncentiveTotal ?? 100000;
   const earcarePayoutTotal = overrides.earcarePayoutTotal ?? 300000;
@@ -1168,5 +1199,50 @@ describe("getDashboardGraphReport", () => {
         error.code === "DASHBOARD_DATE_OUT_OF_RANGE" &&
         error.message === "조회 날짜가 선택한 운영월 범위를 벗어났습니다."
     );
+  });
+});
+
+describe("월 단위 조회 비용", () => {
+  const DAYS_IN_MONTH = 30;
+
+  it("월간 대시보드는 하루당 수당 조회를 한 번으로 묶고 시간 슬롯을 재조회하지 않는다", async () => {
+    const { proxy, counts } = countingPrisma(createDashboardPrisma());
+
+    await getMonthlyDashboardMetrics({
+      operatingMonthId: "month-2026-06",
+      prismaClient: proxy,
+      dependencies: { listMonthlyClosingPreview: async () => monthlyPreview() }
+    });
+
+    assert.ok(
+      (counts.get("therapistCourseRate.findMany") ?? 0) <= DAYS_IN_MONTH,
+      `therapistCourseRate.findMany=${counts.get("therapistCourseRate.findMany")} (하루 1회를 넘으면 행 단위 N+1이다)`
+    );
+    assert.equal(counts.get("timeSlot.findMany"), 1);
+  });
+
+  it("그래프 리포트는 같은 날짜를 두 경로가 조회해도 콜 원장을 한 번만 읽는다", async () => {
+    const { proxy, counts } = countingPrisma(createDashboardPrisma());
+
+    await getDashboardGraphReport({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient: proxy,
+      dependencies: {
+        listRoomStatuses: async () => [],
+        listCompletedServiceCallCalculationsForOperatingMonth: async () => [],
+        listMonthlyClosingPreview: async () => monthlyPreview()
+      } as any
+    });
+
+    assert.ok(
+      (counts.get("serviceCall.findMany") ?? 0) <= DAYS_IN_MONTH,
+      `serviceCall.findMany=${counts.get("serviceCall.findMany")} (일자별 조회는 두 집계 경로가 공유해야 한다)`
+    );
+    assert.ok(
+      (counts.get("therapistCourseRate.findMany") ?? 0) <= DAYS_IN_MONTH,
+      `therapistCourseRate.findMany=${counts.get("therapistCourseRate.findMany")}`
+    );
+    assert.equal(counts.get("timeSlot.findMany"), 1);
   });
 });

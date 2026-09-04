@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { mapWithConcurrency } from "@/lib/concurrency";
+import { memoizePrismaReads } from "@/lib/prisma-read-cache";
 import {
   getDailyCallLedgerSummary,
   listCompletedServiceCallCalculationsForOperatingMonth,
@@ -305,6 +307,9 @@ export class DashboardQueryDomainError extends Error {
     this.name = "DashboardQueryDomainError";
   }
 }
+
+// 한 달치 일자별 집계의 동시 실행 수. Prisma 커넥션 풀(5) 안에서 돌도록 맞춘다.
+const DASHBOARD_QUERY_CONCURRENCY = 5;
 
 function getClient(client?: TodayDashboardPrismaClient) {
   return client ?? (prisma as unknown as TodayDashboardPrismaClient);
@@ -823,7 +828,7 @@ export async function getMonthlyDashboardMetrics(input: {
     throw new DashboardQueryDomainError(parsed.error.issues[0]?.message ?? "대시보드 조회 조건이 올바르지 않습니다.", "INVALID_DASHBOARD_QUERY");
   }
 
-  const client = getDashboardClient(input.prismaClient);
+  const client = memoizePrismaReads(getDashboardClient(input.prismaClient));
   const operatingMonthRecord = await client.operatingMonth.findUnique({
     where: { id: parsed.data.operatingMonthId }
   });
@@ -839,16 +844,16 @@ export async function getMonthlyDashboardMetrics(input: {
     endDate: toIsoDateOnly(operatingMonthRecord.endDate),
     status: operatingMonthRecord.status
   };
-  const summaries = [];
-  for (const serviceDate of dateRange(operatingMonth.startDate, operatingMonth.endDate)) {
-    summaries.push(
-      await dependencies.getDailyCallLedgerSummary({
+  const summaries = await mapWithConcurrency(
+    dateRange(operatingMonth.startDate, operatingMonth.endDate),
+    DASHBOARD_QUERY_CONCURRENCY,
+    (serviceDate) =>
+      dependencies.getDailyCallLedgerSummary({
         operatingMonthId: parsed.data.operatingMonthId,
         serviceDate,
         prismaClient: client as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
       })
-    );
-  }
+  );
 
   const statusCounts = summaries.reduce(
     (totals, summary) => ({
@@ -1051,7 +1056,7 @@ export async function getDashboardGraphReport(input: {
     throw new DashboardQueryDomainError(parsed.error.issues[0]?.message ?? "그래프 리포트 조회 조건이 올바르지 않습니다.", "INVALID_DASHBOARD_QUERY");
   }
 
-  const client = getDashboardClient(input.prismaClient);
+  const client = memoizePrismaReads(getDashboardClient(input.prismaClient));
   const operatingMonthRecord = await client.operatingMonth.findUnique({
     where: { id: parsed.data.operatingMonthId }
   });
@@ -1128,14 +1133,12 @@ export async function getDashboardGraphReport(input: {
     }
   } else {
     const [dailySummaries, completedCalculations, therapistDailyResults, preview] = await Promise.all([
-      Promise.all(
-        serviceDates.map((serviceDate) =>
-          dependencies.getDailyCallLedgerSummary({
-            operatingMonthId: parsed.data.operatingMonthId,
-            serviceDate,
-            prismaClient: client as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
-          })
-        )
+      mapWithConcurrency(serviceDates, DASHBOARD_QUERY_CONCURRENCY, (serviceDate) =>
+        dependencies.getDailyCallLedgerSummary({
+          operatingMonthId: parsed.data.operatingMonthId,
+          serviceDate,
+          prismaClient: client as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
+        })
       ),
       dependencies.listCompletedServiceCallCalculationsForOperatingMonth({
         operatingMonthId: parsed.data.operatingMonthId,
@@ -1143,14 +1146,12 @@ export async function getDashboardGraphReport(input: {
         endDate: operatingMonth.endDate,
         prismaClient: client as Parameters<typeof listCompletedServiceCallCalculationsForOperatingMonth>[0]["prismaClient"]
       }),
-      Promise.all(
-        serviceDates.map((serviceDate) =>
-          dependencies.listTherapistDailySettlements({
-            operatingMonthId: parsed.data.operatingMonthId,
-            serviceDate,
-            prismaClient: client as Parameters<typeof listTherapistDailySettlements>[0]["prismaClient"]
-          })
-        )
+      mapWithConcurrency(serviceDates, DASHBOARD_QUERY_CONCURRENCY, (serviceDate) =>
+        dependencies.listTherapistDailySettlements({
+          operatingMonthId: parsed.data.operatingMonthId,
+          serviceDate,
+          prismaClient: client as Parameters<typeof listTherapistDailySettlements>[0]["prismaClient"]
+        })
       ),
       dependencies.listMonthlyClosingPreview({
         operatingMonthId: parsed.data.operatingMonthId,

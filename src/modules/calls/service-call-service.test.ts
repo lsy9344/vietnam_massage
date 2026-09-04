@@ -20,6 +20,15 @@ function dbDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
+// 목록 조회는 정책/수당을 { in: [...] } 로 한 번에 가져온다. 단건 비교와 in 비교를 모두 지원한다.
+function matchesFilter(value: string, filter: unknown) {
+  if (filter === undefined) return true;
+  if (filter !== null && typeof filter === "object" && Array.isArray((filter as { in?: unknown }).in)) {
+    return ((filter as { in: string[] }).in).includes(value);
+  }
+  return value === filter;
+}
+
 function createMemoryPrisma() {
   const createdAt = new Date("2026-06-01T00:00:00.000Z");
   const updatedAt = new Date("2026-06-01T00:10:00.000Z");
@@ -375,7 +384,7 @@ function createMemoryPrisma() {
     coursePolicy: {
       async findMany({ where }: any = {}) {
         return [...coursePolicies.values()].filter(
-          (policy) => (where?.courseId === undefined || policy.courseId === where.courseId) && (where?.isActive === undefined || policy.isActive === where.isActive)
+          (policy) => matchesFilter(policy.courseId, where?.courseId) && (where?.isActive === undefined || policy.isActive === where.isActive)
         );
       }
     },
@@ -383,8 +392,8 @@ function createMemoryPrisma() {
       async findMany({ where }: any = {}) {
         return [...therapistCourseRates.values()].filter(
           (rate) =>
-            (where?.therapistId === undefined || rate.therapistId === where.therapistId) &&
-            (where?.courseId === undefined || rate.courseId === where.courseId) &&
+            matchesFilter(rate.therapistId, where?.therapistId) &&
+            matchesFilter(rate.courseId, where?.courseId) &&
             (where?.isActive === undefined || rate.isActive === where.isActive)
         );
       }

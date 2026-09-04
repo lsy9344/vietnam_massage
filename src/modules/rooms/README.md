@@ -29,7 +29,7 @@ Owns room-status views for waiters and TV display.
 ## Story 3.4 Contract
 
 - `/tv` is the fullscreen TV board route outside the ERP shell; ERP chrome 없음 means no sidebar, topbar, or input/edit affordances.
-- `/tv` is read-only / 조회 전용 and uses `requireRouteAccess("/tv")` for administrator/read_only_viewer access only.
+- `/tv` is read-only / 조회 전용 and uses `requireRouteAccess("/tv")` for administrator/counter/read_only_viewer access only (spec 9.1 grants 카운터 "TV 화면 조회"); waiter and settlement_manager redirect to their landing.
 - `/tv` consumes `RoomStatusDto` from `listRoomStatuses()` and renders `RoomStatusCard variant="tv"`; it must not recalculate active-call selection, remaining minutes, expected end, `종료확인`, course labels, or assignees. UI 계산 재구현 금지.
 - `/tv` uses shared 15초 refresh affordance through `RoomStatusRefreshController variant="tv"` with last refresh, `갱신 중`, and `갱신 지연`.
 - TV status presentation combines color, text label, and glyph; `종료확인` shows short attention copy such as `결제·확인 필요`.

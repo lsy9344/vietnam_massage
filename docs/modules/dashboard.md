@@ -63,6 +63,12 @@ The dashboard module owns read-only operational KPI summaries:
 - Story 6.4 forbids fake 0값 graphs for missing calculated data. If calculated completed-call data is missing, show an explicit empty message and do not render revenue or course mix charts as successful completed charts.
 - Story 6.4 keeps the Story 6.3 project-local SVG/CSS primitives. Do not add a chart dependency unless a later story verifies and pins the exact version and records compatibility and bundle impact.
 
+## Query cost
+
+- Monthly metrics and the graph report aggregate one operating month day by day, so the same day is read by several aggregation paths. Both entry points wrap their Prisma client with `memoizePrismaReads()` so one request issues each identical read once, and the wrapped client is passed down to `listMonthlyClosingPreview()` so the whole page shares that cache.
+- Per-day fan-out uses `mapWithConcurrency()` with `DASHBOARD_QUERY_CONCURRENCY`, kept at or below the Prisma pool size. Do not replace it with a sequential loop or an unbounded `Promise.all`.
+- `dashboard-query-service.test.ts` keeps a query budget: monthly metrics must issue at most one therapist-rate read per day and read time slots once; the graph report must not read the same day's call ledger twice.
+
 ## Handoffs
 
 - Reads current metrics from `calls` and `settlements`.

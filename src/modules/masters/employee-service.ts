@@ -274,6 +274,30 @@ async function assertNoEmployeeConflict(
   }
 }
 
+// 그룹마다 기본 정렬 번호가 겹치도록 시드돼 있어, 신규 등록과 그룹 변경은 이미 쓰는 번호와
+// 부딪히기 쉽다. 저장을 실패시키는 대신 해당 그룹 맨 뒤의 빈 번호로 밀어 준다.
+async function resolveAvailableSortOrder(
+  tx: EmployeePrismaClient,
+  input: { employeeGroup: EmployeeGroup; sortOrder: number; excludeId?: string }
+) {
+  const conflict = await tx.employee.findFirst({
+    where: {
+      employeeGroup: input.employeeGroup,
+      sortOrder: input.sortOrder,
+      ...(input.excludeId ? { NOT: { id: input.excludeId } } : {})
+    }
+  });
+  if (!conflict) {
+    return input.sortOrder;
+  }
+
+  const lastInGroup = await tx.employee.findFirst({
+    where: { employeeGroup: input.employeeGroup },
+    orderBy: { sortOrder: "desc" }
+  });
+  return (lastInGroup?.sortOrder ?? 0) + 1;
+}
+
 async function recordEmployeeAudit(
   tx: EmployeePrismaClient,
   input: {
@@ -381,13 +405,16 @@ export async function createEmployee(input: CreateEmployeeInput) {
   return runInTransaction(client, async (tx) => {
     await assertNoEmployeeConflict(tx, {
       staffCode: parsed.data.staffCode,
+      employeeGroup: parsed.data.employeeGroup
+    });
+    const sortOrder = await resolveAvailableSortOrder(tx, {
       employeeGroup: parsed.data.employeeGroup,
       sortOrder: parsed.data.sortOrder
     });
 
     const record = await tx.employee.create({
       data: {
-        ...employeeData(parsed.data),
+        ...employeeData({ ...parsed.data, sortOrder }),
         isActive: true
       },
       include: { account: true }
@@ -435,24 +462,11 @@ export async function updateEmployeeProfile(input: UpdateEmployeeProfileInput) {
       return before;
     }
 
-    // Group changes commonly collide with an existing sortOrder in the target group
-    // (defaults deliberately reuse the same numbers across groups). Instead of failing
-    // the save, fall back to the next free order at the end of the target group.
-    let nextSortOrder = parsed.data.sortOrder;
-    const sortOrderConflict = await tx.employee.findFirst({
-      where: {
-        employeeGroup: parsed.data.employeeGroup,
-        sortOrder: nextSortOrder,
-        NOT: { id: parsed.data.employeeId }
-      }
+    const nextSortOrder = await resolveAvailableSortOrder(tx, {
+      employeeGroup: parsed.data.employeeGroup,
+      sortOrder: parsed.data.sortOrder,
+      excludeId: parsed.data.employeeId
     });
-    if (sortOrderConflict) {
-      const lastInGroup = await tx.employee.findFirst({
-        where: { employeeGroup: parsed.data.employeeGroup },
-        orderBy: { sortOrder: "desc" }
-      });
-      nextSortOrder = (lastInGroup?.sortOrder ?? 0) + 1;
-    }
 
     const updateResult = await tx.employee.updateMany({
       where: { id: parsed.data.employeeId },

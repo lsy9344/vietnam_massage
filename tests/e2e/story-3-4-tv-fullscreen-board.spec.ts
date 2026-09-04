@@ -361,9 +361,11 @@ test.describe("Story 3.4 TV fullscreen board", () => {
     await page.goto(`/tv?operatingMonthId=${seededData.openMonthId}&serviceDate=${serviceDate}`);
     await expect(page).toHaveURL(/\/rooms(?:\?|$)/);
 
+    // 요구사항 9.1: 카운터 권한에는 "TV 화면 조회"가 포함된다.
     await login(page, "story34_counter", "Story34!counter");
     await page.goto(`/tv?operatingMonthId=${seededData.openMonthId}&serviceDate=${serviceDate}`);
-    await expect(page).toHaveURL(/\/calls(?:\?|$)/);
+    await expect(page).toHaveURL(/\/tv(?:\?|$)/);
+    await expect(page.getByRole("heading", { name: "TV 현황판" })).toBeVisible();
 
     await login(page, "story34_settlement", "Story34!settlement");
     await page.goto(`/tv?operatingMonthId=${seededData.openMonthId}&serviceDate=${serviceDate}`);

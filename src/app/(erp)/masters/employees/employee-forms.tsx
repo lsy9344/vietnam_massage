@@ -165,7 +165,7 @@ function EmployeeCreateForm() {
           <InlineError state={state} />
           {state?.ok ? (
             <span className="whitespace-nowrap text-xs font-semibold text-success" role="status">
-              {t("masters.employees.savedNotice")}
+              {state.notice ?? t("masters.employees.savedNotice")}
             </span>
           ) : null}
         </div>

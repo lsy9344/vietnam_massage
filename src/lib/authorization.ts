@@ -34,7 +34,7 @@ const roleLandingPath: Record<Role, string> = {
 
 const roleRoutePrefixes: Record<Role, string[]> = {
   administrator: ["/live", "/calls", "/rooms", "/settlements", "/closing", "/dashboard", "/masters", "/audit", "/tv"],
-  counter: ["/live", "/calls", "/rooms", "/dashboard/today", "/dashboard/monthly", "/dashboard/reports"],
+  counter: ["/live", "/calls", "/rooms", "/dashboard/today", "/dashboard/monthly", "/dashboard/reports", "/tv"],
   settlement_manager: ["/settlements", "/closing", "/dashboard/today", "/dashboard/monthly", "/dashboard/reports"],
   waiter: ["/rooms"],
   read_only_viewer: ["/rooms", "/tv", "/dashboard/today", "/dashboard/monthly", "/dashboard/reports"]

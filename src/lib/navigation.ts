@@ -20,7 +20,7 @@ export const navigationGroups: NavigationGroup[] = [
     items: [
       { labelKey: "nav.item.live", href: "/live", allowedRoles: ["administrator", "counter"] },
       { labelKey: "nav.item.rooms", href: "/rooms", allowedRoles: ["administrator", "counter", "waiter", "read_only_viewer"] },
-      { labelKey: "nav.item.tv", href: "/tv", allowedRoles: ["administrator", "read_only_viewer"] }
+      { labelKey: "nav.item.tv", href: "/tv", allowedRoles: ["administrator", "counter", "read_only_viewer"] }
     ]
   },
   {

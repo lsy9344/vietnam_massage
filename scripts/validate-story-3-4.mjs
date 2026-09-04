@@ -175,7 +175,7 @@ const navigation = read("src/lib/navigation.ts");
 for (const required of [
   "nav.item.tv",
   "href: \"/tv\"",
-  "allowedRoles: [\"administrator\", \"read_only_viewer\"]",
+  "{ labelKey: \"nav.item.tv\", href: \"/tv\", allowedRoles: [\"administrator\", \"counter\", \"read_only_viewer\"] }",
   "getNavigationForRole"
 ]) {
   if (!navigation.includes(required)) errors.push(`navigation.ts missing ${required}`);

@@ -213,7 +213,7 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Story 3.3 기준 `/rooms`는 콜 원장 grid, autosave, 지출, 정산, 월마감 mutation UI를 포함하지 않는다. 운영월/조회날짜 form은 read-only 조회 조건 변경만 수행한다.
 - Story 3.3 기준 `/rooms`는 공용 `RoomStatusRefreshController`로 15초 `router.refresh()` 자동 갱신, 수동 새로고침, 마지막 갱신 시각, `갱신 중`, `갱신 지연`을 표시한다. 새 React Query dependency 없이 직전 렌더 값을 유지한다.
 - Story 3.4 기준 `/tv`는 `src/app/tv/page.tsx`의 fullscreen route이며 ERP chrome 없음, sidebar/topbar 없음, 입력/수정 affordance 없음 상태로 렌더링한다.
-- Story 3.4 기준 `/tv`는 조회 전용/읽기 전용 downstream 화면이다. `requireRouteAccess("/tv")`를 유지하고 administrator/read_only_viewer만 접근하며 waiter/counter/settlement_manager 권한을 넓히지 않는다.
+- Story 3.4 기준 `/tv`는 조회 전용/읽기 전용 downstream 화면이다. `requireRouteAccess("/tv")`를 유지하고 administrator/counter/read_only_viewer만 접근한다(요구사항 9.1 권장 권한의 카운터 "TV 화면 조회"). waiter/settlement_manager 권한은 넓히지 않고, counter에게도 조회 외 권한은 추가하지 않는다.
 - Story 3.4 기준 `/tv`는 `listRoomStatuses()`의 `RoomStatusDto`와 `RoomStatusCard variant="tv"`를 재사용한다. 화면에서 활성 콜, 남은 시간, 종료예정, `종료확인`, 코스/담당자 표시를 다시 계산하지 않는다. UI 계산 재구현 금지.
 - Story 3.4 기준 `/tv`는 공유 `RoomStatusRefreshController variant="tv"`로 15초 polling, 수동 새로고침, 마지막 갱신, `갱신 중`, `갱신 지연`을 표시하고 갱신 중/지연 시 직전 렌더 값을 유지한다.
 - Story 3.4 기준 TV 카드는 상태별 색상과 텍스트 라벨과 글리프를 함께 표시하며, `종료확인`은 `결제·확인 필요` 같은 짧은 주의 문구를 보여준다.
