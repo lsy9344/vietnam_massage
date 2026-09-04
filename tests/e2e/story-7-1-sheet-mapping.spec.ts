@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
-import { argon2idOptions, setLocaleCookie } from "./support/auth";
+import { argon2idOptions, login as loginAccount } from "./support/auth";
 
 
 type StoryAccount = {
@@ -108,13 +108,10 @@ async function seedStoryAccounts(workerIndex: number): Promise<SeededAccounts> {
   return accounts;
 }
 
+// 공유 login 헬퍼는 credentials POST 응답과 landing navigation까지 기다린다. 직접 구현하면
+// 클릭 직후의 page.goto가 그 POST를 취소해 세션 없이 /sign-in으로 튕긴다.
 async function login(page: Page, account: StoryAccount) {
-  await page.goto("/sign-in");
-  await setLocaleCookie(page, "ko");
-  await page.reload().catch(() => undefined);
-  await page.getByLabel("이메일 또는 계정 ID").fill(account.accountId);
-  await page.getByLabel("비밀번호").fill(account.password);
-  await page.getByRole("button", { name: "로그인" }).click();
+  await loginAccount(page, account.accountId, account.password);
 }
 
 test.describe("Story 7.1 sheet mapping source guardrails", () => {
@@ -196,13 +193,20 @@ test.describe("Story 7.1 sheet mapping browser access", () => {
     await page.goto("/masters/sheet-mapping");
 
     await expect(page.getByRole("heading", { name: "시트 기능 매핑표", level: 1 })).toBeVisible();
-    await expect(page.getByRole("status")).toContainText("숨김 목록 포함 12개 원본 시트");
+    // 12개 시트 문구는 "숨김 목록 100% gate" 섹션으로 통합됐다(스펙 위 source guardrail과 동일).
+    await expect(page.getByRole("status")).toContainText("숨김 목록 100% gate");
+    await expect(page.getByRole("status")).toContainText("현재 상태: 매핑 완료");
     await expect(page.getByText("기능 보존율 100%")).toBeVisible();
     await expect(page.getByRole("cell", { name: "목록" })).toBeVisible();
-    await expect(page.getByText("hidden 목록")).toBeVisible();
-    await expect(page.getByRole("region", { name: "원본 시트 기능 매핑표" })).toContainText("매핑 완료");
+    // visibility 컬럼은 i18n 전환 후 "hidden"이 아니라 "숨김"으로 표시된다.
+    await expect(
+      page.getByRole("row").filter({ has: page.getByRole("cell", { name: "목록" }) })
+    ).toContainText("숨김");
+    await expect(page.getByRole("region", { name: "이관 검증 리포트 표" })).toContainText("매핑 완료");
 
-    await page.getByRole("button", { name: "원본 근거, ERP 연결, 보존 규칙, 검증 항목 보기" }).nth(1).click();
+    // <summary>는 더 이상 role=button으로 노출되지 않는다. 아래 두 근거 문구는 실시간콜입력 시트의
+    // 것이므로 순서(nth) 대신 시트 이름으로 펼친다.
+    await page.getByText("실시간콜입력 원본 근거, ERP 연결, 보존 규칙, 검증 항목 보기").click();
     await expect(page.getByText("A:S 콜 원장 입력/계산 구조와 U:X 지출/요약 구조를 별도로 검증한다.")).toBeVisible();
     await expect(page.getByText("방문완료 또는 VISIT_COMPLETE 상태만 결제, 수당, 귀케어 풀, 콜인정 계산에 포함한다.")).toBeVisible();
   });

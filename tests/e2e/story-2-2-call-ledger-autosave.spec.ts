@@ -76,13 +76,6 @@ async function seedAuthAccount(input: { accountId: string; email: string; staffC
   });
 }
 
-async function upsertCodeItem(codeType: string, code: string, displayName: string, sortOrder: number, isActive = true) {
-  await (prisma as any).codeItem.upsert({
-    where: { codeType_code: { codeType, code } },
-    update: { displayName, sortOrder, isActive },
-    create: { codeType, code, displayName, sortOrder, isSystemDefault: false, isActive }
-  });
-}
 
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, sortOrder: number) {
   return (prisma as any).employee.upsert({
@@ -204,13 +197,9 @@ async function seedStoryData(): Promise<SeededData> {
     update: { sortOrder: 92201, isActive: true },
     create: { value: "12:00", sortOrder: 92201, isActive: true }
   });
-  await upsertCodeItem("SERVICE_STATUS", "예약", "예약", 92201);
-  await upsertCodeItem("SERVICE_STATUS", "사용중", "사용중", 92202);
-  await upsertCodeItem("SERVICE_STATUS", "취소", "취소", 92203);
-  await upsertCodeItem("DISCOUNT_TYPE", "생일자", "생일자", 92201);
-  await upsertCodeItem("PAYMENT_METHOD", "현금", "현금", 92201);
-  await upsertCodeItem("PAYMENT_METHOD", "카드", "카드", 92202);
-  await upsertCodeItem("CONFIRMATION", "Y", "Y", 92201);
+  // 상태/결제수단/할인/확인값 코드는 공용 마스터 시드(defaultCodeItems)가 제공한다. 여기서 같은
+  // 표시명으로 한국어 code를 또 만들면 콤보박스에 같은 라벨이 두 개 뜨고, 이 스펙이 고른 항목이
+  // 마스터 코드인지 이 스펙 코드인지 알 수 없어진다(다른 스펙 드롭다운도 함께 오염된다).
 
   const counter = await (prisma as any).userAccount.findUniqueOrThrow({ where: { accountId: "story22_counter" } });
   return {
@@ -234,9 +223,9 @@ async function createCallRow(input: { operatingMonthId: string; serviceDate: str
       roomId: seededData.roomId,
       courseId: seededData.courseId,
       customerMemo: input.memo,
-      status: input.status ?? "예약",
+      status: input.status ?? "RESERVED",
       discountTypeCode: null,
-      paymentMethodCode: "현금",
+      paymentMethodCode: "CASH",
       note: "E2E22 초기 비고",
       confirmationCode: "Y"
     }
@@ -312,7 +301,7 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
         const saved = await (prisma as any).serviceCall.findUnique({ where: { id: call.id } });
         return `${saved?.customerMemo}:${saved?.status}:${saved?.paymentMethodCode}`;
       })
-      .toBe(`${updatedMemo}:사용중:카드`);
+      .toBe(`${updatedMemo}:IN_USE:CARD`);
 
     const histories = await (prisma as any).serviceCallStatusHistory.findMany({
       where: { serviceCallId: call.id },
@@ -320,8 +309,8 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
     });
     expect(histories).toHaveLength(1);
     expect(histories[0]).toMatchObject({
-      previousStatus: "예약",
-      newStatus: "사용중",
+      previousStatus: "RESERVED",
+      newStatus: "IN_USE",
       changedByAccountId: seededData.counterAccountDbId
     });
 
@@ -342,26 +331,32 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
     await login(page, "story22_counter", "Story22!counter");
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2032-03-06`);
 
-    await upsertCodeItem("PAYMENT_METHOD", "카드", "카드", 92202, false);
     try {
       // memo를 바꾸면 텍스트 기반 row가 stale해지므로 안정 식별자로 셀을 잡는다.
       const stableRow = page.locator(`tr[data-service-call-id="${call.id}"]`);
       await stableRow.getByLabel("고객/메모").fill(retryMemo);
+      await stableRow.getByLabel("고객/메모").blur();
+      await expect(rowByText(page, retryMemo).getByText("저장됨")).toBeVisible();
+
+      // 저장 성공은 목록을 다시 불러온다. 그 뒤에 코드를 비활성화해야 화면에는 "카드"가 남아 있고
+      // 서버만 거부하는 상태가 되어, 자동저장 실패 경로를 재현할 수 있다.
+      await setCodeItemActive("PAYMENT_METHOD", "CARD", false);
       await selectGridCombobox(stableRow, "결제수단", "카드");
 
-      await expect(rowByText(page, retryMemo).getByText("저장 보류")).toBeVisible();
+      // "저장 보류"(저장 상태)와 "저장 보류 계산 대기"(계산 상태)가 함께 뜨므로 정확히 일치시킨다.
+      await expect(rowByText(page, retryMemo).getByText("저장 보류", { exact: true })).toBeVisible();
       await expect(rowByText(page, retryMemo).getByRole("button", { name: /재시도|retry/i })).toBeVisible();
       await expect(rowByText(page, retryMemo).getByLabel("고객/메모")).toHaveValue(retryMemo);
 
-      await upsertCodeItem("PAYMENT_METHOD", "카드", "카드", 92202, true);
+      await setCodeItemActive("PAYMENT_METHOD", "CARD", true);
       await rowByText(page, retryMemo).getByRole("button", { name: /재시도|retry/i }).click();
       await expect(rowByText(page, retryMemo).getByText("저장됨")).toBeVisible();
 
       const saved = await (prisma as any).serviceCall.findUnique({ where: { id: call.id } });
-      expect(saved).toMatchObject({ customerMemo: retryMemo, paymentMethodCode: "카드" });
+      expect(saved).toMatchObject({ customerMemo: retryMemo, paymentMethodCode: "CARD" });
     } finally {
       // 본문 단언이 실패해도 카드 결제수단 코드를 다시 활성화해 serial 후속 테스트 오염을 막는다.
-      await setCodeItemActive("PAYMENT_METHOD", "카드", true);
+      await setCodeItemActive("PAYMENT_METHOD", "CARD", true);
     }
   });
 
@@ -373,7 +368,8 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
     await page.goto(`/calls?operatingMonthId=${seededData.lockedMonthId}&serviceDate=2032-04-05`);
 
     const row = rowByText(page, memo);
-    await expect(page.getByText("잠긴 운영월입니다.")).toBeVisible();
+    // 잠금 안내는 콜 그리드와 지출 패널 두 곳에 뜬다.
+    await expect(page.getByText("잠긴 운영월입니다.").first()).toBeVisible();
     await expect(row.getByLabel("고객/메모")).toBeDisabled();
     await expect(row.getByLabel("상태")).toBeDisabled();
     await expect(row.getByRole("button", { name: /재시도|retry/i })).toHaveCount(0);
@@ -392,11 +388,12 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
       data: { role: "read_only_viewer" }
     });
     try {
-      const row = rowByText(page, memo);
+      // memo를 바꾸면 텍스트 기반 row가 stale해지므로 안정 식별자로 셀을 잡는다.
+      const row = page.locator(`tr[data-service-call-id="${call.id}"]`);
       await row.getByLabel("고객/메모").fill(draftMemo);
       await row.getByLabel("고객/메모").blur();
 
-      await expect(rowByText(page, draftMemo).getByText("저장 보류")).toBeVisible();
+      await expect(rowByText(page, draftMemo).getByText("저장 보류", { exact: true })).toBeVisible();
       await expect(page.getByText("권한이 없습니다.")).toBeVisible();
       await expect(rowByText(page, draftMemo).getByLabel("고객/메모")).toHaveValue(draftMemo);
 
@@ -418,7 +415,7 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
 
   test.afterAll(async () => {
     // 본문 try/finally가 1차 복구를 보장하지만, 방어적으로 기본 상태를 한 번 더 확정한다.
-    await setCodeItemActive("PAYMENT_METHOD", "카드", true);
+    await setCodeItemActive("PAYMENT_METHOD", "CARD", true);
     await restoreUserAccount("story22_counter", "counter");
     await prisma.$disconnect();
   });

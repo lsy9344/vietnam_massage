@@ -195,7 +195,6 @@ async function cleanupStoryCalls(operatingMonthId: string) {
   const calls = await (prisma as any).serviceCall.findMany({
     where: {
       operatingMonthId,
-      serviceDate: new Date("2032-01-05T00:00:00.000Z"),
       customerMemo: { startsWith: "E2E story 2.1" }
     },
     select: { id: true }
@@ -305,7 +304,8 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
     await expect(savedRow.getByRole("combobox", { name: "객실" })).toHaveValue("E2E 921 호실");
     await expect(savedRow.getByRole("combobox", { name: "마사지사1" })).toHaveValue(/E2E 마사지사1/);
     await expect(savedRow.getByRole("combobox", { name: "귀케어 담당" })).toHaveValue(/E2E 귀케어1/);
-    await expect(savedRow.getByText("비완료 제외")).toBeVisible();
+    // REQ-007: 결제수단을 고른 순간 선결제 매출로 잡히므로 예약 행도 "계산됨"이다.
+    await expect(savedRow.getByText("계산됨")).toBeVisible();
 
     const savedCall = await (prisma as any).serviceCall.findFirst({
       where: { customerMemo: memo },
@@ -327,21 +327,30 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
     ]);
   });
 
-  test("administrator는 운영월 범위를 벗어난 날짜 저장 오류를 한국어로 확인한다", async ({ page }) => {
+  test("administrator가 운영월 밖 날짜로 들어와도 조회날짜가 운영월 안으로 고정된다", async ({ page }) => {
+    const memo = `E2E story 2.1 clamp ${Date.now().toString(36)}`;
     await login(page, "story21_administrator", "Story21!administrator");
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2032-02-01`);
 
-    await fillBasicCallRow(page, `E2E out-of-range ${Date.now().toString(36)}`);
-    await page.getByRole("button", { name: "새 콜 행 추가" }).click();
+    // 화면이 운영월 밖 날짜를 마지막 날로 고정하므로 저장이 서버 가드까지 가지 않는다.
+    // 서버 가드("운영월 범위를 벗어난 날짜입니다." / OPERATING_MONTH_DATE_OUT_OF_RANGE)는
+    // service 단위 테스트가 검증한다.
+    await expect(page.getByLabel("조회날짜")).toHaveValue("2032-01-31");
 
-    await expect(page.getByText("운영월 범위를 벗어난 날짜입니다.")).toBeVisible();
+    await fillBasicCallRow(page, memo);
+    await page.getByRole("button", { name: "새 콜 행 추가" }).click();
+    await expect(page.getByText("저장됨").first()).toBeVisible();
+
+    const saved = await (prisma as any).serviceCall.findFirst({ where: { customerMemo: memo } });
+    expect(saved?.serviceDate.toISOString().slice(0, 10)).toBe("2032-01-31");
   });
 
   test("잠금 운영월은 read-only로 보이고 새 콜 행 추가가 차단된다", async ({ page }) => {
     await login(page, "story21_counter", "Story21!counter");
     await page.goto(`/calls?operatingMonthId=${seededData.lockedMonthId}&serviceDate=2032-02-03`);
 
-    await expect(page.getByText("잠긴 운영월입니다.")).toBeVisible();
+    // 잠금 안내는 콜 그리드와 지출 패널 두 곳에 뜬다.
+    await expect(page.getByText("잠긴 운영월입니다.").first()).toBeVisible();
     await expect(page.getByRole("button", { name: "새 콜 행 추가" })).toBeDisabled();
     await expect(page.getByLabel("시간")).toBeDisabled();
     await expect(page.getByLabel("객실")).toBeDisabled();

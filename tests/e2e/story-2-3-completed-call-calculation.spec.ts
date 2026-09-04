@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
-import { argon2idOptions, setLocaleCookie } from "./support/auth";
+import { argon2idOptions, login as loginAccount } from "./support/auth";
 import { restoreUserAccount } from "./support/cleanup";
 
 
@@ -18,13 +18,10 @@ type SeededData = {
 
 let seededData: SeededData;
 
+// 공유 login 헬퍼는 credentials POST 응답과 landing navigation까지 기다린다. 직접 구현하면
+// 클릭 직후의 page.goto가 그 POST를 취소해 세션 없이 /sign-in으로 튕긴다.
 async function login(page: Page) {
-  await page.goto("/sign-in");
-  await setLocaleCookie(page, "ko");
-  await page.reload().catch(() => undefined);
-  await page.getByLabel("이메일 또는 계정 ID").fill("story23_counter");
-  await page.getByLabel("비밀번호").fill("Story23!counter");
-  await page.getByRole("button", { name: "로그인" }).click();
+  await loginAccount(page, "story23_counter", "Story23!counter");
 }
 
 async function seedAuthAccount() {

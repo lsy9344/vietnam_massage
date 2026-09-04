@@ -1,7 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
-import { argon2idOptions, setLocaleCookie } from "./support/auth";
+import { argon2idOptions, login as loginAccount } from "./support/auth";
+import { selectGridOption, selectGridOptionByValue } from "./support/call-grid";
 import { restoreUserAccount } from "./support/cleanup";
 
 
@@ -16,13 +17,10 @@ type SeededData = {
 
 let seededData: SeededData;
 
+// 공유 login 헬퍼는 credentials POST 응답과 landing navigation까지 기다린다. 직접 구현하면
+// 클릭 직후의 page.goto가 그 POST를 취소해 세션 없이 /sign-in으로 튕긴다.
 async function login(page: Page) {
-  await page.goto("/sign-in");
-  await setLocaleCookie(page, "ko");
-  await page.reload().catch(() => undefined);
-  await page.getByLabel("이메일 또는 계정 ID").fill("story24_counter");
-  await page.getByLabel("비밀번호").fill("Story24!counter");
-  await page.getByRole("button", { name: "로그인" }).click();
+  await loginAccount(page, "story24_counter", "Story24!counter");
 }
 
 async function seedAuthAccount() {
@@ -215,7 +213,9 @@ async function createCallRow(input: { memo: string; courseId: string; therapist2
       roomId: seededData.roomId,
       courseId: input.courseId,
       customerMemo: input.memo,
-      status: input.status ?? "RESERVED"
+      status: input.status ?? "RESERVED",
+      // REQ-007: 결제수단이 있어야 결제금액이 매출로 잡힌다. 방문완료 후 코스 금액을 확인하려면 필요하다.
+      paymentMethodCode: "CASH"
     }
   });
   await (prisma as any).serviceCallAssignment.create({
@@ -249,33 +249,33 @@ test.describe("Story 2.4 D코스 마사지사2 필수 검증", () => {
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2032-06-05`);
 
     const row = rowByText(page, memo);
-    await row.getByLabel("코스").selectOption({ label: "D Story24 D 2:1" });
-    await row.getByLabel("코스").blur();
+    await selectGridOption(page, row, "코스", "D Story24 D 2:1");
 
     const therapist2 = row.getByLabel("마사지사2");
-    const error = row.getByText("D코스는 마사지사2 필수입니다. 마사지사2를 배정해야 저장됩니다.");
+    // 같은 문구가 필드 오류와 계산 상태 셀 양쪽에 뜨므로 필드 오류 요소를 id로 특정한다.
+    const error = row.locator('[id$="-therapist2-error"]');
     await expect(error).toBeVisible();
+    await expect(error).toContainText("D코스는 마사지사2 필수입니다. 마사지사2를 배정해야 저장됩니다.");
     await expect(error).toHaveAttribute("role", "alert");
-    await expect(row.getByText("저장 보류")).toBeVisible();
+    await expect(row.getByText("저장 보류", { exact: true })).toBeVisible();
     await expect(row.getByRole("button", { name: "재시도" })).toBeVisible();
     await expect(therapist2).toHaveAttribute("aria-invalid", "true");
     await expect(therapist2).toHaveAttribute("aria-describedby", /therapist2-error/);
     await expect(row.getByText("!")).toBeVisible();
 
-    await row.getByLabel("상태").selectOption("VISIT_COMPLETE");
-    await row.getByLabel("상태").blur();
+    await selectGridOptionByValue(page, row, "상태", "VISIT_COMPLETE");
     await expect(error).toBeVisible();
     await expect(row.getByText("계산됨")).toHaveCount(0);
     await expect(row.getByText("저장 보류 계산 대기")).toBeVisible();
 
     await row.getByRole("button", { name: "재시도" }).click();
     await expect(error).toBeVisible();
-    await expect(row.getByLabel("상태")).toHaveValue("VISIT_COMPLETE");
+    // combobox 입력에는 저장값이 아니라 표시 라벨이 들어간다.
+    await expect(row.getByLabel("상태")).toHaveValue("방문완료");
     await expect(row.getByText("저장 보류 계산 대기")).toBeVisible();
 
-    await therapist2.selectOption({ label: "E2E24 마사지사2 (E2E24-THR-002)" });
-    await expect(therapist2).toHaveValue(seededData.therapist2Id);
-    await therapist2.blur();
+    await selectGridOption(page, row, "마사지사2", "E2E24 마사지사2 (E2E24-THR-002)");
+    await expect(therapist2).toHaveValue("E2E24 마사지사2 (E2E24-THR-002)");
     await expect(error).toHaveCount(0);
     await expect(therapist2).not.toHaveAttribute("aria-invalid", "true");
     await expect(row.getByText("저장됨")).toBeVisible();
@@ -291,20 +291,19 @@ test.describe("Story 2.4 D코스 마사지사2 필수 검증", () => {
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2032-06-05`);
 
     const row = rowByText(page, memo);
-    await row.getByLabel("상태").selectOption("VISIT_COMPLETE");
-    await row.getByLabel("상태").blur();
+    await selectGridOptionByValue(page, row, "상태", "VISIT_COMPLETE");
     await expect(row.getByText("계산됨")).toBeVisible();
     await expect(row.getByText("1,500,000")).toBeVisible();
 
-    await row.getByLabel("코스").selectOption({ label: "D Story24 D 2:1" });
-    await row.getByLabel("코스").blur();
-    await expect(row.getByText("D코스는 마사지사2 필수")).toBeVisible();
+    await selectGridOption(page, row, "코스", "D Story24 D 2:1");
+    await expect(row.locator('[id$="-therapist2-error"]')).toContainText("D코스는 마사지사2 필수");
 
-    await row.getByLabel("마사지사2").selectOption({ label: "E2E24 마사지사2 (E2E24-THR-002)" });
-    await row.getByLabel("마사지사2").blur();
+    await selectGridOption(page, row, "마사지사2", "E2E24 마사지사2 (E2E24-THR-002)");
     await expect(row.getByText("계산됨")).toBeVisible();
     await expect(row.getByText("3,200,000")).toBeVisible();
-    await expect(row.getByText("900,000")).toHaveCount(2);
+    // 카운터에게는 수당/귀케어풀/콜인정 컬럼이 가려지므로(마사지사 수당 900,000 포함) 결제금액만 확인한다.
+    await expect(row.getByText("900,000")).toHaveCount(0);
+    await expect(page.getByRole("columnheader", { name: "마사지사1수당" })).toHaveCount(0);
   });
 
   test("신규 행 AddRowForm도 D코스 마사지사2 field error를 렌더링한다", async ({ page }) => {
@@ -312,10 +311,10 @@ test.describe("Story 2.4 D코스 마사지사2 필수 검증", () => {
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2032-06-06`);
 
     const form = page.locator("form").last();
-    await form.getByLabel("시간").selectOption("13:30");
-    await form.getByLabel("객실").selectOption(seededData.roomId);
-    await form.getByLabel("코스").selectOption(seededData.dCourseId);
-    await form.getByLabel("마사지사1").selectOption(seededData.therapist1Id);
+    await selectGridOptionByValue(page, form, "시간", "13:30");
+    await selectGridOptionByValue(page, form, "객실", seededData.roomId);
+    await selectGridOptionByValue(page, form, "코스", seededData.dCourseId);
+    await selectGridOptionByValue(page, form, "마사지사1", seededData.therapist1Id);
     await form.getByRole("button", { name: "새 콜 행 추가" }).click();
 
     const therapist2 = form.getByLabel("마사지사2");
