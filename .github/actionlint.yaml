@@ -1,0 +1,5 @@
+# Keep workflow runner labels explicit so accidental hosted fallback is caught.
+self-hosted-runner:
+  labels: [self-hosted, Linux, X64, erp-dabi-linux]
+
+config-variables: null

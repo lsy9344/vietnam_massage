@@ -1,5 +1,5 @@
 name: CI
-# 외부 러너 PC가 온라인이면 거기서 돌고, 꺼져 있거나 없으면 원래 GitHub 호스트에서 돈다.
+# 모든 검사는 Linux 자체 러너에서 실행한다. 외부 저장소의 PR 코드는 실행하지 않는다.
 
 on:
   pull_request:
@@ -39,27 +39,36 @@ env:
 jobs:
   fast-checks:
     name: Fast Checks
-    runs-on: ${{ case(vars.CI_LINUX_RUNNER == 'self-hosted' && github.event_name != 'pull_request', fromJSON('["self-hosted","Linux","X64","erp-dabi"]'), vars.CI_LINUX_RUNNER == 'self-hosted' && github.event.pull_request.head.repo.full_name == github.repository, fromJSON('["self-hosted","Linux","X64","erp-dabi"]'), 'ubuntu-latest') }}
+    runs-on: [self-hosted, Linux, X64, erp-dabi-linux]
     timeout-minutes: 15
-    if: github.event_name != 'schedule'
+    if: >-
+      github.event_name != 'schedule' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          clean: true
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
+          dest: ${{ runner.temp }}/vietnam-massage-pnpm-setup
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          package-manager-cache: false
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        env:
+          PNPM_STORE_DIR: ${{ runner.tool_cache }}/package-stores/${{ github.repository }}/${{ runner.os }}-${{ runner.arch }}/${{ github.event_name == 'pull_request' && 'pr' || 'trusted' }}/pnpm
+        run: |
+          echo "Using pnpm store: $PNPM_STORE_DIR"
+          pnpm install --frozen-lockfile --store-dir "$PNPM_STORE_DIR" --verify-store-integrity --side-effects-cache=false
 
       - name: Validate Prisma schema
         run: pnpm exec prisma validate
@@ -78,27 +87,31 @@ jobs:
 
   build:
     name: Production Build
-    runs-on: ${{ case(vars.CI_LINUX_RUNNER == 'self-hosted' && github.event_name != 'pull_request', fromJSON('["self-hosted","Linux","X64","erp-dabi"]'), vars.CI_LINUX_RUNNER == 'self-hosted' && github.event.pull_request.head.repo.full_name == github.repository, fromJSON('["self-hosted","Linux","X64","erp-dabi"]'), 'ubuntu-latest') }}
+    runs-on: [self-hosted, Linux, X64, erp-dabi-linux]
     timeout-minutes: 25
     if: >-
-      github.event_name == 'pull_request' ||
+      (github.event_name == 'pull_request' ||
       (github.event_name == 'push' && (github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
-      github.event_name == 'workflow_dispatch'
+      github.event_name == 'workflow_dispatch') &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          clean: true
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
+          dest: ${{ runner.temp }}/vietnam-massage-pnpm-setup
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          package-manager-cache: false
 
       - name: Restore Next.js cache
         uses: actions/cache@v4
@@ -109,7 +122,11 @@ jobs:
             nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        env:
+          PNPM_STORE_DIR: ${{ runner.tool_cache }}/package-stores/${{ github.repository }}/${{ runner.os }}-${{ runner.arch }}/${{ github.event_name == 'pull_request' && 'pr' || 'trusted' }}/pnpm
+        run: |
+          echo "Using pnpm store: $PNPM_STORE_DIR"
+          pnpm install --frozen-lockfile --store-dir "$PNPM_STORE_DIR" --verify-store-integrity --side-effects-cache=false
 
       - name: Create test env file
         run: |
@@ -128,13 +145,14 @@ jobs:
 
   playwright-smoke:
     name: Playwright Smoke ${{ matrix.group }}
-    runs-on: ${{ case(vars.CI_LINUX_RUNNER == 'self-hosted' && github.event_name != 'pull_request', fromJSON('["self-hosted","Linux","X64","erp-dabi"]'), vars.CI_LINUX_RUNNER == 'self-hosted' && github.event.pull_request.head.repo.full_name == github.repository, fromJSON('["self-hosted","Linux","X64","erp-dabi"]'), 'ubuntu-latest') }}
+    runs-on: [self-hosted, Linux, X64, erp-dabi-linux]
     container:
       image: mcr.microsoft.com/playwright:v1.60.0-noble
     timeout-minutes: 30
     if: >-
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'workflow_dispatch' && !inputs.run_full_e2e)
+      (github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && !inputs.run_full_e2e)) &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     strategy:
       fail-fast: false
       matrix:
@@ -147,8 +165,6 @@ jobs:
           POSTGRES_DB: vietnam_aesthetic
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U postgres -d vietnam_aesthetic"
           --health-interval 5s
@@ -163,20 +179,27 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          clean: true
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
+          dest: ${{ runner.temp }}/vietnam-massage-pnpm-setup
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          package-manager-cache: false
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        env:
+          PNPM_STORE_DIR: ${{ runner.tool_cache }}/package-stores/${{ github.repository }}/${{ runner.os }}-${{ runner.arch }}/${{ github.event_name == 'pull_request' && 'pr' || 'trusted' }}/pnpm
+        run: |
+          echo "Using pnpm store: $PNPM_STORE_DIR"
+          pnpm install --frozen-lockfile --store-dir "$PNPM_STORE_DIR" --verify-store-integrity --side-effects-cache=false
 
       - name: Generate Prisma client
         run: pnpm exec prisma generate
@@ -223,11 +246,13 @@ jobs:
 
   playwright-full:
     name: Playwright Full ${{ matrix.shard }}
-    runs-on: ${{ case(vars.CI_LINUX_RUNNER == 'self-hosted' && github.event_name != 'pull_request', fromJSON('["self-hosted","Linux","X64","erp-dabi"]'), vars.CI_LINUX_RUNNER == 'self-hosted' && github.event.pull_request.head.repo.full_name == github.repository, fromJSON('["self-hosted","Linux","X64","erp-dabi"]'), 'ubuntu-latest') }}
+    runs-on: [self-hosted, Linux, X64, erp-dabi-linux]
     container:
       image: mcr.microsoft.com/playwright:v1.60.0-noble
     timeout-minutes: 35
-    if: github.event_name == 'workflow_dispatch' && inputs.run_full_e2e
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.run_full_e2e &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     strategy:
       fail-fast: false
       matrix:
@@ -240,8 +265,6 @@ jobs:
           POSTGRES_DB: vietnam_aesthetic
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U postgres -d vietnam_aesthetic"
           --health-interval 5s
@@ -257,20 +280,27 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          clean: true
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
+          dest: ${{ runner.temp }}/vietnam-massage-pnpm-setup
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          package-manager-cache: false
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        env:
+          PNPM_STORE_DIR: ${{ runner.tool_cache }}/package-stores/${{ github.repository }}/${{ runner.os }}-${{ runner.arch }}/${{ github.event_name == 'pull_request' && 'pr' || 'trusted' }}/pnpm
+        run: |
+          echo "Using pnpm store: $PNPM_STORE_DIR"
+          pnpm install --frozen-lockfile --store-dir "$PNPM_STORE_DIR" --verify-store-integrity --side-effects-cache=false
 
       - name: Generate Prisma client
         run: pnpm exec prisma generate
@@ -305,11 +335,13 @@ jobs:
 
   playwright-burn-in:
     name: Playwright Smoke Burn-In
-    runs-on: ${{ case(vars.CI_LINUX_RUNNER == 'self-hosted' && github.event_name != 'pull_request', fromJSON('["self-hosted","Linux","X64","erp-dabi"]'), vars.CI_LINUX_RUNNER == 'self-hosted' && github.event.pull_request.head.repo.full_name == github.repository, fromJSON('["self-hosted","Linux","X64","erp-dabi"]'), 'ubuntu-latest') }}
+    runs-on: [self-hosted, Linux, X64, erp-dabi-linux]
     container:
       image: mcr.microsoft.com/playwright:v1.60.0-noble
     timeout-minutes: 35
-    if: github.event_name == 'workflow_dispatch' && inputs.run_burn_in
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.run_burn_in &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
 
     services:
       postgres:
@@ -318,8 +350,6 @@ jobs:
           POSTGRES_DB: vietnam_aesthetic
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U postgres -d vietnam_aesthetic"
           --health-interval 5s
@@ -333,20 +363,27 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          clean: true
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
+          dest: ${{ runner.temp }}/vietnam-massage-pnpm-setup
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          package-manager-cache: false
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        env:
+          PNPM_STORE_DIR: ${{ runner.tool_cache }}/package-stores/${{ github.repository }}/${{ runner.os }}-${{ runner.arch }}/${{ github.event_name == 'pull_request' && 'pr' || 'trusted' }}/pnpm
+        run: |
+          echo "Using pnpm store: $PNPM_STORE_DIR"
+          pnpm install --frozen-lockfile --store-dir "$PNPM_STORE_DIR" --verify-store-integrity --side-effects-cache=false
 
       - name: Generate Prisma client
         run: pnpm exec prisma generate
@@ -375,7 +412,7 @@ jobs:
 
   notify-slack:
     name: Slack Notification
-    runs-on: ${{ case(vars.CI_LINUX_RUNNER == 'self-hosted' && github.event_name != 'pull_request', fromJSON('["self-hosted","Linux","X64","erp-dabi"]'), vars.CI_LINUX_RUNNER == 'self-hosted' && github.event.pull_request.head.repo.full_name == github.repository, fromJSON('["self-hosted","Linux","X64","erp-dabi"]'), 'ubuntu-latest') }}
+    runs-on: [self-hosted, Linux, X64, erp-dabi-linux]
     timeout-minutes: 5
     needs:
       - fast-checks
@@ -383,7 +420,9 @@ jobs:
       - playwright-smoke
       - playwright-full
       - playwright-burn-in
-    if: always()
+    if: >-
+      always() &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       REPOSITORY: ${{ github.repository }}
