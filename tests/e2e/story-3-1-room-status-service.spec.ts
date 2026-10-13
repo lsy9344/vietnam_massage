@@ -100,6 +100,11 @@ function createMemoryPrisma() {
           .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.getTime() - b.createdAt.getTime());
       }
     },
+    timeSlot: {
+      async findMany() {
+        return [];
+      }
+    },
     coursePolicy: {
       async findMany({ where }: any = {}) {
         return [...coursePolicies.values()].filter(

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { BUSINESS_TIME_ZONE_OFFSET_MINUTES } from "@/lib/business-time";
+import { displayEndInstantsForDate } from "@/modules/calls/service-call-service";
 import type { RoomDisplayStatus, RoomStatusAssigneeDto, RoomStatusCourseDto, RoomStatusDto } from "@/modules/rooms/dtos";
 
 const OPERATING_DAY_START_HOUR = 11;
@@ -94,6 +95,9 @@ type RoomStatusPrismaClient = {
   };
   serviceCall: {
     findMany(args?: unknown): Promise<ServiceCallRecord[]>;
+  };
+  timeSlot: {
+    findMany(args?: unknown): Promise<unknown[]>;
   };
 };
 
@@ -294,11 +298,15 @@ function emptyRoomStatus(room: RoomRecord, serviceDate: string, now: Date): Room
   };
 }
 
-async function activeRoomStatus(tx: RoomStatusPrismaClient, input: { room: RoomRecord; call: ServiceCallRecord; monthKey: string; now: Date }) {
+async function activeRoomStatus(
+  tx: RoomStatusPrismaClient,
+  input: { room: RoomRecord; call: ServiceCallRecord; monthKey: string; now: Date; displayEndAt: Date | null }
+) {
   const sourceDisplayStatus = toDisplayStatus(input.call.status);
   const policy = await findCoursePolicy(tx, input.call, input.monthKey);
-  const startAt = normalizeOperatingDateTime(toIsoDateOnly(input.call.serviceDate), input.call.startTime);
-  const expectedEndAt = policy ? new Date(startAt.getTime() + policy.durationMinutes * 60 * 1000) : null;
+  // 시작시각 형식은 여기서 거른다. 종료 시각 자체는 콜 서비스의 표시 종료를 쓴다.
+  parseStartTime(input.call.startTime);
+  const expectedEndAt = policy ? input.displayEndAt : null;
   const rawRemainingMinutes = expectedEndAt ? Math.ceil((expectedEndAt.getTime() - input.now.getTime()) / 60000) : null;
   const remainingMinutes = rawRemainingMinutes === null ? null : Math.max(0, rawRemainingMinutes);
   const displayStatus = toTimedDisplayStatus(sourceDisplayStatus, remainingMinutes);
@@ -353,6 +361,11 @@ export async function listRoomStatuses(input: ListRoomStatusesInput): Promise<Ro
     }
   });
   const latestByRoom = latestActiveCallByRoom(calls);
+  const displayEnds = await displayEndInstantsForDate({
+    operatingMonthId: input.operatingMonthId,
+    serviceDate: input.serviceDate,
+    prismaClient: client
+  });
 
   return Promise.all(
     rooms.map((room) => {
@@ -365,7 +378,8 @@ export async function listRoomStatuses(input: ListRoomStatusesInput): Promise<Ro
         room,
         call: activeCall,
         monthKey: operatingMonth.monthKey,
-        now
+        now,
+        displayEndAt: displayEnds.get(activeCall.id) ?? null
       });
     })
   );

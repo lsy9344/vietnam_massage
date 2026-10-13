@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { listServiceCallsForDate } from "@/modules/calls/service-call-service";
+import { BUSINESS_TIME_ZONE_OFFSET_MINUTES } from "@/lib/business-time";
 import { listRoomStatuses, RoomStatusDomainError } from "@/modules/rooms/room-status-service";
 import type { RoomStatusDto } from "@/modules/rooms/dtos";
 
@@ -25,6 +27,14 @@ function statusByRoom(statuses: RoomStatusDto[], roomId: string) {
   const status = statuses.find((candidate) => candidate.roomId === roomId);
   assert.ok(status, `${roomId} 상태가 필요합니다.`);
   return status;
+}
+
+// 표시 종료 "HH:mm"을 그 영업일의 시각으로 놓는다. 11시 이전은 다음 달력날이다.
+function operatingInstant(serviceDate: string, time: string) {
+  const [year, month, day] = serviceDate.split("-").map(Number);
+  const [hour, minute] = time.split(":").map(Number);
+  const nextCalendarDayOffset = hour < 11 ? 1 : 0;
+  return new Date(Date.UTC(year, month - 1, day + nextCalendarDayOffset, hour, minute) - BUSINESS_TIME_ZONE_OFFSET_MINUTES * 60 * 1000);
 }
 
 function createMemoryPrisma() {
@@ -152,6 +162,11 @@ function createMemoryPrisma() {
         );
       }
     },
+    timeSlot: {
+      async findMany() {
+        return [];
+      }
+    },
     serviceCall: {
       async findMany({ where }: any = {}) {
         return [...serviceCalls.values()]
@@ -217,6 +232,7 @@ function createMemoryPrisma() {
     status: string;
     startTime: string;
     courseId?: string;
+    actualEntryTime?: string | null;
     createdAt?: string;
     updatedAt?: string;
     serviceDate?: string;
@@ -226,6 +242,7 @@ function createMemoryPrisma() {
       operatingMonthId: "month-2034-06",
       serviceDate: dbDate(input.serviceDate ?? "2034-06-05"),
       startTime: input.startTime,
+      actualEntryTime: input.actualEntryTime ?? null,
       roomId: input.roomId,
       courseId: input.courseId ?? "course-a",
       customerMemo: null,
@@ -438,6 +455,40 @@ describe("room status service", () => {
     assert.equal(room101.displayStatus, "사용중");
     assert.equal(room101.sourceCallStatus, "사용중");
     assert.equal(room101.remainingMinutes, 11);
+  });
+
+  it("uses the call service display end as the expected end, remaining minutes, and ending-soon status", async () => {
+    const { client, addCall } = createMemoryPrisma();
+    addCall({
+      id: "call-shifted-end",
+      roomId: "room-101",
+      status: "사용중",
+      startTime: "15:00",
+      courseId: "course-a",
+      actualEntryTime: "15:20"
+    });
+    const now = new Date("2034-06-05T16:12:00.000+07:00");
+    const listed = await listServiceCallsForDate({
+      operatingMonthId: "month-2034-06",
+      serviceDate: "2034-06-05",
+      prismaClient: client
+    });
+    const displayEnd = listed.find((row) => row.id === "call-shifted-end")?.displayEnd;
+    assert.ok(displayEnd, "콜 서비스가 표시 종료를 돌려줘야 합니다.");
+    const expectedEndAt = operatingInstant("2034-06-05", displayEnd);
+    const remainingMinutes = Math.max(0, Math.ceil((expectedEndAt.getTime() - now.getTime()) / 60000));
+
+    const statuses = await listRoomStatuses({
+      operatingMonthId: "month-2034-06",
+      serviceDate: "2034-06-05",
+      now,
+      prismaClient: client
+    });
+
+    const room101 = statusByRoom(statuses, "room-101");
+    assert.equal(room101.expectedEndAt, expectedEndAt.toISOString());
+    assert.equal(room101.remainingMinutes, remainingMinutes);
+    assert.equal(room101.displayStatus, remainingMinutes <= 0 ? "종료확인" : remainingMinutes <= 10 ? "종료임박" : "사용중");
   });
 
   it("keeps active occupancy when course policy is missing and nulls time calculation fields", async () => {

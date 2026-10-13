@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { BUSINESS_TIME_ZONE_OFFSET_MINUTES } from "@/lib/business-time";
 import { defaultLocale, type Locale } from "@/lib/i18n/config";
 import { codeLabel } from "@/lib/i18n/codes";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
@@ -1206,7 +1207,7 @@ function courseDurationMinutes(record: ServiceCallRecord) {
 // 기준 시각은 실제입장이 있으면 그 시각이고, 없으면 예약시각이다.
 // 다음 예약은 이 콜의 예약시각보다 늦은, 같은 Therapist의 콜이다. 노쇼와 취소는 빠진다.
 // 그 예약시각이 제안 종료보다 먼저일 때만 양보하고, 맞닿으면 경고가 없다.
-function deriveDisplayEnd(record: ServiceCallRecord, context: DisplayEndContext) {
+function displayEndChoice(record: ServiceCallRecord, context: DisplayEndContext) {
   const actualEntryTime = storedActualEntryTime(record);
   const reference = actualEntryTime ?? record.startTime;
   const proposed = businessMinute(reference, context.dayStart) + courseDurationMinutes(record);
@@ -1227,28 +1228,81 @@ function deriveDisplayEnd(record: ServiceCallRecord, context: DisplayEndContext)
     }
   }
   if (next !== null && next < proposed) {
-    const time = formatBusinessMinute(next);
-    return { actualEntryTime, displayEnd: time, warningTime: time };
+    return { actualEntryTime, minute: next, yielded: true };
   }
-  return { actualEntryTime, displayEnd: formatBusinessMinute(proposed), warningTime: null };
+  return { actualEntryTime, minute: proposed, yielded: false };
 }
 
-async function displayEndContextFor(tx: ServiceCallPrismaClient, record: ServiceCallRecord): Promise<DisplayEndContext> {
+function deriveDisplayEnd(record: ServiceCallRecord, context: DisplayEndContext) {
+  const choice = displayEndChoice(record, context);
+  const time = formatBusinessMinute(choice.minute);
+  return { actualEntryTime: choice.actualEntryTime, displayEnd: time, warningTime: choice.yielded ? time : null };
+}
+
+// 영업일 분은 11:00을 0으로 두지 않고, 자정을 넘는 시각에 1440을 더해 둔 시계 분이다.
+// 그 값을 하루로 나눈 몫이 서비스 날짜로부터의 달력날이다.
+function instantFromBusinessMinute(serviceDate: string, minute: number) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(serviceDate);
+  if (!match) {
+    throw new ServiceCallDomainError("서비스 날짜 형식이 올바르지 않습니다.", "INVALID_SERVICE_CALL_QUERY");
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const dayOffset = Math.floor(minute / AVAILABILITY_DAY_MINUTES);
+  const within = ((minute % AVAILABILITY_DAY_MINUTES) + AVAILABILITY_DAY_MINUTES) % AVAILABILITY_DAY_MINUTES;
+  const hour = Math.floor(within / 60);
+  const min = within % 60;
+  const utcMillis =
+    Date.UTC(year, month - 1, day + dayOffset, hour, min, 0, 0) - BUSINESS_TIME_ZONE_OFFSET_MINUTES * 60 * 1000;
+  return new Date(utcMillis);
+}
+
+type DisplayEndReadClient = {
+  serviceCall: { findMany(args?: unknown): Promise<unknown[]> };
+  timeSlot: { findMany(args?: unknown): Promise<unknown[]> };
+};
+
+async function loadDisplayEndContext(
+  tx: DisplayEndReadClient,
+  where: { operatingMonthId: string; serviceDate: Date }
+): Promise<DisplayEndContext> {
   const [dayCalls, slots] = await Promise.all([
     tx.serviceCall.findMany({
-      where: {
-        operatingMonthId: record.operatingMonthId,
-        serviceDate: record.serviceDate
-      },
+      where,
       include: {
         operatingMonth: true,
         course: { include: { policies: true } },
         assignments: true
       }
-    }),
-    tx.timeSlot.findMany({})
+    }) as Promise<ServiceCallRecord[]>,
+    tx.timeSlot.findMany({}) as Promise<TimeSlotRecord[]>
   ]);
   return { dayCalls, dayStart: dayStartFromSlots(slots) };
+}
+
+export async function displayEndInstantsForDate(input: {
+  operatingMonthId: string;
+  serviceDate: string;
+  prismaClient?: DisplayEndReadClient;
+}): Promise<Map<string, Date>> {
+  const client = input.prismaClient ?? getClient();
+  const context = await loadDisplayEndContext(client, {
+    operatingMonthId: input.operatingMonthId,
+    serviceDate: toDateOnly(input.serviceDate)
+  });
+  const instants = new Map<string, Date>();
+  for (const record of context.dayCalls) {
+    instants.set(record.id, instantFromBusinessMinute(input.serviceDate, displayEndChoice(record, context).minute));
+  }
+  return instants;
+}
+
+async function displayEndContextFor(tx: ServiceCallPrismaClient, record: ServiceCallRecord): Promise<DisplayEndContext> {
+  return loadDisplayEndContext(tx, {
+    operatingMonthId: record.operatingMonthId,
+    serviceDate: record.serviceDate
+  });
 }
 
 function currentPolicyForCourse(policies: CoursePolicyRecord[], courseId: string, monthKey: string) {
