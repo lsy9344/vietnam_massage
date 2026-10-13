@@ -81,6 +81,7 @@ type EmployeeRecord = {
   staffCode: string;
   employeeGroup: string;
   isActive: boolean;
+  sortOrder?: number;
 };
 
 type CodeItemRecord = {
@@ -224,7 +225,17 @@ type ServiceCallPrismaClient = {
     findUnique(args: unknown): Promise<CustomerRecord | null>;
     updateMany(args: unknown): Promise<{ count: number }>;
   };
+  therapistAttendance: {
+    findMany(args?: unknown): Promise<TherapistAttendanceRecord[]>;
+  };
   $transaction?<T>(callback: (tx: ServiceCallPrismaClient) => Promise<T>): Promise<T>;
+};
+
+type TherapistAttendanceRecord = {
+  employeeId: string;
+  operatingMonthId: string;
+  attendanceDate: Date;
+  isActive: boolean;
 };
 
 export type CustomerDto = {
@@ -372,6 +383,25 @@ export type ServiceCallFormOptions = {
   therapists: ServiceCallOption[];
   earcareEmployees: ServiceCallOption[];
   expenseHandlers: ServiceCallOption[];
+};
+
+export type TherapistAvailabilityCourseDto = {
+  courseId: string;
+  courseCode: string;
+  courseName: string;
+  durationMinutes: number;
+  possible: boolean;
+};
+
+export type TherapistAvailabilityRowDto = {
+  therapistId: string;
+  therapistName: string;
+  attendance: "checked_in" | "not_entered";
+  available: boolean;
+  freeFrom: string | null;
+  nextReservationTime: string | null;
+  freeMinutes: number | null;
+  courses: TherapistAvailabilityCourseDto[];
 };
 
 export class ServiceCallDomainError extends Error {
@@ -1096,6 +1126,179 @@ export async function listServiceCallsForDate(input: {
       })
       .map((record) => toRowDto(client, record, sources))
   );
+}
+
+const AVAILABILITY_DAY_MINUTES = 24 * 60;
+const AVAILABILITY_DEFAULT_DAY_START = 11 * 60;
+
+function occupiesAvailability(status: string) {
+  return isReservationStatus(status) || isInUseStatus(status) || isCleaningStatus(status) || isCompletedServiceCallStatus(status);
+}
+
+function clockMinutes(value: string) {
+  const [hour, minute] = value.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
+// 영업일 슬롯은 저녁을 지나 다음 달력날 새벽까지 이어진다. 첫 슬롯보다 이른 시각은 그 영업일의 뒤로 본다.
+function businessMinute(value: string, dayStart: number) {
+  const minutes = clockMinutes(value);
+  return minutes < dayStart ? minutes + AVAILABILITY_DAY_MINUTES : minutes;
+}
+
+function formatBusinessMinute(value: number) {
+  const minutes = ((value % AVAILABILITY_DAY_MINUTES) + AVAILABILITY_DAY_MINUTES) % AVAILABILITY_DAY_MINUTES;
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function currentPolicyForCourse(policies: CoursePolicyRecord[], courseId: string, monthKey: string) {
+  return policies
+    .filter((policy) => policy.courseId === courseId && effectiveForMonth(policy, monthKey))
+    .sort((left, right) => right.effectiveFromMonth.localeCompare(left.effectiveFromMonth))[0] ?? null;
+}
+
+type AvailabilityInterval = { start: number; end: number };
+
+// 점유는 [예약시각, 예약시각 + 코스 길이)다. 끝나는 시각과 같은 시작은 비어 있다.
+function coveringEnd(intervals: AvailabilityInterval[], at: number) {
+  const sorted = [...intervals].sort((left, right) => left.start - right.start || left.end - right.end);
+  let cursor = at;
+  let occupied = false;
+  for (const interval of sorted) {
+    if (interval.end <= at) continue;
+    if (interval.start > cursor) break;
+    occupied = true;
+    cursor = Math.max(cursor, interval.end);
+  }
+  return occupied ? cursor : null;
+}
+
+function nextIntervalStart(intervals: AvailabilityInterval[], at: number) {
+  let next: number | null = null;
+  for (const interval of intervals) {
+    if (interval.start <= at) continue;
+    if (next === null || interval.start < next) next = interval.start;
+  }
+  return next;
+}
+
+function intervalOverlaps(intervals: AvailabilityInterval[], start: number, end: number) {
+  return intervals.some((interval) => interval.start < end && interval.end > start);
+}
+
+export async function listTherapistAvailability(input: {
+  operatingMonthId: string;
+  serviceDate: string;
+  time: string;
+  prismaClient?: ServiceCallPrismaClient;
+}): Promise<TherapistAvailabilityRowDto[]> {
+  const parsed = serviceCallInputSchema.pick({ operatingMonthId: true, serviceDate: true, startTime: true }).safeParse({
+    operatingMonthId: input.operatingMonthId,
+    serviceDate: input.serviceDate,
+    startTime: input.time
+  });
+  if (!parsed.success || !/^([01]\d|2[0-3]):[0-5]\d$/.test(parsed.data.startTime)) {
+    throw new ServiceCallDomainError(parsed.success ? "시간은 HH:mm 형식이어야 합니다." : parsed.error.issues[0]?.message ?? "조회 조건이 올바르지 않습니다.", "INVALID_SERVICE_CALL_QUERY");
+  }
+
+  const client = getClient(input.prismaClient);
+  const month = await requireOperatingMonth(client, parsed.data.operatingMonthId);
+  const [therapists, courses, policies, slots, attendances, calls] = await Promise.all([
+    client.employee.findMany({
+      where: { isActive: true, employeeGroup: "THERAPIST" },
+      orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }]
+    }),
+    client.course.findMany(),
+    client.coursePolicy.findMany({ where: { isActive: true } }),
+    client.timeSlot.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }),
+    client.therapistAttendance.findMany({
+      where: {
+        operatingMonthId: month.id,
+        attendanceDate: toDateOnly(parsed.data.serviceDate),
+        isActive: true
+      }
+    }),
+    client.serviceCall.findMany({
+      where: {
+        operatingMonthId: month.id,
+        serviceDate: toDateOnly(parsed.data.serviceDate)
+      },
+      include: { assignments: true }
+    })
+  ]);
+
+  const activeSlots = [...slots].filter((slot) => slot.isActive).sort((left, right) => left.sortOrder - right.sortOrder);
+  const dayStart = activeSlots[0] ? clockMinutes(activeSlots[0].value) : AVAILABILITY_DEFAULT_DAY_START;
+  const dayEnd = activeSlots.length > 0 ? businessMinute(activeSlots[activeSlots.length - 1].value, dayStart) : null;
+  const at = businessMinute(parsed.data.startTime, dayStart);
+  const checkedIn = new Set(attendances.filter((attendance) => attendance.isActive).map((attendance) => attendance.employeeId));
+  const offeredCourses = [...courses]
+    .filter((course) => course.isActive)
+    .sort((left, right) => left.code.localeCompare(right.code))
+    .flatMap((course) => {
+      const policy = currentPolicyForCourse(policies, course.id, month.monthKey);
+      if (!policy) return [];
+      return [{
+        courseId: course.id,
+        courseCode: course.code,
+        courseName: policy.name,
+        durationMinutes: policy.durationMinutes,
+        requiresSecondTherapist: policy.requiresSecondTherapist
+      }];
+    });
+
+  const intervalsByTherapist = new Map<string, AvailabilityInterval[]>();
+  for (const call of calls) {
+    if (!occupiesAvailability(call.status) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(call.startTime)) continue;
+    const policy = currentPolicyForCourse(policies, call.courseId, month.monthKey);
+    if (!policy) continue;
+    const start = businessMinute(call.startTime, dayStart);
+    const interval = { start, end: start + policy.durationMinutes };
+    for (const assignment of call.assignments ?? []) {
+      if (assignment.isActive === false) continue;
+      if (assignment.assignmentRole !== "THERAPIST_1" && assignment.assignmentRole !== "THERAPIST_2") continue;
+      const current = intervalsByTherapist.get(assignment.employeeId) ?? [];
+      current.push(interval);
+      intervalsByTherapist.set(assignment.employeeId, current);
+    }
+  }
+
+  const activeTherapists = [...therapists]
+    .filter((therapist) => therapist.isActive && therapist.employeeGroup === "THERAPIST")
+    .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0) || left.displayName.localeCompare(right.displayName));
+
+  return activeTherapists.map((therapist) => {
+    const intervals = intervalsByTherapist.get(therapist.id) ?? [];
+    const occupiedUntil = coveringEnd(intervals, at);
+    const available = occupiedUntil === null;
+    const nextStart = nextIntervalStart(intervals, at);
+    const freeMinutes = available ? Math.max((nextStart ?? dayEnd ?? at) - at, 0) : null;
+    return {
+      therapistId: therapist.id,
+      therapistName: therapist.displayName,
+      attendance: checkedIn.has(therapist.id) ? "checked_in" as const : "not_entered" as const,
+      available,
+      freeFrom: occupiedUntil === null ? null : formatBusinessMinute(occupiedUntil),
+      nextReservationTime: nextStart === null ? null : formatBusinessMinute(nextStart),
+      freeMinutes,
+      courses: offeredCourses.map((course) => {
+        const fits = available && freeMinutes !== null && course.durationMinutes <= freeMinutes;
+        const partnerFree = activeTherapists.some((other) => {
+          if (other.id === therapist.id) return false;
+          return !intervalOverlaps(intervalsByTherapist.get(other.id) ?? [], at, at + course.durationMinutes);
+        });
+        return {
+          courseId: course.courseId,
+          courseCode: course.courseCode,
+          courseName: course.courseName,
+          durationMinutes: course.durationMinutes,
+          possible: fits && (!course.requiresSecondTherapist || partnerFree)
+        };
+      })
+    };
+  });
 }
 
 export async function listServiceCallsForOperatingMonth(input: {

@@ -22,6 +22,7 @@ import type { MessageKey } from "@/lib/i18n/types";
 import type { CustomerDto, ServiceCallCalculationStatus, ServiceCallFormOptions, ServiceCallOption, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 import type { ServiceCallAutosaveInput } from "@/modules/calls/service-call-schema";
 import { autosaveServiceCallRowAction, saveBasicServiceCallRowAction, type ServiceCallActionState } from "@/app/(erp)/calls/actions";
+import type { AvailabilityCourseChoice } from "@/app/(erp)/calls/therapist-availability-view";
 import {
   EDITABLE_CALL_FIELDS,
   cancelCellDraft,
@@ -565,6 +566,7 @@ function CustomerLinkSelect({
 }
 
 function AddRowForm({
+  courseChoice,
   customers,
   existingRowCount,
   isLocked,
@@ -573,6 +575,7 @@ function AddRowForm({
   serviceDate,
   showSettlementColumns
 }: {
+  courseChoice: (AvailabilityCourseChoice & { id: number }) | null;
   customers: CustomerDto[];
   existingRowCount: number;
   isLocked: boolean;
@@ -583,6 +586,15 @@ function AddRowForm({
 }) {
   const t = useT();
   const [state, formAction, pending] = useActionState<ServiceCallActionState, FormData>(saveBasicServiceCallRowAction, null);
+  const choiceId = courseChoice?.id ?? 0;
+  const [seenChoiceId, setSeenChoiceId] = useState(choiceId);
+  const [hiddenState, setHiddenState] = useState<ServiceCallActionState>(null);
+  // A course choice fills three fields. It is not a save, so the previous result stays off the row.
+  if (seenChoiceId !== choiceId) {
+    setSeenChoiceId(choiceId);
+    setHiddenState(state);
+  }
+  const rowState = state === hiddenState ? null : state;
   const disabled = isLocked || pending;
   const rowIndex = existingRowCount;
   const rowCount = existingRowCount + 1;
@@ -622,7 +634,9 @@ function AddRowForm({
               <td className="border-b border-border px-2 py-2">
                 <SelectCell
                   columnId="startTime"
+                  defaultValue={courseChoice?.startTime}
                   disabled={disabled}
+                  key={courseChoice ? `choice-${courseChoice.id}` : "blank"}
                   label={t("calls.column.time")}
                   name="startTime"
                   onGridKeyDown={(event) => handleAddRowKeyDown("startTime", event)}
@@ -630,7 +644,7 @@ function AddRowForm({
                   required
                   rowIndex={rowIndex}
                 />
-                <InlineError field="startTime" state={state} />
+                <InlineError field="startTime" state={rowState} />
               </td>
               <td className="border-b border-border px-2 py-2">
                 <SelectCell
@@ -643,12 +657,14 @@ function AddRowForm({
                   options={options.rooms}
                   rowIndex={rowIndex}
                 />
-                <InlineError field="roomId" state={state} />
+                <InlineError field="roomId" state={rowState} />
               </td>
               <td className="border-b border-border px-2 py-2">
                 <SelectCell
                   columnId="courseId"
+                  defaultValue={courseChoice?.courseId}
                   disabled={disabled}
+                  key={courseChoice ? `choice-${courseChoice.id}` : "blank"}
                   label={t("calls.column.course")}
                   name="courseId"
                   onGridKeyDown={(event) => handleAddRowKeyDown("courseId", event)}
@@ -656,7 +672,7 @@ function AddRowForm({
                   required
                   rowIndex={rowIndex}
                 />
-                <InlineError field="courseId" state={state} />
+                <InlineError field="courseId" state={rowState} />
               </td>
               <td className="border-b border-border px-2 py-2">
                 <TextCell
@@ -682,7 +698,9 @@ function AddRowForm({
               <td className="border-b border-border px-2 py-2">
                 <SelectCell
                   columnId="therapist1Id"
+                  defaultValue={courseChoice?.therapistId}
                   disabled={disabled}
+                  key={courseChoice ? `choice-${courseChoice.id}` : "blank"}
                   label={t("calls.column.therapist1")}
                   name="therapist1Id"
                   onGridKeyDown={(event) => handleAddRowKeyDown("therapist1Id", event)}
@@ -694,7 +712,7 @@ function AddRowForm({
                 <SelectCell
                   disabled={disabled}
                   errorId="add-call-therapist2-error"
-                  errorMessage={fieldError(state, "therapist2Id")}
+                  errorMessage={fieldError(rowState, "therapist2Id")}
                   columnId="therapist2Id"
                   label={t("calls.column.therapist2")}
                   name="therapist2Id"
@@ -726,7 +744,7 @@ function AddRowForm({
                   required
                   rowIndex={rowIndex}
                 />
-                <InlineError field="status" state={state} />
+                <InlineError field="status" state={rowState} />
               </td>
               <td className="border-b border-border px-2 py-2">
                 <SelectCell
@@ -777,8 +795,8 @@ function AddRowForm({
                   <Button className="h-8 whitespace-nowrap px-3 text-xs" disabled={disabled} type="submit">
                     {t("calls.addRow.submit")}
                   </Button>
-                  <InlineError state={state} />
-                  {state?.ok ? <span className="text-xs text-muted">{t("calls.save.saved")}</span> : null}
+                  <InlineError state={rowState} />
+                  {rowState?.ok ? <span className="text-xs text-muted">{t("calls.save.saved")}</span> : null}
                 </div>
               </td>
             </tr>
@@ -1345,6 +1363,7 @@ function EditableCallRow({
 }
 
 export function EditableCallGrid({
+  courseChoice = null,
   customers = [],
   isLocked,
   operatingMonthId,
@@ -1353,6 +1372,7 @@ export function EditableCallGrid({
   serviceDate,
   showSettlementColumns
 }: {
+  courseChoice?: (AvailabilityCourseChoice & { id: number }) | null;
   customers?: CustomerDto[];
   isLocked: boolean;
   operatingMonthId: string;
@@ -1435,6 +1455,7 @@ export function EditableCallGrid({
       )}
 
       <AddRowForm
+        courseChoice={courseChoice}
         customers={customers}
         existingRowCount={table.getRowModel().rows.length}
         isLocked={isLocked}

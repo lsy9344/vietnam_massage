@@ -9,6 +9,7 @@ import {
   listDailyExpensesForDate,
   listServiceCallFormOptions,
   listServiceCallsForDate,
+  listTherapistAvailability,
   redactServiceCallSettlementAmounts,
   searchCustomerVisitCandidates,
   type CustomerVisitSelection
@@ -17,7 +18,7 @@ import { CustomerPanel } from "@/app/(erp)/calls/customer-panel";
 import { CustomerVisitSearch } from "@/app/(erp)/calls/customer-visit-search-panel";
 import { DailyExpensePanel } from "@/app/(erp)/calls/daily-expense-panel";
 import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
-import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
+import { CallLedgerWorkspace } from "@/app/(erp)/calls/call-ledger-workspace";
 import { PageHeader } from "@/components/domain/page-header";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
@@ -80,6 +81,10 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
     customerQuery ? searchCustomerVisitCandidates({ query: customerQuery }) : Promise.resolve([]),
     visitSelection ? listCustomerVisitHistory(visitSelection) : Promise.resolve([])
   ]);
+  const availabilityTime = options.timeSlots[0]?.value ?? "";
+  const availabilityRows = availabilityTime
+    ? await listTherapistAvailability({ operatingMonthId: selectedMonth.id, serviceDate, time: availabilityTime })
+    : [];
   const isLocked = isOperatingMonthPayoutLocked(selectedMonth.status);
   const canViewSettlementAmounts = account.role === "administrator" || account.role === "settlement_manager";
   const visibleRows = canViewSettlementAmounts ? rows : rows.map(redactServiceCallSettlementAmounts);
@@ -152,7 +157,10 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
         serviceDate={serviceDate}
       />
 
-      <EditableCallGrid
+      <CallLedgerWorkspace
+        key={`${selectedMonth.id}:${serviceDate}`}
+        availabilityRows={availabilityRows}
+        availabilityTime={availabilityTime}
         customers={customers}
         isLocked={isLocked}
         operatingMonthId={selectedMonth.id}

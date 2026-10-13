@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
-import { AuthorizationError, requirePermission } from "@/lib/authorization";
+import { AuthorizationError, requirePermission, requireRouteAccess } from "@/lib/authorization";
 import { AuditDomainError } from "@/modules/audit/audit-event";
 import { t } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
@@ -16,6 +16,7 @@ import {
   updateCustomer,
   updateDailyExpense,
   redactServiceCallSettlementAmounts,
+  listTherapistAvailability,
   saveBasicServiceCallRow,
   ServiceCallDomainError,
   type CustomerDto,
@@ -354,4 +355,9 @@ export async function updateCustomerAction(
   } catch (error) {
     return mapActionError<CustomerDto>(error, locale);
   }
+}
+
+export async function loadTherapistAvailabilityAction(input: { operatingMonthId: string; serviceDate: string; time: string }) {
+  await requireRouteAccess("/calls");
+  return listTherapistAvailability(input);
 }
