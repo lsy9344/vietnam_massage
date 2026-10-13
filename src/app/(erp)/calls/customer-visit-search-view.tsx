@@ -23,6 +23,7 @@ function candidateTitle(candidate: CustomerVisitCandidateDto) {
 export function CustomerVisitSearchView({
   locale,
   query,
+  settledQuery,
   candidates,
   rows,
   historyOpen,
@@ -37,6 +38,7 @@ export function CustomerVisitSearchView({
 }: {
   locale: Locale;
   query: string;
+  settledQuery: string;
   candidates: CustomerVisitCandidateDto[];
   rows: CustomerVisitHistoryRowDto[];
   historyOpen: boolean;
@@ -50,7 +52,7 @@ export function CustomerVisitSearchView({
   onSelect: (candidate: CustomerVisitCandidateDto) => void;
 }) {
   const label = t(locale, "calls.search.label");
-  const showEmpty = query.trim() !== "" && candidates.length === 0;
+  const showEmpty = settledQuery.trim() !== "" && query.trim() === settledQuery.trim() && candidates.length === 0;
   const activeId = activeIndex >= 0 ? `customer-visit-option-${activeIndex}` : undefined;
 
   return (

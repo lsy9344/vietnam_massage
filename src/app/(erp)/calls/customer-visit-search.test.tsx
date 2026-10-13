@@ -54,6 +54,7 @@ function renderView(overrides: Partial<Parameters<typeof CustomerVisitSearchView
       onSelect={() => undefined}
       query=""
       rows={[]}
+      settledQuery=""
       selectedCustomerId={null}
       selectedMemo={null}
       {...overrides}
@@ -109,11 +110,14 @@ describe("customer visit search", () => {
     assert.doesNotMatch(idle, /일치하는 결과가 없습니다/);
     assert.doesNotMatch(idle, /방문 이력/);
 
-    const empty = renderView({ query: "없는손님" });
+    const typing = renderView({ query: "민", settledQuery: "" });
+    assert.doesNotMatch(typing, /일치하는 결과가 없습니다/);
+
+    const empty = renderView({ query: "없는손님", settledQuery: "없는손님" });
     assert.match(empty, /고객 검색/);
     assert.match(empty, /일치하는 결과가 없습니다\. 이름이나 번호의 일부를 다시 입력해 보세요\./);
 
-    const emptyVi = renderView({ locale: "vi", query: "khong" });
+    const emptyVi = renderView({ locale: "vi", query: "khong", settledQuery: "khong" });
     assert.match(emptyVi, /Tìm khách/);
     assert.match(emptyVi, /Không có kết quả khớp\. Hãy thử nhập một phần tên hoặc số\./);
 

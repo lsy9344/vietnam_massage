@@ -1512,19 +1512,14 @@ function visitStatusGroup(status: string) {
   return `6:${status}`;
 }
 
-function clockMinutes(value: string) {
-  const match = /^(\d{2}):(\d{2})$/.exec(value);
-  if (!match) return -1;
-  return Number(match[1]) * 60 + Number(match[2]);
-}
-
-function compareVisitHistory(left: ServiceCallRecord, right: ServiceCallRecord) {
+function compareVisitHistory(left: ServiceCallRecord, right: ServiceCallRecord, sortOrderByTime: Map<string, number>) {
   const group = visitStatusGroup(left.status).localeCompare(visitStatusGroup(right.status));
   if (group !== 0) return group;
   const date = right.serviceDate.getTime() - left.serviceDate.getTime();
   if (date !== 0) return date;
-  const time = clockMinutes(right.startTime) - clockMinutes(left.startTime);
-  if (time !== 0) return time;
+  const leftOrder = sortOrderByTime.get(left.startTime) ?? -1;
+  const rightOrder = sortOrderByTime.get(right.startTime) ?? -1;
+  if (leftOrder !== rightOrder) return rightOrder - leftOrder;
   return right.createdAt.getTime() - left.createdAt.getTime();
 }
 
@@ -1535,7 +1530,7 @@ function visitCourseLabel(record: ServiceCallRecord) {
   if (policy) {
     return `${course?.code ?? ""} ${policy.name}`.trim();
   }
-  return course?.code || record.courseId;
+  return record.courseId;
 }
 
 function visitTherapistLabel(record: ServiceCallRecord) {
@@ -1572,14 +1567,18 @@ export async function listCustomerVisitHistory(
   input: CustomerVisitSelection & { prismaClient?: ServiceCallPrismaClient }
 ): Promise<CustomerVisitHistoryRowDto[]> {
   const client = getClient(input.prismaClient);
-  const records = await loadVisitCalls(client);
+  const [records, timeSlots] = await Promise.all([loadVisitCalls(client), client.timeSlot.findMany()]);
+  const sortOrderByTime = new Map(timeSlots.map((slot) => [slot.value, slot.sortOrder]));
   const matched = records.filter((record) => {
     if (input.kind === "customer") {
       return (record.customerId ?? null) === input.customerId;
     }
     return (record.customerId ?? null) === null && (record.customerMemo ?? "") === input.customerMemo;
   });
-  return matched.slice().sort(compareVisitHistory).map(toVisitHistoryRow);
+  return matched
+    .slice()
+    .sort((left, right) => compareVisitHistory(left, right, sortOrderByTime))
+    .map(toVisitHistoryRow);
 }
 
 function textIncludes(value: string | null | undefined, query: string) {

@@ -2418,8 +2418,8 @@ describe("service call service", () => {
     assert.deepEqual(
       rows.slice(0, 4).map((row) => ({ status: row.status, serviceDate: row.serviceDate, startTime: row.startTime })),
       [
-        { status: "방문완료", serviceDate: "2026-06-10", startTime: "11:00" },
         { status: "방문완료", serviceDate: "2026-06-10", startTime: "01:00" },
+        { status: "방문완료", serviceDate: "2026-06-10", startTime: "11:00" },
         { status: "VISIT_COMPLETE", serviceDate: "2026-06-05", startTime: "11:00" },
         { status: "방문완료", serviceDate: "2026-06-01", startTime: "11:00" }
       ]
@@ -2427,8 +2427,8 @@ describe("service call service", () => {
     assert.deepEqual(
       rows.filter((row) => row.status === "노쇼").map((row) => ({ serviceDate: row.serviceDate, startTime: row.startTime })),
       [
-        { serviceDate: "2026-06-18", startTime: "11:00" },
         { serviceDate: "2026-06-18", startTime: "01:00" },
+        { serviceDate: "2026-06-18", startTime: "11:00" },
         { serviceDate: "2026-06-15", startTime: "11:00" }
       ]
     );
@@ -2436,8 +2436,8 @@ describe("service call service", () => {
       rows.map((row) => row.status).filter((status) => status === "예약" || status === "노쇼" || status === "취소").sort(),
       ["노쇼", "노쇼", "노쇼", "예약", "취소"]
     );
-    assert.equal(rows[0].serviceCallId, completedLate.id);
-    assert.equal(rows[1].serviceCallId, completedEarlySameDay.id);
+    assert.equal(rows[0].serviceCallId, completedEarlySameDay.id);
+    assert.equal(rows[1].serviceCallId, completedLate.id);
     assert.equal(rows[2].serviceCallId, completedCode.id);
     assert.equal(rows[3].serviceCallId, completedOldest.id);
     assert.equal(rows[0].courseLabel, "A A 누루60");

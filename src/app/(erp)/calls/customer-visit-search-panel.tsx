@@ -100,6 +100,7 @@ export function CustomerVisitSearch({
       onQueryKeyDown={onQueryKeyDown}
       onSelect={select}
       query={draft}
+      settledQuery={query}
       rows={rows}
       selectedCustomerId={visitCustomer}
       selectedMemo={visitMemo}
