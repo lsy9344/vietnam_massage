@@ -725,6 +725,7 @@ export async function getTodayDashboardMetrics(input: {
     dependencies.getDailyCallLedgerSummary({
       operatingMonthId: parsed.data.operatingMonthId,
       serviceDate: parsed.data.serviceDate,
+      includeMonthTill: false,
       prismaClient: client as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
     }),
     dependencies.listTherapistDailySettlements({
@@ -851,6 +852,7 @@ export async function getMonthlyDashboardMetrics(input: {
       dependencies.getDailyCallLedgerSummary({
         operatingMonthId: parsed.data.operatingMonthId,
         serviceDate,
+        includeMonthTill: false,
         prismaClient: client as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
       })
   );
@@ -1137,6 +1139,7 @@ export async function getDashboardGraphReport(input: {
         dependencies.getDailyCallLedgerSummary({
           operatingMonthId: parsed.data.operatingMonthId,
           serviceDate,
+          includeMonthTill: false,
           prismaClient: client as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
         })
       ),

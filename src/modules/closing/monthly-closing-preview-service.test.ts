@@ -363,6 +363,10 @@ function financialDayResult(overrides: Partial<{
     earcarePoolTotal: 0,
     therapistCommissionTotal: 0,
     paymentMethodTotals: { cash: 0, card: 0, bank: 0, other: 0 },
+    till: {
+      day: { cashReceipts: 0, cashExpenses: 0, cashBalance: 0, bankReceipts: 0, bankExpenses: 0, bankBalance: 0 },
+      month: { cashReceipts: 0, cashExpenses: 0, cashBalance: 0, bankReceipts: 0, bankExpenses: 0, bankBalance: 0 }
+    },
     courseSummaries: [],
     warningCounts: { coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
     ...overrides

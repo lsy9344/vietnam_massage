@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { hasDomainErrorTranslation, resolveDomainErrorMessage } from "@/lib/i18n/errors";
+import { hasDomainErrorTranslation, resolveDomainErrorMessage, resolveKoreanMessage } from "@/lib/i18n/errors";
 
 describe("resolveDomainErrorMessage", () => {
   it("vi이고 매핑된 code면 vi 번역을 반환한다", () => {
@@ -31,5 +31,12 @@ describe("resolveDomainErrorMessage", () => {
   it("hasDomainErrorTranslation은 매핑 여부를 알려준다", () => {
     assert.equal(hasDomainErrorTranslation("ROOM_REQUIRED_FOR_STATUS"), true);
     assert.equal(hasDomainErrorTranslation("NOPE"), false);
+  });
+});
+
+describe("resolveKoreanMessage", () => {
+  it("지출 수단 오류를 베트남어로 바꾸고 한국어는 그대로 둔다", () => {
+    assert.equal(resolveKoreanMessage("vi", "수단은 현금 또는 계좌입니다."), "Hình thức là tiền mặt hoặc chuyển khoản.");
+    assert.equal(resolveKoreanMessage("ko", "수단은 현금 또는 계좌입니다."), "수단은 현금 또는 계좌입니다.");
   });
 });

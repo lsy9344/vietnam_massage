@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { useLocale, useT } from "@/lib/i18n/client";
 import { formatNumber } from "@/lib/i18n/format";
-import type { DailyExpenseDto, ServiceCallOption } from "@/modules/calls/service-call-service";
+import type { DailyExpenseDto, ExpenseMethod, ServiceCallOption } from "@/modules/calls/service-call-service";
 import {
   createDailyExpenseAction,
   deactivateDailyExpenseAction,
@@ -30,6 +30,47 @@ function InlineError({ state, field }: { state: DailyExpenseActionState; field?:
       {message}
     </span>
   ) : null;
+}
+
+export function ExpenseMethodControl({
+  defaultMethod = "cash",
+  disabled,
+  error
+}: {
+  defaultMethod?: ExpenseMethod;
+  disabled: boolean;
+  error: string | null;
+}) {
+  const t = useT();
+  return (
+    <label className="grid gap-1">
+      <span className="text-xs font-medium text-foreground">{t("calls.expense.field.method")}</span>
+      <select
+        aria-label={t("calls.expense.field.method")}
+        className="h-11 min-w-28 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
+        defaultValue={defaultMethod}
+        disabled={disabled}
+        name="method"
+      >
+        <option value="cash">{t("calls.expense.method.cash")}</option>
+        <option value="bank">{t("calls.expense.method.bank")}</option>
+      </select>
+      {error ? (
+        <span className="text-xs text-danger" role="alert">
+          {error}
+        </span>
+      ) : null}
+    </label>
+  );
+}
+
+export function ExpenseSaveButton({ disabled, idleLabel, pending }: { disabled: boolean; idleLabel: string; pending: boolean }) {
+  const t = useT();
+  return (
+    <Button aria-busy={pending} className="h-8 px-2 text-xs" disabled={disabled} type="submit">
+      {pending ? t("calls.expense.action.saving") : idleLabel}
+    </Button>
+  );
 }
 
 function HandlerSelect({
@@ -119,6 +160,7 @@ function ExpenseRow({
             <InlineError field="description" state={updateState} />
           </label>
           <HandlerSelect defaultValue={expense.handledByEmployee.id} disabled={disabled} handlers={handlers} label={t("calls.expense.field.handler")} name="handledByEmployeeId" />
+          <ExpenseMethodControl defaultMethod={expense.method} disabled={disabled} error={fieldError(updateState, "method")} />
           <label className="grid gap-1">
             <span className="sr-only">{t("calls.expense.field.note")}</span>
             <input
@@ -131,10 +173,10 @@ function ExpenseRow({
             />
             <InlineError field="note" state={updateState} />
           </label>
-          <Button className="h-8 px-2 text-xs" disabled={disabled} type="submit">
-            {t("calls.expense.action.update")}
-          </Button>
-          {updateState?.ok ? <span className="self-center text-xs text-muted">{t("calls.save.saved")}</span> : <InlineError state={updateState} />}
+          <ExpenseSaveButton disabled={disabled} idleLabel={t("calls.expense.action.update")} pending={updatePending} />
+          <div className="basis-full">
+            {updateState?.ok ? <span className="text-xs text-muted">{t("calls.save.saved")}</span> : <InlineError state={updateState} />}
+          </div>
         </form>
       </td>
       <td className="border-b border-border px-2 py-2 text-right text-xs [font-variant-numeric:tabular-nums]">{formatNumber(locale, expense.amount)} {t("calls.summary.vndSuffix")}</td>
@@ -198,6 +240,7 @@ function AddExpenseForm({
         <InlineError field="description" state={state} />
       </label>
       <HandlerSelect disabled={disabled} handlers={handlers} label={t("calls.expense.field.handler")} name="handledByEmployeeId" />
+      <ExpenseMethodControl disabled={disabled} error={fieldError(state, "method")} />
       <label className="grid gap-1">
         <span className="sr-only">{t("calls.expense.field.note")}</span>
         <input
@@ -209,10 +252,10 @@ function AddExpenseForm({
         />
         <InlineError field="note" state={state} />
       </label>
-      <Button className="h-8 px-2 text-xs" disabled={disabled} type="submit">
-        {t("calls.expense.action.add")}
-      </Button>
-      {state?.ok ? <span className="self-center text-xs text-muted">{t("calls.save.saved")}</span> : <InlineError state={state} />}
+      <ExpenseSaveButton disabled={disabled} idleLabel={t("calls.expense.action.add")} pending={pending} />
+      <div className="basis-full">
+        {state?.ok ? <span className="text-xs text-muted">{t("calls.save.saved")}</span> : <InlineError state={state} />}
+      </div>
     </form>
   );
 }

@@ -347,6 +347,19 @@ function createMemoryPrisma() {
     return a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10);
   }
 
+  function matchesDay(value: Date, filter: unknown) {
+    if (filter === undefined) return true;
+    if (filter instanceof Date) return sameDate(value, filter);
+    if (filter !== null && typeof filter === "object") {
+      const range = filter as { gte?: unknown; lte?: unknown };
+      const iso = value.toISOString().slice(0, 10);
+      if (range.gte instanceof Date && iso < range.gte.toISOString().slice(0, 10)) return false;
+      if (range.lte instanceof Date && iso > range.lte.toISOString().slice(0, 10)) return false;
+      return range.gte instanceof Date || range.lte instanceof Date;
+    }
+    return false;
+  }
+
   function withRelations(call: any) {
     const operatingMonth = operatingMonths.get(call.operatingMonthId);
     const course = courses.get(call.courseId);
@@ -456,7 +469,7 @@ function createMemoryPrisma() {
           .filter(
             (call) =>
               (where?.operatingMonthId === undefined || call.operatingMonthId === where.operatingMonthId) &&
-              (where?.serviceDate === undefined || sameDate(call.serviceDate, where.serviceDate))
+              matchesDay(call.serviceDate, where?.serviceDate)
           )
           .map(withRelations);
       },
@@ -536,7 +549,7 @@ function createMemoryPrisma() {
           .filter(
             (expense) =>
               (where?.operatingMonthId === undefined || expense.operatingMonthId === where.operatingMonthId) &&
-              (where?.expenseDate === undefined || sameDate(expense.expenseDate, where.expenseDate)) &&
+              matchesDay(expense.expenseDate, where?.expenseDate) &&
               (where?.isActive === undefined || expense.isActive === where.isActive)
           )
           .map((expense) => ({ ...expense, handledByEmployee: employees.get(expense.handledByEmployeeId) }));
@@ -1945,6 +1958,217 @@ describe("service call service", () => {
     assert.equal(summary.completedCount, 1);
     assert.equal(summary.therapistCommissionTotal, 700000);
     assert.equal(summary.courseSummaries.find((course) => course.courseCode === "A")?.completedCount, 1);
+  });
+
+  it("keeps till balances apart from net sales, card, other, and the previous operating month", async () => {
+    const prismaClient = createMemoryPrisma();
+    const paidCall = {
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "예약",
+      prismaClient
+    };
+    await saveBasicServiceCallRow({ ...paidCall, operatingMonthId: "month-2026-06", serviceDate: "2026-06-10", paymentMethodCode: "현금" });
+    await saveBasicServiceCallRow({ ...paidCall, operatingMonthId: "month-2026-06", serviceDate: "2026-06-10", paymentMethodCode: "카드" });
+    await saveBasicServiceCallRow({ ...paidCall, operatingMonthId: "month-2026-06", serviceDate: "2026-06-10", paymentMethodCode: "계좌" });
+    await saveBasicServiceCallRow({ ...paidCall, operatingMonthId: "month-2026-06", serviceDate: "2026-06-10", paymentMethodCode: "기타" });
+    await saveBasicServiceCallRow({
+      ...paidCall,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      paymentMethodCode: "현금",
+      status: "취소"
+    });
+    await saveBasicServiceCallRow({
+      ...paidCall,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      paymentMethodCode: "계좌",
+      status: "노쇼"
+    });
+    await saveBasicServiceCallRow({ ...paidCall, operatingMonthId: "month-2026-06", serviceDate: "2026-06-20", paymentMethodCode: "현금" });
+    await saveBasicServiceCallRow({ ...paidCall, operatingMonthId: "month-2026-06", serviceDate: "2026-06-20", paymentMethodCode: "카드" });
+    await saveBasicServiceCallRow({ ...paidCall, operatingMonthId: "month-reopened", serviceDate: "2026-09-02", paymentMethodCode: "현금" });
+
+    await createDailyExpense({
+      operatingMonthId: "month-2026-06",
+      expenseDate: "2026-06-10",
+      amount: 200000,
+      description: "현금 지출",
+      handledByEmployeeId: "ops-1",
+      method: "cash",
+      actorId: "counter-account",
+      prismaClient
+    });
+    await createDailyExpense({
+      operatingMonthId: "month-2026-06",
+      expenseDate: "2026-06-10",
+      amount: 80000,
+      description: "계좌 지출",
+      handledByEmployeeId: "ops-1",
+      method: "bank",
+      actorId: "counter-account",
+      prismaClient
+    });
+    await createDailyExpense({
+      operatingMonthId: "month-2026-06",
+      expenseDate: "2026-06-20",
+      amount: 300000,
+      description: "나중 날짜 계좌 지출",
+      handledByEmployeeId: "ops-1",
+      method: "bank",
+      actorId: "counter-account",
+      prismaClient
+    });
+    await createDailyExpense({
+      operatingMonthId: "month-reopened",
+      expenseDate: "2026-09-02",
+      amount: 999000,
+      description: "다른 운영월 현금 지출",
+      handledByEmployeeId: "ops-1",
+      method: "cash",
+      actorId: "counter-account",
+      prismaClient
+    });
+    prismaClient.dailyExpenses.set("legacy-cash", {
+      id: "legacy-cash",
+      operatingMonthId: "month-2026-06",
+      expenseDate: dbDate("2026-06-10"),
+      amount: 50000,
+      description: "수단이 없던 지출",
+      handledByEmployeeId: "ops-1",
+      note: null,
+      isActive: true,
+      createdAt: new Date("2026-06-09T02:09:00.000Z"),
+      updatedAt: new Date("2026-06-09T02:09:00.000Z")
+    });
+
+    const summary = await getDailyCallLedgerSummary({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient
+    });
+
+    assert.deepEqual(summary.paymentMethodTotals, { cash: 1500000, card: 1500000, bank: 1500000, other: 1500000 });
+    assert.equal(summary.paymentTotal, 6000000);
+    assert.equal(summary.expenseTotal, 330000);
+    assert.equal(summary.netSales, 5670000);
+    assert.deepEqual(summary.till, {
+      day: {
+        cashReceipts: 1500000,
+        cashExpenses: 250000,
+        cashBalance: 1250000,
+        bankReceipts: 1500000,
+        bankExpenses: 80000,
+        bankBalance: 1420000
+      },
+      month: {
+        cashReceipts: 3000000,
+        cashExpenses: 250000,
+        cashBalance: 2750000,
+        bankReceipts: 1500000,
+        bankExpenses: 380000,
+        bankBalance: 1120000
+      }
+    });
+  });
+
+  it("defaults an omitted expense method to cash, audits the method, and still rejects a locked month", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const created = await createDailyExpense({
+      operatingMonthId: "month-2026-06",
+      expenseDate: "2026-06-10",
+      amount: 10000,
+      description: "기본 현금",
+      handledByEmployeeId: "ops-1",
+      actorId: "counter-account",
+      prismaClient
+    });
+    const updated = await updateDailyExpense({
+      dailyExpenseId: created.id,
+      operatingMonthId: "month-2026-06",
+      expenseDate: "2026-06-10",
+      amount: 10000,
+      description: "계좌로 변경",
+      handledByEmployeeId: "ops-1",
+      method: "bank",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(created.method, "cash");
+    assert.equal(updated.method, "bank");
+    assert.equal(prismaClient.auditEvents[0].action, "daily_expense.created");
+    assert.equal(prismaClient.auditEvents[0].afterValue.method, "cash");
+    assert.equal(prismaClient.auditEvents[1].action, "daily_expense.changed");
+    assert.equal(prismaClient.auditEvents[1].beforeValue.method, "cash");
+    assert.equal(prismaClient.auditEvents[1].afterValue.method, "bank");
+
+    const beforeInvalid = prismaClient.dailyExpenses.size;
+    await assert.rejects(
+      () =>
+        createDailyExpense({
+          operatingMonthId: "month-2026-06",
+          expenseDate: "2026-06-10",
+          amount: 1000,
+          description: "카드 지출",
+          handledByEmployeeId: "ops-1",
+          method: "card",
+          actorId: "counter-account",
+          prismaClient
+        } as any),
+      (error) =>
+        error instanceof ServiceCallDomainError &&
+        error.code === "INVALID_DAILY_EXPENSE_INPUT" &&
+        error.message === "수단은 현금 또는 계좌입니다."
+    );
+    assert.equal(prismaClient.dailyExpenses.size, beforeInvalid);
+
+    prismaClient.dailyExpenses.set("locked-expense", {
+      id: "locked-expense",
+      operatingMonthId: "month-locked",
+      expenseDate: dbDate("2026-07-10"),
+      amount: 1000,
+      method: "cash",
+      description: "잠긴 지출",
+      handledByEmployeeId: "ops-1",
+      note: null,
+      isActive: true,
+      createdAt: new Date("2026-07-10T00:00:00.000Z"),
+      updatedAt: new Date("2026-07-10T00:00:00.000Z")
+    });
+    await assert.rejects(
+      () =>
+        updateDailyExpense({
+          dailyExpenseId: "locked-expense",
+          operatingMonthId: "month-locked",
+          expenseDate: "2026-07-10",
+          amount: 1000,
+          description: "잠긴 지출",
+          handledByEmployeeId: "ops-1",
+          method: "bank",
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error) => error instanceof ServiceCallDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
+    await assert.rejects(
+      () =>
+        createDailyExpense({
+          operatingMonthId: "month-locked",
+          expenseDate: "2026-07-10",
+          amount: 1000,
+          description: "잠긴 달 추가",
+          handledByEmployeeId: "ops-1",
+          method: "bank",
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error) => error instanceof ServiceCallDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
+    assert.equal(prismaClient.dailyExpenses.get("locked-expense").method, "cash");
   });
 
   it("creates a customer and returns the name, phone, and memo", async () => {

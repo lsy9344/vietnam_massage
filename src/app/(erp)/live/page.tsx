@@ -65,7 +65,7 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
   const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
   const [roomStatuses, summary] = await Promise.all([
     listRoomStatuses({ operatingMonthId: selectedMonth.id, serviceDate }),
-    getDailyCallLedgerSummary({ operatingMonthId: selectedMonth.id, serviceDate })
+    getDailyCallLedgerSummary({ operatingMonthId: selectedMonth.id, serviceDate, includeMonthTill: false })
   ]);
   const lastUpdatedAt = latestRoomStatusUpdatedAt(roomStatuses, new Date().toISOString());
   const warningTotal =

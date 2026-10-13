@@ -11,6 +11,19 @@ function sameDate(left: Date, right: Date) {
   return left.toISOString().slice(0, 10) === right.toISOString().slice(0, 10);
 }
 
+function matchesDay(value: Date, filter: unknown) {
+  if (filter === undefined) return true;
+  if (filter instanceof Date) return sameDate(value, filter);
+  if (filter !== null && typeof filter === "object") {
+    const range = filter as { gte?: unknown; lte?: unknown };
+    const iso = value.toISOString().slice(0, 10);
+    if (range.gte instanceof Date && iso < range.gte.toISOString().slice(0, 10)) return false;
+    if (range.lte instanceof Date && iso > range.lte.toISOString().slice(0, 10)) return false;
+    return range.gte instanceof Date || range.lte instanceof Date;
+  }
+  return false;
+}
+
 function failWrite(method: string): never {
   throw new Error(`Story 7.2 migration calculation fixture is read-only; unexpected write: ${method}`);
 }
@@ -346,7 +359,7 @@ export function createMigrationCalculationPrisma(options: { zeroEarcareWorkersDa
         return dailyExpenses.filter(
           (expense) =>
             (where?.operatingMonthId === undefined || expense.operatingMonthId === where.operatingMonthId) &&
-            (where?.expenseDate === undefined || sameDate(expense.expenseDate, where.expenseDate)) &&
+            matchesDay(expense.expenseDate, where?.expenseDate) &&
             (where?.isActive === undefined || expense.isActive === where.isActive)
         );
       },

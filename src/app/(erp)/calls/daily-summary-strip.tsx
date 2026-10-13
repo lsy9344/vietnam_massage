@@ -28,6 +28,12 @@ export function DailySummaryStrip({
   const vndSuffix = t(locale, "calls.summary.vndSuffix");
   const formatCount = (value: number) => `${formatNumber(locale, value)}${countSuffix}`;
   const formatVnd = (value: number) => `${formatNumber(locale, value)} ${vndSuffix}`;
+  const formatBalance = (value: number, kind: "cash" | "bank") => {
+    if (kind === "cash" && value < 0) {
+      return `${t(locale, "calls.summary.short")} ${formatNumber(locale, Math.abs(value))} ${vndSuffix}`;
+    }
+    return formatVnd(value);
+  };
 
   return (
     <section className="mb-4 border border-border bg-surface" aria-label={t(locale, "calls.summary.aria")}>
@@ -54,6 +60,38 @@ export function DailySummaryStrip({
         <Kpi label={t(locale, "calls.summary.card")} value={formatVnd(summary.paymentMethodTotals.card)} />
         <Kpi label={t(locale, "calls.summary.bank")} value={formatVnd(summary.paymentMethodTotals.bank)} />
         <Kpi label={t(locale, "calls.summary.other")} value={formatVnd(summary.paymentMethodTotals.other)} />
+      </div>
+      <div className="flex flex-wrap border-b border-border">
+        <Kpi label={t(locale, "calls.summary.cashReceipts")} value={formatVnd(summary.till.day.cashReceipts)} />
+        <Kpi label={t(locale, "calls.summary.cashExpenses")} value={formatVnd(summary.till.day.cashExpenses)} />
+        <Kpi
+          label={t(locale, "calls.summary.cashBalance")}
+          value={formatBalance(summary.till.day.cashBalance, "cash")}
+          danger={summary.till.day.cashBalance < 0}
+        />
+        <Kpi label={t(locale, "calls.summary.bankReceipts")} value={formatVnd(summary.till.day.bankReceipts)} />
+        <Kpi label={t(locale, "calls.summary.bankExpenses")} value={formatVnd(summary.till.day.bankExpenses)} />
+        <Kpi
+          label={t(locale, "calls.summary.bankBalance")}
+          value={formatBalance(summary.till.day.bankBalance, "bank")}
+          danger={summary.till.day.bankBalance < 0}
+        />
+      </div>
+      <div className="flex flex-wrap border-b border-border bg-background/60">
+        <Kpi label={t(locale, "calls.summary.monthCashReceipts")} value={formatVnd(summary.till.month.cashReceipts)} />
+        <Kpi label={t(locale, "calls.summary.monthCashExpenses")} value={formatVnd(summary.till.month.cashExpenses)} />
+        <Kpi
+          label={t(locale, "calls.summary.monthCashBalance")}
+          value={formatBalance(summary.till.month.cashBalance, "cash")}
+          danger={summary.till.month.cashBalance < 0}
+        />
+        <Kpi label={t(locale, "calls.summary.monthBankReceipts")} value={formatVnd(summary.till.month.bankReceipts)} />
+        <Kpi label={t(locale, "calls.summary.monthBankExpenses")} value={formatVnd(summary.till.month.bankExpenses)} />
+        <Kpi
+          label={t(locale, "calls.summary.monthBankBalance")}
+          value={formatBalance(summary.till.month.bankBalance, "bank")}
+          danger={summary.till.month.bankBalance < 0}
+        />
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] border-collapse text-left text-xs">

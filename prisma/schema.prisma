@@ -298,6 +298,7 @@ model DailyExpense {
   expenseDate         DateTime       @map("expense_date") @db.Date
   amount              Int
   description         String
+  method              String         @default("cash")
   handledByEmployeeId String         @map("handled_by_employee_id")
   handledByEmployee   Employee       @relation(fields: [handledByEmployeeId], references: [id])
   note                String?

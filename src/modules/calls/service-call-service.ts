@@ -125,6 +125,7 @@ type DailyExpenseRecord = {
   expenseDate: Date;
   amount: number;
   description: string;
+  method?: string | null;
   handledByEmployeeId: string;
   handledByEmployee?: EmployeeRecord;
   note: string | null;
@@ -298,11 +299,14 @@ export type ServiceCallRowDto = {
   savedAt: string;
 };
 
+export type ExpenseMethod = "cash" | "bank";
+
 export type DailyExpenseDto = {
   id: string;
   operatingMonthId: string;
   expenseDate: string;
   amount: number;
+  method: ExpenseMethod;
   description: string;
   handledByEmployee: ServiceCallAssigneeDto;
   note: string | null;
@@ -316,6 +320,15 @@ export type DailyCourseSummaryDto = {
   completedCount: number;
   discountCount: number;
   therapistAssignmentCount: number;
+};
+
+export type TillBalanceDto = {
+  cashReceipts: number;
+  cashExpenses: number;
+  cashBalance: number;
+  bankReceipts: number;
+  bankExpenses: number;
+  bankBalance: number;
 };
 
 export type DailyCallLedgerSummaryDto = {
@@ -336,6 +349,10 @@ export type DailyCallLedgerSummaryDto = {
     card: number;
     bank: number;
     other: number;
+  };
+  till: {
+    day: TillBalanceDto;
+    month: TillBalanceDto;
   };
   courseSummaries: DailyCourseSummaryDto[];
   warningCounts: {
@@ -458,6 +475,51 @@ function recognizesRevenue(record: { status: string; paymentMethodCode: string |
 
 function requiresCalculation(record: { status: string; paymentMethodCode: string | null }) {
   return recognizesRevenue(record) || isCompletedServiceCallStatus(record.status);
+}
+
+function storedExpenseMethod(method: string | null | undefined): ExpenseMethod {
+  return method === "bank" ? "bank" : "cash";
+}
+
+function emptyTill(): TillBalanceDto {
+  return {
+    cashReceipts: 0,
+    cashExpenses: 0,
+    cashBalance: 0,
+    bankReceipts: 0,
+    bankExpenses: 0,
+    bankBalance: 0
+  };
+}
+
+function tillFromReceipts(
+  receipts: { cash: number; bank: number },
+  expenses: Array<{ amount: number; method?: string | null }>
+): TillBalanceDto {
+  let cashExpenses = 0;
+  let bankExpenses = 0;
+  for (const expense of expenses) {
+    if (storedExpenseMethod(expense.method) === "bank") bankExpenses += expense.amount;
+    else cashExpenses += expense.amount;
+  }
+  return {
+    cashReceipts: receipts.cash,
+    cashExpenses,
+    cashBalance: receipts.cash - cashExpenses,
+    bankReceipts: receipts.bank,
+    bankExpenses,
+    bankBalance: receipts.bank - bankExpenses
+  };
+}
+
+function recognizedReceipts(rows: ServiceCallRowDto[]) {
+  const totals = { cash: 0, bank: 0 };
+  for (const row of rows) {
+    if (row.calculationStatus !== "calculated" || !recognizesRevenue(row)) continue;
+    const bucket = paymentMethodBucket(row.paymentMethodCode);
+    if (bucket === "cash" || bucket === "bank") totals[bucket] += row.paymentAmount;
+  }
+  return totals;
 }
 
 function paymentMethodBucket(code: string | null): keyof DailyCallLedgerSummaryDto["paymentMethodTotals"] {
@@ -1009,6 +1071,7 @@ function toDailyExpenseAuditSnapshot(record: DailyExpenseRecord): AuditJsonSnaps
     operatingMonthId: record.operatingMonthId,
     expenseDate: toIsoDateOnly(record.expenseDate),
     amount: record.amount,
+    method: storedExpenseMethod(record.method),
     description: record.description,
     handledByEmployeeId: record.handledByEmployeeId,
     note: record.note,
@@ -1025,6 +1088,7 @@ function toDailyExpenseDto(record: DailyExpenseRecord): DailyExpenseDto {
     operatingMonthId: record.operatingMonthId,
     expenseDate: toIsoDateOnly(record.expenseDate),
     amount: record.amount,
+    method: storedExpenseMethod(record.method),
     description: record.description,
     handledByEmployee: handledByEmployee
       ? toAssigneeDto(handledByEmployee)
@@ -2068,6 +2132,7 @@ export async function createDailyExpense(input: DailyExpenseInput & { actorId: s
         operatingMonthId: parsed.data.operatingMonthId,
         expenseDate: serviceDate,
         amount: parsed.data.amount,
+        method: parsed.data.method,
         description: parsed.data.description,
         handledByEmployeeId: parsed.data.handledByEmployeeId,
         note: parsed.data.note ?? null,
@@ -2119,6 +2184,7 @@ export async function updateDailyExpense(input: DailyExpenseUpdateInput & { acto
       data: {
         expenseDate: serviceDate,
         amount: parsed.data.amount,
+        method: parsed.data.method,
         description: parsed.data.description,
         handledByEmployeeId: parsed.data.handledByEmployeeId,
         note: parsed.data.note ?? null
@@ -2211,6 +2277,44 @@ export async function listDailyExpensesForDate(input: {
   return records.map(toDailyExpenseDto);
 }
 
+async function listActiveExpensesForOperatingMonth(input: {
+  operatingMonthId: string;
+  startDate: string;
+  endDate: string;
+  prismaClient: ServiceCallPrismaClient;
+}) {
+  const records = await input.prismaClient.dailyExpense.findMany({
+    where: {
+      operatingMonthId: input.operatingMonthId,
+      expenseDate: {
+        gte: toDateOnly(input.startDate),
+        lte: toDateOnly(input.endDate)
+      },
+      isActive: true
+    },
+    include: { handledByEmployee: true },
+    orderBy: [{ createdAt: "asc" }]
+  });
+  return records.map(toDailyExpenseDto);
+}
+
+async function monthTillFor(
+  client: ServiceCallPrismaClient,
+  operatingMonthId: string,
+  dayTill: TillBalanceDto
+): Promise<TillBalanceDto> {
+  const month = await client.operatingMonth.findUnique({ where: { id: operatingMonthId } });
+  if (!month) return dayTill;
+
+  const startDate = toIsoDateOnly(month.startDate);
+  const endDate = toIsoDateOnly(month.endDate);
+  const [monthRows, monthExpenses] = await Promise.all([
+    listServiceCallsForOperatingMonth({ operatingMonthId, startDate, endDate, prismaClient: client }),
+    listActiveExpensesForOperatingMonth({ operatingMonthId, startDate, endDate, prismaClient: client })
+  ]);
+  return tillFromReceipts(recognizedReceipts(monthRows), monthExpenses);
+}
+
 function emptyCourseSummaries(): DailyCourseSummaryDto[] {
   return (["A", "B", "C", "D", "E"] as const).map((courseCode) => ({
     courseCode,
@@ -2223,13 +2327,15 @@ function emptyCourseSummaries(): DailyCourseSummaryDto[] {
 export async function getDailyCallLedgerSummary(input: {
   operatingMonthId: string;
   serviceDate: string;
+  includeMonthTill?: boolean;
   prismaClient?: ServiceCallPrismaClient;
 }): Promise<DailyCallLedgerSummaryDto> {
-  const rows = await listServiceCallsForDate(input);
+  const client = getClient(input.prismaClient);
+  const rows = await listServiceCallsForDate({ ...input, prismaClient: client });
   const expenses = await listDailyExpensesForDate({
     operatingMonthId: input.operatingMonthId,
     expenseDate: input.serviceDate,
-    prismaClient: input.prismaClient
+    prismaClient: client
   });
   const courseSummaries = emptyCourseSummaries();
   const courseSummaryByCode = new Map(courseSummaries.map((summary) => [summary.courseCode, summary]));
@@ -2281,6 +2387,9 @@ export async function getDailyCallLedgerSummary(input: {
   }
 
   const expenseTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const dayTill = tillFromReceipts({ cash: paymentMethodTotals.cash, bank: paymentMethodTotals.bank }, expenses);
+  // 시재를 그리지 않는 화면은 날짜마다 운영월 전체를 다시 읽지 않는다.
+  const monthTill = input.includeMonthTill === false ? emptyTill() : await monthTillFor(client, input.operatingMonthId, dayTill);
   return {
     reservationCount: rows.length,
     inUseCount: rows.filter((row) => isInUseStatus(row.status)).length,
@@ -2295,6 +2404,7 @@ export async function getDailyCallLedgerSummary(input: {
     expenseTotal,
     netSales: paymentTotal - expenseTotal,
     paymentMethodTotals,
+    till: { day: dayTill, month: monthTill },
     courseSummaries,
     warningCounts
   };

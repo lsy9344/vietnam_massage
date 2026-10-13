@@ -111,6 +111,7 @@ const KOREAN_MESSAGE_VI: Record<string, string> = {
   "담당자를 선택하세요.": "Vui lòng chọn người phụ trách.",
   "내용을 입력하세요.": "Vui lòng nhập nội dung.",
   "금액은 정수로 입력하세요.": "Vui lòng nhập số tiền là số nguyên.",
+  "수단은 현금 또는 계좌입니다.": "Hình thức là tiền mặt hoặc chuyển khoản.",
   "금액은 0보다 커야 합니다.": "Số tiền phải lớn hơn 0.",
   "금액이 올바르지 않습니다.": "Số tiền không hợp lệ.",
   "500자 이하로 입력하세요.": "Vui lòng nhập tối đa 500 ký tự.",

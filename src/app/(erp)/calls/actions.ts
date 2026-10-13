@@ -218,6 +218,7 @@ export async function createDailyExpenseAction(
     amount: formValue(formData, "amount"),
     description: formValue(formData, "description"),
     handledByEmployeeId: formValue(formData, "handledByEmployeeId"),
+    method: formValue(formData, "method"),
     note: formValue(formData, "note")
   });
 
@@ -251,6 +252,7 @@ export async function updateDailyExpenseAction(
     amount: formValue(formData, "amount"),
     description: formValue(formData, "description"),
     handledByEmployeeId: formValue(formData, "handledByEmployeeId"),
+    method: formValue(formData, "method"),
     note: formValue(formData, "note")
   });
 

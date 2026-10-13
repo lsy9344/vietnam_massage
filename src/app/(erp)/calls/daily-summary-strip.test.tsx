@@ -2,7 +2,18 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
-import type { DailyCallLedgerSummaryDto } from "@/modules/calls/service-call-service";
+import type { DailyCallLedgerSummaryDto, TillBalanceDto } from "@/modules/calls/service-call-service";
+
+function zeroTill(): TillBalanceDto {
+  return {
+    cashReceipts: 0,
+    cashExpenses: 0,
+    cashBalance: 0,
+    bankReceipts: 0,
+    bankExpenses: 0,
+    bankBalance: 0
+  };
+}
 
 function summary(overrides: Partial<DailyCallLedgerSummaryDto> = {}): DailyCallLedgerSummaryDto {
   return {
@@ -19,6 +30,7 @@ function summary(overrides: Partial<DailyCallLedgerSummaryDto> = {}): DailyCallL
     expenseTotal: 50000,
     netSales: 2850000,
     paymentMethodTotals: { cash: 1500000, card: 1000000, bank: 400000, other: 0 },
+    till: { day: zeroTill(), month: zeroTill() },
     courseSummaries: [
       { courseCode: "A", completedCount: 1, discountCount: 1, therapistAssignmentCount: 1 },
       { courseCode: "B", completedCount: 1, discountCount: 0, therapistAssignmentCount: 2 },
@@ -65,5 +77,68 @@ describe("DailySummaryStrip", () => {
     assert.match(html, /400,000 VND/);
     assert.match(html, /기타/);
     assert.match(html, /0 VND/);
+  });
+
+  it("shows the service till amounts, the shortage word, and a signed bank shortage", () => {
+    const html = renderToStaticMarkup(
+      <DailySummaryStrip
+        summary={summary({
+          expenseTotal: 0,
+          netSales: 1000,
+          till: {
+            day: {
+              cashReceipts: 1000,
+              cashExpenses: 1000,
+              cashBalance: -50000,
+              bankReceipts: 0,
+              bankExpenses: 0,
+              bankBalance: -20000
+            },
+            month: {
+              cashReceipts: 0,
+              cashExpenses: 0,
+              cashBalance: 10000,
+              bankReceipts: 0,
+              bankExpenses: 0,
+              bankBalance: 0
+            }
+          }
+        })}
+        showSettlementAmounts={false}
+        locale="ko"
+      />
+    );
+
+    assert.match(html, /현금 수납<\/span><span class="[^"]*">1,000 VND<\/span>/);
+    assert.match(html, /현금 잔액<\/span><span class="[^"]*text-danger[^"]*">부족 50,000 VND<\/span>/);
+    assert.match(html, /계좌 잔액<\/span><span class="[^"]*text-danger[^"]*">-20,000 VND<\/span>/);
+    assert.match(html, /이번 달 현금 잔액<\/span><span class="[^"]*text-foreground[^"]*">10,000 VND<\/span>/);
+    assert.match(html, /카드/);
+    assert.match(html, /기타/);
+    assert.match(html, /순매출/);
+
+    const vietnamese = renderToStaticMarkup(
+      <DailySummaryStrip
+        summary={summary({
+          expenseTotal: 0,
+          netSales: 1000,
+          till: {
+            day: {
+              cashReceipts: 1000,
+              cashExpenses: 1000,
+              cashBalance: -50000,
+              bankReceipts: 0,
+              bankExpenses: 0,
+              bankBalance: -20000
+            },
+            month: zeroTill()
+          }
+        })}
+        showSettlementAmounts={false}
+        locale="vi"
+      />
+    );
+    assert.match(vietnamese, /Số dư tiền mặt<\/span><span class="[^"]*text-danger[^"]*">Thiếu 50.000 VND<\/span>/);
+    assert.match(vietnamese, /Số dư chuyển khoản<\/span><span class="[^"]*text-danger[^"]*">-20.000 VND<\/span>/);
   });
 });
