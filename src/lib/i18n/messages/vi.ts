@@ -202,6 +202,16 @@ export const vi: Messages = {
   "calls.customer.action.create": "Tạo khách",
   "calls.customer.action.update": "Sửa",
   "calls.customer.unlinked": "Chưa gắn",
+  "calls.search.label": "Tìm khách",
+  "calls.search.empty": "Không có kết quả khớp. Hãy thử nhập một phần tên hoặc số.",
+  "calls.search.latestVisit": "Lần ghé gần nhất {date}",
+  "calls.search.history": "Lịch sử ghé",
+  "calls.search.column.date": "Ngày",
+  "calls.search.column.time": "Giờ đặt",
+  "calls.search.column.course": "Gói dịch vụ",
+  "calls.search.column.therapist": "Therapist",
+  "calls.search.column.status": "Trạng thái",
+  "calls.search.column.customerMemo": "Khách/Ghi chú",
 
   // 콜 그리드 본문/상태
   "calls.grid.title": "Lưới sổ cuộc gọi",

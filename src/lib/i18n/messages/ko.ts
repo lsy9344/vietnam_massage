@@ -202,6 +202,16 @@ export const ko = {
   "calls.customer.action.create": "고객 만들기",
   "calls.customer.action.update": "고치기",
   "calls.customer.unlinked": "연결 안 함",
+  "calls.search.label": "고객 검색",
+  "calls.search.empty": "일치하는 결과가 없습니다. 이름이나 번호의 일부를 다시 입력해 보세요.",
+  "calls.search.latestVisit": "최근 방문 {date}",
+  "calls.search.history": "방문 이력",
+  "calls.search.column.date": "날짜",
+  "calls.search.column.time": "예약시각",
+  "calls.search.column.course": "코스",
+  "calls.search.column.therapist": "Therapist",
+  "calls.search.column.status": "상태",
+  "calls.search.column.customerMemo": "고객/메모",
 
   // 콜 그리드 본문/상태
   "calls.grid.title": "콜 원장 그리드",

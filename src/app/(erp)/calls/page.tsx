@@ -4,13 +4,17 @@ import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import {
   getDailyCallLedgerSummary,
+  listCustomerVisitHistory,
   listCustomers,
   listDailyExpensesForDate,
   listServiceCallFormOptions,
   listServiceCallsForDate,
-  redactServiceCallSettlementAmounts
+  redactServiceCallSettlementAmounts,
+  searchCustomerVisitCandidates,
+  type CustomerVisitSelection
 } from "@/modules/calls/service-call-service";
 import { CustomerPanel } from "@/app/(erp)/calls/customer-panel";
+import { CustomerVisitSearch } from "@/app/(erp)/calls/customer-visit-search-panel";
 import { DailyExpensePanel } from "@/app/(erp)/calls/daily-expense-panel";
 import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
@@ -22,6 +26,9 @@ import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
 type CallsPageSearchParams = {
   operatingMonthId?: string;
   serviceDate?: string;
+  customerQuery?: string;
+  visitCustomer?: string;
+  visitMemo?: string;
 };
 
 export default async function CallsPage({ searchParams }: { searchParams: Promise<CallsPageSearchParams> }) {
@@ -54,12 +61,24 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
   }
 
   const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
-  const [rows, options, expenses, summary, customers] = await Promise.all([
+  const customerQuery = typeof params.customerQuery === "string" ? params.customerQuery.trim() : "";
+  const visitCustomer = typeof params.visitCustomer === "string" && params.visitCustomer.trim() ? params.visitCustomer.trim() : null;
+  const visitMemo = typeof params.visitMemo === "string" ? params.visitMemo : null;
+  const visitSelection: CustomerVisitSelection | null = !customerQuery
+    ? null
+    : visitCustomer
+      ? { kind: "customer", customerId: visitCustomer }
+      : visitMemo !== null
+        ? { kind: "memo", customerMemo: visitMemo }
+        : null;
+  const [rows, options, expenses, summary, customers, candidates, visitHistory] = await Promise.all([
     listServiceCallsForDate({ operatingMonthId: selectedMonth.id, serviceDate }),
     listServiceCallFormOptions({ operatingMonthId: selectedMonth.id, locale }),
     listDailyExpensesForDate({ operatingMonthId: selectedMonth.id, expenseDate: serviceDate }),
     getDailyCallLedgerSummary({ operatingMonthId: selectedMonth.id, serviceDate }),
-    listCustomers()
+    listCustomers(),
+    customerQuery ? searchCustomerVisitCandidates({ query: customerQuery }) : Promise.resolve([]),
+    visitSelection ? listCustomerVisitHistory(visitSelection) : Promise.resolve([])
   ]);
   const isLocked = isOperatingMonthPayoutLocked(selectedMonth.status);
   const canViewSettlementAmounts = account.role === "administrator" || account.role === "settlement_manager";
@@ -114,6 +133,15 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
         </button>
       </form>
 
+      <CustomerVisitSearch
+        candidates={candidates}
+        operatingMonthId={selectedMonth.id}
+        query={customerQuery}
+        rows={visitHistory}
+        serviceDate={serviceDate}
+        visitCustomer={visitSelection?.kind === "customer" ? visitSelection.customerId : null}
+        visitMemo={visitSelection?.kind === "memo" ? visitSelection.customerMemo : null}
+      />
       <DailySummaryStrip summary={summary} showSettlementAmounts={canViewSettlementAmounts} locale={locale} />
       <CustomerPanel customers={customers} />
       <DailyExpensePanel

@@ -1478,6 +1478,206 @@ export async function listCustomers(input: { prismaClient?: ServiceCallPrismaCli
     .map(toCustomerDto);
 }
 
+export type CustomerVisitSelection =
+  | { kind: "customer"; customerId: string }
+  | { kind: "memo"; customerMemo: string };
+
+export type CustomerVisitHistoryRowDto = {
+  serviceCallId: string;
+  operatingMonthId: string;
+  serviceDate: string;
+  startTime: string;
+  courseLabel: string;
+  therapistLabel: string;
+  status: string;
+  customerMemo: string | null;
+};
+
+export type CustomerVisitCandidateDto = {
+  kind: "customer" | "memo";
+  customerId: string | null;
+  label: string;
+  phone: string | null;
+  latestVisitDate: string | null;
+};
+
+// 방문완료가 먼저다. 같은 상태 안에서는 늦은 날짜, 그다음 늦은 예약시각이 먼저다.
+function visitStatusGroup(status: string) {
+  if (isCompletedServiceCallStatus(status)) return "0";
+  if (isReservationStatus(status)) return "1";
+  if (isInUseStatus(status)) return "2";
+  if (isCleaningStatus(status)) return "3";
+  if (isNoShowStatus(status)) return "4";
+  if (isCanceledStatus(status)) return "5";
+  return `6:${status}`;
+}
+
+function clockMinutes(value: string) {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return -1;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function compareVisitHistory(left: ServiceCallRecord, right: ServiceCallRecord) {
+  const group = visitStatusGroup(left.status).localeCompare(visitStatusGroup(right.status));
+  if (group !== 0) return group;
+  const date = right.serviceDate.getTime() - left.serviceDate.getTime();
+  if (date !== 0) return date;
+  const time = clockMinutes(right.startTime) - clockMinutes(left.startTime);
+  if (time !== 0) return time;
+  return right.createdAt.getTime() - left.createdAt.getTime();
+}
+
+function visitCourseLabel(record: ServiceCallRecord) {
+  const monthKey = record.operatingMonth?.monthKey;
+  const course = record.course;
+  const policy = monthKey && course ? firstCurrentPolicy(course, monthKey) : null;
+  if (policy) {
+    return `${course?.code ?? ""} ${policy.name}`.trim();
+  }
+  return course?.code || record.courseId;
+}
+
+function visitTherapistLabel(record: ServiceCallRecord) {
+  return (["THERAPIST_1", "THERAPIST_2"] as const)
+    .map((role) => assignmentByRole(record, role)?.employee?.displayName)
+    .filter((name): name is string => Boolean(name))
+    .join(", ");
+}
+
+function toVisitHistoryRow(record: ServiceCallRecord): CustomerVisitHistoryRowDto {
+  return {
+    serviceCallId: record.id,
+    operatingMonthId: record.operatingMonthId,
+    serviceDate: toIsoDateOnly(record.serviceDate),
+    startTime: record.startTime,
+    courseLabel: visitCourseLabel(record),
+    therapistLabel: visitTherapistLabel(record),
+    status: record.status,
+    customerMemo: record.customerMemo
+  };
+}
+
+function loadVisitCalls(client: ServiceCallPrismaClient) {
+  return client.serviceCall.findMany({
+    include: {
+      operatingMonth: true,
+      course: { include: { policies: true } },
+      assignments: { include: { employee: true } }
+    }
+  });
+}
+
+export async function listCustomerVisitHistory(
+  input: CustomerVisitSelection & { prismaClient?: ServiceCallPrismaClient }
+): Promise<CustomerVisitHistoryRowDto[]> {
+  const client = getClient(input.prismaClient);
+  const records = await loadVisitCalls(client);
+  const matched = records.filter((record) => {
+    if (input.kind === "customer") {
+      return (record.customerId ?? null) === input.customerId;
+    }
+    return (record.customerId ?? null) === null && (record.customerMemo ?? "") === input.customerMemo;
+  });
+  return matched.slice().sort(compareVisitHistory).map(toVisitHistoryRow);
+}
+
+function textIncludes(value: string | null | undefined, query: string) {
+  return (value ?? "").toLowerCase().includes(query.toLowerCase());
+}
+
+function latestVisitDate(records: ServiceCallRecord[]) {
+  let latest: Date | null = null;
+  for (const record of records) {
+    if (!latest || record.serviceDate.getTime() > latest.getTime()) {
+      latest = record.serviceDate;
+    }
+  }
+  return latest ? toIsoDateOnly(latest) : null;
+}
+
+export async function searchCustomerVisitCandidates(input: {
+  query: string;
+  prismaClient?: ServiceCallPrismaClient;
+}): Promise<CustomerVisitCandidateDto[]> {
+  const query = input.query.trim();
+  if (!query) return [];
+
+  const client = getClient(input.prismaClient);
+  const [customers, calls] = await Promise.all([client.customer.findMany(), loadVisitCalls(client)]);
+  const customersById = new Map(customers.map((customer) => [customer.id, customer]));
+  const callsByCustomer = new Map<string, ServiceCallRecord[]>();
+  const unlinkedByMemo = new Map<string, ServiceCallRecord[]>();
+
+  for (const call of calls) {
+    const customerId = call.customerId ?? null;
+    if (customerId) {
+      const linked = callsByCustomer.get(customerId) ?? [];
+      linked.push(call);
+      callsByCustomer.set(customerId, linked);
+    } else {
+      const key = call.customerMemo ?? "";
+      const grouped = unlinkedByMemo.get(key) ?? [];
+      grouped.push(call);
+      unlinkedByMemo.set(key, grouped);
+    }
+  }
+
+  const customerIds = new Set<string>();
+  for (const customer of customers) {
+    if (textIncludes(customer.name, query) || textIncludes(customer.phone, query) || textIncludes(customer.memo, query)) {
+      customerIds.add(customer.id);
+    }
+  }
+  for (const call of calls) {
+    const customerId = call.customerId ?? null;
+    if (!customerId || !customersById.has(customerId)) continue;
+    if (textIncludes(call.customerMemo, query) || textIncludes(call.note, query)) {
+      customerIds.add(customerId);
+    }
+  }
+
+  const memoKeys = new Set<string>();
+  for (const call of calls) {
+    if (call.customerId) continue;
+    if (textIncludes(call.customerMemo, query) || textIncludes(call.note, query)) {
+      memoKeys.add(call.customerMemo ?? "");
+    }
+  }
+
+  const candidates: CustomerVisitCandidateDto[] = [];
+  for (const customerId of customerIds) {
+    const customer = customersById.get(customerId);
+    if (!customer) continue;
+    candidates.push({
+      kind: "customer",
+      customerId: customer.id,
+      label: customer.name,
+      phone: customer.phone,
+      latestVisitDate: latestVisitDate(callsByCustomer.get(customerId) ?? [])
+    });
+  }
+  for (const key of memoKeys) {
+    candidates.push({
+      kind: "memo",
+      customerId: null,
+      label: key,
+      phone: null,
+      latestVisitDate: latestVisitDate(unlinkedByMemo.get(key) ?? [])
+    });
+  }
+
+  candidates.sort((left, right) => {
+    if (left.latestVisitDate === right.latestVisitDate) {
+      return left.label.localeCompare(right.label, "ko") || (left.customerId ?? "").localeCompare(right.customerId ?? "");
+    }
+    if (left.latestVisitDate === null) return 1;
+    if (right.latestVisitDate === null) return -1;
+    return left.latestVisitDate < right.latestVisitDate ? 1 : -1;
+  });
+  return candidates;
+}
+
 export async function createDailyExpense(input: DailyExpenseInput & { actorId: string; prismaClient?: ServiceCallPrismaClient }) {
   const parsed = dailyExpenseInputSchema.safeParse(input);
   if (!parsed.success) {

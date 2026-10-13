@@ -6,6 +6,7 @@ import {
   createDailyExpense,
   deactivateDailyExpense,
   getDailyCallLedgerSummary,
+  listCustomerVisitHistory,
   listCustomers,
   listDailyExpensesForDate,
   listCompletedServiceCallCalculationsForDate,
@@ -14,6 +15,7 @@ import {
   listServiceCallsForDate,
   redactServiceCallSettlementAmounts,
   saveBasicServiceCallRow,
+  searchCustomerVisitCandidates,
   ServiceCallDomainError,
   updateCustomer,
   updateDailyExpense
@@ -441,8 +443,8 @@ function createMemoryPrisma() {
         const record = {
           id: `call-${serviceCalls.size + 1}`,
           ...data,
-          createdAt: new Date(`2026-06-09T00:0${serviceCalls.size}:00.000Z`),
-          updatedAt: new Date(`2026-06-09T00:0${serviceCalls.size}:00.000Z`)
+          createdAt: new Date(Date.UTC(2026, 5, 9, 0, serviceCalls.size, 0)),
+          updatedAt: new Date(Date.UTC(2026, 5, 9, 0, serviceCalls.size, 0))
         };
         serviceCalls.set(record.id, record);
         return record;
@@ -2284,4 +2286,357 @@ describe("service call service", () => {
       ["customer.created"]
     );
   });
+
+  it("returns one call per visit row, completed visits first, and still reads a locked month", async () => {
+    const prismaClient = createMemoryPrisma();
+    const mina = await createCustomer({
+      name: "민아",
+      phone: "090111",
+      memo: "단골",
+      actorId: "counter-account",
+      prismaClient
+    });
+    const other = await createCustomer({
+      name: "수아",
+      phone: "090222",
+      memo: null,
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    const completedLate = await saveBasicServiceCallRow({
+      ...visitCall(prismaClient),
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      customerId: mina.id,
+      customerMemo: "민아 방문",
+      therapist1Id: "therapist-1",
+      status: "방문완료"
+    });
+    const completedEarlySameDay = await saveBasicServiceCallRow({
+      ...visitCall(prismaClient),
+      serviceDate: "2026-06-10",
+      startTime: "01:00",
+      customerId: mina.id,
+      customerMemo: "민아 방문",
+      therapist1Id: "therapist-1",
+      status: "방문완료"
+    });
+    const completedCode = await saveBasicServiceCallRow({
+      ...visitCall(prismaClient),
+      serviceDate: "2026-06-05",
+      startTime: "11:00",
+      customerId: mina.id,
+      customerMemo: "민아 방문",
+      therapist1Id: "therapist-1",
+      status: "VISIT_COMPLETE"
+    });
+    const completedOldest = await saveBasicServiceCallRow({
+      ...visitCall(prismaClient),
+      serviceDate: "2026-06-01",
+      startTime: "11:00",
+      customerId: mina.id,
+      customerMemo: "민아 방문",
+      therapist1Id: "therapist-1",
+      status: "방문완료"
+    });
+    await saveBasicServiceCallRow({
+      ...visitCall(prismaClient),
+      serviceDate: "2026-06-15",
+      customerId: mina.id,
+      customerMemo: "민아 노쇼",
+      status: "노쇼"
+    });
+    await saveBasicServiceCallRow({
+      ...visitCall(prismaClient),
+      serviceDate: "2026-06-18",
+      startTime: "01:00",
+      customerId: mina.id,
+      customerMemo: "민아 노쇼",
+      status: "노쇼"
+    });
+    await saveBasicServiceCallRow({
+      ...visitCall(prismaClient),
+      serviceDate: "2026-06-18",
+      startTime: "11:00",
+      customerId: mina.id,
+      customerMemo: "민아 노쇼",
+      status: "노쇼"
+    });
+    await saveBasicServiceCallRow({
+      ...visitCall(prismaClient),
+      serviceDate: "2026-06-20",
+      customerId: mina.id,
+      customerMemo: "민아 취소",
+      status: "취소"
+    });
+    const locked = await prismaClient.serviceCall.create({
+      data: {
+        operatingMonthId: "month-locked",
+        serviceDate: dbDate("2026-07-02"),
+        startTime: "11:00",
+        roomId: "room-101",
+        courseId: "course-a",
+        customerId: mina.id,
+        customerMemo: "잠긴 달",
+        status: "예약",
+        discountTypeCode: null,
+        paymentMethodCode: null,
+        note: null,
+        confirmationCode: null
+      }
+    });
+    await prismaClient.serviceCallAssignment.create({
+      data: {
+        serviceCallId: locked.id,
+        employeeId: "therapist-1",
+        assignmentRole: "THERAPIST_1"
+      }
+    });
+    const someoneElse = await saveBasicServiceCallRow({
+      ...visitCall(prismaClient),
+      serviceDate: "2026-06-11",
+      customerId: other.id,
+      customerMemo: "수아 방문",
+      status: "방문완료"
+    });
+    await saveBasicServiceCallRow({
+      ...visitCall(prismaClient),
+      serviceDate: "2026-06-12",
+      customerMemo: "민아",
+      status: "예약"
+    });
+
+    const rows = await listCustomerVisitHistory({
+      kind: "customer",
+      customerId: mina.id,
+      prismaClient
+    });
+
+    assert.equal(rows.length, 9);
+    assert.equal(new Set(rows.map((row) => row.serviceCallId)).size, 9);
+    assert.deepEqual(
+      rows.slice(0, 4).map((row) => ({ status: row.status, serviceDate: row.serviceDate, startTime: row.startTime })),
+      [
+        { status: "방문완료", serviceDate: "2026-06-10", startTime: "11:00" },
+        { status: "방문완료", serviceDate: "2026-06-10", startTime: "01:00" },
+        { status: "VISIT_COMPLETE", serviceDate: "2026-06-05", startTime: "11:00" },
+        { status: "방문완료", serviceDate: "2026-06-01", startTime: "11:00" }
+      ]
+    );
+    assert.deepEqual(
+      rows.filter((row) => row.status === "노쇼").map((row) => ({ serviceDate: row.serviceDate, startTime: row.startTime })),
+      [
+        { serviceDate: "2026-06-18", startTime: "11:00" },
+        { serviceDate: "2026-06-18", startTime: "01:00" },
+        { serviceDate: "2026-06-15", startTime: "11:00" }
+      ]
+    );
+    assert.deepEqual(
+      rows.map((row) => row.status).filter((status) => status === "예약" || status === "노쇼" || status === "취소").sort(),
+      ["노쇼", "노쇼", "노쇼", "예약", "취소"]
+    );
+    assert.equal(rows[0].serviceCallId, completedLate.id);
+    assert.equal(rows[1].serviceCallId, completedEarlySameDay.id);
+    assert.equal(rows[2].serviceCallId, completedCode.id);
+    assert.equal(rows[3].serviceCallId, completedOldest.id);
+    assert.equal(rows[0].courseLabel, "A A 누루60");
+    assert.equal(rows[0].therapistLabel, "마사지사1");
+    assert.equal(rows[0].customerMemo, "민아 방문");
+    assert.equal(rows[0].operatingMonthId, "month-2026-06");
+    const lockedRow = rows.find((row) => row.serviceCallId === locked.id);
+    assert.equal(lockedRow?.operatingMonthId, "month-locked");
+    assert.equal(lockedRow?.serviceDate, "2026-07-02");
+    assert.equal(lockedRow?.startTime, "11:00");
+    assert.equal(lockedRow?.status, "예약");
+    assert.equal(lockedRow?.customerMemo, "잠긴 달");
+    assert.equal(lockedRow?.therapistLabel, "마사지사1");
+    assert.equal(rows.some((row) => row.serviceCallId === someoneElse.id), false);
+
+    await assert.rejects(
+      () =>
+        autosaveServiceCallRow({
+          serviceCallId: locked.id,
+          operatingMonthId: "month-locked",
+          serviceDate: "2026-07-02",
+          startTime: "11:00",
+          roomId: "room-101",
+          courseId: "course-a",
+          customerId: mina.id,
+          customerMemo: "고친 메모",
+          status: "방문완료",
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
+    const afterReject = await listCustomerVisitHistory({
+      kind: "customer",
+      customerId: mina.id,
+      prismaClient
+    });
+    assert.equal(afterReject.find((row) => row.serviceCallId === locked.id)?.customerMemo, "잠긴 달");
+    assert.equal(afterReject.find((row) => row.serviceCallId === locked.id)?.status, "예약");
+  });
+
+  it("groups customer and unlinked memo candidates without attaching a shared phone", async () => {
+    const prismaClient = createMemoryPrisma();
+    const mina = await createCustomer({
+      name: "민아",
+      phone: "090111",
+      memo: "단골",
+      actorId: "counter-account",
+      prismaClient
+    });
+    const sua = await createCustomer({
+      name: "수아",
+      phone: "090111",
+      memo: "신규",
+      actorId: "counter-account",
+      prismaClient
+    });
+    const lan = await createCustomer({
+      name: "Lan",
+      phone: "091000",
+      memo: null,
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    await saveBasicServiceCallRow({
+      ...visitCall(prismaClient),
+      serviceDate: "2026-06-01",
+      customerId: mina.id,
+      customerMemo: "원장표기",
+      note: "조용",
+      status: "방문완료"
+    });
+    await saveBasicServiceCallRow({
+      ...visitCall(prismaClient),
+      serviceDate: "2026-06-20",
+      customerId: mina.id,
+      customerMemo: "원장표기",
+      status: "예약"
+    });
+    await saveBasicServiceCallRow({
+      ...visitCall(prismaClient),
+      serviceDate: "2026-06-02",
+      customerMemo: "민아 메모",
+      note: "창가",
+      status: "예약"
+    });
+    await prismaClient.serviceCall.create({
+      data: {
+        operatingMonthId: "month-locked",
+        serviceDate: dbDate("2026-07-03"),
+        startTime: "11:00",
+        roomId: "room-101",
+        courseId: "course-a",
+        customerId: null,
+        customerMemo: "민아 메모",
+        status: "노쇼",
+        discountTypeCode: null,
+        paymentMethodCode: null,
+        note: null,
+        confirmationCode: null
+      }
+    });
+    await saveBasicServiceCallRow({
+      ...visitCall(prismaClient),
+      serviceDate: "2026-06-04",
+      customerMemo: "다른 사람",
+      note: "민아 언급",
+      status: "취소"
+    });
+    const suaCall = await saveBasicServiceCallRow({
+      ...visitCall(prismaClient),
+      serviceDate: "2026-06-05",
+      customerId: sua.id,
+      customerMemo: "수아표기",
+      status: "방문완료"
+    });
+    const sharedPhoneMemo = await saveBasicServiceCallRow({
+      ...visitCall(prismaClient),
+      serviceDate: "2026-06-06",
+      customerMemo: "090111 적힘",
+      status: "예약"
+    });
+
+    assert.deepEqual(await searchCustomerVisitCandidates({ query: "", prismaClient }), []);
+    assert.deepEqual(await searchCustomerVisitCandidates({ query: "   ", prismaClient }), []);
+    assert.deepEqual(await searchCustomerVisitCandidates({ query: "없는사람", prismaClient }), []);
+    assert.deepEqual(await searchCustomerVisitCandidates({ query: " 민아 ", prismaClient }), [
+      { kind: "memo", customerId: null, label: "민아 메모", phone: null, latestVisitDate: "2026-07-03" },
+      { kind: "customer", customerId: mina.id, label: "민아", phone: "090111", latestVisitDate: "2026-06-20" },
+      { kind: "memo", customerId: null, label: "다른 사람", phone: null, latestVisitDate: "2026-06-04" }
+    ]);
+    assert.deepEqual(await searchCustomerVisitCandidates({ query: "090111", prismaClient }), [
+      { kind: "customer", customerId: mina.id, label: "민아", phone: "090111", latestVisitDate: "2026-06-20" },
+      { kind: "memo", customerId: null, label: "090111 적힘", phone: null, latestVisitDate: "2026-06-06" },
+      { kind: "customer", customerId: sua.id, label: "수아", phone: "090111", latestVisitDate: "2026-06-05" }
+    ]);
+    assert.deepEqual(await searchCustomerVisitCandidates({ query: "단골", prismaClient }), [
+      { kind: "customer", customerId: mina.id, label: "민아", phone: "090111", latestVisitDate: "2026-06-20" }
+    ]);
+    assert.deepEqual(await searchCustomerVisitCandidates({ query: "조용", prismaClient }), [
+      { kind: "customer", customerId: mina.id, label: "민아", phone: "090111", latestVisitDate: "2026-06-20" }
+    ]);
+    assert.deepEqual(await searchCustomerVisitCandidates({ query: "창가", prismaClient }), [
+      { kind: "memo", customerId: null, label: "민아 메모", phone: null, latestVisitDate: "2026-07-03" }
+    ]);
+    assert.deepEqual(await searchCustomerVisitCandidates({ query: "lan", prismaClient }), [
+      { kind: "customer", customerId: lan.id, label: "Lan", phone: "091000", latestVisitDate: null }
+    ]);
+
+    assert.deepEqual(
+      (await listCustomerVisitHistory({ kind: "customer", customerId: mina.id, prismaClient })).map((row) => ({
+        status: row.status,
+        serviceDate: row.serviceDate,
+        customerMemo: row.customerMemo
+      })),
+      [
+        { status: "방문완료", serviceDate: "2026-06-01", customerMemo: "원장표기" },
+        { status: "예약", serviceDate: "2026-06-20", customerMemo: "원장표기" }
+      ]
+    );
+    const memoRows = await listCustomerVisitHistory({ kind: "memo", customerMemo: "민아 메모", prismaClient });
+    assert.deepEqual(
+      memoRows.map((row) => ({ status: row.status, serviceDate: row.serviceDate, operatingMonthId: row.operatingMonthId })),
+      [
+        { status: "예약", serviceDate: "2026-06-02", operatingMonthId: "month-2026-06" },
+        { status: "노쇼", serviceDate: "2026-07-03", operatingMonthId: "month-locked" }
+      ]
+    );
+    assert.deepEqual(
+      (await listCustomerVisitHistory({ kind: "memo", customerMemo: "다른 사람", prismaClient })).map((row) => row.status),
+      ["취소"]
+    );
+
+    const sharedPhoneDay = await listServiceCallsForDate({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-06",
+      prismaClient
+    });
+    assert.equal(sharedPhoneDay.find((row) => row.id === sharedPhoneMemo.id)?.customerId, null);
+    const suaDay = await listServiceCallsForDate({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-05",
+      prismaClient
+    });
+    assert.equal(suaDay.find((row) => row.id === suaCall.id)?.customerId, sua.id);
+  });
 });
+
+function visitCall(prismaClient: ReturnType<typeof createMemoryPrisma>, overrides: Partial<Parameters<typeof saveBasicServiceCallRow>[0]> = {}) {
+  return {
+    operatingMonthId: "month-2026-06",
+    serviceDate: "2026-06-10",
+    startTime: "11:00",
+    roomId: "room-101",
+    courseId: "course-a",
+    status: "예약",
+    actorId: "counter-account",
+    prismaClient,
+    ...overrides
+  };
+}
