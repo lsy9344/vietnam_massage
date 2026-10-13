@@ -1517,29 +1517,16 @@ export async function listTherapistAvailability(input: {
   });
 }
 
-export async function listServiceCallsForOperatingMonth(input: {
-  operatingMonthId: string;
-  startDate: string;
-  endDate: string;
-  prismaClient?: ServiceCallPrismaClient;
-}) {
-  const parsed = serviceCallInputSchema
-    .pick({ operatingMonthId: true, serviceDate: true })
-    .safeParse({ operatingMonthId: input.operatingMonthId, serviceDate: input.startDate });
-  const endDateParsed = serviceCallInputSchema.pick({ serviceDate: true }).safeParse({ serviceDate: input.endDate });
-  if (!parsed.success || !endDateParsed.success) {
-    throw new ServiceCallDomainError("월별 콜 원장 조회 조건이 올바르지 않습니다.", "INVALID_SERVICE_CALL_MONTH_QUERY");
-  }
-
-  const client = getClient(input.prismaClient);
+async function listServiceCallsInOperatingMonth(
+  client: ServiceCallPrismaClient,
+  operatingMonthId: string,
+  serviceDate?: { gte: Date; lte: Date }
+) {
   const [records, timeSlots] = await Promise.all([
     client.serviceCall.findMany({
       where: {
-        operatingMonthId: parsed.data.operatingMonthId,
-        serviceDate: {
-          gte: toDateOnly(parsed.data.serviceDate),
-          lte: toDateOnly(endDateParsed.data.serviceDate)
-        }
+        operatingMonthId,
+        ...(serviceDate ? { serviceDate } : {})
       },
       include: {
         operatingMonth: true,
@@ -1578,6 +1565,26 @@ export async function listServiceCallsForOperatingMonth(input: {
         })
       )
   );
+}
+
+export async function listServiceCallsForOperatingMonth(input: {
+  operatingMonthId: string;
+  startDate: string;
+  endDate: string;
+  prismaClient?: ServiceCallPrismaClient;
+}) {
+  const parsed = serviceCallInputSchema
+    .pick({ operatingMonthId: true, serviceDate: true })
+    .safeParse({ operatingMonthId: input.operatingMonthId, serviceDate: input.startDate });
+  const endDateParsed = serviceCallInputSchema.pick({ serviceDate: true }).safeParse({ serviceDate: input.endDate });
+  if (!parsed.success || !endDateParsed.success) {
+    throw new ServiceCallDomainError("월별 콜 원장 조회 조건이 올바르지 않습니다.", "INVALID_SERVICE_CALL_MONTH_QUERY");
+  }
+
+  return listServiceCallsInOperatingMonth(getClient(input.prismaClient), parsed.data.operatingMonthId, {
+    gte: toDateOnly(parsed.data.serviceDate),
+    lte: toDateOnly(endDateParsed.data.serviceDate)
+  });
 }
 
 export async function saveBasicServiceCallRow(input: ServiceCallInput & { actorId?: string; prismaClient?: ServiceCallPrismaClient }) {
@@ -2264,53 +2271,32 @@ export async function listDailyExpensesForDate(input: {
   }
 
   const client = getClient(input.prismaClient);
-  const records = await client.dailyExpense.findMany({
-    where: {
-      operatingMonthId: parsed.data.operatingMonthId,
-      expenseDate: toDateOnly(parsed.data.expenseDate),
-      isActive: true
-    },
-    include: { handledByEmployee: true },
-    orderBy: [{ createdAt: "asc" }]
+  return findActiveExpenses(client, {
+    operatingMonthId: parsed.data.operatingMonthId,
+    expenseDate: toDateOnly(parsed.data.expenseDate)
   });
-
-  return records.map(toDailyExpenseDto);
 }
 
-async function listActiveExpensesForOperatingMonth(input: {
-  operatingMonthId: string;
-  startDate: string;
-  endDate: string;
-  prismaClient: ServiceCallPrismaClient;
-}) {
-  const records = await input.prismaClient.dailyExpense.findMany({
-    where: {
-      operatingMonthId: input.operatingMonthId,
-      expenseDate: {
-        gte: toDateOnly(input.startDate),
-        lte: toDateOnly(input.endDate)
-      },
-      isActive: true
-    },
-    include: { handledByEmployee: true },
-    orderBy: [{ createdAt: "asc" }]
-  });
-  return records.map(toDailyExpenseDto);
-}
-
-async function monthTillFor(
+async function findActiveExpenses(
   client: ServiceCallPrismaClient,
-  operatingMonthId: string,
-  dayTill: TillBalanceDto
-): Promise<TillBalanceDto> {
-  const month = await client.operatingMonth.findUnique({ where: { id: operatingMonthId } });
-  if (!month) return dayTill;
+  where: { operatingMonthId: string; expenseDate?: Date | { gte: Date; lte: Date } }
+) {
+  const records = await client.dailyExpense.findMany({
+    where: { ...where, isActive: true },
+    include: { handledByEmployee: true },
+    orderBy: [{ createdAt: "asc" }]
+  });
+  return records.map(toDailyExpenseDto);
+}
 
-  const startDate = toIsoDateOnly(month.startDate);
-  const endDate = toIsoDateOnly(month.endDate);
+async function monthTillFor(client: ServiceCallPrismaClient, operatingMonthId: string): Promise<TillBalanceDto> {
+  const month = await client.operatingMonth.findUnique({ where: { id: operatingMonthId } });
+  const range = month
+    ? { gte: toDateOnly(toIsoDateOnly(month.startDate)), lte: toDateOnly(toIsoDateOnly(month.endDate)) }
+    : undefined;
   const [monthRows, monthExpenses] = await Promise.all([
-    listServiceCallsForOperatingMonth({ operatingMonthId, startDate, endDate, prismaClient: client }),
-    listActiveExpensesForOperatingMonth({ operatingMonthId, startDate, endDate, prismaClient: client })
+    listServiceCallsInOperatingMonth(client, operatingMonthId, range),
+    findActiveExpenses(client, range ? { operatingMonthId, expenseDate: range } : { operatingMonthId })
   ]);
   return tillFromReceipts(recognizedReceipts(monthRows), monthExpenses);
 }
@@ -2389,7 +2375,7 @@ export async function getDailyCallLedgerSummary(input: {
   const expenseTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0);
   const dayTill = tillFromReceipts({ cash: paymentMethodTotals.cash, bank: paymentMethodTotals.bank }, expenses);
   // 시재를 그리지 않는 화면은 날짜마다 운영월 전체를 다시 읽지 않는다.
-  const monthTill = input.includeMonthTill === false ? emptyTill() : await monthTillFor(client, input.operatingMonthId, dayTill);
+  const monthTill = input.includeMonthTill === false ? emptyTill() : await monthTillFor(client, input.operatingMonthId);
   return {
     reservationCount: rows.length,
     inUseCount: rows.filter((row) => isInUseStatus(row.status)).length,

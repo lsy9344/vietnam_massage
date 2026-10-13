@@ -318,7 +318,7 @@ export const vi: Messages = {
   "calls.summary.monthBankReceipts": "Tháng này thu chuyển khoản",
   "calls.summary.monthBankExpenses": "Tháng này chi chuyển khoản",
   "calls.summary.monthBankBalance": "Tháng này số dư chuyển khoản",
-  "calls.summary.short": "Thiếu",
+  "calls.summary.cashShortage": "Thiếu",
   "calls.summary.countSuffix": "ca",
   "calls.summary.vndSuffix": "VND",
   "calls.summary.course.code": "Gói dịch vụ",

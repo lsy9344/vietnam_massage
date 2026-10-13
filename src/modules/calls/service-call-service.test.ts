@@ -2074,6 +2074,72 @@ describe("service call service", () => {
     });
   });
 
+  it("does not report the day's till as the month when the operating month row is missing", async () => {
+    const prismaClient = createMemoryPrisma();
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "예약",
+      paymentMethodCode: "현금",
+      prismaClient
+    });
+    await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-20",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "예약",
+      paymentMethodCode: "현금",
+      prismaClient
+    });
+    await createDailyExpense({
+      operatingMonthId: "month-2026-06",
+      expenseDate: "2026-06-20",
+      amount: 100000,
+      description: "나중 날짜 현금 지출",
+      handledByEmployeeId: "ops-1",
+      method: "cash",
+      actorId: "counter-account",
+      prismaClient
+    });
+    prismaClient.operatingMonth.findUnique = async () => null;
+
+    const dayOnly = await getDailyCallLedgerSummary({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      includeMonthTill: false,
+      prismaClient
+    });
+    assert.equal(dayOnly.till.day.cashBalance, 1500000);
+    assert.equal(dayOnly.till.month.cashBalance, 0);
+
+    const summary = await getDailyCallLedgerSummary({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient
+    });
+    assert.deepEqual(summary.till.day, {
+      cashReceipts: 1500000,
+      cashExpenses: 0,
+      cashBalance: 1500000,
+      bankReceipts: 0,
+      bankExpenses: 0,
+      bankBalance: 0
+    });
+    assert.deepEqual(summary.till.month, {
+      cashReceipts: 3000000,
+      cashExpenses: 100000,
+      cashBalance: 2900000,
+      bankReceipts: 0,
+      bankExpenses: 0,
+      bankBalance: 0
+    });
+  });
+
   it("defaults an omitted expense method to cash, audits the method, and still rejects a locked month", async () => {
     const prismaClient = createMemoryPrisma();
 

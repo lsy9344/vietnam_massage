@@ -1,7 +1,37 @@
 import type { Locale } from "@/lib/i18n/config";
 import { t } from "@/lib/i18n";
 import { formatNumber } from "@/lib/i18n/format";
-import type { DailyCallLedgerSummaryDto } from "@/modules/calls/service-call-service";
+import type { DailyCallLedgerSummaryDto, TillBalanceDto } from "@/modules/calls/service-call-service";
+
+function TillKpis({
+  till,
+  labels,
+  formatVnd,
+  formatBalance
+}: {
+  till: TillBalanceDto;
+  labels: {
+    cashReceipts: string;
+    cashExpenses: string;
+    cashBalance: string;
+    bankReceipts: string;
+    bankExpenses: string;
+    bankBalance: string;
+  };
+  formatVnd: (value: number) => string;
+  formatBalance: (value: number, kind: "cash" | "bank") => string;
+}) {
+  return (
+    <>
+      <Kpi label={labels.cashReceipts} value={formatVnd(till.cashReceipts)} />
+      <Kpi label={labels.cashExpenses} value={formatVnd(till.cashExpenses)} />
+      <Kpi label={labels.cashBalance} value={formatBalance(till.cashBalance, "cash")} danger={till.cashBalance < 0} />
+      <Kpi label={labels.bankReceipts} value={formatVnd(till.bankReceipts)} />
+      <Kpi label={labels.bankExpenses} value={formatVnd(till.bankExpenses)} />
+      <Kpi label={labels.bankBalance} value={formatBalance(till.bankBalance, "bank")} danger={till.bankBalance < 0} />
+    </>
+  );
+}
 
 function Kpi({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
   return (
@@ -30,7 +60,7 @@ export function DailySummaryStrip({
   const formatVnd = (value: number) => `${formatNumber(locale, value)} ${vndSuffix}`;
   const formatBalance = (value: number, kind: "cash" | "bank") => {
     if (kind === "cash" && value < 0) {
-      return `${t(locale, "calls.summary.short")} ${formatNumber(locale, Math.abs(value))} ${vndSuffix}`;
+      return `${t(locale, "calls.summary.cashShortage")} ${formatNumber(locale, Math.abs(value))} ${vndSuffix}`;
     }
     return formatVnd(value);
   };
@@ -62,35 +92,33 @@ export function DailySummaryStrip({
         <Kpi label={t(locale, "calls.summary.other")} value={formatVnd(summary.paymentMethodTotals.other)} />
       </div>
       <div className="flex flex-wrap border-b border-border">
-        <Kpi label={t(locale, "calls.summary.cashReceipts")} value={formatVnd(summary.till.day.cashReceipts)} />
-        <Kpi label={t(locale, "calls.summary.cashExpenses")} value={formatVnd(summary.till.day.cashExpenses)} />
-        <Kpi
-          label={t(locale, "calls.summary.cashBalance")}
-          value={formatBalance(summary.till.day.cashBalance, "cash")}
-          danger={summary.till.day.cashBalance < 0}
-        />
-        <Kpi label={t(locale, "calls.summary.bankReceipts")} value={formatVnd(summary.till.day.bankReceipts)} />
-        <Kpi label={t(locale, "calls.summary.bankExpenses")} value={formatVnd(summary.till.day.bankExpenses)} />
-        <Kpi
-          label={t(locale, "calls.summary.bankBalance")}
-          value={formatBalance(summary.till.day.bankBalance, "bank")}
-          danger={summary.till.day.bankBalance < 0}
+        <TillKpis
+          till={summary.till.day}
+          formatVnd={formatVnd}
+          formatBalance={formatBalance}
+          labels={{
+            cashReceipts: t(locale, "calls.summary.cashReceipts"),
+            cashExpenses: t(locale, "calls.summary.cashExpenses"),
+            cashBalance: t(locale, "calls.summary.cashBalance"),
+            bankReceipts: t(locale, "calls.summary.bankReceipts"),
+            bankExpenses: t(locale, "calls.summary.bankExpenses"),
+            bankBalance: t(locale, "calls.summary.bankBalance")
+          }}
         />
       </div>
       <div className="flex flex-wrap border-b border-border bg-background/60">
-        <Kpi label={t(locale, "calls.summary.monthCashReceipts")} value={formatVnd(summary.till.month.cashReceipts)} />
-        <Kpi label={t(locale, "calls.summary.monthCashExpenses")} value={formatVnd(summary.till.month.cashExpenses)} />
-        <Kpi
-          label={t(locale, "calls.summary.monthCashBalance")}
-          value={formatBalance(summary.till.month.cashBalance, "cash")}
-          danger={summary.till.month.cashBalance < 0}
-        />
-        <Kpi label={t(locale, "calls.summary.monthBankReceipts")} value={formatVnd(summary.till.month.bankReceipts)} />
-        <Kpi label={t(locale, "calls.summary.monthBankExpenses")} value={formatVnd(summary.till.month.bankExpenses)} />
-        <Kpi
-          label={t(locale, "calls.summary.monthBankBalance")}
-          value={formatBalance(summary.till.month.bankBalance, "bank")}
-          danger={summary.till.month.bankBalance < 0}
+        <TillKpis
+          till={summary.till.month}
+          formatVnd={formatVnd}
+          formatBalance={formatBalance}
+          labels={{
+            cashReceipts: t(locale, "calls.summary.monthCashReceipts"),
+            cashExpenses: t(locale, "calls.summary.monthCashExpenses"),
+            cashBalance: t(locale, "calls.summary.monthCashBalance"),
+            bankReceipts: t(locale, "calls.summary.monthBankReceipts"),
+            bankExpenses: t(locale, "calls.summary.monthBankExpenses"),
+            bankBalance: t(locale, "calls.summary.monthBankBalance")
+          }}
         />
       </div>
       <div className="overflow-x-auto">

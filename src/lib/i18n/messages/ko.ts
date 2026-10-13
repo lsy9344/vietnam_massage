@@ -318,7 +318,7 @@ export const ko = {
   "calls.summary.monthBankReceipts": "이번 달 계좌 수납",
   "calls.summary.monthBankExpenses": "이번 달 계좌 지출",
   "calls.summary.monthBankBalance": "이번 달 계좌 잔액",
-  "calls.summary.short": "부족",
+  "calls.summary.cashShortage": "부족",
   "calls.summary.countSuffix": "건",
   "calls.summary.vndSuffix": "VND",
   "calls.summary.course.code": "코스",
