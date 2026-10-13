@@ -28,6 +28,7 @@ export const serviceCallInputSchema = z.object({
   roomId: optionalId,
   courseId: z.string().trim().min(1, "코스를 선택하세요."),
   customerMemo: optionalText,
+  customerId: optionalId,
   therapist1Id: optionalId,
   therapist2Id: optionalId,
   earcareEmployeeId: optionalId,
@@ -59,8 +60,20 @@ export const dailyExpenseDeactivateSchema = z.object({
   dailyExpenseId: z.string().trim().min(1, "지출 항목 ID가 올바르지 않습니다.")
 });
 
+export const customerInputSchema = z.object({
+  name: z.string().trim().min(1, "이름을 입력하세요.").max(200, "200자 이하로 입력하세요."),
+  phone: optionalText,
+  memo: optionalText
+});
+
+export const customerUpdateSchema = customerInputSchema.extend({
+  customerId: z.string().trim().min(1, "고객을 선택하세요.")
+});
+
 export type ServiceCallInput = z.infer<typeof serviceCallInputSchema>;
 export type ServiceCallAutosaveInput = z.infer<typeof serviceCallAutosaveInputSchema>;
 export type DailyExpenseInput = z.infer<typeof dailyExpenseInputSchema>;
 export type DailyExpenseUpdateInput = z.infer<typeof dailyExpenseUpdateSchema>;
 export type DailyExpenseDeactivateInput = z.infer<typeof dailyExpenseDeactivateSchema>;
+export type CustomerInput = z.infer<typeof customerInputSchema>;
+export type CustomerUpdateInput = z.infer<typeof customerUpdateSchema>;

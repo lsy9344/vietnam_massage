@@ -19,7 +19,7 @@ import { useLocale, useT } from "@/lib/i18n/client";
 import { formatDateTime, formatNumber } from "@/lib/i18n/format";
 import type { Locale } from "@/lib/i18n/config";
 import type { MessageKey } from "@/lib/i18n/types";
-import type { ServiceCallCalculationStatus, ServiceCallFormOptions, ServiceCallOption, ServiceCallRowDto } from "@/modules/calls/service-call-service";
+import type { CustomerDto, ServiceCallCalculationStatus, ServiceCallFormOptions, ServiceCallOption, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 import type { ServiceCallAutosaveInput } from "@/modules/calls/service-call-schema";
 import { autosaveServiceCallRowAction, saveBasicServiceCallRowAction, type ServiceCallActionState } from "@/app/(erp)/calls/actions";
 import {
@@ -45,6 +45,7 @@ const CALL_GRID_COLUMNS = [
   { id: "room", labelKey: "calls.column.room", width: "9rem" },
   { id: "course", labelKey: "calls.column.course", width: "10rem" },
   { id: "customerMemo", labelKey: "calls.column.customerMemo", width: "12rem" },
+  { id: "customer", labelKey: "calls.column.customer", width: "14rem" },
   { id: "therapist1", labelKey: "calls.column.therapist1", width: "9rem" },
   { id: "therapist2", labelKey: "calls.column.therapist2", width: "9rem" },
   { id: "earcare", labelKey: "calls.column.earcare", width: "9rem" },
@@ -67,7 +68,7 @@ function visibleCallGridColumns(showSettlementColumns: boolean) {
 }
 
 function callGridMinWidth(showSettlementColumns: boolean) {
-  return showSettlementColumns ? "169rem" : "142rem";
+  return showSettlementColumns ? "183rem" : "156rem";
 }
 
 function CallGridColgroup({ showSettlementColumns }: { showSettlementColumns: boolean }) {
@@ -495,7 +496,58 @@ function TextCell({
   );
 }
 
+function customerChoiceLabel(customer: CustomerDto) {
+  return [customer.name, customer.phone, customer.memo].filter((part) => part && part.trim() !== "").join(" · ");
+}
+
+function CustomerLinkSelect({
+  customers,
+  disabled,
+  name,
+  onChange,
+  value
+}: {
+  customers: CustomerDto[];
+  disabled: boolean;
+  name?: string;
+  onChange?: (value: string) => void;
+  value?: string;
+}) {
+  const t = useT();
+  const options = (
+    <>
+      <option value="">{t("calls.customer.unlinked")}</option>
+      {customers.map((customer) => (
+        <option key={customer.id} value={customer.id}>
+          {customerChoiceLabel(customer)}
+        </option>
+      ))}
+    </>
+  );
+  const className = "h-8 w-full border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly";
+  if (value === undefined) {
+    return (
+      <select aria-label={t("calls.column.customer")} className={className} defaultValue="" disabled={disabled} name={name}>
+        {options}
+      </select>
+    );
+  }
+  return (
+    <select
+      aria-label={t("calls.column.customer")}
+      className={className}
+      disabled={disabled}
+      name={name}
+      onChange={onChange ? (event) => onChange(event.target.value) : undefined}
+      value={value}
+    >
+      {options}
+    </select>
+  );
+}
+
 function AddRowForm({
+  customers,
   existingRowCount,
   isLocked,
   operatingMonthId,
@@ -503,6 +555,7 @@ function AddRowForm({
   serviceDate,
   showSettlementColumns
 }: {
+  customers: CustomerDto[];
   existingRowCount: number;
   isLocked: boolean;
   operatingMonthId: string;
@@ -597,6 +650,9 @@ function AddRowForm({
                   placeholder={t("calls.column.customerMemo")}
                   rowIndex={rowIndex}
                 />
+              </td>
+              <td className="border-b border-border px-2 py-2">
+                <CustomerLinkSelect customers={customers} disabled={disabled} name="customerId" />
               </td>
               <td className="border-b border-border px-2 py-2">
                 <SelectCell
@@ -717,6 +773,7 @@ function draftFromRow(row: ServiceCallRowDto): ServiceCallAutosaveInput {
     roomId: row.roomId,
     courseId: row.courseId,
     customerMemo: row.customerMemo ?? null,
+    customerId: row.customerId ?? null,
     therapist1Id: row.therapist1?.id ?? null,
     therapist2Id: row.therapist2?.id ?? null,
     earcareEmployeeId: row.earcare?.id ?? null,
@@ -851,6 +908,7 @@ function ComputedCell({
 }
 
 function EditableCallRow({
+  customers,
   isLocked,
   options,
   row,
@@ -858,6 +916,7 @@ function EditableCallRow({
   rowIndex,
   showSettlementColumns
 }: {
+  customers: CustomerDto[];
   isLocked: boolean;
   options: ServiceCallFormOptions;
   row: ServiceCallRowDto;
@@ -1036,6 +1095,14 @@ function EditableCallRow({
           value={draft.customerMemo ?? ""}
         />
         <span className="sr-only">{draft.customerMemo ?? ""}</span>
+      </td>
+      <td className="border-b border-border px-2 py-2">
+        <CustomerLinkSelect
+          customers={customers}
+          disabled={isLocked || saveStatus === "saving"}
+          onChange={(value) => updateDraftAndCommit("customerId", nullableValue(value))}
+          value={draft.customerId ?? ""}
+        />
       </td>
       <td className="border-b border-border px-2 py-2">
         <SelectCell
@@ -1250,6 +1317,7 @@ function EditableCallRow({
 }
 
 export function EditableCallGrid({
+  customers = [],
   isLocked,
   operatingMonthId,
   options,
@@ -1257,6 +1325,7 @@ export function EditableCallGrid({
   serviceDate,
   showSettlementColumns
 }: {
+  customers?: CustomerDto[];
   isLocked: boolean;
   operatingMonthId: string;
   options: ServiceCallFormOptions;
@@ -1322,6 +1391,7 @@ export function EditableCallGrid({
             <tbody>
               {table.getRowModel().rows.map((tableRow, index) => (
                 <EditableCallRow
+                  customers={customers}
                   isLocked={isLocked}
                   key={tableRow.original.id}
                   options={options}
@@ -1337,6 +1407,7 @@ export function EditableCallGrid({
       )}
 
       <AddRowForm
+        customers={customers}
         existingRowCount={table.getRowModel().rows.length}
         isLocked={isLocked}
         operatingMonthId={operatingMonthId}

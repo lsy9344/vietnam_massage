@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { CustomerPanel } from "@/app/(erp)/calls/customer-panel";
 import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
 import { LocaleProvider } from "@/lib/i18n/client";
 import { PageHeader } from "@/components/domain/page-header";
@@ -39,6 +40,7 @@ const discountedCallRow: ServiceCallRowDto = {
   courseId: "course-a",
   courseCode: "A",
   courseLabel: "A 누루60",
+  customerId: null,
   customerMemo: "할인 표시 검증",
   therapist1: { id: "therapist-1", displayName: "마사지사1", staffCode: "THR-001" },
   therapist2: null,
@@ -116,6 +118,33 @@ describe("client revision visual regression guards", () => {
 
     assert.match(html, /class="text-\[11px\] text-muted line-through">1,500,000<\/span>/);
     assert.match(html, /class="font-bold text-foreground">1,400,000<\/span>/);
+    assert.match(html, /고객\/메모/);
+    assert.match(html, /연결 안 함/);
+  });
+
+  it("renders the customer record form in Korean and Vietnamese", () => {
+    const customers = [{ id: "customer-1", name: "민아", phone: "090111", memo: "단골" }];
+    const korean = renderToStaticMarkup(
+      createElement(LocaleProvider, {
+        locale: "ko",
+        children: createElement(CustomerPanel, { customers })
+      })
+    );
+    const vietnamese = renderToStaticMarkup(
+      createElement(LocaleProvider, {
+        locale: "vi",
+        children: createElement(CustomerPanel, { customers })
+      })
+    );
+
+    assert.match(korean, /같은 연락처가 있어도 콜에서 고르기 전에는 붙지 않는다/);
+    assert.match(korean, /고객 만들기/);
+    assert.match(korean, /고치기/);
+    assert.match(korean, /value="민아"/);
+    assert.match(vietnamese, /Cùng một số liên lạc cũng không gắn vào cuộc gọi cho đến khi được chọn/);
+    assert.match(vietnamese, /Tạo khách/);
+    assert.match(vietnamese, /Sửa/);
+    assert.match(vietnamese, /value="민아"/);
   });
 
   it("keeps today dashboard revenue strong and cost amounts danger toned", () => {

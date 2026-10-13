@@ -4,11 +4,13 @@ import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import {
   getDailyCallLedgerSummary,
+  listCustomers,
   listDailyExpensesForDate,
   listServiceCallFormOptions,
   listServiceCallsForDate,
   redactServiceCallSettlementAmounts
 } from "@/modules/calls/service-call-service";
+import { CustomerPanel } from "@/app/(erp)/calls/customer-panel";
 import { DailyExpensePanel } from "@/app/(erp)/calls/daily-expense-panel";
 import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
@@ -52,11 +54,12 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
   }
 
   const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
-  const [rows, options, expenses, summary] = await Promise.all([
+  const [rows, options, expenses, summary, customers] = await Promise.all([
     listServiceCallsForDate({ operatingMonthId: selectedMonth.id, serviceDate }),
     listServiceCallFormOptions({ operatingMonthId: selectedMonth.id, locale }),
     listDailyExpensesForDate({ operatingMonthId: selectedMonth.id, expenseDate: serviceDate }),
-    getDailyCallLedgerSummary({ operatingMonthId: selectedMonth.id, serviceDate })
+    getDailyCallLedgerSummary({ operatingMonthId: selectedMonth.id, serviceDate }),
+    listCustomers()
   ]);
   const isLocked = isOperatingMonthPayoutLocked(selectedMonth.status);
   const canViewSettlementAmounts = account.role === "administrator" || account.role === "settlement_manager";
@@ -112,6 +115,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
       </form>
 
       <DailySummaryStrip summary={summary} showSettlementAmounts={canViewSettlementAmounts} locale={locale} />
+      <CustomerPanel customers={customers} />
       <DailyExpensePanel
         expenses={expenses}
         handlers={options.expenseHandlers}
@@ -121,6 +125,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
       />
 
       <EditableCallGrid
+        customers={customers}
         isLocked={isLocked}
         operatingMonthId={selectedMonth.id}
         options={options}

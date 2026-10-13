@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   autosaveServiceCallRow,
+  createCustomer,
   createDailyExpense,
   deactivateDailyExpense,
   getDailyCallLedgerSummary,
+  listCustomers,
   listDailyExpensesForDate,
   listCompletedServiceCallCalculationsForDate,
   listServiceCallStatusHistory,
@@ -13,6 +15,7 @@ import {
   redactServiceCallSettlementAmounts,
   saveBasicServiceCallRow,
   ServiceCallDomainError,
+  updateCustomer,
   updateDailyExpense
 } from "@/modules/calls/service-call-service";
 
@@ -328,6 +331,7 @@ function createMemoryPrisma() {
   const serviceCalls = new Map<string, any>();
   const dailyExpenses = new Map<string, any>();
   const assignments = new Map<string, any>();
+  const customers = new Map<string, any>();
   const statusHistories: any[] = [];
   const auditEvents: any[] = [];
 
@@ -562,6 +566,38 @@ function createMemoryPrisma() {
       },
       async findMany() {
         return auditEvents;
+      }
+    },
+    customer: {
+      async create({ data }: any) {
+        const record = {
+          id: `customer-${customers.size + 1}`,
+          name: data.name,
+          phone: data.phone ?? null,
+          memo: data.memo ?? null,
+          createdAt: new Date(`2026-06-09T04:0${customers.size}:00.000Z`),
+          updatedAt: new Date(`2026-06-09T04:0${customers.size}:00.000Z`)
+        };
+        customers.set(record.id, record);
+        return record;
+      },
+      async findUnique({ where }: any) {
+        return customers.get(where.id) ?? null;
+      },
+      async findMany() {
+        return [...customers.values()];
+      },
+      async updateMany({ where, data }: any) {
+        const record = customers.get(where.id);
+        if (!record) return { count: 0 };
+        customers.set(where.id, {
+          ...record,
+          name: data.name ?? record.name,
+          phone: data.phone === undefined ? record.phone : data.phone,
+          memo: data.memo === undefined ? record.memo : data.memo,
+          updatedAt: new Date("2026-06-09T05:00:00.000Z")
+        });
+        return { count: 1 };
       }
     },
     async $transaction(callback: (tx: any) => Promise<unknown>) {
@@ -1889,5 +1925,295 @@ describe("service call service", () => {
     assert.equal(summary.completedCount, 1);
     assert.equal(summary.therapistCommissionTotal, 700000);
     assert.equal(summary.courseSummaries.find((course) => course.courseCode === "A")?.completedCount, 1);
+  });
+
+  it("creates a customer and returns the name, phone, and memo", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const created = await createCustomer({
+      name: "민아",
+      phone: "090111",
+      memo: "단골",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(created.name, "민아");
+    assert.equal(created.phone, "090111");
+    assert.equal(created.memo, "단골");
+
+    const listed = await listCustomers({ prismaClient });
+    assert.deepEqual(
+      listed.find((customer) => customer.id === created.id),
+      { id: created.id, name: "민아", phone: "090111", memo: "단골" }
+    );
+  });
+
+  it("corrects a customer's name, phone, and memo", async () => {
+    const prismaClient = createMemoryPrisma();
+    const created = await createCustomer({
+      name: "민아",
+      phone: "090111",
+      memo: "단골",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    const updated = await updateCustomer({
+      customerId: created.id,
+      name: "민아정정",
+      phone: "091222",
+      memo: "메모수정",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(updated.id, created.id);
+    assert.equal(updated.name, "민아정정");
+    assert.equal(updated.phone, "091222");
+    assert.equal(updated.memo, "메모수정");
+    assert.deepEqual(await listCustomers({ prismaClient }), [
+      { id: created.id, name: "민아정정", phone: "091222", memo: "메모수정" }
+    ]);
+  });
+
+  it("does not attach a customer from a shared phone until one is chosen, and keeps the call memo", async () => {
+    const prismaClient = createMemoryPrisma();
+    const mina = await createCustomer({
+      name: "민아",
+      phone: "090111",
+      memo: "단골",
+      actorId: "counter-account",
+      prismaClient
+    });
+    const sua = await createCustomer({
+      name: "수아",
+      phone: "090111",
+      memo: "신규",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    const saved = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      customerMemo: "090111 단골이라고 적힘",
+      status: "예약",
+      prismaClient
+    });
+
+    assert.equal(saved.customerId, null);
+    assert.equal(saved.customerMemo, "090111 단골이라고 적힘");
+    assert.deepEqual(
+      (await listCustomers({ prismaClient })).map((customer) => ({ id: customer.id, phone: customer.phone })).sort((a, b) => a.id.localeCompare(b.id)),
+      [
+        { id: mina.id, phone: "090111" },
+        { id: sua.id, phone: "090111" }
+      ]
+    );
+
+    const linked = await autosaveServiceCallRow({
+      serviceCallId: saved.id,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      customerMemo: "090111 단골이라고 적힘",
+      customerId: sua.id,
+      status: "예약",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(linked.customerId, sua.id);
+    assert.equal(linked.customerMemo, "090111 단골이라고 적힘");
+
+    const unlinked = await autosaveServiceCallRow({
+      serviceCallId: saved.id,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      customerMemo: "090111 단골이라고 적힘",
+      customerId: null,
+      status: "예약",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(unlinked.customerId, null);
+    assert.equal(unlinked.customerMemo, "090111 단골이라고 적힘");
+  });
+
+  it("rejects saving a call on a locked month, including a chosen customer link", async () => {
+    const prismaClient = createMemoryPrisma();
+    const customer = await createCustomer({
+      name: "민아",
+      phone: "090111",
+      memo: "단골",
+      actorId: "counter-account",
+      prismaClient
+    });
+    const original = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      customerMemo: "원장 표기",
+      status: "예약",
+      prismaClient
+    });
+
+    await assert.rejects(
+      () =>
+        saveBasicServiceCallRow({
+          operatingMonthId: "month-locked",
+          serviceDate: "2026-07-10",
+          startTime: "11:00",
+          roomId: "room-101",
+          courseId: "course-a",
+          customerMemo: "원장 표기",
+          customerId: customer.id,
+          status: "예약",
+          prismaClient
+        }),
+      (error) => error instanceof ServiceCallDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
+    await assert.rejects(
+      () =>
+        autosaveServiceCallRow({
+          serviceCallId: original.id,
+          operatingMonthId: "month-locked",
+          serviceDate: "2026-07-10",
+          startTime: "11:00",
+          roomId: "room-101",
+          courseId: "course-a",
+          customerMemo: "원장 표기",
+          customerId: customer.id,
+          status: "예약",
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error) => error instanceof ServiceCallDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
+
+    const rows = await listServiceCallsForDate({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient
+    });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].customerId, null);
+    assert.equal(rows[0].customerMemo, "원장 표기");
+    assert.deepEqual(
+      await listServiceCallsForDate({
+        operatingMonthId: "month-locked",
+        serviceDate: "2026-07-10",
+        prismaClient
+      }),
+      []
+    );
+  });
+
+  it("records customer create, customer correction, and the call link in the audit log", async () => {
+    const prismaClient = createMemoryPrisma();
+    const created = await createCustomer({
+      name: "민아",
+      phone: "090111",
+      memo: "단골",
+      actorId: "counter-account",
+      prismaClient
+    });
+    await updateCustomer({
+      customerId: created.id,
+      name: "민아정정",
+      phone: "091222",
+      memo: "메모수정",
+      actorId: "counter-account",
+      prismaClient
+    });
+    const saved = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      customerMemo: "원장 표기",
+      status: "예약",
+      prismaClient
+    });
+    await autosaveServiceCallRow({
+      serviceCallId: saved.id,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      customerMemo: "원장 표기",
+      customerId: created.id,
+      status: "예약",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.deepEqual(
+      prismaClient.auditEvents.map((event: { action: string }) => event.action),
+      ["customer.created", "customer.changed", "service_call.row_changed"]
+    );
+    assert.equal(prismaClient.auditEvents[0].targetType, "customer");
+    assert.equal(prismaClient.auditEvents[0].actorId, "counter-account");
+    assert.equal(prismaClient.auditEvents[0].afterValue.name, "민아");
+    assert.equal(prismaClient.auditEvents[0].afterValue.phone, "090111");
+    assert.equal(prismaClient.auditEvents[0].afterValue.memo, "단골");
+    assert.equal(prismaClient.auditEvents[1].beforeValue.name, "민아");
+    assert.equal(prismaClient.auditEvents[1].afterValue.name, "민아정정");
+    assert.equal(prismaClient.auditEvents[1].afterValue.phone, "091222");
+    assert.equal(prismaClient.auditEvents[1].afterValue.memo, "메모수정");
+    assert.equal(prismaClient.auditEvents[2].targetType, "service_call");
+    assert.equal(prismaClient.auditEvents[2].targetId, saved.id);
+    assert.equal(prismaClient.auditEvents[2].beforeValue.customerId, null);
+    assert.equal(prismaClient.auditEvents[2].afterValue.customerId, created.id);
+    assert.equal(prismaClient.auditEvents[2].beforeValue.customerMemo, "원장 표기");
+    assert.equal(prismaClient.auditEvents[2].afterValue.customerMemo, "원장 표기");
+  });
+
+  it("records a customer chosen while adding a call row without changing the call memo", async () => {
+    const prismaClient = createMemoryPrisma();
+    const created = await createCustomer({
+      name: "민아",
+      phone: "090111",
+      memo: "단골",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    const saved = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      customerMemo: "원장 표기",
+      customerId: created.id,
+      status: "예약",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(saved.customerId, created.id);
+    assert.equal(saved.customerMemo, "원장 표기");
+    assert.deepEqual(
+      prismaClient.auditEvents.map((event: { action: string }) => event.action),
+      ["customer.created", "service_call.row_changed"]
+    );
+    assert.equal(prismaClient.auditEvents[1].beforeValue, null);
+    assert.equal(prismaClient.auditEvents[1].afterValue.customerId, created.id);
+    assert.equal(prismaClient.auditEvents[1].afterValue.customerMemo, "원장 표기");
   });
 });

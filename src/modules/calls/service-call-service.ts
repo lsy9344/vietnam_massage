@@ -10,11 +10,15 @@ import { listActiveEmployees } from "@/modules/masters/employee-service";
 import { listActiveRooms } from "@/modules/masters/room-service";
 import {
   assignmentRoles,
+  customerInputSchema,
+  customerUpdateSchema,
   dailyExpenseDeactivateSchema,
   dailyExpenseInputSchema,
   dailyExpenseUpdateSchema,
   serviceCallAutosaveInputSchema,
   serviceCallInputSchema,
+  type CustomerInput,
+  type CustomerUpdateInput,
   type DailyExpenseDeactivateInput,
   type DailyExpenseInput,
   type DailyExpenseUpdateInput,
@@ -127,6 +131,15 @@ type DailyExpenseRecord = {
   updatedAt: Date;
 };
 
+type CustomerRecord = {
+  id: string;
+  name: string;
+  phone: string | null;
+  memo: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type ServiceCallRecord = {
   id: string;
   operatingMonthId: string;
@@ -137,6 +150,7 @@ type ServiceCallRecord = {
   room?: RoomRecord | null;
   courseId: string;
   course?: CourseRecord;
+  customerId?: string | null;
   customerMemo: string | null;
   status: string;
   discountTypeCode: string | null;
@@ -204,7 +218,20 @@ type ServiceCallPrismaClient = {
     create(args: unknown): Promise<unknown>;
     findMany(args?: unknown): Promise<unknown[]>;
   };
+  customer: {
+    create(args: unknown): Promise<CustomerRecord>;
+    findMany(args?: unknown): Promise<CustomerRecord[]>;
+    findUnique(args: unknown): Promise<CustomerRecord | null>;
+    updateMany(args: unknown): Promise<{ count: number }>;
+  };
   $transaction?<T>(callback: (tx: ServiceCallPrismaClient) => Promise<T>): Promise<T>;
+};
+
+export type CustomerDto = {
+  id: string;
+  name: string;
+  phone: string | null;
+  memo: string | null;
 };
 
 export type ServiceCallAssigneeDto = {
@@ -230,6 +257,7 @@ export type ServiceCallRowDto = {
   courseId: string;
   courseCode: string;
   courseLabel: string;
+  customerId: string | null;
   customerMemo: string | null;
   therapist1: ServiceCallAssigneeDto | null;
   therapist2: ServiceCallAssigneeDto | null;
@@ -704,6 +732,7 @@ async function toRowDto(
     courseId: record.courseId,
     courseCode: course?.code ?? "",
     courseLabel: policy ? `${course?.code ?? ""} ${policy.name}`.trim() : record.courseId,
+    customerId: linkedCustomerId(record),
     customerMemo: record.customerMemo,
     therapist1: therapist1 ? toAssigneeDto(therapist1) : null,
     therapist2: therapist2 ? toAssigneeDto(therapist2) : null,
@@ -916,6 +945,7 @@ function toAuditSnapshot(record: ServiceCallRecord): AuditJsonSnapshot {
     startTime: record.startTime,
     roomId: record.roomId,
     courseId: record.courseId,
+    customerId: linkedCustomerId(record),
     customerMemo: record.customerMemo,
     status: record.status,
     discountTypeCode: record.discountTypeCode,
@@ -976,8 +1006,55 @@ function hasSensitiveRowChange(before: ServiceCallRecord, after: ServiceCallReco
     before.confirmationCode !== after.confirmationCode ||
     assignmentEmployeeId(before, "THERAPIST_1") !== assignmentEmployeeId(after, "THERAPIST_1") ||
     assignmentEmployeeId(before, "THERAPIST_2") !== assignmentEmployeeId(after, "THERAPIST_2") ||
-    assignmentEmployeeId(before, "EARCARE") !== assignmentEmployeeId(after, "EARCARE")
+    assignmentEmployeeId(before, "EARCARE") !== assignmentEmployeeId(after, "EARCARE") ||
+    linkedCustomerId(before) !== linkedCustomerId(after)
   );
+}
+
+function linkedCustomerId(record: { customerId?: string | null }) {
+  return record.customerId ?? null;
+}
+
+function toCustomerDto(record: CustomerRecord): CustomerDto {
+  return {
+    id: record.id,
+    name: record.name,
+    phone: record.phone,
+    memo: record.memo
+  };
+}
+
+function toCustomerAuditSnapshot(record: CustomerRecord): AuditJsonSnapshot {
+  return {
+    id: record.id,
+    name: record.name,
+    phone: record.phone,
+    memo: record.memo
+  };
+}
+
+async function requireCustomer(tx: ServiceCallPrismaClient, customerId: string) {
+  const customer = await tx.customer.findUnique({ where: { id: customerId } });
+  if (!customer) {
+    throw new ServiceCallDomainError("고객을 찾을 수 없습니다.", "CUSTOMER_NOT_FOUND");
+  }
+  return customer;
+}
+
+// A phone number never selects a customer. Only an id the caller chose is stored.
+async function resolveLinkedCustomerId(
+  tx: ServiceCallPrismaClient,
+  requested: string | null | undefined,
+  existing: string | null | undefined
+) {
+  if (requested === undefined) {
+    return existing ?? null;
+  }
+  if (!requested) {
+    return null;
+  }
+  const customer = await requireCustomer(tx, requested);
+  return customer.id;
 }
 
 export async function listServiceCallsForDate(input: {
@@ -1071,7 +1148,7 @@ export async function listServiceCallsForOperatingMonth(input: {
   );
 }
 
-export async function saveBasicServiceCallRow(input: ServiceCallInput & { prismaClient?: ServiceCallPrismaClient }) {
+export async function saveBasicServiceCallRow(input: ServiceCallInput & { actorId?: string; prismaClient?: ServiceCallPrismaClient }) {
   const parsed = serviceCallInputSchema.safeParse(input);
   if (!parsed.success) {
     throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "콜 원장 입력값이 올바르지 않습니다.", "INVALID_SERVICE_CALL_INPUT");
@@ -1100,12 +1177,18 @@ export async function saveBasicServiceCallRow(input: ServiceCallInput & { prisma
     ]);
     assertSecondTherapistRequirement({ policy: coursePolicy, therapist2Id: parsed.data.therapist2Id });
 
+    const beforeRecord = parsed.data.serviceCallId
+      ? await tx.serviceCall.findUnique({ where: { id: parsed.data.serviceCallId } })
+      : null;
+    const beforeLinked = beforeRecord ? await findServiceCallWithRelations(tx, beforeRecord.id) : null;
+    const customerId = await resolveLinkedCustomerId(tx, parsed.data.customerId, beforeLinked?.customerId);
     const data = {
       operatingMonthId: parsed.data.operatingMonthId,
       serviceDate,
       startTime: parsed.data.startTime,
       roomId: parsed.data.roomId ?? null,
       courseId: parsed.data.courseId,
+      customerId,
       customerMemo: parsed.data.customerMemo ?? null,
       status: parsed.data.status,
       discountTypeCode: parsed.data.discountTypeCode ?? null,
@@ -1146,7 +1229,23 @@ export async function saveBasicServiceCallRow(input: ServiceCallInput & { prisma
       })
     ]);
 
-    return toRowDto(tx, await findServiceCallWithRelations(tx, serviceCall.id));
+    const after = await findServiceCallWithRelations(tx, serviceCall.id);
+    const actorId = input.actorId?.trim();
+    if (actorId && linkedCustomerId(beforeLinked ?? {}) !== customerId) {
+      await recordAuditEvent(
+        {
+          actorId,
+          action: "service_call.row_changed",
+          targetType: "service_call",
+          targetId: after.id,
+          beforeValue: beforeLinked ? toAuditSnapshot(beforeLinked) : null,
+          afterValue: toAuditSnapshot(after)
+        },
+        { prismaClient: tx as any }
+      );
+    }
+
+    return toRowDto(tx, after);
   });
 }
 
@@ -1187,12 +1286,14 @@ export async function autosaveServiceCallRow(
     assertSecondTherapistRequirement({ policy: coursePolicy, therapist2Id: parsed.data.therapist2Id });
 
     const before = await findServiceCallWithRelations(tx, parsed.data.serviceCallId);
+    const customerId = await resolveLinkedCustomerId(tx, parsed.data.customerId, before.customerId);
     const data = {
       operatingMonthId: parsed.data.operatingMonthId,
       serviceDate,
       startTime: parsed.data.startTime,
       roomId: parsed.data.roomId ?? null,
       courseId: parsed.data.courseId,
+      customerId,
       customerMemo: parsed.data.customerMemo ?? null,
       status: parsed.data.status,
       discountTypeCode: parsed.data.discountTypeCode ?? null,
@@ -1296,6 +1397,83 @@ function requireActor(actorId: string | null | undefined) {
     throw new ServiceCallDomainError("저장 행위자를 확인할 수 없습니다.", "ACTOR_REQUIRED");
   }
   return id;
+}
+
+export async function createCustomer(input: CustomerInput & { actorId: string; prismaClient?: ServiceCallPrismaClient }) {
+  const parsed = customerInputSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "고객 입력값이 올바르지 않습니다.", "INVALID_CUSTOMER_INPUT");
+  }
+
+  const actorId = requireActor(input.actorId);
+  const client = getClient(input.prismaClient);
+
+  return runInTransaction(client, async (tx) => {
+    const record = await tx.customer.create({
+      data: {
+        name: parsed.data.name,
+        phone: parsed.data.phone ?? null,
+        memo: parsed.data.memo ?? null
+      }
+    });
+    await recordAuditEvent(
+      {
+        actorId,
+        action: "customer.created",
+        targetType: "customer",
+        targetId: record.id,
+        beforeValue: null,
+        afterValue: toCustomerAuditSnapshot(record)
+      },
+      { prismaClient: tx as any }
+    );
+    return toCustomerDto(record);
+  });
+}
+
+export async function updateCustomer(input: CustomerUpdateInput & { actorId: string; prismaClient?: ServiceCallPrismaClient }) {
+  const parsed = customerUpdateSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "고객 입력값이 올바르지 않습니다.", "INVALID_CUSTOMER_INPUT");
+  }
+
+  const actorId = requireActor(input.actorId);
+  const client = getClient(input.prismaClient);
+
+  return runInTransaction(client, async (tx) => {
+    const before = await requireCustomer(tx, parsed.data.customerId);
+    const data = {
+      name: parsed.data.name,
+      phone: parsed.data.phone ?? null,
+      memo: parsed.data.memo ?? null
+    };
+    const updated = await tx.customer.updateMany({ where: { id: before.id }, data });
+    if (updated.count !== 1) {
+      throw new ServiceCallDomainError("고객을 찾을 수 없습니다.", "CUSTOMER_NOT_FOUND");
+    }
+    const after = await requireCustomer(tx, before.id);
+    await recordAuditEvent(
+      {
+        actorId,
+        action: "customer.changed",
+        targetType: "customer",
+        targetId: after.id,
+        beforeValue: toCustomerAuditSnapshot(before),
+        afterValue: toCustomerAuditSnapshot(after)
+      },
+      { prismaClient: tx as any }
+    );
+    return toCustomerDto(after);
+  });
+}
+
+export async function listCustomers(input: { prismaClient?: ServiceCallPrismaClient } = {}) {
+  const client = getClient(input.prismaClient);
+  const records = await client.customer.findMany();
+  return records
+    .slice()
+    .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id))
+    .map(toCustomerDto);
 }
 
 export async function createDailyExpense(input: DailyExpenseInput & { actorId: string; prismaClient?: ServiceCallPrismaClient }) {

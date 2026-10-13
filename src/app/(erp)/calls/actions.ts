@@ -10,16 +10,21 @@ import { getLocale } from "@/lib/i18n/server";
 import { resolveDomainErrorMessage, resolveKoreanMessage } from "@/lib/i18n/errors";
 import {
   autosaveServiceCallRow,
+  createCustomer,
   createDailyExpense,
   deactivateDailyExpense,
+  updateCustomer,
   updateDailyExpense,
   redactServiceCallSettlementAmounts,
   saveBasicServiceCallRow,
   ServiceCallDomainError,
+  type CustomerDto,
   type DailyExpenseDto,
   type ServiceCallRowDto
 } from "@/modules/calls/service-call-service";
 import {
+  customerInputSchema,
+  customerUpdateSchema,
   dailyExpenseDeactivateSchema,
   dailyExpenseInputSchema,
   dailyExpenseUpdateSchema,
@@ -30,6 +35,7 @@ import {
 
 export type ServiceCallActionState = ActionResult<ServiceCallRowDto> | null;
 export type DailyExpenseActionState = ActionResult<DailyExpenseDto> | null;
+export type CustomerActionState = ActionResult<CustomerDto> | null;
 
 function toFieldErrors(fieldErrors: Partial<Record<string, string[]>>, locale: Locale) {
   return Object.fromEntries(
@@ -145,6 +151,7 @@ export async function saveBasicServiceCallRowAction(
     roomId: formValue(formData, "roomId"),
     courseId: formValue(formData, "courseId"),
     customerMemo: formValue(formData, "customerMemo"),
+    customerId: formData.has("customerId") ? formValue(formData, "customerId") : undefined,
     therapist1Id: formValue(formData, "therapist1Id"),
     therapist2Id: formValue(formData, "therapist2Id"),
     earcareEmployeeId: formValue(formData, "earcareEmployeeId"),
@@ -165,7 +172,7 @@ export async function saveBasicServiceCallRowAction(
 
   try {
     const account = await requirePermission("call:write");
-    const data = await saveBasicServiceCallRow(parsed.data);
+    const data = await saveBasicServiceCallRow({ ...parsed.data, actorId: account.id });
     revalidatePath("/calls");
     return { ok: true, data: visibleServiceCallRowForRole(data, account.role) };
   } catch (error) {
@@ -287,5 +294,64 @@ export async function deactivateDailyExpenseAction(
     return { ok: true, data };
   } catch (error) {
     return mapActionError<DailyExpenseDto>(error, locale, { dateField: "expenseDate", handlerField: "handledByEmployeeId" });
+  }
+}
+
+export async function createCustomerAction(
+  _previousState: CustomerActionState,
+  formData: FormData
+): Promise<CustomerActionState> {
+  const locale = await getLocale();
+  const parsed = customerInputSchema.safeParse({
+    name: formValue(formData, "name"),
+    phone: formValue(formData, "phone"),
+    memo: formValue(formData, "memo")
+  });
+
+  if (!parsed.success) {
+    return {
+      ok: false,
+      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors, locale),
+      formError: t(locale, "action.error.invalidInput")
+    };
+  }
+
+  try {
+    const account = await requirePermission("call:write");
+    const data = await createCustomer({ ...parsed.data, actorId: account.id });
+    revalidatePath("/calls");
+    return { ok: true, data };
+  } catch (error) {
+    return mapActionError<CustomerDto>(error, locale);
+  }
+}
+
+export async function updateCustomerAction(
+  _previousState: CustomerActionState,
+  formData: FormData
+): Promise<CustomerActionState> {
+  const locale = await getLocale();
+  const parsed = customerUpdateSchema.safeParse({
+    customerId: formValue(formData, "customerId"),
+    name: formValue(formData, "name"),
+    phone: formValue(formData, "phone"),
+    memo: formValue(formData, "memo")
+  });
+
+  if (!parsed.success) {
+    return {
+      ok: false,
+      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors, locale),
+      formError: t(locale, "action.error.invalidInput")
+    };
+  }
+
+  try {
+    const account = await requirePermission("call:write");
+    const data = await updateCustomer({ ...parsed.data, actorId: account.id });
+    revalidatePath("/calls");
+    return { ok: true, data };
+  } catch (error) {
+    return mapActionError<CustomerDto>(error, locale);
   }
 }

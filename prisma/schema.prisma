@@ -216,6 +216,18 @@ model Course {
   @@map("courses")
 }
 
+model Customer {
+  id           String        @id @default(cuid())
+  name         String
+  phone        String?
+  memo         String?
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  serviceCalls ServiceCall[]
+
+  @@map("customers")
+}
+
 model ServiceCall {
   id                String                     @id @default(cuid())
   operatingMonthId  String                     @map("operating_month_id")
@@ -226,6 +238,8 @@ model ServiceCall {
   room              Room?                      @relation(fields: [roomId], references: [id])
   courseId          String                     @map("course_id")
   course            Course                     @relation(fields: [courseId], references: [id])
+  customerId        String?                    @map("customer_id")
+  customer          Customer?                  @relation(fields: [customerId], references: [id])
   customerMemo      String?                    @map("customer_memo")
   status            String
   discountTypeCode  String?                    @map("discount_type_code")
@@ -240,6 +254,7 @@ model ServiceCall {
   @@index([operatingMonthId, serviceDate], map: "idx_service_calls_month_date")
   @@index([roomId, serviceDate], map: "idx_service_calls_room_date")
   @@index([status, serviceDate], map: "idx_service_calls_status_date")
+  @@index([customerId], map: "idx_service_calls_customer_id")
   @@map("service_calls")
 }
 
