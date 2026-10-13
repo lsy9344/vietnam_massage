@@ -18,6 +18,9 @@ function cell(rowIndex: number, columnId: string): CellCoordinate {
 
 test("Tab and Shift+Tab move across editable cells and wrap between rows", () => {
   assert.deepEqual(moveTabCell(cell(0, "startTime"), rows.length, false), cell(0, "roomId"));
+  assert.deepEqual(moveTabCell(cell(0, "customerMemo"), rows.length, false), cell(0, "customerId"));
+  assert.deepEqual(moveTabCell(cell(0, "customerId"), rows.length, false), cell(0, "therapist1Id"));
+  assert.deepEqual(moveTabCell(cell(0, "therapist1Id"), rows.length, true), cell(0, "customerId"));
   assert.deepEqual(moveTabCell(cell(0, "confirmationCode"), rows.length, false), cell(1, "startTime"));
   assert.deepEqual(moveTabCell(cell(1, "startTime"), rows.length, true), cell(0, "confirmationCode"));
   assert.deepEqual(moveTabCell(cell(0, "startTime"), rows.length, true), cell(0, "startTime"));
@@ -30,6 +33,8 @@ test("Enter commits current editable cell and moves to the same field on the nex
 
 test("Arrow movement is bounded and can land on readonly computed cells without opening edit mode", () => {
   assert.deepEqual(moveAdjacentCell(cell(0, "courseId"), rows.length, "ArrowRight"), cell(0, "customerMemo"));
+  assert.deepEqual(moveAdjacentCell(cell(0, "customerMemo"), rows.length, "ArrowRight"), cell(0, "customerId"));
+  assert.deepEqual(moveAdjacentCell(cell(0, "customerId"), rows.length, "ArrowRight"), cell(0, "therapist1Id"));
   assert.deepEqual(moveAdjacentCell(cell(0, "paymentAmount"), rows.length, "ArrowRight"), cell(0, "discountAmount"));
   assert.deepEqual(moveAdjacentCell(cell(0, "startTime"), rows.length, "ArrowLeft"), cell(0, "startTime"));
   assert.deepEqual(moveAdjacentCell(cell(2, "status"), rows.length, "ArrowDown"), cell(2, "status"));
@@ -53,6 +58,7 @@ test("Esc cancel restores the last server draft without changing object identity
     roomId: "room-1",
     courseId: "course-a",
     customerMemo: null,
+    customerId: null,
     therapist1Id: "employee-0",
     therapist2Id: null,
     earcareEmployeeId: null,

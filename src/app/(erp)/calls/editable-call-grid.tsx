@@ -501,16 +501,22 @@ function customerChoiceLabel(customer: CustomerDto) {
 }
 
 function CustomerLinkSelect({
+  columnId,
   customers,
   disabled,
   name,
   onChange,
+  onKeyDown,
+  rowIndex,
   value
 }: {
+  columnId: EditableCallField;
   customers: CustomerDto[];
   disabled: boolean;
   name?: string;
   onChange?: (value: string) => void;
+  onKeyDown?: (event: KeyboardEvent<HTMLSelectElement>) => void;
+  rowIndex: number;
   value?: string;
 }) {
   const t = useT();
@@ -527,7 +533,16 @@ function CustomerLinkSelect({
   const className = "h-8 w-full border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly";
   if (value === undefined) {
     return (
-      <select aria-label={t("calls.column.customer")} className={className} defaultValue="" disabled={disabled} name={name}>
+      <select
+        aria-label={t("calls.column.customer")}
+        className={className}
+        data-call-cell-column={columnId}
+        data-call-cell-row={rowIndex}
+        defaultValue=""
+        disabled={disabled}
+        name={name}
+        onKeyDown={onKeyDown}
+      >
         {options}
       </select>
     );
@@ -536,9 +551,12 @@ function CustomerLinkSelect({
     <select
       aria-label={t("calls.column.customer")}
       className={className}
+      data-call-cell-column={columnId}
+      data-call-cell-row={rowIndex}
       disabled={disabled}
       name={name}
       onChange={onChange ? (event) => onChange(event.target.value) : undefined}
+      onKeyDown={onKeyDown}
       value={value}
     >
       {options}
@@ -569,7 +587,7 @@ function AddRowForm({
   const rowIndex = existingRowCount;
   const rowCount = existingRowCount + 1;
 
-  function handleAddRowKeyDown(columnId: EditableCallField, event: KeyboardEvent<HTMLInputElement>) {
+  function handleAddRowKeyDown(columnId: EditableCallField, event: KeyboardEvent<HTMLElement>) {
     if (disabled) {
       return;
     }
@@ -652,7 +670,14 @@ function AddRowForm({
                 />
               </td>
               <td className="border-b border-border px-2 py-2">
-                <CustomerLinkSelect customers={customers} disabled={disabled} name="customerId" />
+                <CustomerLinkSelect
+                  columnId="customerId"
+                  customers={customers}
+                  disabled={disabled}
+                  name="customerId"
+                  onKeyDown={(event) => handleAddRowKeyDown("customerId", event)}
+                  rowIndex={rowIndex}
+                />
               </td>
               <td className="border-b border-border px-2 py-2">
                 <SelectCell
@@ -981,7 +1006,7 @@ function EditableCallRow({
     });
   }
 
-  function handleGridKeyDown(columnId: EditableCallField, event: KeyboardEvent<HTMLInputElement>) {
+  function handleGridKeyDown(columnId: EditableCallField, event: KeyboardEvent<HTMLElement>) {
     if (isLocked || saveStatus === "saving") {
       return;
     }
@@ -1098,9 +1123,12 @@ function EditableCallRow({
       </td>
       <td className="border-b border-border px-2 py-2">
         <CustomerLinkSelect
+          columnId="customerId"
           customers={customers}
           disabled={isLocked || saveStatus === "saving"}
           onChange={(value) => updateDraftAndCommit("customerId", nullableValue(value))}
+          onKeyDown={(event) => handleGridKeyDown("customerId", event)}
+          rowIndex={rowIndex}
           value={draft.customerId ?? ""}
         />
       </td>

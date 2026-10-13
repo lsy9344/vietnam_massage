@@ -2216,4 +2216,72 @@ describe("service call service", () => {
     assert.equal(prismaClient.auditEvents[1].afterValue.customerId, created.id);
     assert.equal(prismaClient.auditEvents[1].afterValue.customerMemo, "원장 표기");
   });
+
+  it("rejects a customer link on saveBasic when no actor is present and does not store it", async () => {
+    const prismaClient = createMemoryPrisma();
+    const created = await createCustomer({
+      name: "민아",
+      phone: "090111",
+      memo: "단골",
+      actorId: "counter-account",
+      prismaClient
+    });
+    const saved = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      customerMemo: "원장 표기",
+      status: "예약",
+      prismaClient
+    });
+
+    await assert.rejects(
+      () =>
+        saveBasicServiceCallRow({
+          serviceCallId: saved.id,
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-06-10",
+          startTime: "11:00",
+          roomId: "room-101",
+          courseId: "course-a",
+          customerMemo: "원장 표기",
+          customerId: created.id,
+          status: "예약",
+          actorId: " ",
+          prismaClient
+        }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "ACTOR_REQUIRED"
+    );
+    await assert.rejects(
+      () =>
+        saveBasicServiceCallRow({
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-06-10",
+          startTime: "01:00",
+          roomId: "room-101",
+          courseId: "course-a",
+          customerMemo: "새 행",
+          customerId: created.id,
+          status: "예약",
+          prismaClient
+        }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "ACTOR_REQUIRED"
+    );
+
+    const rows = await listServiceCallsForDate({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient
+    });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].id, saved.id);
+    assert.equal(rows[0].customerId, null);
+    assert.equal(rows[0].customerMemo, "원장 표기");
+    assert.deepEqual(
+      prismaClient.auditEvents.map((event: { action: string }) => event.action),
+      ["customer.created"]
+    );
+  });
 });

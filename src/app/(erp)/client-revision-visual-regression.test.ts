@@ -120,6 +120,7 @@ describe("client revision visual regression guards", () => {
     assert.match(html, /class="font-bold text-foreground">1,400,000<\/span>/);
     assert.match(html, /고객\/메모/);
     assert.match(html, /연결 안 함/);
+    assert.match(html, /data-call-cell-column="customerId"/);
   });
 
   it("renders the customer record form in Korean and Vietnamese", () => {

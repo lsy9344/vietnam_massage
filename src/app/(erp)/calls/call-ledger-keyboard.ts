@@ -3,6 +3,7 @@ export const EDITABLE_CALL_FIELDS = [
   "roomId",
   "courseId",
   "customerMemo",
+  "customerId",
   "therapist1Id",
   "therapist2Id",
   "earcareEmployeeId",

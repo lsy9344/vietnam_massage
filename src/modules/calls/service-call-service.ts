@@ -1182,6 +1182,9 @@ export async function saveBasicServiceCallRow(input: ServiceCallInput & { actorI
       : null;
     const beforeLinked = beforeRecord ? await findServiceCallWithRelations(tx, beforeRecord.id) : null;
     const customerId = await resolveLinkedCustomerId(tx, parsed.data.customerId, beforeLinked?.customerId);
+    const linkChanged = linkedCustomerId(beforeLinked ?? {}) !== customerId;
+    // A link change is a sensitive call edit. Reject it before the write when no actor can be audited.
+    const actorId = linkChanged ? requireActor(input.actorId) : input.actorId?.trim() || "";
     const data = {
       operatingMonthId: parsed.data.operatingMonthId,
       serviceDate,
@@ -1230,8 +1233,7 @@ export async function saveBasicServiceCallRow(input: ServiceCallInput & { actorI
     ]);
 
     const after = await findServiceCallWithRelations(tx, serviceCall.id);
-    const actorId = input.actorId?.trim();
-    if (actorId && linkedCustomerId(beforeLinked ?? {}) !== customerId) {
+    if (linkChanged) {
       await recordAuditEvent(
         {
           actorId,
