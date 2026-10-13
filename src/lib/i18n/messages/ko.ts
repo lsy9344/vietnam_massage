@@ -167,6 +167,7 @@ export const ko = {
   // 콜 그리드 컬럼 헤더
   "calls.column.date": "날짜",
   "calls.column.time": "시간",
+  "calls.column.actualEntry": "실제입장",
   "calls.column.room": "객실",
   "calls.column.course": "코스",
   "calls.column.customerMemo": "고객/메모",
@@ -189,6 +190,9 @@ export const ko = {
   "calls.column.saveStatus": "저장상태",
 
   // 콜 그리드 placeholder/empty 라벨
+  "calls.actualEntry.helper": "예약시각은 그대로입니다.",
+  "calls.actualEntry.displayEnd": "표시 종료 {time}",
+  "calls.actualEntry.warning": "{time} 예약이 있습니다",
   "calls.placeholder.roomUnassigned": "미배정",
   "calls.placeholder.searchEmpty": "검색 결과 없음",
   "calls.addRow.submit": "새 콜 행 추가",

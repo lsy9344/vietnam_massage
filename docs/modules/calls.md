@@ -128,7 +128,7 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 ## Story 2.6 Keyboard and Type-Ahead Contract
 
 - The call ledger uses `@tanstack/react-table` `8.21.3` as the headless table model through `useReactTable` and `getCoreRowModel`; it does not replace the semantic table with a div grid.
-- Editable field order is fixed: `startTime`, `roomId`, `courseId`, `customerMemo`, `customerId`, `therapist1Id`, `therapist2Id`, `earcareEmployeeId`, `status`, `discountTypeCode`, `paymentMethodCode`, `note`, and `confirmationCode`.
+- Editable field order is fixed: `startTime`, `actualEntryTime`, `roomId`, `courseId`, `customerMemo`, `customerId`, `therapist1Id`, `therapist2Id`, `earcareEmployeeId`, `status`, `discountTypeCode`, `paymentMethodCode`, `note`, and `confirmationCode`.
 - `Tab` and `Shift+Tab` move through editable cells and wrap between rows. Computed readonly cells are skipped in tab order.
 - `Enter` commits the current row draft through the existing autosave action and moves to the same field on the next row.
 - Arrow keys move to adjacent ledger cells. Readonly computed cells can be focus targets for navigation semantics, but they do not open edit mode.

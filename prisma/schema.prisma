@@ -234,6 +234,7 @@ model ServiceCall {
   operatingMonth    OperatingMonth             @relation(fields: [operatingMonthId], references: [id])
   serviceDate       DateTime                   @map("service_date") @db.Date
   startTime         String                     @map("start_time")
+  actualEntryTime   String?                    @map("actual_entry_time")
   roomId            String?                    @map("room_id")
   room              Room?                      @relation(fields: [roomId], references: [id])
   courseId          String                     @map("course_id")

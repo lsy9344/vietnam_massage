@@ -147,6 +147,7 @@ type ServiceCallRecord = {
   operatingMonth?: OperatingMonthRecord;
   serviceDate: Date;
   startTime: string;
+  actualEntryTime?: string | null;
   roomId: string | null;
   room?: RoomRecord | null;
   courseId: string;
@@ -263,6 +264,9 @@ export type ServiceCallRowDto = {
   operatingMonthId: string;
   serviceDate: string;
   startTime: string;
+  actualEntryTime: string | null;
+  displayEnd: string;
+  warningTime: string | null;
   roomId: string | null;
   roomLabel: string;
   courseId: string;
@@ -742,7 +746,8 @@ function assignmentByRole(record: ServiceCallRecord, role: ServiceCallAssignment
 async function toRowDto(
   tx: ServiceCallPrismaClient,
   record: ServiceCallRecord,
-  sources?: ServiceCallCalculationSources
+  sources?: ServiceCallCalculationSources,
+  displayContext?: DisplayEndContext
 ): Promise<ServiceCallRowDto> {
   const operatingMonth = record.operatingMonth;
   const course = record.course;
@@ -751,12 +756,16 @@ async function toRowDto(
   const therapist2 = assignmentByRole(record, "THERAPIST_2")?.employee ?? null;
   const earcare = assignmentByRole(record, "EARCARE")?.employee ?? null;
   const calculation = await calculateServiceCallCompletion(tx, record, sources);
+  const display = deriveDisplayEnd(record, displayContext ?? (await displayEndContextFor(tx, record)));
 
   return {
     id: record.id,
     operatingMonthId: record.operatingMonthId,
     serviceDate: toIsoDateOnly(record.serviceDate),
     startTime: record.startTime,
+    actualEntryTime: display.actualEntryTime,
+    displayEnd: display.displayEnd,
+    warningTime: display.warningTime,
     roomId: record.roomId,
     roomLabel: record.room?.displayName ?? "미배정",
     courseId: record.courseId,
@@ -973,6 +982,7 @@ function toAuditSnapshot(record: ServiceCallRecord): AuditJsonSnapshot {
     operatingMonthId: record.operatingMonthId,
     serviceDate: toIsoDateOnly(record.serviceDate),
     startTime: record.startTime,
+    actualEntryTime: storedActualEntryTime(record),
     roomId: record.roomId,
     courseId: record.courseId,
     customerId: linkedCustomerId(record),
@@ -1037,7 +1047,8 @@ function hasSensitiveRowChange(before: ServiceCallRecord, after: ServiceCallReco
     assignmentEmployeeId(before, "THERAPIST_1") !== assignmentEmployeeId(after, "THERAPIST_1") ||
     assignmentEmployeeId(before, "THERAPIST_2") !== assignmentEmployeeId(after, "THERAPIST_2") ||
     assignmentEmployeeId(before, "EARCARE") !== assignmentEmployeeId(after, "EARCARE") ||
-    linkedCustomerId(before) !== linkedCustomerId(after)
+    linkedCustomerId(before) !== linkedCustomerId(after) ||
+    storedActualEntryTime(before) !== storedActualEntryTime(after)
   );
 }
 
@@ -1116,6 +1127,7 @@ export async function listServiceCallsForDate(input: {
   ]);
   const sortOrderByTime = new Map(timeSlots.map((slot) => [slot.value, slot.sortOrder]));
   const sources = await prefetchCalculationSources(client, records);
+  const displayContext = { dayCalls: records, dayStart: dayStartFromSlots(timeSlots) };
 
   return Promise.all(
     records
@@ -1124,7 +1136,7 @@ export async function listServiceCallsForDate(input: {
         const rightOrder = sortOrderByTime.get(b.startTime) ?? 9999;
         return leftOrder - rightOrder || a.createdAt.getTime() - b.createdAt.getTime();
       })
-      .map((record) => toRowDto(client, record, sources))
+      .map((record) => toRowDto(client, record, sources, displayContext))
   );
 }
 
@@ -1151,6 +1163,92 @@ function formatBusinessMinute(value: number) {
   const hour = Math.floor(minutes / 60);
   const minute = minutes % 60;
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+const TEN_MINUTE_TIME = /^([01]\d|2[0-3]):(00|10|20|30|40|50)$/;
+
+type DisplayEndContext = {
+  dayCalls: ServiceCallRecord[];
+  dayStart: number;
+};
+
+function dayStartFromSlots(slots: TimeSlotRecord[]) {
+  const first = [...slots].filter((slot) => slot.isActive).sort((left, right) => left.sortOrder - right.sortOrder)[0];
+  return first ? clockMinutes(first.value) : AVAILABILITY_DEFAULT_DAY_START;
+}
+
+function storedActualEntryTime(record: { actualEntryTime?: string | null }) {
+  const value = record.actualEntryTime?.trim() ?? "";
+  return TEN_MINUTE_TIME.test(value) ? value : null;
+}
+
+function actualEntryForWrite(requested: string | null | undefined, existing: string | null | undefined) {
+  if (requested === undefined) return storedActualEntryTime({ actualEntryTime: existing });
+  return requested;
+}
+
+function assignedTherapistIds(record: ServiceCallRecord) {
+  const ids: string[] = [];
+  for (const assignment of record.assignments ?? []) {
+    if (assignment.isActive === false) continue;
+    if (assignment.assignmentRole !== "THERAPIST_1" && assignment.assignmentRole !== "THERAPIST_2") continue;
+    ids.push(assignment.employeeId);
+  }
+  return ids;
+}
+
+function courseDurationMinutes(record: ServiceCallRecord) {
+  const monthKey = record.operatingMonth?.monthKey;
+  if (!monthKey || !record.course) return 0;
+  return firstCurrentPolicy(record.course, monthKey)?.durationMinutes ?? 0;
+}
+
+// 기준 시각은 실제입장이 있으면 그 시각이고, 없으면 예약시각이다.
+// 다음 예약은 이 콜의 예약시각보다 늦은, 같은 Therapist의 콜이다. 노쇼와 취소는 빠진다.
+// 그 예약시각이 제안 종료보다 먼저일 때만 양보하고, 맞닿으면 경고가 없다.
+function deriveDisplayEnd(record: ServiceCallRecord, context: DisplayEndContext) {
+  const actualEntryTime = storedActualEntryTime(record);
+  const reference = actualEntryTime ?? record.startTime;
+  const proposed = businessMinute(reference, context.dayStart) + courseDurationMinutes(record);
+  const therapists = new Set(assignedTherapistIds(record));
+  const reservationStart = /^([01]\d|2[0-3]):[0-5]\d$/.test(record.startTime)
+    ? businessMinute(record.startTime, context.dayStart)
+    : null;
+  let next: number | null = null;
+  if (reservationStart !== null && therapists.size > 0) {
+    for (const other of context.dayCalls) {
+      if (other.id === record.id) continue;
+      if (isNoShowStatus(other.status) || isCanceledStatus(other.status)) continue;
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(other.startTime)) continue;
+      if (!assignedTherapistIds(other).some((id) => therapists.has(id))) continue;
+      const start = businessMinute(other.startTime, context.dayStart);
+      if (start <= reservationStart) continue;
+      if (next === null || start < next) next = start;
+    }
+  }
+  if (next !== null && next < proposed) {
+    const time = formatBusinessMinute(next);
+    return { actualEntryTime, displayEnd: time, warningTime: time };
+  }
+  return { actualEntryTime, displayEnd: formatBusinessMinute(proposed), warningTime: null };
+}
+
+async function displayEndContextFor(tx: ServiceCallPrismaClient, record: ServiceCallRecord): Promise<DisplayEndContext> {
+  const [dayCalls, slots] = await Promise.all([
+    tx.serviceCall.findMany({
+      where: {
+        operatingMonthId: record.operatingMonthId,
+        serviceDate: record.serviceDate
+      },
+      include: {
+        operatingMonth: true,
+        course: { include: { policies: true } },
+        assignments: true
+      }
+    }),
+    tx.timeSlot.findMany({})
+  ]);
+  return { dayCalls, dayStart: dayStartFromSlots(slots) };
 }
 
 function currentPolicyForCourse(policies: CoursePolicyRecord[], courseId: string, monthKey: string) {
@@ -1337,6 +1435,14 @@ export async function listServiceCallsForOperatingMonth(input: {
   ]);
   const sortOrderByTime = new Map(timeSlots.map((slot) => [slot.value, slot.sortOrder]));
   const sources = await prefetchCalculationSources(client, records);
+  const dayStart = dayStartFromSlots(timeSlots);
+  const callsByDate = new Map<string, ServiceCallRecord[]>();
+  for (const record of records) {
+    const key = toIsoDateOnly(record.serviceDate);
+    const current = callsByDate.get(key) ?? [];
+    current.push(record);
+    callsByDate.set(key, current);
+  }
 
   return Promise.all(
     records
@@ -1347,7 +1453,12 @@ export async function listServiceCallsForOperatingMonth(input: {
         const rightOrder = sortOrderByTime.get(b.startTime) ?? 9999;
         return leftOrder - rightOrder || a.createdAt.getTime() - b.createdAt.getTime();
       })
-      .map((record) => toRowDto(client, record, sources))
+      .map((record) =>
+        toRowDto(client, record, sources, {
+          dayCalls: callsByDate.get(toIsoDateOnly(record.serviceDate)) ?? [record],
+          dayStart
+        })
+      )
   );
 }
 
@@ -1392,6 +1503,7 @@ export async function saveBasicServiceCallRow(input: ServiceCallInput & { actorI
       operatingMonthId: parsed.data.operatingMonthId,
       serviceDate,
       startTime: parsed.data.startTime,
+      actualEntryTime: actualEntryForWrite(parsed.data.actualEntryTime, beforeLinked?.actualEntryTime),
       roomId: parsed.data.roomId ?? null,
       courseId: parsed.data.courseId,
       customerId,
@@ -1496,6 +1608,7 @@ export async function autosaveServiceCallRow(
       operatingMonthId: parsed.data.operatingMonthId,
       serviceDate,
       startTime: parsed.data.startTime,
+      actualEntryTime: actualEntryForWrite(parsed.data.actualEntryTime, before.actualEntryTime),
       roomId: parsed.data.roomId ?? null,
       courseId: parsed.data.courseId,
       customerId,

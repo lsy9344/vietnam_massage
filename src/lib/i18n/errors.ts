@@ -105,6 +105,7 @@ const KOREAN_MESSAGE_VI: Record<string, string> = {
   // 콜 원장/일별 지출 Zod field-level 메시지 (inline 표시)
   "날짜는 YYYY-MM-DD 형식이어야 합니다.": "Ngày phải theo định dạng YYYY-MM-DD.",
   "시간은 HH:mm 형식이어야 합니다.": "Giờ phải theo định dạng HH:mm.",
+  "실제입장은 10분 단위이거나 비어 있어야 합니다.": "Giờ vào thực tế phải theo bước 10 phút hoặc để trống.",
   "코스를 선택하세요.": "Vui lòng chọn gói dịch vụ.",
   "상태를 선택하세요.": "Vui lòng chọn trạng thái.",
   "담당자를 선택하세요.": "Vui lòng chọn người phụ trách.",

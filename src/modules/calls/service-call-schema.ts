@@ -13,6 +13,15 @@ function emptyToNull(value: unknown) {
 const optionalText = z.preprocess(emptyToNull, z.string().trim().max(500, "500자 이하로 입력하세요.").nullable().optional());
 const optionalId = z.preprocess(emptyToNull, z.string().trim().min(1, "선택값이 올바르지 않습니다.").nullable().optional());
 const optionalCode = z.preprocess(emptyToNull, z.string().trim().max(40, "코드값이 올바르지 않습니다.").nullable().optional());
+const optionalTenMinuteTime = z.preprocess(
+  emptyToNull,
+  z
+    .string()
+    .trim()
+    .regex(/^([01]\d|2[0-3]):(00|10|20|30|40|50)$/, "실제입장은 10분 단위이거나 비어 있어야 합니다.")
+    .nullable()
+    .optional()
+);
 const wholeVndAmount = z.preprocess((value) => {
   if (typeof value === "string" && /^\d+$/.test(value.trim())) {
     return Number(value.trim());
@@ -25,6 +34,7 @@ export const serviceCallInputSchema = z.object({
   operatingMonthId: z.string().trim().min(1, "운영월을 선택하세요."),
   serviceDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, isoDateMessage),
   startTime: z.string().trim().regex(/^\d{2}:\d{2}$/, timeMessage),
+  actualEntryTime: optionalTenMinuteTime,
   roomId: optionalId,
   courseId: z.string().trim().min(1, "코스를 선택하세요."),
   customerMemo: optionalText,

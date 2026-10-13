@@ -17,7 +17,8 @@ function cell(rowIndex: number, columnId: string): CellCoordinate {
 }
 
 test("Tab and Shift+Tab move across editable cells and wrap between rows", () => {
-  assert.deepEqual(moveTabCell(cell(0, "startTime"), rows.length, false), cell(0, "roomId"));
+  assert.deepEqual(moveTabCell(cell(0, "startTime"), rows.length, false), cell(0, "actualEntryTime"));
+  assert.deepEqual(moveTabCell(cell(0, "actualEntryTime"), rows.length, false), cell(0, "roomId"));
   assert.deepEqual(moveTabCell(cell(0, "customerMemo"), rows.length, false), cell(0, "customerId"));
   assert.deepEqual(moveTabCell(cell(0, "customerId"), rows.length, false), cell(0, "therapist1Id"));
   assert.deepEqual(moveTabCell(cell(0, "therapist1Id"), rows.length, true), cell(0, "customerId"));
@@ -36,6 +37,8 @@ test("Arrow movement is bounded and can land on readonly computed cells without 
   assert.deepEqual(moveAdjacentCell(cell(0, "customerMemo"), rows.length, "ArrowRight"), cell(0, "customerId"));
   assert.deepEqual(moveAdjacentCell(cell(0, "customerId"), rows.length, "ArrowRight"), cell(0, "therapist1Id"));
   assert.deepEqual(moveAdjacentCell(cell(0, "paymentAmount"), rows.length, "ArrowRight"), cell(0, "discountAmount"));
+  assert.deepEqual(moveAdjacentCell(cell(0, "startTime"), rows.length, "ArrowRight"), cell(0, "actualEntryTime"));
+  assert.deepEqual(moveAdjacentCell(cell(0, "actualEntryTime"), rows.length, "ArrowRight"), cell(0, "roomId"));
   assert.deepEqual(moveAdjacentCell(cell(0, "startTime"), rows.length, "ArrowLeft"), cell(0, "startTime"));
   assert.deepEqual(moveAdjacentCell(cell(2, "status"), rows.length, "ArrowDown"), cell(2, "status"));
 });
@@ -55,6 +58,7 @@ test("computed cells are excluded from the explicit editable field sequence", ()
 test("Esc cancel restores the last server draft without changing object identity of the baseline", () => {
   const serverDraft: Record<EditableCallField, string | null> = {
     startTime: "11:00",
+    actualEntryTime: null,
     roomId: "room-1",
     courseId: "course-a",
     customerMemo: null,

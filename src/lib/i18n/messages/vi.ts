@@ -167,6 +167,7 @@ export const vi: Messages = {
   // 콜 그리드 컬럼 헤더
   "calls.column.date": "Ngày",
   "calls.column.time": "Giờ",
+  "calls.column.actualEntry": "Giờ vào thực tế",
   "calls.column.room": "Phòng",
   "calls.column.course": "Gói dịch vụ",
   "calls.column.customerMemo": "Khách/Ghi chú",
@@ -189,6 +190,9 @@ export const vi: Messages = {
   "calls.column.saveStatus": "Trạng thái lưu",
 
   // 콜 그리드 placeholder/empty 라벨
+  "calls.actualEntry.helper": "Giờ đặt giữ nguyên.",
+  "calls.actualEntry.displayEnd": "Giờ kết thúc hiển thị {time}",
+  "calls.actualEntry.warning": "Có lịch lúc {time}.",
   "calls.placeholder.roomUnassigned": "Chưa phân phòng",
   "calls.placeholder.searchEmpty": "Không có kết quả tìm kiếm",
   "calls.addRow.submit": "Thêm dòng cuộc gọi mới",

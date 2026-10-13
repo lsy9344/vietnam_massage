@@ -43,6 +43,7 @@ type FieldErrors = Record<string, string[]>;
 const CALL_GRID_COLUMNS = [
   { id: "date", labelKey: "calls.column.date", width: "5.5rem" },
   { id: "time", labelKey: "calls.column.time", width: "9rem" },
+  { id: "actualEntry", labelKey: "calls.column.actualEntry", width: "12rem" },
   { id: "room", labelKey: "calls.column.room", width: "9rem" },
   { id: "course", labelKey: "calls.column.course", width: "10rem" },
   { id: "customerMemo", labelKey: "calls.column.customerMemo", width: "12rem" },
@@ -69,7 +70,7 @@ function visibleCallGridColumns(showSettlementColumns: boolean) {
 }
 
 function callGridMinWidth(showSettlementColumns: boolean) {
-  return showSettlementColumns ? "183rem" : "156rem";
+  return showSettlementColumns ? "195rem" : "168rem";
 }
 
 function CallGridColgroup({ showSettlementColumns }: { showSettlementColumns: boolean }) {
@@ -216,6 +217,7 @@ function useListboxPosition(anchor: HTMLElement | null, open: boolean) {
 
 function SelectCell({
   columnId,
+  describedBy,
   disabled,
   defaultValue,
   rowIndex,
@@ -228,11 +230,13 @@ function SelectCell({
   onGridKeyDown,
   options,
   required,
+  tall,
   value,
   errorId,
   errorMessage
 }: {
   columnId?: string;
+  describedBy?: string;
   disabled: boolean;
   defaultValue?: string;
   errorId?: string;
@@ -247,10 +251,12 @@ function SelectCell({
   options: ServiceCallOption[];
   required?: boolean;
   rowIndex?: number;
+  tall?: boolean;
   value?: string;
 }) {
   const t = useT();
   const invalid = Boolean(errorMessage);
+  const describedByIds = [describedBy, invalid && errorId ? errorId : null].filter(Boolean).join(" ");
   const reactId = useId();
   const listboxId = `${reactId}-listbox`;
   const isControlled = value !== undefined;
@@ -344,12 +350,12 @@ function SelectCell({
         aria-activedescendant={open && activeOption ? `${reactId}-option-${activeOption.value}` : undefined}
         aria-autocomplete="list"
         aria-controls={listboxId}
-        aria-describedby={invalid && errorId ? errorId : undefined}
+        aria-describedby={describedByIds || undefined}
         aria-expanded={open}
         aria-invalid={invalid ? "true" : undefined}
         aria-label={label}
         autoComplete="off"
-        className={`h-8 w-full border bg-background px-2 text-xs text-foreground outline-none disabled:bg-readonly ${
+        className={`${tall ? "h-11" : "h-8"} w-full border bg-background px-2 text-xs text-foreground outline-none disabled:bg-readonly ${
           invalid ? "border-danger ring-1 ring-danger focus:border-danger" : "border-border focus:border-brand"
         }`}
         data-call-cell-column={columnId}
@@ -565,6 +571,84 @@ function CustomerLinkSelect({
   );
 }
 
+const TEN_MINUTE_ENTRY_OPTIONS: ServiceCallOption[] = Array.from({ length: 24 * 6 }, (_, index) => {
+  const hour = Math.floor(index / 6);
+  const minute = (index % 6) * 10;
+  const value = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  return { value, label: value };
+});
+
+function spokenClock(value: string) {
+  const [hourText, minute] = value.split(":");
+  const hour = Number(hourText);
+  if (!Number.isInteger(hour) || minute === undefined) return value;
+  const spokenHour = hour % 12 === 0 ? 12 : hour % 12;
+  return `${spokenHour}:${minute}`;
+}
+
+function ActualEntryCell({
+  disabled,
+  displayEnd,
+  errorMessage,
+  onBlur,
+  onChange,
+  onCommitValue,
+  onGridKeyDown,
+  rowIndex,
+  value,
+  warningTime
+}: {
+  disabled: boolean;
+  displayEnd?: string | null;
+  errorMessage?: string | null;
+  onBlur?: () => void;
+  onChange?: (value: string) => void;
+  onCommitValue?: (value: string) => void;
+  onGridKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
+  rowIndex: number;
+  value?: string;
+  warningTime?: string | null;
+}) {
+  const t = useT();
+  const reactId = useId();
+  const helpId = `${reactId}-actual-entry-help`;
+  const warningId = `${reactId}-actual-entry-warning`;
+  const warning = warningTime ? t("calls.actualEntry.warning", { time: spokenClock(warningTime) }) : null;
+
+  return (
+    <>
+      <SelectCell
+        columnId="actualEntryTime"
+        describedBy={[helpId, warning ? warningId : null].filter(Boolean).join(" ")}
+        disabled={disabled}
+        errorId={errorMessage ? `${reactId}-actual-entry-error` : undefined}
+        errorMessage={errorMessage}
+        label={t("calls.column.actualEntry")}
+        name="actualEntryTime"
+        onBlur={onBlur}
+        onChange={onChange}
+        onCommitValue={onCommitValue}
+        onGridKeyDown={onGridKeyDown}
+        options={TEN_MINUTE_ENTRY_OPTIONS}
+        rowIndex={rowIndex}
+        tall
+        {...(value === undefined ? {} : { value })}
+      />
+      <p className="text-[11px] text-muted" id={helpId}>
+        {t("calls.actualEntry.helper")}
+      </p>
+      {displayEnd ? (
+        <p className="text-[11px] text-foreground [font-variant-numeric:tabular-nums]">
+          {t("calls.actualEntry.displayEnd", { time: displayEnd })}
+        </p>
+      ) : null}
+      {warning ? (
+        <p className="text-[11px] text-danger [font-variant-numeric:tabular-nums]" id={warningId}>{warning}</p>
+      ) : null}
+    </>
+  );
+}
+
 function AddRowForm({
   courseChoice,
   customers,
@@ -645,6 +729,14 @@ function AddRowForm({
                   rowIndex={rowIndex}
                 />
                 <InlineError field="startTime" state={rowState} />
+              </td>
+              <td className="border-b border-border px-2 py-2">
+                <ActualEntryCell
+                  disabled={disabled}
+                  onGridKeyDown={(event) => handleAddRowKeyDown("actualEntryTime", event)}
+                  rowIndex={rowIndex}
+                />
+                <InlineError field="actualEntryTime" state={rowState} />
               </td>
               <td className="border-b border-border px-2 py-2">
                 <SelectCell
@@ -813,6 +905,7 @@ function draftFromRow(row: ServiceCallRowDto): ServiceCallAutosaveInput {
     operatingMonthId: row.operatingMonthId,
     serviceDate: row.serviceDate,
     startTime: row.startTime,
+    actualEntryTime: row.actualEntryTime,
     roomId: row.roomId,
     courseId: row.courseId,
     customerMemo: row.customerMemo ?? null,
@@ -1090,6 +1183,20 @@ function EditableCallRow({
           required
           rowIndex={rowIndex}
           value={draft.startTime}
+        />
+      </td>
+      <td className="border-b border-border px-2 py-2">
+        <ActualEntryCell
+          disabled={isLocked || saveStatus === "saving"}
+          displayEnd={serverRow.displayEnd}
+          errorMessage={firstFieldError(fieldErrors, "actualEntryTime")}
+          onBlur={() => commit()}
+          onChange={(value) => updateDraft("actualEntryTime", nullableValue(value))}
+          onCommitValue={(value) => updateDraftAndCommit("actualEntryTime", nullableValue(value))}
+          onGridKeyDown={(event) => handleGridKeyDown("actualEntryTime", event)}
+          rowIndex={rowIndex}
+          value={draft.actualEntryTime ?? ""}
+          warningTime={serverRow.warningTime}
         />
       </td>
       <td className="border-b border-border px-2 py-2">

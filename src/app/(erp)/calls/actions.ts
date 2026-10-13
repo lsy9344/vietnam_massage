@@ -149,6 +149,7 @@ export async function saveBasicServiceCallRowAction(
     operatingMonthId: formValue(formData, "operatingMonthId"),
     serviceDate: formValue(formData, "serviceDate"),
     startTime: formValue(formData, "startTime"),
+    actualEntryTime: formData.has("actualEntryTime") ? formValue(formData, "actualEntryTime") : undefined,
     roomId: formValue(formData, "roomId"),
     courseId: formValue(formData, "courseId"),
     customerMemo: formValue(formData, "customerMemo"),

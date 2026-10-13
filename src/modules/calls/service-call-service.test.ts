@@ -2685,22 +2685,26 @@ function addAvailabilityCall(
     courseId: string;
     status: string;
     serviceDate?: string;
+    actualEntryTime?: string | null;
+    paymentMethodCode?: string | null;
+    createdAt?: Date;
     assignments: Array<{ role: "THERAPIST_1" | "THERAPIST_2" | "EARCARE"; employeeId: string }>;
   }
 ) {
-  const createdAt = new Date("2026-06-10T00:00:00.000Z");
+  const createdAt = input.createdAt ?? new Date("2026-06-10T00:00:00.000Z");
   prismaClient.serviceCalls.set(input.id, {
     id: input.id,
     operatingMonthId: "month-2026-06",
     serviceDate: dbDate(input.serviceDate ?? availabilityDate),
     startTime: input.startTime,
+    actualEntryTime: input.actualEntryTime ?? null,
     roomId: "room-101",
     courseId: input.courseId,
     customerId: null,
     customerMemo: null,
     status: input.status,
     discountTypeCode: null,
-    paymentMethodCode: null,
+    paymentMethodCode: input.paymentMethodCode ?? null,
     note: null,
     confirmationCode: null,
     createdAt,
@@ -3011,6 +3015,308 @@ describe("therapist availability", () => {
     assert.equal(saved.startTime, "15:00");
     assert.equal(saved.courseId, "course-missing-rate");
     assert.equal(saved.therapist1?.id, "therapist-1");
+  });
+});
+
+describe("actual entry and display end", () => {
+  it("yields a 15:20 arrival of 60 minutes to the 16:00 reservation and keeps that booking", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "late",
+      startTime: "15:00",
+      actualEntryTime: "15:20",
+      courseId: "course-a",
+      status: "예약",
+      paymentMethodCode: "현금",
+      createdAt: new Date("2026-06-10T00:00:00.000Z"),
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "dropped",
+      startTime: "15:40",
+      courseId: "course-a",
+      status: "노쇼",
+      createdAt: new Date("2026-06-10T00:01:00.000Z"),
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "other-therapist",
+      startTime: "15:30",
+      courseId: "course-a",
+      status: "예약",
+      createdAt: new Date("2026-06-10T00:02:00.000Z"),
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-2" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "next",
+      startTime: "16:00",
+      courseId: "course-a",
+      status: "예약",
+      paymentMethodCode: "현금",
+      createdAt: new Date("2026-06-10T00:03:00.000Z"),
+      assignments: [{ role: "THERAPIST_2", employeeId: "therapist-1" }]
+    });
+
+    const rows = await listServiceCallsForDate({
+      operatingMonthId: "month-2026-06",
+      serviceDate: availabilityDate,
+      prismaClient
+    });
+    const late = rows.find((row) => row.id === "late");
+    const next = rows.find((row) => row.id === "next");
+
+    assert.equal(late?.actualEntryTime, "15:20");
+    assert.equal(late?.displayEnd, "16:00");
+    assert.equal(late?.warningTime, "16:00");
+    assert.equal(late?.startTime, "15:00");
+    assert.equal(late?.courseId, "course-a");
+    assert.equal(late?.basePrice, 1500000);
+    assert.equal(late?.paymentAmount, 1500000);
+    assert.equal(next?.startTime, "16:00");
+    assert.equal(next?.courseId, "course-a");
+    assert.equal(next?.paymentAmount, 1500000);
+    assert.equal(next?.actualEntryTime, null);
+  });
+
+  it("shows 16:20 and no warning when the next reservation is absent or at 17:00", async () => {
+    const alone = createMemoryPrisma();
+    addAvailabilityCall(alone, {
+      id: "late",
+      startTime: "15:00",
+      actualEntryTime: "15:20",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    const aloneRow = (
+      await listServiceCallsForDate({
+        operatingMonthId: "month-2026-06",
+        serviceDate: availabilityDate,
+        prismaClient: alone
+      })
+    ).find((row) => row.id === "late");
+    assert.equal(aloneRow?.displayEnd, "16:20");
+    assert.equal(aloneRow?.warningTime, null);
+
+    const later = createMemoryPrisma();
+    addAvailabilityCall(later, {
+      id: "late",
+      startTime: "15:00",
+      actualEntryTime: "15:20",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(later, {
+      id: "canceled",
+      startTime: "16:00",
+      courseId: "course-a",
+      status: "취소",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(later, {
+      id: "other-day",
+      startTime: "15:10",
+      courseId: "course-a",
+      status: "예약",
+      serviceDate: "2026-06-11",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(later, {
+      id: "next",
+      startTime: "17:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    const row = (
+      await listServiceCallsForDate({
+        operatingMonthId: "month-2026-06",
+        serviceDate: availabilityDate,
+        prismaClient: later
+      })
+    ).find((item) => item.id === "late");
+    assert.equal(row?.displayEnd, "16:20");
+    assert.equal(row?.warningTime, null);
+  });
+
+  it("keeps the proposed end and an empty warning when the next reservation only touches it", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "late",
+      startTime: "15:00",
+      actualEntryTime: "15:20",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "next",
+      startTime: "16:20",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const row = (
+      await listServiceCallsForDate({
+        operatingMonthId: "month-2026-06",
+        serviceDate: availabilityDate,
+        prismaClient
+      })
+    ).find((item) => item.id === "late");
+
+    assert.equal(row?.displayEnd, "16:20");
+    assert.equal(row?.warningTime, null);
+  });
+
+  it("uses the reservation time when actual entry is empty and still yields past the next reservation", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "booked",
+      startTime: "15:00",
+      actualEntryTime: null,
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "next",
+      startTime: "15:30",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const row = (
+      await listServiceCallsForDate({
+        operatingMonthId: "month-2026-06",
+        serviceDate: availabilityDate,
+        prismaClient
+      })
+    ).find((item) => item.id === "booked");
+
+    assert.equal(row?.actualEntryTime, null);
+    assert.equal(row?.displayEnd, "15:30");
+    assert.equal(row?.warningTime, "15:30");
+  });
+
+  it("stores a 10-minute actual entry, rejects anything else before write, and leaves the next call unchanged", async () => {
+    const prismaClient = createMemoryPrisma();
+    const createdAt = new Date("2026-06-01T00:00:00.000Z");
+    prismaClient.timeSlots.set("15:00", { id: "slot-1500", value: "15:00", sortOrder: 90, isActive: true, createdAt, updatedAt: createdAt });
+    prismaClient.timeSlots.set("16:00", { id: "slot-1600", value: "16:00", sortOrder: 110, isActive: true, createdAt, updatedAt: createdAt });
+    const shared = {
+      operatingMonthId: "month-2026-06",
+      serviceDate: availabilityDate,
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      status: "예약",
+      paymentMethodCode: "현금",
+      prismaClient
+    };
+    const beforeSize = prismaClient.serviceCalls.size;
+
+    await assert.rejects(
+      () => saveBasicServiceCallRow({ ...shared, startTime: "15:00", actualEntryTime: "15:05" }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "INVALID_SERVICE_CALL_INPUT"
+    );
+    assert.equal(prismaClient.serviceCalls.size, beforeSize);
+
+    const late = await saveBasicServiceCallRow({ ...shared, startTime: "15:00", actualEntryTime: "" });
+    const next = await saveBasicServiceCallRow({ ...shared, startTime: "16:00" });
+    assert.equal(late.actualEntryTime, null);
+    assert.equal(late.courseId, "course-a");
+    assert.equal(late.basePrice, 1500000);
+    assert.equal(late.paymentAmount, 1500000);
+
+    const saved = await autosaveServiceCallRow({
+      serviceCallId: late.id,
+      operatingMonthId: late.operatingMonthId,
+      serviceDate: late.serviceDate,
+      startTime: late.startTime,
+      roomId: late.roomId,
+      courseId: late.courseId,
+      customerMemo: late.customerMemo,
+      customerId: late.customerId,
+      therapist1Id: late.therapist1?.id ?? null,
+      therapist2Id: null,
+      earcareEmployeeId: null,
+      status: late.status,
+      discountTypeCode: late.discountTypeCode,
+      paymentMethodCode: late.paymentMethodCode,
+      note: late.note,
+      confirmationCode: late.confirmationCode,
+      actualEntryTime: "15:20",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(saved.actualEntryTime, "15:20");
+    assert.equal(saved.startTime, "15:00");
+    assert.equal(saved.displayEnd, "16:00");
+    assert.equal(saved.warningTime, "16:00");
+    assert.equal(saved.courseId, "course-a");
+    assert.equal(saved.paymentAmount, 1500000);
+    assert.equal(saved.basePrice, 1500000);
+
+    const listed = await listServiceCallsForDate({
+      operatingMonthId: "month-2026-06",
+      serviceDate: availabilityDate,
+      prismaClient
+    });
+    const nextRow = listed.find((row) => row.id === next.id);
+    assert.equal(nextRow?.startTime, "16:00");
+    assert.equal(nextRow?.courseId, "course-a");
+    assert.equal(nextRow?.paymentAmount, 1500000);
+    assert.equal(nextRow?.basePrice, 1500000);
+    assert.equal(prismaClient.serviceCalls.get(next.id).startTime, "16:00");
+    assert.equal(prismaClient.serviceCalls.get(next.id).courseId, "course-a");
+
+    const arrivalAudit = prismaClient.auditEvents.find(
+      (event: { action: string; afterValue?: { actualEntryTime?: string | null } }) =>
+        event.action === "service_call.row_changed" && event.afterValue?.actualEntryTime === "15:20"
+    );
+    assert.equal(arrivalAudit?.beforeValue?.actualEntryTime ?? null, null);
+
+    await assert.rejects(
+      () =>
+        autosaveServiceCallRow({
+          serviceCallId: late.id,
+          operatingMonthId: late.operatingMonthId,
+          serviceDate: late.serviceDate,
+          startTime: late.startTime,
+          roomId: late.roomId,
+          courseId: late.courseId,
+          therapist1Id: "therapist-1",
+          status: late.status,
+          paymentMethodCode: late.paymentMethodCode,
+          actualEntryTime: "15:25",
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "INVALID_SERVICE_CALL_INPUT"
+    );
+    assert.equal(prismaClient.serviceCalls.get(late.id).actualEntryTime, "15:20");
+
+    const cleared = await autosaveServiceCallRow({
+      serviceCallId: late.id,
+      operatingMonthId: late.operatingMonthId,
+      serviceDate: late.serviceDate,
+      startTime: late.startTime,
+      roomId: late.roomId,
+      courseId: late.courseId,
+      therapist1Id: "therapist-1",
+      status: late.status,
+      paymentMethodCode: late.paymentMethodCode,
+      actualEntryTime: null,
+      actorId: "counter-account",
+      prismaClient
+    });
+    assert.equal(cleared.actualEntryTime, null);
+    assert.equal(cleared.displayEnd, "16:00");
+    assert.equal(cleared.warningTime, null);
   });
 });
 
