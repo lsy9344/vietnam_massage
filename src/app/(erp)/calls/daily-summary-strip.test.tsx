@@ -43,6 +43,12 @@ function summary(overrides: Partial<DailyCallLedgerSummaryDto> = {}): DailyCallL
   };
 }
 
+// 시재 표의 한 줄(현금 또는 계좌)에서 조회일 수납·지출·잔액, 이번 달 수납·지출·잔액 칸을 차례로 꺼낸다.
+function tillRow(html: string, label: string) {
+  const row = html.match(new RegExp(`<tr><th[^>]*scope="row">${label}</th>(.*?)</tr>`))?.[1] ?? "";
+  return [...row.matchAll(/<td class="([^"]*)">([^<]*)<\/td>/g)].map(([, className, text]) => ({ className, text }));
+}
+
 describe("DailySummaryStrip", () => {
   it("keeps no-show and canceled counts as separate status summary items", () => {
     const html = renderToStaticMarkup(<DailySummaryStrip summary={summary()} showSettlementAmounts={false} locale="ko" />);
@@ -109,10 +115,19 @@ describe("DailySummaryStrip", () => {
       />
     );
 
-    assert.match(html, /현금 수납<\/span><span class="[^"]*">1,000 VND<\/span>/);
-    assert.match(html, /현금 잔액<\/span><span class="[^"]*text-danger[^"]*">부족 50,000 VND<\/span>/);
-    assert.match(html, /계좌 잔액<\/span><span class="[^"]*text-danger[^"]*">-20,000 VND<\/span>/);
-    assert.match(html, /이번 달 현금 잔액<\/span><span class="[^"]*text-foreground[^"]*">10,000 VND<\/span>/);
+    assert.match(html, /현금·계좌 시재/);
+    assert.match(html, /조회일/);
+    assert.match(html, /이번 달 누계/);
+    const cash = tillRow(html, "현금");
+    const bank = tillRow(html, "계좌");
+    assert.deepEqual(
+      cash.map((cell) => cell.text),
+      ["1,000 VND", "1,000 VND", "부족 50,000 VND", "0 VND", "0 VND", "10,000 VND"]
+    );
+    assert.match(cash[2].className, /text-danger/);
+    assert.match(cash[5].className, /text-foreground/);
+    assert.equal(bank[2].text, "-20,000 VND");
+    assert.match(bank[2].className, /text-danger/);
     assert.match(html, /카드/);
     assert.match(html, /기타/);
     assert.match(html, /순매출/);
@@ -138,7 +153,12 @@ describe("DailySummaryStrip", () => {
         locale="vi"
       />
     );
-    assert.match(vietnamese, /Số dư tiền mặt<\/span><span class="[^"]*text-danger[^"]*">Thiếu 50.000 VND<\/span>/);
-    assert.match(vietnamese, /Số dư chuyển khoản<\/span><span class="[^"]*text-danger[^"]*">-20.000 VND<\/span>/);
+    const vietnameseCash = tillRow(vietnamese, "Tiền mặt");
+    const vietnameseBank = tillRow(vietnamese, "Chuyển khoản");
+    assert.match(vietnamese, /Số dư/);
+    assert.equal(vietnameseCash[2].text, "Thiếu 50.000 VND");
+    assert.match(vietnameseCash[2].className, /text-danger/);
+    assert.equal(vietnameseBank[2].text, "-20.000 VND");
+    assert.match(vietnameseBank[2].className, /text-danger/);
   });
 });

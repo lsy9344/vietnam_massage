@@ -148,7 +148,23 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
         visitMemo={visitSelection?.kind === "memo" ? visitSelection.customerMemo : null}
       />
       <DailySummaryStrip summary={summary} showSettlementAmounts={canViewSettlementAmounts} locale={locale} />
-      <CustomerPanel customers={customers} />
+
+      {/* 매일 쓰는 원장을 위로 올리고, 가끔 쓰는 지출과 고객 관리는 그 아래에 둔다. */}
+      <div className="mb-4">
+        <CallLedgerWorkspace
+          key={`${selectedMonth.id}:${serviceDate}`}
+          availabilityRows={availabilityRows}
+          availabilityTime={availabilityTime}
+          customers={customers}
+          isLocked={isLocked}
+          operatingMonthId={selectedMonth.id}
+          options={options}
+          rows={visibleRows}
+          serviceDate={serviceDate}
+          showSettlementColumns={canViewSettlementAmounts}
+        />
+      </div>
+
       <DailyExpensePanel
         expenses={expenses}
         handlers={options.expenseHandlers}
@@ -156,19 +172,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
         operatingMonthId={selectedMonth.id}
         serviceDate={serviceDate}
       />
-
-      <CallLedgerWorkspace
-        key={`${selectedMonth.id}:${serviceDate}`}
-        availabilityRows={availabilityRows}
-        availabilityTime={availabilityTime}
-        customers={customers}
-        isLocked={isLocked}
-        operatingMonthId={selectedMonth.id}
-        options={options}
-        rows={visibleRows}
-        serviceDate={serviceDate}
-        showSettlementColumns={canViewSettlementAmounts}
-      />
+      <CustomerPanel customers={customers} />
     </main>
   );
 }

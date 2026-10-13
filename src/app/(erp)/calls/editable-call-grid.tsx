@@ -43,7 +43,7 @@ type FieldErrors = Record<string, string[]>;
 const CALL_GRID_COLUMNS = [
   { id: "date", labelKey: "calls.column.date", width: "5.5rem" },
   { id: "time", labelKey: "calls.column.time", width: "9rem" },
-  { id: "actualEntry", labelKey: "calls.column.actualEntry", width: "12rem" },
+  { id: "actualEntry", labelKey: "calls.column.actualEntry", width: "12rem", hintKey: "calls.actualEntry.helper" },
   { id: "room", labelKey: "calls.column.room", width: "9rem" },
   { id: "course", labelKey: "calls.column.course", width: "10rem" },
   { id: "customerMemo", labelKey: "calls.column.customerMemo", width: "12rem" },
@@ -63,7 +63,7 @@ const CALL_GRID_COLUMNS = [
   { id: "earcarePool", labelKey: "calls.column.earcarePool", width: "6.5rem", settlement: true },
   { id: "opsCallCredit", labelKey: "calls.column.opsCallCredit", width: "6rem", settlement: true },
   { id: "saveStatus", labelKey: "calls.column.saveStatus", width: "10rem" }
-] as const satisfies ReadonlyArray<{ id: string; labelKey: MessageKey; width: string; settlement?: boolean }>;
+] as const satisfies ReadonlyArray<{ id: string; labelKey: MessageKey; width: string; settlement?: boolean; hintKey?: MessageKey }>;
 
 function visibleCallGridColumns(showSettlementColumns: boolean) {
   return CALL_GRID_COLUMNS.filter((column) => showSettlementColumns || !("settlement" in column && column.settlement));
@@ -91,6 +91,11 @@ function CallGridHead({ showSettlementColumns }: { showSettlementColumns: boolea
         {visibleCallGridColumns(showSettlementColumns).map((column) => (
           <th className="whitespace-nowrap border-b border-border px-2 py-2 align-middle" key={column.id}>
             {t(column.labelKey)}
+            {"hintKey" in column ? (
+              <span aria-hidden="true" className="block text-[11px] font-normal text-muted">
+                {t(column.hintKey)}
+              </span>
+            ) : null}
           </th>
         ))}
       </tr>
@@ -344,7 +349,9 @@ function SelectCell({
   }
 
   return (
-    <label className="grid w-full gap-1">
+    // tall: 새 칸은 누르는 영역이 44px 이상이어야 하지만 원장 줄 높이는 그대로다. 보이는 입력은 다른 칸과 같은 높이로 두고,
+    // label이 위아래로 칸 여백까지 넓혀 그 영역을 눌러도 입력이 잡힌다.
+    <label className={`grid w-full gap-1 ${tall ? "-my-1.5 min-h-11 cursor-pointer py-1.5" : ""}`}>
       <span className="sr-only">{label}</span>
       <input
         aria-activedescendant={open && activeOption ? `${reactId}-option-${activeOption.value}` : undefined}
@@ -355,7 +362,7 @@ function SelectCell({
         aria-invalid={invalid ? "true" : undefined}
         aria-label={label}
         autoComplete="off"
-        className={`${tall ? "h-11" : "h-8"} w-full border bg-background px-2 text-xs text-foreground outline-none disabled:bg-readonly ${
+        className={`h-8 w-full border bg-background px-2 text-xs text-foreground outline-none disabled:bg-readonly ${
           invalid ? "border-danger ring-1 ring-danger focus:border-danger" : "border-border focus:border-brand"
         }`}
         data-call-cell-column={columnId}
@@ -554,6 +561,7 @@ function CustomerLinkSelect({
       </select>
     );
   }
+  const chosen = customers.find((customer) => customer.id === value);
   return (
     <select
       aria-label={t("calls.column.customer")}
@@ -564,6 +572,8 @@ function CustomerLinkSelect({
       name={name}
       onChange={onChange ? (event) => onChange(event.target.value) : undefined}
       onKeyDown={onKeyDown}
+      // 칸이 좁아 이름 뒤가 잘린다. 마우스를 올리면 고른 고객 전체가 보인다.
+      title={chosen ? customerChoiceLabel(chosen) : undefined}
       value={value}
     >
       {options}
@@ -617,33 +627,43 @@ function ActualEntryCell({
 
   return (
     <>
-      <SelectCell
-        columnId="actualEntryTime"
-        describedBy={[helpId, warning ? warningId : null].filter(Boolean).join(" ")}
-        disabled={disabled}
-        errorId={errorMessage ? `${reactId}-actual-entry-error` : undefined}
-        errorMessage={errorMessage}
-        label={t("calls.column.actualEntry")}
-        name="actualEntryTime"
-        onBlur={onBlur}
-        onChange={onChange}
-        onCommitValue={onCommitValue}
-        onGridKeyDown={onGridKeyDown}
-        options={TEN_MINUTE_ENTRY_OPTIONS}
-        rowIndex={rowIndex}
-        tall
-        {...(value === undefined ? {} : { value })}
-      />
-      <p className="text-[11px] text-muted" id={helpId}>
+      <div className="flex items-center gap-2">
+        <div className="w-[5.5rem] shrink-0">
+          <SelectCell
+            columnId="actualEntryTime"
+            describedBy={[helpId, warning ? warningId : null].filter(Boolean).join(" ")}
+            disabled={disabled}
+            errorId={errorMessage ? `${reactId}-actual-entry-error` : undefined}
+            errorMessage={errorMessage}
+            label={t("calls.column.actualEntry")}
+            name="actualEntryTime"
+            onBlur={onBlur}
+            onChange={onChange}
+            onCommitValue={onCommitValue}
+            onGridKeyDown={onGridKeyDown}
+            options={TEN_MINUTE_ENTRY_OPTIONS}
+            rowIndex={rowIndex}
+            tall
+            {...(value === undefined ? {} : { value })}
+          />
+        </div>
+        {displayEnd ? (
+          <span className="min-w-0 text-[11px] leading-tight text-foreground [font-variant-numeric:tabular-nums]">
+            {t("calls.actualEntry.displayEnd", { time: displayEnd })}
+          </span>
+        ) : null}
+      </div>
+      {/* 열 머리에 같은 말이 보인다. 칸마다 보이게 두면 줄이 길어져서, 칸에는 보조기술용으로만 둔다. */}
+      <span className="sr-only" id={helpId}>
         {t("calls.actualEntry.helper")}
-      </p>
-      {displayEnd ? (
-        <p className="text-[11px] text-foreground [font-variant-numeric:tabular-nums]">
-          {t("calls.actualEntry.displayEnd", { time: displayEnd })}
-        </p>
-      ) : null}
+      </span>
       {warning ? (
-        <p className="text-[11px] text-danger [font-variant-numeric:tabular-nums]" id={warningId}>{warning}</p>
+        <p className="mt-1 flex items-start gap-1 text-[11px] font-medium leading-tight text-danger [font-variant-numeric:tabular-nums]">
+          <span aria-hidden="true" className="font-bold">
+            !
+          </span>
+          <span id={warningId}>{warning}</span>
+        </p>
       ) : null}
     </>
   );
@@ -674,10 +694,21 @@ function AddRowForm({
   const [seenChoiceId, setSeenChoiceId] = useState(choiceId);
   const [hiddenState, setHiddenState] = useState<ServiceCallActionState>(null);
   // A course choice fills three fields. It is not a save, so the previous result stays off the row.
+  const formRef = useRef<HTMLFormElement>(null);
+  const [filledByChoice, setFilledByChoice] = useState(false);
   if (seenChoiceId !== choiceId) {
     setSeenChoiceId(choiceId);
     setHiddenState(state);
+    setFilledByChoice(true);
   }
+
+  // 가능 코스를 누르면 채워진 새 행이 화면 밖일 수 있다. 그 행을 보여 주고 잠깐 색으로 표시한다. 초점은 옮기지 않는다.
+  useEffect(() => {
+    if (!filledByChoice) return;
+    formRef.current?.scrollIntoView({ block: "nearest" });
+    const timer = window.setTimeout(() => setFilledByChoice(false), 1600);
+    return () => window.clearTimeout(timer);
+  }, [filledByChoice, choiceId]);
   const rowState = state === hiddenState ? null : state;
   const disabled = isLocked || pending;
   const rowIndex = existingRowCount;
@@ -705,16 +736,20 @@ function AddRowForm({
   }
 
   return (
-    <form action={formAction} className="border-t border-border bg-surface">
+    <form action={formAction} className="border-t-2 border-brand/40 bg-surface" ref={formRef}>
       <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
       <input name="serviceDate" type="hidden" value={serviceDate} />
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(showSettlementColumns) }}>
           <CallGridColgroup showSettlementColumns={showSettlementColumns} />
           <CallGridHead showSettlementColumns={showSettlementColumns} />
           <tbody>
-            <tr className="align-top">
-              <td className="border-b border-border px-2 py-2 text-xs text-muted">{serviceDate}</td>
+            <tr
+              className={`align-top motion-safe:transition-colors motion-safe:duration-200 motion-reduce:transition-none ${
+                filledByChoice ? "bg-brand/15" : ""
+              }`}
+            >
+              <td className="border-b border-border px-2 py-2 text-xs leading-8 text-muted [font-variant-numeric:tabular-nums]">{serviceDate}</td>
               <td className="border-b border-border px-2 py-2">
                 <SelectCell
                   columnId="startTime"
@@ -882,18 +917,22 @@ function AddRowForm({
                   rowIndex={rowIndex}
                 />
               </td>
-              <td className="border-b border-border bg-readonly px-2 py-2" colSpan={showSettlementColumns ? 7 : 3}>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button className="h-8 whitespace-nowrap px-3 text-xs" disabled={disabled} type="submit">
-                    {t("calls.addRow.submit")}
-                  </Button>
-                  <InlineError state={rowState} />
-                  {rowState?.ok ? <span className="text-xs text-muted">{t("calls.save.saved")}</span> : null}
-                </div>
-              </td>
+              <td className="border-b border-border px-2 py-2" colSpan={showSettlementColumns ? 7 : 3} />
             </tr>
           </tbody>
         </table>
+      </div>
+      {/* 표가 옆으로 길어 맨 끝 칸의 버튼은 스크롤해야 보였다. 저장 버튼은 표 아래 왼쪽에 둔다. */}
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+        <Button className="h-11 whitespace-nowrap px-4 text-sm" disabled={disabled} type="submit">
+          {t("calls.addRow.submit")}
+        </Button>
+        <InlineError state={rowState} />
+        {rowState?.ok ? (
+          <span className="text-xs text-muted" role="status">
+            {t("calls.save.saved")}
+          </span>
+        ) : null}
       </div>
     </form>
   );
@@ -1165,7 +1204,7 @@ function EditableCallRow({
 
   return (
     <tr className="align-top" data-service-call-id={row.id}>
-      <td className="border-b border-border px-2 py-2 text-xs">
+      <td className="border-b border-border px-2 py-2 text-xs leading-8 [font-variant-numeric:tabular-nums]">
         {draft.serviceDate}
         <input name="serviceCallId" type="hidden" value={draft.serviceCallId} />
       </td>
@@ -1539,7 +1578,7 @@ export function EditableCallGrid({
           </div>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(showSettlementColumns) }}>
             <CallGridColgroup showSettlementColumns={showSettlementColumns} />
             <CallGridHead showSettlementColumns={showSettlementColumns} />

@@ -310,7 +310,7 @@ test.describe("Story 2.4 D코스 마사지사2 필수 검증", () => {
     await login(page);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2032-06-06`);
 
-    const form = page.locator("form").last();
+    const form = page.locator("form").filter({ has: page.getByRole("button", { name: "새 콜 행 추가" }) });
     await selectGridOptionByValue(page, form, "시간", "13:30");
     await selectGridOptionByValue(page, form, "객실", seededData.roomId);
     await selectGridOptionByValue(page, form, "코스", seededData.dCourseId);

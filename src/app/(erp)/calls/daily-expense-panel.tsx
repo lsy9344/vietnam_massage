@@ -32,24 +32,33 @@ function InlineError({ state, field }: { state: DailyExpenseActionState; field?:
   ) : null;
 }
 
+// 표 안의 모든 입력이 같은 높이(44px)와 테두리를 쓴다. 칸이 위아래로 맞아야 한 줄이 한 지출로 읽힌다.
+const fieldClassName =
+  "h-11 w-full border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand disabled:bg-readonly";
+
 export function ExpenseMethodControl({
   defaultMethod = "cash",
   disabled,
-  error
+  error,
+  form,
+  hideLabel = false
 }: {
   defaultMethod?: ExpenseMethod;
   disabled: boolean;
   error: string | null;
+  form?: string;
+  hideLabel?: boolean;
 }) {
   const t = useT();
   return (
     <label className="grid gap-1">
-      <span className="text-xs font-medium text-foreground">{t("calls.expense.field.method")}</span>
+      <span className={hideLabel ? "sr-only" : "text-xs font-medium text-foreground"}>{t("calls.expense.field.method")}</span>
       <select
         aria-label={t("calls.expense.field.method")}
-        className="h-11 min-w-28 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
+        className="h-11 w-full min-w-24 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand disabled:bg-readonly"
         defaultValue={defaultMethod}
         disabled={disabled}
+        form={form}
         name="method"
       >
         <option value="cash">{t("calls.expense.method.cash")}</option>
@@ -64,10 +73,20 @@ export function ExpenseMethodControl({
   );
 }
 
-export function ExpenseSaveButton({ disabled, idleLabel, pending }: { disabled: boolean; idleLabel: string; pending: boolean }) {
+export function ExpenseSaveButton({
+  disabled,
+  idleLabel,
+  pending,
+  variant
+}: {
+  disabled: boolean;
+  idleLabel: string;
+  pending: boolean;
+  variant?: "default" | "secondary";
+}) {
   const t = useT();
   return (
-    <Button aria-busy={pending} className="h-8 px-2 text-xs" disabled={disabled} type="submit">
+    <Button aria-busy={pending} className="h-11 whitespace-nowrap px-3 text-sm" disabled={disabled} type="submit" variant={variant}>
       {pending ? t("calls.expense.action.saving") : idleLabel}
     </Button>
   );
@@ -76,24 +95,25 @@ export function ExpenseSaveButton({ disabled, idleLabel, pending }: { disabled: 
 function HandlerSelect({
   defaultValue,
   disabled,
+  form,
   handlers,
-  label,
-  name
+  label
 }: {
   defaultValue?: string;
   disabled: boolean;
+  form: string;
   handlers: ServiceCallOption[];
   label: string;
-  name: string;
 }) {
   const t = useT();
   return (
     <select
       aria-label={label}
-      className="h-8 min-w-44 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
+      className={fieldClassName}
       defaultValue={defaultValue ?? ""}
       disabled={disabled}
-      name={name}
+      form={form}
+      name="handledByEmployeeId"
       required
     >
       <option value="">{t("calls.expense.field.handlerPlaceholder")}</option>
@@ -104,6 +124,110 @@ function HandlerSelect({
       ))}
     </select>
   );
+}
+
+// 한 지출의 입력 칸들. 입력은 각 칸(td)에 있고 form 속성으로 같은 행의 form에 묶인다.
+function ExpenseFieldCells({
+  disabled,
+  expense,
+  form,
+  handlers,
+  state
+}: {
+  disabled: boolean;
+  expense?: DailyExpenseDto;
+  form: string;
+  handlers: ServiceCallOption[];
+  state: DailyExpenseActionState;
+}) {
+  const t = useT();
+  const locale = useLocale();
+  return (
+    <>
+      <td className={cellClassName}>
+        <label className="grid gap-1">
+          <span className="sr-only">{t("calls.expense.field.amount")}</span>
+          <input
+            className={`${fieldClassName} text-right [font-variant-numeric:tabular-nums]`}
+            defaultValue={expense?.amount}
+            disabled={disabled}
+            form={form}
+            min={1}
+            name="amount"
+            placeholder={expense ? undefined : t("calls.expense.field.amountPlaceholder")}
+            required
+            step={1}
+            type="number"
+          />
+          {expense ? (
+            <span className="text-right text-xs text-muted [font-variant-numeric:tabular-nums]">
+              {formatNumber(locale, expense.amount)} {t("calls.summary.vndSuffix")}
+            </span>
+          ) : null}
+          <InlineError field="amount" state={state} />
+        </label>
+      </td>
+      <td className={cellClassName}>
+        <label className="grid gap-1">
+          <span className="sr-only">{t("calls.expense.field.description")}</span>
+          <input
+            className={fieldClassName}
+            defaultValue={expense?.description}
+            disabled={disabled}
+            form={form}
+            maxLength={200}
+            name="description"
+            placeholder={t("calls.expense.field.description")}
+            required
+          />
+          <InlineError field="description" state={state} />
+        </label>
+      </td>
+      <td className={cellClassName}>
+        <div className="grid gap-1">
+          <HandlerSelect
+            defaultValue={expense?.handledByEmployee.id}
+            disabled={disabled}
+            form={form}
+            handlers={handlers}
+            label={t("calls.expense.field.handler")}
+          />
+          <InlineError field="handledByEmployeeId" state={state} />
+        </div>
+      </td>
+      <td className={cellClassName}>
+        <ExpenseMethodControl defaultMethod={expense?.method} disabled={disabled} error={fieldError(state, "method")} form={form} hideLabel />
+      </td>
+      <td className={cellClassName}>
+        <label className="grid gap-1">
+          <span className="sr-only">{t("calls.expense.field.note")}</span>
+          <input
+            className={fieldClassName}
+            defaultValue={expense?.note ?? ""}
+            disabled={disabled}
+            form={form}
+            maxLength={500}
+            name="note"
+            placeholder={t("calls.expense.field.note")}
+          />
+          <InlineError field="note" state={state} />
+        </label>
+      </td>
+    </>
+  );
+}
+
+const cellClassName = "border-b border-border px-2 py-2 align-top";
+
+function SavedOrError({ state, savedLabel }: { state: DailyExpenseActionState; savedLabel: string }) {
+  if (state?.ok) {
+    return (
+      <span className="text-xs text-muted" role="status">
+        {savedLabel}
+      </span>
+    );
+  }
+  return <InlineError state={state} />;
 }
 
 function ExpenseRow({
@@ -120,81 +244,39 @@ function ExpenseRow({
   serviceDate: string;
 }) {
   const t = useT();
-  const locale = useLocale();
+  const formId = `daily-expense-${expense.id}`;
   const [updateState, updateAction, updatePending] = useActionState<DailyExpenseActionState, FormData>(updateDailyExpenseAction, null);
   const [deactivateState, deactivateAction, deactivatePending] = useActionState<DailyExpenseActionState, FormData>(deactivateDailyExpenseAction, null);
   const disabled = isLocked || updatePending || deactivatePending;
 
   return (
-    <tr className="align-top">
-      <td className="border-b border-border px-2 py-2">
-        <form action={updateAction} className="flex min-w-[760px] flex-wrap items-start gap-2" noValidate>
-          <input name="dailyExpenseId" type="hidden" value={expense.id} />
-          <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
-          <input name="expenseDate" type="hidden" value={serviceDate} />
-          <label className="grid gap-1">
-            <span className="sr-only">{t("calls.expense.field.amount")}</span>
-            <input
-              className="h-8 w-32 border border-border bg-background px-2 text-xs text-foreground outline-none [font-variant-numeric:tabular-nums] focus:border-brand disabled:bg-readonly"
-              defaultValue={expense.amount}
-              disabled={disabled}
-              min={1}
-              name="amount"
-              required
-              step={1}
-              type="number"
-            />
-            <InlineError field="amount" state={updateState} />
-          </label>
-          <label className="grid gap-1">
-            <span className="sr-only">{t("calls.expense.field.description")}</span>
-            <input
-              className="h-8 w-48 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
-              defaultValue={expense.description}
-              disabled={disabled}
-              maxLength={200}
-              name="description"
-              placeholder={t("calls.expense.field.description")}
-              required
-            />
-            <InlineError field="description" state={updateState} />
-          </label>
-          <HandlerSelect defaultValue={expense.handledByEmployee.id} disabled={disabled} handlers={handlers} label={t("calls.expense.field.handler")} name="handledByEmployeeId" />
-          <ExpenseMethodControl defaultMethod={expense.method} disabled={disabled} error={fieldError(updateState, "method")} />
-          <label className="grid gap-1">
-            <span className="sr-only">{t("calls.expense.field.note")}</span>
-            <input
-              className="h-8 w-48 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
-              defaultValue={expense.note ?? ""}
-              disabled={disabled}
-              maxLength={500}
-              name="note"
-              placeholder={t("calls.expense.field.note")}
-            />
-            <InlineError field="note" state={updateState} />
-          </label>
-          <ExpenseSaveButton disabled={disabled} idleLabel={t("calls.expense.action.update")} pending={updatePending} />
-          <div className="basis-full">
-            {updateState?.ok ? <span className="text-xs text-muted">{t("calls.save.saved")}</span> : <InlineError state={updateState} />}
-          </div>
-        </form>
-      </td>
-      <td className="border-b border-border px-2 py-2 text-right text-xs [font-variant-numeric:tabular-nums]">{formatNumber(locale, expense.amount)} {t("calls.summary.vndSuffix")}</td>
-      <td className="border-b border-border px-2 py-2 text-xs text-muted">{expense.handledByEmployee.displayName}</td>
-      <td className="border-b border-border px-2 py-2">
-        <form action={deactivateAction} className="grid justify-items-end gap-1">
-          <input name="dailyExpenseId" type="hidden" value={expense.id} />
-          <Button className="h-8 px-2 text-xs" disabled={disabled} type="submit" variant="secondary">
-            {t("calls.expense.action.deactivate")}
-          </Button>
-          {deactivateState?.ok ? <span className="text-xs text-muted">{t("calls.expense.action.deactivated")}</span> : <InlineError state={deactivateState} />}
-        </form>
+    <tr>
+      <ExpenseFieldCells disabled={disabled} expense={expense} form={formId} handlers={handlers} state={updateState} />
+      <td className={cellClassName}>
+        <div className="flex items-start justify-end gap-2">
+          <form action={updateAction} id={formId} noValidate>
+            <input name="dailyExpenseId" type="hidden" value={expense.id} />
+            <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
+            <input name="expenseDate" type="hidden" value={serviceDate} />
+            <ExpenseSaveButton disabled={disabled} idleLabel={t("calls.expense.action.update")} pending={updatePending} variant="secondary" />
+          </form>
+          <form action={deactivateAction}>
+            <input name="dailyExpenseId" type="hidden" value={expense.id} />
+            <Button className="h-11 whitespace-nowrap px-3 text-sm hover:text-danger" disabled={disabled} type="submit" variant="ghost">
+              {t("calls.expense.action.deactivate")}
+            </Button>
+          </form>
+        </div>
+        <div className="mt-1 grid justify-items-end gap-1 text-right">
+          <SavedOrError savedLabel={t("calls.save.saved")} state={updateState} />
+          <SavedOrError savedLabel={t("calls.expense.action.deactivated")} state={deactivateState} />
+        </div>
       </td>
     </tr>
   );
 }
 
-function AddExpenseForm({
+function AddExpenseRow({
   handlers,
   isLocked,
   operatingMonthId,
@@ -206,57 +288,24 @@ function AddExpenseForm({
   serviceDate: string;
 }) {
   const t = useT();
+  const formId = "daily-expense-new";
   const [state, formAction, pending] = useActionState<DailyExpenseActionState, FormData>(createDailyExpenseAction, null);
   const disabled = isLocked || pending;
 
   return (
-    <form action={formAction} className="flex flex-wrap items-start gap-2 border-t border-border px-3 py-3" noValidate>
-      <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
-      <input name="expenseDate" type="hidden" value={serviceDate} />
-      <label className="grid gap-1">
-        <span className="sr-only">{t("calls.expense.field.amount")}</span>
-        <input
-          className="h-8 w-32 border border-border bg-background px-2 text-xs text-foreground outline-none [font-variant-numeric:tabular-nums] focus:border-brand disabled:bg-readonly"
-          disabled={disabled}
-          min={1}
-          name="amount"
-          placeholder={t("calls.expense.field.amountPlaceholder")}
-          required
-          step={1}
-          type="number"
-        />
-        <InlineError field="amount" state={state} />
-      </label>
-      <label className="grid gap-1">
-        <span className="sr-only">{t("calls.expense.field.description")}</span>
-        <input
-          className="h-8 w-56 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
-          disabled={disabled}
-          maxLength={200}
-          name="description"
-          placeholder={t("calls.expense.field.description")}
-          required
-        />
-        <InlineError field="description" state={state} />
-      </label>
-      <HandlerSelect disabled={disabled} handlers={handlers} label={t("calls.expense.field.handler")} name="handledByEmployeeId" />
-      <ExpenseMethodControl disabled={disabled} error={fieldError(state, "method")} />
-      <label className="grid gap-1">
-        <span className="sr-only">{t("calls.expense.field.note")}</span>
-        <input
-          className="h-8 w-56 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
-          disabled={disabled}
-          maxLength={500}
-          name="note"
-          placeholder={t("calls.expense.field.note")}
-        />
-        <InlineError field="note" state={state} />
-      </label>
-      <ExpenseSaveButton disabled={disabled} idleLabel={t("calls.expense.action.add")} pending={pending} />
-      <div className="basis-full">
-        {state?.ok ? <span className="text-xs text-muted">{t("calls.save.saved")}</span> : <InlineError state={state} />}
-      </div>
-    </form>
+    <tr className="bg-readonly/40">
+      <ExpenseFieldCells disabled={disabled} form={formId} handlers={handlers} state={state} />
+      <td className={cellClassName}>
+        <form action={formAction} className="flex justify-end" id={formId} noValidate>
+          <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
+          <input name="expenseDate" type="hidden" value={serviceDate} />
+          <ExpenseSaveButton disabled={disabled} idleLabel={t("calls.expense.action.add")} pending={pending} />
+        </form>
+        <div className="mt-1 grid justify-items-end text-right">
+          <SavedOrError savedLabel={t("calls.save.saved")} state={state} />
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -274,11 +323,12 @@ export function DailyExpensePanel({
   serviceDate: string;
 }) {
   const t = useT();
+  const headClassName = "border-b border-border px-2 py-2 font-semibold";
   return (
     <section className="mb-4 border border-border bg-surface" aria-label={t("calls.expense.aria")}>
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">{t("calls.expense.title")}</h2>
+          <h2 className="text-base font-semibold text-foreground">{t("calls.expense.title")}</h2>
           {isLocked ? (
             <div className="mt-1 text-xs text-danger">
               <p className="font-medium">{t("calls.grid.lockedTitle")}</p>
@@ -288,21 +338,35 @@ export function DailyExpensePanel({
         </div>
         <span className="text-xs text-muted">{t("calls.expense.itemCount", { count: expenses.length })}</span>
       </div>
-      {expenses.length === 0 ? (
-        <div className="px-3 py-4 text-sm text-muted">{t("calls.expense.empty")}</div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] border-collapse text-left text-sm">
-            <thead className="bg-readonly text-xs font-semibold text-foreground">
+      <div className="relative overflow-x-auto">
+        <table className="w-full min-w-[960px] table-fixed border-collapse text-left text-sm">
+          <colgroup>
+            <col className="w-[9.5rem]" />
+            <col />
+            <col className="w-[14rem]" />
+            <col className="w-[9rem]" />
+            <col />
+            <col className="w-[11.5rem]" />
+          </colgroup>
+          <thead className="bg-readonly text-xs text-foreground">
+            <tr>
+              <th className={`${headClassName} text-right`} scope="col">{t("calls.expense.field.amount")}</th>
+              <th className={headClassName} scope="col">{t("calls.expense.field.description")}</th>
+              <th className={headClassName} scope="col">{t("calls.expense.column.handler")}</th>
+              <th className={headClassName} scope="col">{t("calls.expense.field.method")}</th>
+              <th className={headClassName} scope="col">{t("calls.expense.field.note")}</th>
+              <th className={`${headClassName} text-right`} scope="col">{t("calls.expense.column.actions")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {expenses.length === 0 ? (
               <tr>
-                <th className="border-b border-border px-2 py-2">{t("calls.expense.column.input")}</th>
-                <th className="border-b border-border px-2 py-2 text-right">{t("calls.expense.column.displayAmount")}</th>
-                <th className="border-b border-border px-2 py-2">{t("calls.expense.column.handler")}</th>
-                <th className="border-b border-border px-2 py-2 text-right">{t("calls.expense.column.actions")}</th>
+                <td className="border-b border-border px-3 py-4 text-sm text-muted" colSpan={6}>
+                  {t("calls.expense.empty")}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {expenses.map((expense) => (
+            ) : (
+              expenses.map((expense) => (
                 <ExpenseRow
                   expense={expense}
                   handlers={handlers}
@@ -311,12 +375,14 @@ export function DailyExpensePanel({
                   operatingMonthId={operatingMonthId}
                   serviceDate={serviceDate}
                 />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <AddExpenseForm handlers={handlers} isLocked={isLocked} operatingMonthId={operatingMonthId} serviceDate={serviceDate} />
+              ))
+            )}
+          </tbody>
+          <tfoot>
+            <AddExpenseRow handlers={handlers} isLocked={isLocked} operatingMonthId={operatingMonthId} serviceDate={serviceDate} />
+          </tfoot>
+        </table>
+      </div>
     </section>
   );
 }

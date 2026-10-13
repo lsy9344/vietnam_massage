@@ -95,7 +95,10 @@ describe("actual entry cell", () => {
     assert.ok(startAt >= 0 && startAt < entryAt && entryAt < roomAt);
 
     const entryInput = html.match(/<input[^>]*data-call-cell-column="actualEntryTime"[^>]*>/)?.[0] ?? "";
-    assert.match(entryInput, /h-11/);
+    // 보이는 입력은 원장 칸 높이 그대로이고, 감싼 label이 44px 누름 영역을 만든다.
+    const entryHitArea = html.match(/<label class="([^"]*)"><span class="sr-only">실제입장<\/span><input[^>]*data-call-cell-column="actualEntryTime"/)?.[1] ?? "";
+    assert.match(entryHitArea, /min-h-11/);
+    assert.match(entryInput, /h-8/);
     assert.match(entryInput, /aria-describedby="[^"]*actual-entry-warning/);
     assert.match(html, /id="[^"]*actual-entry-warning[^"]*"[^>]*>4:00 예약이 있습니다/);
 
