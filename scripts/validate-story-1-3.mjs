@@ -106,7 +106,8 @@ for (const prohibited of [
   }
 }
 
-const auditPage = read("src/app/(erp)/audit/page.tsx");
+// 티켓 08: 기록 표와 변경 상세 패널은 audit-workspace.tsx로 나뉘었다. 두 파일을 한 화면으로 본다.
+const auditPage = read("src/app/(erp)/audit/page.tsx") + read("src/app/(erp)/audit/audit-workspace.tsx");
 // i18n 전환: /audit 화면 문구는 t() key로 참조하고 한국어 원문은 messages/ko.ts에 보존한다.
 const koMessagesAudit = read("src/lib/i18n/messages/ko.ts");
 for (const required of [

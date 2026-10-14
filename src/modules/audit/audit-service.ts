@@ -188,6 +188,40 @@ export async function recordAuditEvent(input: RecordAuditEventInput, options: Re
   return toListItem(record);
 }
 
+type AuditActorPrismaClient = {
+  userAccount: {
+    findMany(args: unknown): Promise<Array<{ id: string; accountId: string; employee: { displayName: string } | null }>>;
+  };
+};
+
+export type AuditActor = { name: string; accountId: string };
+
+/**
+ * 감사 기록의 처리자 id를 사람이 읽을 이름으로 푼다. 화면 동작은 계정의 내부 id를, 이전 기록과 테스트 fixture는
+ * 계정 ID를 남겨서 둘 다 찾는다. 계정이 없는 id는 결과에 넣지 않는다(화면은 기록된 id를 그대로 보인다).
+ */
+export async function listAuditActors(actorIds: string[], options: { prismaClient?: AuditActorPrismaClient } = {}) {
+  const ids = [...new Set(actorIds)];
+  const actors = new Map<string, AuditActor>();
+  if (ids.length === 0) {
+    return actors;
+  }
+
+  const client = options.prismaClient ?? (prisma as unknown as AuditActorPrismaClient);
+  const accounts = await client.userAccount.findMany({
+    where: { OR: [{ id: { in: ids } }, { accountId: { in: ids } }] },
+    select: { id: true, accountId: true, employee: { select: { displayName: true } } }
+  });
+  for (const account of accounts) {
+    const actor = { name: account.employee?.displayName ?? account.accountId, accountId: account.accountId };
+    for (const key of [account.id, account.accountId]) {
+      if (ids.includes(key)) actors.set(key, actor);
+    }
+  }
+
+  return actors;
+}
+
 export async function listAuditLogs(query: AuditLogListQuery = {}) {
   const where: Record<string, unknown> = {};
   const targetType = query.targetType?.trim();

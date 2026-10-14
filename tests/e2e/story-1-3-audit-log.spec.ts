@@ -148,8 +148,8 @@ test.describe("Story 1.3 감사 로그 기반과 조회", () => {
     await expect(page.getByText("service_call.status_changed").first()).toBeVisible();
     await expect(page.getByText(serviceCallTargetId).first()).toBeVisible();
     await expect(page.getByText("Story 1.3 e2e fixture").first()).toBeVisible();
-    await expect(page.getByText("status: 예약").first()).toBeVisible();
-    await expect(page.getByText("status: 방문완료").first()).toBeVisible();
+    // 티켓 08: 목록 행은 바뀐 항목을 "항목: 변경 전 → 변경 후" 한 줄로 보인다.
+    await expect(page.getByText("status: 예약 → 방문완료").first()).toBeVisible();
     await expect(page.getByText(monthlyCloseTargetId)).toHaveCount(0);
   });
 

@@ -3,6 +3,7 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 import { masterPanel } from "./support/masters";
+import { auditAfterValue, openAuditEntry } from "./support/audit";
 
 
 const users = [
@@ -180,13 +181,11 @@ test.describe("Story 1.4 운영월 관리", () => {
       .toBe("검토중");
 
     await page.goto("/audit?targetType=operating_month");
-    await expect(page.getByRole("row", { name: /operating_month\.created/ }).filter({ hasText: "2031-04" })).toBeVisible();
-    const statusChangedAuditRow = page.getByRole("row", { name: /operating_month\.status_changed/ }).filter({ hasText: "2031-04" });
-    await expect(statusChangedAuditRow).toBeVisible();
-    // 단언 범위를 연 afterValue details(nth(1)) 내부로 한정해 before/after JSON 중복 매칭을 피한다.
-    const afterDetails = statusChangedAuditRow.locator("details").nth(1);
-    await afterDetails.locator("summary").click();
-    await expect(afterDetails.getByText('"status": "검토중"')).toBeVisible();
+    // 티켓 08: 변경 전·후 전체 값은 기록을 골라 여는 변경 상세 패널에 있다.
+    const createdPanel = await openAuditEntry(page, { action: /operating_month\.created/, contains: "2031-04" });
+    await expect(auditAfterValue(createdPanel, "monthKey")).toHaveText("2031-04");
+    const statusChangedPanel = await openAuditEntry(page, { action: /operating_month\.status_changed/, contains: "2031-04" });
+    await expect(auditAfterValue(statusChangedPanel, "status")).toHaveText("검토중");
   });
 
   for (const user of users.filter((candidate) => candidate.role !== "administrator")) {

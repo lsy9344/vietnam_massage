@@ -3,6 +3,7 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 import { masterRow, openMasterPanel } from "./support/masters";
+import { auditAfterValue, openAuditEntry } from "./support/audit";
 
 
 const defaultRooms = [
@@ -230,15 +231,10 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     expect(after.migrationReferenceName).toBe("1번방");
 
     await page.goto("/audit?targetType=room");
-    const auditRow = page.getByRole("row", { name: /room\.display_name_changed/ }).filter({ hasText: "101 E2E 호실" });
-    await expect(auditRow).toBeVisible();
-    await expect(auditRow).toContainText(before.id);
-    // beforeValue/afterValue JSON 두 details 블록 모두 같은 room id를 포함하므로,
-    // 단언 범위를 연 afterValue details(nth(1)) 내부로 한정해야 strict 위반을 피한다.
-    const afterDetails = auditRow.locator("details").nth(1);
-    await afterDetails.locator("summary").click();
-    await expect(afterDetails.getByText('"displayName": "101 E2E 호실"')).toBeVisible();
-    await expect(afterDetails.getByText(`"id": "${before.id}"`)).toBeVisible();
+    // 티켓 08: 변경 전·후 전체 값은 기록을 골라 여는 변경 상세 패널에 있다.
+    const panel = await openAuditEntry(page, { action: /room\.display_name_changed/, contains: "101 E2E 호실" });
+    await expect(auditAfterValue(panel, "displayName")).toHaveText("101 E2E 호실");
+    await expect(auditAfterValue(panel, "id")).toHaveText(before.id);
   });
 
   test("administrator는 정렬 순서를 수정하고 중복 정렬값 오류를 볼 수 있다", async ({ page }) => {
@@ -267,12 +263,8 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     await expect(page.getByText("정렬 순서가 이미 사용 중입니다.")).toBeVisible();
 
     await page.goto("/audit?targetType=room");
-    const auditRow = page.getByRole("row", { name: /room\.sort_order_changed/ }).filter({ hasText: room.id });
-    await expect(auditRow).toBeVisible();
-    // 단언 범위를 연 afterValue details(nth(1)) 내부로 한정해 before/after JSON 중복 매칭을 피한다.
-    const afterDetails = auditRow.locator("details").nth(1);
-    await afterDetails.locator("summary").click();
-    await expect(afterDetails.getByText('"sortOrder": 25')).toBeVisible();
+    const panel = await openAuditEntry(page, { action: /room\.sort_order_changed/, contains: room.id });
+    await expect(auditAfterValue(panel, "sortOrder")).toHaveText("25");
   });
 
   test("administrator는 객실을 물리 삭제 대신 비활성 처리하고 감사 로그를 확인할 수 있다", async ({ page }) => {
@@ -291,12 +283,8 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     expect(after.isActive).toBe(false);
 
     await page.goto("/audit?targetType=room");
-    const auditRow = page.getByRole("row", { name: /room\.deactivated/ }).filter({ hasText: room.id });
-    await expect(auditRow).toBeVisible();
-    // 단언 범위를 연 afterValue details(nth(1)) 내부로 한정해 before/after JSON 중복 매칭을 피한다.
-    const afterDetails = auditRow.locator("details").nth(1);
-    await afterDetails.locator("summary").click();
-    await expect(afterDetails.getByText('"isActive": false')).toBeVisible();
+    const panel = await openAuditEntry(page, { action: /room\.deactivated/, contains: room.id });
+    await expect(auditAfterValue(panel, "isActive")).toHaveText("false");
   });
 
   for (const user of users.filter((candidate) => candidate.role !== "administrator")) {
