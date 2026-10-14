@@ -304,9 +304,9 @@ async function activeRoomStatus(
 ) {
   const sourceDisplayStatus = toDisplayStatus(input.call.status);
   const policy = await findCoursePolicy(tx, input.call, input.monthKey);
-  // 시작시각 형식은 여기서 거른다. 종료 시각 자체는 콜 서비스의 표시 종료를 쓴다.
+  // 시작시각 형식은 여기서 거른다. 종료 시각은 정책이 없어도 콜 서비스의 표시 종료를 쓴다.
   parseStartTime(input.call.startTime);
-  const expectedEndAt = policy ? input.displayEndAt : null;
+  const expectedEndAt = input.displayEndAt;
   const rawRemainingMinutes = expectedEndAt ? Math.ceil((expectedEndAt.getTime() - input.now.getTime()) / 60000) : null;
   const remainingMinutes = rawRemainingMinutes === null ? null : Math.max(0, rawRemainingMinutes);
   const displayStatus = toTimedDisplayStatus(sourceDisplayStatus, remainingMinutes);

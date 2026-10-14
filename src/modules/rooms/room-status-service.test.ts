@@ -491,23 +491,33 @@ describe("room status service", () => {
     assert.equal(room101.displayStatus, remainingMinutes <= 0 ? "종료확인" : remainingMinutes <= 10 ? "종료임박" : "사용중");
   });
 
-  it("keeps active occupancy when course policy is missing and nulls time calculation fields", async () => {
+  it("uses the call service display end when the course policy is missing", async () => {
     const { client, addCall } = createMemoryPrisma();
     addCall({ id: "call-missing-policy", roomId: "room-101", status: "사용중", startTime: "11:00", courseId: "course-missing-policy" });
+    const now = new Date("2034-06-05T11:15:00.000+07:00");
+    const listed = await listServiceCallsForDate({
+      operatingMonthId: "month-2034-06",
+      serviceDate: "2034-06-05",
+      prismaClient: client
+    });
+    const displayEnd = listed.find((row) => row.id === "call-missing-policy")?.displayEnd;
+    assert.ok(displayEnd, "콜 서비스가 표시 종료를 돌려줘야 합니다.");
+    const expectedEndAt = operatingInstant("2034-06-05", displayEnd);
+    const remainingMinutes = Math.max(0, Math.ceil((expectedEndAt.getTime() - now.getTime()) / 60000));
 
     const statuses = await listRoomStatuses({
       operatingMonthId: "month-2034-06",
       serviceDate: "2034-06-05",
-      now: new Date("2034-06-05T11:15:00.000+07:00"),
+      now,
       prismaClient: client
     });
 
     const room101 = statusByRoom(statuses, "room-101");
-    assert.equal(room101.displayStatus, "사용중");
     assert.equal(room101.activeCallId, "call-missing-policy");
     assert.equal(room101.course, null);
-    assert.equal(room101.expectedEndAt, null);
-    assert.equal(room101.remainingMinutes, null);
+    assert.equal(room101.expectedEndAt, expectedEndAt.toISOString());
+    assert.equal(room101.remainingMinutes, remainingMinutes);
+    assert.equal(room101.displayStatus, remainingMinutes <= 0 ? "종료확인" : remainingMinutes <= 10 ? "종료임박" : "사용중");
   });
 
   it("performs read-only queries and never writes service-call, settlement, closing, or audit data", async () => {

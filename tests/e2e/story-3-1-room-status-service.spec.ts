@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { displayEndInstantsForDate } from "@/modules/calls/service-call-service";
 import { listRoomStatuses } from "@/modules/rooms/room-status-service";
 import type { RoomStatusDto } from "@/modules/rooms/dtos";
 
@@ -236,6 +237,11 @@ test.describe("Story 3.1 room status DTO service", () => {
         prismaClient: client
       })
     );
+    const displayEnds = await displayEndInstantsForDate({
+      operatingMonthId,
+      serviceDate,
+      prismaClient: client
+    });
 
     expect(statuses).toHaveLength(11);
     expect(statuses.map((status) => status.roomSortOrder)).toEqual([93110, 93120, 93130, 93140, 93150, 93160, 93170, 93180, 93190, 93200, 93210]);
@@ -279,12 +285,14 @@ test.describe("Story 3.1 room status DTO service", () => {
       });
     }
 
+    const missingPolicyEnd = displayEnds.get("story31-room08-missing-policy");
+    expect(missingPolicyEnd).toBeTruthy();
     expect(statuses[7]).toMatchObject({
-      displayStatus: "사용중",
+      displayStatus: "종료확인",
       sourceCallStatus: "사용중",
       course: null,
-      expectedEndAt: null,
-      remainingMinutes: null
+      expectedEndAt: missingPolicyEnd?.toISOString(),
+      remainingMinutes: 0
     });
     for (const emptyStatus of statuses.slice(8)) {
       expect(emptyStatus.displayStatus).toBe("빈방");

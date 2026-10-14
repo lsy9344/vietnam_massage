@@ -31,7 +31,7 @@ The rooms module owns room-status presentation for operational use:
 - The service finds the latest active call by room using service date, 자정-normalized start time, and deterministic update/create/id tie breakers.
 - Active call statuses are `예약`/`RESERVED`, `사용중`/`IN_USE`/`USING`, and `청소중`/`CLEANING`.
 - Excluded statuses are `방문완료`/`VISIT_COMPLETE`, `노쇼`/`NO_SHOW`, and `취소`/`CANCELED`; they do not occupy a room.
-- Missing course policy keeps the room occupied but returns `course`, `expectedEndAt`, and `remainingMinutes` as `null`.
+- Missing course policy keeps the room occupied and leaves `course` null. `expectedEndAt` and `remainingMinutes` still follow the call's 표시 종료.
 - The service is read-only / 조회 전용 and does not mutate calls, status history, settlement, closing, or audit records.
 
 ## Story 3.2 First Screen Handoff
