@@ -38,7 +38,7 @@ const expectedSheets = [
   "src/app/(erp)/masters/sheet-mapping/page.tsx",
   "src/lib/authorization.ts",
   "src/lib/authorization.test.ts",
-  "src/lib/navigation.ts",
+  "src/lib/routes.ts",
   "docs/modules/README.md",
   "docs/modules/migration-verification.md",
   "_bmad-output/project-context.md",
@@ -103,7 +103,6 @@ for (const required of [
   "getSheetMappingSummary()",
   "masters.sheetMapping.meta.preservationGoal",
   "masters.sheetMapping.summary.missingItemsNote",
-  "masters.sheetMapping.description",
   "StatusBadge",
   "masters.sheetMapping.evidence.workbook",
   "masters.sheetMapping.evidence.erpSurfaces",
@@ -113,10 +112,10 @@ for (const required of [
 ]) {
   if (!page.includes(required)) errors.push(`sheet mapping page missing required marker: ${required}`);
 }
+// 화면 설명 문구(masters.sheetMapping.description)는 새 도구줄에 설명 줄이 없어 제거됐다.
 for (const ko of [
   "기능 보존율 100%",
   "누락된 시트",
-  "visible sheet와 숨김 목록 sheet",
   "원본 근거",
   "ERP 연결",
   "보존 규칙",
@@ -130,14 +129,18 @@ for (const forbidden of ["\"use server\"", "recordAuditEvent", "createDailyExpen
   if (page.includes(forbidden)) errors.push(`sheet mapping page must stay read-only and not include: ${forbidden}`);
 }
 
-const authorization = read("src/lib/authorization.ts");
-if (!authorization.includes("read_only_viewer: [\"/masters/sheet-mapping\"]")) {
+// 화면 접근 규칙은 routes.ts로 옮겨졌고, 모든 화면은 경로 완전일치로 검사한다(접두어 테이블 없음).
+const routes = read("src/lib/routes.ts");
+if (!/\{ path: "\/masters\/sheet-mapping",[^}]*roles: \["administrator", "read_only_viewer"\][^}]*\}/.test(routes)) {
   errors.push("authorization.ts must allow read_only_viewer exact access to /masters/sheet-mapping");
 }
-if (!authorization.includes("roleExactRoutes[role].includes(normalizedPath)")) {
+if (!routes.includes("route.path === pathname")) {
   errors.push("authorization.ts must use exact-route handling for read_only_viewer sheet mapping access");
 }
-if (authorization.includes("read_only_viewer: [\"/rooms\", \"/tv\", \"/dashboard/today\", \"/dashboard/monthly\", \"/dashboard/reports\", \"/masters")) {
+const mastersRoutesWithReadOnlyViewer = [...routes.matchAll(/\{ path: "(\/masters\/[^"]+)",[^}]*roles: \[([^\]]*)\][^}]*\}/g)]
+  .filter(([, , rolesText]) => rolesText.includes("\"read_only_viewer\""))
+  .map(([, path]) => path);
+if (mastersRoutesWithReadOnlyViewer.length !== 1 || mastersRoutesWithReadOnlyViewer[0] !== "/masters/sheet-mapping") {
   errors.push("authorization.ts must not open /masters prefix to read_only_viewer");
 }
 
@@ -152,9 +155,8 @@ for (const required of [
   if (!authorizationTest.includes(required)) errors.push(`authorization.test.ts missing Story 7.1 coverage marker: ${required}`);
 }
 
-const navigation = read("src/lib/navigation.ts");
-for (const required of ["nav.item.mastersSheetMapping", "/masters/sheet-mapping", "\"administrator\", \"read_only_viewer\""]) {
-  if (!navigation.includes(required)) errors.push(`navigation.ts missing Story 7.1 sidebar marker: ${required}`);
+for (const required of ["shell.tab.sheetMapping", "/masters/sheet-mapping", "\"administrator\", \"read_only_viewer\""]) {
+  if (!routes.includes(required)) errors.push(`routes.ts missing Story 7.1 sidebar marker: ${required}`);
 }
 
 const unitTest = read("src/modules/migration/sheet-feature-mapping.test.ts");

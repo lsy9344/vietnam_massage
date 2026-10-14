@@ -11,12 +11,12 @@ import {
   type MigrationVerificationFilters,
   type MigrationVerificationSheetRow
 } from "@/modules/migration/migration-verification-report";
-import { PageHeader } from "@/components/domain/page-header";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { formatDateTime, formatNumber } from "@/lib/i18n/format";
 import { roomStatusLabel } from "@/lib/i18n/codes";
 import type { Locale } from "@/lib/i18n/config";
 import { type Translator } from "@/lib/i18n";
+import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 
 // Story 7.1 compatibility marker: report service still consumes getSheetMappingSummary().
 
@@ -342,20 +342,14 @@ export default async function SheetMappingPage({ searchParams }: { searchParams:
   const hiddenListMapped = hiddenListRow?.mappingStatus === "mapped";
 
   return (
-    <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <PageHeader
-        eyebrow={t("masters.eyebrow")}
-        title={t("masters.sheetMapping.title")}
-        description={t("masters.sheetMapping.description")}
-        meta={
-          <>
-            <div>{t("masters.sheetMapping.meta.preservationGoal")}</div>
-            <div>{t("masters.sheetMapping.meta.generatedAt", { value: masterDateTime(locale, report.generatedAt) })}</div>
-            <div>{canWrite ? t("masters.sheetMapping.meta.canWrite") : t("masters.sheetMapping.meta.readOnly")}</div>
-            <div>{t("masters.sheetMapping.meta.noWriteNote")}</div>
-          </>
-        }
-      />
+    <div className="screen">
+      <ScreenToolbar account={account} locale={locale} path="/masters/sheet-mapping" title={t("masters.sheetMapping.title")} />
+      <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+        <div>{t("masters.sheetMapping.meta.preservationGoal")}</div>
+        <div>{t("masters.sheetMapping.meta.generatedAt", { value: masterDateTime(locale, report.generatedAt) })}</div>
+        <div>{canWrite ? t("masters.sheetMapping.meta.canWrite") : t("masters.sheetMapping.meta.readOnly")}</div>
+        <div>{t("masters.sheetMapping.meta.noWriteNote")}</div>
+      </div>
 
       <section className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5" aria-label={t("masters.sheetMapping.summary.aria")}>
         <SummaryTile
@@ -421,6 +415,6 @@ export default async function SheetMappingPage({ searchParams }: { searchParams:
       <SheetEvidenceDetails rows={report.sheetRows} t={t} />
       <CalculationDetails rows={report.calculationRows} t={t} />
       <OpenIssueTable canWrite={canWrite} issues={report.openIssueRows} locale={locale} t={t} />
-    </main>
+    </div>
   );
 }

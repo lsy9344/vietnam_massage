@@ -23,7 +23,7 @@ function readJson(path) {
   "src/app/(erp)/dashboard/monthly/loading.tsx",
   "src/app/(erp)/dashboard/monthly/error.tsx",
   "src/lib/authorization.ts",
-  "src/lib/navigation.ts",
+  "src/lib/routes.ts",
   "src/modules/dashboard/README.md",
   "docs/modules/dashboard.md",
   "_bmad-output/project-context.md",
@@ -79,8 +79,10 @@ for (const required of [
   if (!page.includes(required)) errors.push(`monthly dashboard page missing ${required}`);
 }
 // i18n: 한국어 UI 문구는 t() key로 참조하고 원문은 messages/ko.ts에 보존한다.
+// 운영월이 없을 때 안내는 공용 NoOperatingMonthNotice(그 안에 common.goToOperatingMonths)로 옮겨졌다.
+if (!page.includes("NoOperatingMonthNotice")) errors.push("monthly dashboard page missing t() key common.goToOperatingMonths");
+if (!koMessages.includes("운영월 관리로 이동")) errors.push("messages/ko.ts missing 운영월 관리로 이동");
 for (const [key, ko] of [
-  ["common.goToOperatingMonths", "운영월 관리로 이동"],
   ["dashboard.monthly.statusCounts.aria", "월간 상태 건수"],
   ["dashboard.monthly.money.aria", "월간 금액 KPI"],
   ["dashboard.monthly.settlement.aria", "월간 지급 정산 KPI"],
@@ -135,19 +137,23 @@ if (errorBoundary.includes("error.message")) {
   errors.push("monthly error.tsx must not expose raw server error.message to users");
 }
 
-const authorization = read("src/lib/authorization.ts");
+// 세 대시보드 화면은 routes.ts의 reportRoles(관리자/카운터/정산담당/조회전용)를 함께 쓰고, 웨이터는 포함하지 않는다.
+const routes = read("src/lib/routes.ts");
+const reportRolesMatch = routes.match(/const reportRoles: Role\[\] = \[([^\]]*)\]/);
+const reportRoles = reportRolesMatch ? reportRolesMatch[1].split(",").map((role) => role.trim().replace(/"/g, "")) : [];
 for (const role of ["counter", "settlement_manager", "read_only_viewer"]) {
-  if (!new RegExp(`${role}: \\[[^\\]]*"/dashboard/monthly"`).test(authorization)) {
+  if (!reportRoles.includes(role)) {
     errors.push(`authorization.ts must allow ${role} to /dashboard/monthly`);
   }
 }
-if (!authorization.includes("waiter: [\"/rooms\"]")) {
+if (reportRoles.includes("waiter")) {
   errors.push("authorization.ts must keep waiter limited to /rooms");
 }
+const waiterRouteCount = (routes.match(/"waiter"/g) ?? []).length;
+if (waiterRouteCount !== 1) errors.push("authorization.ts must keep waiter limited to /rooms");
 
-const navigation = read("src/lib/navigation.ts");
-for (const required of ["nav.item.dashboardMonthly", "/dashboard/monthly", "role !== \"waiter\""]) {
-  if (!navigation.includes(required)) errors.push(`navigation.ts missing ${required}`);
+for (const required of ["shell.tab.dashboardMonthly", "/dashboard/monthly", "reportRoles"]) {
+  if (!routes.includes(required)) errors.push(`routes.ts missing ${required}`);
 }
 
 const unitTest = read("src/modules/dashboard/dashboard-query-service.test.ts");

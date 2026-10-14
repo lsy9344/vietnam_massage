@@ -4,7 +4,7 @@ import { getServerTranslator } from "@/lib/i18n/server";
 export default async function ClosingLoading() {
   const { t } = await getServerTranslator();
   return (
-    <main aria-label={t("closing.loading.aria")} className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
+    <section aria-label={t("closing.loading.aria")} className="screen">
       <div className="mb-5 flex items-end justify-between gap-6">
         <div>
           <Skeleton className="mb-2 h-3 w-16" />
@@ -30,6 +30,6 @@ export default async function ClosingLoading() {
         <Skeleton className="h-56" />
         <Skeleton className="h-44" />
       </section>
-    </main>
+    </section>
   );
 }

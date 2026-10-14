@@ -1,9 +1,12 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
+import { canAccessRoute, getRoleLandingPath } from "@/lib/routes";
 import { getCurrentAccountAuthorization } from "@/modules/masters/account-service";
 
 export { getCurrentAccountAuthorization } from "@/modules/masters/account-service";
+// 화면 접근 규칙은 탐색 셸의 라우트 목록 하나에서 나온다.
+export { canAccessRoute, getRoleLandingPath } from "@/lib/routes";
 
 export const roles = [
   "administrator",
@@ -23,30 +26,6 @@ export type SensitivePermission =
   | "employee:write"
   | "audit:read"
   | "migration:write";
-
-const roleLandingPath: Record<Role, string> = {
-  administrator: "/live",
-  counter: "/calls",
-  settlement_manager: "/settlements",
-  waiter: "/rooms",
-  read_only_viewer: "/rooms"
-};
-
-const roleRoutePrefixes: Record<Role, string[]> = {
-  administrator: ["/live", "/calls", "/rooms", "/settlements", "/closing", "/dashboard", "/masters", "/audit", "/tv"],
-  counter: ["/live", "/calls", "/rooms", "/dashboard/today", "/dashboard/monthly", "/dashboard/reports", "/tv"],
-  settlement_manager: ["/settlements", "/closing", "/dashboard/today", "/dashboard/monthly", "/dashboard/reports"],
-  waiter: ["/rooms"],
-  read_only_viewer: ["/rooms", "/tv", "/dashboard/today", "/dashboard/monthly", "/dashboard/reports"]
-};
-
-const roleExactRoutes: Record<Role, string[]> = {
-  administrator: [],
-  counter: [],
-  settlement_manager: [],
-  waiter: [],
-  read_only_viewer: ["/masters/sheet-mapping"]
-};
 
 const rolePermissions: Record<Role, SensitivePermission[]> = {
   administrator: ["call:write", "payout:write", "closing:write", "closing:reopen", "employee:write", "audit:read", "migration:write"],
@@ -68,6 +47,7 @@ function getDevBypassAccount() {
 
   return {
     id: "local-bypass-account",
+    displayName: "local-bypass-account",
     role: devBypassRole,
     employeeId: null,
     isActive: true,
@@ -84,16 +64,6 @@ export class AuthorizationError extends Error {
 
 export function isRole(value: unknown): value is Role {
   return typeof value === "string" && roles.includes(value as Role);
-}
-
-export function getRoleLandingPath(role: Role) {
-  return roleLandingPath[role];
-}
-
-export function canAccessRoute(role: Role, pathname: string) {
-  const normalizedPath = pathname === "/" ? getRoleLandingPath(role) : pathname;
-  if (roleExactRoutes[role].includes(normalizedPath)) return true;
-  return roleRoutePrefixes[role].some((prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`));
 }
 
 export function canPerform(role: Role, permission: SensitivePermission) {

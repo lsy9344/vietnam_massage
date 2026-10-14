@@ -95,40 +95,32 @@ if (!css.includes("@media (prefers-reduced-motion: reduce)")) {
 }
 
 const page = read("src/app/page.tsx");
-const navigation = read("src/lib/navigation.ts");
+const routes = read("src/lib/routes.ts");
 const emptyState = read("src/components/domain/erp-empty-state.tsx");
-// i18n 전환: 사이드바 라벨은 navigation.ts에서 메시지 key로, 한국어 문구는 messages/ko.ts로 이동했다.
-// 그룹 순서는 navigation.ts의 labelKey 등장 순서로, 한국어 문구 존재는 ko.ts로 검증한다.
+// i18n 전환: 업무 흐름 도크 구역 라벨은 routes.ts에서 메시지 key로, 한국어 문구는 messages/ko.ts로 이동했다.
+// 구역 순서는 routes.ts의 zones 배열 등장 순서로, 한국어 문구 존재는 ko.ts로 검증한다.
 const koMessages = read("src/lib/i18n/messages/ko.ts");
-const sidebarGroupKeys = [
-  "nav.group.operations",
-  "nav.group.calls",
-  "nav.group.settlements",
-  "nav.group.closing",
-  "nav.group.dashboard",
-  "nav.group.masters",
-  "nav.group.audit"
-];
-const sidebarOrder = ["운영 현황", "콜 원장", "정산", "월마감", "대시보드", "마스터 설정", "감사 로그"];
+const dockZoneKeys = ["ledger", "floor", "customers", "settlements", "closing", "reports", "settings"];
+const dockZoneOrder = ["원장", "현장", "고객", "정산", "마감", "보고", "설정"];
 let previousIndex = -1;
-for (const key of sidebarGroupKeys) {
-  const index = navigation.indexOf(key);
+for (const key of dockZoneKeys) {
+  const index = routes.indexOf(`"${key}"`);
   if (index === -1) {
-    errors.push(`navigation.ts missing sidebar group key: ${key}`);
+    errors.push(`routes.ts missing dock zone key: ${key}`);
   }
   if (index !== -1 && index < previousIndex) {
-    errors.push(`Sidebar group key is out of order: ${key}`);
+    errors.push(`Dock zone key is out of order: ${key}`);
   }
   previousIndex = index;
 }
-for (const label of sidebarOrder) {
+for (const label of dockZoneOrder) {
   if (!koMessages.includes(label)) {
-    errors.push(`messages/ko.ts missing sidebar label: ${label}`);
+    errors.push(`messages/ko.ts missing dock zone label: ${label}`);
   }
 }
 
 for (const prohibited of ["fake", "dummy", "샘플 고객", "가짜"]) {
-  const combined = `${page}\n${navigation}\n${emptyState}`.toLowerCase();
+  const combined = `${page}\n${routes}\n${emptyState}`.toLowerCase();
   if (combined.includes(prohibited)) {
     errors.push(`app shell contains placeholder-like text: ${prohibited}`);
   }

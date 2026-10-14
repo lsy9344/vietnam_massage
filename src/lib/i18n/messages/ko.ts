@@ -10,12 +10,50 @@ export const ko = {
   "app.title": "Vietnam Aesthetic ERP",
   "app.description": "운영 원장, 객실 현황, 정산, 월마감을 위한 ERP 앱 쉘",
 
-  // 앱 shell
-  "shell.brand": "Vietnam Aesthetic",
-  "shell.title": "ERP 운영",
-  "shell.header.eyebrow": "오늘 운영 기준",
-  "shell.header.title": "역할별 ERP 업무",
-  "shell.menu.aria": "ERP 도메인 메뉴",
+  // 탐색 셸: 업무 흐름 도크, "나" 메뉴, 건너뛰기 링크
+  "shell.skip.main": "본문으로",
+  "shell.skip.dock": "업무 이동으로",
+  "shell.dock.aria": "업무 이동",
+  "shell.dock.more": "더보기",
+  "shell.zone.ledger": "원장",
+  "shell.zone.floor": "현장",
+  "shell.zone.customers": "고객",
+  "shell.zone.settlements": "정산",
+  "shell.zone.closing": "마감",
+  "shell.zone.reports": "보고",
+  "shell.zone.settings": "설정",
+  "shell.tabs.aria": "{zone} 화면",
+  "shell.tab.calls": "원장",
+  "shell.tab.rooms": "객실",
+  "shell.tab.live": "실시간",
+  "shell.tab.tv": "TV 화면",
+  "shell.tab.therapist": "Therapist",
+  "shell.tab.earcare": "귀케어",
+  "shell.tab.opsDaily": "운영팀 일일",
+  "shell.tab.opsMonthly": "운영팀 월",
+  "shell.tab.closing": "월마감",
+  "shell.tab.dashboardToday": "오늘",
+  "shell.tab.dashboardMonthly": "월간",
+  "shell.tab.dashboardReports": "리포트",
+  "shell.tab.operatingMonths": "운영월",
+  "shell.tab.mastersRooms": "객실",
+  "shell.tab.codes": "코드·시간",
+  "shell.tab.employees": "직원",
+  "shell.tab.courses": "코스·수당",
+  "shell.tab.sheetMapping": "시트 매핑",
+  "shell.tab.audit": "감사",
+  "shell.date.previous": "이전 날",
+  "shell.date.next": "다음 날",
+  "shell.date.today": "오늘",
+  "shell.openTv": "TV 화면 열기",
+  "shell.me.trigger": "나",
+  "shell.me.aria": "내 계정",
+  "shell.me.signOut": "로그아웃",
+  "shell.role.administrator": "관리자",
+  "shell.role.counter": "카운터",
+  "shell.role.waiter": "웨이터",
+  "shell.role.settlement_manager": "정산 담당",
+  "shell.role.read_only_viewer": "조회 전용",
 
   // 언어 전환
   "locale.switch.aria": "화면 언어 전환",
@@ -34,35 +72,23 @@ export const ko = {
   "common.dateRange": "날짜 범위",
   "common.createOperatingMonthFirst": "운영월을 먼저 생성해 주세요",
   "common.goToOperatingMonths": "운영월 관리로 이동",
+  "common.requestOperatingMonthFromAdmin": "관리자에게 운영월 생성을 요청하세요.",
   "common.roomStatusAria": "객실 상태",
   "common.monthOption": "{monthKey} ({status})",
+  "common.warning.more": "+{count}",
+  "common.warning.moreAria": "경고 {count}건 더",
+  "common.saveState.saving": "저장 중",
+  "common.saveState.saved": "저장됨",
+  "common.saveState.failed": "저장 실패",
+  "common.saveState.conflict": "충돌 확인 필요",
+  "common.saveState.checking": "저장 여부 확인 중",
+  "common.panel.close": "닫기",
+  "common.confirm.cancel": "취소",
 
-  // 사이드바 그룹
-  "nav.group.operations": "운영 현황",
-  "nav.group.calls": "콜 원장",
-  "nav.group.settlements": "정산",
-  "nav.group.closing": "월마감",
-  "nav.group.dashboard": "대시보드",
-  "nav.group.masters": "마스터 설정",
-  "nav.group.audit": "감사 로그",
-
-  // 사이드바 항목
+  // 화면 제목 (실시간, 객실, TV)
   "nav.item.live": "첫화면 실시간 현황",
   "nav.item.rooms": "객실 현황",
   "nav.item.tv": "TV 현황판",
-  "nav.item.calls": "콜/예약 입력 원장",
-  "nav.item.settlements": "정산 화면",
-  "nav.item.closing": "월마감",
-  "nav.item.dashboardToday": "오늘 대시보드",
-  "nav.item.dashboardMonthly": "월간 대시보드",
-  "nav.item.dashboardReports": "그래프 리포트",
-  "nav.item.mastersOperatingMonths": "운영월",
-  "nav.item.mastersRooms": "객실",
-  "nav.item.mastersCodes": "코드/시간 슬롯",
-  "nav.item.mastersEmployees": "직원",
-  "nav.item.mastersCourses": "코스/수당/인센",
-  "nav.item.mastersSheetMapping": "시트 기능 매핑표",
-  "nav.item.audit": "감사 로그",
 
   // 로그인
   "auth.signIn.eyebrow": "Vietnam Aesthetic ERP",
@@ -126,7 +152,6 @@ export const ko = {
 
   // /live /rooms /tv 화면
   // 첫화면(실시간 현황)
-  "live.description": "객실 상태와 오늘 콜/매출 요약을 조회한다.",
   "live.empty.description": "첫 화면은 운영월 날짜 범위 안의 객실 상태와 콜 요약을 조회한다.",
   "live.summary.aria": "오늘 상태 요약",
   "live.summary.reservationCount": "예약건수",
@@ -147,8 +172,6 @@ export const ko = {
   "live.loading.summaryAria": "오늘 요약 로딩",
 
   // 객실 현황
-  "rooms.description.short": "객실별 상태와 웨이터 안내 문구를 읽기 전용으로 조회한다.",
-  "rooms.description.full": "객실별 상태, 남은 시간, 종료확인, 웨이터 안내 문구를 읽기 전용으로 조회한다.",
   "rooms.empty.description": "객실 현황은 운영월 날짜 범위 안의 객실 상태를 조회한다.",
   "rooms.loading.roomsAria": "객실 상태 로딩",
 
@@ -161,7 +184,6 @@ export const ko = {
   // /calls 화면
   // 페이지 헤더/빈 상태
   "calls.title": "콜/예약 입력 원장",
-  "calls.description": "운영월과 날짜별로 실시간콜입력 A:S 의미의 기본 콜 정보를 기록한다.",
   "calls.empty.description": "콜 원장은 운영월 날짜 범위 안에서만 조회하고 저장할 수 있다.",
 
   // 콜 그리드 컬럼 헤더
@@ -330,11 +352,6 @@ export const ko = {
 
   // /settlements 화면
   // 공통 정산 탭/포맷
-  "settlements.tabs.aria": "정산 화면",
-  "settlements.tabs.therapistDaily": "마사지사 일일정산",
-  "settlements.tabs.earcareDaily": "귀케어 일일정산",
-  "settlements.tabs.opsDaily": "운영팀 근무/일일인센",
-  "settlements.tabs.opsMonthly": "운영팀 월인센",
   "settlements.vndSuffix": "VND",
   "settlements.countSuffix": "건",
   "settlements.peopleSuffix": "명",
@@ -348,8 +365,6 @@ export const ko = {
   "settlements.payment.saveFailed": "지급완료 상태 저장 중 오류가 발생했습니다.",
   "settlements.therapist.title": "마사지사 일일정산",
   "settlements.therapist.emptyMonthDescription": "마사지사 일일정산은 운영월 날짜 범위 안에서만 조회할 수 있다.",
-  "settlements.therapist.description": "방문완료 콜 기준으로 마사지사별 담당 콜, 코스별 수당, 정책 상태 근거를 조회하고 출퇴근 시간과 만근 인정을 함께 관리한다.",
-  "settlements.therapist.emptyDescription": "방문완료 콜의 마사지사1/2 담당 건과 코스별 수당 근거를 조회한다.",
   "settlements.therapist.locked.description": "이 운영월의 출퇴근 시간은 수정할 수 없습니다. 입력 항목은 읽기 전용으로 표시됩니다.",
   "settlements.therapist.error.title": "정산 조회 실패",
   "settlements.therapist.error.fallback": "마사지사 일일정산을 조회하지 못했습니다.",
@@ -423,8 +438,6 @@ export const ko = {
 
   // 귀케어 일일정산
   "settlements.earcare.title": "귀케어 일일정산",
-  "settlements.earcare.emptyDescription": "방문완료 귀케어 풀과 날짜별 정상 근무 대상 기준으로 지급액을 조회한다.",
-  "settlements.earcare.description": "방문완료 콜 귀케어 풀을 정상 근무 귀케어사에게 균등 분배하고 근무상태 원천을 함께 관리한다.",
   "settlements.earcare.emptyMonthDescription": "귀케어 일일정산은 운영월 날짜 범위 안에서만 조회할 수 있다.",
   "settlements.earcare.locked.description": "이 운영월의 귀케어 근무상태는 수정할 수 없습니다. 입력 항목은 읽기 전용으로 표시됩니다.",
   "settlements.earcare.error.title": "귀케어 일일정산 조회 실패",
@@ -468,8 +481,6 @@ export const ko = {
 
   // 운영팀 근무/일일인센
   "settlements.ops.title": "운영팀 근무/일일인센",
-  "settlements.ops.emptyDescription": "운영팀 근무상태와 방문완료 기준 일 총콜 인센을 조회한다.",
-  "settlements.ops.description": "방문완료 콜의 opsCallCredit 합계로 정상 근무 운영팀 직원의 일일 인센을 계산한다.",
   "settlements.ops.emptyMonthDescription": "운영팀 일일 인센은 운영월 날짜 범위 안에서만 조회할 수 있다.",
   "settlements.ops.locked.description": "이 운영월의 운영팀 근무상태는 수정할 수 없습니다. 입력 항목은 읽기 전용으로 표시됩니다.",
   "settlements.ops.warningNotice.title": "일일 인센 근거 확인",
@@ -512,8 +523,6 @@ export const ko = {
 
   // 운영팀 월인센
   "settlements.opsMonthly.title": "운영팀 월인센",
-  "settlements.opsMonthly.emptyDescription": "운영월 전체 방문완료 콜 기준 운영팀 월 인센을 조회한다.",
-  "settlements.opsMonthly.description": "운영월 총콜과 정책 threshold 기준으로 월 인센 예상액과 직원별 분배 근거를 조회한다.",
   "settlements.opsMonthly.emptyMonthDescription": "운영팀 월 인센 미리보기는 운영월 전체 날짜 범위로만 조회할 수 있다.",
   "settlements.opsMonthly.error.title": "운영팀 월 인센 조회 실패",
   "settlements.opsMonthly.error.fallback": "운영팀 월 인센을 조회하지 못했습니다.",
@@ -579,8 +588,6 @@ export const ko = {
 
   // /closing 화면
   "closing.title": "월마감 미리보기",
-  "closing.emptyDescription": "운영월 전체 날짜 범위로 지급액 미리보기를 집계한다.",
-  "closing.description": "마사지사, 운영팀, 귀케어 지급액을 운영월 날짜 범위 기준으로 읽기 전용 집계한다.",
   "closing.emptyMonthDescription": "월마감 미리보기는 운영월 시작일과 종료일 기준으로만 조회할 수 있다.",
   "closing.error.title": "월마감 미리보기 조회 실패",
   "closing.error.fallback": "월마감 미리보기를 조회하지 못했습니다.",
@@ -695,16 +702,12 @@ export const ko = {
 
   // /dashboard 화면
   // 공통 (대시보드 3개 화면 공유)
-  "dashboard.eyebrow": "대시보드",
   "dashboard.vndSuffix": "VND",
   "dashboard.countSuffix": "건",
   "dashboard.empty.description": "오늘 KPI는 운영월 날짜 범위 안의 콜 원장과 정산 데이터를 기준으로 조회한다.",
-  "dashboard.empty.requestAdmin": "관리자에게 운영월 생성을 요청하세요.",
 
   // 오늘 KPI 대시보드 (6-1)
   "dashboard.today.title": "오늘 KPI 대시보드",
-  "dashboard.today.emptyDescription": "운영월과 조회날짜 기준으로 오늘 예약, 방문완료, 매출, 정산 흐름을 조회한다.",
-  "dashboard.today.description": "선택 날짜 기준의 콜 상태, 매출, 지출, 정산 흐름을 조회한다.",
   "dashboard.today.statusCounts.aria": "오늘 상태 건수",
   "dashboard.today.moneyKpi.aria": "오늘 금액 KPI",
   "dashboard.today.detailSummary.aria": "상세 요약",
@@ -757,9 +760,7 @@ export const ko = {
 
   // 월간 KPI 대시보드 (6-2)
   "dashboard.monthly.title": "월간 KPI 대시보드",
-  "dashboard.monthly.emptyDescription": "운영월 전체 날짜 범위 기준으로 월간 상태, 매출, 지급 요약을 조회한다.",
   "dashboard.monthly.empty.description": "월간 KPI는 운영월 날짜 범위와 운영월 ID를 기준으로 조회한다.",
-  "dashboard.monthly.description": "운영월 전체 기준의 콜 상태, 선결제 반영 매출, 지급 스냅샷 흐름을 조회한다.",
   "dashboard.monthly.basis.aria": "월간 KPI 기준",
   "dashboard.monthly.basis.label": "조회 기준",
   "dashboard.monthly.basis.closedSnapshot": "확정 스냅샷 기준",
@@ -831,9 +832,7 @@ export const ko = {
 
   // 그래프 리포트 (6-3)
   "dashboard.reports.title": "그래프 리포트",
-  "dashboard.reports.emptyDescription": "운영월과 조회날짜 기준으로 매출, 코스, 마사지사, 객실, 노쇼/취소 흐름을 조회한다.",
   "dashboard.reports.empty.description": "그래프 리포트는 운영월 날짜 범위와 선택 조회날짜를 기준으로 조회한다.",
-  "dashboard.reports.description": "매출, 코스, 마사지사, 객실, 노쇼/취소 흐름을 그래프로 조회한다.",
   "dashboard.reports.snapshotMissing.title": "확정 스냅샷을 찾을 수 없습니다",
   "dashboard.reports.snapshotMissing.description": "마감확정 또는 잠금 상태의 운영월은 현재 지급 계산값으로 대체하지 않습니다. 그래프의 정산 순위와 지급 구성은 비워 둡니다.",
   "dashboard.reports.basis.aria": "그래프 리포트 기준",
@@ -906,7 +905,6 @@ export const ko = {
 
   // /masters 화면
   // 공통 (마스터 화면 공유)
-  "masters.eyebrow": "마스터 설정",
   "masters.common.displayCount": "{count}개 표시",
   "masters.common.uniqueId": "고유 ID: {id}",
   "masters.common.save": "저장",
@@ -924,7 +922,6 @@ export const ko = {
 
   // 운영월 관리 (1-4)
   "masters.operatingMonths.title": "운영월 관리",
-  "masters.operatingMonths.description": "모든 콜 입력, 정산, 대시보드, 월마감이 공유할 운영월과 날짜 범위를 관리한다.",
   "masters.operatingMonths.meta.defaultStatus": "기본 상태: 작성중",
   "masters.operatingMonths.meta.dateFormat": "날짜 형식: YYYY-MM-DD",
   "masters.operatingMonths.changeToReview": "검토중으로 변경",
@@ -942,7 +939,6 @@ export const ko = {
 
   // 객실 마스터 (1-5)
   "masters.rooms.title": "객실 마스터",
-  "masters.rooms.description": "콜 원장, 객실 현황, TV 현황판이 공유할 객실 표시명과 정렬 기준을 관리한다.",
   "masters.rooms.meta.defaultRooms": "기본 객실: 11개",
   "masters.rooms.meta.migrationReference": "이관 참조값은 검증용으로만 보존",
   "masters.rooms.listTitle": "객실 목록",
@@ -951,7 +947,6 @@ export const ko = {
 
   // 코드/시간 슬롯 (1-6)
   "masters.codes.title": "코드/시간 슬롯",
-  "masters.codes.description": "콜 원장과 정산 화면이 공유할 상태, 결제수단, 할인구분, 근무상태, 확인값, 입력 시간 슬롯을 관리한다.",
   "masters.codes.meta.defaultCodes": "기본 코드: {count}개",
   "masters.codes.meta.defaultTimeSlots": "기본 시간 슬롯: {count}개",
   "masters.codes.type.SERVICE_STATUS": "상태",
@@ -972,7 +967,6 @@ export const ko = {
 
   // 직원 (1-7)
   "masters.employees.title": "직원",
-  "masters.employees.description": "직원 표시명과 계정 로그인 정보를 분리해 관리한다. 콜 원장과 정산은 이름 문자열이 아니라 직원 고유 ID를 참조한다.",
   "masters.employees.meta.totalEmployees": "전체 직원: {count}명",
   "masters.employees.meta.activeEmployees": "활성 직원: {count}명",
   "masters.employees.group.OPERATIONS": "운영팀",
@@ -1021,7 +1015,6 @@ export const ko = {
 
   // 코스/수당/인센 (1-8)
   "masters.courses.title": "코스/수당/인센",
-  "masters.courses.description": "코스와 지급 정책은 코스 ID, 직원 ID, 적용월 이력으로 관리한다. 표시명 변경은 stable ID와 코스 코드를 바꾸지 않는다.",
   "masters.courses.meta.baseMonth": "기준 적용월: {monthKey}",
   "masters.courses.meta.courseCount": "코스: {count}개",
   "masters.courses.meta.therapistRateCount": "마사지사 수당: {count}개",
@@ -1064,7 +1057,6 @@ export const ko = {
 
   // 시트 기능 매핑표 (7-1/7-3)
   "masters.sheetMapping.title": "시트 기능 매핑표",
-  "masters.sheetMapping.description": "원본 엑셀 11개 visible sheet와 숨김 목록 sheet의 매핑, Story 7.2 계산 대조, 출시 전 열린 위험을 한 화면에서 확인한다.",
   "masters.sheetMapping.meta.preservationGoal": "기준: 기능 보존율 100%",
   "masters.sheetMapping.meta.generatedAt": "생성 {value}",
   "masters.sheetMapping.meta.canWrite": "관리자 상태 변경 가능",
@@ -1149,9 +1141,7 @@ export const ko = {
   "masters.issueStatus.option.pass": "통과",
 
   // /audit 화면
-  "audit.eyebrow": "감사 로그",
   "audit.title": "변경 이력 조회",
-  "audit.description": "지급액과 운영 상태에 영향을 주는 변경의 행위자, 액션, 대상, 변경 전후값을 조회한다.",
   "audit.meta.recent": "최근 100건",
   "audit.meta.noDelete": "삭제 불가 이력",
   "audit.field.targetType": "대상 유형",

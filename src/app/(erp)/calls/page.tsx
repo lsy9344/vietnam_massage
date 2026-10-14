@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { requireRouteAccess } from "@/lib/authorization";
 import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
@@ -19,10 +18,11 @@ import { CustomerVisitSearch } from "@/app/(erp)/calls/customer-visit-search-pan
 import { DailyExpensePanel } from "@/app/(erp)/calls/daily-expense-panel";
 import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { CallLedgerWorkspace } from "@/app/(erp)/calls/call-ledger-workspace";
-import { PageHeader } from "@/components/domain/page-header";
+import { DateContextControls } from "@/components/shell/date-context-controls";
+import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-notice";
+import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
-import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
 
 type CallsPageSearchParams = {
   operatingMonthId?: string;
@@ -42,22 +42,10 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
 
   if (!selectedMonth) {
     return (
-      <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-        <PageHeader
-          eyebrow={t("nav.group.calls")}
-          title={t("calls.title")}
-          description={t("calls.description")}
-        />
-        <section className="border border-border bg-surface px-4 py-8">
-          <h2 className="text-base font-semibold text-foreground">{t("common.createOperatingMonthFirst")}</h2>
-          <p className="mt-2 max-w-2xl text-sm text-muted">{t("calls.empty.description")}</p>
-          {account.role === "administrator" ? (
-            <Link className="mt-4 inline-flex text-sm font-semibold text-brand underline-offset-4 hover:underline" href="/masters/operating-months">
-              {t("common.goToOperatingMonths")}
-            </Link>
-          ) : null}
-        </section>
-      </main>
+      <div className="screen">
+        <ScreenToolbar account={account} locale={locale} path="/calls" title={t("calls.title")} />
+        <NoOperatingMonthNotice description={t("calls.empty.description")} locale={locale} role={account.role} />
+      </div>
     );
   }
 
@@ -90,53 +78,18 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
   const visibleRows = canViewSettlementAmounts ? rows : rows.map(redactServiceCallSettlementAmounts);
 
   return (
-    <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <PageHeader
-        eyebrow={t("nav.group.calls")}
-        title={t("calls.title")}
-        description={t("calls.description")}
-        meta={
-          <>
-            <div>{t("common.operatingMonthStatusPrefix")}: {operatingMonthStatusLabel(locale, selectedMonth.status)}</div>
-            <div>
-              {t("common.dateRange")}: {selectedMonth.startDate} ~ {selectedMonth.endDate}
-            </div>
-          </>
+    <div className="screen">
+      <ScreenToolbar
+        account={account}
+        context={{ operatingMonthId: selectedMonth.id, date: serviceDate }}
+        dateControls={
+          <DateContextControls date={serviceDate} locale={locale} months={operatingMonths} path="/calls" selectedMonth={selectedMonth} />
         }
+        locale={locale}
+        path="/calls"
+        sticky
+        title={t("calls.title")}
       />
-
-      <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("common.operatingMonth")}
-          <select
-            aria-label={t("common.operatingMonth")}
-            className="h-9 min-w-44 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
-            defaultValue={selectedMonth.id}
-            name="operatingMonthId"
-          >
-            {operatingMonths.map((month) => (
-              <option key={month.id} value={month.id}>
-                {t("common.monthOption", { monthKey: month.monthKey, status: operatingMonthStatusLabel(locale, month.status) })}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("common.queryDate")}
-          <input
-            aria-label={t("common.queryDate")}
-            className="h-9 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
-            defaultValue={serviceDate}
-            max={selectedMonth.endDate}
-            min={selectedMonth.startDate}
-            name="serviceDate"
-            type="date"
-          />
-        </label>
-        <button className="h-9 border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
-          {t("common.query")}
-        </button>
-      </form>
 
       <CustomerVisitSearch
         candidates={candidates}
@@ -169,6 +122,6 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
         serviceDate={serviceDate}
         showSettlementColumns={canViewSettlementAmounts}
       />
-    </main>
+    </div>
   );
 }

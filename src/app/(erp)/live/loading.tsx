@@ -4,7 +4,7 @@ import { getServerTranslator } from "@/lib/i18n/server";
 export default async function LiveLoading() {
   const { t } = await getServerTranslator();
   return (
-    <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
+    <div className="screen">
       <div className="mb-5 flex items-end justify-between gap-6">
         <div className="grid gap-2">
           <Skeleton className="h-3 w-24" />
@@ -33,6 +33,6 @@ export default async function LiveLoading() {
           <Skeleton className="h-20" key={index} />
         ))}
       </section>
-    </main>
+    </div>
   );
 }

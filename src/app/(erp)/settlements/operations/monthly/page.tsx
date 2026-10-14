@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { PageHeader } from "@/components/domain/page-header";
 import { requireRouteAccess } from "@/lib/authorization";
 import { selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
@@ -20,6 +18,9 @@ import {
   type OpsMonthlyIncentiveResultDto,
   type OpsMonthlyIncentiveTeamRole
 } from "@/modules/settlements/ops-monthly-incentive-service";
+import { DateContextControls } from "@/components/shell/date-context-controls";
+import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-notice";
+import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 
 type OpsMonthlyIncentivePageSearchParams = {
   operatingMonthId?: string;
@@ -44,25 +45,6 @@ function shareTeamPortionText(locale: Locale, t: Translator, shares: OpsMonthlyI
     percent: formatNumber(locale, Math.round(share * 100)),
     amount: formatNumber(locale, amount)
   });
-}
-
-function SettlementTabs({ t }: { t: Translator }) {
-  return (
-    <nav aria-label={t("settlements.tabs.aria")} className="mb-4 flex flex-wrap gap-2">
-      <Link className="border border-border bg-surface px-3 py-2 text-sm font-semibold text-muted hover:bg-readonly" href="/settlements">
-        {t("settlements.tabs.therapistDaily")}
-      </Link>
-      <Link className="border border-border bg-surface px-3 py-2 text-sm font-semibold text-muted hover:bg-readonly" href="/settlements/earcare">
-        {t("settlements.tabs.earcareDaily")}
-      </Link>
-      <Link className="border border-border bg-surface px-3 py-2 text-sm font-semibold text-muted hover:bg-readonly" href="/settlements/operations">
-        {t("settlements.tabs.opsDaily")}
-      </Link>
-      <Link className="border border-brand bg-brand px-3 py-2 text-sm font-semibold text-brand-foreground" href="/settlements/operations/monthly">
-        {t("settlements.tabs.opsMonthly")}
-      </Link>
-    </nav>
-  );
 }
 
 function formatVnd(locale: Locale, t: Translator, amount: number) {
@@ -340,23 +322,10 @@ export default async function OperationsMonthlyIncentivePage({
 
   if (!selectedMonth) {
     return (
-      <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-        <PageHeader
-          eyebrow={t("nav.group.settlements")}
-          title={t("settlements.opsMonthly.title")}
-          description={t("settlements.opsMonthly.emptyDescription")}
-        />
-        <SettlementTabs t={t} />
-        <section className="border border-border bg-surface px-4 py-8">
-          <h2 className="text-base font-semibold text-foreground">{t("common.createOperatingMonthFirst")}</h2>
-          <p className="mt-2 max-w-2xl text-sm text-muted">{t("settlements.opsMonthly.emptyMonthDescription")}</p>
-          {account.role === "administrator" ? (
-            <Link className="mt-4 inline-flex text-sm font-semibold text-brand underline-offset-4 hover:underline" href="/masters/operating-months">
-              {t("common.goToOperatingMonths")}
-            </Link>
-          ) : null}
-        </section>
-      </main>
+      <div className="screen">
+        <ScreenToolbar account={account} locale={locale} path="/settlements/operations/monthly" title={t("settlements.opsMonthly.title")} />
+        <NoOperatingMonthNotice description={t("settlements.opsMonthly.emptyMonthDescription")} locale={locale} role={account.role} />
+      </div>
     );
   }
 
@@ -391,43 +360,17 @@ export default async function OperationsMonthlyIncentivePage({
   }
 
   return (
-    <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <PageHeader
-        eyebrow={t("nav.group.settlements")}
-        title={t("settlements.opsMonthly.title")}
-        description={t("settlements.opsMonthly.description")}
-        meta={
-          <>
-            <div>{t("common.operatingMonthStatusPrefix")}: {operatingMonthStatusLabel(locale, selectedMonth.status)}</div>
-            <div>
-              {t("common.dateRange")}: {selectedMonth.startDate} ~ {selectedMonth.endDate}
-            </div>
-          </>
+    <div className="screen">
+      <ScreenToolbar
+        account={account}
+        context={{ operatingMonthId: selectedMonth.id, date: null }}
+        dateControls={
+          <DateContextControls date={null} locale={locale} months={operatingMonths} path="/settlements/operations/monthly" selectedMonth={selectedMonth} />
         }
+        locale={locale}
+        path="/settlements/operations/monthly"
+        title={t("settlements.opsMonthly.title")}
       />
-
-      <SettlementTabs t={t} />
-
-      <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("common.operatingMonth")}
-          <select
-            aria-label={t("common.operatingMonth")}
-            className="h-9 min-w-44 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
-            defaultValue={selectedMonth.id}
-            name="operatingMonthId"
-          >
-            {operatingMonths.map((month) => (
-              <option key={month.id} value={month.id}>
-                {t("common.monthOption", { monthKey: month.monthKey, status: operatingMonthStatusLabel(locale, month.status) })}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button className="h-9 border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
-          {t("common.query")}
-        </button>
-      </form>
 
       {errorMessage ? (
         <section className="border border-danger bg-surface px-4 py-5" role="alert">
@@ -462,6 +405,6 @@ export default async function OperationsMonthlyIncentivePage({
           <CallEvidenceTable t={t} result={result} />
         </>
       ) : null}
-    </main>
+    </div>
   );
 }

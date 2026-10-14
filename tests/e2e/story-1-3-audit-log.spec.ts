@@ -182,14 +182,13 @@ test.describe("Story 1.3 감사 로그 기반과 조회", () => {
   });
 
   for (const user of users.filter((candidate) => candidate.role !== "administrator")) {
-    test(`${user.accountId} direct /audit 접근은 차단되고 sidebar 감사 로그도 숨겨진다`, async ({ page }) => {
+    test(`${user.accountId} direct /audit 접근은 차단되고 감사 로그 링크도 숨겨진다`, async ({ page }) => {
       await login(page, user.accountId, user.password);
       await page.goto("/audit");
 
       await expect(page).toHaveURL(new RegExp(`${user.landing}$`));
-      const menu = page.getByRole("navigation", { name: "ERP 도메인 메뉴" });
-      await expect(menu.getByText("감사 로그", { exact: true })).toHaveCount(0);
-      await expect(menu.getByRole("link", { name: "감사 로그" })).toHaveCount(0);
+      // 도크와 구역 탭 어디에도 감사 화면으로 가는 링크가 없다.
+      await expect(page.locator('a[href^="/audit"]')).toHaveCount(0);
     });
   }
 

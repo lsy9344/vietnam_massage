@@ -4,7 +4,7 @@ import { prisma } from "./support/db";
 import { argon2idOptions } from "./support/auth";
 
 /**
- * i18n: 헤더의 언어 전환 버튼으로 vi ↔ ko 전환이 동작하고, 새로고침해도 선택이 유지됨을 검증한다.
+ * i18n: 로그인 화면과 "나" 메뉴의 언어 전환 버튼으로 vi ↔ ko 전환이 동작하고, 새로고침해도 선택이 유지됨을 검증한다.
  */
 const ACCOUNT_ID = "i18n_switch_admin";
 const PASSWORD = "I18nSwitch!admin";
@@ -68,7 +68,7 @@ test.describe("i18n 언어 전환", () => {
     await expect(page.getByLabel("Email hoặc ID tài khoản")).toBeVisible();
   });
 
-  test("로그인 후 헤더에서 한국어로 전환하면 사이드바가 한국어로 바뀐다", async ({ page }) => {
+  test("로그인 후 나 메뉴에서 한국어로 전환하면 도크가 한국어로 바뀐다", async ({ page }) => {
     await page.goto("/sign-in");
     await page.getByLabel("Email hoặc ID tài khoản").fill(ACCOUNT_ID);
     await page.getByLabel("Mật khẩu").fill(PASSWORD);
@@ -82,13 +82,15 @@ test.describe("i18n 언어 전환", () => {
     await credentialsResponse;
     await page.waitForURL((url) => !url.pathname.startsWith("/sign-in"), { timeout: 15_000 }).catch(() => undefined);
 
-    // 로그인 후 베트남어 사이드바.
-    await expect(page.getByRole("navigation", { name: "Menu nghiệp vụ ERP" })).toBeVisible();
+    // 로그인 후 베트남어 도크.
+    await expect(page.getByRole("navigation", { name: "Chuyển khu vực nghiệp vụ" })).toBeVisible();
 
-    // 헤더 전환 버튼으로 한국어 전환.
+    // "나" 메뉴의 언어 전환으로 한국어 전환.
+    await page.getByRole("button", { name: "Tôi", exact: true }).click();
     await page.getByRole("button", { name: "한국어" }).click();
     await expect(page.locator("html")).toHaveAttribute("lang", "ko");
-    await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("heading", { name: "운영 현황", exact: true })).toBeVisible();
+    const dock = page.getByRole("navigation", { name: "업무 이동" });
+    await expect(dock).toBeVisible();
+    await expect(dock.getByRole("link", { name: "현장", exact: true })).toBeVisible();
   });
 });

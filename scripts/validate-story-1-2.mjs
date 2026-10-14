@@ -35,13 +35,13 @@ function readJson(path) {
   "src/app/(erp)/closing/page.tsx",
   "src/app/(erp)/dashboard/today/page.tsx",
   "src/app/tv/page.tsx",
-  "src/components/domain/role-aware-sidebar.tsx",
+  "src/components/shell/workflow-dock.tsx",
   "src/components/domain/erp-empty-state.tsx",
   "src/lib/action-result.ts",
   "src/lib/auth-messages.ts",
   "src/lib/auth.ts",
   "src/lib/authorization.ts",
-  "src/lib/navigation.ts",
+  "src/lib/routes.ts",
   "src/lib/password-hash.ts",
   "src/lib/node-rs-argon2-cloudflare-stub.ts",
   "src/lib/prisma.ts",
@@ -155,64 +155,54 @@ for (const role of ["administrator", "counter", "waiter", "settlement_manager", 
     errors.push(`authorization role missing: ${role}`);
   }
 }
-for (const required of [
-  "getRoleLandingPath",
-  "requireRouteAccess",
-  "requirePermission",
-  "getCurrentAccountAuthorization",
-  "/live",
-  "/calls",
-  "/settlements",
-  "/rooms"
-]) {
+for (const required of ["getRoleLandingPath", "requireRouteAccess", "requirePermission", "getCurrentAccountAuthorization"]) {
   if (!authorization.includes(required)) {
     errors.push(`authorization helper missing: ${required}`);
+  }
+}
+// 역할별 랜딩 경로는 routes.ts의 roleLandingPath 테이블로 옮겨졌다.
+const routes = read("src/lib/routes.ts");
+for (const required of ["/live", "/calls", "/settlements", "/rooms"]) {
+  if (!routes.includes(required)) {
+    errors.push(`routes.ts landing path missing: ${required}`);
   }
 }
 if (!authorization.includes("redirect(")) {
   errors.push("route access guard must block direct unauthorized access server-side");
 }
 
-const navigation = read("src/lib/navigation.ts");
-// i18n 전환: 사이드바 라벨은 메시지 key(navigation.ts)와 한국어 문구(messages/ko.ts)로 분리됐다.
+// i18n 전환: 업무 흐름 도크 구역 라벨은 메시지 key(routes.ts)와 한국어 문구(messages/ko.ts)로 분리됐다.
 const koMessages = read("src/lib/i18n/messages/ko.ts");
-const sidebarGroupKeys = [
-  "nav.group.operations",
-  "nav.group.calls",
-  "nav.group.settlements",
-  "nav.group.closing",
-  "nav.group.dashboard",
-  "nav.group.masters",
-  "nav.group.audit"
-];
-const sidebarOrder = ["운영 현황", "콜 원장", "정산", "월마감", "대시보드", "마스터 설정", "감사 로그"];
+const dockZoneKeys = ["ledger", "floor", "customers", "settlements", "closing", "reports", "settings"];
+const dockZoneOrder = ["원장", "현장", "고객", "정산", "마감", "보고", "설정"];
 let previousIndex = -1;
-for (const key of sidebarGroupKeys) {
-  const index = navigation.indexOf(key);
+for (const key of dockZoneKeys) {
+  const index = routes.indexOf(`"${key}"`);
   if (index === -1) {
-    errors.push(`navigation.ts missing sidebar group key: ${key}`);
+    errors.push(`routes.ts missing dock zone key: ${key}`);
   }
   if (index !== -1 && index < previousIndex) {
-    errors.push(`navigation.ts sidebar group out of order: ${key}`);
+    errors.push(`routes.ts dock zone out of order: ${key}`);
   }
   previousIndex = index;
 }
-for (const label of sidebarOrder) {
+for (const label of dockZoneOrder) {
   if (!koMessages.includes(label)) {
-    errors.push(`messages/ko.ts missing sidebar group label: ${label}`);
+    errors.push(`messages/ko.ts missing dock zone label: ${label}`);
   }
 }
-for (const required of ["getNavigationForRole", "allowedRoles"]) {
-  if (!navigation.includes(required)) {
-    errors.push(`navigation.ts missing ${required}`);
+for (const required of ["getZoneTabs", "roles:"]) {
+  if (!routes.includes(required)) {
+    errors.push(`routes.ts missing ${required}`);
   }
 }
-for (const label of ["TV 현황판", "오늘 대시보드"]) {
+for (const label of ["TV 현황판", "오늘 KPI 대시보드"]) {
   if (!koMessages.includes(label)) {
     errors.push(`messages/ko.ts missing navigation label: ${label}`);
   }
 }
-if (navigation.includes("disabled")) {
+const workflowDock = read("src/components/shell/workflow-dock.tsx");
+if (routes.includes("disabled") || workflowDock.includes("disabled")) {
   errors.push("navigation must hide unauthorized groups/items, not disable them");
 }
 
@@ -220,8 +210,8 @@ const layout = read("src/app/(erp)/layout.tsx");
 if (!layout.includes("getCurrentAccountAuthorization") || !layout.includes("redirect(\"/sign-in\")")) {
   errors.push("(erp)/layout.tsx must recheck account status server-side and redirect unauthenticated users");
 }
-if (!layout.includes("RoleAwareSidebar")) {
-  errors.push("(erp)/layout.tsx must render the role-aware sidebar");
+if (!layout.includes("WorkflowDock") || !layout.includes("SkipLinks")) {
+  errors.push("(erp)/layout.tsx must render the workflow dock and skip links");
 }
 
 const rootPage = read("src/app/page.tsx");

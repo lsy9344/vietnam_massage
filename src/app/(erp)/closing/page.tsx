@@ -1,6 +1,4 @@
-import Link from "next/link";
 import { canPerform, requireRouteAccess } from "@/lib/authorization";
-import { PageHeader } from "@/components/domain/page-header";
 import { ClosingActionPanel, type ConfirmDialogSummary } from "@/app/(erp)/closing/closing-action-panel";
 import { selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
@@ -21,6 +19,9 @@ import {
   type MonthlyClosingTherapistRowDto
 } from "@/modules/closing/monthly-closing-preview-service";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
+import { DateContextControls } from "@/components/shell/date-context-controls";
+import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-notice";
+import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 
 type ClosingPageSearchParams = {
   operatingMonthId?: string;
@@ -472,22 +473,10 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
 
   if (!selectedMonth) {
     return (
-      <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-        <PageHeader
-          eyebrow={t("nav.group.closing")}
-          title={t("closing.title")}
-          description={t("closing.emptyDescription")}
-        />
-        <section className="border border-border bg-surface px-4 py-8">
-          <h2 className="text-base font-semibold text-foreground">{t("common.createOperatingMonthFirst")}</h2>
-          <p className="mt-2 max-w-2xl text-sm text-muted">{t("closing.emptyMonthDescription")}</p>
-          {account.role === "administrator" ? (
-            <Link className="mt-4 inline-flex text-sm font-semibold text-brand underline-offset-4 hover:underline" href="/masters/operating-months">
-              {t("common.goToOperatingMonths")}
-            </Link>
-          ) : null}
-        </section>
-      </main>
+      <div className="screen">
+        <ScreenToolbar account={account} locale={locale} path="/closing" title={t("closing.title")} />
+        <NoOperatingMonthNotice description={t("closing.emptyMonthDescription")} locale={locale} role={account.role} />
+      </div>
     );
   }
 
@@ -517,41 +506,17 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
   const canReopenClosing = canPerform(account.role, "closing:reopen");
 
   return (
-    <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <PageHeader
-        eyebrow={t("nav.group.closing")}
-        title={t("closing.title")}
-        description={t("closing.description")}
-        meta={
-          <>
-            <div>{t("common.operatingMonthStatusPrefix")}: {operatingMonthStatusLabel(locale, selectedMonth.status)}</div>
-            <div>
-              {t("common.dateRange")}: {selectedMonth.startDate} ~ {selectedMonth.endDate}
-            </div>
-          </>
+    <div className="screen">
+      <ScreenToolbar
+        account={account}
+        context={{ operatingMonthId: selectedMonth.id, date: null }}
+        dateControls={
+          <DateContextControls date={null} locale={locale} months={operatingMonths} path="/closing" selectedMonth={selectedMonth} />
         }
+        locale={locale}
+        path="/closing"
+        title={t("closing.title")}
       />
-
-      <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("common.operatingMonth")}
-          <select
-            aria-label={t("common.operatingMonth")}
-            className="h-9 min-w-44 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
-            defaultValue={selectedMonth.id}
-            name="operatingMonthId"
-          >
-            {operatingMonths.map((month) => (
-              <option key={month.id} value={month.id}>
-                {t("common.monthOption", { monthKey: month.monthKey, status: operatingMonthStatusLabel(locale, month.status) })}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button className="h-9 border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
-          {t("common.query")}
-        </button>
-      </form>
 
       <ClosingStepper locale={locale} t={t} status={selectedMonth.status} />
       <ClosingActionPanel
@@ -584,6 +549,6 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
           <EvidenceSection locale={locale} t={t} result={result} />
         </>
       ) : null}
-    </main>
+    </div>
   );
 }

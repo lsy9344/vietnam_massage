@@ -1,11 +1,11 @@
 import { requirePermission, requireRouteAccess } from "@/lib/authorization";
-import { PageHeader } from "@/components/domain/page-header";
 import { listAuditLogs } from "@/modules/audit/audit-service";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { formatDateTime } from "@/lib/i18n/format";
 import type { Locale } from "@/lib/i18n/config";
 import { type Translator } from "@/lib/i18n";
 import { BUSINESS_TIME_ZONE_OFFSET } from "@/lib/business-time";
+import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 
 type AuditPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -58,7 +58,7 @@ function formatJson(value: unknown) {
 }
 
 export default async function AuditPage({ searchParams }: AuditPageProps) {
-  await requireRouteAccess("/audit");
+  const account = await requireRouteAccess("/audit");
   await requirePermission("audit:read");
 
   const { locale, t } = await getServerTranslator();
@@ -87,18 +87,12 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
   }
 
   return (
-    <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <PageHeader
-        eyebrow={t("audit.eyebrow")}
-        title={t("audit.title")}
-        description={t("audit.description")}
-        meta={
-          <>
-            <div>{t("audit.meta.recent")}</div>
-            <div>{t("audit.meta.noDelete")}</div>
-          </>
-        }
-      />
+    <div className="screen">
+      <ScreenToolbar account={account} locale={locale} path="/audit" title={t("audit.title")} />
+      <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+        <div>{t("audit.meta.recent")}</div>
+        <div>{t("audit.meta.noDelete")}</div>
+      </div>
 
       <form className="mb-4 grid grid-cols-1 items-end gap-3 border border-border bg-surface p-3 lg:grid-cols-[220px_180px_180px_auto]" method="get">
         <label className="grid gap-1 text-xs font-semibold text-muted">
@@ -206,6 +200,6 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
           </div>
         )}
       </section>
-    </main>
+    </div>
   );
 }

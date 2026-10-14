@@ -26,7 +26,7 @@ function readJson(path) {
   "src/app/(erp)/masters/courses/actions.ts",
   "src/app/(erp)/masters/courses/page.tsx",
   "src/app/(erp)/masters/courses/course-forms.tsx",
-  "src/lib/navigation.ts",
+  "src/lib/routes.ts",
   "scripts/validate-story-1-8.mjs",
   "tests/e2e/story-1-8-courses-policies.spec.ts",
   "src/modules/masters/README.md",
@@ -181,11 +181,12 @@ for (const ko of ["코스/수당/인센", "마사지사2", "TV 표시명", "0원
 }
 if (page.includes("삭제")) errors.push("/masters/courses page must not present physical delete wording");
 
-const navigation = read("src/lib/navigation.ts");
-for (const required of ["nav.item.mastersCourses", "/masters/courses", "administrator"]) {
-  if (!navigation.includes(required)) errors.push(`navigation.ts missing ${required}`);
+// 화면 접근 규칙은 routes.ts의 screenRoutes로 옮겨졌다.
+const routes = read("src/lib/routes.ts");
+if (!/\{ path: "\/masters\/courses",[^}]*roles: \["administrator"\][^}]*\}/.test(routes)) {
+  errors.push("routes.ts must keep administrator-only /masters/courses screen route");
 }
-if (navigation.includes("disabled")) errors.push("navigation must hide unauthorized course links, not disable them");
+if (routes.includes("disabled")) errors.push("routes.ts must hide unauthorized course links, not disable them");
 
 const unitTest = read("src/modules/masters/course-service.test.ts");
 for (const required of [

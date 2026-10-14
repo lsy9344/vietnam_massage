@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { CustomerPanel } from "@/app/(erp)/calls/customer-panel";
 import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
 import { LocaleProvider } from "@/lib/i18n/client";
-import { PageHeader } from "@/components/domain/page-header";
+import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 import type { ServiceCallFormOptions, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 
 function source(path: string) {
@@ -69,21 +69,14 @@ const discountedCallRow: ServiceCallRowDto = {
 };
 
 describe("client revision visual regression guards", () => {
-  it("keeps major page titles inside the highlighted PageHeader band", () => {
+  it("keeps major page titles as the first heading of each screen toolbar", () => {
     const html = renderToStaticMarkup(
-      createElement(PageHeader, {
-        eyebrow: "대시보드",
-        title: "오늘 KPI 대시보드",
-        description: "선택 날짜 기준의 콜 상태, 매출, 지출, 정산 흐름을 조회한다."
-      })
+      createElement(ScreenToolbar, { locale: "ko", path: "/dashboard/today", title: "오늘 KPI 대시보드" })
     );
-    const css = source("src/app/globals.css");
 
-    assert.match(html, /<header class="page-header-band mb-5">/);
-    assert.match(html, /class="page-header-eyebrow"/);
-    assert.match(html, /<h1 class="[^"]*font-extrabold[^"]*">오늘 KPI 대시보드<\/h1>/);
-    assert.match(css, /\.page-header-band\s*\{/);
-    assert.match(css, /\.page-header-eyebrow\s*\{/);
+    assert.match(html, /<header class="screen-toolbar">/);
+    assert.match(html, /<h1 class="[^"]*font-bold[^"]*">오늘 KPI 대시보드<\/h1>/);
+    assert.match(source("src/app/globals.css"), /\.screen-toolbar\s*\{/);
 
     // i18n 전환된 화면(/live·/rooms·/calls·/settlements·/closing·/dashboard)은 제목을 t() key로 참조하고, 한국어 원문은 messages/ko.ts에 보존한다.
     const koMessages = source("src/lib/i18n/messages/ko.ts");
@@ -97,7 +90,7 @@ describe("client revision visual regression guards", () => {
       ["src/app/(erp)/dashboard/reports/page.tsx", "dashboard.reports.title", "그래프 리포트"]
     ] as const) {
       const page = source(path);
-      assert.match(page, /<PageHeader/);
+      assert.match(page, /<ScreenToolbar/);
       assert.match(page, new RegExp(`title=\\{t\\("${titleKey}"\\)\\}`));
       assert.ok(koMessages.includes(koTitle), `messages/ko.ts must keep ${koTitle}`);
     }

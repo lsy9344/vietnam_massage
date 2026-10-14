@@ -124,7 +124,7 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     await gotoStable(page, "/masters/courses");
 
     await expect(page.getByRole("heading", { name: "코스/수당/인센", level: 1 })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: /코스\/수당\/인센/ })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "설정 화면" }).getByRole("link", { name: "코스·수당" })).toHaveAttribute("aria-current", "page");
     // tvDisplayName은 텍스트 노드가 아니라 정책 폼의 input value(course-forms.tsx)로 렌더되므로
     // getByText로는 잡히지 않는다. input value 로케이터로 확인한다.
     await expect(page.locator('input[value="A 누루60"]').first()).toBeVisible();
@@ -206,11 +206,11 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
   });
 
   for (const user of users.filter((entry) => entry.role !== "administrator")) {
-    test(`non-admin ${user.role}는 direct /masters/courses 접근과 sidebar 항목에서 제외된다`, async ({ page }) => {
+    test(`non-admin ${user.role}는 direct /masters/courses 접근과 코스 화면 링크에서 제외된다`, async ({ page }) => {
       await login(page, user.accountId, user.password);
       await gotoStable(page, "/masters/courses");
       await expect(page).toHaveURL(new RegExp(user.landing));
-      await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: /코스\/수당\/인센/ })).toHaveCount(0);
+      await expect(page.locator('a[href^="/masters/courses"]')).toHaveCount(0);
     });
   }
 });

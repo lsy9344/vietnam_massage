@@ -1,28 +1,22 @@
 import { requireRouteAccess } from "@/lib/authorization";
 import { listEmployees } from "@/modules/masters/employee-service";
 import { EmployeeManager } from "@/app/(erp)/masters/employees/employee-forms";
-import { PageHeader } from "@/components/domain/page-header";
 import { getServerTranslator } from "@/lib/i18n/server";
+import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 
 export default async function EmployeeMasterPage() {
-  await requireRouteAccess("/masters/employees");
-  const { t } = await getServerTranslator();
+  const account = await requireRouteAccess("/masters/employees");
+  const { locale, t } = await getServerTranslator();
   const employees = await listEmployees();
 
   return (
-    <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <PageHeader
-        eyebrow={t("masters.eyebrow")}
-        title={t("masters.employees.title")}
-        description={t("masters.employees.description")}
-        meta={
-          <>
-            <div>{t("masters.employees.meta.totalEmployees", { count: employees.length })}</div>
-            <div>{t("masters.employees.meta.activeEmployees", { count: employees.filter((employee) => employee.isActive).length })}</div>
-          </>
-        }
-      />
+    <div className="screen">
+      <ScreenToolbar account={account} locale={locale} path="/masters/employees" title={t("masters.employees.title")} />
+      <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+        <div>{t("masters.employees.meta.totalEmployees", { count: employees.length })}</div>
+        <div>{t("masters.employees.meta.activeEmployees", { count: employees.filter((employee) => employee.isActive).length })}</div>
+      </div>
       <EmployeeManager employees={employees} />
-    </main>
+    </div>
   );
 }

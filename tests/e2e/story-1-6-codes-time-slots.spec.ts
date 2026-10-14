@@ -195,7 +195,7 @@ test.describe("Story 1.6 코드와 시간 슬롯 관리", () => {
     await page.goto("/masters/codes");
 
     await expect(page.getByRole("heading", { name: "코드/시간 슬롯", level: 1 })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: "코드/시간 슬롯" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "설정 화면" }).getByRole("link", { name: "코드·시간" })).toHaveAttribute("aria-current", "page");
     // "상태"는 "근무상태" heading에도 부분 매칭(strict 위반)하므로 exact로 정확히 겨냥한다.
     for (const heading of ["상태", "결제수단", "할인구분", "근무상태", "확인값", "시간 슬롯"]) {
       await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
@@ -313,14 +313,13 @@ test.describe("Story 1.6 코드와 시간 슬롯 관리", () => {
   });
 
   for (const user of users.filter((candidate) => candidate.role !== "administrator")) {
-    test(`${user.accountId} direct /masters/codes 접근은 차단되고 sidebar 코드/시간 슬롯도 숨겨진다`, async ({ page }) => {
+    test(`${user.accountId} direct /masters/codes 접근은 차단되고 코드/시간 슬롯 링크도 숨겨진다`, async ({ page }) => {
       await login(page, user.accountId, user.password);
       await page.goto("/masters/codes");
 
       await expect(page).toHaveURL(new RegExp(`${user.landing}$`));
-      const menu = page.getByRole("navigation", { name: "ERP 도메인 메뉴" });
-      await expect(menu.getByText("코드/시간 슬롯", { exact: true })).toHaveCount(0);
-      await expect(menu.getByRole("link", { name: "코드/시간 슬롯" })).toHaveCount(0);
+      // 도크와 구역 탭 어디에도 코드/시간 슬롯으로 가는 링크가 없다.
+      await expect(page.locator('a[href^="/masters/codes"]')).toHaveCount(0);
     });
   }
 

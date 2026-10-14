@@ -32,7 +32,7 @@ function readJson(path) {
   "src/components/domain/room-status-card.tsx",
   "src/components/domain/status-badge.tsx",
   "src/lib/authorization.ts",
-  "src/lib/navigation.ts",
+  "src/lib/routes.ts",
   "src/modules/rooms/room-status-service.ts",
   "tests/e2e/story-3-4-tv-fullscreen-board.spec.ts",
   "_bmad-output/project-context.md",
@@ -89,7 +89,9 @@ for (const forbidden of [
   "createDailyExpense",
   "updateDailyExpense",
   "deactivateDailyExpense",
-  "requirePermission("
+  "requirePermission(",
+  // "ERP 운영"/"역할별 ERP 업무"(옛 shell.title/shell.header.title)는 삭제됐다: TV는 (erp) 바깥에 있고 도크를 그리지 않는다.
+  "WorkflowDock"
 ]) {
   if (tvPage.includes(forbidden)) errors.push(`src/app/tv/page.tsx must stay fullscreen read-only and not include ${forbidden}`);
 }
@@ -161,24 +163,30 @@ for (const required of ["●", "◷", "◐", "⚠", "○", "상태:"]) {
   if (!statusBadge.includes(required)) errors.push(`status-badge.tsx missing status label/glyph ${required}`);
 }
 
-const authorization = read("src/lib/authorization.ts");
-for (const required of [
-  "administrator: [\"/live\", \"/calls\", \"/rooms\", \"/settlements\", \"/closing\", \"/dashboard\", \"/masters\", \"/audit\", \"/tv\"]",
-  "read_only_viewer: [\"/rooms\", \"/tv\", \"/dashboard/today\", \"/dashboard/monthly\"",
-  "waiter: [\"/rooms\"]",
-  "counter: [\"/live\", \"/calls\", \"/rooms\", \"/dashboard/today\", \"/dashboard/monthly\""
-]) {
-  if (!authorization.includes(required)) errors.push(`authorization.ts missing ${required}`);
+// 역할별 화면 접근 규칙은 routes.ts의 screenRoutes로 옮겨졌다(경로별 정확 일치, 대시보드 3개는 reportRoles 공유).
+const routes = read("src/lib/routes.ts");
+function routeGrants(routesSrc, path, role) {
+  const escapedPath = path.replace(/\//g, "\\/");
+  return new RegExp(`\\{ path: "${escapedPath}",[^}]*(roles: reportRoles|"${role}")`).test(routesSrc);
+}
+for (const path of ["/live", "/calls", "/rooms", "/settlements", "/closing", "/dashboard/today", "/masters/rooms", "/audit", "/tv"]) {
+  if (!routeGrants(routes, path, "administrator")) errors.push(`routes.ts must grant administrator access to ${path}`);
+}
+for (const path of ["/rooms", "/tv", "/dashboard/today", "/dashboard/monthly"]) {
+  if (!routeGrants(routes, path, "read_only_viewer")) errors.push(`routes.ts must grant read_only_viewer access to ${path}`);
+}
+const waiterRouteCount = (routes.match(/"waiter"/g) ?? []).length;
+if (waiterRouteCount !== 1) errors.push("routes.ts must limit waiter to the single /rooms screen route");
+for (const path of ["/live", "/calls", "/rooms", "/dashboard/today", "/dashboard/monthly"]) {
+  if (!routeGrants(routes, path, "counter")) errors.push(`routes.ts must grant counter access to ${path}`);
 }
 
-const navigation = read("src/lib/navigation.ts");
 for (const required of [
-  "nav.item.tv",
-  "href: \"/tv\"",
-  "{ labelKey: \"nav.item.tv\", href: \"/tv\", allowedRoles: [\"administrator\", \"counter\", \"read_only_viewer\"] }",
-  "getNavigationForRole"
+  "{ path: \"/tv\", labelKey: \"shell.tab.tv\", zone: \"floor\", roles: [\"administrator\", \"counter\", \"read_only_viewer\"]",
+  "notATab: true",
+  "getDockZones"
 ]) {
-  if (!navigation.includes(required)) errors.push(`navigation.ts missing ${required}`);
+  if (!routes.includes(required)) errors.push(`routes.ts missing ${required}`);
 }
 // i18n 전환: "TV 현황판" 한국어 문구는 messages/ko.ts로 이동.
 if (!read("src/lib/i18n/messages/ko.ts").includes("TV 현황판")) {
@@ -198,8 +206,6 @@ for (const required of [
   "/tv?operatingMonthId",
   "room-status-card",
   "toHaveCount(11)",
-  "ERP 운영",
-  "역할별 ERP 업무",
   "상태: 예약",
   "상태: 사용중",
   "상태: 종료확인",

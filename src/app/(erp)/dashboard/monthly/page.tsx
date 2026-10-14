@@ -1,16 +1,19 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { PageHeader } from "@/components/domain/page-header";
 import { StatusBadge, type StatusBadgeState } from "@/components/domain/status-badge";
 import { requireRouteAccess } from "@/lib/authorization";
+import { linkToScreen } from "@/lib/routes";
 import { selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { formatCurrencyVnd, formatDateTime, formatNumber } from "@/lib/i18n/format";
-import { operatingMonthStatusLabel, roomStatusLabel } from "@/lib/i18n/codes";
+import { roomStatusLabel } from "@/lib/i18n/codes";
 import type { Locale } from "@/lib/i18n/config";
 import type { Translator } from "@/lib/i18n";
 import { getMonthlyDashboardMetrics, type MonthlyDashboardMetricsDto } from "@/modules/dashboard/dashboard-query-service";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
+import { DateContextControls } from "@/components/shell/date-context-controls";
+import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-notice";
+import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 
 type MonthlyDashboardSearchParams = {
   operatingMonthId?: string;
@@ -107,7 +110,18 @@ function SourceBasisPanel({ metrics, locale, t }: { metrics: MonthlyDashboardMet
   );
 }
 
-function EmptyOrWarningState({ metrics, locale, t }: { metrics: MonthlyDashboardMetricsDto; locale: Locale; t: Translator }) {
+function EmptyOrWarningState({
+  ledgerHref,
+  metrics,
+  locale,
+  t
+}: {
+  /** 원장에 들어갈 수 없는 역할에게는 null(링크 없음). */
+  ledgerHref: string | null;
+  metrics: MonthlyDashboardMetricsDto;
+  locale: Locale;
+  t: Translator;
+}) {
   if (metrics.emptyState.kind === "none" || metrics.emptyState.kind === "snapshot_missing") return null;
 
   if (metrics.emptyState.kind === "no_calls") {
@@ -115,9 +129,11 @@ function EmptyOrWarningState({ metrics, locale, t }: { metrics: MonthlyDashboard
       <section className="border border-border bg-surface px-4 py-5" aria-label={t("dashboard.today.noData.aria")}>
         <h2 className="text-base font-semibold text-foreground">{t("dashboard.monthly.empty.noCallsTitle")}</h2>
         <p className="mt-2 text-sm text-muted">{t("dashboard.monthly.empty.noCallsDescription")}</p>
-        <Link className="mt-4 inline-flex text-sm font-semibold text-brand underline-offset-4 hover:underline" href="/calls">
-          {t("dashboard.today.goToCalls")}
-        </Link>
+        {ledgerHref ? (
+          <Link className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-brand underline-offset-4 hover:underline" href={ledgerHref}>
+            {t("dashboard.today.goToCalls")}
+          </Link>
+        ) : null}
       </section>
     );
   }
@@ -229,24 +245,10 @@ export default async function MonthlyDashboardPage({ searchParams }: { searchPar
 
   if (!selectedMonth) {
     return (
-      <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-        <PageHeader
-          eyebrow={t("dashboard.eyebrow")}
-          title={t("dashboard.monthly.title")}
-          description={t("dashboard.monthly.emptyDescription")}
-        />
-        <section className="border border-border bg-surface px-4 py-8">
-          <h2 className="text-base font-semibold text-foreground">{t("common.createOperatingMonthFirst")}</h2>
-          <p className="mt-2 max-w-2xl text-sm text-muted">{t("dashboard.monthly.empty.description")}</p>
-          {account.role === "administrator" ? (
-            <Link className="mt-4 inline-flex text-sm font-semibold text-brand underline-offset-4 hover:underline" href="/masters/operating-months">
-              {t("common.goToOperatingMonths")}
-            </Link>
-          ) : (
-            <p className="mt-4 text-sm text-muted">{t("dashboard.empty.requestAdmin")}</p>
-          )}
-        </section>
-      </main>
+      <div className="screen">
+        <ScreenToolbar account={account} locale={locale} path="/dashboard/monthly" title={t("dashboard.monthly.title")} />
+        <NoOperatingMonthNotice description={t("dashboard.monthly.empty.description")} locale={locale} role={account.role} />
+      </div>
     );
   }
 
@@ -269,45 +271,21 @@ export default async function MonthlyDashboardPage({ searchParams }: { searchPar
   ];
 
   return (
-    <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <PageHeader
-        eyebrow={t("dashboard.eyebrow")}
-        title={t("dashboard.monthly.title")}
-        description={t("dashboard.monthly.description")}
-        meta={
-          <>
-            <div>{t("common.operatingMonthStatusPrefix")}: {operatingMonthStatusLabel(locale, metrics.operatingMonth.status)}</div>
-            <div>
-              {t("common.dateRange")}: {metrics.operatingMonth.startDate} ~ {metrics.operatingMonth.endDate}
-            </div>
-          </>
+    <div className="screen">
+      <ScreenToolbar
+        account={account}
+        context={{ operatingMonthId: selectedMonth.id, date: null }}
+        dateControls={
+          <DateContextControls date={null} locale={locale} months={operatingMonths} path="/dashboard/monthly" selectedMonth={selectedMonth} />
         }
+        locale={locale}
+        path="/dashboard/monthly"
+        title={t("dashboard.monthly.title")}
       />
-
-      <form className="mb-5 flex flex-wrap items-end gap-3" method="get">
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("common.operatingMonth")}
-          <select
-            aria-label={t("common.operatingMonth")}
-            className="h-9 min-w-44 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
-            defaultValue={selectedMonth.id}
-            name="operatingMonthId"
-          >
-            {operatingMonths.map((month) => (
-              <option key={month.id} value={month.id}>
-                {t("common.monthOption", { monthKey: month.monthKey, status: operatingMonthStatusLabel(locale, month.status) })}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button className="h-9 border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
-          {t("common.query")}
-        </button>
-      </form>
 
       <div className="space-y-4">
         <SourceBasisPanel metrics={metrics} locale={locale} t={t} />
-        <EmptyOrWarningState metrics={metrics} locale={locale} t={t} />
+        <EmptyOrWarningState ledgerHref={linkToScreen(account.role, "/calls", { operatingMonthId: selectedMonth.id, date: null })} metrics={metrics} locale={locale} t={t} />
         <PreviousSnapshotReference metrics={metrics} locale={locale} t={t} formatVnd={formatVnd} />
 
         <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-6" aria-label={t("dashboard.monthly.statusCounts.aria")}>
@@ -344,6 +322,6 @@ export default async function MonthlyDashboardPage({ searchParams }: { searchPar
           </div>
         </section>
       </div>
-    </main>
+    </div>
   );
 }

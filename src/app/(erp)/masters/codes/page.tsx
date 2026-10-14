@@ -8,12 +8,12 @@ import {
   type CodeItemDto
 } from "@/modules/masters/code-service";
 import { CodeManager } from "@/app/(erp)/masters/codes/code-forms";
-import { PageHeader } from "@/components/domain/page-header";
 import { getServerTranslator } from "@/lib/i18n/server";
+import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 
 export default async function CodesPage() {
   const account = await requireRouteAccess("/masters/codes");
-  const { t } = await getServerTranslator();
+  const { locale, t } = await getServerTranslator();
   await ensureDefaultCodeItems({ actorId: account.id });
   await ensureDefaultTimeSlots({ actorId: account.id });
 
@@ -26,20 +26,14 @@ export default async function CodesPage() {
   const timeSlots = await listTimeSlots();
 
   return (
-    <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <PageHeader
-        eyebrow={t("masters.eyebrow")}
-        title={t("masters.codes.title")}
-        description={t("masters.codes.description")}
-        meta={
-          <>
-            <div>{t("masters.codes.meta.defaultCodes", { count: codeGroups.reduce((sum, group) => sum + group.items.length, 0) })}</div>
-            <div>{t("masters.codes.meta.defaultTimeSlots", { count: timeSlots.length })}</div>
-          </>
-        }
-      />
+    <div className="screen">
+      <ScreenToolbar account={account} locale={locale} path="/masters/codes" title={t("masters.codes.title")} />
+      <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+        <div>{t("masters.codes.meta.defaultCodes", { count: codeGroups.reduce((sum, group) => sum + group.items.length, 0) })}</div>
+        <div>{t("masters.codes.meta.defaultTimeSlots", { count: timeSlots.length })}</div>
+      </div>
 
       <CodeManager codeGroups={codeGroups} timeSlots={timeSlots} />
-    </main>
+    </div>
   );
 }

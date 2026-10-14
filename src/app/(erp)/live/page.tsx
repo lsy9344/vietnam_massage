@@ -1,11 +1,13 @@
-import Link from "next/link";
-import { PageHeader } from "@/components/domain/page-header";
 import { RoomStatusCard } from "@/components/domain/room-status-card";
+import { DateContextControls } from "@/components/shell/date-context-controls";
+import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-notice";
+import { OpenTvLink } from "@/components/shell/open-tv-link";
+import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 import { requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { formatCurrencyVnd, formatNumber } from "@/lib/i18n/format";
-import { codeLabel, operatingMonthStatusLabel } from "@/lib/i18n/codes";
+import { codeLabel } from "@/lib/i18n/codes";
 import { getDailyCallLedgerSummary } from "@/modules/calls/service-call-service";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import { latestRoomStatusUpdatedAt } from "@/modules/rooms/room-status-refresh";
@@ -43,22 +45,10 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
 
   if (!selectedMonth) {
     return (
-      <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-        <PageHeader
-          eyebrow={t("nav.group.operations")}
-          title={t("nav.item.live")}
-          description={t("live.description")}
-        />
-        <section className="border border-border bg-surface px-4 py-8">
-          <h2 className="text-base font-semibold text-foreground">{t("common.createOperatingMonthFirst")}</h2>
-          <p className="mt-2 max-w-2xl text-sm text-muted">{t("live.empty.description")}</p>
-          {account.role === "administrator" ? (
-            <Link className="mt-4 inline-flex text-sm font-semibold text-brand underline-offset-4 hover:underline" href="/masters/operating-months">
-              {t("common.goToOperatingMonths")}
-            </Link>
-          ) : null}
-        </section>
-      </main>
+      <div className="screen">
+        <ScreenToolbar account={account} locale={locale} path="/live" title={t("nav.item.live")} />
+        <NoOperatingMonthNotice description={t("live.empty.description")} locale={locale} role={account.role} />
+      </div>
     );
   }
 
@@ -81,57 +71,22 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
     [t("live.summary.canceled"), summary.canceledCount]
   ] as const;
 
-  return (
-    <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <PageHeader
-        eyebrow={t("nav.group.operations")}
-        title={t("nav.item.live")}
-        description={t("live.description")}
-        meta={
-          <>
-            <RoomStatusRefreshController lastUpdatedAt={lastUpdatedAt} locale={locale} />
-          </>
-        }
-      />
+  const context = { operatingMonthId: selectedMonth.id, date: serviceDate };
 
-      <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("common.operatingMonth")}
-          <select
-            aria-label={t("common.operatingMonth")}
-            className="h-9 min-w-44 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
-            defaultValue={selectedMonth.id}
-            name="operatingMonthId"
-          >
-            {operatingMonths.map((month) => (
-              <option key={month.id} value={month.id}>
-                {t("common.monthOption", { monthKey: month.monthKey, status: operatingMonthStatusLabel(locale, month.status) })}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("common.queryDate")}
-          <input
-            aria-label={t("common.queryDate")}
-            className="h-9 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
-            defaultValue={serviceDate}
-            max={selectedMonth.endDate}
-            min={selectedMonth.startDate}
-            name="serviceDate"
-            type="date"
-          />
-        </label>
-        <button className="h-9 border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
-          {t("common.query")}
-        </button>
-        <div className="ml-auto text-right text-xs text-muted">
-          <div>{t("common.operatingMonthStatusPrefix")}: {operatingMonthStatusLabel(locale, selectedMonth.status)}</div>
-          <div>
-            {t("common.dateRange")}: {selectedMonth.startDate} ~ {selectedMonth.endDate}
-          </div>
-        </div>
-      </form>
+  return (
+    <div className="screen">
+      <ScreenToolbar
+        account={account}
+        action={<OpenTvLink context={context} locale={locale} primary role={account.role} />}
+        context={context}
+        dateControls={
+          <DateContextControls date={serviceDate} locale={locale} months={operatingMonths} path="/live" selectedMonth={selectedMonth} />
+        }
+        locale={locale}
+        path="/live"
+        status={<RoomStatusRefreshController lastUpdatedAt={lastUpdatedAt} locale={locale} />}
+        title={t("nav.item.live")}
+      />
 
       <section className="grid grid-cols-4 gap-3" aria-label={t("common.roomStatusAria")}>
         {roomFloorGroups(roomStatuses).map((group) => (
@@ -181,6 +136,6 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
           ) : null}
         </div>
       </section>
-    </main>
+    </div>
   );
 }

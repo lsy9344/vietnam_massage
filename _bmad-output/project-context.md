@@ -26,11 +26,13 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - 비밀번호 저장은 `@node-rs/argon2@2.0.2` Argon2id hash만 사용한다. `passwordHash` 외 plaintext 또는 복호화 가능 비밀번호 재료를 DB/fixture/log에 저장하지 않는다.
 - 로그인 실패 잠금 정책은 Story 1.2 기준 5회 실패 후 15분 잠금이다. 로그인 실패 문구는 계정 존재/잠금/비밀번호 오류를 구분하지 않는 한국어 문구로 통일한다.
 - RBAC 역할은 `administrator`, `counter`, `waiter`, `settlement_manager`, `read_only_viewer` 다섯 가지다. 역할별 landing은 관리자 `/live`, 카운터 `/calls`, 정산 담당 `/settlements`, 웨이터 `/rooms`, 조회 전용 `/rooms`이다.
-- Sidebar 그룹 순서는 운영 현황, 콜 원장, 정산, 월마감, 대시보드, 마스터 설정, 감사 로그로 고정한다. 권한 없는 그룹/항목은 disabled가 아니라 렌더링하지 않는다.
+- 좌측 사이드바와 상단바는 없다(티켓 02, `docs/design/2026-10-14-workflow-information-architecture.md`). 구역 이동은 화면 아래 업무 흐름 도크(`src/components/shell/workflow-dock.tsx`)가 맡고, 구역 순서는 원장, 현장, 고객, 정산, 마감, 보고, 설정으로 고정한다. 권한 없는 구역/탭은 disabled가 아니라 렌더링하지 않는다.
+- 화면마다 경로·구역·접근 역할·탭 라벨은 `src/lib/routes.ts`의 라우트 목록 하나에만 적는다. 도크, 구역 안 탭, `canAccessRoute()`(경로 정확 일치), 역할별 landing이 모두 이 목록에서 나온다. 새 화면은 이 목록에 먼저 추가한다.
+- 모달 패널은 `@radix-ui/react-dialog@1.1.15`(`src/components/ui/panel.tsx`의 `ModalPanel`), 확인 다이얼로그는 `@radix-ui/react-alert-dialog`(`ConfirmDialog`)를 쓴다.
 - 권한 없는 direct route 접근은 page/layout/server boundary에서 `requireRouteAccess()`로 차단한다. 지급액, 수당, 마감, 직원 정보 등 민감 action은 `requirePermission()`으로 DB에서 현재 계정 상태와 권한을 재조회해야 한다.
 - 감사 로그는 `AuditLog` Prisma 모델과 `src/modules/audit/audit-service.ts`의 `recordAuditEvent()`/`listAuditLogs()`를 사용한다. DB table은 `audit_logs`, before/after snapshot은 Prisma `Json?`, action은 `service_call.status_changed` 같은 dot notation만 허용한다.
 - 감사 로그 `beforeValue`/`afterValue`는 JSON 직렬화 가능한 값만 허용한다. `NaN`, 함수, class instance, `Date` 객체는 `recordAuditEvent()`에서 domain error로 거부되므로 날짜/시간은 ISO 문자열로 넘긴다.
-- 감사 로그 조회 권한은 `audit:read`이며 관리자만 `/audit` 화면과 sidebar 감사 로그 그룹을 볼 수 있다. 화면/서버 경계는 `requirePermission("audit:read")`로 DB 재조회 기반 권한 검사를 수행한다.
+- 감사 로그 조회 권한은 `audit:read`이며 관리자만 `/audit` 화면과 설정 구역의 감사 탭을 볼 수 있다. 화면/서버 경계는 `requirePermission("audit:read")`로 DB 재조회 기반 권한 검사를 수행한다.
 - 감사 로그는 append-only 불변 이력이다. 일반 운영 경로에 update/delete helper, Server Action, UI를 만들지 않는다. 정정은 후속 감사 이벤트를 추가하는 방식으로만 표현한다.
 - 운영월 기준 데이터는 Prisma `OperatingMonth` 모델(`operating_months`)이 소유한다. `monthKey`는 unique `YYYY-MM`, `startDate`/`endDate`는 DB `@db.Date`, 서비스 DTO는 ISO `YYYY-MM-DD` 문자열이다.
 - 운영월 상태값은 한국어 원문 `작성중`, `검토중`, `마감확정`, `잠금` 네 값만 허용한다. Story 1.4의 직접 상태 변경은 `작성중 -> 검토중`만 지원하며, `마감확정`/`잠금`/재오픈은 월마감 stories가 소유한다.
@@ -85,7 +87,7 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Prisma 7 기준으로 DB URL은 `prisma.config.ts`에서 관리하고, runtime PrismaClient는 `@prisma/adapter-pg`의 `PrismaPg` adapter를 사용한다.
 - lint/static validation baseline은 `eslint@9.39.1`, `eslint-config-next@16.2.7`과 story 1.1/1.2 정적 검증을 함께 실행하는 `npm run lint` 스크립트다.
 - E2E 테스트 baseline은 Playwright `@playwright/test@1.60.0`이며, 실행 스크립트는 `npm run test:e2e`다.
-- Story 1.2 E2E는 역할별 로그인, landing, sidebar 숨김, direct route 차단을 검증한다. 실행 전 `DATABASE_URL` 설정, Prisma migration/generate, `scripts/seed-dev-accounts.ts` 기반 local 계정 seed가 필요하다.
+- Story 1.2 E2E는 역할별 로그인, landing, 역할별 도크 구역, direct route 차단을 검증한다. 실행 전 `DATABASE_URL` 설정, Prisma migration/generate, `scripts/seed-dev-accounts.ts` 기반 local 계정 seed가 필요하다.
 - 현재 산출물은 Markdown 문서, 원본 Excel 파일 `sheet.xlsx`, 설계 이미지 PNG, 도메인 모듈 README 스캐폴드로 구성된다.
 - BMad 설정은 `6.8.0` installer 기반이며, 프로젝트명은 `vietnam_aesthetic`, 문서 출력 언어는 Korean이다.
 - 코드 구현을 시작하기 전에는 새로 선택한 기술 스택의 버전 제약, package/config/test 파일, lint/format 규칙을 이 문서에 먼저 반영해야 한다.
@@ -212,7 +214,7 @@ _이 파일은 AI 에이전트가 이 프로젝트에서 코드를 구현할 때
 - Story 3.3 기준 상태별 안내 문구 source of truth는 `src/modules/rooms/room-status-service.ts`의 `ROOM_STATUS_GUIDANCE_TEXT`다. `/rooms`에서 문구를 별도 상수로 복제하지 않는다.
 - Story 3.3 기준 `/rooms`는 콜 원장 grid, autosave, 지출, 정산, 월마감 mutation UI를 포함하지 않는다. 운영월/조회날짜 form은 read-only 조회 조건 변경만 수행한다.
 - Story 3.3 기준 `/rooms`는 공용 `RoomStatusRefreshController`로 15초 `router.refresh()` 자동 갱신, 수동 새로고침, 마지막 갱신 시각, `갱신 중`, `갱신 지연`을 표시한다. 새 React Query dependency 없이 직전 렌더 값을 유지한다.
-- Story 3.4 기준 `/tv`는 `src/app/tv/page.tsx`의 fullscreen route이며 ERP chrome 없음, sidebar/topbar 없음, 입력/수정 affordance 없음 상태로 렌더링한다.
+- Story 3.4 기준 `/tv`는 `src/app/tv/page.tsx`의 fullscreen route이며 ERP 셸(업무 흐름 도크, 건너뛰기 링크) 없음, 입력/수정 affordance 없음 상태로 렌더링한다.
 - Story 3.4 기준 `/tv`는 조회 전용/읽기 전용 downstream 화면이다. `requireRouteAccess("/tv")`를 유지하고 administrator/counter/read_only_viewer만 접근한다(요구사항 9.1 권장 권한의 카운터 "TV 화면 조회"). waiter/settlement_manager 권한은 넓히지 않고, counter에게도 조회 외 권한은 추가하지 않는다.
 - Story 3.4 기준 `/tv`는 `listRoomStatuses()`의 `RoomStatusDto`와 `RoomStatusCard variant="tv"`를 재사용한다. 화면에서 활성 콜, 남은 시간, 종료예정, `종료확인`, 코스/담당자 표시를 다시 계산하지 않는다. UI 계산 재구현 금지.
 - Story 3.4 기준 `/tv`는 공유 `RoomStatusRefreshController variant="tv"`로 15초 polling, 수동 새로고침, 마지막 갱신, `갱신 중`, `갱신 지연`을 표시하고 갱신 중/지연 시 직전 렌더 값을 유지한다.

@@ -25,7 +25,7 @@ function readJson(path) {
   "src/modules/audit/README.md",
   "src/app/(erp)/audit/page.tsx",
   "src/lib/authorization.ts",
-  "src/lib/navigation.ts",
+  "src/lib/routes.ts",
   "tests/e2e/story-1-3-audit-log.spec.ts"
 ].forEach(requireFile);
 
@@ -145,23 +145,23 @@ if (auditPage.includes("ErpEmptyState") || auditPage.includes("Story 1.3에서 �
 }
 
 const authorization = read("src/lib/authorization.ts");
-if (!authorization.includes("\"audit:read\"") || !authorization.includes("\"/audit\"")) {
-  errors.push("authorization.ts must preserve administrator audit:read and /audit access");
+if (!authorization.includes("\"audit:read\"")) {
+  errors.push("authorization.ts must preserve administrator audit:read permission");
 }
 if (/counter:[^\n]+\baudit:read\b/.test(authorization)) {
   errors.push("counter must not have audit:read permission");
 }
 
-const navigation = read("src/lib/navigation.ts");
-// i18n 전환: "감사 로그" 한국어 라벨은 messages/ko.ts로, nav 항목은 key로 표현된다.
-if (!navigation.includes("nav.item.audit") || !navigation.includes("administrator")) {
-  errors.push("navigation.ts must keep administrator-only audit sidebar entry");
+// i18n 전환: "감사 로그" 한국어 라벨은 messages/ko.ts로, 화면 접근 규칙은 routes.ts의 screenRoutes로 옮겨졌다.
+const routes = read("src/lib/routes.ts");
+if (!/\{ path: "\/audit",[^}]*roles: \["administrator"\][^}]*\}/.test(routes)) {
+  errors.push("routes.ts must keep administrator-only /audit screen route");
 }
 if (!read("src/lib/i18n/messages/ko.ts").includes("감사 로그")) {
   errors.push("messages/ko.ts missing audit label: 감사 로그");
 }
-if (navigation.includes("disabled")) {
-  errors.push("navigation must hide unauthorized audit links, not disable them");
+if (routes.includes("disabled")) {
+  errors.push("routes.ts must hide unauthorized audit links, not disable them");
 }
 
 const e2e = read("tests/e2e/story-1-3-audit-log.spec.ts");

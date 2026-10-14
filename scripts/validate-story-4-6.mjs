@@ -136,14 +136,19 @@ for (const forbidden of ["use server", "action=", "saveOps", "revalidatePath", "
   if (page.includes(forbidden)) errors.push(`monthly page.tsx must not add write/closing behavior: ${forbidden}`);
 }
 
+// 구역 안 탭 링크는 더 이상 각 화면에 직접 적히지 않는다: routes.ts의 screenRoutes를 ScreenToolbar가 그린다.
+const routes = read("src/lib/routes.ts");
+if (!/\{ path: "\/settlements\/operations\/monthly", labelKey: "shell\.tab\.opsMonthly", zone: "settlements"/.test(routes)) {
+  errors.push("routes.ts must include the /settlements/operations/monthly screen route (운영팀 월인센 tab)");
+}
 for (const tabPath of [
   "src/app/(erp)/settlements/page.tsx",
   "src/app/(erp)/settlements/earcare/page.tsx",
   "src/app/(erp)/settlements/operations/page.tsx"
 ]) {
   const contents = read(tabPath);
-  if (!contents.includes("/settlements/operations/monthly") || !contents.includes("settlements.tabs.opsMonthly")) {
-    errors.push(`${tabPath} must include 운영팀 월인센 tab link`);
+  if (!contents.includes("ScreenToolbar")) {
+    errors.push(`${tabPath} must keep using ScreenToolbar so the 운영팀 월인센 tab link comes from routes.ts`);
   }
 }
 if (!koCatalog.includes("운영팀 월인센")) errors.push("ko.ts missing 운영팀 월인센");

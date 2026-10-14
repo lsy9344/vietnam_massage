@@ -342,14 +342,16 @@ test.describe("Story 3.3 rooms waiter guidance", () => {
     });
   });
 
-  test("lands waiters on /rooms and hides unauthorized sidebar menus", async ({ page }) => {
+  test("lands waiters on /rooms without a dock and hides links to unauthorized screens", async ({ page }) => {
     await login(page, "story33_waiter", "Story33!waiter");
 
     await expect(page).toHaveURL(/\/rooms(?:\?|$)/);
     await expect(page.getByRole("heading", { name: "객실 현황" })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: "객실 현황" })).toBeVisible();
-    for (const hidden of ["콜/예약 입력 원장", "정산 화면", "월마감", "오늘 대시보드", "마스터 설정", "감사 로그"]) {
-      await expect(page.getByRole("link", { name: hidden })).toHaveCount(0);
+    // 구역이 객실 하나뿐이라 도크가 없고, "나" 메뉴는 객실 도구줄에 있다.
+    await expect(page.getByRole("navigation", { name: "업무 이동" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "나", exact: true })).toBeVisible();
+    for (const hidden of ["/calls", "/live", "/tv", "/settlements", "/closing", "/dashboard", "/masters", "/audit"]) {
+      await expect(page.locator(`a[href^="${hidden}"]`)).toHaveCount(0);
     }
   });
 

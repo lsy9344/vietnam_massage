@@ -36,7 +36,7 @@ const errorFiles = [
   "src/components/domain/status-badge.tsx",
   "src/app/globals.css",
   "src/lib/authorization.ts",
-  "src/lib/navigation.ts",
+  "src/lib/routes.ts",
   "src/modules/dashboard/README.md",
   "docs/modules/dashboard.md",
   "_bmad-output/project-context.md",
@@ -147,21 +147,27 @@ for (const [key, ko] of [
   if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 
-const authorization = read("src/lib/authorization.ts");
+// 세 대시보드 화면은 routes.ts의 reportRoles(관리자/카운터/정산담당/조회전용)를 함께 쓰고, 웨이터는 포함하지 않는다.
+const routes = read("src/lib/routes.ts");
+const reportRolesMatch = routes.match(/const reportRoles: Role\[\] = \[([^\]]*)\]/);
+const reportRoles = reportRolesMatch ? reportRolesMatch[1].split(",").map((role) => role.trim().replace(/"/g, "")) : [];
 for (const route of ["/dashboard/today", "/dashboard/monthly", "/dashboard/reports"]) {
   for (const role of ["counter", "settlement_manager", "read_only_viewer"]) {
-    if (!new RegExp(`${role}: \\[[^\\]]*"${route}"`).test(authorization)) {
+    if (!reportRoles.includes(role)) {
       errors.push(`authorization.ts must allow ${role} to ${route}`);
     }
   }
 }
-if (!authorization.includes("waiter: [\"/rooms\"]")) {
+if (reportRoles.includes("waiter")) {
+  errors.push("authorization.ts must keep waiter limited to /rooms, including direct /dashboard/* access redirect to /rooms");
+}
+const waiterRouteCount = (routes.match(/"waiter"/g) ?? []).length;
+if (waiterRouteCount !== 1) {
   errors.push("authorization.ts must keep waiter limited to /rooms, including direct /dashboard/* access redirect to /rooms");
 }
 
-const navigation = read("src/lib/navigation.ts");
-for (const required of ["/dashboard/today", "/dashboard/monthly", "/dashboard/reports", "role !== \"waiter\""]) {
-  if (!navigation.includes(required)) errors.push(`navigation.ts missing dashboard route-access marker: ${required}`);
+for (const required of ["/dashboard/today", "/dashboard/monthly", "/dashboard/reports", "reportRoles"]) {
+  if (!routes.includes(required)) errors.push(`routes.ts missing dashboard route-access marker: ${required}`);
 }
 
 const e2eSpec = read("tests/e2e/story-6-4-dashboard-states-and-colors.spec.ts");

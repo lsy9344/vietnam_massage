@@ -256,7 +256,7 @@ test.describe("Story 6.4 dashboard browser states and route access", () => {
       await page.goto(`/dashboard/${route}?${query}`);
 
       await expect(page).toHaveURL(/\/rooms$/);
-      await expect(page.getByRole("link", { name: "대시보드" })).toHaveCount(0);
+      await expect(page.locator('a[href^="/dashboard"]')).toHaveCount(0);
     });
   }
 

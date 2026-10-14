@@ -124,7 +124,8 @@ for (const required of [
 }
 requireMoved(page, "earcare page.tsx", "settlements.earcare.locked.description", "귀케어 근무상태");
 requireMoved(page, "earcare page.tsx", "settlements.locked.title", "잠긴 운영월입니다");
-requireMoved(page, "earcare page.tsx", "common.goToOperatingMonths", "운영월 관리로 이동");
+// 운영월이 없을 때 안내는 공용 NoOperatingMonthNotice(그 안에 common.goToOperatingMonths)로 옮겨졌다.
+requireMoved(page, "earcare page.tsx", "NoOperatingMonthNotice", "운영월 관리로 이동");
 requireMoved(page, "earcare page.tsx", "settlements.earcare.payoutEligible", "지급 대상");
 requireMoved(page, "earcare page.tsx", "settlements.earcare.excluded", "제외");
 
@@ -143,9 +144,15 @@ requireMoved(table, "earcare-attendance-table.tsx", "settlements.therapist.atten
 requireMoved(table, "earcare-attendance-table.tsx", "settlements.earcare.payoutEligible", "지급 대상");
 requireMoved(table, "earcare-attendance-table.tsx", "settlements.earcare.excluded", "제외:");
 
+// 구역 안 탭 링크는 routes.ts의 screenRoutes에서 ScreenToolbar가 그린다.
 const settlementPage = read("src/app/(erp)/settlements/page.tsx");
-if (!settlementPage.includes("settlements.tabs.earcareDaily") || !settlementPage.includes("href=\"/settlements/earcare\"")) {
-  errors.push("settlements/page.tsx must link to /settlements/earcare without replacing therapist daily settlement");
+const routes = read("src/lib/routes.ts");
+if (!/\{ path: "\/settlements",[^}]*roles: \["administrator", "settlement_manager"\][^}]*\}/.test(routes) ||
+    !/\{ path: "\/settlements\/earcare",[^}]*roles: \["administrator", "settlement_manager"\][^}]*\}/.test(routes)) {
+  errors.push("routes.ts must keep /settlements and /settlements/earcare screen routes in the settlements zone");
+}
+if (!settlementPage.includes("ScreenToolbar") || !settlementPage.includes("path=\"/settlements\"")) {
+  errors.push("settlements/page.tsx must keep using ScreenToolbar so its earcare tab link comes from routes.ts, without replacing therapist daily settlement");
 }
 if (!koCatalog.includes("귀케어 일일정산")) errors.push("ko.ts missing 귀케어 일일정산");
 

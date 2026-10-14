@@ -63,7 +63,8 @@ export function StatusBadge({
         className
       )}
     >
-      <span aria-hidden="true">{config.glyph}</span>
+      {/* U+FE0E: 기호를 늘 글자 모양으로 그린다(이모지로 바뀌지 않게). */}
+      <span aria-hidden="true">{`${config.glyph}\uFE0E`}</span>
       {displayLabel}
     </span>
   );

@@ -405,6 +405,18 @@ test.describe("Story 6.1 today dashboard", () => {
     await expect(page.getByRole("link", { name: "콜 원장으로 이동" })).toBeVisible();
   });
 
+  // 티켓 02: 빈 상태의 링크는 그 역할이 들어갈 수 있는 화면만 가리킨다.
+  for (const role of ["settlement_manager", "read_only_viewer"] as const) {
+    test(`${role}는 빈 상태에서 들어갈 수 없는 콜 원장 링크를 보지 않는다`, async ({ page }) => {
+      const account = seededData.accounts[role];
+      await login(page, account.accountId, account.password);
+      await page.goto(`/dashboard/today?operatingMonthId=${seededData.monthId}&serviceDate=${seededData.emptyDate}`);
+
+      await expect(page.getByText("이 날짜의 콜이 없습니다")).toBeVisible();
+      await expect(page.getByRole("link", { name: "콜 원장으로 이동" })).toHaveCount(0);
+    });
+  }
+
   test("loading UI presence and retry/error affordance are wired", async () => {
     const loading = readFileSync("src/app/(erp)/dashboard/today/loading.tsx", "utf8");
     const errorBoundary = readFileSync("src/app/(erp)/dashboard/today/error.tsx", "utf8");

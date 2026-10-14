@@ -26,7 +26,7 @@ function readJson(path) {
   "src/app/(erp)/masters/codes/actions.ts",
   "src/app/(erp)/masters/codes/page.tsx",
   "src/app/(erp)/masters/codes/code-forms.tsx",
-  "src/lib/navigation.ts",
+  "src/lib/routes.ts",
   "src/modules/masters/README.md",
   "docs/modules/masters.md",
   "_bmad-output/project-context.md",
@@ -210,14 +210,13 @@ if (page.includes("삭제")) {
   errors.push("/masters/codes page must not present physical delete wording");
 }
 
-const navigation = read("src/lib/navigation.ts");
-for (const required of ["nav.item.mastersCodes", "/masters/codes", "administrator"]) {
-  if (!navigation.includes(required)) {
-    errors.push(`navigation.ts missing ${required}`);
-  }
+// 화면 접근 규칙은 routes.ts의 screenRoutes로 옮겨졌다.
+const routes = read("src/lib/routes.ts");
+if (!/\{ path: "\/masters\/codes",[^}]*roles: \["administrator"\][^}]*\}/.test(routes)) {
+  errors.push("routes.ts must keep administrator-only /masters/codes screen route");
 }
-if (navigation.includes("disabled")) {
-  errors.push("navigation must hide unauthorized code links, not disable them");
+if (routes.includes("disabled")) {
+  errors.push("routes.ts must hide unauthorized code links, not disable them");
 }
 
 const unitTest = read("src/modules/masters/code-service.test.ts");

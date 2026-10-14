@@ -399,7 +399,7 @@ test.describe("Story 6.3 graph report", () => {
     await login(page, seededData.accounts.waiter.accountId, seededData.accounts.waiter.password);
     await page.goto(`/dashboard/reports?operatingMonthId=${seededData.monthId}&serviceDate=${seededData.serviceDate}`);
     await expect(page).toHaveURL(/\/rooms/);
-    await expect(page.getByRole("link", { name: "그래프 리포트" })).toHaveCount(0);
+    await expect(page.locator('a[href^="/dashboard"]')).toHaveCount(0);
   });
 
   test("loading and error files keep safe Korean copy and do not expose error.message", async () => {

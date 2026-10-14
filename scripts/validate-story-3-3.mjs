@@ -26,7 +26,7 @@ function readJson(path) {
   "src/components/domain/room-status-card.tsx",
   "src/components/domain/status-badge.tsx",
   "src/lib/authorization.ts",
-  "src/lib/navigation.ts",
+  "src/lib/routes.ts",
   "src/modules/rooms/room-status-service.ts",
   "tests/e2e/story-3-3-rooms-waiter-guidance.spec.ts",
   "_bmad-output/project-context.md",
@@ -52,11 +52,11 @@ for (const required of [
   "RoomStatusCard",
   "RoomStatusRefreshController",
   // i18n 전환: 한국어 UI 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
-  "common.goToOperatingMonths",
+  // 운영월이 없을 때 안내는 공용 NoOperatingMonthNotice(그 안에 common.goToOperatingMonths)로 옮겨졌다.
+  "NoOperatingMonthNotice",
   "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4",
   "common.roomStatusAria",
-  "nav.item.rooms",
-  "rooms.description.full"
+  "nav.item.rooms"
 ]) {
   if (!roomsPage.includes(required)) errors.push(`rooms/page.tsx missing ${required}`);
 }
@@ -142,24 +142,26 @@ for (const required of ["ROOM_STATUS_GUIDANCE_TEXT", "예약", "사용중", "청
   if (!guidance.includes(required)) errors.push(`room-status-service.ts missing guidance source ${required}`);
 }
 
-const authorization = read("src/lib/authorization.ts");
+// 역할별 랜딩 경로와 화면 접근 규칙은 routes.ts의 roleLandingPath/screenRoutes로 옮겨졌다.
+const routes = read("src/lib/routes.ts");
 for (const required of [
   "waiter: \"/rooms\"",
   "read_only_viewer: \"/rooms\"",
-  "waiter: [\"/rooms\"]",
-  "read_only_viewer: [\"/rooms\", \"/tv\", \"/dashboard/today\", \"/dashboard/monthly\""
+  "{ path: \"/rooms\", labelKey: \"shell.tab.rooms\", zone: \"floor\", roles: [\"administrator\", \"counter\", \"waiter\", \"read_only_viewer\"]"
 ]) {
-  if (!authorization.includes(required)) errors.push(`authorization.ts missing ${required}`);
+  if (!routes.includes(required)) errors.push(`routes.ts missing ${required}`);
 }
-
-const navigation = read("src/lib/navigation.ts");
-for (const required of [
-  "nav.item.rooms",
-  "allowedRoles: [\"administrator\", \"counter\", \"waiter\", \"read_only_viewer\"]",
-  "getNavigationForRole",
-  ".filter((group) => group.items.length > 0)"
-]) {
-  if (!navigation.includes(required)) errors.push(`navigation.ts missing ${required}`);
+const waiterRouteCount = (routes.match(/"waiter"/g) ?? []).length;
+if (waiterRouteCount !== 1) errors.push("routes.ts must limit waiter to the single /rooms screen route");
+for (const path of ["/tv", "/dashboard/today", "/dashboard/monthly"]) {
+  const escapedPath = path.replace(/\//g, "\\/");
+  if (!new RegExp(`\\{ path: "${escapedPath}",[^}]*(roles: reportRoles|"read_only_viewer")`).test(routes)) {
+    errors.push(`routes.ts must grant read_only_viewer access to ${path}`);
+  }
+}
+// 구역이 하나뿐인 역할(웨이터)에게는 도크를 두지 않는다: getNavigationForRole의 그룹 숨김에 대응한다.
+for (const required of ["getDockZones", "dockZones.length > 1"]) {
+  if (!routes.includes(required)) errors.push(`routes.ts missing ${required}`);
 }
 
 const e2e = read("tests/e2e/story-3-3-rooms-waiter-guidance.spec.ts");

@@ -45,7 +45,8 @@ const e2e = read("tests/e2e/story-7-3-migration-verification-report.spec.ts");
 const schema = read("prisma/schema.prisma");
 const migration = read("prisma/migrations/20260610203000_add_migration_verification_issues/migration.sql");
 const auth = read("src/lib/authorization.ts");
-const nav = read("src/lib/navigation.ts");
+// 화면 접근 규칙(사이드바 탭 포함)은 routes.ts의 screenRoutes로 옮겨졌다.
+const routes = read("src/lib/routes.ts");
 const docs = `${read("docs/modules/migration-verification.md")}\n${read("docs/modules/README.md")}`;
 const context = read("_bmad-output/project-context.md");
 
@@ -149,12 +150,14 @@ for (const ko of ["기능 보존율", "누락 항목", "계산 불일치", "열�
 if (!action.includes("requirePermission(\"migration:write\")")) errors.push("sheet mapping action must require migration:write");
 if (!action.includes("updateMigrationVerificationIssueStatus")) errors.push("sheet mapping action must delegate to domain tracking service");
 if (!auth.includes("\"migration:write\"")) errors.push("authorization.ts must define migration:write permission");
-if (!auth.includes("read_only_viewer: [\"/masters/sheet-mapping\"]")) errors.push("authorization.ts must preserve read_only_viewer exact sheet-mapping route");
+if (!/\{ path: "\/masters\/sheet-mapping",[^}]*roles: \["administrator", "read_only_viewer"\][^}]*\}/.test(routes)) {
+  errors.push("authorization.ts must preserve read_only_viewer exact sheet-mapping route");
+}
 if (auth.includes("read_only_viewer: [\"/rooms\", \"/tv\", \"/dashboard/today\", \"/dashboard/monthly\", \"/dashboard/reports\", \"/masters")) {
   errors.push("authorization.ts must not open /masters prefix to read_only_viewer");
 }
-if (!nav.includes("{ labelKey: \"nav.item.mastersSheetMapping\", href: \"/masters/sheet-mapping\", allowedRoles: [\"administrator\", \"read_only_viewer\"] }")) {
-  errors.push("navigation.ts must keep 시트 기능 매핑표 for administrator/read_only_viewer only");
+if (!routes.includes("{ path: \"/masters/sheet-mapping\", labelKey: \"shell.tab.sheetMapping\", zone: \"settings\", roles: [\"administrator\", \"read_only_viewer\"] }")) {
+  errors.push("routes.ts must keep 시트 기능 매핑표 for administrator/read_only_viewer only");
 }
 
 for (const required of [

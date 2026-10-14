@@ -56,7 +56,8 @@ for (const required of [
   "RoomStatusCard",
   "RoomStatusRefreshController",
   // i18n 전환: 한국어 UI 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
-  "common.goToOperatingMonths",
+  // 운영월이 없을 때 안내는 공용 NoOperatingMonthNotice(그 안에 common.goToOperatingMonths)로 옮겨졌다.
+  "NoOperatingMonthNotice",
   "grid grid-cols-4",
   "live.summary.aria",
   "summary.inUseCount",

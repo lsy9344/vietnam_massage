@@ -405,12 +405,12 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
     }
   });
 
-  test("non-write role은 /calls direct access와 sidebar 콜 원장에서 제외된다", async ({ page }) => {
+  test("non-write role은 /calls direct access와 원장 링크에서 제외된다", async ({ page }) => {
     await login(page, "story22_waiter", "Story22!waiter");
     await page.goto("/calls");
 
     await expect(page).toHaveURL(/\/rooms$/);
-    await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: /콜\/예약 입력 원장/ })).toHaveCount(0);
+    await expect(page.locator('a[href^="/calls"]')).toHaveCount(0);
   });
 
   test.afterAll(async () => {

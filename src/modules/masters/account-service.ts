@@ -65,6 +65,8 @@ export type CurrentAccountAuthorization = {
   employeeId: string | null;
   isActive: boolean;
   lockedUntil: Date | null;
+  /** "나" 메뉴에 보이는 이름. 연결된 직원의 표시명, 없으면 계정 ID. */
+  displayName: string;
 };
 
 export type CreateUserAccountInput = {
@@ -290,17 +292,26 @@ export async function authenticateAccount(identity: string, secret: string) {
   } satisfies AuthenticatedAccount;
 }
 
-export async function getCurrentAccountAuthorization(accountId: string) {
-  const account = (await (prisma as any).userAccount.findUnique({
+export async function getCurrentAccountAuthorization(
+  accountId: string,
+  options: { prismaClient?: AccountPrismaClient } = {}
+): Promise<CurrentAccountAuthorization | null> {
+  const account = (await getAccountClient(options.prismaClient).userAccount.findUnique({
     where: { accountId },
     select: {
       id: true,
+      accountId: true,
       role: true,
       employeeId: true,
       isActive: true,
-      lockedUntil: true
+      lockedUntil: true,
+      employee: { select: { displayName: true } }
     }
-  })) as CurrentAccountAuthorization | null;
+  })) as (Omit<CurrentAccountAuthorization, "role" | "displayName"> & {
+    accountId: string;
+    role: string;
+    employee: { displayName: string } | null;
+  }) | null;
 
   if (!account) {
     return null;
@@ -312,8 +323,12 @@ export async function getCurrentAccountAuthorization(accountId: string) {
   }
 
   return {
-    ...account,
-    role
+    id: account.id,
+    role,
+    employeeId: account.employeeId,
+    isActive: account.isActive,
+    lockedUntil: account.lockedUntil,
+    displayName: account.employee?.displayName ?? account.accountId
   };
 }
 

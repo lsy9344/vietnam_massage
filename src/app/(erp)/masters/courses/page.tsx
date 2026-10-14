@@ -8,12 +8,12 @@ import {
   listTherapistCourseRatesForMonth
 } from "@/modules/masters/course-service";
 import { CoursePolicyManager } from "@/app/(erp)/masters/courses/course-forms";
-import { PageHeader } from "@/components/domain/page-header";
 import { getServerTranslator } from "@/lib/i18n/server";
+import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 
 export default async function CourseMasterPage() {
-  await requireRouteAccess("/masters/courses");
-  const { t } = await getServerTranslator();
+  const account = await requireRouteAccess("/masters/courses");
+  const { locale, t } = await getServerTranslator();
 
   const operatingMonths = await listOperatingMonths();
   const monthKey = operatingMonths.length > 0 ? [...operatingMonths].sort((a, b) => a.monthKey.localeCompare(b.monthKey))[0].monthKey : "2026-06";
@@ -27,19 +27,13 @@ export default async function CourseMasterPage() {
   const therapists = employees.filter((employee) => employee.employeeGroup === "THERAPIST");
 
   return (
-    <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <PageHeader
-        eyebrow={t("masters.eyebrow")}
-        title={t("masters.courses.title")}
-        description={t("masters.courses.description")}
-        meta={
-          <>
-            <div>{t("masters.courses.meta.baseMonth", { monthKey })}</div>
-            <div>{t("masters.courses.meta.courseCount", { count: courses.length })}</div>
-            <div>{t("masters.courses.meta.therapistRateCount", { count: therapistRates.length })}</div>
-          </>
-        }
-      />
+    <div className="screen">
+      <ScreenToolbar account={account} locale={locale} path="/masters/courses" title={t("masters.courses.title")} />
+      <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+        <div>{t("masters.courses.meta.baseMonth", { monthKey })}</div>
+        <div>{t("masters.courses.meta.courseCount", { count: courses.length })}</div>
+        <div>{t("masters.courses.meta.therapistRateCount", { count: therapistRates.length })}</div>
+      </div>
       <CoursePolicyManager
         courses={courses}
         dailyRules={dailyRules}
@@ -48,6 +42,6 @@ export default async function CourseMasterPage() {
         therapistRates={therapistRates}
         therapists={therapists}
       />
-    </main>
+    </div>
   );
 }

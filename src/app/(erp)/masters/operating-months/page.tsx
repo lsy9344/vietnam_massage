@@ -1,9 +1,9 @@
 import { requireRouteAccess } from "@/lib/authorization";
 import { listOperatingMonths, type OperatingMonthDto } from "@/modules/masters/operating-month-service";
 import { OperatingMonthManager } from "@/app/(erp)/masters/operating-months/operating-month-forms";
-import { PageHeader } from "@/components/domain/page-header";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { businessTodayIsoDate } from "@/lib/operating-date";
+import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 
 function getHighlightedMonthKey(months: OperatingMonthDto[]) {
   const today = businessTodayIsoDate();
@@ -12,26 +12,20 @@ function getHighlightedMonthKey(months: OperatingMonthDto[]) {
 }
 
 export default async function OperatingMonthsPage() {
-  await requireRouteAccess("/masters/operating-months");
+  const account = await requireRouteAccess("/masters/operating-months");
 
-  const { t } = await getServerTranslator();
+  const { locale, t } = await getServerTranslator();
   const months = await listOperatingMonths();
 
   return (
-    <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <PageHeader
-        eyebrow={t("masters.eyebrow")}
-        title={t("masters.operatingMonths.title")}
-        description={t("masters.operatingMonths.description")}
-        meta={
-          <>
-            <div>{t("masters.operatingMonths.meta.defaultStatus")}</div>
-            <div>{t("masters.operatingMonths.meta.dateFormat")}</div>
-          </>
-        }
-      />
+    <div className="screen">
+      <ScreenToolbar account={account} locale={locale} path="/masters/operating-months" title={t("masters.operatingMonths.title")} />
+      <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+        <div>{t("masters.operatingMonths.meta.defaultStatus")}</div>
+        <div>{t("masters.operatingMonths.meta.dateFormat")}</div>
+      </div>
 
       <OperatingMonthManager highlightedMonthKey={getHighlightedMonthKey(months)} months={months} />
-    </main>
+    </div>
   );
 }

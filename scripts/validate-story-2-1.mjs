@@ -124,8 +124,7 @@ for (const required of [
   "requireRouteAccess(\"/calls\")",
   "operatingMonthId",
   "serviceDate",
-  "min={selectedMonth.startDate}",
-  "max={selectedMonth.endDate}",
+  "DateContextControls",
   "listServiceCallsForDate",
   "listServiceCallFormOptions",
   "EditableCallGrid",
@@ -136,6 +135,11 @@ for (const required of [
   "Skeleton"
 ]) {
   if (!page.includes(required)) errors.push(`calls page/grid/loading missing ${required}`);
+}
+// 운영월 날짜 범위 min/max는 공용 DateContextControls로 옮겨졌다.
+const dateContextControls = read("src/components/shell/date-context-controls.tsx");
+for (const required of ["min={selectedMonth.startDate}", "max={selectedMonth.endDate}"]) {
+  if (!dateContextControls.includes(required)) errors.push(`date-context-controls.tsx missing ${required}`);
 }
 const koMessages = read("src/lib/i18n/messages/ko.ts");
 for (const label of ["이 날짜의 콜이 없습니다", "새 콜 행 추가", "잠긴 운영월입니다."]) {

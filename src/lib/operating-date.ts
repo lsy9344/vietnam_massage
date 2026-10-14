@@ -20,6 +20,11 @@ export function businessTodayIsoDate(now = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+export function addDaysToIsoDate(date: string, days: number) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
 export function clampDateToOperatingMonth(date: string | undefined, month: OperatingMonthDateRange, now = new Date()) {
   if (!date) {
     const today = businessTodayIsoDate(now);

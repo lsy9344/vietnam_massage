@@ -179,7 +179,7 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     await page.goto("/masters/rooms");
 
     await expect(page.getByRole("heading", { name: "객실 마스터", level: 1 })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: "객실", exact: true })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "설정 화면" }).getByRole("link", { name: "객실", exact: true })).toHaveAttribute("aria-current", "page");
     await expect(page.getByText("기본 객실: 11개")).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "표시명" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "이관 참조값" })).toBeVisible();
@@ -297,14 +297,13 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
   });
 
   for (const user of users.filter((candidate) => candidate.role !== "administrator")) {
-    test(`${user.accountId} direct /masters/rooms 접근은 차단되고 sidebar 객실도 숨겨진다`, async ({ page }) => {
+    test(`${user.accountId} direct /masters/rooms 접근은 차단되고 객실 마스터 링크도 숨겨진다`, async ({ page }) => {
       await login(page, user.accountId, user.password);
       await page.goto("/masters/rooms");
 
       await expect(page).toHaveURL(new RegExp(`${user.landing}$`));
-      const menu = page.getByRole("navigation", { name: "ERP 도메인 메뉴" });
-      await expect(menu.getByText("객실", { exact: true })).toHaveCount(0);
-      await expect(menu.getByRole("link", { name: "객실", exact: true })).toHaveCount(0);
+      // 도크와 구역 탭 어디에도 객실 마스터로 가는 링크가 없다.
+      await expect(page.locator('a[href^="/masters/rooms"]')).toHaveCount(0);
     });
   }
 

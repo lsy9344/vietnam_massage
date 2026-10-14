@@ -216,11 +216,14 @@ test.describe("Story 7.1 sheet mapping browser access", () => {
 
     await page.goto("/masters/sheet-mapping");
     await expect(page.getByRole("heading", { name: "시트 기능 매핑표", level: 1 })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: "시트 기능 매핑표" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "업무 이동" }).getByRole("link", { name: "설정", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
 
     await page.goto("/masters/codes");
     await expect(page).toHaveURL(/\/rooms$/);
-    await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: "코드\/시간 슬롯" })).toHaveCount(0);
+    await expect(page.locator('a[href^="/masters/codes"]')).toHaveCount(0);
   });
 
   test("waiter is redirected away from the QA-only mapping page", async ({ page }) => {
@@ -228,6 +231,6 @@ test.describe("Story 7.1 sheet mapping browser access", () => {
     await page.goto("/masters/sheet-mapping");
 
     await expect(page).toHaveURL(/\/rooms$/);
-    await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: "시트 기능 매핑표" })).toHaveCount(0);
+    await expect(page.locator('a[href^="/masters/sheet-mapping"]')).toHaveCount(0);
   });
 });

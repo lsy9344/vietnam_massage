@@ -180,7 +180,8 @@ test.describe("Story 7.3 migration verification report source guardrails", () =>
     const page = readSource("src/app/(erp)/masters/sheet-mapping/page.tsx");
     const action = readSource("src/app/(erp)/masters/sheet-mapping/actions.ts");
     const auth = readSource("src/lib/authorization.ts");
-    const nav = readSource("src/lib/navigation.ts");
+    // 티켓 02: 화면 접근 규칙과 메뉴(도크·구역 탭)는 라우트 목록 하나(routes.ts)에서 나온다.
+    const routes = readSource("src/lib/routes.ts");
     // i18n 전환: 한국어 문구는 messages/ko.ts로 이동했고 컴포넌트는 t() key로 참조한다.
     const koMessages = readSource("src/lib/i18n/messages/ko.ts");
 
@@ -209,9 +210,17 @@ test.describe("Story 7.3 migration verification report source guardrails", () =>
     expect(action).toContain("requirePermission(\"migration:write\")");
     expect(action).toContain("updateMigrationVerificationIssueStatus");
     expect(auth).toContain("\"migration:write\"");
-    expect(auth).toContain("read_only_viewer: [\"/masters/sheet-mapping\"]");
-    expect(auth).not.toContain("read_only_viewer: [\"/rooms\", \"/tv\", \"/dashboard/today\", \"/dashboard/monthly\", \"/dashboard/reports\", \"/masters");
-    expect(nav).toContain("{ labelKey: \"nav.item.mastersSheetMapping\", href: \"/masters/sheet-mapping\", allowedRoles: [\"administrator\", \"read_only_viewer\"] }");
+    expect(auth).toContain("export { canAccessRoute, getRoleLandingPath } from \"@/lib/routes\";");
+    expect(routes).toContain(
+      "{ path: \"/masters/sheet-mapping\", labelKey: \"shell.tab.sheetMapping\", zone: \"settings\", roles: [\"administrator\", \"read_only_viewer\"] }"
+    );
+    // 화면 경로는 정확히 일치할 때만 허용되고, 조회 전용은 다른 기준정보 화면에 들어가지 못한다.
+    expect(routes).toContain("screenRoutes.find((route) => route.path === pathname)");
+    const otherMasterRoutes = routes.split("\n").filter((line) => line.includes("path: \"/masters/") && !line.includes("/masters/sheet-mapping"));
+    expect(otherMasterRoutes.length).toBeGreaterThan(0);
+    for (const line of otherMasterRoutes) {
+      expect(line).not.toContain("read_only_viewer");
+    }
     expect(koMessages).toContain("시트 기능 매핑표");
   });
 
@@ -312,6 +321,6 @@ test.describe("Story 7.3 migration verification report browser access", () => {
     await page.goto("/masters/sheet-mapping");
 
     await expect(page).toHaveURL(/\/rooms$/);
-    await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: "시트 기능 매핑표" })).toHaveCount(0);
+    await expect(page.locator('a[href^="/masters/sheet-mapping"]')).toHaveCount(0);
   });
 });

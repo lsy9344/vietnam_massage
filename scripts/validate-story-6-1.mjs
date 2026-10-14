@@ -75,8 +75,10 @@ for (const required of [
   if (!page.includes(required)) errors.push(`today dashboard page missing ${required}`);
 }
 // i18n: 한국어 UI 문구는 t() key로 참조하고 원문은 messages/ko.ts에 보존한다.
+// 운영월이 없을 때 안내는 공용 NoOperatingMonthNotice(그 안에 common.goToOperatingMonths)로 옮겨졌다.
+if (!page.includes("NoOperatingMonthNotice")) errors.push("today dashboard page missing t() key common.goToOperatingMonths");
+if (!koMessages.includes("운영월 관리로 이동")) errors.push("messages/ko.ts missing 운영월 관리로 이동");
 for (const [key, ko] of [
-  ["common.goToOperatingMonths", "운영월 관리로 이동"],
   ["dashboard.today.statusCounts.aria", "오늘 상태 건수"],
   ["dashboard.today.moneyKpi.aria", "오늘 금액 KPI"],
   ["dashboard.today.course.title", "코스별 방문완료"],

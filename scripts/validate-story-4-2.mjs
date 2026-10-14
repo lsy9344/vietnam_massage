@@ -89,7 +89,8 @@ for (const required of [
 ]) {
   if (!page.includes(required)) errors.push(`settlements/page.tsx missing ${required}`);
 }
-requireMoved(page, "settlements/page.tsx", "common.goToOperatingMonths", "운영월 관리로 이동");
+// 운영월이 없을 때 안내는 공용 NoOperatingMonthNotice(그 안에 common.goToOperatingMonths)로 옮겨졌다.
+requireMoved(page, "settlements/page.tsx", "NoOperatingMonthNotice", "운영월 관리로 이동");
 requireMoved(page, "settlements/page.tsx", "settlements.therapist.title", "마사지사 일일정산");
 requireMoved(page, "settlements/page.tsx", "settlements.therapist.empty.title", "이 날짜의 방문완료 콜이 없습니다");
 requireMoved(page, "settlements/page.tsx", "settlements.therapist.error.title", "정산 조회 실패");

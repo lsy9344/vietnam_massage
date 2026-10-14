@@ -331,9 +331,9 @@ test.describe("Story 3.4 TV fullscreen board", () => {
 
     await expect(page).toHaveURL(/\/tv(?:\?|$)/);
     await expect(page.getByRole("heading", { name: "TV 현황판" })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" })).toHaveCount(0);
-    await expect(page.getByText("ERP 운영")).toHaveCount(0);
-    await expect(page.getByText("역할별 ERP 업무")).toHaveCount(0);
+    // TV는 셸(도크, 건너뛰기 링크) 없는 전체 화면이다.
+    await expect(page.getByRole("navigation", { name: "업무 이동" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "본문으로" })).toHaveCount(0);
     await expect(page.getByTestId("room-status-card")).toHaveCount(11);
     await expect(page.getByLabel("상태: 예약").filter({ hasText: "◷" })).toBeVisible();
     await expect(page.getByLabel("상태: 사용중").filter({ hasText: "●" })).toBeVisible();

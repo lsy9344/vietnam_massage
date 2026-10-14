@@ -14,7 +14,7 @@ function SkeletonBlock({ className = "" }: { className?: string }) {
 export default async function ReportsLoading() {
   const { t } = await getServerTranslator();
   return (
-    <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7" aria-busy="true" aria-label={t("dashboard.reports.loading.aria")}>
+    <section className="screen" aria-busy="true" aria-label={t("dashboard.reports.loading.aria")}>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <Skeleton className="mb-3 h-3 w-20" />
@@ -52,6 +52,6 @@ export default async function ReportsLoading() {
           <SkeletonBlock />
         </section>
       </div>
-    </main>
+    </section>
   );
 }

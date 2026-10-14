@@ -11,12 +11,50 @@ export const vi: Messages = {
   "app.title": "Vietnam Aesthetic ERP",
   "app.description": "Vỏ ứng dụng ERP cho sổ vận hành, tình trạng phòng, đối soát và chốt tháng",
 
-  // 앱 shell
-  "shell.brand": "Vietnam Aesthetic",
-  "shell.title": "Vận hành ERP",
-  "shell.header.eyebrow": "Theo ngày vận hành hôm nay",
-  "shell.header.title": "Nghiệp vụ ERP theo vai trò",
-  "shell.menu.aria": "Menu nghiệp vụ ERP",
+  // 탐색 셸: 업무 흐름 도크, "나" 메뉴, 건너뛰기 링크
+  "shell.skip.main": "Tới nội dung chính",
+  "shell.skip.dock": "Tới chuyển khu vực",
+  "shell.dock.aria": "Chuyển khu vực nghiệp vụ",
+  "shell.dock.more": "Thêm",
+  "shell.zone.ledger": "Sổ gọi",
+  "shell.zone.floor": "Vận hành",
+  "shell.zone.customers": "Khách",
+  "shell.zone.settlements": "Đối soát",
+  "shell.zone.closing": "Chốt tháng",
+  "shell.zone.reports": "Báo cáo",
+  "shell.zone.settings": "Thiết lập",
+  "shell.tabs.aria": "Màn hình {zone}",
+  "shell.tab.calls": "Sổ gọi",
+  "shell.tab.rooms": "Phòng",
+  "shell.tab.live": "Thời gian thực",
+  "shell.tab.tv": "Màn hình TV",
+  "shell.tab.therapist": "KTV",
+  "shell.tab.earcare": "Chăm sóc tai",
+  "shell.tab.opsDaily": "Vận hành ngày",
+  "shell.tab.opsMonthly": "Vận hành tháng",
+  "shell.tab.closing": "Chốt tháng",
+  "shell.tab.dashboardToday": "Hôm nay",
+  "shell.tab.dashboardMonthly": "Theo tháng",
+  "shell.tab.dashboardReports": "Báo cáo",
+  "shell.tab.operatingMonths": "Tháng vận hành",
+  "shell.tab.mastersRooms": "Phòng",
+  "shell.tab.codes": "Mã·Khung giờ",
+  "shell.tab.employees": "Nhân viên",
+  "shell.tab.courses": "Gói·Phụ cấp",
+  "shell.tab.sheetMapping": "Ánh xạ sheet",
+  "shell.tab.audit": "Nhật ký",
+  "shell.date.previous": "Ngày trước",
+  "shell.date.next": "Ngày sau",
+  "shell.date.today": "Hôm nay",
+  "shell.openTv": "Mở màn hình TV",
+  "shell.me.trigger": "Tôi",
+  "shell.me.aria": "Tài khoản của tôi",
+  "shell.me.signOut": "Đăng xuất",
+  "shell.role.administrator": "Quản trị viên",
+  "shell.role.counter": "Lễ tân",
+  "shell.role.waiter": "Phục vụ",
+  "shell.role.settlement_manager": "Quản lý đối soát",
+  "shell.role.read_only_viewer": "Chỉ xem",
 
   // 언어 전환
   "locale.switch.aria": "Chuyển ngôn ngữ hiển thị",
@@ -35,35 +73,23 @@ export const vi: Messages = {
   "common.dateRange": "Khoảng ngày",
   "common.createOperatingMonthFirst": "Vui lòng tạo tháng vận hành trước",
   "common.goToOperatingMonths": "Đi tới quản lý tháng vận hành",
+  "common.requestOperatingMonthFromAdmin": "Hãy yêu cầu quản trị viên tạo tháng vận hành.",
   "common.roomStatusAria": "Tình trạng phòng",
   "common.monthOption": "{monthKey} ({status})",
+  "common.warning.more": "+{count}",
+  "common.warning.moreAria": "Thêm {count} cảnh báo",
+  "common.saveState.saving": "Đang lưu",
+  "common.saveState.saved": "Đã lưu",
+  "common.saveState.failed": "Lưu thất bại",
+  "common.saveState.conflict": "Cần kiểm tra xung đột",
+  "common.saveState.checking": "Đang kiểm tra đã lưu chưa",
+  "common.panel.close": "Đóng",
+  "common.confirm.cancel": "Hủy",
 
-  // 사이드바 그룹
-  "nav.group.operations": "Tình hình vận hành",
-  "nav.group.calls": "Sổ cuộc gọi",
-  "nav.group.settlements": "Đối soát",
-  "nav.group.closing": "Chốt tháng",
-  "nav.group.dashboard": "Bảng điều khiển",
-  "nav.group.masters": "Thiết lập dữ liệu gốc",
-  "nav.group.audit": "Nhật ký kiểm tra",
-
-  // 사이드바 항목
+  // 화면 제목 (실시간, 객실, TV)
   "nav.item.live": "Trạng thái thời gian thực",
   "nav.item.rooms": "Tình trạng phòng",
   "nav.item.tv": "Bảng trạng thái TV",
-  "nav.item.calls": "Sổ nhập cuộc gọi/đặt lịch",
-  "nav.item.settlements": "Màn hình đối soát",
-  "nav.item.closing": "Chốt tháng",
-  "nav.item.dashboardToday": "Bảng điều khiển hôm nay",
-  "nav.item.dashboardMonthly": "Bảng điều khiển theo tháng",
-  "nav.item.dashboardReports": "Báo cáo biểu đồ",
-  "nav.item.mastersOperatingMonths": "Tháng vận hành",
-  "nav.item.mastersRooms": "Phòng",
-  "nav.item.mastersCodes": "Mã/Khung giờ",
-  "nav.item.mastersEmployees": "Nhân viên",
-  "nav.item.mastersCourses": "Gói dịch vụ/Phụ cấp/Thưởng",
-  "nav.item.mastersSheetMapping": "Bảng ánh xạ chức năng sheet",
-  "nav.item.audit": "Nhật ký kiểm tra",
 
   // 로그인
   "auth.signIn.eyebrow": "Vietnam Aesthetic ERP",
@@ -126,7 +152,6 @@ export const vi: Messages = {
 
   // /live /rooms /tv 화면
   // 첫화면(실시간 현황)
-  "live.description": "Tra cứu tình trạng phòng và tóm tắt cuộc gọi/doanh thu hôm nay.",
   "live.empty.description": "Màn hình đầu tra cứu tình trạng phòng và tóm tắt cuộc gọi trong khoảng ngày của tháng vận hành.",
   "live.summary.aria": "Tóm tắt trạng thái hôm nay",
   "live.summary.reservationCount": "Số lượt đặt trước",
@@ -147,8 +172,6 @@ export const vi: Messages = {
   "live.loading.summaryAria": "Đang tải tóm tắt hôm nay",
 
   // 객실 현황
-  "rooms.description.short": "Tra cứu chỉ đọc tình trạng từng phòng và lời hướng dẫn cho phục vụ.",
-  "rooms.description.full": "Tra cứu chỉ đọc tình trạng từng phòng, thời gian còn lại, xác nhận kết thúc và lời hướng dẫn cho phục vụ.",
   "rooms.empty.description": "Tình trạng phòng tra cứu tình trạng phòng trong khoảng ngày của tháng vận hành.",
   "rooms.loading.roomsAria": "Đang tải tình trạng phòng",
 
@@ -161,7 +184,6 @@ export const vi: Messages = {
   // /calls 화면
   // 페이지 헤더/빈 상태
   "calls.title": "Sổ nhập cuộc gọi/đặt lịch",
-  "calls.description": "Ghi lại thông tin cuộc gọi cơ bản theo tháng vận hành và theo ngày (nhập cuộc gọi thời gian thực, ý nghĩa A:S).",
   "calls.empty.description": "Sổ cuộc gọi chỉ có thể tra cứu và lưu trong khoảng ngày của tháng vận hành.",
 
   // 콜 그리드 컬럼 헤더
@@ -330,11 +352,6 @@ export const vi: Messages = {
 
   // /settlements 화면
   // 공통 정산 탭/포맷
-  "settlements.tabs.aria": "Màn hình đối soát",
-  "settlements.tabs.therapistDaily": "Đối soát ngày KTV massage",
-  "settlements.tabs.earcareDaily": "Đối soát ngày chăm sóc tai",
-  "settlements.tabs.opsDaily": "Chuyên cần/Thưởng ngày nhóm vận hành",
-  "settlements.tabs.opsMonthly": "Thưởng tháng nhóm vận hành",
   "settlements.vndSuffix": "VND",
   "settlements.countSuffix": "ca",
   "settlements.peopleSuffix": "người",
@@ -348,8 +365,6 @@ export const vi: Messages = {
   "settlements.payment.saveFailed": "Đã xảy ra lỗi khi lưu trạng thái đã thanh toán.",
   "settlements.therapist.title": "Đối soát ngày KTV massage",
   "settlements.therapist.emptyMonthDescription": "Đối soát ngày KTV massage chỉ có thể tra cứu trong khoảng ngày của tháng vận hành.",
-  "settlements.therapist.description": "Theo cuộc gọi đã hoàn tất, tra cứu cuộc gọi phụ trách theo KTV, phụ cấp theo gói dịch vụ, căn cứ trạng thái chính sách và quản lý kèm giờ chuyên cần cùng công nhận đủ công.",
-  "settlements.therapist.emptyDescription": "Tra cứu cuộc gọi phụ trách KTV 1/2 đã hoàn tất và căn cứ phụ cấp theo gói dịch vụ.",
   "settlements.therapist.locked.description": "Không thể chỉnh sửa giờ chuyên cần của tháng vận hành này. Các mục nhập hiển thị ở chế độ chỉ đọc.",
   "settlements.therapist.error.title": "Tra cứu đối soát thất bại",
   "settlements.therapist.error.fallback": "Không thể tra cứu đối soát ngày KTV massage.",
@@ -423,8 +438,6 @@ export const vi: Messages = {
 
   // 귀케어 일일정산
   "settlements.earcare.title": "Đối soát ngày chăm sóc tai",
-  "settlements.earcare.emptyDescription": "Tra cứu số tiền chi trả theo quỹ chăm sóc tai đã hoàn tất và đối tượng làm việc bình thường theo ngày.",
-  "settlements.earcare.description": "Phân bổ đều quỹ chăm sóc tai từ cuộc gọi đã hoàn tất cho KTV chăm sóc tai làm việc bình thường và quản lý kèm nguồn trạng thái làm việc.",
   "settlements.earcare.emptyMonthDescription": "Đối soát ngày chăm sóc tai chỉ có thể tra cứu trong khoảng ngày của tháng vận hành.",
   "settlements.earcare.locked.description": "Không thể chỉnh sửa trạng thái làm việc chăm sóc tai của tháng vận hành này. Các mục nhập hiển thị ở chế độ chỉ đọc.",
   "settlements.earcare.error.title": "Tra cứu đối soát ngày chăm sóc tai thất bại",
@@ -468,8 +481,6 @@ export const vi: Messages = {
 
   // 운영팀 근무/일일인센
   "settlements.ops.title": "Chuyên cần/Thưởng ngày nhóm vận hành",
-  "settlements.ops.emptyDescription": "Tra cứu trạng thái làm việc nhóm vận hành và thưởng theo tổng cuộc gọi ngày dựa trên hoàn tất.",
-  "settlements.ops.description": "Tính thưởng ngày cho nhân viên nhóm vận hành làm việc bình thường bằng tổng opsCallCredit của cuộc gọi đã hoàn tất.",
   "settlements.ops.emptyMonthDescription": "Thưởng ngày nhóm vận hành chỉ có thể tra cứu trong khoảng ngày của tháng vận hành.",
   "settlements.ops.locked.description": "Không thể chỉnh sửa trạng thái làm việc nhóm vận hành của tháng vận hành này. Các mục nhập hiển thị ở chế độ chỉ đọc.",
   "settlements.ops.warningNotice.title": "Kiểm tra căn cứ thưởng ngày",
@@ -512,8 +523,6 @@ export const vi: Messages = {
 
   // 운영팀 월인센
   "settlements.opsMonthly.title": "Thưởng tháng nhóm vận hành",
-  "settlements.opsMonthly.emptyDescription": "Tra cứu thưởng tháng nhóm vận hành theo toàn bộ cuộc gọi hoàn tất của tháng vận hành.",
-  "settlements.opsMonthly.description": "Tra cứu số tiền thưởng tháng dự kiến và căn cứ phân bổ theo nhân viên dựa trên tổng cuộc gọi tháng và threshold chính sách.",
   "settlements.opsMonthly.emptyMonthDescription": "Xem trước thưởng tháng nhóm vận hành chỉ tra cứu được theo toàn bộ khoảng ngày của tháng vận hành.",
   "settlements.opsMonthly.error.title": "Tra cứu thưởng tháng nhóm vận hành thất bại",
   "settlements.opsMonthly.error.fallback": "Không thể tra cứu thưởng tháng nhóm vận hành.",
@@ -579,8 +588,6 @@ export const vi: Messages = {
 
   // /closing 화면
   "closing.title": "Xem trước chốt tháng",
-  "closing.emptyDescription": "Tổng hợp xem trước số tiền chi trả theo toàn bộ khoảng ngày của tháng vận hành.",
-  "closing.description": "Tổng hợp chỉ đọc số tiền chi trả KTV massage, nhóm vận hành, chăm sóc tai theo khoảng ngày của tháng vận hành.",
   "closing.emptyMonthDescription": "Xem trước chốt tháng chỉ tra cứu được theo ngày bắt đầu và ngày kết thúc của tháng vận hành.",
   "closing.error.title": "Tra cứu xem trước chốt tháng thất bại",
   "closing.error.fallback": "Không thể tra cứu xem trước chốt tháng.",
@@ -695,16 +702,12 @@ export const vi: Messages = {
 
   // /dashboard 화면
   // 공통 (대시보드 3개 화면 공유)
-  "dashboard.eyebrow": "Bảng điều khiển",
   "dashboard.vndSuffix": "VND",
   "dashboard.countSuffix": "ca",
   "dashboard.empty.description": "KPI hôm nay được tra cứu dựa trên sổ cuộc gọi và dữ liệu đối soát trong khoảng ngày của tháng vận hành.",
-  "dashboard.empty.requestAdmin": "Hãy yêu cầu quản trị viên tạo tháng vận hành.",
 
   // 오늘 KPI 대시보드 (6-1)
   "dashboard.today.title": "Bảng điều khiển KPI hôm nay",
-  "dashboard.today.emptyDescription": "Tra cứu luồng đặt trước, hoàn tất, doanh thu, đối soát hôm nay theo tháng vận hành và ngày tra cứu.",
-  "dashboard.today.description": "Tra cứu luồng trạng thái cuộc gọi, doanh thu, chi phí, đối soát theo ngày được chọn.",
   "dashboard.today.statusCounts.aria": "Số ca trạng thái hôm nay",
   "dashboard.today.moneyKpi.aria": "KPI số tiền hôm nay",
   "dashboard.today.detailSummary.aria": "Tóm tắt chi tiết",
@@ -757,9 +760,7 @@ export const vi: Messages = {
 
   // 월간 KPI 대시보드 (6-2)
   "dashboard.monthly.title": "Bảng điều khiển KPI theo tháng",
-  "dashboard.monthly.emptyDescription": "Tra cứu tóm tắt trạng thái, doanh thu, chi trả theo tháng dựa trên toàn bộ khoảng ngày của tháng vận hành.",
   "dashboard.monthly.empty.description": "KPI theo tháng được tra cứu dựa trên khoảng ngày của tháng vận hành và ID tháng vận hành.",
-  "dashboard.monthly.description": "Tra cứu luồng trạng thái cuộc gọi, doanh thu phản ánh trả trước, ảnh chụp chi trả theo toàn bộ tháng vận hành.",
   "dashboard.monthly.basis.aria": "Cơ sở KPI theo tháng",
   "dashboard.monthly.basis.label": "Cơ sở tra cứu",
   "dashboard.monthly.basis.closedSnapshot": "Theo ảnh chụp đã chốt",
@@ -831,9 +832,7 @@ export const vi: Messages = {
 
   // 그래프 리포트 (6-3)
   "dashboard.reports.title": "Báo cáo biểu đồ",
-  "dashboard.reports.emptyDescription": "Tra cứu luồng doanh thu, gói dịch vụ, KTV, phòng, không đến/hủy theo tháng vận hành và ngày tra cứu.",
   "dashboard.reports.empty.description": "Báo cáo biểu đồ được tra cứu dựa trên khoảng ngày của tháng vận hành và ngày tra cứu được chọn.",
-  "dashboard.reports.description": "Tra cứu bằng biểu đồ luồng doanh thu, gói dịch vụ, KTV, phòng, không đến/hủy.",
   "dashboard.reports.snapshotMissing.title": "Không tìm thấy ảnh chụp đã chốt",
   "dashboard.reports.snapshotMissing.description": "Tháng vận hành đã chốt hoặc đã khóa không được thay bằng giá trị tính chi trả hiện tại. Xếp hạng đối soát và cấu thành chi trả trên biểu đồ để trống.",
   "dashboard.reports.basis.aria": "Cơ sở báo cáo biểu đồ",
@@ -906,7 +905,6 @@ export const vi: Messages = {
 
   // /masters 화면
   // 공통 (마스터 화면 공유)
-  "masters.eyebrow": "Thiết lập dữ liệu gốc",
   "masters.common.displayCount": "Hiển thị {count}",
   "masters.common.uniqueId": "ID duy nhất: {id}",
   "masters.common.save": "Lưu",
@@ -924,7 +922,6 @@ export const vi: Messages = {
 
   // 운영월 관리 (1-4)
   "masters.operatingMonths.title": "Quản lý tháng vận hành",
-  "masters.operatingMonths.description": "Quản lý tháng vận hành và khoảng ngày được chia sẻ cho mọi nhập cuộc gọi, đối soát, bảng điều khiển và chốt tháng.",
   "masters.operatingMonths.meta.defaultStatus": "Trạng thái mặc định: Đang soạn",
   "masters.operatingMonths.meta.dateFormat": "Định dạng ngày: YYYY-MM-DD",
   "masters.operatingMonths.changeToReview": "Chuyển sang đang xem xét",
@@ -942,7 +939,6 @@ export const vi: Messages = {
 
   // 객실 마스터 (1-5)
   "masters.rooms.title": "Dữ liệu gốc phòng",
-  "masters.rooms.description": "Quản lý tên hiển thị phòng và tiêu chí sắp xếp được chia sẻ cho sổ cuộc gọi, tình trạng phòng và bảng trạng thái TV.",
   "masters.rooms.meta.defaultRooms": "Phòng mặc định: 11",
   "masters.rooms.meta.migrationReference": "Giá trị tham chiếu chuyển đổi chỉ giữ để kiểm chứng",
   "masters.rooms.listTitle": "Danh sách phòng",
@@ -951,7 +947,6 @@ export const vi: Messages = {
 
   // 코드/시간 슬롯 (1-6)
   "masters.codes.title": "Mã/Khung giờ",
-  "masters.codes.description": "Quản lý trạng thái, phương thức thanh toán, loại giảm giá, trạng thái làm việc, giá trị xác nhận và khung giờ nhập được chia sẻ cho sổ cuộc gọi và màn hình đối soát.",
   "masters.codes.meta.defaultCodes": "Mã mặc định: {count}",
   "masters.codes.meta.defaultTimeSlots": "Khung giờ mặc định: {count}",
   "masters.codes.type.SERVICE_STATUS": "Trạng thái",
@@ -972,7 +967,6 @@ export const vi: Messages = {
 
   // 직원 (1-7)
   "masters.employees.title": "Nhân viên",
-  "masters.employees.description": "Quản lý tách biệt tên hiển thị nhân viên và thông tin đăng nhập tài khoản. Sổ cuộc gọi và đối soát tham chiếu ID duy nhất của nhân viên chứ không phải chuỗi tên.",
   "masters.employees.meta.totalEmployees": "Tổng nhân viên: {count} người",
   "masters.employees.meta.activeEmployees": "Nhân viên hoạt động: {count} người",
   "masters.employees.group.OPERATIONS": "Nhóm vận hành",
@@ -1021,7 +1015,6 @@ export const vi: Messages = {
 
   // 코스/수당/인센 (1-8)
   "masters.courses.title": "Gói dịch vụ/Phụ cấp/Thưởng",
-  "masters.courses.description": "Gói dịch vụ và chính sách chi trả được quản lý theo ID gói, ID nhân viên và lịch sử tháng áp dụng. Thay đổi tên hiển thị không làm đổi stable ID và mã gói dịch vụ.",
   "masters.courses.meta.baseMonth": "Tháng áp dụng cơ sở: {monthKey}",
   "masters.courses.meta.courseCount": "Gói dịch vụ: {count}",
   "masters.courses.meta.therapistRateCount": "Phụ cấp KTV massage: {count}",
@@ -1064,7 +1057,6 @@ export const vi: Messages = {
 
   // 시트 기능 매핑표 (7-1/7-3)
   "masters.sheetMapping.title": "Bảng ánh xạ chức năng sheet",
-  "masters.sheetMapping.description": "Xem trên một màn hình việc ánh xạ 11 visible sheet và sheet danh sách ẩn của Excel gốc, đối chiếu tính toán Story 7.2 và rủi ro còn mở trước khi phát hành.",
   "masters.sheetMapping.meta.preservationGoal": "Tiêu chuẩn: Tỷ lệ bảo toàn chức năng 100%",
   "masters.sheetMapping.meta.generatedAt": "Tạo {value}",
   "masters.sheetMapping.meta.canWrite": "Quản trị viên có thể đổi trạng thái",
@@ -1149,9 +1141,7 @@ export const vi: Messages = {
   "masters.issueStatus.option.pass": "Đạt",
 
   // /audit 화면
-  "audit.eyebrow": "Nhật ký kiểm tra",
   "audit.title": "Tra cứu lịch sử thay đổi",
-  "audit.description": "Tra cứu người thực hiện, hành động, đối tượng và giá trị trước/sau của các thay đổi ảnh hưởng đến số tiền chi trả và trạng thái vận hành.",
   "audit.meta.recent": "100 mục gần nhất",
   "audit.meta.noDelete": "Lịch sử không thể xóa",
   "audit.field.targetType": "Loại đối tượng",

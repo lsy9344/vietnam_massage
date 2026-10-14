@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { RoomStatusCard } from "@/components/domain/room-status-card";
 import { RoomStatusRefreshController } from "@/components/domain/room-status-refresh-controller";
-import { requireRouteAccess } from "@/lib/authorization";
+import { canAccessRoute, requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
@@ -34,11 +34,13 @@ export default async function TvPage({ searchParams }: { searchParams: Promise<T
             <p className="text-lg font-bold text-muted">{t("tv.eyebrow")}</p>
             <h1 className="mt-3 text-[40px] font-black leading-none">{t("nav.item.tv")}</h1>
             <p className="mt-5 text-[22px] font-bold text-muted">{t("tv.empty.description")}</p>
-            {account.role === "administrator" ? (
+            {canAccessRoute(account.role, "/masters/operating-months") ? (
               <Link className="mt-6 inline-flex text-lg font-bold text-brand underline-offset-4 hover:underline" href="/masters/operating-months">
                 {t("common.goToOperatingMonths")}
               </Link>
-            ) : null}
+            ) : (
+              <p className="mt-6 text-lg font-bold text-muted">{t("common.requestOperatingMonthFromAdmin")}</p>
+            )}
           </div>
         </section>
       </main>

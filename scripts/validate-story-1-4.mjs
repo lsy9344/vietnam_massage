@@ -26,7 +26,7 @@ function readJson(path) {
   "src/app/(erp)/masters/operating-months/actions.ts",
   "src/app/(erp)/masters/operating-months/page.tsx",
   "src/lib/authorization.ts",
-  "src/lib/navigation.ts",
+  "src/lib/routes.ts",
   "src/modules/masters/README.md",
   "_bmad-output/project-context.md",
   "tests/e2e/story-1-4-operating-months.spec.ts"
@@ -151,21 +151,20 @@ if (page.includes("ErpEmptyState") || page.includes("Story 1.4에서 연결")) {
 }
 
 const authorization = read("src/lib/authorization.ts");
-if (!authorization.includes("\"employee:write\"") || !authorization.includes("\"/masters\"")) {
-  errors.push("authorization.ts must preserve administrator master route and employee:write permission");
+if (!authorization.includes("\"employee:write\"")) {
+  errors.push("authorization.ts must preserve administrator employee:write permission");
 }
 if (/counter:[^\n]+\bemployee:write\b/.test(authorization)) {
   errors.push("counter must not have employee:write permission");
 }
 
-const navigation = read("src/lib/navigation.ts");
-for (const required of ["nav.item.mastersOperatingMonths", "/masters/operating-months", "administrator"]) {
-  if (!navigation.includes(required)) {
-    errors.push(`navigation.ts missing ${required}`);
-  }
+// 화면 접근 규칙은 routes.ts의 screenRoutes로 옮겨졌다.
+const routes = read("src/lib/routes.ts");
+if (!/\{ path: "\/masters\/operating-months",[^}]*roles: \["administrator"\][^}]*\}/.test(routes)) {
+  errors.push("routes.ts must keep administrator-only /masters/operating-months screen route");
 }
-if (navigation.includes("disabled")) {
-  errors.push("navigation must hide unauthorized operating-month links, not disable them");
+if (routes.includes("disabled")) {
+  errors.push("routes.ts must hide unauthorized operating-month links, not disable them");
 }
 
 const unitTest = read("src/modules/masters/operating-month-service.test.ts");

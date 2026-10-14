@@ -3,68 +3,45 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login, setLocaleCookie } from "./support/auth";
 
+// 티켓 02: 사이드바 대신 화면 아래 업무 흐름 도크에 역할이 들어갈 수 있는 구역만 보인다.
+const allZones = ["원장", "현장", "고객", "정산", "마감", "보고", "설정"];
+
 const users = [
   {
     accountId: "administrator",
     role: "administrator",
     password: "Story12!administrator",
     landing: "/live",
-    visibleGroups: ["운영 현황", "콜 원장", "정산", "월마감", "대시보드", "마스터 설정", "감사 로그"],
-    hiddenGroups: [],
-    visibleLinks: [
-      "첫화면 실시간 현황",
-      "객실 현황",
-      "TV 현황판",
-      "콜/예약 입력 원장",
-      "정산 화면",
-      "월마감",
-      "오늘 대시보드",
-      "직원",
-      "시트 기능 매핑표",
-      "감사 로그"
-    ],
-    hiddenLinks: []
+    zones: ["원장", "현장", "정산", "마감", "보고", "설정"]
   },
   {
     accountId: "counter",
     role: "counter",
     password: "Story12!counter",
     landing: "/calls",
-    visibleGroups: ["운영 현황", "콜 원장", "대시보드"],
-    hiddenGroups: ["정산", "월마감", "마스터 설정", "감사 로그"],
-    // 요구사항 9.1 권장 권한: 카운터에는 "TV 화면 조회"가 포함된다.
-    visibleLinks: ["첫화면 실시간 현황", "객실 현황", "TV 현황판", "콜/예약 입력 원장", "오늘 대시보드"],
-    hiddenLinks: ["정산 화면", "월마감", "직원", "감사 로그"]
+    zones: ["원장", "현장", "보고"]
   },
   {
     accountId: "settlement_manager",
     role: "settlement_manager",
     password: "Story12!settlement_manager",
     landing: "/settlements",
-    visibleGroups: ["정산", "월마감", "대시보드"],
-    hiddenGroups: ["운영 현황", "콜 원장", "마스터 설정", "감사 로그"],
-    visibleLinks: ["정산 화면", "월마감", "오늘 대시보드"],
-    hiddenLinks: ["첫화면 실시간 현황", "객실 현황", "TV 현황판", "콜/예약 입력 원장", "직원", "감사 로그"]
+    zones: ["정산", "마감", "보고"]
   },
   {
     accountId: "waiter",
     role: "waiter",
     password: "Story12!waiter",
     landing: "/rooms",
-    visibleGroups: ["운영 현황"],
-    hiddenGroups: ["콜 원장", "정산", "월마감", "대시보드", "마스터 설정", "감사 로그"],
-    visibleLinks: ["객실 현황"],
-    hiddenLinks: ["첫화면 실시간 현황", "TV 현황판", "콜/예약 입력 원장", "정산 화면", "월마감", "오늘 대시보드", "직원", "감사 로그"]
+    // 구역이 하나뿐이라 도크가 없다.
+    zones: [] as string[]
   },
   {
     accountId: "read_only_viewer",
     role: "read_only_viewer",
     password: "Story12!read_only_viewer",
     landing: "/rooms",
-    visibleGroups: ["운영 현황", "대시보드", "마스터 설정"],
-    hiddenGroups: ["콜 원장", "정산", "월마감", "감사 로그"],
-    visibleLinks: ["객실 현황", "TV 현황판", "오늘 대시보드", "시트 기능 매핑표"],
-    hiddenLinks: ["첫화면 실시간 현황", "콜/예약 입력 원장", "정산 화면", "월마감", "직원", "감사 로그"]
+    zones: ["현장", "보고", "설정"]
   }
 ];
 
@@ -144,24 +121,18 @@ test.describe("Story 1.2 직원 로그인과 RBAC", () => {
   });
 
   for (const user of users) {
-    test(`${user.accountId} 로그인 후 역할별 landing과 sidebar만 렌더링한다`, async ({ page }) => {
+    test(`${user.accountId} 로그인 후 역할별 landing과 도크 구역만 렌더링한다`, async ({ page }) => {
       await login(page, user.accountId, user.password);
       await expect(page).toHaveURL(new RegExp(`${user.landing}$`));
-      const menu = page.getByRole("navigation", { name: "ERP 도메인 메뉴" });
+      const dock = page.getByRole("navigation", { name: "업무 이동" });
 
-      for (const label of user.visibleGroups) {
-        // 그룹명은 <h2> 헤딩으로 렌더된다. 같은 텍스트의 sidebar 링크(예: "월마감")와
-        // 겹치므로 getByText 대신 heading role로 구분한다.
-        await expect(menu.getByRole("heading", { name: label, exact: true })).toBeVisible();
+      if (user.zones.length === 0) {
+        await expect(dock).toHaveCount(0);
+        return;
       }
-      for (const label of user.hiddenGroups) {
-        await expect(menu.getByRole("heading", { name: label, exact: true })).toHaveCount(0);
-      }
-      for (const label of user.visibleLinks) {
-        await expect(menu.getByRole("link", { name: label })).toBeVisible();
-      }
-      for (const label of user.hiddenLinks) {
-        await expect(menu.getByRole("link", { name: label })).toHaveCount(0);
+      await expect(dock.getByRole("link")).toHaveText(user.zones);
+      for (const zone of allZones.filter((zone) => !user.zones.includes(zone))) {
+        await expect(dock.getByRole("link", { name: zone, exact: true })).toHaveCount(0);
       }
     });
   }

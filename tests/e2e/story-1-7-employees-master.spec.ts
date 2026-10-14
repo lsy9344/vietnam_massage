@@ -122,7 +122,7 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await page.goto("/masters/employees");
 
     await expect(page.getByRole("heading", { name: "직원", level: 1 })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: /직원/ })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "설정 화면" }).getByRole("link", { name: "직원" })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("heading", { name: /운영팀/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: /귀케어팀/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: /마사지사/ })).toBeVisible();
@@ -252,11 +252,11 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
   });
 
   for (const user of users.filter((entry) => entry.role !== "administrator")) {
-    test(`${user.role}는 direct /masters/employees 접근과 sidebar 직원 항목에서 제외된다`, async ({ page }) => {
+    test(`${user.role}는 direct /masters/employees 접근과 직원 화면 링크에서 제외된다`, async ({ page }) => {
       await login(page, user.accountId, user.password);
       await page.goto("/masters/employees");
       await expect(page).toHaveURL(new RegExp(user.landing));
-      await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" }).getByRole("link", { name: /직원/ })).toHaveCount(0);
+      await expect(page.locator('a[href^="/masters/employees"]')).toHaveCount(0);
     });
   }
 

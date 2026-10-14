@@ -1,0 +1,97 @@
+"use client";
+
+import { useEffect, type ReactNode } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { useT } from "@/lib/i18n/client";
+import { cn } from "@/lib/utils";
+
+const closeButtonClass =
+  "inline-flex min-h-11 min-w-11 items-center justify-center px-3 text-sm font-semibold text-foreground transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
+
+/**
+ * 비모달 보조 패널(콜 상세, 직원 근거, 항목 편집). 작업면을 보면서 다른 행을 고르면 내용만 바뀐다.
+ * 포커스를 가두지 않고, 닫히면 패널을 열 때 포커스가 있던 자리로 돌려준다. 도크 위에서 끝난다.
+ */
+export function SidePanel({
+  title,
+  onClose,
+  children,
+  className
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  className?: string;
+}) {
+  const t = useT();
+
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
+  }, []);
+
+  return (
+    <aside
+      aria-label={title}
+      className={cn(
+        "flex max-h-[calc(100vh-var(--dock-height))] flex-col overflow-y-auto border border-border bg-surface",
+        className
+      )}
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
+        <h2 className="text-base font-semibold text-foreground">{title}</h2>
+        <button className={closeButtonClass} onClick={onClose} type="button">
+          {t("common.panel.close")}
+        </button>
+      </div>
+      <div className="p-4">{children}</div>
+    </aside>
+  );
+}
+
+/**
+ * 모달 패널(빠른 예약 같은 생성 흐름). 오른쪽 서랍이고 휴대폰 폭에서는 전체 화면 시트다.
+ * 포커스를 가두고 Esc로 닫으며, 닫으면 연 자리로 포커스를 돌려준다. 도크까지 덮어 배경을 비활성으로 만든다.
+ * 미저장 값 안내는 onOpenChange를 받는 쪽이 정한다.
+ */
+export function ModalPanel({
+  open,
+  onOpenChange,
+  title,
+  description,
+  trigger,
+  children
+}: {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  title: string;
+  description?: string;
+  trigger?: ReactNode;
+  children: ReactNode;
+}) {
+  const t = useT();
+  return (
+    <DialogPrimitive.Root onOpenChange={onOpenChange} open={open}>
+      {trigger ? <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger> : null}
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-foreground/30" />
+        <DialogPrimitive.Content
+          className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-surface text-foreground outline-none min-[600px]:inset-y-0 min-[600px]:left-auto min-[600px]:right-0 min-[600px]:w-[min(32rem,100vw)] min-[600px]:border-l min-[600px]:border-border"
+        >
+          <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
+            <div>
+              <DialogPrimitive.Title className="text-lg font-semibold text-foreground">{title}</DialogPrimitive.Title>
+              {description ? (
+                <DialogPrimitive.Description className="mt-1 text-sm text-muted">{description}</DialogPrimitive.Description>
+              ) : null}
+            </div>
+            <DialogPrimitive.Close className={closeButtonClass}>{t("common.panel.close")}</DialogPrimitive.Close>
+          </div>
+          <div className="flex-1 p-4">{children}</div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+}

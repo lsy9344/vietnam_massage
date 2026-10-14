@@ -1,15 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { login as loginAccount } from "./support/auth";
 
-const sidebarGroups = [
-  "운영 현황",
-  "콜 원장",
-  "정산",
-  "월마감",
-  "대시보드",
-  "마스터 설정",
-  "감사 로그"
-];
+// 티켓 02: 좌측 사이드바와 상단바 대신 화면 아래 업무 흐름 도크와 화면별 도구줄을 쓴다.
+const dockZones = ["원장", "현장", "정산", "마감", "보고", "설정"];
 
 test.describe("Story 1.1 ERP 앱 쉘", () => {
   test.beforeEach(async ({ page }) => {
@@ -18,21 +11,17 @@ test.describe("Story 1.1 ERP 앱 쉘", () => {
     await expect(page).toHaveURL(/\/live$/);
   });
 
-  test("기본 데스크톱 shell과 sidebar 도메인 순서를 렌더링한다", async ({ page }) => {
+  test("업무 흐름 도크와 현장 구역의 도구줄을 렌더링한다", async ({ page }) => {
     await expect(page).toHaveTitle("Vietnam Aesthetic ERP");
-    await expect(page.getByRole("heading", { name: "ERP 운영", level: 1 })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "역할별 ERP 업무", level: 2 })).toBeVisible();
 
-    const menu = page.getByRole("navigation", { name: "ERP 도메인 메뉴" });
-    await expect(menu).toBeVisible();
-    for (const group of sidebarGroups) {
-      await expect(menu.getByRole("region", { name: group })).toBeVisible();
-    }
-    await expect(menu.getByRole("link", { name: "첫화면 실시간 현황" })).toHaveAttribute("aria-current", "page");
+    const dock = page.getByRole("navigation", { name: "업무 이동" });
+    await expect(dock).toBeVisible();
+    await expect(dock.getByRole("link")).toHaveText(dockZones);
+    await expect(dock.getByRole("link", { name: "현장", exact: true })).toHaveAttribute("aria-current", "page");
 
-    await expect(page.getByText("운영 현황").first()).toBeVisible();
     // 로그인 직후 /live 랜딩이 실제로 렌더된다 (운영월 유무와 무관하게 heading은 항상 존재).
     await expect(page.getByRole("heading", { name: "첫화면 실시간 현황", level: 1 })).toBeVisible();
+    await expect(page.getByRole("main")).toBeVisible();
   });
 
   // NOTE: Story 1.1 시절의 상태 배지 토큰/연결 대기 데모는 `erp-empty-state.tsx`에 있었으나,
@@ -41,8 +30,15 @@ test.describe("Story 1.1 ERP 앱 쉘", () => {
   // story-3-5-status-badge-accessibility.spec.ts가 소유한다. 죽은 데모를 검증하던
   // 3개 테스트(상태 배지 토큰, 색상 보정, 연결 대기 영역)는 제거했다.
 
-  test("v1 desktop 최소 너비 제약을 유지한다", async ({ page }) => {
+  test("최소 너비 1280px 제약 없이 폭에 따라 셸이 바뀐다", async ({ page }) => {
     const minWidth = await page.evaluate(() => getComputedStyle(document.body).minWidth);
-    expect(minWidth).toBe("1280px");
+    expect(minWidth).not.toBe("1280px");
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const dock = page.getByRole("navigation", { name: "업무 이동" });
+    await expect(dock.getByRole("button", { name: "더보기" })).toBeVisible();
+    const dockOverflow = await dock.evaluate((element) => element.scrollWidth - element.clientWidth);
+    // 본문 재배치는 뒤 티켓이 맡는다. 셸 자체(도크)는 휴대폰 폭에서 넘치지 않는다.
+    expect(dockOverflow).toBeLessThanOrEqual(0);
   });
 });

@@ -11,6 +11,18 @@
   --color-brand: var(--brand);
   --color-brand-secondary: var(--brand-secondary);
   --color-brand-strong: var(--brand-strong);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-border-strong: var(--border-strong);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-foreground: var(--info-foreground);
+  --color-danger-soft: var(--danger-soft);
   --color-status-active: var(--status-active);
   --color-status-active-foreground: var(--status-active-foreground);
   --color-status-reserved: var(--status-reserved);
@@ -35,19 +47,34 @@
 }
 
 :root {
-  /* OKLCH(L C H) per design.md §2.2 — Royal Gold palette. */
-  --brand: oklch(0.604 0.124 78);
+  /* OKLCH(L C H) per design.md §2.2 — Royal Gold palette.
+     대비 측정값은 docs/design/2026-10-14-color-contrast.md (scripts/measure-token-contrast.mjs). */
+  --brand: oklch(0.54 0.12 78);
   --brand-secondary: oklch(0.737 0.135 82);
-  --brand-strong: oklch(0.534 0.118 76);
+  --brand-strong: oklch(0.47 0.105 76);
+  --brand-foreground: #FFFFFF;
   --background: oklch(0.965 0.022 90);
   --surface: oklch(0.992 0.008 92);
   --text: oklch(0.296 0.035 75);
   --border: oklch(0.883 0.048 85);
+  /* 입력칸처럼 경계가 곧 조작 영역인 곳의 테두리(WCAG 1.4.11, 3:1 이상). */
+  --border-strong: #9A8352;
   --muted: oklch(0.47 0.046 80);
   --muted-line: oklch(0.712 0.043 85);
-  --danger: oklch(0.547 0.187 27);
-  --danger-foreground: oklch(0.985 0.005 90);
   --readonly: oklch(0.94 0.028 88);
+  /* 의미 토큰: 상태와 오류는 브랜드 골드와 따로 둔다. 글자는 늘 -soft 바탕이나 surface 위에 쓴다. */
+  --success: #0E7549;
+  --success-soft: #E3F1E8;
+  --success-foreground: #FFFFFF;
+  --warning: #8A4B00;
+  --warning-soft: #FBEEDC;
+  --warning-foreground: #FFFFFF;
+  --info: #245BB0;
+  --info-soft: #E5EEFB;
+  --info-foreground: #FFFFFF;
+  --danger: oklch(0.547 0.187 27);
+  --danger-soft: #FBE7E4;
+  --danger-foreground: oklch(0.985 0.005 90);
   --status-active: #0E7549;
   --status-active-foreground: #FFFFFF;
   --status-reserved: #2F6FD0;
@@ -62,6 +89,8 @@
   --status-empty: #B3A37D;
   --status-empty-foreground: #3D3115;
   --radius: 0rem;
+  /* 업무 흐름 도크 높이. 본문 아래 여백과 scroll-padding이 이 값을 따른다(WCAG 2.4.11). */
+  --dock-height: 3.5rem;
 }
 
 * {
@@ -70,8 +99,12 @@
 
 html,
 body {
-  min-width: 1280px;
   min-height: 100%;
+}
+
+html {
+  /* 고정된 도크가 포커스된 요소를 가리지 않게 한다(WCAG 2.4.11). */
+  scroll-padding-bottom: calc(var(--dock-height) + 1rem);
 }
 
 body {
@@ -89,33 +122,234 @@ select {
   font: inherit;
 }
 
-.erp-shell {
-  display: grid;
-  grid-template-columns: 260px minmax(1020px, 1fr);
+/* 탐색 셸: 건너뛰기 링크, 본문, 업무 흐름 도크, 화면 도구줄.
+   docs/design/2026-10-14-workflow-information-architecture.md 8·11절. 폭 경계는 600·840·1200px이고,
+   폭은 화면 모양만 바꾼다(권한은 같다). 움직임은 색과 투명도만 200ms. */
+.erp-main {
+  display: block;
   min-height: 100vh;
+  padding-bottom: calc(var(--dock-height) + 1rem);
 }
 
-/* REQ-001: 화면 대제목 영역. PageHeader 컴포넌트(src/components/domain/page-header.tsx)가 사용한다.
-   좌측 강조 바 + 옅은 브랜드 배경 밴드로 대제목을 본문/카드/표 제목과 확실히 구분한다.
-   (이전에는 `main h1.text-2xl...` 전역 셀렉터로 우회 처리했으나, 클래스 문자열에 의존해
-   취약했고 라벨/구조 강조가 부족했다. 명시적 클래스로 대체한다.) */
-.page-header-band {
-  border: 1px solid var(--border);
-  border-left: 6px solid var(--brand);
-  background: color-mix(in srgb, var(--brand-secondary) 18%, var(--surface));
+.erp-main:focus,
+.shell-dock:focus {
+  outline: none;
 }
 
-.page-header-eyebrow {
+.skip-links a:not(:focus) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.skip-links a:focus {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 60;
   display: inline-flex;
   align-items: center;
-  background: var(--brand);
-  color: #fff;
-  padding: 0.125rem 0.5rem;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  line-height: 1.4;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border: 2px solid var(--brand);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.shell-dock {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: var(--dock-height);
+  padding: 0 max(0.5rem, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(0.5rem, env(safe-area-inset-left));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.shell-dock-zones {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.shell-dock-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0 0.875rem;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: color 200ms, background-color 200ms;
+}
+
+.shell-dock-item:hover {
+  background: var(--readonly);
+  color: var(--text);
+}
+
+/* 현재 구역은 색만이 아니라 아래 막대 모양으로도 보인다. */
+.shell-dock-item[aria-current="page"],
+.shell-dock-item-current {
+  background: var(--readonly);
+  color: var(--brand-strong);
+  box-shadow: inset 0 -3px 0 var(--brand);
+}
+
+.shell-dock-item:focus-visible,
+.screen-tab:focus-visible,
+.screen-step:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+/* 오늘 운영 | 백오피스 | 그 밖 사이 간격 */
+.shell-dock-group-start {
+  margin-left: 1rem;
+}
+
+.shell-popover {
+  position: fixed;
+  min-width: 14rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+}
+
+.shell-popover-end {
+  inset: auto 0.5rem calc(var(--dock-height) + 0.5rem) auto;
+}
+
+.shell-popover-top {
+  inset: 4.5rem 0.5rem auto auto;
+}
+
+.shell-popover .shell-dock-item {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+@media (max-width: 839px) {
+  .shell-dock-zones {
+    justify-content: space-around;
+  }
+
+  .shell-dock-wide-only {
+    display: none;
+  }
+
+  .shell-dock-group-start {
+    margin-left: 0;
+  }
+}
+
+@media (min-width: 840px) {
+  .shell-dock-compact-only {
+    display: none;
+  }
+}
+
+.screen {
+  padding: 1rem;
+}
+
+@media (min-width: 840px) {
+  .screen {
+    padding: 1.5rem 2rem;
+  }
+}
+
+.screen-toolbar {
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+@media (min-width: 840px) {
+  /* 위에 붙은 도구줄도 포커스된 요소를 가리지 않게 한다(WCAG 2.4.11). */
+  html:has(.screen-toolbar-sticky) {
+    scroll-padding-top: 11rem;
+  }
+
+  .screen-toolbar-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    padding-top: 0.75rem;
+    background: var(--background);
+  }
+}
+
+.screen-tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0 0.875rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+  box-shadow: inset 0 -3px 0 transparent;
+  transition: color 200ms, background-color 200ms;
+}
+
+.screen-tab:hover {
+  background: var(--readonly);
+  color: var(--text);
+}
+
+.screen-tab[aria-current="page"] {
+  color: var(--text);
+  box-shadow: inset 0 -3px 0 var(--brand);
+}
+
+.screen-field {
+  height: 2.75rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.screen-field:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.screen-step {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: background-color 200ms;
+}
+
+.screen-step:hover {
+  background: var(--readonly);
 }
 
 .status-attention {

@@ -5,7 +5,7 @@ import { argon2idOptions } from "./support/auth";
 
 /**
  * i18n: 쿠키가 없으면 기본 화면 언어가 베트남어(vi)임을 검증한다.
- * 로그인 화면과 로그인 후 사이드바가 베트남어로 보여야 한다.
+ * 로그인 화면과 로그인 후 업무 흐름 도크가 베트남어로 보여야 한다.
  * (다른 스펙들은 ko 쿠키를 강제하므로, 이 스펙이 vi 기본 동작의 유일한 증명이다.)
  */
 const ACCOUNT_ID = "i18n_vi_admin";
@@ -61,7 +61,7 @@ test.describe("i18n 기본 베트남어(vi)", () => {
     await expect(page.getByText("이메일 또는 계정 ID")).toHaveCount(0);
   });
 
-  test("베트남어로 로그인하면 사이드바가 베트남어로 보인다", async ({ page }) => {
+  test("베트남어로 로그인하면 업무 흐름 도크가 베트남어로 보인다", async ({ page }) => {
     await page.goto("/sign-in");
     await page.getByLabel("Email hoặc ID tài khoản").fill(ACCOUNT_ID);
     await page.getByLabel("Mật khẩu").fill(PASSWORD);
@@ -76,12 +76,12 @@ test.describe("i18n 기본 베트남어(vi)", () => {
     await credentialsResponse;
     await page.waitForURL((url) => !url.pathname.startsWith("/sign-in"), { timeout: 15_000 }).catch(() => undefined);
 
-    // 사이드바 메뉴(aria-label)와 그룹 헤딩이 베트남어다.
-    const menu = page.getByRole("navigation", { name: "Menu nghiệp vụ ERP" });
-    await expect(menu).toBeVisible();
-    await expect(menu.getByRole("heading", { name: "Tình hình vận hành", exact: true })).toBeVisible();
-    await expect(menu.getByRole("link", { name: "Tình trạng phòng" })).toBeVisible();
-    // 한국어 그룹명은 없다.
-    await expect(menu.getByRole("heading", { name: "운영 현황", exact: true })).toHaveCount(0);
+    // 도크(aria-label)와 구역 라벨이 베트남어다.
+    const dock = page.getByRole("navigation", { name: "Chuyển khu vực nghiệp vụ" });
+    await expect(dock).toBeVisible();
+    await expect(dock.getByRole("link", { name: "Vận hành", exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(dock.getByRole("button", { name: "Tôi", exact: true })).toBeVisible();
+    // 한국어 구역 라벨은 없다.
+    await expect(dock.getByRole("link", { name: "현장", exact: true })).toHaveCount(0);
   });
 });

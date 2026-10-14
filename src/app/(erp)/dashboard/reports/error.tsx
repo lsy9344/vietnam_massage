@@ -1,16 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { PageHeader } from "@/components/domain/page-header";
-import { useT } from "@/lib/i18n/client";
+import { ScreenToolbar } from "@/components/shell/screen-toolbar";
+import { useLocale, useT } from "@/lib/i18n/client";
 
 export default function ReportsError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const router = useRouter();
   const t = useT();
+  const locale = useLocale();
 
   return (
-    <main className="min-h-screen px-4 py-6 lg:px-8 lg:py-7">
-      <PageHeader eyebrow={t("dashboard.eyebrow")} title={t("dashboard.reports.title")} />
+    <div className="screen">
+      <ScreenToolbar locale={locale} path="/dashboard/reports" title={t("dashboard.reports.title")} />
       <section className="border border-danger bg-surface px-4 py-6" role="alert">
         <h2 className="text-base font-semibold text-foreground">{t("dashboard.reports.error.title")}</h2>
         <p className="mt-2 max-w-2xl text-sm text-muted">{t("dashboard.reports.error.description")}</p>
@@ -36,6 +37,6 @@ export default function ReportsError({ reset }: { error: Error & { digest?: stri
           </button>
         </div>
       </section>
-    </main>
+    </div>
   );
 }
