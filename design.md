@@ -1,5 +1,7 @@
 # Shadcn/ui Customization Specification (`design.md`)
 
+> 2026-10-14 후속 사용자 지시: UI/UX·디자인·스타일을 핵심 요구사항으로 두며 필요하면 모든 화면과 스타일을 재구성할 수 있다. 아래의 골드·각진 모서리 등 기존 시각 조건은 현행 구현 기록이며 새 디자인을 제한하지 않는다. 화면 점검·리서치·AI 생성 화면 이미지와 [후속 디자인 가이드](docs/design/2026-10-14-ui-redesign.md), [27개 화면 갤러리](output/design/2026-10-14/index.html)가 새 구현 기준이 된다. 업무 규칙·권한·데이터 보존은 통합 명세를 따른다.
+
 This document serves as a strict guideline and reference for the AI Agent to customize Shadcn/ui components and establish a unique design system. The agent must strictly follow the architectural principles, global configuration rules, and component-level variant structures defined below.
 
 ---
