@@ -162,7 +162,7 @@ test.describe("Story 6.4 dashboard source guardrails", () => {
       expect(loading).toContain('aria-busy="true"');
       expect(loading).toContain(`dashboard.${route}.loading.aria`);
       expect(koMessages).toContain(loadingLabel);
-      expect(errorBoundary).toContain('role="alert"');
+      expect(errorBoundary).toContain('kind="error"');
       expect(errorBoundary).toContain(`dashboard.${route}.error.title`);
       expect(koMessages).toContain(errorHeading);
       expect(errorBoundary).toContain("dashboard.error.retry");
@@ -175,40 +175,38 @@ test.describe("Story 6.4 dashboard source guardrails", () => {
   });
 
   test("reports chart source keeps status tokens out of non-status series", async () => {
-    const reportsPage = readFileSync("src/app/(erp)/dashboard/reports/page.tsx", "utf8");
-    // i18n 전환: 한국어 문구는 messages/ko.ts로 이동했고 컴포넌트는 t() key로 참조한다.
-    const koMessages = readFileSync("src/lib/i18n/messages/ko.ts", "utf8");
+    // 티켓 06: 리포트 화면은 reports-view.tsx, 차트 모양은 report-charts.tsx에 있다.
+    const reportsView = readFileSync("src/app/(erp)/dashboard/reports/reports-view.tsx", "utf8");
+    const reportCharts = readFileSync("src/app/(erp)/dashboard/reports/report-charts.tsx", "utf8");
+    const chartSource = reportsView + reportCharts;
 
-    // i18n 전환 후 StatusBadge가 label/ariaLabel과 함께 멀티라인으로 렌더되므로 핵심 마커만 검사한다.
-    expect(reportsPage).toContain("state={row.displayStatus}");
-    expect(reportsPage).toContain("role=\"img\"");
-    expect(reportsPage).toContain("<table");
-    expect(reportsPage).toContain("dashboard.reports.noShow.legend");
-    expect(koMessages).toContain("범례: 노쇼는 브랜드색, 취소는 위험색");
-    expect(reportsPage).toContain("bg-brand");
-    expect(reportsPage).toContain("bg-danger");
-    expect(reportsPage).toContain("var(--color-brand)");
-    expect(reportsPage).toContain("var(--color-danger)");
-    expect(reportsPage).not.toContain("bg-status-");
-    expect(reportsPage).not.toContain("text-status-");
-    expect(reportsPage).not.toContain("border-status-");
-    expect(reportsPage).not.toContain("var(--color-status-");
-    expect(reportsPage).not.toContain("0으로 표시됩니다");
+    expect(reportsView).toContain("state={row.displayStatus}");
+    expect(reportCharts).toContain("role=\"img\"");
+    expect(reportsView).toContain("<table");
+    // 차트 계열은 지표 계열의 파스텔(매출 라벤더, 지급 피치, 건수 민트)이고 위험색을 계열에 쓰지 않는다(design.md 6.14).
+    for (const tone of ["lavender", "peach", "mint"]) {
+      expect(reportCharts).toContain(`bg-accent-${tone}`);
+      expect(reportsView).toContain(`tone="${tone}"`);
+    }
+    expect(chartSource).not.toContain("bg-danger");
+    expect(chartSource).not.toContain("bg-status-");
+    expect(chartSource).not.toContain("text-status-");
+    expect(chartSource).not.toContain("border-status-");
+    expect(chartSource).not.toContain("var(--color-status-");
+    expect(chartSource).not.toContain("0으로 표시됩니다");
   });
 
   test("missing calculated completed calls do not render revenue or course charts as successful zero graphs", async () => {
-    const reportsPage = readFileSync("src/app/(erp)/dashboard/reports/page.tsx", "utf8");
+    const reportsView = readFileSync("src/app/(erp)/dashboard/reports/reports-view.tsx", "utf8");
     // i18n 전환: 한국어 문구는 messages/ko.ts로 이동했고 컴포넌트는 t() key로 참조한다.
     const koMessages = readFileSync("src/lib/i18n/messages/ko.ts", "utf8");
 
-    expect(reportsPage).toContain("dashboard.reports.completedEmpty.aria");
-    expect(koMessages).toContain("완료 콜 그래프 없음");
-    expect(reportsPage).toContain("dashboard.reports.completedEmpty.description");
+    expect(reportsView).toContain("dashboard.reports.completedEmpty.description");
     expect(koMessages).toContain("누락된 완료 데이터를 0값 매출 또는 0값 코스 비중 그래프로 꾸미지 않습니다.");
-    // i18n 전환으로 차트 컴포넌트가 t/locale props를 받으면서 이 가드 라인의 모양이 바뀌었다.
-    // (validate-story-6-4.mjs가 pin하는 현재 문자열과 동일하게 맞춘다.)
-    expect(reportsPage).toContain("report.emptyStates.noRevenueTrendData ? <CompletedChartEmptyPanel t={t} /> : <RevenueTrendChart {...viewProps} />");
-    expect(reportsPage).toContain("report.emptyStates.noCalculatedCompletedCalls ? (");
+    // 티켓 06: 계산 근거가 없으면 그 차트 자리에 0값 차트 대신 근거 없음을 둔다.
+    expect(reportsView).toContain("report.emptyStates.noRevenueTrendData");
+    expect(reportsView).toContain("report.emptyStates.noCalculatedCompletedCalls ?");
+    expect(reportsView).toContain("<NoBasis");
   });
 });
 
@@ -267,7 +265,7 @@ test.describe("Story 6.4 dashboard browser states and route access", () => {
 
       await expect(page.getByRole("heading", { name: "그래프 리포트" })).toBeVisible();
       // 미확정 운영월에는 정산 미리보기가 있으므로 "정산 source 없음"이 아니라 콜 원장 데이터 없음이 뜬다.
-      await expect(page.getByRole("region", { name: "데이터 없음 상태" })).toContainText("운영월 기간 전체에 콜 원장 데이터가 없습니다.");
+      await expect(page.getByLabel("데이터 없음 상태")).toContainText("운영월 기간 전체에 콜 원장 데이터가 없습니다.");
     });
   }
 });

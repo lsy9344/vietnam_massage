@@ -21,6 +21,9 @@ function readJson(path) {
   "src/modules/dashboard/dashboard-query-service.test.ts",
   "src/modules/calls/service-call-service.ts",
   "src/app/(erp)/dashboard/reports/page.tsx",
+  "src/app/(erp)/dashboard/reports/reports-view.tsx",
+  "src/app/(erp)/dashboard/reports/report-charts.tsx",
+  "src/app/(erp)/dashboard/chart-scale.ts",
   "src/app/(erp)/dashboard/reports/loading.tsx",
   "src/app/(erp)/dashboard/reports/error.tsx",
   "src/lib/authorization.ts",
@@ -81,13 +84,14 @@ for (const required of [
   "listOperatingMonths",
   "selectedOperatingMonthFor",
   "clampDateToOperatingMonth",
-  "redirect(`/dashboard/reports?",
-  "role=\"img\"",
-  "scaledY",
-  "<table",
-  "StatusBadge"
+  "redirect(`/dashboard/reports?"
 ]) {
   if (!page.includes(required)) errors.push(`reports page missing ${required}`);
+}
+// 티켓 06: 차트와 표는 reports-view.tsx와 report-charts.tsx가 그리고, 축 눈금·막대 위치는 chart-scale.ts가 정한다.
+const view = read("src/app/(erp)/dashboard/reports/reports-view.tsx") + read("src/app/(erp)/dashboard/reports/report-charts.tsx");
+for (const required of ["role=\"img\"", "axisTicks", "<table", "StatusBadge"]) {
+  if (!view.includes(required)) errors.push(`reports view missing ${required}`);
 }
 // i18n: 한국어 UI 문구는 t() key로 참조하고 원문은 messages/ko.ts에 보존한다.
 for (const [key, ko] of [
@@ -100,10 +104,11 @@ for (const [key, ko] of [
   ["dashboard.reports.noShow.title", "노쇼/취소 추이"],
   ["dashboard.reports.payout.title", "운영팀 인센/월마감 지급 구성"],
   ["dashboard.reports.basis.description", "매출은 결제수단 선택 시점 선결제 기준"],
-  ["dashboard.reports.noShow.chartAria", "노쇼와 취소 건수 그래프"],
+  ["dashboard.reports.noShow.chartNoShow", "일별 노쇼 건수"],
+  ["dashboard.reports.noShow.chartCanceled", "일별 취소 건수"],
   ["dashboard.reports.snapshotMissing.title", "확정 스냅샷을 찾을 수 없습니다"]
 ]) {
-  if (!page.includes(`"${key}"`)) errors.push(`reports page missing t() key ${key}`);
+  if (!(page + view).includes(`"${key}"`)) errors.push(`reports page/view missing t() key ${key}`);
   if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 for (const forbidden of [
@@ -120,7 +125,7 @@ for (const forbidden of [
   "recordAuditEvent",
   "action="
 ]) {
-  if (page.includes(forbidden)) errors.push(`reports page must not calculate, parse snapshots, or mutate directly: ${forbidden}`);
+  if ((page + view).includes(forbidden)) errors.push(`reports page/view must not calculate, parse snapshots, or mutate directly: ${forbidden}`);
 }
 
 const loading = read("src/app/(erp)/dashboard/reports/loading.tsx");
@@ -136,7 +141,7 @@ for (const [key, ko] of [
 }
 
 const errorBoundary = read("src/app/(erp)/dashboard/reports/error.tsx");
-for (const required of ["\"use client\"", "role=\"alert\"", "router.refresh", "reset()"]) {
+for (const required of ["\"use client\"", "kind=\"error\"", "router.refresh", "reset()"]) {
   if (!errorBoundary.includes(required)) errors.push(`reports error.tsx missing ${required}`);
 }
 for (const [key, ko] of [

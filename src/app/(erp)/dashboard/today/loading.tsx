@@ -1,66 +1,52 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { getServerTranslator } from "@/lib/i18n/server";
 
-function SkeletonTile() {
+function SkeletonCard() {
   return (
-    <div className="border border-border bg-surface px-4 py-3">
-      <Skeleton className="h-4 w-20" />
-      <Skeleton className="mt-3 h-8 w-28" />
-      <Skeleton className="mt-2 h-3 w-24" />
+    <div className="rounded-lg border border-border bg-surface p-4">
+      <Skeleton className="h-5 w-32" />
+      <div className="mt-4 space-y-3">
+        {Array.from({ length: 4 }, (_, index) => (
+          <Skeleton className="h-8 w-full" key={index} />
+        ))}
+      </div>
     </div>
   );
 }
 
+// 오늘 화면 골격: 도구줄 → 상태별 건수 한 줄 → 금액 요약 카드 세 장 → 비용 내역·코스별 완료·마사지사 정산.
 export default async function TodayDashboardLoading() {
   const { t } = await getServerTranslator();
   return (
     <section className="screen" aria-busy="true" aria-label={t("dashboard.today.loading.aria")}>
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <Skeleton className="mb-3 h-3 w-20" />
-          <Skeleton className="h-8 w-56" />
-          <Skeleton className="mt-3 h-4 w-80 max-w-full" />
-        </div>
-        <div className="grid justify-items-end gap-2">
-          <Skeleton className="h-3 w-28" />
-          <Skeleton className="h-3 w-48" />
+      <div className="mb-5 flex flex-wrap items-center gap-x-6 gap-y-3 pb-4">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-11 w-72 rounded-full" />
+        <div className="flex gap-2">
+          {Array.from({ length: 3 }, (_, index) => (
+            <Skeleton className="h-11 w-20 rounded-full" key={index} />
+          ))}
         </div>
       </div>
 
-      <div className="mb-5 flex flex-wrap items-end gap-3">
-        <Skeleton className="h-12 w-44" />
-        <Skeleton className="h-12 w-40" />
-        <Skeleton className="h-9 w-16" />
-      </div>
-
-      <div className="space-y-4">
-        <section className="grid gap-3 md:grid-cols-4" aria-label={t("dashboard.today.loading.statusCountsAria")}>
-          {Array.from({ length: 4 }).map((_, index) => (
-            <SkeletonTile key={index} />
+      <div className="grid gap-6">
+        <section className="flex flex-wrap gap-x-4 gap-y-2" aria-label={t("dashboard.today.loading.statusCountsAria")}>
+          {Array.from({ length: 6 }, (_, index) => (
+            <Skeleton className="h-7 w-24 rounded-full" key={index} />
           ))}
         </section>
-        <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-6" aria-label={t("dashboard.today.loading.moneyKpiAria")}>
-          {Array.from({ length: 6 }).map((_, index) => (
-            <SkeletonTile key={index} />
+        <section className="grid grid-cols-1 gap-4 min-[600px]:grid-cols-2 min-[1200px]:grid-cols-3" aria-label={t("dashboard.today.loading.moneyKpiAria")}>
+          {Array.from({ length: 3 }, (_, index) => (
+            <Skeleton className="h-28 rounded-lg" key={index} />
           ))}
         </section>
-        <section className="grid gap-4 lg:grid-cols-[1fr_1.4fr]" aria-label={t("dashboard.today.loading.detailSummaryAria")}>
-          <div className="border border-border bg-surface px-4 py-4">
-            <Skeleton className="h-5 w-32" />
-            <div className="mt-4 grid grid-cols-5 gap-2">
-              {Array.from({ length: 5 }).map((_, index) => (
-                <Skeleton className="h-24" key={index} />
-              ))}
-            </div>
-          </div>
-          <div className="border border-border bg-surface px-4 py-4">
-            <Skeleton className="h-5 w-44" />
-            <div className="mt-4 space-y-3">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <Skeleton className="h-9 w-full" key={index} />
-              ))}
-            </div>
-          </div>
+        <section
+          className="grid grid-cols-1 gap-4 min-[840px]:grid-cols-2 min-[1200px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.6fr)]"
+          aria-label={t("dashboard.today.loading.detailSummaryAria")}
+        >
+          {Array.from({ length: 3 }, (_, index) => (
+            <SkeletonCard key={index} />
+          ))}
         </section>
       </div>
     </section>

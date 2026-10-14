@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
-import { expect, test, type Locator } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
-import { argon2idOptions, login } from "./support/auth";
+import { argon2idOptions, login, setLocaleCookie } from "./support/auth";
 
 
 type SeededData = {
@@ -36,29 +36,13 @@ function utcDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+async function documentOverflow(page: Page) {
+  return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 }
 
-function kpiTile(region: Locator, label: string) {
-  return region.locator(":scope > div").filter({ hasText: new RegExp(`^\\s*${escapeRegExp(label)}\\s*`) }).first();
-}
-
-async function expectStrongTone(region: Locator, label: string) {
-  const tile = kpiTile(region, label);
-  await expect(tile).toHaveClass(/border-2/);
-  await expect(tile).toHaveClass(/border-brand/);
-  const value = tile.locator("p").nth(1);
-  await expect(value).toHaveClass(/text-3xl/);
-  await expect(value).toHaveClass(/font-bold/);
-  await expect(value).toHaveClass(/text-brand/);
-}
-
-async function expectCostTone(region: Locator, label: string) {
-  const value = kpiTile(region, label).locator("p").nth(1);
-  await expect(value).toHaveClass(/text-2xl/);
-  await expect(value).toHaveClass(/font-semibold/);
-  await expect(value).toHaveClass(/text-danger/);
+/** 요약 카드 하나(라벨과 값). 라벨과 값은 서로 다른 칸이라 카드로 찾는다. */
+function summaryCard(region: Locator, label: string) {
+  return region.locator("div", { has: region.page().getByText(label, { exact: true }) });
 }
 
 async function safeEmployeeSortOrder(employeeGroup: string, staffCode: string, preferredSortOrder: number) {
@@ -536,14 +520,16 @@ test.describe("Story 6.2 monthly dashboard", () => {
 
     await expect(page).toHaveURL(new RegExp(`/dashboard/monthly\\?operatingMonthId=${seededData.months.closed}`));
     await expect(page.getByRole("region", { name: "월간 KPI 기준", exact: true })).toContainText("확정 스냅샷 기준");
-    await expect(page.getByRole("region", { name: "월간 KPI 기준", exact: true })).toContainText("closeVersion 2");
+    await expect(page.getByRole("region", { name: "월간 KPI 기준", exact: true })).toContainText("마감 버전 2");
     await expect(page.getByRole("region", { name: "월간 지급 정산 KPI", exact: true })).toContainText("10,500,000 VND");
     await expect(page.getByRole("region", { name: "월간 상태 건수", exact: true })).toContainText("예약");
     await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("결제합계");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("운영팀 월인센");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("만근수당");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("갯수왕");
-    await expect(page.getByRole("region", { name: "월간 코스별 방문완료", exact: true })).toContainText("A");
+    // 요약 카드 밖의 금액은 "월간 금액 내역" 목록에 있다(티켓 06).
+    await expect(page.getByRole("region", { name: "월간 금액 내역", exact: true })).toContainText("운영팀 월인센");
+    await expect(page.getByRole("region", { name: "월간 금액 내역", exact: true })).toContainText("만근수당");
+    await expect(page.getByRole("region", { name: "월간 금액 내역", exact: true })).toContainText("갯수왕");
+    // 이 확정 월은 스냅샷만 있고 원장에 계산 가능한 방문완료 콜이 없으므로, 0 표 대신 근거 없음을 보인다(티켓 06).
+    await expect(page.getByRole("region", { name: "월간 코스별 방문완료", exact: true })).toContainText("계산 근거 없음");
   });
 
   test("운영월 선택 변경은 URL search params와 서버 데이터 기준 KPI를 갱신한다", async ({ page }) => {
@@ -576,30 +562,49 @@ test.describe("Story 6.2 monthly dashboard", () => {
     await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("10,900,000 VND");
     await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("월간 순이익");
     await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("6,000,000 VND");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("운영팀 월인센");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("만근수당");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("갯수왕");
+    // 요약 카드 밖의 금액은 "월간 금액 내역" 목록에 있다(티켓 06).
+    await expect(page.getByRole("region", { name: "월간 금액 내역", exact: true })).toContainText("운영팀 월인센");
+    await expect(page.getByRole("region", { name: "월간 금액 내역", exact: true })).toContainText("만근수당");
+    await expect(page.getByRole("region", { name: "월간 금액 내역", exact: true })).toContainText("갯수왕");
     await expect(page.getByLabel("A 코스 방문완료")).toContainText("1");
-    await expect(page.getByLabel("B 코스 방문완료")).toContainText("담당 2건");
-    await expect(page.getByLabel("D 코스 방문완료")).toContainText("담당 2건");
+    // 코스별 방문완료 표의 마지막 칸이 담당(Therapist 배정) 건수다.
+    await expect(page.getByLabel("B 코스 방문완료").getByRole("cell").last()).toHaveText("2건");
+    await expect(page.getByLabel("D 코스 방문완료").getByRole("cell").last()).toHaveText("2건");
     const warning = page.getByRole("alert").filter({ hasText: "집계 제외 항목이 있습니다" });
     await expect(warning).toContainText("집계 제외 항목이 있습니다");
     await expect(warning).toContainText("수당 누락 1건");
     await expect(warning).toContainText("D코스 마사지사2 필요 1건");
   });
 
-  test("월간 금액 KPI는 순이익/비용 구분과 월간 비용 라벨을 브라우저 DOM class로 유지한다", async ({ page }) => {
+  // 티켓 06: 매출 계열(라벤더)과 비용 계열(피치)을 한 값처럼 같은 색으로 칠하지 않는다. 나머지 금액은 목록이다.
+  test("월간 금액 요약은 매출 계열과 비용 계열 카드를 나누고 월간 비용 내역을 목록으로 둔다", async ({ page }) => {
     const account = seededData.accounts.administrator;
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, account.accountId, account.password);
     await page.goto(`/dashboard/monthly?operatingMonthId=${seededData.months.draft}`);
 
     const money = page.getByRole("region", { name: "월간 금액 KPI", exact: true });
-    await expectStrongTone(money, "결제합계");
-    await expectStrongTone(money, "월간 순이익");
-    for (const label of ["일일비용 합계", "월간비용 합계", "운영팀 월인센", "만근수당", "갯수왕"]) {
-      await expect(money).toContainText(label);
-      await expectCostTone(money, label);
+    await expect(summaryCard(money, "결제합계")).toHaveClass(/bg-accent-lavender/);
+    await expect(summaryCard(money, "월간 순이익")).toHaveClass(/bg-accent-lavender/);
+    await expect(summaryCard(money, "일일비용 합계")).toHaveClass(/bg-accent-peach/);
+    await expect(summaryCard(money, "월간비용 합계")).toHaveClass(/bg-accent-peach/);
+    const amounts = page.getByRole("region", { name: "월간 금액 내역", exact: true });
+    for (const label of ["운영팀 월인센", "만근수당", "갯수왕"]) {
+      await expect(amounts).toContainText(label);
+    }
+  });
+
+  test("티켓 06: 월간 화면은 두 언어 모두 휴대폰부터 PC까지 옆으로 넘치지 않는다", async ({ page }) => {
+    const account = seededData.accounts.administrator;
+    await login(page, account.accountId, account.password);
+    for (const locale of ["ko", "vi"] as const) {
+      await setLocaleCookie(page, locale);
+      for (const width of [390, 1024, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(`/dashboard/monthly?operatingMonthId=${seededData.months.draft}`);
+        await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+        expect(await documentOverflow(page), `${locale} monthly @${width}`).toBe(0);
+      }
     }
   });
 
@@ -610,7 +615,7 @@ test.describe("Story 6.2 monthly dashboard", () => {
 
     await expect(page.getByRole("region", { name: "월간 KPI 기준", exact: true })).toContainText("미확정 현재 기준");
     await expect(page.getByRole("region", { name: "이전 확정 스냅샷", exact: true })).toContainText("현재 KPI 기준에는 섞지 않습니다");
-    await expect(page.getByRole("region", { name: "이전 확정 스냅샷", exact: true })).toContainText("closeVersion 1");
+    await expect(page.getByRole("region", { name: "이전 확정 스냅샷", exact: true })).toContainText("마감 버전 1");
     await expect(page.getByRole("region", { name: "이전 확정 스냅샷", exact: true })).toContainText("10,500,000 VND");
     await expect(page.getByText("이 운영월의 콜이 없습니다")).toBeVisible();
   });
@@ -640,7 +645,7 @@ test.describe("Story 6.2 monthly dashboard", () => {
     expect(koMessages).toContain("월간 KPI를 불러오지 못했습니다");
     expect(errorBoundary).toContain("dashboard.error.retry");
     expect(koMessages).toContain("다시 시도");
-    expect(errorBoundary).toContain("role=\"alert\"");
+    expect(errorBoundary).toContain("kind=\"error\"");
     expect(errorBoundary.includes("error.message")).toBe(false);
   });
 });

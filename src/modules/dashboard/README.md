@@ -64,7 +64,7 @@ Owns read-only KPI summaries.
 - Dashboard loading screens must preserve the real layout outline with `Skeleton`, `aria-busy="true"`, and Korean loading labels. While URL criteria change, the UI must not show the previous date or month as if it were the new server query basis.
 - Dashboard error boundaries must show safe Korean copy, `role="alert"`, `다시 시도`, and `현재 조건 새로고침`. They must not expose raw server error details.
 - Dashboard empty states must distinguish no calls, no calculated completed calls, missing settlement source, missing room status data, and `snapshot_missing`. Do not render missing completed data as a fake 0값 completed graph.
-- status color tokens are reserved for room/status meaning only. General revenue, ranking, payout, no-show, and cancel series use brand/danger or another non-status chart color.
+- status color tokens are reserved for room/status meaning only. Since ticket 06, revenue, ranking, payout, no-show, and cancel series use the metric-family pastel from `design.md` 6.14 (revenue lavender, payout peach, counts mint), one pastel per chart; danger and brand ink are not series fills.
 - Chart legend, visible labels, SVG titles, and table/list fallback must include text and numbers; color alone is not enough.
 - No chart dependency is allowed for this story. If a later story requires one, pin an exact compatible version and document the bundle impact before adding it.
 

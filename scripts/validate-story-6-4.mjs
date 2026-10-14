@@ -33,6 +33,11 @@ const errorFiles = [
   "src/app/(erp)/dashboard/today/page.tsx",
   "src/app/(erp)/dashboard/monthly/page.tsx",
   "src/app/(erp)/dashboard/reports/page.tsx",
+  "src/app/(erp)/dashboard/reports/reports-view.tsx",
+  "src/app/(erp)/dashboard/reports/report-charts.tsx",
+  "src/app/(erp)/dashboard/today/today-dashboard-view.tsx",
+  "src/app/(erp)/dashboard/monthly/monthly-dashboard-view.tsx",
+  "src/app/(erp)/dashboard/dashboard-parts.tsx",
   "src/components/domain/status-badge.tsx",
   "src/app/globals.css",
   "src/lib/authorization.ts",
@@ -69,7 +74,7 @@ for (const [route, path, ariaKey, ariaKo] of loadingFiles) {
 
 for (const [route, path, headingKey, headingKo] of errorFiles) {
   const contents = read(path);
-  for (const required of ["\"use client\"", "role=\"alert\"", `t("${headingKey}")`, "dashboard.error.retry", "dashboard.error.refresh", "router.refresh", "reset()"]) {
+  for (const required of ["\"use client\"", "kind=\"error\"", `t("${headingKey}")`, "dashboard.error.retry", "dashboard.error.refresh", "router.refresh", "reset()"]) {
     if (!contents.includes(required)) errors.push(`${route} error.tsx missing safe error-boundary marker: ${required}`);
   }
   if (!koMessages.includes(headingKo)) errors.push(`messages/ko.ts missing ${headingKo}`);
@@ -82,69 +87,87 @@ for (const ko of ["다시 시도", "현재 조건 새로고침"]) {
 }
 
 const reportsPage = read("src/app/(erp)/dashboard/reports/page.tsx");
+for (const required of ["requireRouteAccess(\"/dashboard/reports\")", "redirect(`/dashboard/reports?"]) {
+  if (!reportsPage.includes(required)) errors.push(`reports page missing Story 6.4 route marker: ${required}`);
+}
+
+// 티켓 06: 리포트 화면은 reports-view.tsx가, 차트 모양은 report-charts.tsx가 그린다.
+const reportsView = read("src/app/(erp)/dashboard/reports/reports-view.tsx");
+const reportCharts = read("src/app/(erp)/dashboard/reports/report-charts.tsx");
 for (const required of [
-  "requireRouteAccess(\"/dashboard/reports\")",
-  "redirect(`/dashboard/reports?",
-  "role=\"img\"",
-  "<title id=\"daily-revenue-chart-title\"",
   "<table",
-  // i18n 전환 후 StatusBadge가 label/ariaLabel prop과 함께 멀티라인으로 렌더되므로
-  // 공백 의존 매칭 대신 핵심 마커(room status를 stable key로 전달)만 검사한다.
+  // room status는 stable key로 StatusBadge에 넘긴다.
   "state={row.displayStatus}",
   "snapshot_missing",
-  "report.emptyStates.noRevenueTrendData ? <CompletedChartEmptyPanel t={t} /> : <RevenueTrendChart {...viewProps} />",
-  "report.emptyStates.noCalculatedCompletedCalls ? ("
+  // 계산 근거가 없으면 0값 차트 대신 그 자리에 근거 없음을 둔다.
+  "report.emptyStates.noRevenueTrendData",
+  "report.emptyStates.noCalculatedCompletedCalls ?",
+  "report.emptyStates.noCallsInPeriod",
+  "<NoBasis"
 ]) {
-  if (!reportsPage.includes(required)) errors.push(`reports page missing Story 6.4 state/color marker: ${required}`);
+  if (!reportsView.includes(required)) errors.push(`reports view missing Story 6.4 state/color marker: ${required}`);
 }
+if (!reportCharts.includes("role=\"img\"")) errors.push("report-charts.tsx missing Story 6.4 chart marker: role=\"img\"");
 // i18n: 한국어 UI 문구는 t() key로 참조하고 원문은 messages/ko.ts에 보존한다.
 for (const [key, ko] of [
-  ["dashboard.reports.noShow.legend", "범례: 노쇼는 브랜드색, 취소는 위험색"],
   ["dashboard.reports.snapshotMissing.title", "확정 스냅샷을 찾을 수 없습니다"],
   ["dashboard.reports.ranking.settlementEmpty", "정산 source가 없어 순위를 표시하지 않습니다."],
   ["dashboard.reports.payout.empty", "확정 스냅샷이 없어 지급 구성 그래프를 표시하지 않습니다."],
-  ["dashboard.reports.completedEmpty.aria", "완료 콜 그래프 없음"]
+  ["dashboard.reports.completedEmpty.description", "누락된 완료 데이터를 0값 매출 또는 0값 코스 비중 그래프로 꾸미지 않습니다."],
+  ["dashboard.reports.courseMix.empty", "코스 비중을 그리지 않습니다"],
+  ["dashboard.reports.noShow.empty", "노쇼·취소 추이를 그리지 않습니다"]
 ]) {
-  if (!reportsPage.includes(`"${key}"`)) errors.push(`reports page missing Story 6.4 t() key: ${key}`);
+  if (!reportsView.includes(`"${key}"`)) errors.push(`reports view missing Story 6.4 t() key: ${key}`);
   if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 
-const statusBadgeReferences = reportsPage.match(/StatusBadge/g)?.length ?? 0;
+const statusBadgeReferences = reportsView.match(/StatusBadge/g)?.length ?? 0;
 if (statusBadgeReferences !== 2) {
-  errors.push("reports page must use StatusBadge only for room status distribution (import + room-status usage)");
+  errors.push("reports view must use StatusBadge only for room status distribution (import + room-status usage)");
 }
 
 for (const forbidden of ["bg-status-", "text-status-", "border-status-", "var(--color-status-", "0으로 표시됩니다"]) {
-  if (reportsPage.includes(forbidden)) errors.push(`reports page must not use forbidden Story 6.4 marker: ${forbidden}`);
+  if ((reportsPage + reportsView + reportCharts).includes(forbidden)) errors.push(`reports page/view must not use forbidden Story 6.4 marker: ${forbidden}`);
 }
 
-for (const required of ["bg-brand", "bg-danger", "var(--color-brand)", "var(--color-danger)"]) {
-  if (!reportsPage.includes(required)) errors.push(`reports page non-status chart series must keep semantic color marker: ${required}`);
+// 티켓 06·design.md 6.14: 차트 계열은 지표 계열의 파스텔이다(매출 라벤더, 지급 피치, 건수 민트).
+// 위험색과 검정 잉크는 상태·행동의 뜻이라 계열 채움에 쓰지 않는다(검정은 막대에 올렸을 때만).
+for (const required of ["bg-accent-lavender", "bg-accent-peach", "bg-accent-mint"]) {
+  if (!reportCharts.includes(required)) errors.push(`report-charts.tsx missing chart series color: ${required}`);
+}
+for (const required of ["tone=\"lavender\"", "tone=\"peach\"", "tone=\"mint\""]) {
+  if (!reportsView.includes(required)) errors.push(`reports view missing chart series tone: ${required}`);
+}
+for (const forbidden of ["bg-danger", "var(--color-danger)", "var(--color-brand)"]) {
+  if ((reportsView + reportCharts).includes(forbidden)) errors.push(`reports chart series must not use status or action color: ${forbidden}`);
 }
 
-const todayPage = read("src/app/(erp)/dashboard/today/page.tsx");
-if (!todayPage.includes("StatusBadge state=\"예약\"")) {
-  errors.push("today page missing distinct status marker: StatusBadge state=\"예약\"");
-}
+// 티켓 06·design.md 2.5: 객실 상태색(StatusBadge)은 객실·실시간·TV에만 쓴다. 대시보드의 콜 상태 건수는 StatusIndicator다.
+const dashboardParts = read("src/app/(erp)/dashboard/dashboard-parts.tsx");
+if (!dashboardParts.includes("<StatusIndicator")) errors.push("dashboard status counts must use StatusIndicator");
+const todayPage = read("src/app/(erp)/dashboard/today/today-dashboard-view.tsx") + dashboardParts;
 for (const [key, ko] of [
   ["dashboard.today.empty.noCallsTitle", "이 날짜의 콜이 없습니다"],
   ["dashboard.today.warning.excludedTitle", "집계 제외 항목이 있습니다"]
 ]) {
-  if (!todayPage.includes(`"${key}"`)) errors.push(`today page missing distinct empty/status t() key: ${key}`);
+  if (!todayPage.includes(`"${key}"`)) errors.push(`today view missing distinct empty/status t() key: ${key}`);
   if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 
-const monthlyPage = read("src/app/(erp)/dashboard/monthly/page.tsx");
-if (!monthlyPage.includes("state={badgeState}")) {
-  errors.push("monthly page missing distinct status marker: state={badgeState}");
-}
+const monthlyPage = read("src/app/(erp)/dashboard/monthly/monthly-dashboard-view.tsx") + dashboardParts;
 for (const [key, ko] of [
   ["dashboard.monthly.empty.noCallsTitle", "이 운영월의 콜이 없습니다"],
   ["dashboard.monthly.snapshotMissing.title", "확정 스냅샷을 찾을 수 없습니다"],
   ["dashboard.monthly.snapshotMissing.description", "현재 재계산값으로 대체하지 않습니다"]
 ]) {
-  if (!monthlyPage.includes(`"${key}"`)) errors.push(`monthly page missing distinct empty/snapshot t() key: ${key}`);
+  if (!monthlyPage.includes(`"${key}"`)) errors.push(`monthly view missing distinct empty/snapshot t() key: ${key}`);
   if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
+}
+for (const [label, contents] of [
+  ["today", todayPage],
+  ["monthly", monthlyPage]
+]) {
+  if (contents.includes("StatusBadge")) errors.push(`${label} dashboard must not borrow room status colors (StatusBadge)`);
 }
 
 // 세 대시보드 화면은 routes.ts의 reportRoles(관리자/카운터/정산담당/조회전용)를 함께 쓰고, 웨이터는 포함하지 않는다.

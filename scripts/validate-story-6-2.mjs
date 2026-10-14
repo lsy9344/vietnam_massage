@@ -20,6 +20,8 @@ function readJson(path) {
   "src/modules/dashboard/dashboard-query-service.ts",
   "src/modules/dashboard/dashboard-query-service.test.ts",
   "src/app/(erp)/dashboard/monthly/page.tsx",
+  "src/app/(erp)/dashboard/monthly/monthly-dashboard-view.tsx",
+  "src/app/(erp)/dashboard/dashboard-parts.tsx",
   "src/app/(erp)/dashboard/monthly/loading.tsx",
   "src/app/(erp)/dashboard/monthly/error.tsx",
   "src/lib/authorization.ts",
@@ -69,6 +71,8 @@ for (const forbidden of ["recordAuditEvent", ".create(", ".update(", ".delete(",
 const koMessages = read("src/lib/i18n/messages/ko.ts");
 
 const page = read("src/app/(erp)/dashboard/monthly/page.tsx");
+// 티켓 06: 화면은 monthly-dashboard-view.tsx(와 대시보드 공통 조각)가 그리고, 페이지는 권한·주소·조회만 맡는다.
+const view = read("src/app/(erp)/dashboard/monthly/monthly-dashboard-view.tsx") + read("src/app/(erp)/dashboard/dashboard-parts.tsx");
 for (const required of [
   "requireRouteAccess(\"/dashboard/monthly\")",
   "getMonthlyDashboardMetrics",
@@ -92,7 +96,7 @@ for (const [key, ko] of [
   ["dashboard.monthly.previousSnapshot.title", "이전 확정 스냅샷"],
   ["dashboard.monthly.snapshotMissing.title", "확정 스냅샷을 찾을 수 없습니다"]
 ]) {
-  if (!page.includes(`"${key}"`)) errors.push(`monthly dashboard page missing t() key ${key}`);
+  if (!view.includes(`"${key}"`)) errors.push(`monthly dashboard view missing t() key ${key}`);
   if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 for (const forbidden of [
@@ -108,7 +112,10 @@ for (const forbidden of [
   "action="
 ]) {
   if (page.includes(forbidden)) errors.push(`monthly dashboard page must not calculate, parse snapshots, or mutate directly: ${forbidden}`);
+  // 뷰의 action= 는 ScreenState의 다음 행동(링크) prop이라, 뷰에는 form 자체를 금지한다.
+  if (forbidden !== "action=" && view.includes(forbidden)) errors.push(`monthly dashboard view must not calculate, parse snapshots, or mutate directly: ${forbidden}`);
 }
+if (view.includes("<form")) errors.push("monthly dashboard view must stay read-only (no <form>)");
 
 const loading = read("src/app/(erp)/dashboard/monthly/loading.tsx");
 if (!loading.includes("Skeleton")) errors.push("monthly loading.tsx missing Skeleton");
@@ -123,7 +130,7 @@ for (const [key, ko] of [
 }
 
 const errorBoundary = read("src/app/(erp)/dashboard/monthly/error.tsx");
-for (const required of ["\"use client\"", "role=\"alert\"", "router.refresh", "reset()"]) {
+for (const required of ["\"use client\"", "kind=\"error\"", "router.refresh", "reset()"]) {
   if (!errorBoundary.includes(required)) errors.push(`monthly error.tsx missing ${required}`);
 }
 for (const [key, ko] of [

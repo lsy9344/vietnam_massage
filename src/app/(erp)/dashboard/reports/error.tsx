@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { ScreenToolbar } from "@/components/shell/screen-toolbar";
+import { Button } from "@/components/ui/button";
+import { ScreenState } from "@/components/ui/screen-state";
 import { useLocale, useT } from "@/lib/i18n/client";
 
 export default function ReportsError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
@@ -12,31 +14,38 @@ export default function ReportsError({ reset }: { error: Error & { digest?: stri
   return (
     <div className="screen">
       <ScreenToolbar locale={locale} path="/dashboard/reports" title={t("dashboard.reports.title")} />
-      <section className="border border-danger bg-surface px-4 py-6" role="alert">
-        <h2 className="text-base font-semibold text-foreground">{t("dashboard.reports.error.title")}</h2>
-        <p className="mt-2 max-w-2xl text-sm text-muted">{t("dashboard.reports.error.description")}</p>
-        <p className="mt-3 text-sm font-medium text-danger">{t("dashboard.error.generic")}</p>
-        <div className="mt-5 flex flex-wrap gap-2">
-          <button
-            className="h-9 border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-readonly"
-            onClick={() => {
-              reset();
-            }}
-            type="button"
-          >
-            {t("dashboard.error.retry")}
-          </button>
-          <button
-            className="h-9 border border-border bg-background px-3 text-sm font-semibold text-foreground hover:bg-readonly"
-            onClick={() => {
-              router.refresh();
-            }}
-            type="button"
-          >
-            {t("dashboard.error.refresh")}
-          </button>
-        </div>
-      </section>
+      {/* 오류 상태는 화면 낭독기에 바로 알린다(ScreenState). 서버 오류 문장은 보이지 않는다. */}
+      <ScreenState
+        action={
+          <>
+            <Button
+              onClick={() => {
+                reset();
+              }}
+              variant="secondary"
+            >
+              {t("dashboard.error.retry")}
+            </Button>
+            <Button
+              onClick={() => {
+                router.refresh();
+              }}
+              variant="secondary"
+            >
+              {t("dashboard.error.refresh")}
+            </Button>
+          </>
+        }
+        description={
+          <>
+            <p>{t("dashboard.reports.error.description")}</p>
+            <p className="mt-2 font-semibold text-danger">{t("dashboard.error.generic")}</p>
+          </>
+        }
+        kind="error"
+        label={t("dashboard.error.chip")}
+        title={t("dashboard.reports.error.title")}
+      />
     </div>
   );
 }

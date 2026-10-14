@@ -4,16 +4,17 @@ import { cn } from "@/lib/utils";
 
 /**
  * 같은 화면 골격 안에서 보이는 상태: 로딩, 빈 상태(데이터 없음·계산 근거 없음·검색 결과 없음은 문구로 구분),
- * 오류(원인·다음 행동·재시도), 잠금(이유·재오픈 경로·버전), 갱신 지연(마지막 갱신).
+ * 오류(원인·다음 행동·재시도), 잠금(이유·재오픈 경로·버전), 갱신 지연(마지막 갱신), 경고(계산에서 빠진 항목처럼 바로 알릴 문제).
  */
-export type ScreenStateKind = "loading" | "empty" | "error" | "locked" | "stale";
+export type ScreenStateKind = "loading" | "empty" | "error" | "locked" | "stale" | "warning";
 
 const kindConfig: Record<ScreenStateKind, { tone: StatusTone; border: string }> = {
   loading: { tone: "neutral", border: "border-border" },
   empty: { tone: "neutral", border: "border-dashed border-border-strong" },
   error: { tone: "danger", border: "border-danger" },
   locked: { tone: "info", border: "border-info" },
-  stale: { tone: "warning", border: "border-warning" }
+  stale: { tone: "warning", border: "border-warning" },
+  warning: { tone: "warning", border: "border-warning" }
 };
 
 export function ScreenState({
@@ -22,6 +23,7 @@ export function ScreenState({
   title,
   description,
   action,
+  name,
   className
 }: {
   kind: ScreenStateKind;
@@ -31,14 +33,17 @@ export function ScreenState({
   description?: ReactNode;
   /** 다음 행동(재시도, 재오픈 경로 링크 등). */
   action?: ReactNode;
+  /** 영역 이름이 제목과 달라야 할 때(aria-label). */
+  name?: string;
   className?: string;
 }) {
   const config = kindConfig[kind];
   return (
     <section
       aria-busy={kind === "loading" ? true : undefined}
+      aria-label={name}
       className={cn("rounded-lg border bg-surface px-4 py-5", config.border, className)}
-      role={kind === "error" ? "alert" : "status"}
+      role={kind === "error" || kind === "warning" ? "alert" : "status"}
     >
       <StatusIndicator label={label} tone={config.tone} />
       <h2 className="mt-3 text-base font-semibold text-foreground">{title}</h2>

@@ -20,6 +20,8 @@ function readJson(path) {
   "src/modules/dashboard/dashboard-query-service.ts",
   "src/modules/dashboard/dashboard-query-service.test.ts",
   "src/app/(erp)/dashboard/today/page.tsx",
+  "src/app/(erp)/dashboard/today/today-dashboard-view.tsx",
+  "src/app/(erp)/dashboard/dashboard-parts.tsx",
   "src/app/(erp)/dashboard/today/loading.tsx",
   "src/app/(erp)/dashboard/today/error.tsx",
   "src/modules/dashboard/README.md",
@@ -64,6 +66,8 @@ for (const forbidden of ["recordAuditEvent", ".create(", ".update(", ".delete(",
 const koMessages = read("src/lib/i18n/messages/ko.ts");
 
 const page = read("src/app/(erp)/dashboard/today/page.tsx");
+// 티켓 06: 화면은 today-dashboard-view.tsx(와 대시보드 공통 조각)가 그리고, 페이지는 권한·주소·조회만 맡는다.
+const view = read("src/app/(erp)/dashboard/today/today-dashboard-view.tsx") + read("src/app/(erp)/dashboard/dashboard-parts.tsx");
 for (const required of [
   "requireRouteAccess(\"/dashboard/today\")",
   "getTodayDashboardMetrics",
@@ -86,7 +90,7 @@ for (const [key, ko] of [
   ["dashboard.today.empty.noCallsTitle", "이 날짜의 콜이 없습니다"],
   ["dashboard.today.warning.excludedTitle", "집계 제외 항목이 있습니다"]
 ]) {
-  if (!page.includes(`"${key}"`)) errors.push(`today dashboard page missing t() key ${key}`);
+  if (!view.includes(`"${key}"`)) errors.push(`today dashboard view missing t() key ${key}`);
   if (!koMessages.includes(ko)) errors.push(`messages/ko.ts missing ${ko}`);
 }
 for (const forbidden of [
@@ -100,6 +104,13 @@ for (const forbidden of [
   "action="
 ]) {
   if (page.includes(forbidden)) errors.push(`today dashboard page must not calculate or mutate directly: ${forbidden}`);
+  // 뷰의 action= 는 ScreenState의 다음 행동(링크) prop이라, 뷰에는 form 자체를 금지한다.
+  if (forbidden !== "action=" && view.includes(forbidden)) errors.push(`today dashboard view must not calculate or mutate directly: ${forbidden}`);
+}
+if (view.includes("<form")) errors.push("today dashboard view must stay read-only (no <form>)");
+// 티켓 06: 현금·계좌 잔액은 하루 수납·지출 탭에만 있다(명세 F08 기준 5).
+for (const forbidden of ["till", "cashBalance", "bankBalance"]) {
+  if (view.includes(forbidden)) errors.push(`today dashboard view must not show cash or bank balance: ${forbidden}`);
 }
 
 const loading = read("src/app/(erp)/dashboard/today/loading.tsx");
@@ -115,7 +126,7 @@ for (const [key, ko] of [
 }
 
 const errorBoundary = read("src/app/(erp)/dashboard/today/error.tsx");
-for (const required of ["\"use client\"", "role=\"alert\"", "router.refresh", "reset()"]) {
+for (const required of ["\"use client\"", "kind=\"error\"", "router.refresh", "reset()"]) {
   if (!errorBoundary.includes(required)) errors.push(`today error.tsx missing ${required}`);
 }
 for (const [key, ko] of [

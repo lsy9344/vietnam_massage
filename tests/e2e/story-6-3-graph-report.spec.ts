@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
-import { argon2idOptions, login } from "./support/auth";
+import { argon2idOptions, login, setLocaleCookie } from "./support/auth";
 
 
 type SeededData = {
@@ -25,6 +25,10 @@ function monthKeyForWorker(workerIndex: number) {
   const year = 2066 + Math.floor((monthNumber - 1) / 12);
   const month = ((monthNumber - 1) % 12) + 1;
   return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+async function documentOverflow(page: Page) {
+  return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 }
 
 function isoDate(monthKey: string, day: number) {
@@ -376,6 +380,46 @@ test.describe("Story 6.3 graph report", () => {
     await expect(page.getByText("1개").first()).toBeVisible();
     const noShowCancelRow = page.getByRole("row").filter({ hasText: isoDate(seededData.monthKey, 12) }).last();
     await expect(noShowCancelRow).toContainText("1건");
+  });
+
+  // 티켓 06: 차트 색은 객실 상태색과 구분하고 표·범례·글자를 함께 둔다(design.md 6.14).
+  test("티켓 06: 차트 막대는 객실 상태색이 아닌 지표 계열 파스텔이고, 두 언어 모두 옆으로 넘치지 않는다", async ({ page }) => {
+    await login(page, seededData.accounts.administrator.accountId, seededData.accounts.administrator.password);
+    const path = `/dashboard/reports?operatingMonthId=${seededData.monthId}&serviceDate=${seededData.serviceDate}`;
+    await page.goto(path);
+
+    const barColors = await page.locator('[class*="bg-accent-"]').evaluateAll((elements) => elements.map((element) => getComputedStyle(element).backgroundColor));
+    expect(barColors.length).toBeGreaterThan(0);
+    const roomStatusColors = await page.evaluate(() =>
+      ["--status-active", "--status-reserved", "--status-ending-soon", "--status-cleaning", "--status-complete-check"].map((name) => {
+        const probe = document.createElement("div");
+        probe.style.backgroundColor = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        document.body.append(probe);
+        const color = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return color;
+      })
+    );
+    for (const color of barColors) expect(roomStatusColors).not.toContain(color);
+
+    // 두 계열은 색이 아니라 범례의 모양(막대·선)과 글자로 구분하고, 막대에 올리면 그날 값이 보인다.
+    const revenue = page.getByRole("img", { name: "일별 선결제 매출과 순매출 추이" });
+    const tooltip = page.getByText(`${seededData.serviceDate} · 4,700,000 VND`);
+    await expect(tooltip).toBeHidden();
+    await revenue.locator(".group").nth(Number(seededData.serviceDate.slice(8)) - 1).hover();
+    await expect(tooltip).toBeVisible();
+    await expect(page.getByRole("img", { name: "일별 노쇼 건수" })).toBeVisible();
+    await expect(page.getByRole("img", { name: "일별 취소 건수" })).toBeVisible();
+
+    for (const locale of ["ko", "vi"] as const) {
+      await setLocaleCookie(page, locale);
+      for (const width of [390, 1024, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(path);
+        await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+        expect(await documentOverflow(page), `${locale} reports @${width}`).toBe(0);
+      }
+    }
   });
 
   test("out-of-range serviceDate is canonicalized to the selected operating month range", async ({ page }) => {

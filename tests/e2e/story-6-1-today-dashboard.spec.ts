@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
-import { expect, test, type Locator } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
-import { argon2idOptions, login } from "./support/auth";
+import { argon2idOptions, login, setLocaleCookie } from "./support/auth";
 
 
 type SeededData = {
@@ -33,29 +33,13 @@ function utcDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** 요약 카드 하나(라벨과 값). 라벨과 값은 서로 다른 칸이라 카드로 찾는다. */
+function summaryCard(region: Locator, label: string) {
+  return region.locator("div", { has: region.page().getByText(label, { exact: true }) });
 }
 
-function kpiTile(region: Locator, label: string) {
-  return region.locator(":scope > div").filter({ hasText: new RegExp(`^\\s*${escapeRegExp(label)}\\s*`) }).first();
-}
-
-async function expectStrongTone(region: Locator, label: string) {
-  const tile = kpiTile(region, label);
-  await expect(tile).toHaveClass(/border-2/);
-  await expect(tile).toHaveClass(/border-brand/);
-  const value = tile.locator("p").nth(1);
-  await expect(value).toHaveClass(/text-3xl/);
-  await expect(value).toHaveClass(/font-bold/);
-  await expect(value).toHaveClass(/text-brand/);
-}
-
-async function expectCostTone(region: Locator, label: string) {
-  const value = kpiTile(region, label).locator("p").nth(1);
-  await expect(value).toHaveClass(/text-2xl/);
-  await expect(value).toHaveClass(/font-semibold/);
-  await expect(value).toHaveClass(/text-danger/);
+async function documentOverflow(page: Page) {
+  return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 }
 
 async function safeEmployeeSortOrder(employeeGroup: string, staffCode: string, preferredSortOrder: number) {
@@ -361,25 +345,62 @@ test.describe("Story 6.1 today dashboard", () => {
     const details = page.getByRole("region", { name: "상세 요약", exact: true });
     await expect(details).toContainText("코스별 방문완료");
     await expect(details).toContainText("A");
-    await expect(page.getByLabel("B 코스 방문완료")).toContainText("담당 2건");
-    await expect(page.getByLabel("D 코스 방문완료")).toContainText("담당 2건");
+    // 코스별 방문완료 표의 마지막 칸이 담당(Therapist 배정) 건수다.
+    await expect(page.getByLabel("B 코스 방문완료").getByRole("cell").last()).toHaveText("2건");
+    await expect(page.getByLabel("D 코스 방문완료").getByRole("cell").last()).toHaveText("2건");
     await expect(details).toContainText("마사지사 담당콜/정산");
     await expect(details).toContainText("E2E61");
     await expect(page.getByRole("alert").filter({ hasText: "집계 제외 항목이 있습니다" })).toBeVisible();
   });
 
-  test("결제합계와 순이익은 strong tone, 비용 항목은 cost tone으로 유지한다", async ({ page }) => {
+  // 티켓 06: 매출 계열(라벤더)과 비용 계열(피치)을 한 값처럼 같은 색으로 칠하지 않는다. 나머지 비용은 카드가 아니라 목록이다.
+  test("결제합계와 순이익은 매출 계열, 일일비용 합계는 비용 계열 카드이고 그 내역은 목록이다", async ({ page }) => {
     const account = seededData.accounts.administrator;
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, account.accountId, account.password);
     await page.goto(`/dashboard/today?operatingMonthId=${seededData.monthId}&serviceDate=${seededData.serviceDate}`);
 
     const money = page.getByRole("region", { name: "오늘 금액 KPI", exact: true });
-    await expectStrongTone(money, "결제합계");
-    await expectStrongTone(money, "순이익");
-    for (const label of ["일일인센 합계", "지출합계", "마사지사 정산", "귀케어 정산", "일일비용 합계"]) {
-      await expectCostTone(money, label);
+    await expect(summaryCard(money, "결제합계")).toHaveClass(/bg-accent-lavender/);
+    await expect(summaryCard(money, "순이익")).toHaveClass(/bg-accent-lavender/);
+    await expect(summaryCard(money, "일일비용 합계")).toHaveClass(/bg-accent-peach/);
+    const costs = page.getByRole("region", { name: "일일비용 내역", exact: true });
+    for (const label of ["일일인센 합계", "지출합계", "마사지사 정산", "귀케어 정산"]) {
+      await expect(costs).toContainText(label);
     }
+  });
+
+  // 티켓 06: 휴대폰 폭에서는 권한 안의 오늘 현황이 짧은 카드로 보이고, 데스크톱 표를 줄여 보이지 않는다.
+  test("티켓 06: 휴대폰에서 오늘 현황은 잔액 없이 짧은 카드로 보이고 두 언어 모두 옆으로 넘치지 않는다", async ({ page }) => {
+    const account = seededData.accounts.administrator;
+    await login(page, account.accountId, account.password);
+    const path = `/dashboard/today?operatingMonthId=${seededData.monthId}&serviceDate=${seededData.serviceDate}`;
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(path);
+    const details = page.getByRole("region", { name: "상세 요약", exact: true });
+    // 마사지사 비교 표는 숨고, 같은 값의 짧은 카드가 보인다.
+    await expect(details.getByRole("table").filter({ hasText: "정산 합계" })).toBeHidden();
+    const therapistCard = details.getByRole("listitem").filter({ hasText: "E2E61" }).first();
+    await expect(therapistCard).toBeVisible();
+    await expect(therapistCard).toContainText("담당");
+    for (const box of await page.getByRole("region", { name: "오늘 금액 KPI", exact: true }).locator("dl > div").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect()))) {
+      expect(box.height).toBeLessThanOrEqual(160);
+      expect(box.width).toBeLessThanOrEqual(390);
+    }
+    // 현금·계좌 잔액은 하루 수납·지출 탭에만 있다(명세 F08 기준 5).
+    await expect(page.getByText(/잔액/)).toHaveCount(0);
+
+    for (const locale of ["ko", "vi"] as const) {
+      await setLocaleCookie(page, locale);
+      for (const width of [390, 1024, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(path);
+        await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+        expect(await documentOverflow(page), `${locale} today @${width}`).toBe(0);
+      }
+    }
+    await expect(page.getByText(/Số dư/)).toHaveCount(0);
   });
 
   test("조회날짜 변경은 URL search params와 서버 데이터 기준 empty state를 갱신한다", async ({ page }) => {
@@ -430,7 +451,7 @@ test.describe("Story 6.1 today dashboard", () => {
     expect(koMessages).toContain("오늘 KPI를 불러오지 못했습니다");
     expect(errorBoundary).toContain("dashboard.error.retry");
     expect(koMessages).toContain("다시 시도");
-    expect(errorBoundary).toContain("role=\"alert\"");
+    expect(errorBoundary).toContain("kind=\"error\"");
     expect(errorBoundary.includes("error.message")).toBe(false);
   });
 });
