@@ -293,7 +293,6 @@ export const ko = {
   "calls.expense.column.handler": "담당자",
   "calls.expense.column.actions": "처리",
   "calls.expense.field.amount": "지출금액",
-  "calls.expense.field.amountPlaceholder": "금액",
   "calls.expense.field.description": "내용",
   "calls.expense.field.note": "비고",
   "calls.expense.field.handler": "지출 담당자",

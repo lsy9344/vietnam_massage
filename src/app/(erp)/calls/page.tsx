@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { requireRouteAccess } from "@/lib/authorization";
 import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
@@ -12,7 +13,7 @@ import {
   listTherapistAvailability,
   redactServiceCallSettlementAmounts
 } from "@/modules/calls/service-call-service";
-import { DailyExpensePanel } from "@/app/(erp)/calls/daily-expense-panel";
+import { AddExpensePanel, DailyExpensePanel } from "@/app/(erp)/calls/daily-expense-panel";
 import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { CallLedgerWorkspace } from "@/app/(erp)/calls/call-ledger-workspace";
 import { LedgerStatusCounts } from "@/app/(erp)/calls/ledger-status-counts";
@@ -58,9 +59,11 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
   const isLocked = isOperatingMonthPayoutLocked(selectedMonth.status);
   const canViewSettlementAmounts = account.role === "administrator" || account.role === "settlement_manager";
 
-  const toolbar = (
+  // 주요 행동은 탭마다 다르다. 하루 수납·지출은 지출 추가, 원장의 빠른 예약은 티켓 20에서 붙인다.
+  const toolbar = (action?: ReactNode) => (
     <ScreenToolbar
       account={account}
+      action={action}
       context={{ operatingMonthId: selectedMonth.id, date: serviceDate }}
       dateControls={
         <DateContextControls
@@ -93,7 +96,14 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
 
     return (
       <div className="screen">
-        {toolbar}
+        {toolbar(
+          <AddExpensePanel
+            handlers={options.expenseHandlers}
+            isLocked={isLocked}
+            operatingMonthId={selectedMonth.id}
+            serviceDate={serviceDate}
+          />
+        )}
         <div className="grid grid-cols-1 gap-10">
           <DailySummaryStrip
             locale={locale}
@@ -126,7 +136,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="screen">
-      {toolbar}
+      {toolbar()}
       <LedgerStatusCounts
         counts={ledgerStatusCountsFromRows(rows)}
         customerHref={linkToScreen(account.role, "/customers", { operatingMonthId: selectedMonth.id, date: serviceDate })}

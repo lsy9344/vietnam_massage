@@ -202,6 +202,7 @@ test.describe("티켓 03 콜 원장 화면 분리", () => {
     await expect(page.locator(`tr[data-service-call-id="${customerCallId}"]`)).toBeInViewport();
 
     await expect(page.getByLabel("일별 지출")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "지출 추가" })).toHaveCount(0);
     await expect(page.getByLabel("하루 수납 요약")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "고객 등록" })).toHaveCount(0);
     await expect(page.getByLabel("고객 검색")).toHaveCount(0);
@@ -223,7 +224,8 @@ test.describe("티켓 03 콜 원장 화면 분리", () => {
     await expect(cards.locator("div").filter({ hasText: /^결제합계/ })).toContainText("1,500,000 VND");
     await expect(cards.locator("div").filter({ hasText: /^순매출/ })).toContainText("1,500,000 VND");
     await expect(cards.locator("div").filter({ hasText: /^현금 잔액/ })).toContainText("1,500,000 VND");
-    await expect(page.getByLabel("일별 지출").getByRole("button", { name: "지출 추가" })).toBeVisible();
+    // 지출 추가는 이 탭 도구줄의 주요 행동이다.
+    await expect(page.locator("header").getByRole("button", { name: "지출 추가" })).toBeVisible();
     await expect(page.getByRole("list", { name: "상태별 건수" })).toHaveCount(0);
     await expect(page.getByLabel("조회날짜")).toHaveValue(serviceDate);
 

@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { inputFieldClassName } from "@/components/ui/input-field";
+import { ModalPanel } from "@/components/ui/panel";
 import { useLocale, useT } from "@/lib/i18n/client";
 import { formatNumber } from "@/lib/i18n/format";
 import type { DailyExpenseDto, ExpenseMethod, ServiceCallOption } from "@/modules/calls/service-call-service";
@@ -44,8 +45,8 @@ export function ExpenseMethodControl({
 }) {
   const t = useT();
   return (
-    <label className="grid gap-1">
-      <span className="text-xs font-medium text-foreground">{t("calls.expense.field.method")}</span>
+    <label className="grid gap-1.5">
+      <span className="text-sm font-semibold text-foreground">{t("calls.expense.field.method")}</span>
       <select
         aria-label={t("calls.expense.field.method")}
         className={inputFieldClassName({ className: "min-w-28" })}
@@ -86,12 +87,14 @@ export function ExpenseSaveButton({
 }
 
 function HandlerSelect({
+  className = "min-w-44",
   defaultValue,
   disabled,
   handlers,
   label,
   name
 }: {
+  className?: string;
   defaultValue?: string;
   disabled: boolean;
   handlers: ServiceCallOption[];
@@ -102,7 +105,7 @@ function HandlerSelect({
   return (
     <select
       aria-label={label}
-      className={inputFieldClassName({ className: "min-w-44" })}
+      className={inputFieldClassName({ className })}
       defaultValue={defaultValue ?? ""}
       disabled={disabled}
       name={name}
@@ -206,7 +209,75 @@ function ExpenseRow({
   );
 }
 
-function AddExpenseForm({
+function DrawerField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="grid gap-1.5">
+      <span className="text-sm font-semibold text-foreground">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+/** 지출 추가 서랍의 입력. 저장되면 onAdded로 서랍을 닫고, 목록은 서버가 다시 그린다. */
+export function AddExpenseForm({
+  handlers,
+  operatingMonthId,
+  serviceDate,
+  onAdded
+}: {
+  handlers: ServiceCallOption[];
+  operatingMonthId: string;
+  serviceDate: string;
+  onAdded: () => void;
+}) {
+  const t = useT();
+  const [state, formAction, pending] = useActionState<DailyExpenseActionState, FormData>(async (previous, formData) => {
+    const result = await createDailyExpenseAction(previous, formData);
+    if (result?.ok) onAdded();
+    return result;
+  }, null);
+
+  return (
+    <form action={formAction} className="grid gap-4" noValidate>
+      <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
+      <input name="expenseDate" type="hidden" value={serviceDate} />
+      <DrawerField label={t("calls.expense.field.amount")}>
+        <input
+          className={inputFieldClassName({ className: "w-full" })}
+          disabled={pending}
+          min={1}
+          name="amount"
+          required
+          step={1}
+          type="number"
+        />
+        <InlineError field="amount" state={state} />
+      </DrawerField>
+      <DrawerField label={t("calls.expense.field.description")}>
+        <input className={inputFieldClassName({ className: "w-full" })} disabled={pending} maxLength={200} name="description" required />
+        <InlineError field="description" state={state} />
+      </DrawerField>
+      <DrawerField label={t("calls.expense.field.handler")}>
+        <HandlerSelect className="w-full" disabled={pending} handlers={handlers} label={t("calls.expense.field.handler")} name="handledByEmployeeId" />
+      </DrawerField>
+      <ExpenseMethodControl disabled={pending} error={fieldError(state, "method")} />
+      <DrawerField label={t("calls.expense.field.note")}>
+        <input className={inputFieldClassName({ className: "w-full" })} disabled={pending} maxLength={500} name="note" />
+        <InlineError field="note" state={state} />
+      </DrawerField>
+      <div className="flex flex-wrap items-center gap-3">
+        <ExpenseSaveButton disabled={pending} idleLabel={t("calls.expense.action.add")} pending={pending} />
+        {state && !state.ok ? <InlineError state={state} /> : null}
+      </div>
+    </form>
+  );
+}
+
+/**
+ * "하루 수납·지출" 탭 도구줄의 주요 행동(정보구조 9절). 지출 추가를 서랍으로 연다.
+ * 이미 있는 지출의 수정과 비활성은 목록의 행 안에서 한다. 잠긴 운영월에서는 열 수 없다.
+ */
+export function AddExpensePanel({
   handlers,
   isLocked,
   operatingMonthId,
@@ -218,57 +289,17 @@ function AddExpenseForm({
   serviceDate: string;
 }) {
   const t = useT();
-  const [state, formAction, pending] = useActionState<DailyExpenseActionState, FormData>(createDailyExpenseAction, null);
-  const disabled = isLocked || pending;
+  const [open, setOpen] = useState(false);
 
   return (
-    <form action={formAction} className="flex flex-wrap items-start gap-2 border-t border-border px-4 py-4" noValidate>
-      <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
-      <input name="expenseDate" type="hidden" value={serviceDate} />
-      <label className="grid gap-1">
-        <span className="sr-only">{t("calls.expense.field.amount")}</span>
-        <input
-          className={inputFieldClassName({ className: "w-32" })}
-          disabled={disabled}
-          min={1}
-          name="amount"
-          placeholder={t("calls.expense.field.amountPlaceholder")}
-          required
-          step={1}
-          type="number"
-        />
-        <InlineError field="amount" state={state} />
-      </label>
-      <label className="grid gap-1">
-        <span className="sr-only">{t("calls.expense.field.description")}</span>
-        <input
-          className={inputFieldClassName({ className: "w-56" })}
-          disabled={disabled}
-          maxLength={200}
-          name="description"
-          placeholder={t("calls.expense.field.description")}
-          required
-        />
-        <InlineError field="description" state={state} />
-      </label>
-      <HandlerSelect disabled={disabled} handlers={handlers} label={t("calls.expense.field.handler")} name="handledByEmployeeId" />
-      <ExpenseMethodControl disabled={disabled} error={fieldError(state, "method")} />
-      <label className="grid gap-1">
-        <span className="sr-only">{t("calls.expense.field.note")}</span>
-        <input
-          className={inputFieldClassName({ className: "w-56" })}
-          disabled={disabled}
-          maxLength={500}
-          name="note"
-          placeholder={t("calls.expense.field.note")}
-        />
-        <InlineError field="note" state={state} />
-      </label>
-      <ExpenseSaveButton disabled={disabled} idleLabel={t("calls.expense.action.add")} pending={pending} />
-      <div className="basis-full">
-        {state?.ok ? <span className="text-xs text-muted">{t("calls.save.saved")}</span> : <InlineError state={state} />}
-      </div>
-    </form>
+    <ModalPanel
+      onOpenChange={setOpen}
+      open={open}
+      title={t("calls.expense.action.add")}
+      trigger={<Button disabled={isLocked}>{t("calls.expense.action.add")}</Button>}
+    >
+      <AddExpenseForm handlers={handlers} onAdded={() => setOpen(false)} operatingMonthId={operatingMonthId} serviceDate={serviceDate} />
+    </ModalPanel>
   );
 }
 
@@ -328,7 +359,6 @@ export function DailyExpensePanel({
           </table>
         </div>
       )}
-      <AddExpenseForm handlers={handlers} isLocked={isLocked} operatingMonthId={operatingMonthId} serviceDate={serviceDate} />
     </section>
   );
 }

@@ -293,7 +293,6 @@ export const vi: Messages = {
   "calls.expense.column.handler": "Người phụ trách",
   "calls.expense.column.actions": "Xử lý",
   "calls.expense.field.amount": "Số tiền chi",
-  "calls.expense.field.amountPlaceholder": "Số tiền",
   "calls.expense.field.description": "Nội dung",
   "calls.expense.field.note": "Ghi chú",
   "calls.expense.field.handler": "Người phụ trách chi",

@@ -290,12 +290,16 @@ test.describe("Story 2.5 일별 지출 입력과 요약 계산", () => {
     await expect(page.getByLabel("일별 요약").getByRole("row", { name: /^D\s+1\s+0\s+2$/ })).toBeVisible();
     await expect(page.getByLabel("일별 요약").getByRole("row", { name: /^E\s+0\s+0\s+0$/ })).toBeVisible();
 
+    // 티켓 03: 지출 추가는 도구줄의 주요 행동이 여는 서랍에서 한다. 저장되면 서랍이 닫히고 목록에 행이 생긴다.
     const expensePanel = page.getByLabel("일별 지출");
-    await expensePanel.getByPlaceholder("금액").fill("250000");
-    await expensePanel.getByPlaceholder("내용").fill("소모품");
-    await expensePanel.getByLabel("지출 담당자").last().selectOption(seededData.handlerId);
-    await expensePanel.getByRole("button", { name: "지출 추가" }).click();
-    await expect(expensePanel.getByText("저장됨")).toBeVisible();
+    await page.getByRole("button", { name: "지출 추가" }).click();
+    const drawer = page.getByRole("dialog", { name: "지출 추가" });
+    await drawer.getByLabel("지출금액").fill("250000");
+    await drawer.getByLabel("내용").fill("소모품");
+    await drawer.getByLabel("지출 담당자").selectOption(seededData.handlerId);
+    await drawer.getByRole("button", { name: "지출 추가" }).click();
+    await expect(drawer).toHaveCount(0);
+    await expect(expensePanel.getByRole("row", { name: /소모품/ })).toBeVisible();
     await page.reload();
     await expect(page.getByLabel("일별 요약")).toContainText("250,000 VND");
     await expect(page.getByLabel("일별 요약")).toContainText("4,350,000 VND");
@@ -325,16 +329,18 @@ test.describe("Story 2.5 일별 지출 입력과 요약 계산", () => {
   test("field error와 잠긴 운영월 read-only 상태를 확인한다", async ({ page }) => {
     await login(page);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2033-06-05&tab=cashbook`);
-    await page.getByLabel("일별 지출").getByPlaceholder("금액").fill("0");
-    await page.getByLabel("일별 지출").getByPlaceholder("내용").fill("금액 오류");
-    await page.getByLabel("일별 지출").getByRole("button", { name: "지출 추가" }).click();
-    await expect(page.getByText("금액은 0보다 커야 합니다.")).toBeVisible();
+    await page.getByRole("button", { name: "지출 추가" }).click();
+    const drawer = page.getByRole("dialog", { name: "지출 추가" });
+    await drawer.getByLabel("지출금액").fill("0");
+    await drawer.getByLabel("내용").fill("금액 오류");
+    await drawer.getByRole("button", { name: "지출 추가" }).click();
+    await expect(drawer.getByText("금액은 0보다 커야 합니다.")).toBeVisible();
 
     await page.goto(`/calls?operatingMonthId=${seededData.lockedMonthId}&serviceDate=2033-07-05&tab=cashbook`);
     // 잠금 안내는 제목("잠긴 운영월입니다.")과 설명이 분리돼 있다.
     await expect(page.getByLabel("일별 지출").getByText("잠긴 운영월입니다.")).toBeVisible();
     await expect(page.getByText("마감확정 또는 잠금 운영월입니다. 지출 입력과 수정이 차단됩니다.")).toBeVisible();
-    await expect(page.getByLabel("일별 지출").getByRole("button", { name: "지출 추가" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "지출 추가" })).toBeDisabled();
   });
 
   test.afterAll(async () => {
