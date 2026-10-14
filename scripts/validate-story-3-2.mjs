@@ -44,7 +44,8 @@ if (!packageJson.scripts?.lint?.includes("validate-story-3-2.mjs")) {
 }
 
 const koMessagesLive = read("src/lib/i18n/messages/ko.ts");
-const livePage = read("src/app/(erp)/live/page.tsx");
+// 티켓 04: 요약 카드와 객실판 아래 요약 목록은 live-summary.tsx가 그린다.
+const livePage = `${read("src/app/(erp)/live/page.tsx")}\n${read("src/app/(erp)/live/live-summary.tsx")}`;
 for (const required of [
   "requireRouteAccess(\"/live\")",
   "listOperatingMonths",
@@ -58,7 +59,7 @@ for (const required of [
   // i18n 전환: 한국어 UI 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
   // 운영월이 없을 때 안내는 공용 NoOperatingMonthNotice(그 안에 common.goToOperatingMonths)로 옮겨졌다.
   "NoOperatingMonthNotice",
-  "grid grid-cols-4",
+  "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4",
   "live.summary.aria",
   "summary.inUseCount",
   "summary.cleaningCount",
@@ -77,7 +78,7 @@ for (const forbidden of ["ErpEmptyState", "EditableCallGrid", "DailyExpensePanel
 }
 
 const loading = read("src/app/(erp)/live/loading.tsx");
-for (const required of ["Skeleton", "live.loading.roomsAria", "live.loading.summaryAria", "Array.from({ length: 11 }", "grid grid-cols-4"]) {
+for (const required of ["Skeleton", "live.loading.roomsAria", "live.loading.summaryAria", "Array.from({ length: 11 }", "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"]) {
   if (!loading.includes(required)) errors.push(`live/loading.tsx missing ${required}`);
 }
 for (const label of ["객실 상태 로딩", "오늘 요약 로딩"]) {
@@ -86,7 +87,8 @@ for (const label of ["객실 상태 로딩", "오늘 요약 로딩"]) {
 
 // i18n 전환: 컴포넌트의 한국어 문구는 messages/ko.ts로 이동했고, 컴포넌트는 t()로 참조한다.
 const koMessages = read("src/lib/i18n/messages/ko.ts");
-const refresh = read("src/components/domain/room-status-refresh-controller.tsx");
+// 티켓 04: 자동 갱신 멈춤·갱신 지연 판정(isWithinLiveRefreshWindow를 쓰는 roomStatusRefreshState)은 rooms 모듈로 옮겼다.
+const refresh = `${read("src/components/domain/room-status-refresh-controller.tsx")}\n${read("src/modules/rooms/room-status-refresh.ts")}`;
 for (const required of ["useRouter", "router.refresh", "setInterval", "30_000", "90_000", "isWithinLiveRefreshWindow", "visibilitychange", "roomRefresh.lastUpdated", "roomRefresh.refreshing", "roomRefresh.stale", "roomRefresh.refresh"]) {
   if (!refresh.includes(required)) errors.push(`room-status-refresh-controller.tsx missing ${required}`);
 }

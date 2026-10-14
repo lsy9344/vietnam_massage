@@ -16,7 +16,7 @@ export default async function TvLoading() {
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label={t("tv.loading.boardAria")}>
         {Array.from({ length: 11 }, (_, index) => (
-          <div className="min-h-[270px] border border-border bg-surface p-6" key={index}>
+          <div className="min-h-[270px] rounded-lg border border-border bg-surface p-6" key={index}>
             <div className="flex items-start justify-between gap-4">
               <div className="grid gap-3">
                 <Skeleton className="h-10 w-28" />

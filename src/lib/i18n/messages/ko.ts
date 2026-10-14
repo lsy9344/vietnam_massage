@@ -133,6 +133,8 @@ export const ko = {
   "roomRefresh.lastUpdated": "마지막 갱신",
   "roomRefresh.paused": "영업 시간 외 · 자동 갱신 중지",
   "roomRefresh.refresh": "새로고침",
+  "roomRefresh.staleNotice.title": "{time} 이후로 객실 상태를 새로 받지 못했습니다",
+  "roomRefresh.staleNotice.description": "화면의 상태가 지금과 다를 수 있습니다. 위의 새로고침을 누르고, 계속되면 연결을 확인하세요.",
 
   // ERP empty state (디자인 데모용)
   "emptyState.dataWaiting": "데이터 연결 대기",
@@ -175,6 +177,8 @@ export const ko = {
   // 객실 현황
   "rooms.empty.description": "객실 현황은 운영월 날짜 범위 안의 객실 상태를 조회한다.",
   "rooms.loading.roomsAria": "객실 상태 로딩",
+  "rooms.counts.aria": "상태별 객실 수",
+  "rooms.counts.count": "{count}실",
 
   // TV 현황판
   "tv.eyebrow": "운영 현황",

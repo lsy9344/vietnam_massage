@@ -1,9 +1,10 @@
 import { RoomStatusCard } from "@/components/domain/room-status-card";
+import { RoomStatusCounts } from "@/components/domain/room-status-counts";
 import { DateContextControls } from "@/components/shell/date-context-controls";
 import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-notice";
 import { OpenTvLink } from "@/components/shell/open-tv-link";
 import { ScreenToolbar } from "@/components/shell/screen-toolbar";
-import { RoomStatusRefreshController } from "@/components/domain/room-status-refresh-controller";
+import { RoomStatusRefresh, RoomStatusRefreshController, RoomStatusStaleNotice } from "@/components/domain/room-status-refresh-controller";
 import { requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
@@ -44,29 +45,34 @@ export default async function RoomsPage({ searchParams }: { searchParams: Promis
   const context = { operatingMonthId: selectedMonth.id, date: serviceDate };
 
   return (
-    <div className="screen">
-      <ScreenToolbar
-        account={account}
-        action={<OpenTvLink context={context} locale={locale} role={account.role} />}
-        context={context}
-        dateControls={
-          <DateContextControls date={serviceDate} locale={locale} months={operatingMonths} path="/rooms" selectedMonth={selectedMonth} />
-        }
-        locale={locale}
-        path="/rooms"
-        status={<RoomStatusRefreshController lastUpdatedAt={lastUpdatedAt} locale={locale} />}
-        title={t("nav.item.rooms")}
-      />
+    <RoomStatusRefresh lastUpdatedAt={lastUpdatedAt} locale={locale}>
+      <div className="screen">
+        <ScreenToolbar
+          account={account}
+          action={<OpenTvLink context={context} locale={locale} role={account.role} />}
+          context={context}
+          dateControls={
+            <DateContextControls date={serviceDate} locale={locale} months={operatingMonths} path="/rooms" selectedMonth={selectedMonth} />
+          }
+          locale={locale}
+          path="/rooms"
+          status={<RoomStatusRefreshController />}
+          title={t("nav.item.rooms")}
+        />
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={t("common.roomStatusAria")}>
-        {roomFloorGroups(roomStatuses).map((group) => (
-          <div className={`col-span-full ${floorGridClass(group.statuses.length)}`} key={group.floor}>
-            {group.statuses.map((status) => (
-              <RoomStatusCard key={status.roomId} status={status} locale={locale} />
-            ))}
-          </div>
-        ))}
-      </section>
-    </div>
+        <RoomStatusStaleNotice />
+        <RoomStatusCounts displayStatuses={roomStatuses.map((status) => status.displayStatus)} locale={locale} />
+
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={t("common.roomStatusAria")}>
+          {roomFloorGroups(roomStatuses).map((group) => (
+            <div className={`col-span-full ${floorGridClass(group.statuses.length)}`} key={group.floor}>
+              {group.statuses.map((status) => (
+                <RoomStatusCard key={status.roomId} status={status} locale={locale} />
+              ))}
+            </div>
+          ))}
+        </section>
+      </div>
+    </RoomStatusRefresh>
   );
 }

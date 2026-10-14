@@ -49,12 +49,18 @@ export function RoomStatusCard({
           ? t("roomCard.guidance.empty")
           : t(`roomCard.guidance.${status.displayStatus}`);
 
+  const timeClass = isTv
+    ? "inline-flex items-baseline gap-2 text-[22px] font-bold text-foreground"
+    : "inline-flex h-7 items-center gap-1 rounded-full border border-border bg-surface-float px-2.5 text-xs font-semibold";
+  const timeLabelClass = isTv ? "text-base text-muted" : "font-medium text-muted";
+  // 남은 시간은 손님이 객실에 있는 동안에만 뜻이 있다.
+  const isOccupied = status.displayStatus === "사용중" || isEndingSoon || status.displayStatus === "종료확인";
+
   return (
     <article
       aria-label={`${status.roomDisplayName} ${statusLabel}`}
       className={cn(
-        "grid h-full min-h-56 grid-rows-[auto_auto_1fr] gap-3 border border-border bg-surface p-4",
-        "rounded-md",
+        "flex h-full flex-col gap-2.5 rounded-lg border border-border bg-surface p-4",
         isEmpty && "border-dashed border-status-empty bg-surface",
         isEndingSoon && "status-attention border-status-ending-soon",
         status.displayStatus === "종료확인" && "status-attention border-status-complete-check",
@@ -62,54 +68,51 @@ export function RoomStatusCard({
       )}
       data-testid="room-status-card"
     >
-      <div className="min-w-0">
-        {/* Badge on its own row so the large room name never has to share
-            horizontal space with it (the prior side-by-side layout overflowed
-            narrow 4-up TV columns). */}
-        <div className="flex justify-start">
-          <StatusBadge
-            className={cn("max-w-full", isTv && "h-12 gap-2 px-4 text-[28px] font-black")}
-            state={status.displayStatus}
-            label={statusLabel}
-            ariaLabel={t("roomStatus.aria", { status: statusLabel })}
-          />
-        </div>
-        <h2
-          className={cn(
-            "mt-2 truncate text-xl font-semibold text-foreground",
-            isTv && "mt-3 text-[40px] font-black leading-none"
-          )}
-        >
+      {/* 이름과 배지는 한 줄에 두되, 좁은 칸(TV 4열, 휴대폰)에서는 배지가 다음 줄로 내려간다. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <h2 className={cn("min-w-0 truncate text-lg font-semibold text-foreground", isTv && "text-[40px] font-black leading-none")}>
           {status.roomDisplayName}
         </h2>
-        <p className={cn("mt-1 line-clamp-2 text-xs text-muted", isTv && "mt-3 text-[22px] font-bold leading-tight")}>
-          {guidance}
+        <StatusBadge
+          // TV 배지는 28px라 베트남어 "Cần xác nhận kết thúc"가 좁은 칸(3열)에서 넘치지 않게 줄을 바꿀 수 있다.
+          className={cn("max-w-full", isTv && "h-auto min-h-12 gap-2 whitespace-normal px-4 py-1.5 text-[28px] font-black leading-tight")}
+          state={status.displayStatus}
+          label={statusLabel}
+          ariaLabel={t("roomStatus.aria", { status: statusLabel })}
+        />
+      </div>
+      <p className={cn("line-clamp-2 text-sm text-muted", isTv && "text-[22px] font-bold leading-tight")}>{guidance}</p>
+
+      <dl className={cn("grid gap-1.5 text-sm", isTv && "gap-2 text-[22px]")}>
+        <div className="flex min-w-0 gap-2">
+          <dt className={cn("shrink-0 text-muted", isTv && "font-bold")}>{t("roomCard.field.course")}</dt>
+          <dd className={cn("min-w-0 truncate font-semibold text-foreground", isTv && "font-bold")}>{courseLabel(status)}</dd>
+        </div>
+        <div className="flex min-w-0 gap-2">
+          <dt className={cn("shrink-0 text-muted", isTv && "font-bold")}>{t("roomCard.field.assignee")}</dt>
+          <dd className={cn("min-w-0 truncate font-semibold text-foreground", isTv && "font-bold")}>{assigneeLine(status)}</dd>
+        </div>
+      </dl>
+
+      {/* 시각은 서비스가 준 값을 그린다. 칸은 같은 자리에 두고 값이 없으면 "-"다. 빈방은 시각 줄이 없다. */}
+      {!isEmpty ? (
+        <p className={cn("mt-auto flex flex-wrap items-center gap-1.5", isTv && "gap-x-6 gap-y-2")}>
+          <span className={timeClass}>
+            <span className={timeLabelClass}>{t("roomCard.field.start")}</span>
+            {status.startTime ?? "-"}
+          </span>
+          <span className={timeClass}>
+            <span className={timeLabelClass}>{t("roomCard.field.expectedEnd")}</span>
+            {formatBusinessTime(locale, status.expectedEndAt)}
+          </span>
+          {isOccupied ? (
+            <span className={cn("ml-auto inline-flex items-baseline gap-1 text-sm font-semibold text-foreground", isTv && "ml-0 gap-2 text-[22px] font-bold")}>
+              <span className={timeLabelClass}>{t("roomCard.field.remaining")}</span>
+              {remainingLabel(t, status)}
+            </span>
+          ) : null}
         </p>
-      </div>
-
-      <div className={cn("grid grid-cols-2 gap-2 text-sm", isTv && "gap-4 text-[22px]")}>
-        <div className="min-w-0">
-          <p className={cn("text-xs font-medium text-muted", isTv && "text-base font-bold")}>{t("roomCard.field.course")}</p>
-          <p className={cn("truncate font-semibold text-foreground", isTv && "text-[22px] font-bold leading-tight")}>{courseLabel(status)}</p>
-        </div>
-        <div className="min-w-0">
-          <p className={cn("text-xs font-medium text-muted", isTv && "text-base font-bold")}>{t("roomCard.field.start")}</p>
-          <p className={cn("font-semibold text-foreground [font-variant-numeric:tabular-nums]", isTv && "text-[22px] font-bold")}>{status.startTime ?? "-"}</p>
-        </div>
-        <div className="min-w-0">
-          <p className={cn("text-xs font-medium text-muted", isTv && "text-base font-bold")}>{t("roomCard.field.remaining")}</p>
-          <p className={cn("font-semibold text-foreground [font-variant-numeric:tabular-nums]", isTv && "text-[22px] font-bold")}>{remainingLabel(t, status)}</p>
-        </div>
-        <div className="min-w-0">
-          <p className={cn("text-xs font-medium text-muted", isTv && "text-base font-bold")}>{t("roomCard.field.expectedEnd")}</p>
-          <p className={cn("font-semibold text-foreground [font-variant-numeric:tabular-nums]", isTv && "text-[22px] font-bold")}>{formatBusinessTime(locale, status.expectedEndAt)}</p>
-        </div>
-      </div>
-
-      <div className={cn("min-w-0 self-end border-t border-border pt-3", isTv && "pt-4")}>
-        <p className={cn("text-xs font-medium text-muted", isTv && "text-base font-bold")}>{t("roomCard.field.assignee")}</p>
-        <p className={cn("truncate text-sm font-semibold text-foreground", isTv && "text-[22px] font-bold leading-tight")}>{assigneeLine(status)}</p>
-      </div>
+      ) : null}
     </article>
   );
 }

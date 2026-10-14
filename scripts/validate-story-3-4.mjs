@@ -102,7 +102,8 @@ for (const required of ["Skeleton", "tv.loading.boardAria", "Array.from({ length
 }
 if (!koMessagesTv.includes("TV 현황판 로딩")) errors.push("messages/ko.ts missing tv loading label: TV 현황판 로딩");
 
-const refresh = read("src/components/domain/room-status-refresh-controller.tsx");
+// 티켓 04: 자동 갱신 멈춤·갱신 지연 판정(isWithinLiveRefreshWindow를 쓰는 roomStatusRefreshState)은 rooms 모듈로 옮겼다.
+const refresh = `${read("src/components/domain/room-status-refresh-controller.tsx")}\n${read("src/modules/rooms/room-status-refresh.ts")}`;
 for (const required of [
   "variant?: \"default\" | \"tv\"",
   "variant === \"tv\"",

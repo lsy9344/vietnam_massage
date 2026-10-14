@@ -14,6 +14,7 @@ type SeededData = {
   attentionCourseId: string;
   endingSoonCourseId: string;
   therapistId: string;
+  endingSoonTherapistId: string;
   roomIds: string[];
 };
 
@@ -276,6 +277,33 @@ async function seedStoryData(): Promise<SeededData> {
     }
   });
 
+  // 종료임박 콜은 다른 마사지사가 맡는다. 같은 마사지사의 더 늦은 콜이 있으면 앞 콜의 표시 종료가
+  // 그 예약시각으로 당겨져(ADR 0001) 사용중 콜이 종료확인으로 보인다.
+  const endingSoonTherapist = await (prisma as any).employee.upsert({
+    where: { staffCode: "E2E35-THR-002" },
+    update: {
+      displayName: "E2E35 마사지사2",
+      employeeGroup: "THERAPIST",
+      position: "마사지사",
+      shiftType: "전체",
+      baseSalary: 0,
+      employmentStatus: "재직",
+      sortOrder: await storyEmployeeSortOrder("THERAPIST", "E2E35-THR-002", 93551),
+      isActive: true
+    },
+    create: {
+      staffCode: "E2E35-THR-002",
+      displayName: "E2E35 마사지사2",
+      employeeGroup: "THERAPIST",
+      position: "마사지사",
+      shiftType: "전체",
+      baseSalary: 0,
+      employmentStatus: "재직",
+      sortOrder: await storyEmployeeSortOrder("THERAPIST", "E2E35-THR-002", 93551),
+      isActive: true
+    }
+  });
+
   for (const [code, label, sortOrder] of [
     ["예약", "예약", 93501],
     ["사용중", "사용중", 93502],
@@ -293,11 +321,12 @@ async function seedStoryData(): Promise<SeededData> {
     attentionCourseId: attentionCourse.id,
     endingSoonCourseId: endingSoonCourse.id,
     therapistId: therapist.id,
+    endingSoonTherapistId: endingSoonTherapist.id,
     roomIds: rooms.map((room: { id: string }) => room.id)
   };
 }
 
-async function createCall(input: { roomId: string; status: string; startTime: string; memo: string; courseId?: string }) {
+async function createCall(input: { roomId: string; status: string; startTime: string; memo: string; courseId?: string; therapistId?: string }) {
   const call = await (prisma as any).serviceCall.create({
     data: {
       operatingMonthId: seededData.openMonthId,
@@ -310,7 +339,7 @@ async function createCall(input: { roomId: string; status: string; startTime: st
     }
   });
   await (prisma as any).serviceCallAssignment.create({
-    data: { serviceCallId: call.id, assignmentRole: "THERAPIST_1", employeeId: seededData.therapistId }
+    data: { serviceCallId: call.id, assignmentRole: "THERAPIST_1", employeeId: input.therapistId ?? seededData.therapistId }
   });
 }
 
@@ -371,7 +400,8 @@ test.describe("Story 3.5 status badge accessibility", () => {
       status: "사용중",
       startTime: endingSoonStart,
       memo: "Story 3.5 ending soon",
-      courseId: seededData.endingSoonCourseId
+      courseId: seededData.endingSoonCourseId,
+      therapistId: seededData.endingSoonTherapistId
     });
   });
 

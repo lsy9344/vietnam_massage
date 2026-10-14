@@ -133,6 +133,8 @@ export const vi: Messages = {
   "roomRefresh.lastUpdated": "Cập nhật gần nhất",
   "roomRefresh.paused": "Ngoài giờ làm việc · Đã dừng tự động cập nhật",
   "roomRefresh.refresh": "Làm mới",
+  "roomRefresh.staleNotice.title": "Chưa nhận được trạng thái phòng mới kể từ {time}",
+  "roomRefresh.staleNotice.description": "Trạng thái trên màn hình có thể khác với hiện tại. Hãy bấm Làm mới ở trên; nếu vẫn vậy, hãy kiểm tra kết nối.",
 
   // ERP empty state (디자인 데모용)
   "emptyState.dataWaiting": "Chờ kết nối dữ liệu",
@@ -175,6 +177,8 @@ export const vi: Messages = {
   // 객실 현황
   "rooms.empty.description": "Tình trạng phòng tra cứu tình trạng phòng trong khoảng ngày của tháng vận hành.",
   "rooms.loading.roomsAria": "Đang tải tình trạng phòng",
+  "rooms.counts.aria": "Số phòng theo trạng thái",
+  "rooms.counts.count": "{count} phòng",
 
   // TV 현황판
   "tv.eyebrow": "Tình hình vận hành",

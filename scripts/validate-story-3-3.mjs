@@ -85,7 +85,8 @@ if (!koMessagesRooms.includes("객실 상태 로딩")) errors.push("messages/ko.
 
 // i18n 전환: 컴포넌트 한국어 문구는 messages/ko.ts로 이동, 컴포넌트는 t() key로 참조.
 const koMessages = read("src/lib/i18n/messages/ko.ts");
-const refresh = read("src/components/domain/room-status-refresh-controller.tsx");
+// 티켓 04: 자동 갱신 멈춤·갱신 지연 판정(isWithinLiveRefreshWindow를 쓰는 roomStatusRefreshState)은 rooms 모듈로 옮겼다.
+const refresh = `${read("src/components/domain/room-status-refresh-controller.tsx")}\n${read("src/modules/rooms/room-status-refresh.ts")}`;
 for (const required of [
   "useRouter",
   "router.refresh",

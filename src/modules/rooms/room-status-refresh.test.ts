@@ -3,7 +3,8 @@ import { describe, it } from "node:test";
 import {
   businessHourAt,
   isWithinLiveRefreshWindow,
-  latestRoomStatusUpdatedAt
+  latestRoomStatusUpdatedAt,
+  roomStatusRefreshState
 } from "@/modules/rooms/room-status-refresh";
 
 /** 매장 현지(UTC+7) 시각을 UTC ISO 문자열로 바꾼다. */
@@ -63,5 +64,32 @@ describe("latestRoomStatusUpdatedAt", () => {
 
   it("객실 상태가 없을 때만 fallback 시각을 사용한다", () => {
     assert.equal(latestRoomStatusUpdatedAt([], "2026-06-10T10:00:00.000Z"), "2026-06-10T10:00:00.000Z");
+  });
+});
+
+describe("roomStatusRefreshState", () => {
+  const lastUpdatedAt = "2026-06-10T12:00:00.000Z"; // 매장 19:00
+  const after = (seconds: number) => new Date(new Date(lastUpdatedAt).getTime() + seconds * 1000);
+
+  it("영업 중에 화면이 보이면 마지막 갱신 뒤 90초가 지나야 갱신 지연이다", () => {
+    const at = (seconds: number) => roomStatusRefreshState({ now: after(seconds), lastUpdatedAt, isDocumentVisible: true, staleAfterMs: 90_000 });
+
+    assert.deepEqual(at(90), { isOutsideBusinessHours: false, isPaused: false, isStale: false });
+    assert.deepEqual(at(91), { isOutsideBusinessHours: false, isPaused: false, isStale: true });
+  });
+
+  it("자동 갱신을 멈춘 동안(화면이 숨었거나 영업 시간 외)에는 오래된 게 정상이라 갱신 지연이 아니다", () => {
+    assert.deepEqual(roomStatusRefreshState({ now: after(600), lastUpdatedAt, isDocumentVisible: false, staleAfterMs: 90_000 }), {
+      isOutsideBusinessHours: false,
+      isPaused: true,
+      isStale: false
+    });
+
+    const closed = atBusinessLocalTime("2026-06-11T05:00:00");
+    assert.deepEqual(roomStatusRefreshState({ now: closed, lastUpdatedAt, isDocumentVisible: true, staleAfterMs: 90_000 }), {
+      isOutsideBusinessHours: true,
+      isPaused: true,
+      isStale: false
+    });
   });
 });

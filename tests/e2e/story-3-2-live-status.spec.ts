@@ -59,6 +59,7 @@ type SeededData = {
   attentionCourseId: string;
   endingSoonCourseId: string;
   therapistId: string;
+  endingSoonTherapistId: string;
   roomIds: string[];
 };
 
@@ -68,8 +69,9 @@ async function loginAsAdmin(page: Page) {
   await login(page, "story32_admin", "Story32!admin");
 }
 
-function summaryTile(region: Locator, label: string, count: number) {
-  return region.locator(":scope > div").filter({ hasText: new RegExp(`${label}\\s*${count}건`) });
+// 티켓 04: 상태별 건수 전체는 객실판 아래 요약 목록의 행이다.
+function summaryRow(region: Locator, label: string, count: number) {
+  return region.locator("dl > div").filter({ hasText: new RegExp(`${label}\\s*${count}건`) });
 }
 
 function kpiTile(region: Locator, label: string, value: string) {
@@ -280,6 +282,32 @@ async function seedStoryData(): Promise<SeededData> {
       isActive: true
     }
   });
+  // 종료임박 콜은 다른 마사지사가 맡는다. 같은 마사지사의 더 늦은 콜이 있으면 앞 콜의 표시 종료가
+  // 그 예약시각으로 당겨져(ADR 0001) 사용중 콜이 종료확인으로 보인다.
+  const endingSoonTherapist = await (prisma as any).employee.upsert({
+    where: { staffCode: "E2E32-THR-002" },
+    update: {
+      displayName: "E2E32 마사지사2",
+      employeeGroup: "THERAPIST",
+      position: "마사지사",
+      shiftType: "전체",
+      baseSalary: 0,
+      employmentStatus: "재직",
+      sortOrder: 93202,
+      isActive: true
+    },
+    create: {
+      staffCode: "E2E32-THR-002",
+      displayName: "E2E32 마사지사2",
+      employeeGroup: "THERAPIST",
+      position: "마사지사",
+      shiftType: "전체",
+      baseSalary: 0,
+      employmentStatus: "재직",
+      sortOrder: 93202,
+      isActive: true
+    }
+  });
   const rate = await (prisma as any).therapistCourseRate.findFirst({ where: { therapistId: therapist.id, courseId: course.id, effectiveFromMonth: monthKey } });
   if (rate) {
     await (prisma as any).therapistCourseRate.update({ where: { id: rate.id }, data: { amount: 700000, effectiveToMonth: null, isActive: true } });
@@ -315,11 +343,20 @@ async function seedStoryData(): Promise<SeededData> {
     attentionCourseId: attentionCourse.id,
     endingSoonCourseId: endingSoonCourse.id,
     therapistId: therapist.id,
+    endingSoonTherapistId: endingSoonTherapist.id,
     roomIds: rooms.map((room: { id: string }) => room.id)
   };
 }
 
-async function createCall(input: { roomId: string; status: string; startTime: string; memo: string; paymentMethodCode?: string; courseId?: string }) {
+async function createCall(input: {
+  roomId: string;
+  status: string;
+  startTime: string;
+  memo: string;
+  paymentMethodCode?: string;
+  courseId?: string;
+  therapistId?: string;
+}) {
   const call = await (prisma as any).serviceCall.create({
     data: {
       operatingMonthId: seededData.openMonthId,
@@ -334,7 +371,7 @@ async function createCall(input: { roomId: string; status: string; startTime: st
     }
   });
   await (prisma as any).serviceCallAssignment.create({
-    data: { serviceCallId: call.id, assignmentRole: "THERAPIST_1", employeeId: seededData.therapistId }
+    data: { serviceCallId: call.id, assignmentRole: "THERAPIST_1", employeeId: input.therapistId ?? seededData.therapistId }
   });
 }
 
@@ -366,7 +403,8 @@ test.describe("Story 3.2 live room and call status", () => {
       status: "사용중",
       startTime: endingSoonStart,
       memo: "Story 3.2 ending soon",
-      courseId: seededData.endingSoonCourseId
+      courseId: seededData.endingSoonCourseId,
+      therapistId: seededData.endingSoonTherapistId
     });
     await (prisma as any).dailyExpense.create({
       data: {
@@ -405,18 +443,21 @@ test.describe("Story 3.2 live room and call status", () => {
     await expect(page.getByText("E2E32 마사지사").first()).toBeVisible();
 
     const statusSummary = page.getByRole("region", { name: "오늘 상태 요약" });
-    await expect(summaryTile(statusSummary, "예약건수", 8)).toBeVisible();
-    await expect(summaryTile(statusSummary, "사용중", 3)).toBeVisible();
-    await expect(summaryTile(statusSummary, "청소중", 1)).toBeVisible();
-    await expect(summaryTile(statusSummary, "방문완료", 1)).toBeVisible();
-    await expect(summaryTile(statusSummary, "노쇼", 1)).toBeVisible();
-    await expect(summaryTile(statusSummary, "취소", 1)).toBeVisible();
+    await expect(summaryRow(statusSummary, "예약건수", 8)).toBeVisible();
+    await expect(summaryRow(statusSummary, "사용중", 3)).toBeVisible();
+    await expect(summaryRow(statusSummary, "청소중", 1)).toBeVisible();
+    await expect(summaryRow(statusSummary, "방문완료", 1)).toBeVisible();
+    await expect(summaryRow(statusSummary, "노쇼", 1)).toBeVisible();
+    await expect(summaryRow(statusSummary, "취소", 1)).toBeVisible();
 
-    const kpi = page.getByRole("region", { name: "오늘 KPI" });
+    // 화면 맨 위 요약 카드: 예약건수·사용중(민트), 결제합계·순매출(라벤더).
+    const kpi = page.getByLabel("오늘 KPI");
+    await expect(kpiTile(kpi, "예약건수", "8건")).toBeVisible();
+    await expect(kpiTile(kpi, "사용중", "3건")).toBeVisible();
     await expect(kpiTile(kpi, "결제합계", "1,500,000 VND")).toBeVisible();
     await expect(kpiTile(kpi, "순매출", "1,400,000 VND")).toBeVisible();
-    await expect(kpi.getByText("코스별 방문완료")).toBeVisible();
-    await expect(kpi.locator("div").filter({ hasText: /A\s*1/ }).first()).toBeVisible();
+    const courses = page.getByRole("region", { name: "코스별 방문완료" });
+    await expect(courses.locator("dl > div").filter({ hasText: /^A\s*1건$/ })).toBeVisible();
     await expect(page.getByLabel("실시간 갱신 상태")).toContainText(/마지막 갱신|갱신 중|갱신 지연/);
 
     await expect(page.getByRole("heading", { name: "콜 원장 그리드" })).toHaveCount(0);

@@ -37,6 +37,17 @@ export function isWithinLiveRefreshWindow(now: Date, timeZone: string = BUSINESS
   return hour >= LIVE_REFRESH_START_HOUR || hour < LIVE_REFRESH_END_HOUR;
 }
 
+/**
+ * 자동 갱신이 멈췄는지(영업 시간 외이거나 화면이 보이지 않음)와 화면이 오래됐는지(갱신 지연).
+ * 멈춘 동안에는 데이터가 오래된 게 정상이므로 갱신 지연으로 보지 않는다.
+ */
+export function roomStatusRefreshState(input: { now: Date; lastUpdatedAt: string; isDocumentVisible: boolean; staleAfterMs: number }) {
+  const isOutsideBusinessHours = !isWithinLiveRefreshWindow(input.now);
+  const isPaused = isOutsideBusinessHours || !input.isDocumentVisible;
+  const isStale = !isPaused && input.now.getTime() - new Date(input.lastUpdatedAt).getTime() > input.staleAfterMs;
+  return { isOutsideBusinessHours, isPaused, isStale };
+}
+
 export function latestRoomStatusUpdatedAt(values: Array<{ updatedAt: string }>, fallbackUpdatedAt: string) {
   if (values.length === 0) return fallbackUpdatedAt;
   return values.reduce((latest, value) => (value.updatedAt > latest ? value.updatedAt : latest), values[0].updatedAt);
