@@ -9,9 +9,11 @@ import {
 } from "@/modules/masters/course-service";
 import { CoursePolicyManager } from "@/app/(erp)/masters/courses/course-forms";
 import { getServerTranslator } from "@/lib/i18n/server";
+import { ActiveCounts } from "@/app/(erp)/masters/master-parts";
+import { MASTER_ITEM_PARAM, countActive, readMasterItem } from "@/app/(erp)/masters/master-view-model";
 import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 
-export default async function CourseMasterPage() {
+export default async function CourseMasterPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const account = await requireRouteAccess("/masters/courses");
   const { locale, t } = await getServerTranslator();
 
@@ -25,18 +27,24 @@ export default async function CourseMasterPage() {
     listOpsMonthlyIncentiveRulesForMonth({ monthKey })
   ]);
   const therapists = employees.filter((employee) => employee.employeeGroup === "THERAPIST");
+  const params = await searchParams;
+  const counts = countActive(courses);
 
   return (
     <div className="screen">
       <ScreenToolbar account={account} locale={locale} path="/masters/courses" title={t("masters.courses.title")} />
-      <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-        <div>{t("masters.courses.meta.baseMonth", { monthKey })}</div>
-        <div>{t("masters.courses.meta.courseCount", { count: courses.length })}</div>
-        <div>{t("masters.courses.meta.therapistRateCount", { count: therapistRates.length })}</div>
+      <div className="mb-6 grid gap-2">
+        <ActiveCounts active={counts.active} inactive={counts.inactive} locale={locale} unit={(count) => t("masters.common.count", { count })} />
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+          <span>{t("masters.courses.meta.baseMonth", { monthKey })}</span>
+          <span>{t("masters.courses.meta.courseCount", { count: courses.length })}</span>
+          <span>{t("masters.courses.meta.therapistRateCount", { count: therapistRates.length })}</span>
+        </div>
       </div>
       <CoursePolicyManager
         courses={courses}
         dailyRules={dailyRules}
+        initialItem={readMasterItem(params[MASTER_ITEM_PARAM])}
         monthlyRules={monthlyRules}
         monthKey={monthKey}
         therapistRates={therapistRates}

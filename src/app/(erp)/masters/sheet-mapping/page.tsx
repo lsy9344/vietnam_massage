@@ -1,4 +1,12 @@
+import Link from "next/link";
 import { StatusBadge } from "@/components/domain/status-badge";
+import { Button } from "@/components/ui/button";
+import { inputFieldClassName } from "@/components/ui/input-field";
+import { StatusIndicator, type StatusTone } from "@/components/ui/status-indicator";
+import { SummaryCard, SummaryCards } from "@/components/ui/summary-card";
+import { Cell, HeadCell, MasterTable } from "@/app/(erp)/masters/master-parts";
+import { MASTER_ITEM_PARAM, readMasterItem } from "@/app/(erp)/masters/master-view-model";
+import { OpenIssueWorkspace, type OpenIssueView } from "@/app/(erp)/masters/sheet-mapping/open-issue-workspace";
 import { canPerform, requireRouteAccess } from "@/lib/authorization";
 import { MigrationIssueStatusForm } from "@/app/(erp)/masters/sheet-mapping/issue-status-form";
 import {
@@ -49,25 +57,28 @@ function issueStatusLabel(t: Translator, status: string) {
   }
 }
 
-function SummaryTile({ label, value, note }: { label: string; value: string; note: string }) {
-  return (
-    <div className="border border-border bg-surface px-4 py-3">
-      <p className="text-xs font-medium text-muted">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-foreground [font-variant-numeric:tabular-nums]">{value}</p>
-      <p className="mt-1 text-xs text-muted">{note}</p>
-    </div>
-  );
-}
+const issueStatusTones: Record<string, StatusTone> = {
+  통과: "success",
+  "재검증 필요": "warning",
+  수정중: "info",
+  미확인: "neutral"
+};
 
 function IssueStatusBadge({ status, label }: { status: string; label: string }) {
-  const className =
-    status === "통과"
-      ? "border-success text-success"
-      : status === "재검증 필요"
-        ? "border-danger text-danger"
-        : "border-border text-foreground";
+  return <StatusIndicator label={label} tone={issueStatusTones[status] ?? "neutral"} />;
+}
 
-  return <span className={`inline-flex border bg-background px-2 py-1 text-xs font-semibold ${className}`}>{label}</span>;
+function kindLabel(t: Translator, kind: string) {
+  switch (kind) {
+    case "sheet_mapping":
+      return t("masters.sheetMapping.kind.sheetMapping");
+    case "calculation_comparison":
+      return t("masters.sheetMapping.kind.calculationComparison");
+    case "manual_risk":
+      return t("masters.sheetMapping.kind.manualRisk");
+    default:
+      return kind;
+  }
 }
 
 function FilterSelect({
@@ -80,36 +91,60 @@ function FilterSelect({
   name: keyof MigrationVerificationFilters;
   label: string;
   value?: string;
-  options: string[];
+  options: Array<{ value: string; label: string }>;
   allLabel: string;
 }) {
+  const id = `sheet-mapping-filter-${name}`;
   return (
-    <label className="grid gap-1 text-xs font-semibold text-muted">
-      {label}
-      <select className="min-w-36 border border-border bg-background px-2 py-2 text-sm font-normal text-foreground" defaultValue={value ?? ""} name={name}>
+    <div className="grid gap-1.5">
+      <label className="text-sm font-semibold text-foreground" htmlFor={id}>
+        {label}
+      </label>
+      <select className={inputFieldClassName({ className: "min-w-36" })} defaultValue={value ?? ""} id={id} name={name}>
         <option value="">{allLabel}</option>
         {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>
-    </label>
+    </div>
   );
 }
 
+const plainOptions = (values: readonly string[]) => values.map((value) => ({ value, label: value }));
+
 function FilterPanel({ filters, sheetOptions, t }: { filters: MigrationVerificationFilters; sheetOptions: string[]; t: Translator }) {
   return (
-    <form className="mb-5 flex flex-wrap items-end gap-3 border border-border bg-surface px-4 py-4" action="/masters/sheet-mapping">
-      <FilterSelect allLabel={t("masters.sheetMapping.filter.all")} label={t("masters.sheetMapping.filter.sheet")} name="sheet" options={sheetOptions} value={filters.sheet} />
-      <FilterSelect allLabel={t("masters.sheetMapping.filter.all")} label={t("masters.sheetMapping.filter.fr")} name="fr" options={["FR-36", "FR-37"]} value={filters.fr} />
-      <FilterSelect allLabel={t("masters.sheetMapping.filter.all")} label={t("masters.sheetMapping.filter.story")} name="story" options={["Story 7.1", "Story 7.2", "Story 7.3"]} value={filters.story} />
-      <FilterSelect allLabel={t("masters.sheetMapping.filter.all")} label={t("masters.sheetMapping.filter.status")} name="status" options={[...migrationVerificationIssueStatuses]} value={filters.status} />
-      <FilterSelect allLabel={t("masters.sheetMapping.filter.all")} label={t("masters.sheetMapping.filter.kind")} name="kind" options={[...migrationVerificationIssueKinds]} value={filters.kind} />
-      <button className="border border-border bg-foreground px-4 py-2 text-sm font-semibold text-background">{t("masters.sheetMapping.filter.apply")}</button>
-      <a className="border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground" href="/masters/sheet-mapping">
-        {t("masters.sheetMapping.filter.reset")}
-      </a>
+    <form className="mb-6 flex flex-wrap items-end gap-4 rounded-lg border border-border bg-surface p-4" action="/masters/sheet-mapping">
+      <FilterSelect allLabel={t("masters.sheetMapping.filter.all")} label={t("masters.sheetMapping.filter.sheet")} name="sheet" options={plainOptions(sheetOptions)} value={filters.sheet} />
+      <FilterSelect allLabel={t("masters.sheetMapping.filter.all")} label={t("masters.sheetMapping.filter.fr")} name="fr" options={plainOptions(["FR-36", "FR-37"])} value={filters.fr} />
+      <FilterSelect allLabel={t("masters.sheetMapping.filter.all")} label={t("masters.sheetMapping.filter.story")} name="story" options={plainOptions(["Story 7.1", "Story 7.2", "Story 7.3"])} value={filters.story} />
+      <FilterSelect
+        allLabel={t("masters.sheetMapping.filter.all")}
+        label={t("masters.sheetMapping.filter.status")}
+        name="status"
+        options={migrationVerificationIssueStatuses.map((status) => ({ value: status, label: issueStatusLabel(t, status) }))}
+        value={filters.status}
+      />
+      <FilterSelect
+        allLabel={t("masters.sheetMapping.filter.all")}
+        label={t("masters.sheetMapping.filter.kind")}
+        name="kind"
+        options={migrationVerificationIssueKinds.map((kind) => ({ value: kind, label: kindLabel(t, kind) }))}
+        value={filters.kind}
+      />
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" variant="secondary">
+          {t("masters.sheetMapping.filter.apply")}
+        </Button>
+        <Link
+          className="inline-flex h-11 items-center rounded-full border border-border px-4 text-sm font-semibold text-foreground transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary"
+          href="/masters/sheet-mapping"
+        >
+          {t("masters.sheetMapping.filter.reset")}
+        </Link>
+      </div>
     </form>
   );
 }
@@ -151,38 +186,41 @@ function VerificationTable({
   ];
 
   return (
-    <section className="mb-5 overflow-x-auto border border-border bg-surface" aria-label={t("masters.sheetMapping.table.aria")}>
-      <table className="w-full min-w-[1100px] border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-border text-left text-xs font-semibold text-muted">
-            <th className="px-4 py-3">source sheet</th>
-            <th className="px-4 py-3">visibility</th>
-            <th className="px-4 py-3">FR / story</th>
-            <th className="px-4 py-3">mapping status</th>
-            <th className="px-4 py-3">calculation status</th>
-            <th className="px-4 py-3">issue status</th>
-            <th className="px-4 py-3">{t("masters.sheetMapping.table.lastNoteChangedAt")}</th>
+    <section aria-label={t("masters.sheetMapping.table.aria")} className="mb-6">
+      <MasterTable
+        head={
+          <>
+            <HeadCell>{t("masters.sheetMapping.table.sourceSheet")}</HeadCell>
+            <HeadCell>{t("masters.sheetMapping.table.visibility")}</HeadCell>
+            <HeadCell>{t("masters.sheetMapping.table.related")}</HeadCell>
+            <HeadCell>{t("masters.sheetMapping.table.mappingStatus")}</HeadCell>
+            <HeadCell>{t("masters.sheetMapping.table.calculationStatus")}</HeadCell>
+            <HeadCell>{t("masters.sheetMapping.table.issueStatus")}</HeadCell>
+            <HeadCell>{t("masters.sheetMapping.table.lastNoteChangedAt")}</HeadCell>
+          </>
+        }
+        label={t("masters.sheetMapping.table.aria")}
+        minWidth="min-w-[68rem]"
+      >
+        {rows.map((row) => (
+          <tr className="align-top transition-colors hover:bg-readonly" key={row.key}>
+            <Cell>
+              <span className="font-semibold text-foreground">{row.sourceSheet}</span>
+            </Cell>
+            <Cell>{row.visibility}</Cell>
+            <Cell>{row.related}</Cell>
+            <Cell>{row.mappingStatus}</Cell>
+            <Cell>{row.calculationStatus}</Cell>
+            <Cell>
+              <IssueStatusBadge label={issueStatusLabel(t, row.issueStatus)} status={row.issueStatus} />
+            </Cell>
+            <Cell muted>
+              <div>{row.note ?? "-"}</div>
+              <div className="mt-1 text-xs">{masterDateTime(locale, row.changedAt)}</div>
+            </Cell>
           </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr className="border-b border-border align-top last:border-0" key={row.key}>
-              <td className="px-4 py-4 font-semibold text-foreground">{row.sourceSheet}</td>
-              <td className="px-4 py-4 text-foreground">{row.visibility}</td>
-              <td className="px-4 py-4 text-foreground">{row.related}</td>
-              <td className="px-4 py-4 text-foreground">{row.mappingStatus}</td>
-              <td className="px-4 py-4 text-foreground">{row.calculationStatus}</td>
-              <td className="px-4 py-4">
-                <IssueStatusBadge label={issueStatusLabel(t, row.issueStatus)} status={row.issueStatus} />
-              </td>
-              <td className="px-4 py-4 text-muted">
-                <div>{row.note ?? "-"}</div>
-                <div className="mt-1 text-xs">{masterDateTime(locale, row.changedAt)}</div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+        ))}
+      </MasterTable>
     </section>
   );
 }
@@ -190,13 +228,9 @@ function VerificationTable({
 function ListBlock({ title, items }: { title: string; items: string[] }) {
   return (
     <div>
-      <p className="text-xs font-semibold text-muted">{title}</p>
-      <ul className="mt-2 space-y-1 text-sm text-foreground">
-        {items.length === 0 ? (
-          <li>-</li>
-        ) : (
-          items.map((item) => <li key={item}>- {item}</li>)
-        )}
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      <ul className="mt-2 grid list-disc gap-1 pl-5 text-sm text-foreground">
+        {items.length === 0 ? <li>-</li> : items.map((item) => <li key={item}>{item}</li>)}
       </ul>
     </div>
   );
@@ -204,15 +238,15 @@ function ListBlock({ title, items }: { title: string; items: string[] }) {
 
 function SheetEvidenceDetails({ rows, t }: { rows: MigrationVerificationSheetRow[]; t: Translator }) {
   return (
-    <section className="mb-5 border border-border bg-surface px-4 py-4" aria-label={t("masters.sheetMapping.evidence.aria")}>
-      <h2 className="text-base font-semibold text-foreground">{t("masters.sheetMapping.evidence.title")}</h2>
-      <div className="mt-3 grid gap-3">
+    <section className="mb-6 grid gap-3" aria-label={t("masters.sheetMapping.evidence.aria")}>
+      <h2 className="text-[0.9375rem] font-semibold text-foreground">{t("masters.sheetMapping.evidence.title")}</h2>
+      <div className="grid gap-2">
         {rows.map((row) => (
-          <details className="border border-border bg-background px-3 py-3" key={row.itemKey}>
-            <summary className="cursor-pointer text-sm font-semibold text-brand underline-offset-4 hover:underline">
+          <details className="rounded-md border border-border bg-surface" key={row.itemKey}>
+            <summary className="flex min-h-11 cursor-pointer items-center rounded-md px-4 text-sm font-semibold text-foreground transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary">
               {t("masters.sheetMapping.evidence.summary", { sheet: row.sourceSheet })}
             </summary>
-            <div className="mt-3 grid gap-4 border-t border-border pt-3 lg:grid-cols-2">
+            <div className="grid gap-4 border-t border-border p-4 lg:grid-cols-2">
               <ListBlock items={row.workbookEvidence} title={t("masters.sheetMapping.evidence.workbook")} />
               <ListBlock items={row.erpSurfaces} title={t("masters.sheetMapping.evidence.erpSurfaces")} />
               <ListBlock items={row.preservedRules} title={t("masters.sheetMapping.evidence.preservedRules")} />
@@ -227,44 +261,52 @@ function SheetEvidenceDetails({ rows, t }: { rows: MigrationVerificationSheetRow
 
 function CalculationDetails({ rows, t }: { rows: MigrationVerificationCalculationRow[]; t: Translator }) {
   return (
-    <section className="mb-5 overflow-x-auto border border-border bg-surface" aria-label={t("masters.sheetMapping.calcDetails.aria")}>
-      <div className="border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-foreground">{t("masters.sheetMapping.calcDetails.title")}</h2>
-      </div>
-      <table className="w-full min-w-[1040px] border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-border text-left text-xs font-semibold text-muted">
-            <th className="px-4 py-3">area</th>
-            <th className="px-4 py-3">fixture</th>
-            <th className="px-4 py-3">{t("masters.sheetMapping.calcDetails.status")}</th>
-            <th className="px-4 py-3">{t("masters.sheetMapping.calcDetails.expected")}</th>
-            <th className="px-4 py-3">{t("masters.sheetMapping.calcDetails.erpActual")}</th>
-            <th className="px-4 py-3">{t("masters.sheetMapping.calcDetails.source")}</th>
+    <section className="mb-6 grid gap-3" aria-label={t("masters.sheetMapping.calcDetails.aria")}>
+      <h2 className="text-[0.9375rem] font-semibold text-foreground">{t("masters.sheetMapping.calcDetails.title")}</h2>
+      <MasterTable
+        head={
+          <>
+            <HeadCell>{t("masters.sheetMapping.calcDetails.area")}</HeadCell>
+            <HeadCell>{t("masters.sheetMapping.calcDetails.fixture")}</HeadCell>
+            <HeadCell>{t("masters.sheetMapping.calcDetails.status")}</HeadCell>
+            <HeadCell>{t("masters.sheetMapping.calcDetails.expected")}</HeadCell>
+            <HeadCell>{t("masters.sheetMapping.calcDetails.erpActual")}</HeadCell>
+            <HeadCell>{t("masters.sheetMapping.calcDetails.source")}</HeadCell>
+          </>
+        }
+        label={t("masters.sheetMapping.calcDetails.title")}
+        minWidth="min-w-[64rem]"
+      >
+        {rows.map((row) => (
+          <tr className="align-top transition-colors hover:bg-readonly" key={row.itemKey}>
+            <Cell>
+              <span className="font-semibold text-foreground">{row.area}</span>
+            </Cell>
+            <Cell>{row.fixtureId}</Cell>
+            <Cell>
+              <IssueStatusBadge
+                label={row.status === "pass" ? t("masters.sheetMapping.status.pass") : t("masters.sheetMapping.calcDetails.unconfirmed")}
+                status={row.status === "pass" ? "통과" : "미확인"}
+              />
+            </Cell>
+            <Cell muted>
+              <span className="block max-w-80 break-words">{formatEvidence(row.expected)}</span>
+            </Cell>
+            <Cell muted>
+              <span className="block max-w-80 break-words">{formatEvidence(row.actual)}</span>
+            </Cell>
+            <Cell muted>
+              <span className="block max-w-80 break-words">{row.sourceReference}</span>
+            </Cell>
           </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr className="border-b border-border align-top last:border-0" key={row.itemKey}>
-              <td className="px-4 py-4 font-semibold text-foreground">{row.area}</td>
-              <td className="px-4 py-4 text-foreground">{row.fixtureId}</td>
-              <td className="px-4 py-4">
-                <IssueStatusBadge
-                  label={row.status === "pass" ? t("masters.sheetMapping.status.pass") : t("masters.sheetMapping.calcDetails.unconfirmed")}
-                  status={row.status === "pass" ? "통과" : "미확인"}
-                />
-              </td>
-              <td className="max-w-80 px-4 py-4 text-muted">{formatEvidence(row.expected)}</td>
-              <td className="max-w-80 px-4 py-4 text-muted">{formatEvidence(row.actual)}</td>
-              <td className="max-w-80 px-4 py-4 text-muted">{row.sourceReference}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+        ))}
+      </MasterTable>
     </section>
   );
 }
 
-function OpenIssueTable({
+/** 열린 추적을 패널이 그대로 그릴 수 있게 번역·서식까지 마친다. 상태 변경 폼은 쓸 수 있는 역할에게만 넣는다. */
+function openIssueViews({
   canWrite,
   issues,
   locale,
@@ -274,60 +316,18 @@ function OpenIssueTable({
   issues: ReturnType<typeof buildMigrationVerificationReport>["openIssueRows"];
   locale: Locale;
   t: Translator;
-}) {
-  return (
-    <section className="mb-5 overflow-x-auto border border-border bg-surface" aria-label={t("masters.sheetMapping.openIssue.aria")}>
-      <div className="border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-foreground">{t("masters.sheetMapping.openIssue.title")}</h2>
-      </div>
-      <table className="w-full min-w-[1040px] border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-border text-left text-xs font-semibold text-muted">
-            <th className="px-4 py-3">{t("masters.sheetMapping.openIssue.item")}</th>
-            <th className="px-4 py-3">{t("masters.sheetMapping.openIssue.status")}</th>
-            <th className="px-4 py-3">{t("masters.sheetMapping.openIssue.expected")}</th>
-            <th className="px-4 py-3">{t("masters.sheetMapping.openIssue.erpActual")}</th>
-            <th className="px-4 py-3">{t("masters.sheetMapping.openIssue.handlerNote")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {issues.length === 0 ? (
-            <tr>
-              <td className="px-4 py-6 text-sm font-medium text-foreground" colSpan={5}>
-                {t("masters.sheetMapping.openIssue.empty")}
-              </td>
-            </tr>
-          ) : (
-            issues.map((issue) => (
-              <tr className="border-b border-border align-top last:border-0" key={issue.itemKey}>
-                <td className="px-4 py-4">
-                  <p className="font-semibold text-foreground">{issue.summary}</p>
-                  <p className="mt-1 text-xs text-muted">
-                    {issue.itemKey} · {issue.relatedRequirement ?? "-"} · {issue.relatedStory ?? "-"}
-                  </p>
-                </td>
-                <td className="px-4 py-4">
-                  <IssueStatusBadge label={issueStatusLabel(t, issue.status)} status={issue.status} />
-                </td>
-                <td className="max-w-72 px-4 py-4 text-muted">{formatEvidence(issue.expected)}</td>
-                <td className="max-w-72 px-4 py-4 text-muted">{formatEvidence(issue.actual)}</td>
-                <td className="px-4 py-4">
-                  {canWrite ? (
-                    <MigrationIssueStatusForm issue={issue} />
-                  ) : (
-                    <div className="text-muted">
-                      <div>{issue.lastNote ?? "-"}</div>
-                      <div className="mt-1 text-xs">{masterDateTime(locale, issue.lastChangedAt)}</div>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </section>
-  );
+}): OpenIssueView[] {
+  return issues.map((issue) => ({
+    itemKey: issue.itemKey,
+    summary: issue.summary,
+    related: `${issue.relatedRequirement ?? "-"} / ${issue.relatedStory ?? "-"}`,
+    status: { label: issueStatusLabel(t, issue.status), tone: issueStatusTones[issue.status] ?? "neutral" },
+    expected: formatEvidence(issue.expected),
+    actual: formatEvidence(issue.actual),
+    lastNote: issue.lastNote ?? "-",
+    changedAt: masterDateTime(locale, issue.lastChangedAt),
+    form: canWrite ? <MigrationIssueStatusForm issue={issue} /> : null
+  }));
 }
 
 export default async function SheetMappingPage({ searchParams }: { searchParams: Promise<SheetMappingSearchParams> }) {
@@ -340,61 +340,70 @@ export default async function SheetMappingPage({ searchParams }: { searchParams:
   const canWrite = canPerform(account.role, "migration:write");
   const hiddenListRow = report.sheetRows.find((row) => row.sourceSheet === "목록");
   const hiddenListMapped = hiddenListRow?.mappingStatus === "mapped";
+  const count = (value: number) => formatNumber(locale, value);
 
   return (
     <div className="screen">
       <ScreenToolbar account={account} locale={locale} path="/masters/sheet-mapping" title={t("masters.sheetMapping.title")} />
-      <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-        <div>{t("masters.sheetMapping.meta.preservationGoal")}</div>
-        <div>{t("masters.sheetMapping.meta.generatedAt", { value: masterDateTime(locale, report.generatedAt) })}</div>
-        <div>{canWrite ? t("masters.sheetMapping.meta.canWrite") : t("masters.sheetMapping.meta.readOnly")}</div>
-        <div>{t("masters.sheetMapping.meta.noWriteNote")}</div>
+      <div className="mb-6 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+        <span>{t("masters.sheetMapping.meta.preservationGoal")}</span>
+        <span>{t("masters.sheetMapping.meta.generatedAt", { value: masterDateTime(locale, report.generatedAt) })}</span>
+        <span>{canWrite ? t("masters.sheetMapping.meta.canWrite") : t("masters.sheetMapping.meta.readOnly")}</span>
+        <span>{t("masters.sheetMapping.meta.noWriteNote")}</span>
       </div>
 
-      <section className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5" aria-label={t("masters.sheetMapping.summary.aria")}>
-        <SummaryTile
+      <SummaryCards className="mb-6" label={t("masters.sheetMapping.summary.aria")}>
+        <SummaryCard
+          accent="mint"
           label={t("masters.sheetMapping.summary.preservationRate")}
           note={report.summary.preservationGoalMet ? t("masters.sheetMapping.summary.goalMet") : t("masters.sheetMapping.summary.goalNotMet")}
-          value={`${formatNumber(locale, report.summary.preservationRate)}${t("masters.sheetMapping.percentSuffix")}`}
+          value={`${count(report.summary.preservationRate)}${t("masters.sheetMapping.percentSuffix")}`}
         />
-        <SummaryTile
+        <SummaryCard
+          accent="mint"
           label={t("masters.sheetMapping.summary.missingItems")}
           note={t("masters.sheetMapping.summary.missingItemsNote")}
-          value={`${formatNumber(locale, report.summary.missingSheetCount)}${t("masters.sheetMapping.countSuffix")}`}
+          value={`${count(report.summary.missingSheetCount)}${t("masters.sheetMapping.countSuffix")}`}
         />
-        <SummaryTile
-          label={t("masters.sheetMapping.summary.calcPass")}
-          note={t("masters.sheetMapping.summary.calcPassNote", { status: report.summary.coreCalculationStatus })}
-          value={`${formatNumber(locale, report.summary.calculationPassCount)}${t("masters.sheetMapping.countSuffix")}`}
-        />
-        <SummaryTile
+        <SummaryCard
+          accent="mint"
           label={t("masters.sheetMapping.summary.calcMismatch")}
-          note={t("masters.sheetMapping.summary.calcMismatchNote")}
-          value={`${formatNumber(locale, report.summary.calculationMismatchCount)}${t("masters.sheetMapping.countSuffix")}`}
+          note={t("masters.sheetMapping.summary.calcPassLine", {
+            count: count(report.summary.calculationPassCount),
+            status: report.summary.coreCalculationStatus
+          })}
+          value={`${count(report.summary.calculationMismatchCount)}${t("masters.sheetMapping.countSuffix")}`}
         />
-        <SummaryTile
+        <SummaryCard
+          accent="mint"
           label={t("masters.sheetMapping.summary.openIssues")}
           note={t("masters.sheetMapping.summary.openIssuesNote")}
-          value={`${formatNumber(locale, report.summary.openIssueCount)}${t("masters.sheetMapping.countSuffix")}`}
+          value={`${count(report.summary.openIssueCount)}${t("masters.sheetMapping.countSuffix")}`}
         />
-      </section>
+      </SummaryCards>
 
       <section
-        className={`mb-5 border px-4 py-4 ${hiddenListMapped ? "border-border bg-surface" : "border-danger bg-surface"}`}
+        className={`mb-6 grid gap-2 rounded-lg border bg-surface p-4 ${hiddenListMapped ? "border-border" : "border-danger"}`}
         role={hiddenListMapped ? "status" : "alert"}
       >
-        <h2 className="text-base font-semibold text-foreground">{t("masters.sheetMapping.gate.title")}</h2>
-        <p className="mt-2 text-sm text-muted">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-[0.9375rem] font-semibold text-foreground">{t("masters.sheetMapping.gate.title")}</h2>
+          <StatusIndicator
+            label={hiddenListMapped ? t("masters.sheetMapping.mapping.mapped") : t("masters.sheetMapping.mapping.missing")}
+            tone={hiddenListMapped ? "success" : "danger"}
+          />
+        </div>
+        <p className="text-sm text-muted">
           {t("masters.sheetMapping.gate.description", {
             status: hiddenListMapped ? t("masters.sheetMapping.mapping.mapped") : t("masters.sheetMapping.mapping.missing")
           })}
         </p>
       </section>
 
-      <section className="mb-5 border border-border bg-surface px-4 py-4" aria-label={t("masters.sheetMapping.statusTokens.aria")}>
+      <section className="mb-6 rounded-lg border border-border bg-surface p-4" aria-label={t("masters.sheetMapping.statusTokens.aria")}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-foreground">{t("masters.sheetMapping.statusTokens.title")}</h2>
+            <h2 className="text-[0.9375rem] font-semibold text-foreground">{t("masters.sheetMapping.statusTokens.title")}</h2>
             <p className="mt-1 text-sm text-muted">{t("masters.sheetMapping.statusTokens.description")}</p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -414,7 +423,10 @@ export default async function SheetMappingPage({ searchParams }: { searchParams:
       <VerificationTable calculationRows={report.calculationRows} locale={locale} sheetRows={report.sheetRows} t={t} />
       <SheetEvidenceDetails rows={report.sheetRows} t={t} />
       <CalculationDetails rows={report.calculationRows} t={t} />
-      <OpenIssueTable canWrite={canWrite} issues={report.openIssueRows} locale={locale} t={t} />
+      <OpenIssueWorkspace
+        initialItem={readMasterItem(params[MASTER_ITEM_PARAM])}
+        issues={openIssueViews({ canWrite, issues: report.openIssueRows, locale, t })}
+      />
     </div>
   );
 }

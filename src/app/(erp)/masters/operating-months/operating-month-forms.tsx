@@ -1,141 +1,206 @@
 "use client";
 
-import { useActionState } from "react";
+import Link from "next/link";
+import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DetailRow } from "@/components/ui/detail-row";
+import { ModalPanel, SidePanel } from "@/components/ui/panel";
+import { StatusIndicator } from "@/components/ui/status-indicator";
 import type { OperatingMonthDto } from "@/modules/masters/operating-month-service";
 import {
   changeOperatingMonthStatusAction,
   createOperatingMonthAction,
   type OperatingMonthActionState
 } from "@/app/(erp)/masters/operating-months/actions";
+import { lifecycleSteps, operatingMonthTone } from "@/app/(erp)/masters/operating-months/operating-month-lifecycle";
+import { SaveRow, TextField } from "@/app/(erp)/masters/master-fields";
+import { Cell, HeadCell, ImpactNotice, MasterSectionHeading, MasterTable, PanelSection, masterDateTime } from "@/app/(erp)/masters/master-parts";
+import { MasterSplit, SelectableRow, useMasterSelection, useSelectCreatedItem } from "@/app/(erp)/masters/master-workspace";
 import { useLocale, useT } from "@/lib/i18n/client";
-import { formatDateTime } from "@/lib/i18n/format";
 import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
+import { findScreenRoute, screenHref } from "@/lib/routes";
+import { cn } from "@/lib/utils";
+
+/** 도구줄의 주요 행동: 새 운영월을 만드는 서랍. 만든 운영월을 바로 골라 패널에 연다. */
+export function CreateOperatingMonthPanel() {
+  const t = useT();
+  const selectCreated = useSelectCreatedItem();
+  const [open, setOpen] = useState(false);
+  const [state, formAction, pending] = useActionState<OperatingMonthActionState, FormData>(async (previous, formData) => {
+    const result = await createOperatingMonthAction(previous, formData);
+    if (result?.ok) {
+      setOpen(false);
+      selectCreated(result.data.id);
+    }
+    return result;
+  }, null);
+
+  return (
+    <ModalPanel
+      description={t("masters.operatingMonths.meta.defaultStatus")}
+      onOpenChange={setOpen}
+      open={open}
+      title={t("masters.operatingMonths.create")}
+      trigger={<Button>{t("masters.operatingMonths.create")}</Button>}
+    >
+      <form action={formAction} className="grid gap-4">
+        <TextField
+          hint={t("masters.operatingMonths.createHelp")}
+          label={t("masters.operatingMonths.newMonth")}
+          name="monthKey"
+          pattern="[0-9]{4}-(0[1-9]|1[0-2])"
+          placeholder="YYYY-MM"
+          required
+          state={state}
+        />
+        <SaveRow label={t("masters.operatingMonths.create")} pending={pending} primary state={state} />
+      </form>
+    </ModalPanel>
+  );
+}
 
 function StatusChangeForm({ month }: { month: OperatingMonthDto }) {
   const t = useT();
-  const [state, formAction, pending] = useActionState<OperatingMonthActionState, FormData>(
-    changeOperatingMonthStatusAction,
-    null
-  );
+  const [state, formAction, pending] = useActionState<OperatingMonthActionState, FormData>(changeOperatingMonthStatusAction, null);
 
   return (
-    <form action={formAction} className="grid gap-1">
+    <form action={formAction} className="grid gap-3">
       <input name="monthKey" type="hidden" value={month.monthKey} />
       <input name="status" type="hidden" value="검토중" />
-      <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant="secondary">
-        {t("masters.operatingMonths.changeToReview")}
-      </Button>
-      {state && !state.ok ? <span className="text-xs text-danger">{state.formError}</span> : null}
+      <p className="text-sm text-muted">{t("masters.operatingMonths.changeToReviewNote")}</p>
+      <SaveRow label={t("masters.operatingMonths.changeToReview")} pending={pending} state={state} />
     </form>
   );
 }
 
+function LifecycleSteps({ status }: { status: string }) {
+  const t = useT();
+  const locale = useLocale();
+  return (
+    <ol aria-label={t("masters.operatingMonths.lifecycle")} className="flex flex-wrap items-center gap-2">
+      {lifecycleSteps(status).map((step, index) => (
+        <li
+          aria-current={step.state === "current" ? "step" : undefined}
+          className={cn(
+            "inline-flex min-h-7 items-center gap-1.5 rounded-full px-2.5 text-sm",
+            step.state === "current" && "bg-brand font-semibold text-brand-foreground",
+            step.state === "done" && "border border-border text-foreground",
+            step.state === "upcoming" && "border border-dashed border-border-strong text-muted"
+          )}
+          key={step.status}
+        >
+          <span aria-hidden="true">{index + 1}</span>
+          {operatingMonthStatusLabel(locale, step.status)}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function OperatingMonthPanel({ month, onClose }: { month: OperatingMonthDto; onClose: () => void }) {
+  const t = useT();
+  const locale = useLocale();
+  const closingRoute = findScreenRoute("/closing");
+
+  return (
+    <SidePanel onClose={onClose} title={month.monthKey}>
+      <div className="grid gap-6" key={month.id}>
+        <PanelSection title={t("masters.operatingMonths.lifecycle")}>
+          <LifecycleSteps status={month.status} />
+        </PanelSection>
+        <ImpactNotice
+          items={[t("masters.operatingMonths.impact.review"), t("masters.operatingMonths.impact.closing")]}
+          locale={locale}
+        />
+        {month.status === "작성중" ? (
+          <StatusChangeForm month={month} />
+        ) : (
+          <div className="grid justify-items-start gap-3">
+            <p className="text-sm text-muted">{t("masters.operatingMonths.nextStepOnClosing")}</p>
+            {closingRoute ? (
+              <Link className="screen-step" href={screenHref(closingRoute, { operatingMonthId: month.id, date: null })}>
+                {t("masters.operatingMonths.openClosing")}
+              </Link>
+            ) : null}
+          </div>
+        )}
+        <PanelSection title={t("masters.common.details")}>
+          <dl>
+            <DetailRow label={t("masters.operatingMonths.column.startDate")} value={month.startDate} />
+            <DetailRow label={t("masters.operatingMonths.column.endDate")} value={month.endDate} />
+            <DetailRow label={t("masters.common.createdAt")} value={masterDateTime(locale, month.createdAt)} />
+            <DetailRow label={t("masters.common.updatedAt")} value={masterDateTime(locale, month.updatedAt)} />
+          </dl>
+        </PanelSection>
+      </div>
+    </SidePanel>
+  );
+}
+
+/** 운영월 목록과, 고른 운영월의 단계·변경 영향·검토 시작 패널. 운영월은 지우거나 비활성으로 두지 않는다. */
 export function OperatingMonthManager({
   highlightedMonthKey,
-  months
+  months,
+  initialItem
 }: {
   highlightedMonthKey: string | null;
   months: OperatingMonthDto[];
+  initialItem: string | null;
 }) {
   const t = useT();
   const locale = useLocale();
-  const [createState, createAction, createPending] = useActionState<OperatingMonthActionState, FormData>(
-    createOperatingMonthAction,
-    null
-  );
+  const { selected, select, panelRef } = useMasterSelection(initialItem);
+  const selectedMonth = months.find((month) => month.id === selected) ?? null;
 
   return (
-    <>
-      <form
-        action={createAction}
-        className="mb-4 grid grid-cols-1 items-end gap-3 border border-border bg-surface p-3 lg:grid-cols-[220px_auto]"
-      >
-        <label className="grid gap-1 text-xs font-semibold text-muted">
-          {t("masters.operatingMonths.newMonth")}
-          <input
-            className="h-9 border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-brand"
-            name="monthKey"
-            pattern="[0-9]{4}-(0[1-9]|1[0-2])"
-            placeholder="YYYY-MM"
-            required
-          />
-        </label>
-        <div className="flex items-center gap-3">
-          <Button className="h-9" disabled={createPending} type="submit">
-            {t("masters.operatingMonths.create")}
-          </Button>
-          <span className="text-xs text-muted">{t("masters.operatingMonths.createHelp")}</span>
-        </div>
-        {createState && !createState.ok ? (
-          <div className="lg:col-span-2 border border-danger bg-surface px-3 py-2 text-sm text-danger">
-            {createState.fieldErrors?.monthKey?.map((error) => <div key={error}>{error}</div>)}
-            {createState.formError ? <div>{createState.formError}</div> : null}
-          </div>
-        ) : null}
-      </form>
-
-      <section className="border border-border bg-surface">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h2 className="text-base font-semibold text-foreground">{t("masters.operatingMonths.listTitle")}</h2>
-          <span className="text-xs text-muted">{t("masters.common.displayCount", { count: months.length })}</span>
-        </div>
-
+    <MasterSplit
+      hint={t("masters.operatingMonths.panelHint")}
+      panel={selectedMonth ? <OperatingMonthPanel month={selectedMonth} onClose={() => select(null)} /> : null}
+      panelRef={panelRef}
+    >
+      <section aria-labelledby="operating-months-title" className="grid gap-3">
+        <MasterSectionHeading count={t("masters.common.count", { count: months.length })} id="operating-months-title" title={t("masters.operatingMonths.listTitle")} />
         {months.length === 0 ? (
-          <div className="px-4 py-10 text-center text-sm text-muted">{t("masters.operatingMonths.empty")}</div>
+          <p className="rounded-md border border-dashed border-border-strong bg-surface px-4 py-6 text-sm text-muted">{t("masters.operatingMonths.empty")}</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1040px] border-collapse text-left text-sm">
-              <thead className="bg-readonly text-xs font-semibold text-muted">
-                <tr>
-                  <th className="w-32 border-b border-border px-3 py-2">{t("masters.operatingMonths.column.month")}</th>
-                  <th className="w-32 border-b border-border px-3 py-2">{t("masters.operatingMonths.column.startDate")}</th>
-                  <th className="w-32 border-b border-border px-3 py-2">{t("masters.operatingMonths.column.endDate")}</th>
-                  <th className="w-32 border-b border-border px-3 py-2">{t("masters.operatingMonths.column.currentStatus")}</th>
-                  <th className="w-44 border-b border-border px-3 py-2">{t("masters.common.createdAt")}</th>
-                  <th className="w-44 border-b border-border px-3 py-2">{t("masters.common.updatedAt")}</th>
-                  <th className="border-b border-border px-3 py-2">{t("masters.common.actions")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {months.map((month) => {
-                  const highlighted = highlightedMonthKey === month.monthKey;
-                  return (
-                    <tr className={highlighted ? "bg-readonly align-top" : "align-top"} key={month.id}>
-                      <td className="border-b border-border px-3 py-2 font-semibold">
-                        <div className="flex items-center gap-2">
-                          <span>{month.monthKey}</span>
-                          {highlighted ? (
-                            <span className="rounded-sm bg-brand px-2 py-1 text-xs font-semibold text-white">
-                              {t("masters.operatingMonths.selectedBasis")}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="border-b border-border px-3 py-2">{month.startDate}</td>
-                      <td className="border-b border-border px-3 py-2">{month.endDate}</td>
-                      <td className="border-b border-border px-3 py-2">{operatingMonthStatusLabel(locale, month.status)}</td>
-                      <td className="border-b border-border px-3 py-2 text-xs text-muted">
-                        {formatDateTime(locale, month.createdAt, { dateStyle: "short", timeStyle: "short" })}
-                      </td>
-                      <td className="border-b border-border px-3 py-2 text-xs text-muted">
-                        {formatDateTime(locale, month.updatedAt, { dateStyle: "short", timeStyle: "short" })}
-                      </td>
-                      <td className="border-b border-border px-3 py-2">
-                        {month.status === "작성중" ? (
-                          <StatusChangeForm month={month} />
-                        ) : (
-                          <span className="text-xs text-muted">{t("masters.operatingMonths.noActionInScope")}</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <MasterTable
+            head={
+              <>
+                <HeadCell>{t("masters.operatingMonths.column.month")}</HeadCell>
+                <HeadCell>{t("masters.operatingMonths.column.startDate")}</HeadCell>
+                <HeadCell>{t("masters.operatingMonths.column.endDate")}</HeadCell>
+                <HeadCell>{t("masters.operatingMonths.column.currentStatus")}</HeadCell>
+              </>
+            }
+            label={t("masters.operatingMonths.listTitle")}
+            minWidth="min-w-[32rem]"
+          >
+            {months.map((month) => (
+              <SelectableRow
+                key={month.id}
+                label={
+                  <span className="inline-flex items-center gap-2">
+                    {month.monthKey}
+                    {highlightedMonthKey === month.monthKey ? (
+                      <span className="inline-flex h-7 items-center rounded-full border border-border bg-surface-float px-2.5 text-xs font-semibold text-foreground">
+                        {t("masters.operatingMonths.selectedBasis")}
+                      </span>
+                    ) : null}
+                  </span>
+                }
+                onSelect={(viaKeyboard) => select(month.id, viaKeyboard)}
+                selected={month.id === selected}
+              >
+                <Cell>{month.startDate}</Cell>
+                <Cell>{month.endDate}</Cell>
+                <Cell>
+                  <StatusIndicator label={operatingMonthStatusLabel(locale, month.status)} tone={operatingMonthTone(month.status)} />
+                </Cell>
+              </SelectableRow>
+            ))}
+          </MasterTable>
         )}
       </section>
-    </>
+    </MasterSplit>
   );
 }

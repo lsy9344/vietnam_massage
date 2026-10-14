@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { openMasterPanelByRowText } from "./support/masters";
 
 
 const users = [
@@ -133,9 +134,9 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await expect.poll(async () => (prisma as any).employee.count({ where: { employeeGroup: "EARCARE", staffCode: { startsWith: "EAR-" } } })).toBe(4);
     await expect.poll(async () => (prisma as any).employee.count({ where: { employeeGroup: "THERAPIST", staffCode: { startsWith: "THR-" } } })).toBe(50);
 
-    // 범위를 section이 아니라 form으로 좁힌다. section은 생성 폼과 직원 테이블을
-    // 모두 포함해, getByLabel("그룹")이 테이블 행의 인라인 <select>까지 매칭(strict 위반)한다.
-    const createForm = page.locator("form").filter({ has: page.getByRole("button", { name: "직원 생성" }) });
+    // 티켓 07: 직원 생성은 도구줄의 서랍이다. 범위를 서랍 안으로 좁힌다.
+    await page.getByRole("button", { name: "직원 생성" }).click();
+    const createForm = page.getByRole("dialog", { name: "직원 생성" });
     await createForm.getByLabel("이름").fill("테스트 직원");
     await createForm.getByLabel("staff code").fill(staffCode);
     await createForm.getByLabel("그룹").selectOption("OPERATIONS");
@@ -156,11 +157,12 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
 
     const created = await findEmployeeByStaffCode(staffCode);
     expect(created).toMatchObject({ displayName: "테스트 직원", staffCode, isActive: true });
-
-    await expect(row.getByText(`직원 ID: ${created.id}`)).toBeVisible();
-    await row.getByLabel("표시명").fill("테스트 직원 변경");
-    await row.getByRole("button", { name: "프로필 저장" }).click();
-    await expect(row.getByLabel("표시명")).toHaveValue("테스트 직원 변경");
+    // 프로필·계정 연결·비활성 처리는 직원 행을 고르면 열리는 패널에 있다.
+    const panel = await openMasterPanelByRowText(page, staffCode);
+    await expect(panel.getByText(created.id)).toBeVisible();
+    await panel.getByLabel("표시명").fill("테스트 직원 변경");
+    await panel.getByRole("button", { name: "프로필 저장" }).click();
+    await expect(panel.getByLabel("표시명")).toHaveValue("테스트 직원 변경");
     // 비제어 input의 toHaveValue는 내가 채운 값이라 즉시 통과하므로 server action 반영을 보장하지 못한다.
     // revalidate 후 DB가 갱신되기를 폴링해 이후 단언이 stale row를 읽지 않게 한다.
     await expect
@@ -169,16 +171,16 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     const renamed = await findEmployeeByStaffCode(staffCode);
     expect(renamed).toMatchObject({ id: created.id, displayName: "테스트 직원 변경", staffCode });
 
-    await row.getByLabel("계정 ID").fill(linkedAccountId);
-    await row.getByLabel("이메일").fill(linkedEmail);
-    await row.getByLabel("역할").selectOption("counter");
-    await row.getByLabel("초기 비밀번호").fill("Story17!linked");
-    await row.getByRole("button", { name: "계정 연결" }).click();
+    await panel.getByLabel("계정 ID").fill(linkedAccountId);
+    await panel.getByLabel("이메일").fill(linkedEmail);
+    await panel.getByLabel("역할").selectOption("counter");
+    await panel.getByLabel("초기 비밀번호").fill("Story17!linked");
+    await panel.getByRole("button", { name: "계정 연결" }).click();
     // 계정 연결 server action 완료를 DB 폴링으로 먼저 확정해 revalidate race를 제거한다.
     await expect.poll(async () => (await (prisma as any).userAccount.findUnique({ where: { accountId: linkedAccountId }, select: { role: true } }))?.role).toBe("counter");
     // 역할은 화면에 한국어 라벨("카운터")로 표시된다. 라벨만으로는 역할 <select>의 selected option과
     // 겹쳐 strict 위반이 나므로, 계정 연결 결과는 "현재 역할: " 접두사가 붙은 표시 div로 확인한다.
-    await expect(row.getByText("현재 역할: 카운터")).toBeVisible();
+    await expect(panel.getByText("현재 역할: 카운터")).toBeVisible();
     const linkedAccount = await (prisma as any).userAccount.findUnique({
       where: { accountId: linkedAccountId },
       select: { employeeId: true, role: true, isActive: true }
@@ -190,14 +192,14 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await expect(linkedPage).toHaveURL(/\/calls/);
     await linkedPage.close();
 
-    await row.getByRole("button", { name: "비활성 처리" }).click();
+    await panel.getByRole("button", { name: "비활성 처리" }).click();
     // 비활성 server action 완료를 DB 폴링으로 확정한다(서버 진실).
     await expect.poll(async () => (await findEmployeeByStaffCode(staffCode))?.isActive).toBe(false);
     // goto로 RSC를 안전하게 재조회한 뒤 UI 신호를 확인한다("비활성"은 "비활성 처리" 버튼에도 매칭되는
     // 거짓 양성이므로, 비활성 시 버튼이 대체되는 "이미 비활성" 텍스트로 확인 — employee-forms.tsx).
     await page.goto("/masters/employees");
-    const deactivatedRow = page.locator("tbody tr").filter({ hasText: staffCode });
-    await expect(deactivatedRow.getByText("이미 비활성")).toBeVisible();
+    const deactivatedPanel = await openMasterPanelByRowText(page, staffCode);
+    await expect(deactivatedPanel.getByText("이미 비활성")).toBeVisible();
     const deactivated = await findEmployeeByStaffCode(staffCode);
     expect(deactivated).toMatchObject({ id: created.id, staffCode, isActive: false });
     const accountAfterEmployeeDeactivate = await (prisma as any).userAccount.findUnique({
@@ -218,9 +220,9 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await login(page, "story17_administrator", "Story17!administrator");
     await page.goto("/masters/employees");
 
-    // 범위를 section이 아니라 form으로 좁힌다. section은 생성 폼과 직원 테이블을
-    // 모두 포함해, getByLabel("그룹")이 테이블 행의 인라인 <select>까지 매칭(strict 위반)한다.
-    const createForm = page.locator("form").filter({ has: page.getByRole("button", { name: "직원 생성" }) });
+    // 티켓 07: 직원 생성은 도구줄의 서랍이다. 실패하면 서랍이 열린 채 이유를 보인다.
+    await page.getByRole("button", { name: "직원 생성" }).click();
+    const createForm = page.getByRole("dialog", { name: "직원 생성" });
     await createForm.getByLabel("이름").fill("오류 직원");
     await createForm.getByLabel("staff code").fill("bad-code");
     await createForm.getByLabel("그룹").selectOption("OPERATIONS");
@@ -242,12 +244,13 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await createForm.getByLabel("정렬 순서").fill("9801");
     await createForm.getByRole("button", { name: "직원 생성" }).click();
     await expect(page.getByText("이미 사용 중인 staff code입니다.")).toBeVisible();
+    await page.keyboard.press("Escape");
 
-    const row = page.locator("tbody tr").filter({ hasText: "OPS-COUNTER-NIGHT-001" });
-    await row.getByLabel("계정 ID").fill(`story17_no_secret_${suffix}`);
-    await row.getByLabel("이메일").fill(`story17_no_secret_${suffix}@example.local`);
-    await row.getByLabel("역할").selectOption("counter");
-    await row.getByRole("button", { name: "계정 연결" }).click();
+    const panel = await openMasterPanelByRowText(page, "OPS-COUNTER-NIGHT-001");
+    await panel.getByLabel("계정 ID").fill(`story17_no_secret_${suffix}`);
+    await panel.getByLabel("이메일").fill(`story17_no_secret_${suffix}@example.local`);
+    await panel.getByLabel("역할").selectOption("counter");
+    await panel.getByRole("button", { name: "계정 연결" }).click();
     await expect(page.getByText("새 계정을 만들려면 초기 비밀번호가 필요합니다.")).toBeVisible();
   });
 

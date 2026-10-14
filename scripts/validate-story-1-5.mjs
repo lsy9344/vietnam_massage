@@ -202,8 +202,9 @@ for (const required of [
   "402 호실",
   "1번방",
   "표시명",
-  "roomRowByDisplayValue",
-  "getByDisplayValue",
+  // 티켓 07: 목록은 읽기 전용이고 편집 칸은 행을 고르면 열리는 패널에 있다.
+  "masterRow",
+  "openMasterPanel",
   "비활성 처리",
   "room.display_name_changed",
   "room.deactivated",

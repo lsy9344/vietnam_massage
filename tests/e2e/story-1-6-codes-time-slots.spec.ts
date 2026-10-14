@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { masterPanel, masterRow, openMasterPanel } from "./support/masters";
 
 
 const codeAuditActions = [
@@ -157,10 +158,6 @@ async function getTimeSlot(value: string) {
   return slot as { id: string; value: string; sortOrder: number; isActive: boolean };
 }
 
-function rowByDisplayValue(page: import("@playwright/test").Page, value: string) {
-  return page.locator("tbody tr").filter({ has: page.locator(`input[value="${value}"]`) });
-}
-
 test.describe("Story 1.6 코드와 시간 슬롯 관리", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -201,11 +198,12 @@ test.describe("Story 1.6 코드와 시간 슬롯 관리", () => {
       await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
     }
     for (const value of ["예약", "사용중", "청소중", "방문완료", "노쇼", "취소", "현금", "카드", "계좌", "기타", "일주일내방문", "생일자", "후기작성", "정상", "휴무", "지각", "조퇴", "결근", "Y", "N", "11:00", "01:00"]) {
-      await expect(page.locator(`input[value="${value}"]`).first()).toBeVisible();
+      // 티켓 07: 목록은 읽기 전용이고 표시명·시간 슬롯 값은 행의 첫 칸 버튼이다.
+      await expect(page.getByRole("button", { name: value, exact: true }).first()).toBeVisible();
     }
-    await expect(page.locator('input[value="01:30"]')).toHaveCount(0);
-    await expect(page.locator('input[value="02:00"]')).toHaveCount(0);
-    await expect(page.locator('input[value="02:30"]')).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "01:30", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "02:00", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "02:30", exact: true })).toHaveCount(0);
 
     const slots = await (prisma as any).timeSlot.findMany({ orderBy: { sortOrder: "asc" } });
     expect(slots.map((slot: { value: string }) => slot.value)).toEqual([...defaultTimeSlotValues]);
@@ -221,10 +219,13 @@ test.describe("Story 1.6 코드와 시간 슬롯 관리", () => {
     await page.goto("/masters/codes");
 
     const before = await getCodeItem("PAYMENT_METHOD", "CASH");
-    const row = rowByDisplayValue(page, "현금");
-    await row.locator('input[name="displayName"]').fill("현금 결제");
-    await row.getByRole("button", { name: "저장" }).click();
-    await expect(rowByDisplayValue(page, "현금 결제")).toContainText(`고유 ID: ${before.id}`);
+    const panel = await openMasterPanel(page, "현금");
+    await panel.getByLabel("표시명").fill("현금 결제");
+    await panel.getByRole("button", { name: "저장" }).click();
+    // 새 표시명의 행을 골라 연 패널에 원래 고유 ID가 있어야 같은 코드다.
+    const renamedPanel = await openMasterPanel(page, "현금 결제");
+    await expect(renamedPanel.getByRole("heading", { name: "현금 결제" })).toBeVisible();
+    await expect(renamedPanel).toContainText(before.id);
 
     const after = await getCodeItem("PAYMENT_METHOD", "CASH");
     expect(after.id).toBe(before.id);
@@ -242,9 +243,9 @@ test.describe("Story 1.6 코드와 시간 슬롯 관리", () => {
     await page.goto("/masters/codes");
 
     const card = await getCodeItem("PAYMENT_METHOD", "CARD");
-    const row = rowByDisplayValue(page, "카드");
-    await row.locator('input[name="sortOrder"]').fill("10");
-    await row.getByRole("button", { name: "적용" }).click();
+    const panel = await openMasterPanel(page, "카드");
+    await panel.getByLabel("정렬 순서").fill("10");
+    await panel.getByRole("button", { name: "적용" }).click();
 
     await expect(page.getByText("같은 코드 유형에서 정렬 순서가 이미 사용 중입니다.")).toBeVisible();
     const after = await getCodeItem("PAYMENT_METHOD", "CARD");
@@ -256,16 +257,22 @@ test.describe("Story 1.6 코드와 시간 슬롯 관리", () => {
     await login(page, "story16_administrator", "Story16!administrator");
     await page.goto("/masters/codes");
 
-    await page.locator("#new-time-slot-value").fill("10:00");
-    await page.locator("#new-time-slot-sort").fill("5");
+    // 슬롯 추가는 시간 슬롯 구역의 서랍이다. 만든 슬롯은 바로 골라 패널에 열린다.
     await page.getByRole("button", { name: "슬롯 추가" }).click();
-    await expect(rowByDisplayValue(page, "10:00")).toBeVisible();
+    const drawer = page.getByRole("dialog", { name: "슬롯 추가" });
+    await drawer.locator("#new-time-slot-value").fill("10:00");
+    await drawer.locator("#new-time-slot-sort").fill("5");
+    await drawer.getByRole("button", { name: "슬롯 추가" }).click();
+    await expect(masterRow(page, "10:00")).toBeVisible();
 
     const before = await getTimeSlot("10:00");
-    const row = rowByDisplayValue(page, "10:00");
-    await row.locator('input[name="value"]').fill("10:30");
-    await row.getByRole("button", { name: "저장" }).click();
-    await expect(rowByDisplayValue(page, "10:30")).toContainText(`고유 ID: ${before.id}`);
+    const panel = masterPanel(page);
+    await expect(panel.getByLabel("시간 슬롯")).toHaveValue("10:00");
+    await panel.getByLabel("시간 슬롯").fill("10:30");
+    await panel.getByRole("button", { name: "저장" }).click();
+    const renamedPanel = await openMasterPanel(page, "10:30");
+    await expect(renamedPanel.getByRole("heading", { name: "10:30" })).toBeVisible();
+    await expect(renamedPanel).toContainText(before.id);
 
     const after = await getTimeSlot("10:30");
     expect(after.id).toBe(before.id);
@@ -282,9 +289,9 @@ test.describe("Story 1.6 코드와 시간 슬롯 관리", () => {
     await page.goto("/masters/codes");
 
     const slot = await getTimeSlot("11:00");
-    const row = rowByDisplayValue(page, "11:00");
-    await row.locator('input[name="value"]').fill("11:30");
-    await row.getByRole("button", { name: "저장" }).click();
+    const panel = await openMasterPanel(page, "11:00");
+    await panel.getByLabel("시간 슬롯").fill("11:30");
+    await panel.getByRole("button", { name: "저장" }).click();
 
     await expect(page.getByText("이미 존재하는 시간 슬롯입니다.")).toBeVisible();
     const after = await getTimeSlot("11:00");
@@ -297,8 +304,8 @@ test.describe("Story 1.6 코드와 시간 슬롯 관리", () => {
     await page.goto("/masters/codes");
 
     const slot = await getTimeSlot("01:00");
-    const row = rowByDisplayValue(page, "01:00");
-    await row.getByRole("button", { name: "비활성 처리" }).click();
+    const panel = await openMasterPanel(page, "01:00");
+    await panel.getByRole("button", { name: "비활성 처리" }).click();
     // toContainText("비활성")은 "비활성 처리" 버튼 라벨에도 매칭되는 거짓 양성이라 동기화하지 못한다.
     // 비활성 반영을 DB 폴링으로 확정한 뒤 /audit으로 navigate한다(in-flight POST abort 회피).
     await expect.poll(async () => (await getTimeSlot("01:00")).isActive).toBe(false);

@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { masterRow, openMasterPanel } from "./support/masters";
 
 
 const defaultRooms = [
@@ -140,13 +141,6 @@ async function getRoomByMigrationReferenceName(migrationReferenceName: string) {
   };
 }
 
-function getByDisplayValue(page: import("@playwright/test").Page, displayName: string) {
-  return page.locator(`input[value="${displayName}"]`);
-}
-
-function roomRowByDisplayValue(page: import("@playwright/test").Page, displayName: string) {
-  return page.locator("tbody tr").filter({ has: getByDisplayValue(page, displayName) });
-}
 
 test.describe("Story 1.5 객실 마스터 관리", () => {
   test.describe.configure({ mode: "serial" });
@@ -185,15 +179,15 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     await expect(page.getByRole("columnheader", { name: "이관 참조값" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "정렬 순서" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "활성 여부" })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "생성 시각" })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "수정 시각" })).toBeVisible();
 
     for (const room of defaultRooms) {
-      const row = roomRowByDisplayValue(page, room.displayName);
-      await expect(row.locator('input[name="displayName"]')).toHaveValue(room.displayName);
+      // 티켓 07: 목록은 읽기 전용이고 편집 칸은 행을 고르면 열리는 패널에 있다.
+      const row = masterRow(page, room.displayName);
       await expect(row).toContainText(room.migrationReferenceName);
-      await expect(row.locator('input[name="sortOrder"]')).toHaveValue(String(room.sortOrder));
-      await expect(row.getByText("활성", { exact: true })).toBeVisible();
+      await expect(row.getByRole("cell", { name: String(room.sortOrder), exact: true })).toBeVisible();
+      // 활성 여부는 기호가 붙은 상태 칩이다. 비활성 행이면 "비활성"이 보인다.
+      await expect(row).toContainText("활성");
+      await expect(row).not.toContainText("비활성");
     }
 
     const rooms = await (prisma as any).room.findMany({
@@ -202,6 +196,12 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     });
     expect(rooms.map((room: { displayName: string }) => room.displayName)).toEqual(defaultRooms.map((room) => room.displayName));
     expect(new Set(rooms.map((room: { id: string }) => room.id)).size).toBe(defaultRooms.length);
+
+    // 생성·수정 시각과 고유 ID는 패널의 기록 정보에 있다.
+    const panel = await openMasterPanel(page, "101 호실");
+    await expect(panel.getByLabel("표시명")).toHaveValue("101 호실");
+    await expect(panel.getByText("생성 시각")).toBeVisible();
+    await expect(panel.getByText("수정 시각")).toBeVisible();
     for (const room of rooms as Array<{ id: string; displayName: string; migrationReferenceName: string }>) {
       expect(room.id).not.toBe(room.displayName);
       expect(room.id).not.toBe(room.migrationReferenceName);
@@ -216,10 +216,13 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     await page.goto("/masters/rooms");
 
     const before = await getRoomByMigrationReferenceName("1번방");
-    const row = roomRowByDisplayValue(page, "101 호실");
-    await row.locator('input[name="displayName"]').fill("101 E2E 호실");
-    await row.getByRole("button", { name: "저장" }).click();
-    await expect(roomRowByDisplayValue(page, "101 E2E 호실")).toContainText(`고유 ID: ${before.id}`);
+    const panel = await openMasterPanel(page, "101 호실");
+    await panel.getByLabel("표시명").fill("101 E2E 호실");
+    await panel.getByRole("button", { name: "저장" }).click();
+    // 새 표시명의 행을 골라 연 패널에 원래 고유 ID가 있어야 같은 객실이다.
+    const renamedPanel = await openMasterPanel(page, "101 E2E 호실");
+    await expect(renamedPanel.getByRole("heading", { name: "101 E2E 호실" })).toBeVisible();
+    await expect(renamedPanel).toContainText(before.id);
 
     const after = await getRoomByMigrationReferenceName("1번방");
     expect(after.id).toBe(before.id);
@@ -243,11 +246,10 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     await page.goto("/masters/rooms");
 
     const room = await getRoomByMigrationReferenceName("2번방");
-    const row = roomRowByDisplayValue(page, "102 호실");
-    await row.locator('input[name="sortOrder"]').fill("25");
-    await row.getByRole("button", { name: "적용" }).click();
-    await expect(roomRowByDisplayValue(page, "102 호실").locator('input[name="sortOrder"]')).toHaveValue("25");
-    // toHaveValue는 내가 채운 값이라 즉시 통과하므로 server action 반영을 보장하지 못한다.
+    const panel = await openMasterPanel(page, "102 호실");
+    await panel.getByLabel("정렬 순서").fill("25");
+    await panel.getByRole("button", { name: "적용" }).click();
+    // 패널의 입력값은 내가 채운 값이라 server action 반영을 보장하지 못한다.
     // DB가 갱신되기를 폴링해 이후 단언이 stale row를 읽지 않게 한다.
     await expect.poll(async () => (await getRoomByMigrationReferenceName("2번방")).sortOrder).toBe(25);
 
@@ -255,12 +257,13 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     expect(updated.id).toBe(room.id);
     expect(updated.sortOrder).toBe(25);
 
-    // 첫 적용(25)의 revalidate로 행 input이 리렌더되면 이어지는 fill이 stale 요소에 적용될 수 있다.
+    await expect(masterRow(page, "102 호실").getByRole("cell", { name: "25", exact: true })).toBeVisible();
+    // 첫 적용(25)의 revalidate로 패널 input이 리렌더되면 이어지는 fill이 stale 요소에 적용될 수 있다.
     // goto로 RSC를 안전하게 재조회한 뒤 중복(30) 입력을 진행한다.
     await page.goto("/masters/rooms");
-    const updatedRow = roomRowByDisplayValue(page, "102 호실");
-    await updatedRow.locator('input[name="sortOrder"]').fill("30");
-    await updatedRow.getByRole("button", { name: "적용" }).click();
+    const updatedPanel = await openMasterPanel(page, "102 호실");
+    await updatedPanel.getByLabel("정렬 순서").fill("30");
+    await updatedPanel.getByRole("button", { name: "적용" }).click();
     await expect(page.getByText("정렬 순서가 이미 사용 중입니다.")).toBeVisible();
 
     await page.goto("/audit?targetType=room");
@@ -277,8 +280,8 @@ test.describe("Story 1.5 객실 마스터 관리", () => {
     await page.goto("/masters/rooms");
 
     const room = await getRoomByMigrationReferenceName("11번방");
-    const row = roomRowByDisplayValue(page, "402 호실");
-    await row.getByRole("button", { name: "비활성 처리" }).click();
+    const panel = await openMasterPanel(page, "402 호실");
+    await panel.getByRole("button", { name: "비활성 처리" }).click();
     // toContainText("비활성")은 "비활성 처리" 버튼 라벨에도 매칭되는 거짓 양성이라 server action을
     // 동기화하지 못한다. 비활성 반영을 DB 폴링으로 확정한다.
     await expect.poll(async () => (await getRoomByMigrationReferenceName("11번방")).isActive).toBe(false);

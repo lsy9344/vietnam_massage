@@ -1,7 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DetailRow } from "@/components/ui/detail-row";
+import { ModalPanel, SidePanel } from "@/components/ui/panel";
 import type { CodeType } from "@/modules/masters/code-schema";
 import type { CodeItemDto, TimeSlotDto } from "@/modules/masters/code-service";
 import {
@@ -16,10 +18,11 @@ import {
   type CodeActionState,
   type TimeSlotActionState
 } from "@/app/(erp)/masters/codes/actions";
+import { SaveRow, TextField } from "@/app/(erp)/masters/master-fields";
+import { ActiveStatus, Cell, HeadCell, ImpactNotice, MasterSectionHeading, MasterTable, PanelSection, masterDateTime } from "@/app/(erp)/masters/master-parts";
+import { MasterSplit, SelectableRow, useMasterSelection } from "@/app/(erp)/masters/master-workspace";
 import { useLocale, useT } from "@/lib/i18n/client";
 import { codeLabel } from "@/lib/i18n/codes";
-import { formatDateTime } from "@/lib/i18n/format";
-import type { Locale } from "@/lib/i18n/config";
 import type { MessageKey } from "@/lib/i18n/types";
 
 type CodeGroup = {
@@ -35,67 +38,35 @@ const codeTypeLabelKeys: Record<CodeType, MessageKey> = {
   CONFIRMATION: "masters.codes.type.CONFIRMATION"
 };
 
-function masterDateTime(locale: Locale, value: string) {
-  return formatDateTime(locale, value, { dateStyle: "short", timeStyle: "short" });
-}
-
-function InlineError({ state, field }: { state: CodeActionState | TimeSlotActionState; field?: string }) {
-  if (!state || state.ok) {
-    return null;
-  }
-
-  const fieldMessages = field ? state.fieldErrors?.[field] : null;
-  return (
-    <span className="text-xs text-danger">
-      {fieldMessages?.map((message) => <span key={message}>{message}</span>)}
-      {state.formError ? <span>{state.formError}</span> : null}
-    </span>
-  );
-}
-
-function CodeCreateForm({ codeType }: { codeType: CodeType }) {
+function CodeCreatePanel({ codeType, onCreated }: { codeType: CodeType; onCreated: (id: string) => void }) {
   const t = useT();
-  const [state, formAction, pending] = useActionState<CodeActionState, FormData>(createCodeItemAction, null);
+  const [open, setOpen] = useState(false);
+  const [state, formAction, pending] = useActionState<CodeActionState, FormData>(async (previous, formData) => {
+    const result = await createCodeItemAction(previous, formData);
+    if (result?.ok) {
+      setOpen(false);
+      onCreated(result.data.id);
+    }
+    return result;
+  }, null);
+  const typeLabel = t(codeTypeLabelKeys[codeType]);
 
   return (
-    <form action={formAction} className="grid gap-2 border-b border-border bg-readonly px-3 py-3 md:grid-cols-[120px_1fr_100px_auto]">
-      <input name="codeType" type="hidden" value={codeType} />
-      <label className="sr-only" htmlFor={`new-code-${codeType}`}>
-        {t("masters.codes.stableCode")}
-      </label>
-      <input
-        className="h-8 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
-        id={`new-code-${codeType}`}
-        name="code"
-        placeholder={t("masters.codes.stableCodePlaceholder")}
-      />
-      <label className="sr-only" htmlFor={`new-display-${codeType}`}>
-        {t("masters.common.displayName")}
-      </label>
-      <input
-        className="h-8 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
-        id={`new-display-${codeType}`}
-        name="displayName"
-        placeholder={t("masters.codes.newDisplayNamePlaceholder")}
-      />
-      <label className="sr-only" htmlFor={`new-sort-${codeType}`}>
-        {t("masters.common.sortOrder")}
-      </label>
-      <input
-        className="h-8 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
-        id={`new-sort-${codeType}`}
-        min={1}
-        name="sortOrder"
-        placeholder="90"
-        type="number"
-      />
-      <Button className="h-8 px-3 text-xs" disabled={pending} type="submit" variant="secondary">
-        {t("masters.codes.addCode")}
-      </Button>
-      <div className="md:col-span-4">
-        <InlineError state={state} />
-      </div>
-    </form>
+    <ModalPanel
+      description={t("masters.codes.createDescription", { type: typeLabel })}
+      onOpenChange={setOpen}
+      open={open}
+      title={`${typeLabel} · ${t("masters.codes.addCode")}`}
+      trigger={<Button variant="secondary">{t("masters.codes.addCode")}</Button>}
+    >
+      <form action={formAction} className="grid gap-4">
+        <input name="codeType" type="hidden" value={codeType} />
+        <TextField hint={t("masters.codes.stableCodeHint")} id={`new-code-${codeType}`} label={t("masters.codes.stableCode")} name="code" placeholder={t("masters.codes.stableCodePlaceholder")} state={state} />
+        <TextField id={`new-display-${codeType}`} label={t("masters.common.displayName")} name="displayName" placeholder={t("masters.codes.newDisplayNamePlaceholder")} state={state} />
+        <TextField id={`new-sort-${codeType}`} label={t("masters.common.sortOrder")} min={1} name="sortOrder" placeholder="90" state={state} type="number" />
+        <SaveRow label={t("masters.codes.addCode")} pending={pending} primary state={state} />
+      </form>
+    </ModalPanel>
   );
 }
 
@@ -104,25 +75,10 @@ function CodeDisplayNameForm({ item }: { item: CodeItemDto }) {
   const [state, formAction, pending] = useActionState<CodeActionState, FormData>(updateCodeItemDisplayNameAction, null);
 
   return (
-    <form action={formAction} className="grid min-w-52 gap-1">
+    <form action={formAction} className="grid gap-3">
       <input name="codeItemId" type="hidden" value={item.id} />
-      <label className="sr-only" htmlFor={`display-${item.id}`}>
-        {t("masters.common.displayName")}
-      </label>
-      <div className="flex items-center gap-2">
-        <input
-          className="h-8 w-36 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
-          defaultValue={item.displayName}
-          id={`display-${item.id}`}
-          maxLength={60}
-          name="displayName"
-          required
-        />
-        <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant="secondary">
-          {t("masters.common.save")}
-        </Button>
-      </div>
-      <InlineError field="displayName" state={state} />
+      <TextField defaultValue={item.displayName} label={t("masters.common.displayName")} maxLength={60} name="displayName" required state={state} />
+      <SaveRow label={t("masters.common.save")} pending={pending} state={state} />
     </form>
   );
 }
@@ -132,27 +88,10 @@ function CodeSortOrderForm({ item }: { item: CodeItemDto }) {
   const [state, formAction, pending] = useActionState<CodeActionState, FormData>(updateCodeItemSortOrderAction, null);
 
   return (
-    <form action={formAction} className="grid gap-1">
+    <form action={formAction} className="grid gap-3">
       <input name="codeItemId" type="hidden" value={item.id} />
-      <label className="sr-only" htmlFor={`sort-${item.id}`}>
-        {t("masters.common.sortOrder")}
-      </label>
-      <div className="flex items-center gap-2">
-        <input
-          className="h-8 w-20 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
-          defaultValue={item.sortOrder}
-          id={`sort-${item.id}`}
-          max={9999}
-          min={1}
-          name="sortOrder"
-          required
-          type="number"
-        />
-        <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant="secondary">
-          {t("masters.common.apply")}
-        </Button>
-      </div>
-      <InlineError field="sortOrder" state={state} />
+      <TextField defaultValue={item.sortOrder} label={t("masters.common.sortOrder")} max={9999} min={1} name="sortOrder" required state={state} type="number" />
+      <SaveRow label={t("masters.common.apply")} pending={pending} state={state} />
     </form>
   );
 }
@@ -162,109 +101,78 @@ function CodeDeactivateForm({ item }: { item: CodeItemDto }) {
   const [state, formAction, pending] = useActionState<CodeActionState, FormData>(deactivateCodeItemAction, null);
 
   if (!item.isActive) {
-    return <span className="text-xs text-muted">{t("masters.common.alreadyInactive")}</span>;
+    return <p className="text-sm text-muted">{t("masters.common.alreadyInactive")}</p>;
   }
 
   return (
-    <form action={formAction} className="grid gap-1">
+    <form action={formAction} className="grid gap-3">
       <input name="codeItemId" type="hidden" value={item.id} />
-      <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant="ghost">
-        {t("masters.common.deactivate")}
-      </Button>
-      <InlineError state={state} />
+      <p className="text-sm text-muted">{t("masters.codes.deactivateNote")}</p>
+      <SaveRow label={t("masters.common.deactivate")} pending={pending} state={state} />
     </form>
   );
 }
 
-function CodeGroupSection({ group }: { group: CodeGroup }) {
+function CodePanel({ item, onClose }: { item: CodeItemDto; onClose: () => void }) {
   const t = useT();
   const locale = useLocale();
-  const label = t(codeTypeLabelKeys[group.codeType]);
+  const screenLabel = codeLabel(locale, item.codeType, item.code, item.isSystemDefault, item.displayName);
+  const impact = [t("masters.codes.impact.storedCode")];
+  if (item.isSystemDefault) impact.push(t("masters.codes.impact.systemDefaultLabel"));
+  impact.push(t("masters.codes.impact.inactive"));
+
   return (
-    <section className="border border-border bg-surface">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-foreground">{label}</h2>
-        <span className="text-xs text-muted">{t("masters.common.displayCount", { count: group.items.length })}</span>
+    <SidePanel onClose={onClose} title={item.displayName}>
+      <div className="grid gap-6" key={item.id}>
+        <ActiveStatus inactiveNote={t("masters.codes.inactiveNote")} isActive={item.isActive} locale={locale} />
+        <ImpactNotice items={impact} locale={locale} />
+        <CodeDisplayNameForm item={item} />
+        <CodeSortOrderForm item={item} />
+        <PanelSection title={t("masters.common.details")}>
+          <dl>
+            <DetailRow label={t("masters.codes.column.type")} value={t(codeTypeLabelKeys[item.codeType])} />
+            <DetailRow label={t("masters.codes.stableCode")} value={<span className="font-mono">{item.code}</span>} />
+            <DetailRow label={t("masters.codes.column.screenLabel")} value={screenLabel} />
+            <DetailRow label={t("masters.codes.column.systemDefault")} value={item.isSystemDefault ? t("masters.codes.yes") : t("masters.codes.no")} />
+            <DetailRow label={t("masters.common.uniqueId")} value={item.id} />
+            <DetailRow label={t("masters.common.createdAt")} value={masterDateTime(locale, item.createdAt)} />
+            <DetailRow label={t("masters.common.updatedAt")} value={masterDateTime(locale, item.updatedAt)} />
+          </dl>
+        </PanelSection>
+        <PanelSection title={t("masters.common.deactivateTitle")}>
+          <CodeDeactivateForm item={item} />
+        </PanelSection>
       </div>
-      <CodeCreateForm codeType={group.codeType} />
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
-          <thead className="bg-readonly text-xs font-semibold text-muted">
-            <tr>
-              <th className="w-32 border-b border-border px-3 py-2">{t("masters.codes.column.type")}</th>
-              <th className="w-40 border-b border-border px-3 py-2">{t("masters.codes.stableCode")}</th>
-              <th className="w-56 border-b border-border px-3 py-2">{t("masters.common.displayName")}</th>
-              <th className="w-40 border-b border-border px-3 py-2">{t("masters.common.sortOrder")}</th>
-              <th className="w-24 border-b border-border px-3 py-2">{t("masters.codes.column.systemDefault")}</th>
-              <th className="w-24 border-b border-border px-3 py-2">{t("masters.common.activeColumn")}</th>
-              <th className="w-40 border-b border-border px-3 py-2">{t("masters.common.createdAt")}</th>
-              <th className="w-40 border-b border-border px-3 py-2">{t("masters.common.updatedAt")}</th>
-              <th className="border-b border-border px-3 py-2">{t("masters.common.actions")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {group.items.map((item) => (
-              <tr className={item.isActive ? "align-top" : "bg-readonly align-top"} key={item.id}>
-                <td className="border-b border-border px-3 py-2 text-xs text-muted">{label}</td>
-                <td className="border-b border-border px-3 py-2 font-mono text-xs text-foreground">{item.code}</td>
-                <td className="border-b border-border px-3 py-2">
-                  <CodeDisplayNameForm item={item} />
-                  <div className="mt-1 text-xs text-muted">
-                    {codeLabel(locale, group.codeType, item.code, item.isSystemDefault, item.displayName)} · {t("masters.common.uniqueId", { id: item.id })}
-                  </div>
-                </td>
-                <td className="border-b border-border px-3 py-2">
-                  <CodeSortOrderForm item={item} />
-                </td>
-                <td className="border-b border-border px-3 py-2">{item.isSystemDefault ? t("masters.codes.yes") : t("masters.codes.no")}</td>
-                <td className="border-b border-border px-3 py-2">{item.isActive ? t("masters.common.active") : t("masters.common.inactive")}</td>
-                <td className="border-b border-border px-3 py-2 text-xs text-muted">{masterDateTime(locale, item.createdAt)}</td>
-                <td className="border-b border-border px-3 py-2 text-xs text-muted">{masterDateTime(locale, item.updatedAt)}</td>
-                <td className="border-b border-border px-3 py-2">
-                  <CodeDeactivateForm item={item} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+    </SidePanel>
   );
 }
 
-function TimeSlotCreateForm() {
+function TimeSlotCreatePanel({ onCreated }: { onCreated: (id: string) => void }) {
   const t = useT();
-  const [state, formAction, pending] = useActionState<TimeSlotActionState, FormData>(createTimeSlotAction, null);
+  const [open, setOpen] = useState(false);
+  const [state, formAction, pending] = useActionState<TimeSlotActionState, FormData>(async (previous, formData) => {
+    const result = await createTimeSlotAction(previous, formData);
+    if (result?.ok) {
+      setOpen(false);
+      onCreated(result.data.id);
+    }
+    return result;
+  }, null);
 
   return (
-    <form action={formAction} className="grid gap-2 border-b border-border bg-readonly px-3 py-3 md:grid-cols-[120px_100px_auto]">
-      <label className="sr-only" htmlFor="new-time-slot-value">
-        {t("masters.codes.timeSlot")}
-      </label>
-      <input
-        className="h-8 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
-        id="new-time-slot-value"
-        name="value"
-        placeholder="10:00"
-      />
-      <label className="sr-only" htmlFor="new-time-slot-sort">
-        {t("masters.common.sortOrder")}
-      </label>
-      <input
-        className="h-8 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
-        id="new-time-slot-sort"
-        min={1}
-        name="sortOrder"
-        placeholder="5"
-        type="number"
-      />
-      <Button className="h-8 px-3 text-xs" disabled={pending} type="submit" variant="secondary">
-        {t("masters.codes.addSlot")}
-      </Button>
-      <div className="md:col-span-3">
-        <InlineError state={state} />
-      </div>
-    </form>
+    <ModalPanel
+      description={t("masters.codes.slotCreateDescription")}
+      onOpenChange={setOpen}
+      open={open}
+      title={t("masters.codes.addSlot")}
+      trigger={<Button variant="secondary">{t("masters.codes.addSlot")}</Button>}
+    >
+      <form action={formAction} className="grid gap-4">
+        <TextField id="new-time-slot-value" label={t("masters.codes.timeSlot")} name="value" placeholder="10:00" state={state} />
+        <TextField id="new-time-slot-sort" label={t("masters.common.sortOrder")} min={1} name="sortOrder" placeholder="5" state={state} type="number" />
+        <SaveRow label={t("masters.codes.addSlot")} pending={pending} primary state={state} />
+      </form>
+    </ModalPanel>
   );
 }
 
@@ -273,24 +181,10 @@ function TimeSlotValueForm({ slot }: { slot: TimeSlotDto }) {
   const [state, formAction, pending] = useActionState<TimeSlotActionState, FormData>(updateTimeSlotValueAction, null);
 
   return (
-    <form action={formAction} className="grid gap-1">
+    <form action={formAction} className="grid gap-3">
       <input name="timeSlotId" type="hidden" value={slot.id} />
-      <label className="sr-only" htmlFor={`slot-value-${slot.id}`}>
-        {t("masters.codes.timeSlot")}
-      </label>
-      <div className="flex items-center gap-2">
-        <input
-          className="h-8 w-24 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
-          defaultValue={slot.value}
-          id={`slot-value-${slot.id}`}
-          name="value"
-          required
-        />
-        <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant="secondary">
-          {t("masters.common.save")}
-        </Button>
-      </div>
-      <InlineError field="value" state={state} />
+      <TextField defaultValue={slot.value} label={t("masters.codes.timeSlot")} name="value" required state={state} />
+      <SaveRow label={t("masters.common.save")} pending={pending} state={state} />
     </form>
   );
 }
@@ -300,27 +194,10 @@ function TimeSlotSortOrderForm({ slot }: { slot: TimeSlotDto }) {
   const [state, formAction, pending] = useActionState<TimeSlotActionState, FormData>(updateTimeSlotSortOrderAction, null);
 
   return (
-    <form action={formAction} className="grid gap-1">
+    <form action={formAction} className="grid gap-3">
       <input name="timeSlotId" type="hidden" value={slot.id} />
-      <label className="sr-only" htmlFor={`slot-sort-${slot.id}`}>
-        {t("masters.common.sortOrder")}
-      </label>
-      <div className="flex items-center gap-2">
-        <input
-          className="h-8 w-20 border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-brand"
-          defaultValue={slot.sortOrder}
-          id={`slot-sort-${slot.id}`}
-          max={9999}
-          min={1}
-          name="sortOrder"
-          required
-          type="number"
-        />
-        <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant="secondary">
-          {t("masters.common.apply")}
-        </Button>
-      </div>
-      <InlineError field="sortOrder" state={state} />
+      <TextField defaultValue={slot.sortOrder} label={t("masters.common.sortOrder")} max={9999} min={1} name="sortOrder" required state={state} type="number" />
+      <SaveRow label={t("masters.common.apply")} pending={pending} state={state} />
     </form>
   );
 }
@@ -330,74 +207,135 @@ function TimeSlotDeactivateForm({ slot }: { slot: TimeSlotDto }) {
   const [state, formAction, pending] = useActionState<TimeSlotActionState, FormData>(deactivateTimeSlotAction, null);
 
   if (!slot.isActive) {
-    return <span className="text-xs text-muted">{t("masters.common.alreadyInactive")}</span>;
+    return <p className="text-sm text-muted">{t("masters.common.alreadyInactive")}</p>;
   }
 
   return (
-    <form action={formAction} className="grid gap-1">
+    <form action={formAction} className="grid gap-3">
       <input name="timeSlotId" type="hidden" value={slot.id} />
-      <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant="ghost">
-        {t("masters.common.deactivate")}
-      </Button>
-      <InlineError state={state} />
+      <p className="text-sm text-muted">{t("masters.codes.slotDeactivateNote")}</p>
+      <SaveRow label={t("masters.common.deactivate")} pending={pending} state={state} />
     </form>
   );
 }
 
-function TimeSlotSection({ timeSlots }: { timeSlots: TimeSlotDto[] }) {
+function TimeSlotPanel({ slot, onClose }: { slot: TimeSlotDto; onClose: () => void }) {
   const t = useT();
   const locale = useLocale();
   return (
-    <section className="border border-border bg-surface">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-foreground">{t("masters.codes.timeSlot")}</h2>
-        <span className="text-xs text-muted">{t("masters.common.displayCount", { count: timeSlots.length })}</span>
+    <SidePanel onClose={onClose} title={slot.value}>
+      <div className="grid gap-6" key={slot.id}>
+        <ActiveStatus inactiveNote={t("masters.codes.slotInactiveNote")} isActive={slot.isActive} locale={locale} />
+        <ImpactNotice
+          items={[t("masters.codes.impact.storedTime"), t("masters.codes.impact.slotOrder"), t("masters.codes.impact.slotInactive")]}
+          locale={locale}
+        />
+        <TimeSlotValueForm slot={slot} />
+        <TimeSlotSortOrderForm slot={slot} />
+        <PanelSection title={t("masters.common.details")}>
+          <dl>
+            <DetailRow label={t("masters.common.uniqueId")} value={slot.id} />
+            <DetailRow label={t("masters.common.createdAt")} value={masterDateTime(locale, slot.createdAt)} />
+            <DetailRow label={t("masters.common.updatedAt")} value={masterDateTime(locale, slot.updatedAt)} />
+          </dl>
+        </PanelSection>
+        <PanelSection title={t("masters.common.deactivateTitle")}>
+          <TimeSlotDeactivateForm slot={slot} />
+        </PanelSection>
       </div>
-      <TimeSlotCreateForm />
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse text-left text-sm">
-          <thead className="bg-readonly text-xs font-semibold text-muted">
-            <tr>
-              <th className="w-48 border-b border-border px-3 py-2">{t("masters.codes.timeSlot")}</th>
-              <th className="w-40 border-b border-border px-3 py-2">{t("masters.common.sortOrder")}</th>
-              <th className="w-24 border-b border-border px-3 py-2">{t("masters.common.activeColumn")}</th>
-              <th className="w-40 border-b border-border px-3 py-2">{t("masters.common.createdAt")}</th>
-              <th className="w-40 border-b border-border px-3 py-2">{t("masters.common.updatedAt")}</th>
-              <th className="border-b border-border px-3 py-2">{t("masters.common.actions")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {timeSlots.map((slot) => (
-              <tr className={slot.isActive ? "align-top" : "bg-readonly align-top"} key={slot.id}>
-                <td className="border-b border-border px-3 py-2">
-                  <TimeSlotValueForm slot={slot} />
-                  <div className="mt-1 text-xs text-muted">{t("masters.common.uniqueId", { id: slot.id })}</div>
-                </td>
-                <td className="border-b border-border px-3 py-2">
-                  <TimeSlotSortOrderForm slot={slot} />
-                </td>
-                <td className="border-b border-border px-3 py-2">{slot.isActive ? t("masters.common.active") : t("masters.common.inactive")}</td>
-                <td className="border-b border-border px-3 py-2 text-xs text-muted">{masterDateTime(locale, slot.createdAt)}</td>
-                <td className="border-b border-border px-3 py-2 text-xs text-muted">{masterDateTime(locale, slot.updatedAt)}</td>
-                <td className="border-b border-border px-3 py-2">
-                  <TimeSlotDeactivateForm slot={slot} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+    </SidePanel>
   );
 }
 
-export function CodeManager({ codeGroups, timeSlots }: { codeGroups: CodeGroup[]; timeSlots: TimeSlotDto[] }) {
+/**
+ * 코드·시간 슬롯: 코드 유형마다의 목록과 시간 슬롯 목록, 고른 항목의 패널 하나.
+ * 목록은 안정 코드와 표시명, 그리고 화면에 실제로 보이는 이름(시스템 기본 코드는 언어별 이름)을 나눠 보인다.
+ */
+export function CodeManager({ codeGroups, timeSlots, initialItem }: { codeGroups: CodeGroup[]; timeSlots: TimeSlotDto[]; initialItem: string | null }) {
+  const t = useT();
+  const locale = useLocale();
+  const { selected, select, panelRef } = useMasterSelection(initialItem);
+  const selectedCode = codeGroups.flatMap((group) => group.items).find((item) => item.id === selected) ?? null;
+  const selectedSlot = selectedCode ? null : (timeSlots.find((slot) => slot.id === selected) ?? null);
+  const panel = selectedCode ? (
+    <CodePanel item={selectedCode} onClose={() => select(null)} />
+  ) : selectedSlot ? (
+    <TimeSlotPanel onClose={() => select(null)} slot={selectedSlot} />
+  ) : null;
+
   return (
-    <div className="grid gap-5">
-      {codeGroups.map((group) => (
-        <CodeGroupSection group={group} key={group.codeType} />
-      ))}
-      <TimeSlotSection timeSlots={timeSlots} />
-    </div>
+    <MasterSplit hint={t("masters.common.panelHint")} panel={panel} panelRef={panelRef}>
+      {codeGroups.map((group) => {
+        const label = t(codeTypeLabelKeys[group.codeType]);
+        const headingId = `code-group-${group.codeType}`;
+        return (
+          <section aria-labelledby={headingId} className="grid gap-3" key={group.codeType}>
+            <MasterSectionHeading
+              action={<CodeCreatePanel codeType={group.codeType} onCreated={(id) => select(id)} />}
+              count={t("masters.common.count", { count: group.items.length })}
+              id={headingId}
+              title={label}
+            />
+            <MasterTable
+              head={
+                <>
+                  <HeadCell>{t("masters.common.displayName")}</HeadCell>
+                  <HeadCell>{t("masters.common.activeColumn")}</HeadCell>
+                  <HeadCell>{t("masters.codes.stableCode")}</HeadCell>
+                  <HeadCell>{t("masters.codes.column.screenLabel")}</HeadCell>
+                  <HeadCell numeric>{t("masters.common.sortOrder")}</HeadCell>
+                  <HeadCell>{t("masters.codes.column.systemDefault")}</HeadCell>
+                </>
+              }
+              label={label}
+              minWidth="min-w-[44rem]"
+            >
+              {group.items.map((item) => (
+                <SelectableRow key={item.id} label={item.displayName} onSelect={(viaKeyboard) => select(item.id, viaKeyboard)} selected={item.id === selected}>
+                  <Cell>
+                    <ActiveStatus inactiveNote={t("masters.codes.inactiveNote")} isActive={item.isActive} locale={locale} />
+                  </Cell>
+                  <Cell>
+                    <span className="font-mono text-xs text-foreground">{item.code}</span>
+                  </Cell>
+                  <Cell muted>{codeLabel(locale, group.codeType, item.code, item.isSystemDefault, item.displayName)}</Cell>
+                  <Cell numeric>{item.sortOrder}</Cell>
+                  <Cell>{item.isSystemDefault ? t("masters.codes.yes") : t("masters.codes.no")}</Cell>
+                </SelectableRow>
+              ))}
+            </MasterTable>
+          </section>
+        );
+      })}
+
+      <section aria-labelledby="time-slot-title" className="grid gap-3">
+        <MasterSectionHeading
+          action={<TimeSlotCreatePanel onCreated={(id) => select(id)} />}
+          count={t("masters.common.count", { count: timeSlots.length })}
+          id="time-slot-title"
+          title={t("masters.codes.timeSlot")}
+        />
+        <MasterTable
+          head={
+            <>
+              <HeadCell>{t("masters.codes.timeSlot")}</HeadCell>
+              <HeadCell>{t("masters.common.activeColumn")}</HeadCell>
+              <HeadCell numeric>{t("masters.common.sortOrder")}</HeadCell>
+            </>
+          }
+          label={t("masters.codes.timeSlot")}
+          minWidth="min-w-[28rem]"
+        >
+          {timeSlots.map((slot) => (
+            <SelectableRow key={slot.id} label={slot.value} onSelect={(viaKeyboard) => select(slot.id, viaKeyboard)} selected={slot.id === selected}>
+              <Cell>
+                <ActiveStatus inactiveNote={t("masters.codes.slotInactiveNote")} isActive={slot.isActive} locale={locale} />
+              </Cell>
+              <Cell numeric>{slot.sortOrder}</Cell>
+            </SelectableRow>
+          ))}
+        </MasterTable>
+      </section>
+    </MasterSplit>
   );
 }

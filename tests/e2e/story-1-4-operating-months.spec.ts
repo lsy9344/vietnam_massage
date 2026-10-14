@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { masterPanel } from "./support/masters";
 
 
 const users = [
@@ -137,30 +138,41 @@ test.describe("Story 1.4 운영월 관리", () => {
 
     await expect(page.getByRole("heading", { name: "운영월 관리", level: 1 })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "설정 화면" }).getByRole("link", { name: "운영월" })).toHaveAttribute("aria-current", "page");
-    await expect(page.getByRole("columnheader", { name: "생성 시각" })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "수정 시각" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "시작일" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "종료일" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "현재 상태" })).toBeVisible();
     // "선택 기준" 배지는 오늘이 포함된 운영월(없으면 목록 첫 행)에 붙는다. 공유 DB에는 다른 스펙의
     // 운영월도 있으므로 어느 행인지 고정할 수 없다. 배지가 정확히 하나만 있는지로 확인한다.
     await expect(page.getByRole("row", { name: /2031-05/ }).first()).toBeVisible();
     await expect(page.getByText("선택 기준")).toHaveCount(1);
 
-    const monthInput = page.getByLabel("새 운영월");
+    // 티켓 07: 생성은 도구줄의 서랍이고, 만든 운영월은 바로 골라 패널이 열린다.
+    await page.getByRole("button", { name: "운영월 생성" }).click();
+    const drawer = page.getByRole("dialog", { name: "운영월 생성" });
+    const monthInput = drawer.getByLabel("새 운영월");
     await monthInput.fill("2031-13");
     await expect.poll(() => monthInput.evaluate((input) => (input as HTMLInputElement).validity.valid)).toBe(false);
     await monthInput.fill("2031-04");
 
-    await page.getByRole("button", { name: "운영월 생성" }).click();
-    await expect(page.getByText("2031-04").first()).toBeVisible();
-    await expect(page.getByText("2031-04-01").first()).toBeVisible();
-    await expect(page.getByText("2031-04-30").first()).toBeVisible();
-    await expect(page.getByText("작성중").first()).toBeVisible();
+    await drawer.getByRole("button", { name: "운영월 생성" }).click();
+    const createdRow = page.getByRole("row", { name: /2031-04/ });
+    await expect(createdRow).toBeVisible();
+    await expect(createdRow.getByText("2031-04-01")).toBeVisible();
+    await expect(createdRow.getByText("2031-04-30")).toBeVisible();
+    await expect(createdRow.getByText("작성중")).toBeVisible();
+    const panel = masterPanel(page);
+    await expect(panel.getByRole("heading", { name: "2031-04" })).toBeVisible();
+    await expect(panel.getByText("생성 시각")).toBeVisible();
+    await expect(panel.getByText("수정 시각")).toBeVisible();
 
-    await page.getByLabel("새 운영월").fill("2031-04");
     await page.getByRole("button", { name: "운영월 생성" }).click();
-    await expect(page.getByText("이미 존재하는 운영월입니다.")).toBeVisible();
+    await drawer.getByLabel("새 운영월").fill("2031-04");
+    await drawer.getByRole("button", { name: "운영월 생성" }).click();
+    await expect(drawer.getByText("이미 존재하는 운영월입니다.")).toBeVisible();
+    await page.keyboard.press("Escape");
 
-    await page.getByRole("row", { name: /2031-04/ }).getByRole("button", { name: "검토중으로 변경" }).click();
-    await expect(page.getByRole("row", { name: /2031-04/ }).getByText("검토중")).toBeVisible();
+    await panel.getByRole("button", { name: "검토중으로 변경" }).click();
+    await expect(createdRow.getByText("검토중")).toBeVisible();
     // 상태 변경 server action을 DB 폴링으로 확정한 뒤 /audit으로 navigate한다.
     // (in-flight POST 중 goto하면 net::ERR_ABORTED로 status_changed 감사 로그가 누락된다.)
     await expect

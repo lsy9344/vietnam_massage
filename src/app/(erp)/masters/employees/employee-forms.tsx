@@ -1,8 +1,18 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { accountRoles, employeeGroups, employmentStatuses, shiftTypes, type EmployeeGroup } from "@/modules/masters/employee-schema";
+import { DetailRow } from "@/components/ui/detail-row";
+import { ModalPanel, SidePanel } from "@/components/ui/panel";
+import {
+  accountRoles,
+  employeeGroups,
+  employmentStatuses,
+  shiftTypes,
+  type EmployeeGroup,
+  type EmploymentStatus,
+  type ShiftType
+} from "@/modules/masters/employee-schema";
 import type { EmployeeDto } from "@/modules/masters/employee-service";
 import {
   createEmployeeAction,
@@ -13,10 +23,12 @@ import {
   type AccountLinkActionState,
   type EmployeeActionState
 } from "@/app/(erp)/masters/employees/actions";
+import { SaveRow, SelectField, TextField } from "@/app/(erp)/masters/master-fields";
+import { ActiveStatus, Cell, HeadCell, ImpactNotice, MasterSectionHeading, MasterTable, PanelSection, masterDateTime } from "@/app/(erp)/masters/master-parts";
+import { MasterSplit, SelectableRow, useMasterSelection, useSelectCreatedItem } from "@/app/(erp)/masters/master-workspace";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { Translator } from "@/lib/i18n";
-import { formatDateTime, formatNumber } from "@/lib/i18n/format";
-import type { Locale } from "@/lib/i18n/config";
+import { formatNumber } from "@/lib/i18n/format";
 import type { MessageKey } from "@/lib/i18n/types";
 
 const groupLabelKeys: Record<EmployeeGroup, MessageKey> = {
@@ -33,144 +45,89 @@ const roleLabelKeys: Record<(typeof accountRoles)[number], MessageKey> = {
   read_only_viewer: "masters.employees.role.read_only_viewer"
 };
 
+// 값은 한국어 stable key 그대로 저장하고, 보이는 이름만 번역한다.
+const shiftLabelKeys: Record<ShiftType, MessageKey> = {
+  전체: "masters.employees.shift.all",
+  주간: "masters.employees.shift.day",
+  야간: "masters.employees.shift.night"
+};
+
+const employmentLabelKeys: Record<EmploymentStatus, MessageKey> = {
+  재직: "masters.employees.employment.employed",
+  퇴사: "masters.employees.employment.left",
+  휴직: "masters.employees.employment.onLeave"
+};
+
 function roleDisplayName(t: Translator, role: string) {
-  return (accountRoles as readonly string[]).includes(role)
-    ? t(roleLabelKeys[role as (typeof accountRoles)[number]])
-    : role;
+  return (accountRoles as readonly string[]).includes(role) ? t(roleLabelKeys[role as (typeof accountRoles)[number]]) : role;
 }
 
-function masterDateTime(locale: Locale, value: string) {
-  return formatDateTime(locale, value, { dateStyle: "short", timeStyle: "short" });
-}
-
-function InlineError({ state, field }: { state: EmployeeActionState | AccountLinkActionState; field?: string }) {
-  if (!state || state.ok) {
-    return null;
-  }
-
-  if (field) {
-    const fieldMessages = state.fieldErrors?.[field];
-    if (!fieldMessages?.length) {
-      return null;
-    }
-
-    return (
-      <span className="text-xs text-danger">
-        {fieldMessages.map((message) => (
-          <span key={message}>{message}</span>
-        ))}
-      </span>
-    );
-  }
-
-  if (!state.formError) {
-    return null;
-  }
-
+/** 프로필 칸들. 생성 서랍과 직원 패널이 같은 칸을 쓴다(생성 서랍만 이름 라벨이 "이름"이고 staff code를 받는다). */
+function ProfileFields({ employee, state }: { employee?: EmployeeDto; state: EmployeeActionState }) {
+  const t = useT();
   return (
-    <span className="text-xs text-danger">
-      <span>{state.formError}</span>
-    </span>
+    <>
+      <SelectField defaultValue={employee?.employeeGroup} label={t("masters.employees.field.group")} name="employeeGroup" required state={state}>
+        {employeeGroups.map((group) => (
+          <option key={group} value={group}>
+            {t(groupLabelKeys[group])}
+          </option>
+        ))}
+      </SelectField>
+      <TextField defaultValue={employee?.position} label={t("masters.employees.field.position")} name="position" required state={state} />
+      <SelectField defaultValue={employee?.shiftType ?? ""} label={t("masters.employees.field.shiftType")} name="shiftType" state={state}>
+        <option value="">{t("masters.employees.field.notEntered")}</option>
+        {shiftTypes.map((shiftType) => (
+          <option key={shiftType} value={shiftType}>
+            {t(shiftLabelKeys[shiftType])}
+          </option>
+        ))}
+      </SelectField>
+      <TextField defaultValue={employee?.baseSalary} label={t("masters.employees.field.baseSalary")} min={0} name="baseSalary" required state={state} type="number" />
+      <TextField defaultValue={employee?.phone ?? ""} label={t("masters.employees.field.phone")} name="phone" state={state} />
+      <TextField defaultValue={employee?.birthday ?? ""} label={t("masters.employees.field.birthday")} name="birthday" state={state} type="date" />
+      <TextField defaultValue={employee?.hireDate ?? ""} label={t("masters.employees.field.hireDate")} name="hireDate" state={state} type="date" />
+      <SelectField defaultValue={employee?.employmentStatus} label={t("masters.employees.field.employmentStatus")} name="employmentStatus" state={state}>
+        {employmentStatuses.map((status) => (
+          <option key={status} value={status}>
+            {t(employmentLabelKeys[status])}
+          </option>
+        ))}
+      </SelectField>
+    </>
   );
 }
 
-function EmployeeCreateForm() {
+/** 도구줄의 주요 행동: 직원을 만드는 서랍. 만든 직원을 바로 골라 패널에 연다. */
+export function CreateEmployeePanel() {
   const t = useT();
-  const [state, formAction, pending] = useActionState<EmployeeActionState, FormData>(createEmployeeAction, null);
+  const selectCreated = useSelectCreatedItem();
+  const [open, setOpen] = useState(false);
+  const [state, formAction, pending] = useActionState<EmployeeActionState, FormData>(async (previous, formData) => {
+    const result = await createEmployeeAction(previous, formData);
+    if (result?.ok) {
+      setOpen(false);
+      selectCreated(result.data.id);
+    }
+    return result;
+  }, null);
 
   return (
-    <section className="mb-5 border border-border bg-surface">
-      <div className="border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-foreground">{t("masters.employees.create")}</h2>
-      </div>
-      <form action={formAction} className="grid gap-3 px-4 py-4 md:grid-cols-6">
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("masters.employees.field.name")}
-          <input className="h-9 border border-border bg-background px-2 text-sm text-foreground" name="displayName" required />
-          <InlineError field="displayName" state={state} />
-        </label>
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("masters.employees.field.staffCode")}
-          <input className="h-9 border border-border bg-background px-2 text-sm text-foreground" name="staffCode" required />
-          <InlineError field="staffCode" state={state} />
-        </label>
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("masters.employees.field.group")}
-          <select className="h-9 border border-border bg-background px-2 text-sm text-foreground" name="employeeGroup" required>
-            {employeeGroups.map((group) => (
-              <option key={group} value={group}>
-                {t(groupLabelKeys[group])}
-              </option>
-            ))}
-          </select>
-          <InlineError field="employeeGroup" state={state} />
-        </label>
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("masters.employees.field.position")}
-          <input className="h-9 border border-border bg-background px-2 text-sm text-foreground" name="position" required />
-          <InlineError field="position" state={state} />
-        </label>
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("masters.employees.field.shiftType")}
-          <select className="h-9 border border-border bg-background px-2 text-sm text-foreground" name="shiftType">
-            <option value="">{t("masters.employees.field.notEntered")}</option>
-            {shiftTypes.map((shiftType) => (
-              <option key={shiftType} value={shiftType}>
-                {shiftType}
-              </option>
-            ))}
-          </select>
-          <InlineError field="shiftType" state={state} />
-        </label>
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("masters.employees.field.baseSalary")}
-          <input className="h-9 border border-border bg-background px-2 text-sm text-foreground" min={0} name="baseSalary" required type="number" />
-          <InlineError field="baseSalary" state={state} />
-        </label>
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("masters.employees.field.phone")}
-          <input className="h-9 border border-border bg-background px-2 text-sm text-foreground" name="phone" />
-          <InlineError field="phone" state={state} />
-        </label>
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("masters.employees.field.birthday")}
-          <input className="h-9 border border-border bg-background px-2 text-sm text-foreground" name="birthday" type="date" />
-          <InlineError field="birthday" state={state} />
-        </label>
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("masters.employees.field.hireDate")}
-          <input className="h-9 border border-border bg-background px-2 text-sm text-foreground" name="hireDate" type="date" />
-          <InlineError field="hireDate" state={state} />
-        </label>
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("masters.employees.field.employmentStatus")}
-          <select className="h-9 border border-border bg-background px-2 text-sm text-foreground" name="employmentStatus">
-            {employmentStatuses.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
-          <InlineError field="employmentStatus" state={state} />
-        </label>
-        <label className="grid gap-1 text-xs font-medium text-muted">
-          {t("masters.common.sortOrder")}
-          <input className="h-9 border border-border bg-background px-2 text-sm text-foreground" min={1} name="sortOrder" required type="number" />
-          <InlineError field="sortOrder" state={state} />
-        </label>
-        <div className="flex items-end gap-2">
-          <Button className="h-9 px-3 text-xs" disabled={pending} type="submit">
-            {t("masters.employees.create")}
-          </Button>
-          <InlineError state={state} />
-          {state?.ok ? (
-            <span className="whitespace-nowrap text-xs font-semibold text-success" role="status">
-              {state.notice ?? t("masters.employees.savedNotice")}
-            </span>
-          ) : null}
-        </div>
+    <ModalPanel
+      description={t("masters.employees.createDescription")}
+      onOpenChange={setOpen}
+      open={open}
+      title={t("masters.employees.create")}
+      trigger={<Button>{t("masters.employees.create")}</Button>}
+    >
+      <form action={formAction} className="grid gap-4">
+        <TextField label={t("masters.employees.field.name")} name="displayName" required state={state} />
+        <TextField label={t("masters.employees.field.staffCode")} name="staffCode" required state={state} />
+        <ProfileFields state={state} />
+        <TextField label={t("masters.common.sortOrder")} min={1} name="sortOrder" required state={state} type="number" />
+        <SaveRow label={t("masters.employees.create")} pending={pending} primary savedMessage={t("masters.employees.savedNotice")} state={state} />
       </form>
-    </section>
+    </ModalPanel>
   );
 }
 
@@ -179,85 +136,15 @@ function ProfileForm({ employee }: { employee: EmployeeDto }) {
   const [state, formAction, pending] = useActionState<EmployeeActionState, FormData>(updateEmployeeProfileAction, null);
 
   return (
-    <form action={formAction} className="grid min-w-[860px] grid-cols-[150px_120px_110px_90px_90px_110px_120px_120px_120px_auto] gap-2">
+    <form action={formAction} className="grid gap-4">
       <input name="employeeId" type="hidden" value={employee.id} />
       <input name="staffCode" type="hidden" value={employee.staffCode} />
-      <label className="grid gap-1 text-xs text-muted">
-        {t("masters.common.displayName")}
-        <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={employee.displayName} name="displayName" required />
-        <InlineError field="displayName" state={state} />
-      </label>
-      <label className="grid gap-1 text-xs text-muted">
-        {t("masters.employees.field.group")}
-        <select className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={employee.employeeGroup} name="employeeGroup">
-          {employeeGroups.map((group) => (
-            <option key={group} value={group}>
-              {t(groupLabelKeys[group])}
-            </option>
-          ))}
-        </select>
-        <InlineError field="employeeGroup" state={state} />
-      </label>
-      <label className="grid gap-1 text-xs text-muted">
-        {t("masters.employees.field.position")}
-        <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={employee.position} name="position" required />
-        <InlineError field="position" state={state} />
-      </label>
-      <label className="grid gap-1 text-xs text-muted">
-        {t("masters.employees.field.shiftType")}
-        <select className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={employee.shiftType ?? ""} name="shiftType">
-          <option value="">{t("masters.employees.field.notEntered")}</option>
-          {shiftTypes.map((shiftType) => (
-            <option key={shiftType} value={shiftType}>
-              {shiftType}
-            </option>
-          ))}
-        </select>
-        <InlineError field="shiftType" state={state} />
-      </label>
-      <label className="grid gap-1 text-xs text-muted">
-        {t("masters.employees.field.baseSalary")}
-        <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={employee.baseSalary} min={0} name="baseSalary" required type="number" />
-        <InlineError field="baseSalary" state={state} />
-      </label>
-      <label className="grid gap-1 text-xs text-muted">
-        {t("masters.employees.field.phone")}
-        <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={employee.phone ?? ""} name="phone" />
-        <InlineError field="phone" state={state} />
-      </label>
-      <label className="grid gap-1 text-xs text-muted">
-        {t("masters.employees.field.birthday")}
-        <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={employee.birthday ?? ""} name="birthday" type="date" />
-        <InlineError field="birthday" state={state} />
-      </label>
-      <label className="grid gap-1 text-xs text-muted">
-        {t("masters.employees.field.hireDate")}
-        <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={employee.hireDate ?? ""} name="hireDate" type="date" />
-        <InlineError field="hireDate" state={state} />
-      </label>
-      <label className="grid gap-1 text-xs text-muted">
-        {t("masters.employees.field.employmentStatus")}
-        <select className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={employee.employmentStatus} name="employmentStatus">
-          {employmentStatuses.map((status) => (
-            <option key={status} value={status}>
-              {status}
-            </option>
-          ))}
-        </select>
-        <InlineError field="employmentStatus" state={state} />
-      </label>
-      <div className="flex items-end gap-2">
-        <input name="sortOrder" type="hidden" value={employee.sortOrder} />
-        <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant="secondary">
-          {t("masters.employees.saveProfile")}
-        </Button>
-        <InlineError state={state} />
-        {state?.ok ? (
-          <span className="whitespace-nowrap text-xs font-semibold text-success" role="status">
-            {state.notice ?? t("masters.employees.savedNotice")}
-          </span>
-        ) : null}
+      <input name="sortOrder" type="hidden" value={employee.sortOrder} />
+      <div className="grid gap-4 min-[1200px]:grid-cols-2">
+        <TextField defaultValue={employee.displayName} label={t("masters.common.displayName")} name="displayName" required state={state} />
+        <ProfileFields employee={employee} state={state} />
       </div>
+      <SaveRow label={t("masters.employees.saveProfile")} pending={pending} savedMessage={t("masters.employees.savedNotice")} state={state} />
     </form>
   );
 }
@@ -267,42 +154,10 @@ function SortOrderForm({ employee }: { employee: EmployeeDto }) {
   const [state, formAction, pending] = useActionState<EmployeeActionState, FormData>(updateEmployeeSortOrderAction, null);
 
   return (
-    <form action={formAction} className="flex items-center gap-2">
+    <form action={formAction} className="grid gap-3">
       <input name="employeeId" type="hidden" value={employee.id} />
-      <label className="sr-only" htmlFor={`sort-${employee.id}`}>
-        {t("masters.common.sortOrder")}
-      </label>
-      <input
-        className="h-8 w-20 border border-border bg-background px-2 text-sm text-foreground"
-        defaultValue={employee.sortOrder}
-        id={`sort-${employee.id}`}
-        min={1}
-        name="sortOrder"
-        type="number"
-      />
-      <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant="secondary">
-        {t("masters.employees.saveSortOrder")}
-      </Button>
-      <InlineError field="sortOrder" state={state} />
-    </form>
-  );
-}
-
-function DeactivateForm({ employee }: { employee: EmployeeDto }) {
-  const t = useT();
-  const [state, formAction, pending] = useActionState<EmployeeActionState, FormData>(deactivateEmployeeAction, null);
-
-  if (!employee.isActive) {
-    return <span className="text-xs text-muted">{t("masters.common.alreadyInactive")}</span>;
-  }
-
-  return (
-    <form action={formAction} className="grid gap-1">
-      <input name="employeeId" type="hidden" value={employee.id} />
-      <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant="ghost">
-        {t("masters.common.deactivate")}
-      </Button>
-      <InlineError state={state} />
+      <TextField defaultValue={employee.sortOrder} label={t("masters.common.sortOrder")} min={1} name="sortOrder" state={state} type="number" />
+      <SaveRow label={t("masters.employees.saveSortOrder")} pending={pending} state={state} />
     </form>
   );
 }
@@ -312,133 +167,145 @@ function AccountLinkForm({ employee }: { employee: EmployeeDto }) {
   const [state, formAction, pending] = useActionState<AccountLinkActionState, FormData>(linkUserAccountToEmployeeAction, null);
 
   return (
-    <form action={formAction} className="grid min-w-[560px] grid-cols-[130px_170px_145px_130px_auto] gap-2">
+    <form action={formAction} className="grid gap-4">
       <input name="employeeId" type="hidden" value={employee.id} />
-      <label className="grid gap-1 text-xs text-muted">
-        {t("masters.employees.field.accountId")}
-        <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={employee.account?.accountId ?? ""} name="accountId" />
-        <InlineError field="accountId" state={state} />
-      </label>
-      <label className="grid gap-1 text-xs text-muted">
-        {t("masters.employees.field.email")}
-        <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={employee.account?.email ?? ""} name="email" type="email" />
-        <InlineError field="email" state={state} />
-      </label>
-      <label className="grid gap-1 text-xs text-muted">
-        {t("masters.employees.field.role")}
-        <select className="h-8 border border-border bg-background px-2 text-sm text-foreground" defaultValue={employee.account?.role ?? "counter"} name="role">
+      <div className="grid gap-4 min-[1200px]:grid-cols-2">
+        <TextField defaultValue={employee.account?.accountId ?? ""} label={t("masters.employees.field.accountId")} name="accountId" state={state} />
+        <TextField defaultValue={employee.account?.email ?? ""} label={t("masters.employees.field.email")} name="email" state={state} type="email" />
+        <SelectField defaultValue={employee.account?.role ?? "counter"} hint={t("masters.employees.role.tvHint")} label={t("masters.employees.field.role")} name="role" state={state}>
           {accountRoles.map((role) => (
             <option key={role} value={role}>
               {t(roleLabelKeys[role])}
             </option>
           ))}
-        </select>
-        <span className="text-[11px] leading-4 text-muted">{t("masters.employees.role.tvHint")}</span>
-        <InlineError field="role" state={state} />
-      </label>
-      <label className="grid gap-1 text-xs text-muted">
-        {t("masters.employees.field.initialSecret")}
-        <input className="h-8 border border-border bg-background px-2 text-sm text-foreground" name="initialSecret" type="password" />
-        <InlineError field="initialSecret" state={state} />
-      </label>
-      <div className="flex items-end gap-2">
-        <Button className="h-8 px-2 text-xs" disabled={pending} type="submit" variant="secondary">
-          {t("masters.employees.linkAccount")}
-        </Button>
-        <InlineError state={state} />
-        {state?.ok ? (
-          <span className="whitespace-nowrap text-xs font-semibold text-success" role="status">
-            {t("masters.employees.savedNotice")}
-          </span>
-        ) : null}
+        </SelectField>
+        <TextField hint={t("masters.employees.initialSecretHint")} label={t("masters.employees.field.initialSecret")} name="initialSecret" state={state} type="password" />
       </div>
+      <SaveRow label={t("masters.employees.linkAccount")} pending={pending} savedMessage={t("masters.employees.savedNotice")} state={state} />
     </form>
   );
 }
 
-function EmployeeTable({ title, employees }: { title: string; employees: EmployeeDto[] }) {
+function DeactivateForm({ employee }: { employee: EmployeeDto }) {
   const t = useT();
-  const locale = useLocale();
+  const [state, formAction, pending] = useActionState<EmployeeActionState, FormData>(deactivateEmployeeAction, null);
+
+  if (!employee.isActive) {
+    return <p className="text-sm text-muted">{t("masters.common.alreadyInactive")}</p>;
+  }
+
   return (
-    <section className="border border-border bg-surface">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-foreground">
-          {title} <span className="text-sm font-normal text-muted">{employees.length}{t("masters.employees.peopleSuffix")}</span>
-        </h2>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[1720px] border-collapse text-left text-sm">
-          <thead className="bg-readonly text-xs font-semibold text-muted">
-            <tr>
-              <th className="w-[930px] border-b border-border px-3 py-2">{t("masters.employees.column.profile")}</th>
-              <th className="w-40 border-b border-border px-3 py-2">{t("masters.employees.column.idStaffCode")}</th>
-              <th className="w-40 border-b border-border px-3 py-2">{t("masters.employees.column.sort")}</th>
-              <th className="w-28 border-b border-border px-3 py-2">{t("masters.employees.column.status")}</th>
-              <th className="w-[590px] border-b border-border px-3 py-2">{t("masters.employees.column.linkedAccount")}</th>
-              <th className="w-44 border-b border-border px-3 py-2">{t("masters.employees.column.timestamps")}</th>
-              <th className="border-b border-border px-3 py-2">{t("masters.common.actions")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {employees.map((employee) => (
-              <tr className={employee.isActive ? "align-top" : "bg-readonly align-top"} key={employee.id}>
-                <td className="border-b border-border px-3 py-2">
-                  <ProfileForm employee={employee} />
-                  <div className="mt-1 text-xs text-muted">
-                    {t("masters.employees.baseSalaryLine", {
-                      group: t(groupLabelKeys[employee.employeeGroup]),
-                      amount: formatNumber(locale, employee.baseSalary)
-                    })}
-                  </div>
-                </td>
-                <td className="border-b border-border px-3 py-2 text-xs text-muted">
-                  <div>{t("masters.employees.employeeId", { id: employee.id })}</div>
-                  <div>{t("masters.employees.staffCodeLine", { code: employee.staffCode })}</div>
-                </td>
-                <td className="border-b border-border px-3 py-2">
-                  <SortOrderForm employee={employee} />
-                </td>
-                <td className="border-b border-border px-3 py-2">
-                  <div>{employee.employmentStatus}</div>
-                  <div className="text-xs text-muted">{employee.isActive ? t("masters.common.active") : t("masters.common.inactive")}</div>
-                </td>
-                <td className="border-b border-border px-3 py-2">
-                  <AccountLinkForm employee={employee} />
-                  {employee.account ? (
-                    <div className="mt-1 text-xs text-muted">{t("masters.employees.currentRole", { role: roleDisplayName(t, employee.account.role) })}</div>
-                  ) : null}
-                </td>
-                <td className="border-b border-border px-3 py-2 text-xs text-muted">
-                  <div>{t("masters.employees.createdLine", { value: masterDateTime(locale, employee.createdAt) })}</div>
-                  <div>{t("masters.employees.updatedLine", { value: masterDateTime(locale, employee.updatedAt) })}</div>
-                </td>
-                <td className="border-b border-border px-3 py-2">
-                  <DeactivateForm employee={employee} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <form action={formAction} className="grid gap-3">
+      <input name="employeeId" type="hidden" value={employee.id} />
+      <p className="text-sm text-muted">{t("masters.employees.deactivateNote")}</p>
+      <SaveRow label={t("masters.common.deactivate")} pending={pending} state={state} />
+    </form>
   );
 }
 
-export function EmployeeManager({ employees }: { employees: EmployeeDto[] }) {
+function EmployeePanel({ employee, onClose }: { employee: EmployeeDto; onClose: () => void }) {
   const t = useT();
-  const grouped = employeeGroups.map((group) => ({
-    group,
-    employees: employees.filter((employee) => employee.employeeGroup === group)
-  }));
+  const locale = useLocale();
+  return (
+    <SidePanel onClose={onClose} title={`${employee.displayName} (${employee.staffCode})`}>
+      <div className="grid gap-6" key={employee.id}>
+        <ActiveStatus inactiveNote={t("masters.employees.inactiveNote")} isActive={employee.isActive} locale={locale} />
+        <ImpactNotice
+          items={[t("masters.employees.impact.name"), t("masters.employees.impact.inactive"), t("masters.employees.impact.account")]}
+          locale={locale}
+        />
+        <PanelSection title={t("masters.employees.column.profile")}>
+          <ProfileForm employee={employee} />
+        </PanelSection>
+        <SortOrderForm employee={employee} />
+        <PanelSection title={t("masters.employees.column.linkedAccount")}>
+          {employee.account ? (
+            <p className="text-sm text-foreground">{t("masters.employees.currentRole", { role: roleDisplayName(t, employee.account.role) })}</p>
+          ) : (
+            <p className="text-sm text-muted">{t("masters.employees.accountNotLinked")}</p>
+          )}
+          <AccountLinkForm employee={employee} />
+        </PanelSection>
+        <PanelSection title={t("masters.common.details")}>
+          <dl>
+            <DetailRow label={t("masters.employees.employeeId")} value={employee.id} />
+            <DetailRow label={t("masters.employees.field.staffCode")} value={employee.staffCode} />
+            <DetailRow label={t("masters.common.createdAt")} value={masterDateTime(locale, employee.createdAt)} />
+            <DetailRow label={t("masters.common.updatedAt")} value={masterDateTime(locale, employee.updatedAt)} />
+          </dl>
+        </PanelSection>
+        <PanelSection title={t("masters.common.deactivateTitle")}>
+          <DeactivateForm employee={employee} />
+        </PanelSection>
+      </div>
+    </SidePanel>
+  );
+}
+
+/** 직원 마스터: 직군별 직원 목록과, 고른 직원의 변경 영향·프로필·계정 연결·비활성 처리 패널. */
+export function EmployeeManager({ employees, initialItem }: { employees: EmployeeDto[]; initialItem: string | null }) {
+  const t = useT();
+  const locale = useLocale();
+  const { selected, select, panelRef } = useMasterSelection(initialItem);
+  const selectedEmployee = employees.find((employee) => employee.id === selected) ?? null;
 
   return (
-    <>
-      <EmployeeCreateForm />
-      <div className="grid gap-5">
-        {grouped.map((entry) => (
-          <EmployeeTable employees={entry.employees} key={entry.group} title={t(groupLabelKeys[entry.group])} />
-        ))}
-      </div>
-    </>
+    <MasterSplit
+      hint={t("masters.common.panelHint")}
+      panel={selectedEmployee ? <EmployeePanel employee={selectedEmployee} onClose={() => select(null)} /> : null}
+      panelRef={panelRef}
+    >
+      {employeeGroups.map((group) => {
+        const groupEmployees = employees.filter((employee) => employee.employeeGroup === group);
+        const title = t(groupLabelKeys[group]);
+        const headingId = `employee-group-${group}`;
+        return (
+          <section aria-labelledby={headingId} className="grid gap-3" key={group}>
+            <MasterSectionHeading count={`${formatNumber(locale, groupEmployees.length)}${t("masters.employees.peopleSuffix")}`} id={headingId} title={title} />
+            <MasterTable
+              head={
+                <>
+                  <HeadCell>{t("masters.employees.field.name")}</HeadCell>
+                  <HeadCell>{t("masters.common.activeColumn")}</HeadCell>
+                  <HeadCell>{t("masters.employees.field.position")}</HeadCell>
+                  <HeadCell>{t("masters.employees.field.shiftType")}</HeadCell>
+                  <HeadCell>{t("masters.employees.field.employmentStatus")}</HeadCell>
+                  <HeadCell>{t("masters.employees.column.linkedAccount")}</HeadCell>
+                </>
+              }
+              label={title}
+              minWidth="min-w-[44rem]"
+            >
+              {groupEmployees.map((employee) => (
+                <SelectableRow
+                  key={employee.id}
+                  label={employee.displayName}
+                  onSelect={(viaKeyboard) => select(employee.id, viaKeyboard)}
+                  selected={employee.id === selected}
+                  sublabel={employee.staffCode}
+                >
+                  <Cell>
+                    <ActiveStatus inactiveNote={t("masters.employees.inactiveNote")} isActive={employee.isActive} locale={locale} />
+                  </Cell>
+                  <Cell>{employee.position}</Cell>
+                  <Cell nowrap>{employee.shiftType ? t(shiftLabelKeys[employee.shiftType]) : t("masters.employees.field.notEntered")}</Cell>
+                  <Cell nowrap>{t(employmentLabelKeys[employee.employmentStatus])}</Cell>
+                  <Cell muted={!employee.account}>
+                    {employee.account ? (
+                      <span className="grid">
+                        <span className="text-foreground">{employee.account.accountId}</span>
+                        <span className="text-xs text-muted">{roleDisplayName(t, employee.account.role)}</span>
+                      </span>
+                    ) : (
+                      t("masters.employees.accountNotLinked")
+                    )}
+                  </Cell>
+                </SelectableRow>
+              ))}
+            </MasterTable>
+          </section>
+        );
+      })}
+    </MasterSplit>
   );
 }

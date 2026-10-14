@@ -294,10 +294,13 @@ test.describe("Story 7.3 migration verification report browser access", () => {
     await expect(page).toHaveURL(/kind=calculation_comparison/);
 
     const issueRow = page.getByRole("row").filter({ hasText: story73OpenIssueKey });
-    // 담당자 메모는 텍스트가 아니라 input value로 렌더되므로 toHaveValue로 확인한다.
-    await expect(issueRow.getByLabel("추적 상태")).toHaveValue("재검증 필요");
-    await expect(issueRow.getByLabel("담당자 메모")).toHaveValue("수정 배포 후 재검증 예정");
-    await expect(issueRow.getByRole("button", { name: "저장" })).toBeVisible();
+    await expect(issueRow).toContainText("수정 배포 후 재검증 예정");
+    // 티켓 07: 추적 상태·담당자 메모 저장은 행을 고르면 열리는 이슈 상세 패널에 있다.
+    await issueRow.getByRole("button").first().click();
+    const issuePanel = page.getByRole("complementary");
+    await expect(issuePanel.getByLabel("추적 상태")).toHaveValue("재검증 필요");
+    await expect(issuePanel.getByLabel("담당자 메모")).toHaveValue("수정 배포 후 재검증 예정");
+    await expect(issuePanel.getByRole("button", { name: "저장" })).toBeVisible();
   });
 
   test("read_only_viewer can inspect the report but cannot mutate tracking status", async ({ page }) => {
@@ -305,12 +308,17 @@ test.describe("Story 7.3 migration verification report browser access", () => {
     await page.goto("/masters/sheet-mapping?status=%EC%9E%AC%EA%B2%80%EC%A6%9D+%ED%95%84%EC%9A%94&kind=calculation_comparison");
 
     await expect(page.getByRole("heading", { name: "시트 기능 매핑표", level: 1 })).toBeVisible();
-    await expect(page.getByText("조회 전용")).toBeVisible();
+    // 도크의 "나" 메뉴도 역할 이름 "조회 전용"을 보이므로 본문 안으로 범위를 좁힌다.
+    await expect(page.locator("#main-content").getByText("조회 전용")).toBeVisible();
 
     const issueRow = page.getByRole("row").filter({ hasText: story73OpenIssueKey });
     await expect(issueRow).toContainText("수정 배포 후 재검증 예정");
-    await expect(issueRow.getByRole("button", { name: "저장" })).toHaveCount(0);
-    await expect(issueRow.getByLabel("추적 상태")).toHaveCount(0);
+    // 조회 전용은 같은 이슈 상세 패널을 읽기만 한다.
+    await issueRow.getByRole("button").first().click();
+    const issuePanel = page.getByRole("complementary");
+    await expect(issuePanel).toContainText("수정 배포 후 재검증 예정");
+    await expect(issuePanel.getByRole("button", { name: "저장" })).toHaveCount(0);
+    await expect(issuePanel.getByLabel("추적 상태")).toHaveCount(0);
 
     await page.goto("/masters/codes");
     await expect(page).toHaveURL(/\/rooms$/);

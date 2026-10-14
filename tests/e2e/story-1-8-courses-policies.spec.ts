@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, gotoStable, login } from "./support/auth";
+import { masterRow, openMasterPanel } from "./support/masters";
 import { defaultCourseSeeds } from "@/modules/masters/course-schema";
 import { ensureDefaultCoursesAndPolicies } from "@/modules/masters/course-service";
 
@@ -12,8 +13,9 @@ const users = [
   { accountId: "story18_waiter", role: "waiter", password: "Story18!waiter", landing: "/rooms" }
 ];
 
+// 티켓 07: 코스 목록 행의 첫 칸 버튼은 코스 코드다. 정책 폼은 행을 고르면 열리는 패널에 있다.
 function courseRow(page: import("@playwright/test").Page, code: string) {
-  return page.locator("tbody tr").filter({ hasText: new RegExp(`^\\s*${code}\\s*Course\\.id`) }).first();
+  return masterRow(page, code);
 }
 
 
@@ -125,18 +127,17 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
 
     await expect(page.getByRole("heading", { name: "코스/수당/인센", level: 1 })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "설정 화면" }).getByRole("link", { name: "코스·수당" })).toHaveAttribute("aria-current", "page");
-    // tvDisplayName은 텍스트 노드가 아니라 정책 폼의 input value(course-forms.tsx)로 렌더되므로
-    // getByText로는 잡히지 않는다. input value 로케이터로 확인한다.
-    await expect(page.locator('input[value="A 누루60"]').first()).toBeVisible();
-    await expect(page.locator('input[value="B 귀청소90"]').first()).toBeVisible();
-    await expect(page.locator('input[value="C 때밀이90"]').first()).toBeVisible();
-    await expect(page.locator('input[value="D 2:1 90"]').first()).toBeVisible();
-    await expect(page.locator('input[value="E 풀코스120"]').first()).toBeVisible();
-    await expect(courseRow(page, "D").getByText("마사지사2 필요: Y")).toBeVisible();
-    await expect(page.getByText("0원 수당")).toBeVisible();
-    await expect(page.locator('input[value="0"]').first()).toBeVisible();
-    await expect(page.getByText("30콜").or(page.locator('input[value="30"]')).first()).toBeVisible();
-    await expect(page.locator('input[value="1000"]').first()).toBeVisible();
+    // 코스 목록은 읽기 전용 표다. TV 표시명은 그 표의 칸 글자다.
+    for (const tvLabel of ["A 누루60", "B 귀청소90", "C 때밀이90", "D 2:1 90", "E 풀코스120"]) {
+      await expect(page.getByRole("cell", { name: tvLabel, exact: true }).first()).toBeVisible();
+    }
+    // "마사지사2 필요" 열의 D 코스 값.
+    await expect(courseRow(page, "D").getByRole("cell", { name: "필요", exact: true })).toBeVisible();
+    await expect(page.getByText("0원 수당").first()).toBeVisible();
+    // 수당 표의 칸은 "{마사지사} {코스} 수당: {금액}" 이름의 버튼이다. 0원 수당은 미등록과 다르게 0으로 보인다.
+    await expect(page.getByRole("button", { name: / 수당: 0$/ }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "30콜", exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "1,000콜", exact: true }).first()).toBeVisible();
 
     const dCourse = await (prisma as any).course.findUnique({ where: { code: "D" }, select: { id: true, code: true } });
     const dPolicy = await (prisma as any).coursePolicy.findFirst({
@@ -149,11 +150,11 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     const auditCountBefore = await (prisma as any).auditLog.count({
       where: { action: "course.policy_changed", targetType: "course_policy" }
     });
-    const row = courseRow(page, "A");
+    const panel = await openMasterPanel(page, "A");
     const newTvLabel = `A 누루60 ${Date.now().toString(36).slice(-4)}`;
-    // 코스 A 행에는 현재 정책 폼(현재 정책 저장)과 새 정책 폼이 각각 TV 표시명 input을 렌더한다.
-    // 현재 정책 폼의 input(first)을 채우고 같은 폼의 "현재 정책 저장" 버튼을 누른다.
-    const currentPolicyForm = row.locator("form").filter({ has: page.getByRole("button", { name: "현재 정책 저장" }) });
+    // 코스 A 패널에는 현재 정책 폼(현재 정책 저장)과 새 정책 이력 폼이 각각 TV 표시명 input을 렌더한다.
+    // 현재 정책 폼의 input을 채우고 같은 폼의 "현재 정책 저장" 버튼을 누른다.
+    const currentPolicyForm = panel.locator("form").filter({ has: page.getByRole("button", { name: "현재 정책 저장" }) });
     await currentPolicyForm.getByLabel("TV 표시명").fill(newTvLabel);
     // 저장 server action POST 응답을 기다린 뒤 반환해 in-flight POST 중 goto가 abort되지 않게 한다.
     const saveResponse = page
@@ -168,7 +169,7 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
       )
       .toBeGreaterThan(0);
     await gotoStable(page, "/masters/courses");
-    await expect(page.locator(`input[value="${newTvLabel}"]`).first()).toBeVisible();
+    await expect(page.getByRole("cell", { name: newTvLabel, exact: true })).toBeVisible();
 
     const courseA = await (prisma as any).course.findUnique({ where: { code: "A" }, select: { id: true, code: true } });
     expect(courseA).toMatchObject({ id: beforeCourseA.id, code: "A" });
@@ -187,8 +188,8 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     await gotoStable(page, "/masters/courses");
 
     const beforeB = await (prisma as any).course.findUnique({ where: { code: "B" }, select: { id: true, code: true } });
-    const bRow = courseRow(page, "B");
-    const currentPolicyForm = bRow.locator("form").first();
+    const bPanel = await openMasterPanel(page, "B");
+    const currentPolicyForm = bPanel.locator("form").filter({ has: page.getByRole("button", { name: "현재 정책 저장" }) });
     await currentPolicyForm.getByLabel("시작월").fill("2026-07");
     await currentPolicyForm.getByLabel("종료월").fill("2026-06");
     await currentPolicyForm.getByRole("button", { name: "현재 정책 저장" }).click();
@@ -198,11 +199,13 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     const afterB = await (prisma as any).course.findUnique({ where: { code: "B" }, select: { id: true, code: true } });
     expect(afterB).toMatchObject(beforeB);
 
-    const monthlySection = page.getByRole("heading", { name: "운영팀 월 인센 정책" }).locator("xpath=ancestor::div[contains(@class, 'border-t')][1]");
-    const monthlyForm = monthlySection.locator("form").first();
+    // 월 인센 규칙은 표의 행을 고르면 열리는 패널에서 고친다.
+    const monthlySection = page.getByRole("region", { name: "운영팀 월 인센 정책" });
+    await monthlySection.locator("tbody tr").first().getByRole("button").first().click();
+    const monthlyForm = page.getByRole("complementary").locator("form");
     await monthlyForm.locator('input[name="leadShare"]').fill("0.5");
     await monthlyForm.getByRole("button", { name: "월 저장" }).click();
-    await expect(monthlySection.getByText("팀장/카운터팀/웨이터팀 분배율 합계는 1이어야 합니다.").first()).toBeAttached();
+    await expect(monthlyForm.getByText("팀장/카운터팀/웨이터팀 분배율 합계는 1이어야 합니다.").first()).toBeAttached();
   });
 
   for (const user of users.filter((entry) => entry.role !== "administrator")) {
