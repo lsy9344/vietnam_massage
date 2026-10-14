@@ -20,7 +20,7 @@ export function StatusIndicator({ tone, label, className }: { tone: StatusTone; 
   return (
     <span
       className={cn(
-        "inline-flex min-h-7 items-center gap-1.5 whitespace-nowrap px-2.5 text-sm font-semibold leading-none",
+        "inline-flex min-h-7 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-sm font-semibold leading-none",
         config.className,
         className
       )}

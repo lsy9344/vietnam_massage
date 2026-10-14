@@ -37,7 +37,7 @@ export function LocaleSwitcher({ className }: { className?: string }) {
             disabled={isPending}
             onClick={() => selectLocale(loc)}
             className={cn(
-              "min-h-11 rounded-md px-3 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-60",
+              "min-h-11 rounded-full px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary disabled:opacity-60",
               active ? "bg-brand text-brand-foreground" : "border border-border bg-surface text-muted hover:bg-readonly hover:text-foreground"
             )}
           >

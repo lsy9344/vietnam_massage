@@ -1,85 +1,295 @@
-# Shadcn/ui Customization Specification (`design.md`)
+# 디자인 시스템 (`design.md`)
 
-> 2026-10-14 후속 사용자 지시: UI/UX·디자인·스타일을 핵심 요구사항으로 두며 필요하면 모든 화면과 스타일을 재구성할 수 있다. 아래의 골드·각진 모서리 등 기존 시각 조건은 현행 구현 기록이며 새 디자인을 제한하지 않는다. 화면 점검·리서치·AI 생성 화면 이미지와 [후속 디자인 가이드](docs/design/2026-10-14-ui-redesign.md), [27개 화면 갤러리](output/design/2026-10-14/index.html)가 새 구현 기준이 된다. 업무 규칙·권한·데이터 보존은 통합 명세를 따른다.
+작성일: 2026-10-14
+상태: 현행 기준. 토큰은 `src/app/globals.css`에, 공통 컴포넌트 모양은 `src/components/ui/`와 `src/components/shell/`에 적용돼 있다.
+출처: 사용자가 준 Clarity Warm-Pastel 명세(JSON)를 이 앱의 업무와 접근성 기준에 맞춰 고쳤다. 원본과 달라진 점은 9절에 있다.
 
-> 탐색과 화면 골격은 [업무 흐름 중심 정보구조와 화면 골격](docs/design/2026-10-14-workflow-information-architecture.md)을 따른다. 위 갤러리와 가이드는 화면 안의 정보 위계를 정할 때 참고하는 자료이며, 그 안의 좌측 사이드바·상단바 배치는 따르지 않는다.
+UI를 만들거나 고치기 전에 이 문서를 읽는다. 화면에 새 모양이 필요하면 페이지에서 클래스를 조합해 만들지 말고 공통 컴포넌트나 토큰을 먼저 고친다.
 
-This document serves as a strict guideline and reference for the AI Agent to customize Shadcn/ui components and establish a unique design system. The agent must strictly follow the architectural principles, global configuration rules, and component-level variant structures defined below.
+## 0. 이 문서의 자리
 
----
+| 정하는 것 | 기준 문서 |
+| --- | --- |
+| 업무 규칙, 계산, 권한, 잠금, 데이터 보존 | `.scratch/app-expansion/spec.md`, `CONTEXT.md`, `docs/adr/` |
+| 탐색 셸, 화면 골격, 화면 사이 이동 | `docs/design/2026-10-14-workflow-information-architecture.md` |
+| 색, 글꼴, 모서리, 간격, 그림자, 움직임, 컴포넌트 모양 | 이 문서 |
+| 화면별 업무 동선과 상태 표현 원칙 | `docs/design/2026-10-14-ui-redesign.md` (그 안의 색·글꼴·모서리 값은 이 문서가 대체한다) |
+| 화면 시안 이미지 `output/design/…` | 정보 위계 참고만 한다. 시안의 골드 버튼, 각진 모서리, 녹색 팔레트, 사이드바, 칸반은 따르지 않는다 |
 
-## 1. Architectural Principles & Anti-Patterns
-*   **Anti-Pattern (Out-of-the-box Shadcn):** Do not leave components with default padding, border-radius, or shadows. Avoid making the application look identical to standard Shadcn templates (Bootstrap effect).
-*   **Ownership Principle:** Shadcn/ui is not a dependency abstraction (like MUI); it is a code generator. You own the source code inside `components/ui/`. Modify the component files directly instead of chaining arbitrary utility classes in page layouts.
-*   **Accessibility Foundation:** Retain the underlying Radix UI primitives for behavior and accessibility, but completely override styles using Tailwind CSS.
+위 칸이 아래 칸보다 앞선다. 이 문서의 모양 규칙이 업무 규칙과 부딪히면 업무 규칙을 따르고 이 문서를 고친다.
 
----
+## 1. 원칙
 
-## 2. Global Style Configuration (`app/globals.css`)
+1. **그림자 없이 층을 나눈다.** 바탕(모래 크림) → 작업면(아이보리) → 떠 있는 면(알라배스터). 밝기 차이와 1px 선으로 나누고, 제자리에 놓인 카드·표·패널에는 그림자를 넣지 않는다.
+2. **주 행동은 검정 잉크, 골드는 표식.** 주 버튼, 현재 탭, 선택은 검정으로 채운다. Royal Gold는 포커스 링, 도크의 현재 구역 막대, 로그인·TV의 브랜드 표식에만 쓴다.
+3. **파스텔은 요약 숫자에만.** 화면 맨 위 요약 카드와 차트 계열만 파스텔로 채우고 그 위 글자는 검정 잉크로 쓴다. 파스텔에는 상태 뜻이 없다. 상태는 의미색과 글자·기호로 보인다.
+4. **바깥에서 안으로 모서리가 줄어든다.** 도크·서랍 24px → 카드·패널 18px → 표·목록 행 14px → 입력칸 10px. 버튼, 탭, 칩은 알약 모양이다.
+5. **숫자는 같은 폭, 표가 주인공.** 모든 숫자는 고정폭 숫자로 그린다. 원장과 정산처럼 열을 비교하는 업무는 표로 둔다.
 
-All foundational design tokens must be configured in `globals.css` inside the `:root` and `.dark` blocks. Do not hardcode magic numbers in local components.
+## 2. 색
 
-### 2.1 Border Radius Configuration
-*   To achieve a sharp, modern, or boxy UI, reduce or completely remove the default global radius.
-*   **Action:** Modify the `--radius` variable globally.
-```css
-    :root {
-      --radius: 0rem; /* Set to 0rem for sharp corners, or custom values like 0.1rem */
-    }
-    ```
+토큰 이름이 그대로 Tailwind 클래스가 된다(`--surface` → `bg-surface`, `--text` → `text-foreground`). 화면 코드에 HEX·OKLCH·rgb 값이나 `style={{ color }}`를 쓰지 않는다. 대비 측정값은 `docs/design/2026-10-14-color-contrast.md`에 있다.
 
-### 2.2 OKLCH Color System Space
-Shadcn/ui utilizes OKLCH instead of HSL for perceptually uniform color mapping. When generating or modifying themes, follow this structural template: `oklch(L C H)`
-*   **L (Lightness):** Range `0.0` (Black) to `1.0` (White) / `0%` to `100%`.
-*   **C (Chroma):** Color intensity/saturation. `0` is pure gray. Higher values yield more vivid colors. Keep it low for backgrounds, high for accents.
-*   **H (Hue):** Color wheel angle (`0` to `360`).
-    *   `0° - 20°`: Red
-    *   `180°`: Green/Cyan
-    *   `200°`: Blue
-    *   `260°`: Deep Blue / Indigo
-    *   `300°`: Purple
+### 2.1 면, 글자, 선
 
-*   **Theme Modification Pattern Example:**
-```css
-    .dark {
-      /* Deep Blue Primary Accents (L=0.54, C=0.24, H=260) */
-      --primary: 0.54 0.24 260; 
-      --primary-foreground: 0.98 0.01 260;
-    }
-    ```
+| 토큰 | 클래스 | 값 | 쓰임 |
+| --- | --- | --- | --- |
+| `--background` | `bg-background` | `#F1E8D7` | 화면 바탕, 도구줄 |
+| `--surface` | `bg-surface` | `#FAF4E9` | 카드, 표, 비모달 패널, 입력칸 |
+| `--surface-float` | `bg-surface-float` | `#F6F5F1` | 떠 있는 층: 도크, 팝오버, 서랍, 다이얼로그, 날짜 캡슐 |
+| `--readonly` | `bg-readonly` | `#ECE3D0` | 읽기 전용 칸, 표 머리, hover 바탕, 스켈레톤 |
+| `--text` | `text-foreground` | `#161513` | 본문, 제목, 숫자, 파스텔 위 글자 |
+| `--muted` | `text-muted` | `#57534C` | 보조 글자, 설명 |
+| `--faint` | `text-faint` | `#68625A` | 입력칸 안내 문구, 마지막 갱신 시각 같은 작은 메타 |
+| `--border` | `border-border` | `#D8D0C1` | 장식선: 카드 테두리, 표 행 구분, 글자가 있는 알약의 테두리 |
+| `--border-strong` | `border-border-strong` | `#857D6C` | 경계가 곧 조작 영역인 곳: 입력칸, 선택칸, 체크박스, 검색 캡슐 |
 
----
+`--border`는 대비가 1.26–1.40:1이라 입력칸 경계에 쓰지 않는다. 글자가 있는 버튼·탭은 글자로 알아볼 수 있으므로 `--border`를 써도 된다.
 
-## 3. Automated Theme Generation
-*   When a wholesale theme overhaul is required, prioritize generating tokens compatible with tools like **Tweak CN**.
-*   **Design Token Checklist for Agent:**
-    1.  **Typography:** Define custom monospace or sans-serif fonts (e.g., Geist Mono) and explicitly adjust `letter-spacing` for scannability.
-    2.  **Shadows:** Finetune shadow opacity, blur radius, and spread. Avoid heavy default shadows; use minimal spread with subtle opacity.
+### 2.2 행동과 브랜드
 
----
+| 토큰 | 값 | 쓰임 |
+| --- | --- | --- |
+| `--brand` (`bg-brand`, `border-brand`) | `#090909` | 주 버튼, 현재 탭, 선택 표시, 포커스된 입력칸 테두리 |
+| `--brand-strong` | `#2B2824` | 주 버튼 hover |
+| `--brand-foreground` | `#FFFFFF` | 검정 위 글자 |
+| `--brand-secondary` (`outline-brand-secondary`) | Royal Gold `oklch(0.47 0.105 76)` | 포커스 링, 도크 현재 구역 막대, 로그인·TV 브랜드 표식 |
 
-## 4. Component-Level Customization Rule (`components/ui/*`)
+토큰 이름 `--brand`는 검사 스크립트와 기존 화면이 쓰고 있어 그대로 두었다. 이름과 달리 지금 값은 검정 잉크다. 골드는 `--brand-secondary`다.
 
-When altering specific UI behaviors, navigate to the respective file in `components/ui/` and utilize the `cva` (Class Variance Authority) schema. **Never** wrap components repeatedly in `className="rounded-full"` at the page level.
+골드를 버튼, 배지, 차트, 금액 강조에 쓰지 않는다. 주 버튼은 화면마다 하나다.
 
-### 4.1 Modifying Existing Variants (e.g., `button.tsx`)
-Locate `buttonVariants` and update the inline Tailwind classes inside the targeted variant group.
-```typescript
-// Example: Enforcing full rounding exclusively for the outline variant
-const buttonVariants = cva(
-  "inline-flex items-center justify-center...", // Global Styles
-  {
-    variants: {
-      variant: {
-        default: "bg-primary text-primary-foreground shadow",
-        // Action: Append specific utility classes directly to the variant
-        outline: "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground rounded-full", 
-      },
-      size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-md px-3",
-      }
-    }
-  }
-)
-```
+### 2.3 파스텔: 요약 카드와 차트
+
+| 토큰 | 값 | 맡는 지표 |
+| --- | --- | --- |
+| `--accent-lavender` | `#CDAAEE` | 매출 계열: 결제 합계, 순매출 |
+| `--accent-blue` | `#A4C1ED` | 잔액 계열: 현금 잔액, 계좌 잔액 |
+| `--accent-peach` | `#FFB399` | 지출·비용 계열 |
+| `--accent-mint` | `#B8E6C9` | 건수·인원 계열: 콜 수, 출근 인원 |
+| `--accent-butter` | `#FFE5AA` | 차트의 다섯 번째 계열 |
+
+- 같은 지표는 모든 화면에서 같은 색이다.
+- 파스텔 위 글자는 `text-foreground`만 쓴다. `text-muted`는 파스텔 위에서 3.85–4.43:1이라 기준에 못 미치고, 흰 글자도 쓰지 않는다.
+- 파스텔은 상태를 뜻하지 않는다. 피치는 경고가 아니다.
+- 다른 값은 같은 계열이라도 카드를 나눈다. 현금 잔액은 순매출이 아니다(ADR 0002).
+
+### 2.4 의미색: 상태, 경고, 오류
+
+| 뜻 | 진한 색 | 연한 바탕 | 진한 색 위 글자 |
+| --- | --- | --- | --- |
+| 성공·완료 | `--success` | `--success-soft` | `--success-foreground` |
+| 주의·경고 | `--warning` | `--warning-soft` | `--warning-foreground` |
+| 정보·잠금·진행 | `--info` | `--info-soft` | `--info-foreground` |
+| 오류·파괴적 행동 | `--danger` | `--danger-soft` | `--danger-foreground` |
+
+- 상태 칩은 연한 바탕 + 같은 뜻의 진한 글자 + 기호다(`StatusIndicator`).
+- 색만으로 상태를 알리지 않는다. 글자, 기호(●▲■◆○), 색을 함께 쓴다. 이모지를 쓰지 않는다.
+- 빨강으로 채운 버튼은 파괴적 확정에만 쓴다.
+
+### 2.5 객실 상태색 (고정)
+
+`--status-*`는 Story 3.5가 값까지 고정했다(`scripts/validate-story-3-5.mjs`). 객실·실시간·TV의 `StatusBadge`에서만 쓰고, 다른 상태 표시에 빌려 쓰지 않는다.
+
+### 2.6 색 금지
+
+- 흰색(`#FFFFFF`) 면, Tailwind 기본 회색(`slate`·`gray`·`zinc`·`neutral`·`stone`)과 기본 색 팔레트(`red-500` 등).
+- 새 색이 필요하면 `globals.css`에 토큰을 더하고, `node scripts/measure-token-contrast.mjs`로 재서 대비 문서에 적은 뒤 쓴다.
+
+## 3. 글꼴과 글자
+
+- **글꼴:** `--font-body` = Plus Jakarta Sans(라틴·베트남어, `next/font`로 내장) → Pretendard(기기에 있을 때) → Apple SD Gothic Neo / Malgun Gothic / Noto Sans KR → system-ui. 한국어 글꼴 파일은 내려받지 않는다.
+- **숫자:** `body` 전체가 `tabular-nums`라 금액·시각·건수 열이 세로로 맞는다. 금액은 오른쪽 정렬한다.
+- **줄바꿈:** 한국어 화면은 `word-break: keep-all`이다(`globals.css`).
+- `uppercase`를 쓰지 않는다. 한국어에는 뜻이 없고, 베트남어는 성조 부호가 읽기 어려워진다.
+- 가장 작은 글자는 12px다.
+
+| 역할 | 클래스 | 크기·굵기 |
+| --- | --- | --- |
+| 요약 숫자 | `text-[1.75rem] min-[1200px]:text-4xl font-semibold leading-none tracking-[-0.03em]` | 28–36px / 600 |
+| 화면 제목 | `ScreenToolbar`의 `h1`: `text-xl lg:text-2xl font-bold` | 20–24px / 700 |
+| 구역·카드 제목 | `text-[0.9375rem] font-semibold` | 15px / 600 |
+| 본문, 표 셀 | `text-sm` | 14px / 400 |
+| 버튼, 탭, 도크 | `text-sm font-semibold` | 14px / 600 |
+| 메타, 칩, 표 머리 | `text-xs font-semibold` | 12px / 600 |
+
+## 4. 모서리, 간격, 크기
+
+### 4.1 모서리
+
+| 클래스 | 값 | 쓰임 |
+| --- | --- | --- |
+| `rounded-xl` | 24px | 도크, 서랍, 다이얼로그 |
+| `rounded-lg` | 18px | 카드, 요약 카드, 비모달 패널, 화면 상태, 팝오버 |
+| `rounded-md` | 14px | 표 컨테이너, 목록 행 카드 |
+| `rounded-sm` | 10px | 입력칸, 선택칸, 메뉴 항목, 표 안 편집 칸 |
+| `rounded-full` | 알약 | 버튼, 탭, 도구줄 날짜칸, 검색 캡슐, 상태 칩, 날짜 캡슐 |
+
+안쪽 요소의 모서리가 바깥 면보다 크면 안 된다(알약은 예외).
+
+### 4.2 간격
+
+| 값 | 클래스 | 쓰임 |
+| --- | --- | --- |
+| 6px | `gap-1.5` | 칩 사이, 기호와 글자, 라벨과 입력칸 |
+| 8–10px | `gap-2`, `gap-2.5` | 탭 사이, 목록 행 사이, 카드 안 요소 |
+| 16px | `gap-4`, `p-4` | 카드 안 여백, 카드 사이, 요약 카드 사이 |
+| 24px | `gap-6` | 입력 묶음 사이, 화면 구역 사이 |
+| 40px | `gap-10` | 서로 다른 업무 사이 (예: 요약 지표와 지출 입력) |
+
+화면 가장자리 여백은 `.screen`이 정한다(840px 미만 16px, 이상 24·32px).
+
+### 4.3 조작 크기
+
+- 누르는 것(버튼, 탭, 도크 항목, 입력칸, 행 동작)은 높이 44px(`h-11`, `min-h-11`) 이상이다.
+- 표 안 편집 칸은 밀도를 위해 보이는 높이 32px(`h-8`)까지 줄일 수 있다. 행 높이는 각 화면 티켓이 PC와 태블릿에서 확인해 정한다.
+
+## 5. 그림자와 움직임
+
+- 제자리에 놓인 카드, 표, 패널, 요약 카드, 도크에는 그림자가 없다.
+- 팝오버(나 메뉴, 더보기)만 `--shadow-float` 한 단계를 쓴다.
+- 서랍과 다이얼로그는 그림자 대신 뒤를 `bg-foreground/20 backdrop-blur-[3px]`로 덮는다.
+- 움직임은 색·배경·테두리·투명도만 150–250ms 바뀐다(`transition-colors`). 위치 이동, 크기 변화, 회전은 쓰지 않는다.
+- 동작 줄이기 설정에서는 `globals.css`가 모든 전환을 즉시 끝낸다.
+
+## 6. 컴포넌트
+
+### 6.1 업무 흐름 도크 — `src/components/shell/workflow-dock.tsx`, `.shell-dock*`
+
+- 화면 가장자리에서 12px(600px 미만은 8px) 떨어져 떠 있는 섬이다: `--surface-float`, 1px `--border`, 24px 모서리.
+- 840px 미만에서는 항목 글자를 13px, 좌우 여백을 8px로 줄여 베트남어 라벨 네 구역 + 더보기 + 나가 한 줄에 들어간다. 360px 폭에서 "Chốt tháng"이 여백 없이 꼭 맞으므로 라벨을 늘리면 이 폭에서 다시 확인한다.
+- 항목은 알약이고 hover는 `--readonly`다. 현재 구역은 `--readonly` 바탕에 글자 아래 골드 막대가 붙는다.
+- 도크에 가리지 않도록 본문 아래 여백과 높이 계산은 `--dock-space`를 쓴다. 예: `max-h-[calc(100vh-var(--dock-space))]`.
+
+### 6.2 화면 도구줄 — `ScreenToolbar`, `.screen-toolbar`, `.screen-tab`, `.screen-field`, `.screen-step`
+
+- 순서: 제목 → 날짜·운영월(알약 날짜칸, 이전·오늘·다음 알약) → 구역 안 탭 → 오른쪽 끝에 화면 상태와 주요 행동.
+- 탭은 낱개 알약을 8px 간격으로 놓는다. 공유 배경 트랙(segmented control) 안에 넣지 않는다. 현재 탭은 검정으로 채우고 흰 글자, 나머지는 `--border` 테두리다.
+- 화면 안의 보기 전환(예: 원장 / 하루 수납·지출)도 `.screen-tab` 모양을 쓴다.
+- 주요 행동은 하나이며 검정 알약 `Button`이다.
+- 위에 붙는 도구줄(`sticky`)만 아래 선을 갖는다.
+
+### 6.3 버튼 — `src/components/ui/button.tsx`
+
+| variant | 모양 | 쓰임 |
+| --- | --- | --- |
+| `default` | 검정 알약, 흰 글자 | 화면의 주요 행동, 패널의 저장 |
+| `secondary` | 투명 알약, `--border` 테두리 | 보조 행동 |
+| `ghost` | 테두리 없음 | 표 안 행 동작, 메뉴 항목 |
+
+파괴적 확정은 `AlertDialogAction`(빨강 알약)이다. 모든 버튼은 높이 44px, 키보드 포커스는 골드 링이다.
+
+### 6.4 입력칸
+
+- 기본: `h-11 rounded-sm border border-border-strong bg-surface px-3 text-sm text-foreground`.
+- 포커스: `focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-secondary`.
+- 오류: `border-danger`와 칸 아래 오류 문장(`text-sm text-danger`)을 두고 `aria-describedby`로 잇는다.
+- 읽기 전용·비활성: `bg-readonly text-muted`.
+- 안내 문구는 `::placeholder`가 `--faint`로 그린다. 라벨을 안내 문구로 대신하지 않는다.
+- 표 안 편집 칸은 `h-8 rounded-sm`까지 줄일 수 있다.
+
+### 6.5 검색 캡슐
+
+화면의 주 검색(예: 고객 검색)에 쓴다.
+
+- 폭 전체, 높이 44px, 알약, `border border-border-strong bg-surface`, 포커스는 `focus-within`에 골드 링.
+- 왼쪽에 검색어 입력(자체 테두리 없음), 오른쪽 끝 캡슐 안에 필터·정렬 같은 보조 조작을 둔다. 없으면 생략한다.
+- 검색 버튼을 따로 두면 캡슐 오른쪽 안의 검정 알약이다.
+
+### 6.6 표 — 원장, 정산, 방문 이력, 감사
+
+- 컨테이너: `overflow-x-auto rounded-md border border-border bg-surface`.
+- 머리: `bg-readonly text-xs font-semibold text-muted`. 긴 표는 머리를 위에 붙인다(`sticky`).
+- 행: 아래 1px `--border`만 두고 세로 선은 없다. hover는 `bg-readonly`.
+- 선택된 행: `bg-readonly`와 왼쪽 3px 검정 막대(`[box-shadow:inset_3px_0_0_var(--brand)]`).
+- 숫자 열은 오른쪽 정렬이다. 날짜·시각은 표 안에서 글자 그대로 둔다(캡슐 없음).
+- 행 안의 상태는 `StatusIndicator`, 경고는 `WarningSummary`, 저장 상태는 `SaveStatus`로 서로 다른 자리에 둔다.
+
+### 6.7 요약 카드 (파스텔)
+
+- 화면 맨 위 한 줄에 최대 4장. 업무 판단을 바꾸는 지표만 올리고, 나머지 숫자는 표나 요약 목록으로 둔다.
+- `rounded-lg bg-accent-* px-5 py-4`, 테두리와 그림자는 없다. 위에 라벨(`text-sm font-semibold`), 아래에 값(3절 요약 숫자), 필요하면 값 아래 한 줄 설명(`text-xs`).
+- 카드 안 글자는 모두 `text-foreground`다.
+- 계산 근거가 없으면 0 대신 "계산 근거 없음"을 쓴다.
+- 600px 미만에서는 한 열로 쌓는다.
+- 원본의 검정 원 아이콘 배지는 아이콘 패키지가 없어 지금은 쓰지 않는다. 넣게 되면 그 티켓에서 `lucide-react`(`components.json`의 아이콘 설정)를 더한다.
+
+### 6.8 상태 칩 — `StatusIndicator`, `SaveStatus`, `WarningSummary`
+
+알약 모양에 연한 의미색 바탕 + 진한 의미색 글자 + 기호다. 객실 상태는 `StatusBadge`(고정색)를 쓴다. 상태별 건수 한 줄은 칩 옆에 건수를 붙여 보인다.
+
+### 6.9 날짜 캡슐
+
+카드와 목록 행 안의 예약시각·방문일은 캡슐로 감싼다: `inline-flex h-7 items-center rounded-full border border-border bg-surface-float px-2.5 text-xs font-semibold`. 표 셀 안에서는 캡슐 없이 글자로 둔다.
+
+### 6.10 목록 행 카드
+
+하나를 골라 들어가는 짧은 목록(예: 고객 검색 후보)에 쓴다. `min-h-14 rounded-md bg-surface px-4` 행을 `gap-2`로 쌓는다. 행 전체가 링크나 버튼이면 포커스 링을 갖는다. 열을 비교해야 하면 표로 바꾼다.
+
+### 6.11 패널, 서랍, 다이얼로그 — `src/components/ui/panel.tsx`, `alert-dialog.tsx`, `confirm-dialog.tsx`
+
+- `SidePanel`(비모달, 작업면 옆): `rounded-lg border border-border bg-surface`.
+- `ModalPanel`(빠른 예약 같은 생성 흐름): 600px 이상에서는 오른쪽에서 16px 떨어져 떠 있는 서랍(`--surface-float`, 24px, 폭 최대 480px), 미만에서는 전체 화면 시트.
+- 다이얼로그: 가운데, `--surface-float`, 24px, 그림자 없음.
+- 닫기 버튼은 테두리 알약이다.
+
+### 6.12 팝오버 — `.shell-popover`
+
+`--surface-float`, `--border`, 18px, `--shadow-float`, 안쪽 여백 6px. 메뉴 항목은 `rounded-sm` 44px다.
+
+### 6.13 로딩, 빈 상태, 오류 — `Skeleton`, `ScreenState`
+
+스켈레톤은 `bg-readonly`(따뜻한 모래색)이고 차가운 회색을 쓰지 않는다. `ScreenState`는 18px 카드다.
+
+### 6.14 차트
+
+- 계열 색은 라벤더 → 피치 → 블루 → 민트 → 버터 순이다. 객실 상태색과 섞지 않는다.
+- 막대는 위쪽 모서리 8px, 아래 0. 격자선은 가로 점선 `--border`, 축 글자는 12px `--faint`.
+- 툴팁은 검정 바탕(`--brand`)에 `--surface` 글자, 12px 모서리, 그림자 없음. hover는 채움을 검정으로 바꾼다.
+- 차트만으로 값을 전하지 않고 표·범례·글자를 함께 둔다.
+- 대시보드·리포트(티켓 06)에서 적용한다. 지금 리포트 차트는 검사 스크립트(Story 6.4)가 `bg-brand` 계열을 요구하므로 06에서 스크립트와 함께 바꾼다.
+
+### 6.15 TV와 로그인
+
+- TV: 셸 없이 읽기 전용이다. 바탕 `--background`, 객실 카드 `--surface` 18px, 큰 상태 라벨과 숫자. 골드 브랜드 표식은 머리말에만 둔다.
+- 로그인: 가운데 카드(`--surface`, 24px). 브랜드 표식은 골드, 주 버튼은 검정이다.
+
+## 7. 하지 않는 것
+
+- 흰색 면, 기본 Tailwind 회색·색 팔레트, 화면 코드의 색 값
+- 제자리 카드·표·패널·요약 카드의 그림자
+- 파스텔 위의 흰 글자나 `text-muted`
+- 골드 버튼, 골드 배지, 골드 금액 강조
+- 탭을 공유 배경 트랙 안에 넣기
+- 색만으로 상태 알리기, 이모지
+- 위치·크기·회전 움직임
+- 44px보다 작은 누르는 영역(표 안 편집 칸 제외)
+- 12px보다 작은 글자, `uppercase`
+- 좌측 사이드바, 전역 상단바, 원장의 칸반 보드
+
+## 8. 확인 방법
+
+- 색 대비: `node scripts/measure-token-contrast.mjs`, 결과를 `docs/design/2026-10-14-color-contrast.md`에 적는다.
+- 토큰 이름과 객실 상태색: `pnpm lint`(Story 1.1·3.5 검사 스크립트).
+- 포커스: 키보드로 돌며 골드 링이 보이는지, 도크와 붙은 도구줄이 포커스된 요소를 가리지 않는지 본다.
+- 움직임: 운영체제의 동작 줄이기를 켜고 전환이 즉시 끝나는지 본다.
+- 언어: 한국어와 베트남어 둘 다에서 줄바꿈과 잘림을 본다.
+
+## 9. 원본 JSON에서 달라진 점
+
+| 원본 | 여기 | 이유 |
+| --- | --- | --- |
+| 떠 있는 좌측 사이드바 230px | 떠 있는 하단 도크 | 탐색은 티켓 01·02가 정한 업무 흐름 도크다 |
+| 칸반 보드, 작업 카드(아바타, 댓글 수, 미디어 미리보기) | 표와 목록 행 카드 | 원장·정산은 열을 비교하는 업무다. Clarity 제품 고유 요소는 이 앱에 없다 |
+| "스프레드시트 표 대신 행 카드" | 열 비교는 표 | 위와 같다 |
+| 브랜드 색 없음 | Royal Gold를 표식으로 | 사용자 결정(2026-10-14) |
+| 연한 글자 `#878176` (3.6:1로 적혀 있으나 실제 바탕 위 3.18:1) | `--faint` `#68625A` (4.96:1) | 본문 4.5:1 |
+| 검색창·알약 테두리 `#D8D0C1` (1.26:1) | 입력칸·검색 캡슐은 `--border-strong` (3.35:1), 글자가 있는 알약만 `--border` | 조작 경계 3:1 |
+| 조작 높이 34px | 44px | 프로젝트 조작 영역 기준 |
+| 카드 hover 2px 떠오름, 끌기 기울임과 그림자 | 색만 바뀜 | 움직임 규칙 |
+| 글자 11px | 최소 12px | 베트남어 성조 부호 |
+| Plus Jakarta Sans + Pretendard | 같은 조합, 베트남어 글자 포함, Pretendard는 기기에 있을 때만 | 기본 언어가 베트남어다. 이전 Geist는 라틴 글자만 불러 베트남어 성조 글자가 다른 글꼴로 섞였다 |
+| 파스텔 의미색(성공 `#B8E6C9` 등) | 기존 연한 틴트 의미색 유지 | 파스텔 요약 카드(민트·피치)와 겹쳐 상태로 오인된다 |
+| `--danger` 기존 값 | `oklch(0.52 0.187 27)` | 새 바탕 위 4.44:1이라 진하게 했다 |
+| 다크 모드 | 뺐다 | 앱에 테마 전환 기능이 없다 |
+| 온라인 표시 녹색 점, 미디어 12px 모서리 | 뺐다 | 쓰는 화면이 없다 |

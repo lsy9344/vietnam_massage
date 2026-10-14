@@ -17,7 +17,7 @@
 정하지 않는 것:
 
 - 업무 규칙, 계산, 권한, 감사, 잠금, 과거 데이터 보존. 이것들은 `.scratch/app-expansion/spec.md`, `CONTEXT.md`, `docs/adr/`를 따른다.
-- 색과 글꼴 토큰의 값. 지금 브랜드의 Royal Gold 토큰(`src/app/globals.css`)을 쓴다. 상태색과 오류색의 대비 측정은 티켓 02가 한다.
+- 색과 글꼴 토큰의 값. 루트 `design.md`(2026-10-14 Clarity 기반 디자인 시스템)와 `src/app/globals.css`를 따른다. 대비 측정은 `docs/design/2026-10-14-color-contrast.md`에 있다.
 - 픽셀 단위 배치. 화면별 시안은 정보 위계를 정하는 참고 자료로만 쓴다.
 
 이 문서가 대체하는 것:

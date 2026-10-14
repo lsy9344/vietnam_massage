@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 const buttonVariants = {
   default: "bg-brand text-brand-foreground hover:bg-brand-strong",
-  secondary: "bg-readonly text-foreground hover:bg-border",
+  secondary: "border border-border text-foreground hover:bg-readonly",
   ghost: "text-muted hover:bg-readonly hover:text-foreground"
 } as const;
 
@@ -20,7 +20,7 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex h-11 items-center rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex h-11 items-center rounded-full px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary disabled:pointer-events-none disabled:opacity-50",
         buttonVariants[variant],
         className
       )}

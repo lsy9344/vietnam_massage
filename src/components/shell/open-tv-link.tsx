@@ -15,7 +15,7 @@ export function OpenTvLink({ role, context, locale, primary = false }: { role: R
     <Link
       className={
         primary
-          ? "inline-flex min-h-11 items-center bg-brand px-4 text-sm font-semibold text-brand-foreground transition-colors hover:bg-brand-strong"
+          ? "inline-flex min-h-11 items-center rounded-full bg-brand px-4 text-sm font-semibold text-brand-foreground transition-colors hover:bg-brand-strong"
           : "screen-step"
       }
       href={screenHref(tvRoute, context)}

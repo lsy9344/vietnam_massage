@@ -52,7 +52,7 @@ export function ScreenToolbar({
         <h1 className="text-xl font-bold leading-tight text-foreground lg:text-2xl">{title}</h1>
         {dateControls}
         {tabs.length > 1 && zone ? (
-          <nav aria-label={t("shell.tabs.aria", { zone: t(`shell.zone.${zone}`) })} className="flex flex-wrap gap-1">
+          <nav aria-label={t("shell.tabs.aria", { zone: t(`shell.zone.${zone}`) })} className="flex flex-wrap gap-2">
             {tabs.map((tab) => (
               <Link
                 aria-current={tab.path === path ? "page" : undefined}

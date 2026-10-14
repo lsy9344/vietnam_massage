@@ -37,7 +37,7 @@ export function ScreenState({
   return (
     <section
       aria-busy={kind === "loading" ? true : undefined}
-      className={cn("border bg-surface px-4 py-5", config.border, className)}
+      className={cn("rounded-lg border bg-surface px-4 py-5", config.border, className)}
       role={kind === "error" ? "alert" : "status"}
     >
       <StatusIndicator label={label} tone={config.tone} />

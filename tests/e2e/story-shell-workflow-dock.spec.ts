@@ -113,7 +113,8 @@ test.describe("티켓 02 업무 흐름 셸", () => {
     await login(page, accounts.administrator.accountId, accounts.administrator.password);
     const viewport = page.viewportSize();
     const box = await dock(page).boundingBox();
-    expect(box && viewport ? Math.round(box.y + box.height) : 0).toBe(viewport?.height);
+    // design.md 6.1: 도크는 화면 아래 가장자리에서 12px(--dock-inset) 떨어져 떠 있다.
+    expect(box && viewport ? Math.round(box.y + box.height) : 0).toBe((viewport?.height ?? 0) - 12);
     await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" })).toHaveCount(0);
     await expect(dock(page).getByRole("link", { name: "현장", exact: true })).toHaveAttribute("aria-current", "page");
     expect(await page.evaluate(() => getComputedStyle(document.body).minWidth)).not.toBe("1280px");

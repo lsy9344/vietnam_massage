@@ -13,7 +13,7 @@ const AlertDialogOverlay = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Overlay>
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Overlay
-    className={cn("fixed inset-0 z-50 bg-background/80 backdrop-blur-sm", className)}
+    className={cn("fixed inset-0 z-50 bg-foreground/20 backdrop-blur-[3px]", className)}
     ref={ref}
     {...props}
   />
@@ -28,8 +28,8 @@ const AlertDialogContent = React.forwardRef<
     <AlertDialogOverlay />
       <AlertDialogPrimitive.Content
         className={cn(
-        "fixed left-1/2 top-1/2 z-50 grid w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 gap-4 border border-border bg-surface p-5 text-foreground shadow-lg outline-none",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
+        "fixed left-1/2 top-1/2 z-50 grid w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border border-border bg-surface-float p-6 text-foreground outline-none",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary",
         className
       )}
       ref={ref}
@@ -71,7 +71,7 @@ const AlertDialogAction = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Action
     className={cn(
-      "inline-flex h-9 items-center justify-center border border-danger bg-danger px-3 text-sm font-semibold text-danger-foreground hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:pointer-events-none disabled:opacity-50",
+      "inline-flex h-11 items-center justify-center rounded-full border border-danger bg-danger px-4 text-sm font-semibold text-danger-foreground hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary disabled:pointer-events-none disabled:opacity-50",
       className
     )}
     ref={ref}
@@ -86,7 +86,7 @@ const AlertDialogCancel = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Cancel
     className={cn(
-      "inline-flex h-9 items-center justify-center border border-border bg-background px-3 text-sm font-semibold text-foreground hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:pointer-events-none disabled:opacity-50",
+      "inline-flex h-11 items-center justify-center rounded-full border border-border px-4 text-sm font-semibold text-foreground hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary disabled:pointer-events-none disabled:opacity-50",
       className
     )}
     ref={ref}

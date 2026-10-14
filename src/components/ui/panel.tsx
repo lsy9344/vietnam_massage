@@ -6,7 +6,7 @@ import { useT } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 
 const closeButtonClass =
-  "inline-flex min-h-11 min-w-11 items-center justify-center px-3 text-sm font-semibold text-foreground transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
+  "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-border px-4 text-sm font-semibold text-foreground transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary";
 
 /**
  * 비모달 보조 패널(콜 상세, 직원 근거, 항목 편집). 작업면을 보면서 다른 행을 고르면 내용만 바뀐다.
@@ -36,11 +36,11 @@ export function SidePanel({
     <aside
       aria-label={title}
       className={cn(
-        "flex max-h-[calc(100vh-var(--dock-height))] flex-col overflow-y-auto border border-border bg-surface",
+        "flex max-h-[calc(100vh-var(--dock-space))] flex-col overflow-y-auto rounded-lg border border-border bg-surface",
         className
       )}
     >
-      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
         <h2 className="text-base font-semibold text-foreground">{title}</h2>
         <button className={closeButtonClass} onClick={onClose} type="button">
           {t("common.panel.close")}
@@ -76,9 +76,9 @@ export function ModalPanel({
     <DialogPrimitive.Root onOpenChange={onOpenChange} open={open}>
       {trigger ? <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger> : null}
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-foreground/30" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-foreground/20 backdrop-blur-[3px]" />
         <DialogPrimitive.Content
-          className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-surface text-foreground outline-none min-[600px]:inset-y-0 min-[600px]:left-auto min-[600px]:right-0 min-[600px]:w-[min(32rem,100vw)] min-[600px]:border-l min-[600px]:border-border"
+          className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-surface-float text-foreground outline-none min-[600px]:inset-y-4 min-[600px]:left-auto min-[600px]:right-4 min-[600px]:w-[min(30rem,calc(100vw-2rem))] min-[600px]:rounded-xl min-[600px]:border min-[600px]:border-border"
         >
           <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
             <div>
