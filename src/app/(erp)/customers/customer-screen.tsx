@@ -3,31 +3,23 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
-import { CustomerVisitSearchView } from "@/app/(erp)/calls/customer-visit-search-view";
-import {
-  CUSTOMER_SEARCH_DEBOUNCE_MS,
-  customerVisitSearchPath,
-  moveCandidateIndex
-} from "@/app/(erp)/calls/customer-visit-search";
+import { CustomerScreenView } from "@/app/(erp)/customers/customer-screen-view";
+import { CUSTOMER_SEARCH_DEBOUNCE_MS, customerScreenHref, moveCandidateIndex } from "@/app/(erp)/customers/customer-search";
 import { useLocale } from "@/lib/i18n/client";
-import type { CustomerVisitCandidateDto, CustomerVisitHistoryRowDto } from "@/modules/calls/service-call-service";
+import type { CustomerDto, CustomerVisitCandidateDto, CustomerVisitHistoryRowDto } from "@/modules/calls/service-call-service";
 
-export function CustomerVisitSearch({
-  operatingMonthId,
-  serviceDate,
+export function CustomerScreen({
   query,
   candidates,
-  rows,
-  visitCustomer,
-  visitMemo
+  customer,
+  visitMemo,
+  history
 }: {
-  operatingMonthId: string;
-  serviceDate: string;
   query: string;
   candidates: CustomerVisitCandidateDto[];
-  rows: CustomerVisitHistoryRowDto[];
-  visitCustomer: string | null;
+  customer: CustomerDto | null;
   visitMemo: string | null;
+  history: CustomerVisitHistoryRowDto[];
 }) {
   const router = useRouter();
   const locale = useLocale();
@@ -36,28 +28,27 @@ export function CustomerVisitSearch({
   const inputFocused = useRef(false);
   const commitTimer = useRef<number | null>(null);
   const candidateKey = candidates.map((candidate) => `${candidate.kind}:${candidate.customerId ?? ""}:${candidate.label}`).join("|");
+  const visitCustomer = customer?.id ?? null;
+  const [seenCandidateKey, setSeenCandidateKey] = useState(candidateKey);
+  // 후보가 바뀌면 키보드로 고르던 자리를 처음으로 되돌린다.
+  if (seenCandidateKey !== candidateKey) {
+    setSeenCandidateKey(candidateKey);
+    setActiveIndex(-1);
+  }
 
   useEffect(() => {
     if (!inputFocused.current) setDraft(query);
   }, [query]);
 
   useEffect(() => {
-    window.history.scrollRestoration = "auto";
-  }, []);
-
-  useEffect(() => {
     if (draft.trim() === query) return;
     commitTimer.current = window.setTimeout(() => {
-      router.replace(customerVisitSearchPath({ operatingMonthId, serviceDate }, { customerQuery: draft }), { scroll: false });
+      router.replace(customerScreenHref({ customerQuery: draft, visitCustomer, visitMemo }), { scroll: false });
     }, CUSTOMER_SEARCH_DEBOUNCE_MS);
     return () => {
       if (commitTimer.current !== null) window.clearTimeout(commitTimer.current);
     };
-  }, [draft, operatingMonthId, query, router, serviceDate]);
-
-  useEffect(() => {
-    setActiveIndex(-1);
-  }, [candidateKey]);
+  }, [draft, query, router, visitCustomer, visitMemo]);
 
   function select(candidate: CustomerVisitCandidateDto) {
     if (draft.trim() !== query) return;
@@ -67,7 +58,7 @@ export function CustomerVisitSearch({
       candidate.kind === "customer" && candidate.customerId
         ? { customerQuery: draft, visitCustomer: candidate.customerId }
         : { customerQuery: draft, visitMemo: candidate.label };
-    router.replace(customerVisitSearchPath({ operatingMonthId, serviceDate }, next), { scroll: false });
+    router.replace(customerScreenHref(next), { scroll: false });
   }
 
   function onQueryKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -85,11 +76,13 @@ export function CustomerVisitSearch({
   }
 
   return (
-    <CustomerVisitSearchView
+    <CustomerScreenView
       activeIndex={activeIndex}
       candidates={candidates}
-      historyOpen={(visitCustomer !== null || visitMemo !== null) && draft.trim() === query}
+      customer={customer}
+      history={history}
       locale={locale}
+      onClose={() => router.replace(customerScreenHref({ customerQuery: query }), { scroll: false })}
       onQueryBlur={() => {
         inputFocused.current = false;
       }}
@@ -100,10 +93,8 @@ export function CustomerVisitSearch({
       onQueryKeyDown={onQueryKeyDown}
       onSelect={select}
       query={draft}
+      selectedMemo={customer ? null : visitMemo}
       settledQuery={query}
-      rows={rows}
-      selectedCustomerId={visitCustomer}
-      selectedMemo={visitMemo}
     />
   );
 }

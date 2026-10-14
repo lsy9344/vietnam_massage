@@ -291,7 +291,8 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
     await expect(page.getByRole("heading", { name: /콜|예약|원장/, level: 1 })).toBeVisible();
     await expect(page.getByText("이 날짜의 콜이 없습니다")).toBeVisible();
     await expect(page.getByRole("button", { name: "새 콜 행 추가" })).toBeEnabled();
-    await expect(page.getByRole("columnheader", { name: "코스" }).nth(1)).toBeVisible();
+    // 티켓 03: 코스 요약 표는 "하루 수납·지출" 탭으로 옮겨, 원장 탭의 첫 "코스" 머리가 원장 표다.
+    await expect(page.getByRole("columnheader", { name: "코스" }).first()).toBeVisible();
     await expect(page.getByLabel("운영월")).toHaveValue(seededData.openMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2032-01-05");
 

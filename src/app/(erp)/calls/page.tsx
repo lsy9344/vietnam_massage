@@ -2,35 +2,38 @@ import { requireRouteAccess } from "@/lib/authorization";
 import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import {
+  calculationWarningCallsFromRows,
   getDailyCallLedgerSummary,
-  listCustomerVisitHistory,
+  ledgerStatusCountsFromRows,
   listCustomers,
   listDailyExpensesForDate,
   listServiceCallFormOptions,
   listServiceCallsForDate,
   listTherapistAvailability,
-  redactServiceCallSettlementAmounts,
-  searchCustomerVisitCandidates,
-  type CustomerVisitSelection
+  redactServiceCallSettlementAmounts
 } from "@/modules/calls/service-call-service";
-import { CustomerPanel } from "@/app/(erp)/calls/customer-panel";
-import { CustomerVisitSearch } from "@/app/(erp)/calls/customer-visit-search-panel";
 import { DailyExpensePanel } from "@/app/(erp)/calls/daily-expense-panel";
 import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { CallLedgerWorkspace } from "@/app/(erp)/calls/call-ledger-workspace";
+import { LedgerStatusCounts } from "@/app/(erp)/calls/ledger-status-counts";
+import { ledgerHref, ledgerTabParams, parseLedgerTab, type LedgerTab } from "@/app/(erp)/calls/ledger-address";
 import { DateContextControls } from "@/components/shell/date-context-controls";
 import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-notice";
 import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
+import { linkToScreen } from "@/lib/routes";
 
 type CallsPageSearchParams = {
   operatingMonthId?: string;
   serviceDate?: string;
-  customerQuery?: string;
-  visitCustomer?: string;
-  visitMemo?: string;
+  tab?: string;
 };
+
+const ledgerTabs: Array<{ tab: LedgerTab; labelKey: "calls.tab.ledger" | "calls.tab.cashbook" }> = [
+  { tab: "ledger", labelKey: "calls.tab.ledger" },
+  { tab: "cashbook", labelKey: "calls.tab.cashbook" }
+];
 
 export default async function CallsPage({ searchParams }: { searchParams: Promise<CallsPageSearchParams> }) {
   const account = await requireRouteAccess("/calls");
@@ -50,66 +53,86 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
   }
 
   const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
-  const customerQuery = typeof params.customerQuery === "string" ? params.customerQuery.trim() : "";
-  const visitCustomer = typeof params.visitCustomer === "string" && params.visitCustomer.trim() ? params.visitCustomer.trim() : null;
-  const visitMemo = typeof params.visitMemo === "string" ? params.visitMemo : null;
-  const visitSelection: CustomerVisitSelection | null = !customerQuery
-    ? null
-    : visitCustomer
-      ? { kind: "customer", customerId: visitCustomer }
-      : visitMemo !== null
-        ? { kind: "memo", customerMemo: visitMemo }
-        : null;
-  const [rows, options, expenses, summary, customers, candidates, visitHistory] = await Promise.all([
-    listServiceCallsForDate({ operatingMonthId: selectedMonth.id, serviceDate }),
+  const tab = parseLedgerTab(params.tab);
+  const ledgerDate = { operatingMonthId: selectedMonth.id, serviceDate };
+  const isLocked = isOperatingMonthPayoutLocked(selectedMonth.status);
+  const canViewSettlementAmounts = account.role === "administrator" || account.role === "settlement_manager";
+
+  const toolbar = (
+    <ScreenToolbar
+      account={account}
+      context={{ operatingMonthId: selectedMonth.id, date: serviceDate }}
+      dateControls={
+        <DateContextControls
+          date={serviceDate}
+          keepParams={ledgerTabParams(tab)}
+          locale={locale}
+          months={operatingMonths}
+          path="/calls"
+          selectedMonth={selectedMonth}
+        />
+      }
+      locale={locale}
+      path="/calls"
+      screenTabs={{
+        label: t("calls.tabs.aria"),
+        items: ledgerTabs.map((item) => ({ href: ledgerHref(ledgerDate, item.tab), label: t(item.labelKey), current: item.tab === tab }))
+      }}
+      sticky
+      title={t("calls.title")}
+    />
+  );
+
+  if (tab === "cashbook") {
+    const [rows, options, expenses, summary] = await Promise.all([
+      listServiceCallsForDate(ledgerDate),
+      listServiceCallFormOptions({ operatingMonthId: selectedMonth.id, locale }),
+      listDailyExpensesForDate({ operatingMonthId: selectedMonth.id, expenseDate: serviceDate }),
+      getDailyCallLedgerSummary(ledgerDate)
+    ]);
+
+    return (
+      <div className="screen">
+        {toolbar}
+        <div className="grid grid-cols-1 gap-10">
+          <DailySummaryStrip
+            locale={locale}
+            showSettlementAmounts={canViewSettlementAmounts}
+            summary={summary}
+            warningCalls={calculationWarningCallsFromRows(rows)}
+          />
+          <DailyExpensePanel
+            expenses={expenses}
+            handlers={options.expenseHandlers}
+            isLocked={isLocked}
+            operatingMonthId={selectedMonth.id}
+            serviceDate={serviceDate}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  const [rows, options, customers] = await Promise.all([
+    listServiceCallsForDate(ledgerDate),
     listServiceCallFormOptions({ operatingMonthId: selectedMonth.id, locale }),
-    listDailyExpensesForDate({ operatingMonthId: selectedMonth.id, expenseDate: serviceDate }),
-    getDailyCallLedgerSummary({ operatingMonthId: selectedMonth.id, serviceDate }),
-    listCustomers(),
-    customerQuery ? searchCustomerVisitCandidates({ query: customerQuery }) : Promise.resolve([]),
-    visitSelection ? listCustomerVisitHistory(visitSelection) : Promise.resolve([])
+    listCustomers()
   ]);
   const availabilityTime = options.timeSlots[0]?.value ?? "";
   const availabilityRows = availabilityTime
     ? await listTherapistAvailability({ operatingMonthId: selectedMonth.id, serviceDate, time: availabilityTime })
     : [];
-  const isLocked = isOperatingMonthPayoutLocked(selectedMonth.status);
-  const canViewSettlementAmounts = account.role === "administrator" || account.role === "settlement_manager";
   const visibleRows = canViewSettlementAmounts ? rows : rows.map(redactServiceCallSettlementAmounts);
 
   return (
     <div className="screen">
-      <ScreenToolbar
-        account={account}
-        context={{ operatingMonthId: selectedMonth.id, date: serviceDate }}
-        dateControls={
-          <DateContextControls date={serviceDate} locale={locale} months={operatingMonths} path="/calls" selectedMonth={selectedMonth} />
-        }
+      {toolbar}
+      <LedgerStatusCounts
+        counts={ledgerStatusCountsFromRows(rows)}
+        customerHref={linkToScreen(account.role, "/customers", { operatingMonthId: selectedMonth.id, date: serviceDate })}
         locale={locale}
-        path="/calls"
-        sticky
-        title={t("calls.title")}
       />
-
-      <CustomerVisitSearch
-        candidates={candidates}
-        operatingMonthId={selectedMonth.id}
-        query={customerQuery}
-        rows={visitHistory}
-        serviceDate={serviceDate}
-        visitCustomer={visitSelection?.kind === "customer" ? visitSelection.customerId : null}
-        visitMemo={visitSelection?.kind === "memo" ? visitSelection.customerMemo : null}
-      />
-      <DailySummaryStrip summary={summary} showSettlementAmounts={canViewSettlementAmounts} locale={locale} />
-      <CustomerPanel customers={customers} />
-      <DailyExpensePanel
-        expenses={expenses}
-        handlers={options.expenseHandlers}
-        isLocked={isLocked}
-        operatingMonthId={selectedMonth.id}
-        serviceDate={serviceDate}
-      />
-
+      {/* 가능 코스 영역은 티켓 20에서 빠른 예약 패널로 옮길 때까지 원장 위에 둔다. */}
       <CallLedgerWorkspace
         key={`${selectedMonth.id}:${serviceDate}`}
         availabilityRows={availabilityRows}

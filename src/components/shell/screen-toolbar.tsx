@@ -5,6 +5,12 @@ import { createTranslator } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
 import { getDockZones, getZoneTabs, screenHref, zoneForPath, type ScreenContext } from "@/lib/routes";
 
+/** 한 화면 안의 보기 탭(예: 원장 / 하루 수납·지출). 같은 화면의 다른 주소로 가는 링크다. */
+export type ScreenTabs = {
+  label: string;
+  items: Array<{ href: string; label: string; current: boolean }>;
+};
+
 type ScreenToolbarProps = {
   /** 로딩·오류 화면처럼 계정을 모르는 곳에서는 비워 둔다(탭과 "나" 메뉴 없이 제목만). */
   account?: ShellAccount;
@@ -16,6 +22,8 @@ type ScreenToolbarProps = {
   context?: ScreenContext;
   /** 날짜·운영월 맥락(DateContextControls). 날짜가 있는 화면만. */
   dateControls?: ReactNode;
+  /** 화면 안의 보기 탭. 주면 구역 안 탭 자리에 이 탭을 그린다. */
+  screenTabs?: ScreenTabs;
   /** 오른쪽 끝의 주요 행동 하나. */
   action?: ReactNode;
   /** 연결 상태, 마지막 갱신. */
@@ -37,6 +45,7 @@ export function ScreenToolbar({
   locale,
   context = noContext,
   dateControls,
+  screenTabs,
   action,
   status,
   sticky = false
@@ -51,7 +60,15 @@ export function ScreenToolbar({
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <h1 className="text-xl font-bold leading-tight text-foreground lg:text-2xl">{title}</h1>
         {dateControls}
-        {tabs.length > 1 && zone ? (
+        {screenTabs ? (
+          <nav aria-label={screenTabs.label} className="flex flex-wrap gap-2">
+            {screenTabs.items.map((tab) => (
+              <Link aria-current={tab.current ? "page" : undefined} className="screen-tab" href={tab.href} key={tab.href}>
+                {tab.label}
+              </Link>
+            ))}
+          </nav>
+        ) : tabs.length > 1 && zone ? (
           <nav aria-label={t("shell.tabs.aria", { zone: t(`shell.zone.${zone}`) })} className="flex flex-wrap gap-2">
             {tabs.map((tab) => (
               <Link

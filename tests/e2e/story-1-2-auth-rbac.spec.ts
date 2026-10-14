@@ -12,14 +12,14 @@ const users = [
     role: "administrator",
     password: "Story12!administrator",
     landing: "/live",
-    zones: ["원장", "현장", "정산", "마감", "보고", "설정"]
+    zones: ["원장", "현장", "고객", "정산", "마감", "보고", "설정"]
   },
   {
     accountId: "counter",
     role: "counter",
     password: "Story12!counter",
     landing: "/calls",
-    zones: ["원장", "현장", "보고"]
+    zones: ["원장", "현장", "고객", "보고"]
   },
   {
     accountId: "settlement_manager",

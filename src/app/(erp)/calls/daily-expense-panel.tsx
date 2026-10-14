@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
+import { inputFieldClassName } from "@/components/ui/input-field";
 import { useLocale, useT } from "@/lib/i18n/client";
 import { formatNumber } from "@/lib/i18n/format";
 import type { DailyExpenseDto, ExpenseMethod, ServiceCallOption } from "@/modules/calls/service-call-service";
@@ -47,7 +48,7 @@ export function ExpenseMethodControl({
       <span className="text-xs font-medium text-foreground">{t("calls.expense.field.method")}</span>
       <select
         aria-label={t("calls.expense.field.method")}
-        className="h-11 min-w-28 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
+        className={inputFieldClassName({ className: "min-w-28" })}
         defaultValue={defaultMethod}
         disabled={disabled}
         name="method"
@@ -64,10 +65,21 @@ export function ExpenseMethodControl({
   );
 }
 
-export function ExpenseSaveButton({ disabled, idleLabel, pending }: { disabled: boolean; idleLabel: string; pending: boolean }) {
+export function ExpenseSaveButton({
+  disabled,
+  idleLabel,
+  pending,
+  variant = "default"
+}: {
+  disabled: boolean;
+  idleLabel: string;
+  pending: boolean;
+  /** 지출 추가만 주 버튼(검정)이고, 행의 수정은 보조 버튼이다. */
+  variant?: "default" | "secondary";
+}) {
   const t = useT();
   return (
-    <Button aria-busy={pending} className="h-8 px-2 text-xs" disabled={disabled} type="submit">
+    <Button aria-busy={pending} disabled={disabled} type="submit" variant={variant}>
       {pending ? t("calls.expense.action.saving") : idleLabel}
     </Button>
   );
@@ -90,7 +102,7 @@ function HandlerSelect({
   return (
     <select
       aria-label={label}
-      className="h-8 min-w-44 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
+      className={inputFieldClassName({ className: "min-w-44" })}
       defaultValue={defaultValue ?? ""}
       disabled={disabled}
       name={name}
@@ -126,8 +138,8 @@ function ExpenseRow({
   const disabled = isLocked || updatePending || deactivatePending;
 
   return (
-    <tr className="align-top">
-      <td className="border-b border-border px-2 py-2">
+    <tr className="align-top hover:bg-readonly">
+      <td className="border-b border-border px-3 py-2">
         <form action={updateAction} className="flex min-w-[760px] flex-wrap items-start gap-2" noValidate>
           <input name="dailyExpenseId" type="hidden" value={expense.id} />
           <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
@@ -135,7 +147,7 @@ function ExpenseRow({
           <label className="grid gap-1">
             <span className="sr-only">{t("calls.expense.field.amount")}</span>
             <input
-              className="h-8 w-32 border border-border bg-background px-2 text-xs text-foreground outline-none [font-variant-numeric:tabular-nums] focus:border-brand disabled:bg-readonly"
+              className={inputFieldClassName({ className: "w-32" })}
               defaultValue={expense.amount}
               disabled={disabled}
               min={1}
@@ -149,7 +161,7 @@ function ExpenseRow({
           <label className="grid gap-1">
             <span className="sr-only">{t("calls.expense.field.description")}</span>
             <input
-              className="h-8 w-48 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
+              className={inputFieldClassName({ className: "w-48" })}
               defaultValue={expense.description}
               disabled={disabled}
               maxLength={200}
@@ -164,7 +176,7 @@ function ExpenseRow({
           <label className="grid gap-1">
             <span className="sr-only">{t("calls.expense.field.note")}</span>
             <input
-              className="h-8 w-48 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
+              className={inputFieldClassName({ className: "w-48" })}
               defaultValue={expense.note ?? ""}
               disabled={disabled}
               maxLength={500}
@@ -173,18 +185,18 @@ function ExpenseRow({
             />
             <InlineError field="note" state={updateState} />
           </label>
-          <ExpenseSaveButton disabled={disabled} idleLabel={t("calls.expense.action.update")} pending={updatePending} />
+          <ExpenseSaveButton disabled={disabled} idleLabel={t("calls.expense.action.update")} pending={updatePending} variant="secondary" />
           <div className="basis-full">
             {updateState?.ok ? <span className="text-xs text-muted">{t("calls.save.saved")}</span> : <InlineError state={updateState} />}
           </div>
         </form>
       </td>
-      <td className="border-b border-border px-2 py-2 text-right text-xs [font-variant-numeric:tabular-nums]">{formatNumber(locale, expense.amount)} {t("calls.summary.vndSuffix")}</td>
-      <td className="border-b border-border px-2 py-2 text-xs text-muted">{expense.handledByEmployee.displayName}</td>
-      <td className="border-b border-border px-2 py-2">
+      <td className="border-b border-border px-3 py-2 text-right text-sm font-semibold">{formatNumber(locale, expense.amount)} {t("calls.summary.vndSuffix")}</td>
+      <td className="border-b border-border px-3 py-2 text-sm text-muted">{expense.handledByEmployee.displayName}</td>
+      <td className="border-b border-border px-3 py-2">
         <form action={deactivateAction} className="grid justify-items-end gap-1">
           <input name="dailyExpenseId" type="hidden" value={expense.id} />
-          <Button className="h-8 px-2 text-xs" disabled={disabled} type="submit" variant="secondary">
+          <Button disabled={disabled} type="submit" variant="secondary">
             {t("calls.expense.action.deactivate")}
           </Button>
           {deactivateState?.ok ? <span className="text-xs text-muted">{t("calls.expense.action.deactivated")}</span> : <InlineError state={deactivateState} />}
@@ -210,13 +222,13 @@ function AddExpenseForm({
   const disabled = isLocked || pending;
 
   return (
-    <form action={formAction} className="flex flex-wrap items-start gap-2 border-t border-border px-3 py-3" noValidate>
+    <form action={formAction} className="flex flex-wrap items-start gap-2 border-t border-border px-4 py-4" noValidate>
       <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
       <input name="expenseDate" type="hidden" value={serviceDate} />
       <label className="grid gap-1">
         <span className="sr-only">{t("calls.expense.field.amount")}</span>
         <input
-          className="h-8 w-32 border border-border bg-background px-2 text-xs text-foreground outline-none [font-variant-numeric:tabular-nums] focus:border-brand disabled:bg-readonly"
+          className={inputFieldClassName({ className: "w-32" })}
           disabled={disabled}
           min={1}
           name="amount"
@@ -230,7 +242,7 @@ function AddExpenseForm({
       <label className="grid gap-1">
         <span className="sr-only">{t("calls.expense.field.description")}</span>
         <input
-          className="h-8 w-56 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
+          className={inputFieldClassName({ className: "w-56" })}
           disabled={disabled}
           maxLength={200}
           name="description"
@@ -244,7 +256,7 @@ function AddExpenseForm({
       <label className="grid gap-1">
         <span className="sr-only">{t("calls.expense.field.note")}</span>
         <input
-          className="h-8 w-56 border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-brand disabled:bg-readonly"
+          className={inputFieldClassName({ className: "w-56" })}
           disabled={disabled}
           maxLength={500}
           name="note"
@@ -275,10 +287,10 @@ export function DailyExpensePanel({
 }) {
   const t = useT();
   return (
-    <section className="mb-4 border border-border bg-surface" aria-label={t("calls.expense.aria")}>
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
+    <section className="overflow-hidden rounded-lg border border-border bg-surface" aria-label={t("calls.expense.aria")}>
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">{t("calls.expense.title")}</h2>
+          <h2 className="text-[0.9375rem] font-semibold text-foreground">{t("calls.expense.title")}</h2>
           {isLocked ? (
             <div className="mt-1 text-xs text-danger">
               <p className="font-medium">{t("calls.grid.lockedTitle")}</p>
@@ -289,16 +301,16 @@ export function DailyExpensePanel({
         <span className="text-xs text-muted">{t("calls.expense.itemCount", { count: expenses.length })}</span>
       </div>
       {expenses.length === 0 ? (
-        <div className="px-3 py-4 text-sm text-muted">{t("calls.expense.empty")}</div>
+        <div className="px-4 py-4 text-sm text-muted">{t("calls.expense.empty")}</div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full min-w-[980px] border-collapse text-left text-sm">
-            <thead className="bg-readonly text-xs font-semibold text-foreground">
+            <thead className="bg-readonly text-xs font-semibold text-muted">
               <tr>
-                <th className="border-b border-border px-2 py-2">{t("calls.expense.column.input")}</th>
-                <th className="border-b border-border px-2 py-2 text-right">{t("calls.expense.column.displayAmount")}</th>
-                <th className="border-b border-border px-2 py-2">{t("calls.expense.column.handler")}</th>
-                <th className="border-b border-border px-2 py-2 text-right">{t("calls.expense.column.actions")}</th>
+                <th className="border-b border-border px-3 py-2">{t("calls.expense.column.input")}</th>
+                <th className="border-b border-border px-3 py-2 text-right">{t("calls.expense.column.displayAmount")}</th>
+                <th className="border-b border-border px-3 py-2">{t("calls.expense.column.handler")}</th>
+                <th className="border-b border-border px-3 py-2 text-right">{t("calls.expense.column.actions")}</th>
               </tr>
             </thead>
             <tbody>

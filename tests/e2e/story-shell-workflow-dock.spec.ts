@@ -16,8 +16,8 @@ const accounts: Record<Role, { accountId: string; password: string; displayName:
 };
 
 const expectedDock: Record<Role, { landing: RegExp; zones: string[]; firstHeading: string }> = {
-  administrator: { landing: /\/live$/, zones: ["원장", "현장", "정산", "마감", "보고", "설정"], firstHeading: "첫화면 실시간 현황" },
-  counter: { landing: /\/calls$/, zones: ["원장", "현장", "보고"], firstHeading: "콜/예약 입력 원장" },
+  administrator: { landing: /\/live$/, zones: ["원장", "현장", "고객", "정산", "마감", "보고", "설정"], firstHeading: "첫화면 실시간 현황" },
+  counter: { landing: /\/calls$/, zones: ["원장", "현장", "고객", "보고"], firstHeading: "콜/예약 입력 원장" },
   settlement_manager: { landing: /\/settlements$/, zones: ["정산", "마감", "보고"], firstHeading: "마사지사 일일정산" },
   waiter: { landing: /\/rooms$/, zones: [], firstHeading: "객실 현황" },
   read_only_viewer: { landing: /\/rooms$/, zones: ["현장", "보고", "설정"], firstHeading: "객실 현황" }
@@ -218,9 +218,10 @@ test.describe("티켓 02 업무 흐름 셸", () => {
     await page.setViewportSize({ width: 600, height: 900 });
     await login(page, accounts.administrator.accountId, accounts.administrator.password);
 
-    for (const zone of ["원장", "현장", "정산", "마감"]) {
+    for (const zone of ["원장", "현장", "고객", "정산"]) {
       await expect(dock(page).getByRole("link", { name: zone, exact: true })).toBeVisible();
     }
+    await expect(dock(page).getByRole("link", { name: "마감", exact: true })).toBeHidden();
     await expect(dock(page).getByRole("link", { name: "보고", exact: true })).toBeHidden();
     await dock(page).getByRole("button", { name: "더보기" }).click();
     await dock(page).getByRole("link", { name: "설정", exact: true }).click();
@@ -231,7 +232,7 @@ test.describe("티켓 02 업무 흐름 셸", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, accounts.counter.accountId, accounts.counter.password);
 
-    for (const zone of ["원장", "현장", "보고"]) {
+    for (const zone of ["원장", "현장", "고객", "보고"]) {
       await expect(dock(page).getByRole("link", { name: zone, exact: true })).toBeVisible();
     }
     await expect(dock(page).getByRole("button", { name: "더보기" })).toBeHidden();
@@ -244,7 +245,7 @@ test.describe("티켓 02 업무 흐름 셸", () => {
     await page.reload();
 
     const viDock = page.getByRole("navigation", { name: "Chuyển khu vực nghiệp vụ" });
-    await expect(viDock.getByRole("link")).toHaveText(["Sổ gọi", "Vận hành", "Đối soát", "Chốt tháng", "Báo cáo", "Thiết lập"]);
+    await expect(viDock.getByRole("link")).toHaveText(["Sổ gọi", "Vận hành", "Khách", "Đối soát", "Chốt tháng", "Báo cáo", "Thiết lập"]);
     const overflow = await viDock.evaluate((element) => element.scrollWidth - element.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
     for (const box of await Promise.all((await viDock.getByRole("link").all()).map((link) => link.boundingBox()))) {

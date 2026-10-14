@@ -323,6 +323,8 @@ export async function createCustomerAction(
   try {
     const account = await requirePermission("call:write");
     const data = await createCustomer({ ...parsed.data, actorId: account.id });
+    // 고객 등록·정정은 고객 화면에서 하고, 원장은 콜에 고객을 붙일 때 같은 고객 목록을 쓴다.
+    revalidatePath("/customers");
     revalidatePath("/calls");
     return { ok: true, data };
   } catch (error) {
@@ -353,6 +355,8 @@ export async function updateCustomerAction(
   try {
     const account = await requirePermission("call:write");
     const data = await updateCustomer({ ...parsed.data, actorId: account.id });
+    // 고객 등록·정정은 고객 화면에서 하고, 원장은 콜에 고객을 붙일 때 같은 고객 목록을 쓴다.
+    revalidatePath("/customers");
     revalidatePath("/calls");
     return { ok: true, data };
   } catch (error) {

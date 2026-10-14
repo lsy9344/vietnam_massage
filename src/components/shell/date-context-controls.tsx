@@ -23,17 +23,31 @@ type DateContextControlsProps = {
   locale: Locale;
   /** 영업 기준 오늘(YYYY-MM-DD). 테스트에서 고정한다. */
   today?: string;
+  /** 날짜를 옮겨도 남길 화면 자체의 매개변수(예: 콜 원장의 탭). */
+  keepParams?: Record<string, string>;
 };
 
 /**
  * 날짜가 있는 화면의 운영월·날짜 맥락. 화면마다 복사되던 조회 폼을 대신한다.
  * 이전/다음 날과 오늘 링크는 운영월 범위 안에서만 보인다.
  */
-export function DateContextControls({ path, months, selectedMonth, date, locale, today = businessTodayIsoDate() }: DateContextControlsProps) {
+export function DateContextControls({
+  path,
+  months,
+  selectedMonth,
+  date,
+  locale,
+  today = businessTodayIsoDate(),
+  keepParams = {}
+}: DateContextControlsProps) {
   const t = createTranslator(locale);
   const route = findScreenRoute(path);
   const dateParam = route?.dateContext && route.dateContext !== "month" ? route.dateContext : null;
-  const hrefFor = (monthId: string, day: string) => (route ? screenHref(route, { operatingMonthId: monthId, date: day }) : path);
+  const keptQuery = new URLSearchParams(keepParams).toString();
+  const hrefFor = (monthId: string, day: string) => {
+    const href = route ? screenHref(route, { operatingMonthId: monthId, date: day }) : path;
+    return keptQuery ? `${href}${href.includes("?") ? "&" : "?"}${keptQuery}` : href;
+  };
 
   const previousDay = date && date > selectedMonth.startDate ? addDaysToIsoDate(date, -1) : null;
   const nextDay = date && date < selectedMonth.endDate ? addDaysToIsoDate(date, 1) : null;
@@ -41,6 +55,9 @@ export function DateContextControls({ path, months, selectedMonth, date, locale,
 
   return (
     <form action={path} className="flex flex-wrap items-end gap-2" method="get">
+      {Object.entries(keepParams).map(([name, value]) => (
+        <input key={name} name={name} type="hidden" value={value} />
+      ))}
       <label className="grid gap-1 text-xs font-medium text-muted">
         {t("common.operatingMonth")}
         <select

@@ -19,6 +19,8 @@ const accessMatrix: Record<string, Record<"administrator" | "counter" | "settlem
   "/rooms": { administrator: true, counter: true, settlement_manager: false, waiter: true, read_only_viewer: true },
   "/tv": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: true },
   "/calls": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: false },
+  // 티켓 03: 고객 화면은 지금 콜 원장에 들어가는 역할에게만 연다(명세 F08 기준 6).
+  "/customers": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: false },
   "/settlements": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
   "/settlements/earcare": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
   "/settlements/operations": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
@@ -65,9 +67,9 @@ describe("route list access", () => {
 });
 
 describe("workflow dock zones", () => {
-  it("shows each role only the zones it can enter, always in ledger → floor → settlements → closing → reports → settings order", () => {
-    assert.deepEqual(getDockZones("administrator"), ["ledger", "floor", "settlements", "closing", "reports", "settings"]);
-    assert.deepEqual(getDockZones("counter"), ["ledger", "floor", "reports"]);
+  it("shows each role only the zones it can enter, always in ledger → floor → customers → settlements → closing → reports → settings order", () => {
+    assert.deepEqual(getDockZones("administrator"), ["ledger", "floor", "customers", "settlements", "closing", "reports", "settings"]);
+    assert.deepEqual(getDockZones("counter"), ["ledger", "floor", "customers", "reports"]);
     assert.deepEqual(getDockZones("settlement_manager"), ["settlements", "closing", "reports"]);
     assert.deepEqual(getDockZones("read_only_viewer"), ["floor", "reports", "settings"]);
   });
@@ -76,8 +78,8 @@ describe("workflow dock zones", () => {
     assert.deepEqual(getDockZones("waiter"), []);
   });
 
-  it("keeps the customer zone hidden until a customer screen exists", () => {
-    for (const role of ["administrator", "counter"] as const) {
+  it("opens the customer zone only to the roles that enter the call ledger", () => {
+    for (const role of ["settlement_manager", "waiter", "read_only_viewer"] as const) {
       assert.equal(getDockZones(role).includes("customers"), false);
     }
   });
@@ -86,13 +88,13 @@ describe("workflow dock zones", () => {
 describe("workflow dock below 840px", () => {
   it("shows the first four zones and moves the rest behind More when a role has five or more zones", () => {
     assert.deepEqual(getCompactDock("administrator"), {
-      primary: ["ledger", "floor", "settlements", "closing"],
-      overflow: ["reports", "settings"]
+      primary: ["ledger", "floor", "customers", "settlements"],
+      overflow: ["closing", "reports", "settings"]
     });
   });
 
   it("keeps every zone visible with no More for roles with four or fewer zones", () => {
-    assert.deepEqual(getCompactDock("counter"), { primary: ["ledger", "floor", "reports"], overflow: [] });
+    assert.deepEqual(getCompactDock("counter"), { primary: ["ledger", "floor", "customers", "reports"], overflow: [] });
     assert.deepEqual(getCompactDock("settlement_manager"), { primary: ["settlements", "closing", "reports"], overflow: [] });
     assert.deepEqual(getCompactDock("read_only_viewer"), { primary: ["floor", "reports", "settings"], overflow: [] });
   });
@@ -127,6 +129,10 @@ describe("moving between zones with the dock", () => {
     assert.equal(getZoneHref("administrator", "settings", ledgerContext), "/masters/operating-months");
     assert.equal(getZoneHref("read_only_viewer", "settings", ledgerContext), "/masters/sheet-mapping");
     assert.equal(getZoneHref("administrator", "floor", ledgerContext), "/rooms?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
+  });
+
+  it("opens the undated customer screen without the ledger's month and date", () => {
+    assert.equal(getZoneHref("counter", "customers", ledgerContext), "/customers");
   });
 
   it("links to the bare first tab when no month or date has been chosen yet", () => {

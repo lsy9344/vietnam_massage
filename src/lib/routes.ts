@@ -40,6 +40,7 @@ export const screenRoutes: readonly ScreenRoute[] = [
   { path: "/rooms", labelKey: "shell.tab.rooms", zone: "floor", roles: ["administrator", "counter", "waiter", "read_only_viewer"], dateContext: "serviceDate" },
   { path: "/live", labelKey: "shell.tab.live", zone: "floor", roles: ["administrator", "counter"], dateContext: "serviceDate" },
   { path: "/tv", labelKey: "shell.tab.tv", zone: "floor", roles: ["administrator", "counter", "read_only_viewer"], dateContext: "serviceDate", notATab: true },
+  { path: "/customers", labelKey: "shell.tab.customers", zone: "customers", roles: ["administrator", "counter"] },
   { path: "/settlements", labelKey: "shell.tab.therapist", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "serviceDate" },
   { path: "/settlements/earcare", labelKey: "shell.tab.earcare", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "attendanceDate" },
   { path: "/settlements/operations", labelKey: "shell.tab.opsDaily", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "attendanceDate" },

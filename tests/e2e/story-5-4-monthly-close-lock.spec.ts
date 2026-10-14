@@ -233,8 +233,10 @@ test.describe("Story 5.4 monthly close lock", () => {
 
     await page.goto(`/calls?operatingMonthId=${seededData.counterLockedMonth.id}`);
     await expect(page.getByText("마감확정 또는 잠금 운영월입니다.").first()).toBeVisible();
-    await expect(page.getByText("마감확정 또는 잠금 운영월입니다. 지출 입력과 수정이 차단됩니다.")).toBeVisible();
     await expect(page.getByRole("button", { name: "새 콜 행 추가" })).toBeDisabled();
+    // 티켓 03: 지출 입력은 같은 날짜의 "하루 수납·지출" 탭에 있다.
+    await page.getByRole("navigation", { name: "콜 원장 보기" }).getByRole("link", { name: "하루 수납·지출" }).click();
+    await expect(page.getByText("마감확정 또는 잠금 운영월입니다. 지출 입력과 수정이 차단됩니다.")).toBeVisible();
     await expect(page.getByRole("button", { name: "지출 추가" })).toBeDisabled();
 
     await expect(

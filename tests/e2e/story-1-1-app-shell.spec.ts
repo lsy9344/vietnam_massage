@@ -2,7 +2,8 @@ import { expect, test } from "@playwright/test";
 import { login as loginAccount } from "./support/auth";
 
 // 티켓 02: 좌측 사이드바와 상단바 대신 화면 아래 업무 흐름 도크와 화면별 도구줄을 쓴다.
-const dockZones = ["원장", "현장", "정산", "마감", "보고", "설정"];
+// 티켓 03: 고객 화면이 생겨 관리자 도크에 고객 구역이 보인다.
+const dockZones = ["원장", "현장", "고객", "정산", "마감", "보고", "설정"];
 
 test.describe("Story 1.1 ERP 앱 쉘", () => {
   test.beforeEach(async ({ page }) => {

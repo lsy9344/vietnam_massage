@@ -65,6 +65,38 @@ describe("ScreenToolbar", () => {
     assert.doesNotMatch(renderToolbar("counter", "/rooms"), />로그아웃</);
   });
 
+  it("draws a screen's own view tabs as pill links in the tab slot, marking the current one", () => {
+    const html = renderToStaticMarkup(
+      renderInShell(
+        <ScreenToolbar
+          account={{ role: "counter", displayName: "Lan" }}
+          locale="ko"
+          path="/calls"
+          screenTabs={{
+            label: "원장 보기",
+            items: [
+              { href: "/calls?serviceDate=2026-10-14", label: "원장", current: false },
+              { href: "/calls?serviceDate=2026-10-14&tab=cashbook", label: "하루 수납·지출", current: true }
+            ]
+          }}
+          title="콜 원장"
+        />,
+        "ko"
+      )
+    );
+    const nav = html.match(/<nav[^>]*aria-label="원장 보기"[^>]*>([\s\S]*?)<\/nav>/)?.[1] ?? "";
+    assert.deepEqual(
+      [...nav.matchAll(/<a [^>]*class="screen-tab"[^>]*>([^<]*)<\/a>/g)].map((match) => ({
+        label: match[1],
+        current: match[0].includes('aria-current="page"')
+      })),
+      [
+        { label: "원장", current: false },
+        { label: "하루 수납·지출", current: true }
+      ]
+    );
+  });
+
   it("places the primary action and screen status in the toolbar", () => {
     const html = renderToolbar("counter", "/rooms", {
       action: <button type="button">빠른 예약</button>,
@@ -124,6 +156,30 @@ describe("DateContextControls", () => {
 
     assert.match(html, /name="attendanceDate"/);
     assert.match(html, /href="\/settlements\/earcare\?operatingMonthId=m-2026-10&amp;attendanceDate=2026-10-13"/);
+  });
+
+  it("keeps the screen's own view parameters when the month or date changes", () => {
+    const html = renderToStaticMarkup(
+      <DateContextControls
+        date="2026-10-14"
+        keepParams={{ tab: "cashbook" }}
+        locale="ko"
+        months={[october, september]}
+        path="/calls"
+        selectedMonth={october}
+        today="2026-10-20"
+      />
+    );
+
+    assert.match(html, /<input type="hidden" name="tab" value="cashbook"\/>/);
+    assert.deepEqual(
+      links(html).map((link) => link.href),
+      [
+        "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-13&tab=cashbook",
+        "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-20&tab=cashbook",
+        "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-15&tab=cashbook"
+      ]
+    );
   });
 
   it("asks only for the operating month on month-only screens", () => {

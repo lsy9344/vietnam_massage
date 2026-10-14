@@ -23,9 +23,17 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function expectSummaryKpi(page: Page, label: string, value: string) {
-  const pattern = new RegExp(`^${escapeRegExp(label)}\\s*${escapeRegExp(value)}$`);
-  await expect(page.getByLabel("일별 요약").locator("div.grid").filter({ hasText: pattern })).toBeVisible();
+// 티켓 03: 금액 요약은 "하루 수납·지출" 탭의 "일별 요약"(요약 카드와 합계 목록)에, 상태별 건수는 원장 탭에 있다.
+async function expectSummaryAmount(page: Page, label: string, value: string) {
+  const item = page
+    .getByLabel("일별 요약")
+    .locator("dl > div")
+    .filter({ has: page.locator("dt", { hasText: new RegExp(`^${escapeRegExp(label)}$`) }) });
+  await expect(item.locator("dd").first()).toHaveText(value);
+}
+
+async function expectStatusCount(page: Page, text: string) {
+  await expect(page.getByRole("list", { name: "상태별 건수" })).toContainText(text);
 }
 
 // 공유 login 헬퍼는 credentials POST 응답과 landing navigation까지 기다린다. 직접 구현하면
@@ -264,17 +272,20 @@ test.describe("Story 2.5 일별 지출 입력과 요약 계산", () => {
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2033-06-05`);
     const auditCountBefore = await countStoryDailyExpenseAuditEvents();
 
-    // 예약건수는 상태와 무관하게 원장 행 수를 센다(Story 2.1 REQ-009). 노쇼/취소는 개별 KPI로 분리됐다.
-    await expectSummaryKpi(page, "예약건수", "4건");
-    await expectSummaryKpi(page, "방문완료", "2건");
-    await expectSummaryKpi(page, "노쇼", "0건");
-    await expectSummaryKpi(page, "취소", "1건");
-    await expectSummaryKpi(page, "결제합계", "4,600,000 VND");
-    await expectSummaryKpi(page, "마사지사정산", "2,500,000 VND");
-    await expectSummaryKpi(page, "귀케어풀", "100,000 VND");
-    await expectSummaryKpi(page, "할인합계", "100,000 VND");
-    await expectSummaryKpi(page, "지출합계", "0 VND");
-    await expectSummaryKpi(page, "순매출", "4,600,000 VND");
+    // 전체는 상태와 무관하게 원장 행 수를 센다(Story 2.1 REQ-009). 노쇼/취소는 개별 건수로 분리됐다.
+    await expectStatusCount(page, "전체 4건");
+    await expectStatusCount(page, "예약 1건");
+    await expectStatusCount(page, "방문완료 2건");
+    await expectStatusCount(page, "노쇼 0건");
+    await expectStatusCount(page, "취소 1건");
+
+    await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2033-06-05&tab=cashbook`);
+    await expectSummaryAmount(page, "결제합계", "4,600,000 VND");
+    await expectSummaryAmount(page, "마사지사정산", "2,500,000 VND");
+    await expectSummaryAmount(page, "귀케어풀", "100,000 VND");
+    await expectSummaryAmount(page, "할인합계", "100,000 VND");
+    await expectSummaryAmount(page, "지출합계", "0 VND");
+    await expectSummaryAmount(page, "순매출", "4,600,000 VND");
     await expect(page.getByLabel("일별 요약").getByRole("row", { name: /^A\s+1\s+1\s+2$/ })).toBeVisible();
     await expect(page.getByLabel("일별 요약").getByRole("row", { name: /^D\s+1\s+0\s+2$/ })).toBeVisible();
     await expect(page.getByLabel("일별 요약").getByRole("row", { name: /^E\s+0\s+0\s+0$/ })).toBeVisible();
@@ -313,13 +324,13 @@ test.describe("Story 2.5 일별 지출 입력과 요약 계산", () => {
 
   test("field error와 잠긴 운영월 read-only 상태를 확인한다", async ({ page }) => {
     await login(page);
-    await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2033-06-05`);
+    await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2033-06-05&tab=cashbook`);
     await page.getByLabel("일별 지출").getByPlaceholder("금액").fill("0");
     await page.getByLabel("일별 지출").getByPlaceholder("내용").fill("금액 오류");
     await page.getByLabel("일별 지출").getByRole("button", { name: "지출 추가" }).click();
     await expect(page.getByText("금액은 0보다 커야 합니다.")).toBeVisible();
 
-    await page.goto(`/calls?operatingMonthId=${seededData.lockedMonthId}&serviceDate=2033-07-05`);
+    await page.goto(`/calls?operatingMonthId=${seededData.lockedMonthId}&serviceDate=2033-07-05&tab=cashbook`);
     // 잠금 안내는 제목("잠긴 운영월입니다.")과 설명이 분리돼 있다.
     await expect(page.getByLabel("일별 지출").getByText("잠긴 운영월입니다.")).toBeVisible();
     await expect(page.getByText("마감확정 또는 잠금 운영월입니다. 지출 입력과 수정이 차단됩니다.")).toBeVisible();

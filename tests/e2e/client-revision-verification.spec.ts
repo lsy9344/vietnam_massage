@@ -355,13 +355,16 @@ test.describe("Client revision browser verification", () => {
 
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, seededData.accounts.counter.accountId, seededData.accounts.counter.password);
-    await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${paymentSummaryDate}`);
+    // 티켓 03: 결제수단별 합계는 "하루 수납·지출" 탭에 있다.
+    await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${paymentSummaryDate}&tab=cashbook`);
 
-    const summary = page.getByLabel("일별 요약");
-    await expect(summary.locator("div.grid").filter({ hasText: /현금\s*0 VND/ }).first()).toBeVisible();
-    await expect(summary.locator("div.grid").filter({ hasText: /카드\s*1,500,000 VND/ }).first()).toBeVisible();
-    await expect(summary.locator("div.grid").filter({ hasText: /계좌\s*0 VND/ }).first()).toBeVisible();
-    await expect(summary.locator("div.grid").filter({ hasText: /기타\s*0 VND/ }).first()).toBeVisible();
+    const paymentMethods = page.getByLabel("일별 요약").getByRole("region", { name: "결제수단별 합계" });
+    for (const [label, value] of [["현금", "0 VND"], ["카드", "1,500,000 VND"], ["계좌", "0 VND"], ["기타", "0 VND"]] as const) {
+      const item = paymentMethods.locator("dl > div").filter({ has: page.locator("dt", { hasText: new RegExp(`^${label}$`) }) });
+      await expect(item).toBeVisible();
+      await expect(item.locator("dd")).toHaveText(value);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   });
 
   test.afterAll(async () => {

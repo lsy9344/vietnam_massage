@@ -38,7 +38,7 @@ describe("WorkflowDockView", () => {
     assert.match(html, /<nav[^>]*aria-label="업무 이동"/);
     assert.deepEqual(
       dockLinks(html).map((link) => link.label),
-      ["원장", "현장", "정산", "마감", "보고", "설정"]
+      ["원장", "현장", "고객", "정산", "마감", "보고", "설정"]
     );
   });
 
@@ -57,6 +57,7 @@ describe("WorkflowDockView", () => {
     assert.deepEqual(links, [
       { href: "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-14", label: "원장", current: true },
       { href: "/rooms?operatingMonthId=m-2026-10&serviceDate=2026-10-14", label: "현장", current: false },
+      { href: "/customers", label: "고객", current: false },
       { href: "/dashboard/today?operatingMonthId=m-2026-10&serviceDate=2026-10-14", label: "보고", current: false }
     ]);
   });
@@ -69,7 +70,7 @@ describe("WorkflowDockView", () => {
     const overflow = admin.match(/data-dock-overflow[\s\S]*?<\/nav>/)?.[0] ?? "";
     assert.deepEqual(
       [...overflow.matchAll(/<a [^>]*>([^<]*)<\/a>/g)].map((match) => match[1]),
-      ["보고", "설정"]
+      ["마감", "보고", "설정"]
     );
     assert.doesNotMatch(counter, />더보기</);
   });
@@ -100,7 +101,7 @@ describe("WorkflowDockView", () => {
 
     assert.deepEqual(
       dockLinks(html).map((link) => link.label),
-      ["Sổ gọi", "Vận hành", "Báo cáo"]
+      ["Sổ gọi", "Vận hành", "Khách", "Báo cáo"]
     );
     assert.match(html, />Đăng xuất</);
   });

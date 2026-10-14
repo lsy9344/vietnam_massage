@@ -1,49 +1,23 @@
 import { Skeleton } from "@/components/ui/skeleton";
 
+// 원장 탭 골격: 도구줄(제목·날짜·탭) → 상태별 건수 한 줄 → 원장 표.
 export default function CallsLoading() {
   return (
     <div className="screen">
-      <div className="mb-5 flex items-end justify-between gap-6">
-        <div className="grid gap-2">
-          <Skeleton className="h-3 w-20" />
-          <Skeleton className="h-8 w-56" />
-          <Skeleton className="h-4 w-[420px] max-w-full" />
-        </div>
-        <div className="hidden gap-2 text-right lg:grid">
-          <Skeleton className="h-3 w-32" />
-          <Skeleton className="h-3 w-44" />
+      <div className="mb-5 flex flex-wrap items-center gap-x-6 gap-y-3 pb-4">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-11 w-72 rounded-full" />
+        <div className="flex gap-2">
+          <Skeleton className="h-11 w-20 rounded-full" />
+          <Skeleton className="h-11 w-36 rounded-full" />
         </div>
       </div>
-      <div className="mb-4 flex gap-3">
-        <Skeleton className="h-9 w-44" />
-        <Skeleton className="h-9 w-40" />
-        <Skeleton className="h-9 w-16" />
+      <div className="mb-4 flex flex-wrap gap-3">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <Skeleton className="h-7 w-24 rounded-full" key={index} />
+        ))}
       </div>
-      <section className="mb-4 border border-border bg-surface">
-        <div className="flex flex-wrap border-b border-border">
-          {Array.from({ length: 9 }).map((_, index) => (
-            <div className="grid min-w-28 gap-2 border-r border-border px-3 py-2 last:border-r-0" key={index}>
-              <Skeleton className="h-3 w-16" />
-              <Skeleton className="h-4 w-24" />
-            </div>
-          ))}
-        </div>
-        <div className="grid gap-2 px-3 py-3">
-          <Skeleton className="h-7 w-full" />
-          <Skeleton className="h-7 w-full" />
-        </div>
-      </section>
-      <section className="mb-4 border border-border bg-surface">
-        <div className="flex items-center justify-between border-b border-border px-3 py-2">
-          <Skeleton className="h-5 w-24" />
-          <Skeleton className="h-3 w-16" />
-        </div>
-        <div className="grid gap-2 px-3 py-3">
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-        </div>
-      </section>
-      <section className="border border-border bg-surface">
+      <section className="rounded-md border border-border bg-surface">
         <div className="border-b border-border px-4 py-3">
           <Skeleton className="h-5 w-32" />
         </div>

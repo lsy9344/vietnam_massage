@@ -61,7 +61,8 @@ if (/paymentAmount\s*:\s*null/.test(service) || /opsCallCredit\s*:\s*null/.test(
   errors.push("service-call-service.ts must not keep Story 2.1 null calculation placeholders");
 }
 
-const grid = read("src/app/(erp)/calls/editable-call-grid.tsx");
+// 계산 상태 문구 키는 원장 표와 하루 수납·지출이 함께 쓰도록 calculation-status-message.ts로 옮겼다(티켓 03).
+const grid = `${read("src/app/(erp)/calls/editable-call-grid.tsx")}\n${read("src/app/(erp)/calls/calculation-status-message.ts")}`;
 for (const required of [
   "ComputedCell",
   "bg-readonly",

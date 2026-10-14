@@ -2448,6 +2448,66 @@ export function completedServiceCallCalculationsFromRows(rows: ServiceCallRowDto
     }));
 }
 
+export type LedgerStatusCountsDto = {
+  totalCount: number;
+  reservedCount: number;
+  inUseCount: number;
+  cleaningCount: number;
+  completedCount: number;
+  noShowCount: number;
+  canceledCount: number;
+};
+
+// 원장 탭 머리의 상태별 건수(명세 F08). totalCount는 하루 요약의 reservationCount와 같은 그날의 콜 수다.
+export function ledgerStatusCountsFromRows(rows: ServiceCallRowDto[]): LedgerStatusCountsDto {
+  const count = (matches: (status: string) => boolean) => rows.filter((row) => matches(row.status)).length;
+  return {
+    totalCount: rows.length,
+    reservedCount: count(isReservationStatus),
+    inUseCount: count(isInUseStatus),
+    cleaningCount: count(isCleaningStatus),
+    completedCount: count(isCompletedServiceCallStatus),
+    noShowCount: count(isNoShowStatus),
+    canceledCount: count(isCanceledStatus)
+  };
+}
+
+export type CalculationWarningStatus = Extract<
+  ServiceCallCalculationStatus,
+  "course_policy_missing" | "therapist_rate_missing" | "second_therapist_required"
+>;
+
+export type CalculationWarningCallDto = {
+  serviceCallId: string;
+  operatingMonthId: string;
+  serviceDate: string;
+  startTime: string;
+  customerMemo: string | null;
+  calculationStatus: CalculationWarningStatus;
+};
+
+function isCalculationWarningStatus(status: ServiceCallCalculationStatus): status is CalculationWarningStatus {
+  return status === "course_policy_missing" || status === "therapist_rate_missing" || status === "second_therapist_required";
+}
+
+// 하루 요약의 계산 경고 건수(warningCounts)와 같은 행이다. 원장 순서를 그대로 둔다.
+export function calculationWarningCallsFromRows(rows: ServiceCallRowDto[]): CalculationWarningCallDto[] {
+  return rows.flatMap((row) =>
+    isCalculationWarningStatus(row.calculationStatus)
+      ? [
+          {
+            serviceCallId: row.id,
+            operatingMonthId: row.operatingMonthId,
+            serviceDate: row.serviceDate,
+            startTime: row.startTime,
+            customerMemo: row.customerMemo,
+            calculationStatus: row.calculationStatus
+          }
+        ]
+      : []
+  );
+}
+
 export function redactServiceCallSettlementAmounts(row: ServiceCallRowDto): ServiceCallRowDto {
   return {
     ...row,

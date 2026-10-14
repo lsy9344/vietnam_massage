@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   autosaveServiceCallRow,
+  calculationWarningCallsFromRows,
   createCustomer,
   createDailyExpense,
   deactivateDailyExpense,
   getDailyCallLedgerSummary,
   listCustomerVisitHistory,
   listCustomers,
+  ledgerStatusCountsFromRows,
   listDailyExpensesForDate,
   listCompletedServiceCallCalculationsForDate,
   listServiceCallStatusHistory,
@@ -19,7 +21,8 @@ import {
   searchCustomerVisitCandidates,
   ServiceCallDomainError,
   updateCustomer,
-  updateDailyExpense
+  updateDailyExpense,
+  type ServiceCallRowDto
 } from "@/modules/calls/service-call-service";
 
 function dbDate(value: string) {
@@ -3623,3 +3626,117 @@ function visitCall(prismaClient: ReturnType<typeof createMemoryPrisma>, override
     ...overrides
   };
 }
+
+function ledgerRow(overrides: Partial<ServiceCallRowDto>): ServiceCallRowDto {
+  return {
+    id: "call",
+    operatingMonthId: "month-2026-06",
+    serviceDate: "2026-06-10",
+    startTime: "11:00",
+    actualEntryTime: null,
+    displayEnd: "12:00",
+    warningTime: null,
+    roomId: "room-101",
+    roomLabel: "101",
+    courseId: "course-a",
+    courseCode: "A",
+    courseLabel: "A 누루60",
+    customerId: null,
+    customerMemo: null,
+    therapist1: null,
+    therapist2: null,
+    earcare: null,
+    status: "방문완료",
+    discountTypeCode: null,
+    paymentMethodCode: null,
+    note: null,
+    confirmationCode: null,
+    basePrice: 0,
+    paymentAmount: 0,
+    discountAmount: 0,
+    therapist1Commission: 0,
+    therapist2Commission: 0,
+    earcarePoolAmount: 0,
+    opsCallCredit: 0,
+    calculationStatus: "calculated",
+    calculationErrorCode: null,
+    calculationErrorMessage: null,
+    createdAt: "2026-06-10T00:00:00.000Z",
+    updatedAt: "2026-06-10T00:00:00.000Z",
+    savedAt: "2026-06-10T00:00:00.000Z",
+    ...overrides
+  };
+}
+
+describe("calculation warning calls", () => {
+  it("lists the ledger rows whose calculation failed, in ledger order, with the time, memo, and calculation status", () => {
+    const warnings = calculationWarningCallsFromRows([
+      ledgerRow({ id: "calculated", startTime: "10:00" }),
+      ledgerRow({ id: "rate", startTime: "11:00", customerMemo: "민아", calculationStatus: "therapist_rate_missing" }),
+      ledgerRow({ id: "reserved", startTime: "12:00", status: "예약", calculationStatus: "not_completed" }),
+      ledgerRow({ id: "policy", startTime: "13:00", calculationStatus: "course_policy_missing" }),
+      ledgerRow({ id: "second", startTime: "14:00", customerMemo: "지윤", calculationStatus: "second_therapist_required" })
+    ]);
+
+    assert.deepEqual(warnings, [
+      {
+        serviceCallId: "rate",
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-06-10",
+        startTime: "11:00",
+        customerMemo: "민아",
+        calculationStatus: "therapist_rate_missing"
+      },
+      {
+        serviceCallId: "policy",
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-06-10",
+        startTime: "13:00",
+        customerMemo: null,
+        calculationStatus: "course_policy_missing"
+      },
+      {
+        serviceCallId: "second",
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-06-10",
+        startTime: "14:00",
+        customerMemo: "지윤",
+        calculationStatus: "second_therapist_required"
+      }
+    ]);
+  });
+});
+
+describe("ledger status counts", () => {
+  it("counts all calls and each status, accepting both the Korean label and the stable code", () => {
+    const counts = ledgerStatusCountsFromRows([
+      ledgerRow({ id: "r1", status: "예약" }),
+      ledgerRow({ id: "r2", status: "RESERVED" }),
+      ledgerRow({ id: "u1", status: "IN_USE" }),
+      ledgerRow({ id: "c1", status: "청소중" }),
+      ledgerRow({ id: "v1", status: "VISIT_COMPLETE" }),
+      ledgerRow({ id: "v2", status: "방문완료" }),
+      ledgerRow({ id: "n1", status: "NO_SHOW" }),
+      ledgerRow({ id: "x1", status: "CANCELED" })
+    ]);
+
+    assert.deepEqual(counts, {
+      totalCount: 8,
+      reservedCount: 2,
+      inUseCount: 1,
+      cleaningCount: 1,
+      completedCount: 2,
+      noShowCount: 1,
+      canceledCount: 1
+    });
+    assert.deepEqual(ledgerStatusCountsFromRows([]), {
+      totalCount: 0,
+      reservedCount: 0,
+      inUseCount: 0,
+      cleaningCount: 0,
+      completedCount: 0,
+      noShowCount: 0,
+      canceledCount: 0
+    });
+  });
+});

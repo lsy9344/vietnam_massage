@@ -23,6 +23,8 @@ import type { CustomerDto, ServiceCallCalculationStatus, ServiceCallFormOptions,
 import type { ServiceCallAutosaveInput } from "@/modules/calls/service-call-schema";
 import { autosaveServiceCallRowAction, saveBasicServiceCallRowAction, type ServiceCallActionState } from "@/app/(erp)/calls/actions";
 import type { AvailabilityCourseChoice } from "@/app/(erp)/calls/therapist-availability-view";
+import { calculationErrorMessageKey } from "@/app/(erp)/calls/calculation-status-message";
+import { ledgerCallAnchorId } from "@/app/(erp)/calls/ledger-address";
 import {
   EDITABLE_CALL_FIELDS,
   cancelCellDraft,
@@ -708,7 +710,7 @@ function AddRowForm({
     <form action={formAction} className="border-t border-border bg-surface">
       <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
       <input name="serviceDate" type="hidden" value={serviceDate} />
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(showSettlementColumns) }}>
           <CallGridColgroup showSettlementColumns={showSettlementColumns} />
           <CallGridHead showSettlementColumns={showSettlementColumns} />
@@ -939,13 +941,8 @@ function saveStateClassName(state: RowSaveState) {
   return "text-muted";
 }
 
-// 서비스가 만든 한국어 calculationErrorMessage 대신, 안정적인 calculationStatus(kind)로
-// 번역 키를 골라 표시한다. 화면이 i18n 경계를 직접 통과시키도록 한다.
 function calcMessage(t: (key: MessageKey) => string, status: ServiceCallCalculationStatus) {
-  if (status === "course_policy_missing") return t("calls.calc.coursePolicyMissing");
-  if (status === "therapist_rate_missing") return t("calls.calc.therapistRateMissing");
-  if (status === "second_therapist_required") return t("calls.calc.secondTherapistRequired");
-  return t("calls.calc.policyMissing");
+  return t(calculationErrorMessageKey(status));
 }
 
 function firstFieldError(fieldErrors: FieldErrors, field: string) {
@@ -1164,7 +1161,12 @@ function EditableCallRow({
   }
 
   return (
-    <tr className="align-top" data-service-call-id={row.id}>
+    // 다른 화면에서 #call-… 로 들어오면 이 행이 선택된 행 모양이 된다(design.md 6.6).
+    <tr
+      className="align-top target:bg-readonly [&:target>td:first-child]:[box-shadow:inset_3px_0_0_var(--brand)]"
+      data-service-call-id={row.id}
+      id={ledgerCallAnchorId(row.id)}
+    >
       <td className="border-b border-border px-2 py-2 text-xs">
         {draft.serviceDate}
         <input name="serviceCallId" type="hidden" value={draft.serviceCallId} />
@@ -1517,7 +1519,7 @@ export function EditableCallGrid({
   });
 
   return (
-    <section className="border border-border bg-surface">
+    <section className="overflow-hidden rounded-md border border-border bg-surface">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div>
           <h2 className="text-base font-semibold text-foreground">{t("calls.grid.title")}</h2>
@@ -1539,7 +1541,7 @@ export function EditableCallGrid({
           </div>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(showSettlementColumns) }}>
             <CallGridColgroup showSettlementColumns={showSettlementColumns} />
             <CallGridHead showSettlementColumns={showSettlementColumns} />
