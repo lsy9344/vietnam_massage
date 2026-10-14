@@ -2036,6 +2036,20 @@ function latestVisitDate(records: ServiceCallRecord[]) {
   return latest ? toIsoDateOnly(latest) : null;
 }
 
+// 후보에 보이는 손님 표기는 콜의 고객/메모다. 최근 방문의 표기를 먼저 보고, 비어 있으면 그보다 앞선 표기를 쓴다.
+function latestCallMemo(records: ServiceCallRecord[]) {
+  const sorted = records.slice().sort((left, right) => {
+    const date = right.serviceDate.getTime() - left.serviceDate.getTime();
+    if (date !== 0) return date;
+    return right.startTime.localeCompare(left.startTime);
+  });
+  for (const record of sorted) {
+    const memo = record.customerMemo?.trim() ?? "";
+    if (memo) return memo;
+  }
+  return "";
+}
+
 export async function searchCustomerVisitCandidates(input: {
   query: string;
   prismaClient?: ServiceCallPrismaClient;
@@ -2089,12 +2103,14 @@ export async function searchCustomerVisitCandidates(input: {
   for (const customerId of customerIds) {
     const customer = customersById.get(customerId);
     if (!customer) continue;
+    const calls = callsByCustomer.get(customerId) ?? [];
+    const memo = latestCallMemo(calls);
     candidates.push({
       kind: "customer",
       customerId: customer.id,
-      label: customer.name,
+      label: memo || customer.name,
       phone: customer.phone,
-      latestVisitDate: latestVisitDate(callsByCustomer.get(customerId) ?? [])
+      latestVisitDate: latestVisitDate(calls)
     });
   }
   for (const key of memoKeys) {

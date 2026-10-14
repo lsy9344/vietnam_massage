@@ -123,12 +123,16 @@ describe("customer visit search", () => {
 
     const found = renderView({
       query: "민아",
-      candidates: [candidate(), candidate({ kind: "memo", customerId: null, label: "민아 메모", phone: null, latestVisitDate: "2026-07-03" })],
+      candidates: [
+        candidate({ label: "원장표기" }),
+        candidate({ kind: "memo", customerId: null, label: "민아 메모", phone: null, latestVisitDate: "2026-07-03" })
+      ],
       historyOpen: true,
       selectedCustomerId: "customer-1",
       rows: [row()]
     });
-    assert.match(found, /민아 · 090111/);
+    assert.match(found, /원장표기/);
+    assert.doesNotMatch(found, /090111/);
     assert.match(found, /최근 방문 2026-06-20/);
     assert.match(found, /민아 메모/);
     assert.match(found, /최근 방문 2026-07-03/);

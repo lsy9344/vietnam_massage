@@ -2875,19 +2875,19 @@ describe("service call service", () => {
     assert.deepEqual(await searchCustomerVisitCandidates({ query: "없는사람", prismaClient }), []);
     assert.deepEqual(await searchCustomerVisitCandidates({ query: " 민아 ", prismaClient }), [
       { kind: "memo", customerId: null, label: "민아 메모", phone: null, latestVisitDate: "2026-07-03" },
-      { kind: "customer", customerId: mina.id, label: "민아", phone: "090111", latestVisitDate: "2026-06-20" },
+      { kind: "customer", customerId: mina.id, label: "원장표기", phone: "090111", latestVisitDate: "2026-06-20" },
       { kind: "memo", customerId: null, label: "다른 사람", phone: null, latestVisitDate: "2026-06-04" }
     ]);
     assert.deepEqual(await searchCustomerVisitCandidates({ query: "090111", prismaClient }), [
-      { kind: "customer", customerId: mina.id, label: "민아", phone: "090111", latestVisitDate: "2026-06-20" },
+      { kind: "customer", customerId: mina.id, label: "원장표기", phone: "090111", latestVisitDate: "2026-06-20" },
       { kind: "memo", customerId: null, label: "090111 적힘", phone: null, latestVisitDate: "2026-06-06" },
-      { kind: "customer", customerId: sua.id, label: "수아", phone: "090111", latestVisitDate: "2026-06-05" }
+      { kind: "customer", customerId: sua.id, label: "수아표기", phone: "090111", latestVisitDate: "2026-06-05" }
     ]);
     assert.deepEqual(await searchCustomerVisitCandidates({ query: "단골", prismaClient }), [
-      { kind: "customer", customerId: mina.id, label: "민아", phone: "090111", latestVisitDate: "2026-06-20" }
+      { kind: "customer", customerId: mina.id, label: "원장표기", phone: "090111", latestVisitDate: "2026-06-20" }
     ]);
     assert.deepEqual(await searchCustomerVisitCandidates({ query: "조용", prismaClient }), [
-      { kind: "customer", customerId: mina.id, label: "민아", phone: "090111", latestVisitDate: "2026-06-20" }
+      { kind: "customer", customerId: mina.id, label: "원장표기", phone: "090111", latestVisitDate: "2026-06-20" }
     ]);
     assert.deepEqual(await searchCustomerVisitCandidates({ query: "창가", prismaClient }), [
       { kind: "memo", customerId: null, label: "민아 메모", phone: null, latestVisitDate: "2026-07-03" }

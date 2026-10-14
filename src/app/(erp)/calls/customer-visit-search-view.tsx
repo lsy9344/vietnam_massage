@@ -16,10 +16,6 @@ function visitStatusLabel(locale: Locale, status: string) {
   return codeLabelFromKoreanLabel(locale, "SERVICE_STATUS", status);
 }
 
-function candidateTitle(candidate: CustomerVisitCandidateDto) {
-  return candidate.phone ? `${candidate.label} · ${candidate.phone}` : candidate.label;
-}
-
 export function CustomerVisitSearchView({
   locale,
   query,
@@ -96,7 +92,7 @@ export function CustomerVisitSearchView({
                   tabIndex={-1}
                   type="button"
                 >
-                  <span className="block text-sm text-foreground">{candidateTitle(candidate)}</span>
+                  <span className="block text-sm text-foreground">{candidate.label}</span>
                   {candidate.latestVisitDate ? (
                     <span className="block text-xs text-muted [font-variant-numeric:tabular-nums]">
                       {t(locale, "calls.search.latestVisit", { date: candidate.latestVisitDate })}
