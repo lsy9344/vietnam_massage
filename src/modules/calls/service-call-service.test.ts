@@ -1394,6 +1394,39 @@ describe("service call service", () => {
     });
   });
 
+  it("autosave writes an edited visit request instead of reverting it to the old value (S1)", async () => {
+    const prismaClient = createMemoryPrisma();
+    const original = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      status: "예약",
+      visitRequest: "조용한 방으로 부탁드립니다",
+      prismaClient
+    });
+    assert.equal(original.visitRequest, "조용한 방으로 부탁드립니다");
+
+    const saved = await autosaveServiceCallRow({
+      serviceCallId: original.id,
+      expectedUpdatedAt: original.updatedAt,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      status: "예약",
+      visitRequest: "창가 쪽으로 바꿔주세요",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(saved.visitRequest, "창가 쪽으로 바꿔주세요");
+  });
+
   it("autosave from 예약 to 방문완료 immediately returns computed readonly values", async () => {
     const prismaClient = createMemoryPrisma();
     const original = await saveBasicServiceCallRow({

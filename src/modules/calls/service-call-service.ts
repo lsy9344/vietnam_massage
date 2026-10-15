@@ -2157,6 +2157,7 @@ export async function autosaveServiceCallRow(
       discountTypeCode: parsed.data.discountTypeCode ?? null,
       paymentMethodCode: parsed.data.paymentMethodCode ?? null,
       note: parsed.data.note ?? null,
+      visitRequest: parsed.data.visitRequest ?? null,
       confirmationCode: parsed.data.confirmationCode ?? null
     };
 
