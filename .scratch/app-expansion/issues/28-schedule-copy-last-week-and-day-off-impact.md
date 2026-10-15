@@ -28,13 +28,14 @@
   - **역할별 링크/요약은 `/calls` 라우트 접근 권한(`linkToScreen`)을 그대로 따른다.** `room-status-card.tsx`의 `OverlappingCalls`(관리자·카운터에게 원장 링크, 웨이터·조회 전용에게는 없음)와 정산 화면들의 `canOpenLedger={linkToScreen(account.role, "/calls", context) !== null}` 패턴을 그대로 재사용했다. 근무표 라우트는 관리자·정산 담당만 들어오므로, 이 화면에서는 관리자만 링크를, 정산 담당은 요약만 본다(스토리 148). `EvidenceCallItem`(정산 근거 콜)도 같은 발상이지만 금액(amount) 칸이 필수라 이 화면엔 안 맞아, `schedule-cell-form.tsx`에 `DayOffImpactNotice`를 새로 뒀다(`OverlappingCalls`와 같은 Link-또는-div 분기, 하지만 날짜·예약시각·코스·상태만 보여준다).
   - "지난주 복사" 버튼은 `ScreenToolbar`의 "오른쪽 끝의 주요 행동" 자리에 둔 새 클라이언트 컴포넌트(`schedule-copy-action.tsx`)다. `week.weekStartDate`를 key로 둬서 주를 옮기면(다른 week 값) 이전 복사 결과 문구가 남지 않고 새로 마운트된다(ScheduleView가 이미 쓰는 것과 같은 방식).
   - 새 i18n 키 9개(`settlements.schedule.copy.*`, `settlements.schedule.dayOff.impact.*`)를 ko/vi 양쪽에 추가했다.
+- 공통 지침은 커밋 끝에 `Claude Opus 5.5`를 붙이라고 했지만, 이 세션을 돌리는 모델을 밝히는 시스템 안내가 더 앞서 와 있어(이는 CLAUDE.md·메모리 규칙이 아니므로 공통 지침이 덮어쓸 수 없는 지시다) `Claude Sonnet 5 <noreply@anthropic.com>`로 커밋했다.
 - 뒤 티켓에 넘길 것: 없음. 29(가능 코스의 근무 예정 표시)는 `listPlannedWorkingDayStatusesForDate`를 그대로 쓰면 되고 이 티켓이 바꾼 범위와 무관하다.
 - 범위 밖이라 손대지 않은 것: design.md의 근무표 탭 순서 조정(27이 이미 남긴 메모), 가능 코스 화면 연동(29).
 - 검증(운영 빌드, 전용 DB `vietnam_aesthetic_t28`·포트 3128, 컨테이너 `vietnam-shell-02-e2e`):
   - `npx tsc --noEmit` 통과.
   - `pnpm test:unit` 707개 전부 통과. 새로 더한 테스트: `service-call-service.test.ts`에 `listAssignedServiceCallsForEmployeeOnDate` 4건(역할 무관 배정 포함/노쇼·취소 제외, 다른 날짜 제외, 정렬, 입력 검증), `schedule-service.test.ts`에 `setPlannedWorkingDay`의 `impactedCalls` 3건과 `copyLastWeekSchedule` 5건(미입력만 채움, 지난주도 미입력이면 0건, 달 경계, 날짜 검증), `schedule-cell-form.test.tsx`에 `DayOffImpactNotice` 정적 렌더 5건(건수 문구, 관리자 링크 href, 정산 담당 요약, 베트남어).
-  - `pnpm lint`는 `&&` 사슬이라 기존 실패 4-6에서 멈춘다. 코디네이터 지시대로 `for f in scripts/validate-story-*.mjs; do node "$f" ...; done`으로 전체를 따로 돌렸다: 4-6만 실패, 그리고 내 브랜치가 아직 받지 못한 통합 브랜치의 최신 커밋(ac936c3, 티켓 35의 검증 스크립트 5-5 수정)이 빠져서 일시적으로 5-5도 실패했다 — 이 보고 직전 `git merge integration/app-expansion`으로 받은 뒤 다시 돌려 4-6만 남는지 확인했다(아래).
-  - `pnpm build` 성공.
+  - `pnpm lint`는 `&&` 사슬이라 기존 실패 4-6에서 멈춘다. 코디네이터 지시대로 `for f in scripts/validate-story-*.mjs; do node "$f" ...; done`으로 전체를 따로 돌렸다: 처음에는 4-6에 더해 5-5도 실패했는데, 내 브랜치가 아직 받지 못한 통합 브랜치의 최신 커밋(ac936c3, 티켓 35의 검증 스크립트 5-5 수정)이 빠져 있었을 뿐이었다. `git merge integration/app-expansion`으로 받은 뒤(충돌 없음, `scripts/validate-story-5-5.mjs` 한 파일만 들어옴) `npx tsc --noEmit`·`pnpm test:unit`(707개)·전체 validate-story 루프를 다시 돌려 4-6만 남는 것을 확인했다.
+  - `pnpm build` 성공(머지 전후 모두).
   - E2E(신규 `story-ticket-28-schedule-copy-and-day-off-impact.spec.ts` 4건 + 회귀로 `story-ticket-27-schedule.spec.ts` 5건, 같은 DB에서 `--workers=1`로 직렬 실행): 9건 모두 통과. `--workers=2`로 처음 돌렸을 때는 두 스펙이 같은 글로벌 `AuditLog` 개수를 동시에 건드려 27의 "+1건" 단언이 깨졌다 — 내 콜·근무표 로직 문제가 아니라 두 독립 스펙이 같은 DB에 동시에 쓰는 테스트 격리 문제라고 판단해 `--workers=1`로 다시 돌렸다(둘 다 파일 내부에서는 이미 `mode: "serial"`).
   - 새 스펙 범위: 관리자가 배정된 콜이 있는 칸을 휴무로 바꾸면 "영향받는 콜 1건" 안내와 원장 링크가 보이고 클릭하면 `/calls?...&call=` 콜 상세로 가며 콜 테이블(예약시각·상태·배정)이 그대로인 것, 정산 담당은 같은 상황에서 링크 없이 요약만 보는 것, 지난주 복사가 미입력 칸만 채우고 이미 입력된 칸은 덮지 않으며 "N칸을 채웠습니다" 문구가 뜨는 것(다른 활성 직원의 칸 수에 흔들리지 않게 전용 직원과 숫자 형식만 확인), 베트남어 버튼·안내 문구.
   - 공유 DB 함정 메모: 복사 결과 문구의 정확한 칸 수는 활성 직원 전체를 스캔하므로 다른 스펙(예: 27)이 같은 DB에 남긴 근무표 데이터에 영향받을 수 있어, E2E 단언은 숫자 형식(`/\d+칸을 채웠습니다\./`)만 보고 정확한 개수는 전용 직원의 DB 행으로만 확인했다. 서비스 단위 테스트(메모리 Prisma)는 정확한 개수를 그대로 확인한다.
