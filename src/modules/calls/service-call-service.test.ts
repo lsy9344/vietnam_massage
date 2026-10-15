@@ -5,6 +5,7 @@ import {
   calculationWarningCallsFromRows,
   createCustomer,
   createDailyExpense,
+  customerVisitCountsFromRows,
   deactivateDailyExpense,
   getDailyCallLedgerSummary,
   getServiceCallRow,
@@ -24,6 +25,7 @@ import {
   ServiceCallDomainError,
   updateCustomer,
   updateDailyExpense,
+  type CustomerVisitHistoryRowDto,
   type ServiceCallRowDto
 } from "@/modules/calls/service-call-service";
 
@@ -2816,7 +2818,7 @@ describe("service call service", () => {
     assert.equal(afterReject.find((row) => row.serviceCallId === locked.id)?.status, "예약");
   });
 
-  it("groups customer and unlinked memo candidates without attaching a shared phone", async () => {
+  it("groups customer and unlinked memo candidates, counts each candidate's completed visits, and marks a shared phone only among customers whose digits match within that search's results", async () => {
     const prismaClient = createMemoryPrisma();
     const mina = await createCustomer({
       name: "민아",
@@ -2902,27 +2904,69 @@ describe("service call service", () => {
     assert.deepEqual(await searchCustomerVisitCandidates({ query: "", prismaClient }), []);
     assert.deepEqual(await searchCustomerVisitCandidates({ query: "   ", prismaClient }), []);
     assert.deepEqual(await searchCustomerVisitCandidates({ query: "없는사람", prismaClient }), []);
+    // 둘 다 "민아"에 걸리지만 수아는 걸리지 않는 검색이라, 전화가 같아도 이 결과 안에서는 혼자다(공유 경고 없음).
     assert.deepEqual(await searchCustomerVisitCandidates({ query: " 민아 ", prismaClient }), [
-      { kind: "memo", customerId: null, label: "민아 메모", phone: null, latestVisitDate: "2026-07-03" },
-      { kind: "customer", customerId: mina.id, label: "원장표기", phone: "090111", latestVisitDate: "2026-06-20" },
-      { kind: "memo", customerId: null, label: "다른 사람", phone: null, latestVisitDate: "2026-06-04" }
+      { kind: "memo", customerId: null, label: "민아 메모", phone: null, latestVisitDate: "2026-07-03", completedVisitCount: 0, sharedPhone: false },
+      {
+        kind: "customer",
+        customerId: mina.id,
+        label: "원장표기",
+        phone: "090111",
+        latestVisitDate: "2026-06-20",
+        completedVisitCount: 1,
+        sharedPhone: false
+      },
+      { kind: "memo", customerId: null, label: "다른 사람", phone: null, latestVisitDate: "2026-06-04", completedVisitCount: 0, sharedPhone: false }
     ]);
+    // 연락처로 검색하면 민아와 수아가 같이 걸리고, 숫자만 비교한 연락처가 같아 둘 다 공유 경고가 선다.
     assert.deepEqual(await searchCustomerVisitCandidates({ query: "090111", prismaClient }), [
-      { kind: "customer", customerId: mina.id, label: "원장표기", phone: "090111", latestVisitDate: "2026-06-20" },
-      { kind: "memo", customerId: null, label: "090111 적힘", phone: null, latestVisitDate: "2026-06-06" },
-      { kind: "customer", customerId: sua.id, label: "수아표기", phone: "090111", latestVisitDate: "2026-06-05" }
+      {
+        kind: "customer",
+        customerId: mina.id,
+        label: "원장표기",
+        phone: "090111",
+        latestVisitDate: "2026-06-20",
+        completedVisitCount: 1,
+        sharedPhone: true
+      },
+      { kind: "memo", customerId: null, label: "090111 적힘", phone: null, latestVisitDate: "2026-06-06", completedVisitCount: 0, sharedPhone: false },
+      {
+        kind: "customer",
+        customerId: sua.id,
+        label: "수아표기",
+        phone: "090111",
+        latestVisitDate: "2026-06-05",
+        completedVisitCount: 1,
+        sharedPhone: true
+      }
     ]);
     assert.deepEqual(await searchCustomerVisitCandidates({ query: "단골", prismaClient }), [
-      { kind: "customer", customerId: mina.id, label: "원장표기", phone: "090111", latestVisitDate: "2026-06-20" }
+      {
+        kind: "customer",
+        customerId: mina.id,
+        label: "원장표기",
+        phone: "090111",
+        latestVisitDate: "2026-06-20",
+        completedVisitCount: 1,
+        sharedPhone: false
+      }
     ]);
     assert.deepEqual(await searchCustomerVisitCandidates({ query: "조용", prismaClient }), [
-      { kind: "customer", customerId: mina.id, label: "원장표기", phone: "090111", latestVisitDate: "2026-06-20" }
+      {
+        kind: "customer",
+        customerId: mina.id,
+        label: "원장표기",
+        phone: "090111",
+        latestVisitDate: "2026-06-20",
+        completedVisitCount: 1,
+        sharedPhone: false
+      }
     ]);
     assert.deepEqual(await searchCustomerVisitCandidates({ query: "창가", prismaClient }), [
-      { kind: "memo", customerId: null, label: "민아 메모", phone: null, latestVisitDate: "2026-07-03" }
+      { kind: "memo", customerId: null, label: "민아 메모", phone: null, latestVisitDate: "2026-07-03", completedVisitCount: 0, sharedPhone: false }
     ]);
     assert.deepEqual(await searchCustomerVisitCandidates({ query: "lan", prismaClient }), [
-      { kind: "customer", customerId: lan.id, label: "Lan", phone: "091000", latestVisitDate: null }
+      { kind: "customer", customerId: lan.id, label: "Lan", phone: "091000", latestVisitDate: null, completedVisitCount: 0, sharedPhone: false }
     ]);
 
     assert.deepEqual(
@@ -2961,6 +3005,40 @@ describe("service call service", () => {
       prismaClient
     });
     assert.equal(suaDay.find((row) => row.id === suaCall.id)?.customerId, sua.id);
+  });
+
+  it("marks a shared phone by comparing digits only, ignores formatting, does not interpret a country code, and skips an empty phone", async () => {
+    const prismaClient = createMemoryPrisma();
+    const formatted = await createCustomer({ name: "서식 전화", phone: "090-222-3333", memo: null, actorId: "counter-account", prismaClient });
+    const plain = await createCustomer({ name: "숫자만 전화", phone: "0902223333", memo: null, actorId: "counter-account", prismaClient });
+    const countryCode = await createCustomer({ name: "국가번호 전화", phone: "+84902223333", memo: null, actorId: "counter-account", prismaClient });
+    const blank = await createCustomer({ name: "전화 없음", phone: "", memo: null, actorId: "counter-account", prismaClient });
+
+    for (const [customer, day] of [
+      [formatted, "2026-06-01"],
+      [plain, "2026-06-02"],
+      [countryCode, "2026-06-03"],
+      [blank, "2026-06-04"]
+    ] as const) {
+      await saveBasicServiceCallRow({
+        ...visitCall(prismaClient),
+        serviceDate: day,
+        customerId: customer.id,
+        customerMemo: customer.name,
+        status: "예약"
+      });
+    }
+
+    const results = await searchCustomerVisitCandidates({ query: "전화", prismaClient });
+    const sharedByLabel = new Map(results.map((candidate) => [candidate.label, candidate.sharedPhone]));
+
+    // 서식(하이픈)만 다르고 숫자는 같아 공유로 본다.
+    assert.equal(sharedByLabel.get("서식 전화"), true);
+    assert.equal(sharedByLabel.get("숫자만 전화"), true);
+    // 국가번호를 붙인 자리는 해석하지 않아 숫자 문자열이 달라 공유로 보지 않는다.
+    assert.equal(sharedByLabel.get("국가번호 전화"), false);
+    // 연락처가 빈 고객은 비교 대상이 아니다.
+    assert.equal(sharedByLabel.get("전화 없음"), false);
   });
 });
 
@@ -4299,6 +4377,45 @@ describe("ledger status counts", () => {
       reservedCount: 0,
       inUseCount: 0,
       cleaningCount: 0,
+      completedCount: 0,
+      noShowCount: 0,
+      canceledCount: 0
+    });
+  });
+});
+
+function visitHistoryRow(overrides: Partial<CustomerVisitHistoryRowDto>): CustomerVisitHistoryRowDto {
+  return {
+    serviceCallId: "call",
+    operatingMonthId: "month-2026-06",
+    serviceDate: "2026-06-10",
+    startTime: "11:00",
+    courseLabel: "A 누루60",
+    therapistLabel: "마사지사1",
+    status: "방문완료",
+    customerMemo: null,
+    ...overrides
+  };
+}
+
+describe("customer visit counts", () => {
+  it("counts completed, no-show, and canceled rows, accepting both the Korean label and the stable code, and leaves out reserved/in-use/cleaning rows", () => {
+    const counts = customerVisitCountsFromRows([
+      visitHistoryRow({ serviceCallId: "v1", status: "방문완료" }),
+      visitHistoryRow({ serviceCallId: "v2", status: "VISIT_COMPLETE" }),
+      visitHistoryRow({ serviceCallId: "n1", status: "노쇼" }),
+      visitHistoryRow({ serviceCallId: "c1", status: "취소" }),
+      visitHistoryRow({ serviceCallId: "r1", status: "예약" }),
+      visitHistoryRow({ serviceCallId: "u1", status: "사용중" }),
+      visitHistoryRow({ serviceCallId: "cl1", status: "청소중" })
+    ]);
+
+    assert.deepEqual(counts, { completedCount: 2, noShowCount: 1, canceledCount: 1 });
+  });
+
+  it("includes zero counts for a selection with no matching visits yet", () => {
+    assert.deepEqual(customerVisitCountsFromRows([]), { completedCount: 0, noShowCount: 0, canceledCount: 0 });
+    assert.deepEqual(customerVisitCountsFromRows([visitHistoryRow({ status: "예약" })]), {
       completedCount: 0,
       noShowCount: 0,
       canceledCount: 0
