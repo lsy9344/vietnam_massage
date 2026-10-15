@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -21,7 +22,7 @@ let thirdCallId = "";
 let createdMonth = false;
 
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, sortOrder: number) {
-  return (prisma as any).employee.upsert({
+  return testEmployees.upsert({
     where: { staffCode },
     update: { displayName, employeeGroup, isActive: true },
     create: {
@@ -158,6 +159,7 @@ test.describe("티켓 13 원장 행 경고와 콜 상세 패널", () => {
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanup();
     await removeSeededMasters();
     await prisma.$disconnect();

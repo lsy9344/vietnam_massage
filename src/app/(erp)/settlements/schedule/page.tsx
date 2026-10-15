@@ -51,7 +51,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     <div className="screen">
       <ScreenToolbar
         account={account}
-        action={week ? <ScheduleCopyWeekAction key={week.weekStartDate} weekStartDate={week.weekStartDate} /> : null}
+        action={week ? <ScheduleCopyWeekAction canOpenLedger={canOpenLedger} key={week.weekStartDate} weekStartDate={week.weekStartDate} /> : null}
         dateControls={week ? <ScheduleWeekNav locale={locale} weekEndDate={week.weekEndDate} weekStartDate={week.weekStartDate} /> : null}
         locale={locale}
         path="/settlements/schedule"

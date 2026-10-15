@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { callConflictFieldRows, CallConflictCompareFields, type CallConflictCompareData } from "@/app/(erp)/calls/call-conflict-compare";
+import { callConflictFieldRows, CallConflictCompare, CallConflictCompareFields, type CallConflictCompareData } from "@/app/(erp)/calls/call-conflict-compare";
 import { draftFromRow, type CallRowDraft } from "@/app/(erp)/calls/call-row-save";
 import { LocaleProvider } from "@/lib/i18n/client";
 import { createTranslator } from "@/lib/i18n";
@@ -198,5 +198,19 @@ describe("CallConflictCompareFields", () => {
     assert.match(html, /Màn hình khác đã lưu cuộc gọi này trước/);
     assert.match(html, /Tải lại nội dung mới nhất/);
     assert.match(html, /Áp lại và lưu/);
+  });
+});
+
+// S2: 비교는 콜 상세 패널(SidePanel, 비모달) 안의 충돌 상태 구역이어야 한다(스펙 321줄). 한 행이
+// STALE_CALL이 되어도 패널 전체가 포커스를 가두는 모달이 되면 안 되므로, role="dialog"가 아닌 평범한
+// 구역으로 그려지는지 정적 렌더로 확인한다(모달이면 Radix Dialog.Portal이라 아무것도 그리지 않는다).
+describe("CallConflictCompare", () => {
+  it("renders as a plain section inside the detail panel instead of its own modal dialog", () => {
+    const html = render("ko", createElement(CallConflictCompare, { compare: compareData(), customers, options }));
+    assert.doesNotMatch(html, /role="dialog"/);
+    assert.doesNotMatch(html, /role="alertdialog"/);
+    assert.match(html, /저장 충돌 비교/);
+    assert.match(html, /다른 화면에서 이 콜이 바뀌었습니다/);
+    assert.match(html, /고객\/메모/);
   });
 });

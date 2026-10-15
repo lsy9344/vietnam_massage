@@ -14,7 +14,7 @@ import {
   monthlyStatementEmployeeGroups,
   MonthlyStatementDomainError,
   type MonthlyStatementDto
-} from "@/modules/settlements/monthly-statement-service";
+} from "@/modules/closing/monthly-statement-service";
 import { MonthlyStatementView } from "@/app/(erp)/settlements/statement/monthly-statement-view";
 import { SettlementEmptyNotice, SettlementErrorNotice } from "@/app/(erp)/settlements/settlement-parts";
 import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-notice";

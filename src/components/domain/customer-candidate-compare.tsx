@@ -3,7 +3,9 @@ import { t } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
 import type { CustomerVisitCandidateDto } from "@/modules/calls/service-call-service";
 
-const cellClassName = "border-b border-border px-3 py-2";
+export function customerCandidateOptionId(listboxId: string, index: number) {
+  return `${listboxId}-option-${index}`;
+}
 
 /** 검색 후보 목록에서 지금 고른 고객(또는 고객 기록이 없는 콜의 고객/메모)인지. 목록·비교 표가 같이 쓴다. */
 export function isCustomerCandidateChosen(
@@ -48,54 +50,35 @@ export function CustomerCandidateCompare({
     <>
       <ScreenState kind="warning" label={t(locale, "customers.duplicatePhone.chip")} title={t(locale, "customers.duplicatePhone.title")} />
       <div aria-label={label} className="overflow-x-auto rounded-md border border-border bg-surface" id={listboxId} role="listbox">
-        <table className="w-full min-w-[32rem] border-collapse text-left text-sm">
-          <thead className="bg-readonly text-xs font-semibold text-muted">
-            <tr>
-              <th className={cellClassName} scope="col">
-                {t(locale, "calls.customer.field.name")}
-              </th>
-              <th className={cellClassName} scope="col">
-                {t(locale, "calls.customer.field.phone")}
-              </th>
-              <th className={cellClassName} scope="col">
-                {t(locale, "customers.compare.column.latestVisit")}
-              </th>
-              <th className={`${cellClassName} text-right`} scope="col">
-                {t(locale, "customers.compare.column.completedVisits")}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {candidates.map((candidate, index) => {
-              const chosen = isCustomerCandidateChosen(candidate, selectedCustomerId, selectedMemo);
-              const active = index === activeIndex;
-              return (
-                <tr
-                  className={chosen ? "bg-readonly [box-shadow:inset_3px_0_0_var(--brand)]" : "hover:bg-readonly"}
-                  key={`${candidate.kind}:${candidate.customerId ?? ""}:${candidate.label}`}
-                >
-                  <td className={cellClassName}>
-                    <button
-                      aria-current={chosen ? "true" : undefined}
-                      aria-selected={active}
-                      className="min-h-11 text-left font-semibold text-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary"
-                      id={`customer-option-${index}`}
-                      onClick={() => onSelect(candidate)}
-                      role="option"
-                      tabIndex={-1}
-                      type="button"
-                    >
-                      {candidate.label}
-                    </button>
-                  </td>
-                  <td className={cellClassName}>{candidate.phone ?? ""}</td>
-                  <td className={cellClassName}>{candidate.latestVisitDate ?? ""}</td>
-                  <td className={`${cellClassName} text-right`}>{candidate.completedVisitCount}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="min-w-[32rem]" role="presentation">
+          <div aria-hidden="true" className="grid grid-cols-4 gap-3 border-b border-border bg-readonly px-3 py-2 text-xs font-semibold text-muted">
+            <span>{t(locale, "calls.customer.field.name")}</span>
+            <span>{t(locale, "calls.customer.field.phone")}</span>
+            <span>{t(locale, "customers.compare.column.latestVisit")}</span>
+            <span className="text-right">{t(locale, "customers.compare.column.completedVisits")}</span>
+          </div>
+          {candidates.map((candidate, index) => {
+            const chosen = isCustomerCandidateChosen(candidate, selectedCustomerId, selectedMemo);
+            return (
+              <button
+                aria-current={chosen ? "true" : undefined}
+                aria-selected={index === activeIndex}
+                className={`grid min-h-11 w-full grid-cols-4 items-center gap-3 border-b border-border px-3 py-2 text-left text-sm text-foreground hover:bg-readonly focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-secondary ${chosen ? "bg-readonly [box-shadow:inset_3px_0_0_var(--brand)]" : ""}`}
+                id={customerCandidateOptionId(listboxId, index)}
+                key={`${candidate.kind}:${candidate.customerId ?? ""}:${candidate.label}`}
+                onClick={() => onSelect(candidate)}
+                role="option"
+                tabIndex={activeIndex < 0 ? 0 : -1}
+                type="button"
+              >
+                <span className="font-semibold underline underline-offset-4">{candidate.label}</span>
+                <span>{candidate.phone ?? ""}</span>
+                <span>{candidate.latestVisitDate ?? ""}</span>
+                <span className="text-right tabular-nums">{candidate.completedVisitCount}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </>
   );

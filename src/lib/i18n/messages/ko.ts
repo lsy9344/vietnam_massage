@@ -361,7 +361,7 @@ export const ko = {
   // 두 명 코스와 경고 확인 후 배정(스펙 F01, 티켓 21)
   "calls.quickBooking.therapist.overrideAssign": "경고 확인 후 배정",
   "calls.quickBooking.therapist.overrideTitle": "경고를 확인하고 배정하시겠습니까?",
-  "calls.quickBooking.therapist.overrideTimeShort": "{therapist}님은 이 시각에 코스 길이만큼 비어 있지 않습니다. 그래도 배정하면 시간 겹침 경고와 함께 저장됩니다.",
+  "calls.quickBooking.therapist.overrideTimeShort": "{therapist}님은 이 시각에 코스 길이만큼 비어 있지 않습니다. 그래도 배정하면 시간표상 가능 조건을 만족하지 않는 콜로 저장됩니다.",
   "calls.quickBooking.therapist.overrideRateMissing": "{therapist}님에게 이 코스 수당이 없습니다. 그래도 배정하면 수당 없음 경고와 함께 저장됩니다.",
   "calls.quickBooking.therapist.secondTitle": "두 번째 Therapist",
   "calls.quickBooking.therapist.secondUnset": "두 번째 Therapist를 고르세요.",
@@ -395,7 +395,6 @@ export const ko = {
   "calls.conflict.useMine": "내 값 쓰기",
   "calls.conflict.useMineAria": "{field} 내 값 쓰기",
   "calls.conflict.reapply": "다시 반영하고 저장",
-  "calls.conflict.closeConfirmDescription": "비교를 닫아도 초안은 원장 행에 남고, 다시 열어 비교할 수 있습니다. 닫으시겠습니까?",
 
   // 콜 계산 상태
   "calls.calc.errorPending": "저장 보류 계산 대기",
@@ -565,6 +564,7 @@ export const ko = {
   "settlements.schedule.dayOff.impact.count": "영향받는 콜 {count}건",
   "settlements.schedule.dayOff.impact.guidance": "배정된 콜을 다른 직원에게 재배정하거나, 해당 직원의 근무 예정을 다시 확인하세요.",
   "settlements.schedule.dayOff.impact.listAria": "{name}의 {date} 영향받는 콜 목록",
+  "settlements.schedule.copy.impactsHeading": "복사로 휴무가 된 칸 중 콜이 배정된 직원·날짜",
 
   // 마사지사 일일정산
   "settlements.therapist.title": "마사지사 일일정산",
@@ -834,6 +834,8 @@ export const ko = {
   "settlements.statement.evidence.column.calls": "콜",
   "settlements.statement.evidence.column.amount": "금액",
   "settlements.statement.evidence.column.payout": "지급 확인",
+  // S9(V08): 코스 수당·0원 정책 근거.
+  "settlements.statement.evidence.appliedPolicy.title": "적용 정책",
   "settlements.statement.evidence.empty.title": "이 달에는 날짜별 근거가 없습니다.",
   "settlements.statement.evidence.noAttendance": "기록 없음",
   "settlements.statement.evidence.unavailable.title": "날짜별 근거",

@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Browser, type Locator } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -12,8 +13,8 @@ const accounts = {
 } as const;
 type AccountKey = keyof typeof accounts;
 
-const monthKey = "2038-03";
-const serviceDate = "2038-03-10";
+const monthKey = "2075-03";
+const serviceDate = "2075-03-10";
 const staleMessage = "다른 화면에서 이 콜이 바뀌었습니다. 다시 불러온 뒤에 저장하세요.";
 
 let monthId = "";
@@ -25,7 +26,7 @@ const accountDbIds: Record<AccountKey, string> = { counterA: "", counterB: "" };
 
 async function seedAccount(key: AccountKey) {
   const account = accounts[key];
-  const employee = await (prisma as any).employee.upsert({
+  const employee = await testEmployees.upsert({
     where: { staffCode: account.staffCode },
     update: { displayName: `T15 ${key}`, employeeGroup: "OPERATIONS", isActive: true },
     create: {
@@ -142,7 +143,7 @@ test.describe("티켓 15 기존 행 저장 충돌 거절과 행 저장 상태", 
     } else {
       await (prisma as any).coursePolicy.create({ data: { courseId, effectiveFromMonth: monthKey, ...policy } });
     }
-    const therapist = await (prisma as any).employee.upsert({
+    const therapist = await testEmployees.upsert({
       where: { staffCode: "E2E-T15-THR-1" },
       update: { displayName: "T15 마사지사", employeeGroup: "THERAPIST", isActive: true },
       create: {
@@ -161,6 +162,7 @@ test.describe("티켓 15 기존 행 저장 충돌 거절과 행 저장 상태", 
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanup();
     // 코스 정책과 운영월은 다른 스펙의 화면에도 보인다. 이 스펙이 만든 것은 지운다.
     await (prisma as any).coursePolicy.deleteMany({ where: { name: "T15 A", effectiveFromMonth: monthKey } });
@@ -208,16 +210,6 @@ test.describe("티켓 15 기존 행 저장 충돌 거절과 행 저장 상태", 
       const loserSaveCell = loser.row.locator('[data-call-cell-column="calculationStatus"]');
       await expect(loserSaveCell).toContainText("충돌 확인 필요");
       await expect(loserSaveCell).toContainText(staleMessage);
-
-      // 티켓 17: 충돌이 되면 콜 상세 패널에 비교가 자동으로 열리고, 배경은 aria-hidden으로 비활성화된다.
-      // 이 스펙은 행 자체의 저장 순서(모아서 재전송, 늦은 응답 무시)를 보므로, 비교를 확인한 뒤 닫고
-      // 행의 상호작용을 그대로 이어간다.
-      const conflictDialog = loser.page.getByRole("dialog", { name: "저장 충돌 비교" });
-      await expect(conflictDialog).toBeVisible();
-      await conflictDialog.getByRole("button", { name: "닫기" }).click();
-      await loser.page.getByRole("alertdialog", { name: "저장하지 않은 입력이 있습니다" }).getByRole("button", { name: "닫기" }).click();
-      await expect(conflictDialog).toBeHidden();
-
       await expect(loserSaveCell.getByRole("button")).toHaveText(["최신 내용으로 다시 불러오기"]);
       await expect(loser.row.getByRole("combobox", { name: "결제수단" })).toHaveValue(loser.paymentLabel);
       await expect(loser.row.locator('[data-call-cell-column="warnings"]')).not.toContainText("충돌");

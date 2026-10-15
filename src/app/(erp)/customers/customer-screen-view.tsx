@@ -1,7 +1,8 @@
 import type { KeyboardEvent } from "react";
 import { SidePanel } from "@/components/ui/panel";
-import { CustomerCandidateCompare, isCustomerCandidateChosen } from "@/components/domain/customer-candidate-compare";
+import { CustomerCandidateCompare, customerCandidateOptionId, isCustomerCandidateChosen } from "@/components/domain/customer-candidate-compare";
 import { CustomerVisitCounts } from "@/components/domain/customer-visit-counts";
+import { ScreenState } from "@/components/ui/screen-state";
 import { serviceStatusLabel } from "@/lib/i18n/codes";
 import { t } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
@@ -11,7 +12,7 @@ import type {
   CustomerVisitCountsDto,
   CustomerVisitHistoryRowDto
 } from "@/modules/calls/service-call-service";
-import { ledgerCallHref } from "@/app/(erp)/calls/ledger-address";
+import { ledgerCallHref } from "@/lib/ledger-address";
 import { CustomerEditForm } from "@/app/(erp)/customers/customer-forms";
 
 const cellClassName = "border-b border-border px-3 py-2";
@@ -28,6 +29,7 @@ export function CustomerScreenView({
   activeIndex,
   customer,
   selectedMemo,
+  selectedSharedPhone,
   visitCounts,
   history,
   onQueryChange,
@@ -45,6 +47,8 @@ export function CustomerScreenView({
   /** 고른 고객. 고객 기록이 없는 콜의 고객/메모를 골랐으면 null이고 selectedMemo가 있다. */
   customer: CustomerDto | null;
   selectedMemo: string | null;
+  /** S5: 검색 결과 밖(쿼리 없이 바로 연 고객)에서도 보일 같은 연락처 경고. */
+  selectedSharedPhone: boolean;
   /** 열린 방문 이력의 건수(B09). 고른 고객·메모가 없으면 null이다. */
   visitCounts: CustomerVisitCountsDto | null;
   history: CustomerVisitHistoryRowDto[];
@@ -57,7 +61,7 @@ export function CustomerScreenView({
 }) {
   const label = t(locale, "calls.search.label");
   const showEmpty = settledQuery.trim() !== "" && query.trim() === settledQuery.trim() && candidates.length === 0;
-  const activeId = activeIndex >= 0 ? `customer-option-${activeIndex}` : undefined;
+  const activeId = activeIndex >= 0 ? customerCandidateOptionId("customer-candidates", activeIndex) : undefined;
   const panelOpen = customer !== null || selectedMemo !== null;
 
   return (
@@ -113,7 +117,7 @@ export function CustomerScreenView({
                       className={`flex min-h-14 w-full flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md px-4 py-2 text-left transition-colors hover:bg-readonly ${
                         chosen ? "bg-readonly [box-shadow:inset_3px_0_0_var(--brand)]" : "bg-surface"
                       } ${active ? "outline-2 outline-offset-2 outline-brand-secondary" : ""}`}
-                      id={`customer-option-${index}`}
+                      id={customerCandidateOptionId("customer-candidates", index)}
                       onClick={() => onSelect(candidate)}
                       role="option"
                       tabIndex={-1}
@@ -140,6 +144,9 @@ export function CustomerScreenView({
             {customer ? (
               <section aria-label={t(locale, "customers.detail.info")} className="grid gap-3">
                 <h3 className="text-[0.9375rem] font-semibold text-foreground">{t(locale, "customers.detail.info")}</h3>
+                {selectedSharedPhone ? (
+                  <ScreenState kind="warning" label={t(locale, "customers.duplicatePhone.chip")} title={t(locale, "customers.duplicatePhone.title")} />
+                ) : null}
                 <CustomerEditForm customer={customer} key={customer.id} />
               </section>
             ) : (

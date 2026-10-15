@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -77,7 +78,7 @@ async function storyTimeSlotSortOrder(value: string, preferredSortOrder: number)
 
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, position: string, sortOrder: number) {
   const safeSortOrder = await storyEmployeeSortOrder(employeeGroup, staffCode, sortOrder);
-  return (prisma as any).employee.upsert({
+  return testEmployees.upsert({
     where: { staffCode },
     update: { displayName, employeeGroup, position, shiftType: "전체", baseSalary: 0, employmentStatus: "재직", sortOrder: safeSortOrder, isActive: true },
     create: { staffCode, displayName, employeeGroup, position, shiftType: "전체", baseSalary: 0, employmentStatus: "재직", sortOrder: safeSortOrder, isActive: true }
@@ -233,6 +234,7 @@ test.describe("Ticket 33 closing checklist and confirm blocking", () => {
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await prisma.$disconnect();
   });
 

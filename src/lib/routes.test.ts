@@ -146,11 +146,11 @@ describe("zone tabs", () => {
 
   it("lists the zone's screens the role can enter, in workflow order", () => {
     assert.deepEqual(tabPaths("administrator", "settlements"), [
+      "/settlements/schedule",
       "/settlements",
       "/settlements/earcare",
       "/settlements/operations",
-      "/settlements/operations/monthly",
-      "/settlements/schedule"
+      "/settlements/operations/monthly"
     ]);
     assert.deepEqual(tabPaths("administrator", "settings"), [
       "/masters/operating-months",

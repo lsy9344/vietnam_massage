@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -23,7 +24,7 @@ let therapistId = "";
 let existingCustomerId = "";
 
 async function seedAccount() {
-  const employee = await (prisma as any).employee.upsert({
+  const employee = await testEmployees.upsert({
     where: { staffCode: account.staffCode },
     update: { displayName: "T24 카운터", employeeGroup: "OPERATIONS", isActive: true },
     create: {
@@ -119,7 +120,7 @@ test.describe("티켓 24 빠른 예약 새 고객 함께 저장과 최근 방문
       await (prisma as any).coursePolicy.create({ data: { courseId, effectiveFromMonth: operatingMonthKey, ...policy } });
     }
 
-    const therapist = await (prisma as any).employee.upsert({
+    const therapist = await testEmployees.upsert({
       where: { staffCode: "E2E-T24-THR-1" },
       update: { displayName: "T24 마사지사", employeeGroup: "THERAPIST", isActive: true },
       create: {
@@ -169,6 +170,7 @@ test.describe("티켓 24 빠른 예약 새 고객 함께 저장과 최근 방문
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanup();
     await (prisma as any).therapistCourseRate.deleteMany({ where: { therapistId, courseId } });
     await (prisma as any).coursePolicy.deleteMany({ where: { name: "T24 A", effectiveFromMonth: operatingMonthKey } });

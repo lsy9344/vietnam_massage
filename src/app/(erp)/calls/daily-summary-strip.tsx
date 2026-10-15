@@ -5,7 +5,7 @@ import { formatNumber } from "@/lib/i18n/format";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { SummaryCard, SummaryCards } from "@/components/ui/summary-card";
 import { calculationErrorMessageKey } from "@/app/(erp)/calls/calculation-status-message";
-import { ledgerCallHref } from "@/app/(erp)/calls/ledger-address";
+import { ledgerCallHref } from "@/lib/ledger-address";
 import type { CalculationWarningCallDto, DailyCallLedgerSummaryDto, TillBalanceDto } from "@/modules/calls/service-call-service";
 
 const cardClassName = "rounded-lg border border-border bg-surface p-4";

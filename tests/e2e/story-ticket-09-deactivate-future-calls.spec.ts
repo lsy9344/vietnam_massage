@@ -1,6 +1,7 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
-import { addDaysToIsoDate, businessTodayIsoDate } from "@/lib/operating-date";
+import { addDaysToIsoDate, businessTodayIsoDate, businessTodayServiceDate } from "@/lib/operating-date";
 import { prisma } from "./support/db";
 import { argon2idOptions, login, setLocaleCookie } from "./support/auth";
 import { masterPanel } from "./support/masters";
@@ -14,7 +15,7 @@ const admin = { accountId: "ticket09_admin", password: "Ticket09!admin", staffCo
 const target = { staffCode: "E2E-T09-THR", displayName: "T09 마사지사", sortOrder: 94901 };
 
 const tomorrow = addDaysToIsoDate(businessTodayIsoDate(), 1);
-const yesterday = addDaysToIsoDate(businessTodayIsoDate(), -1);
+let previousServiceDate = "";
 
 let targetId = "";
 let reservedCallId = "";
@@ -32,7 +33,7 @@ async function freeEmployeeSortOrder(employeeGroup: string, staffCode: string, p
 }
 
 async function upsertEmployee(input: { staffCode: string; displayName: string; employeeGroup: string; position: string; sortOrder: number }) {
-  return (prisma as any).employee.upsert({
+  return testEmployees.upsert({
     where: { staffCode: input.staffCode },
     update: { displayName: input.displayName, isActive: true },
     create: {
@@ -106,15 +107,18 @@ test.describe("티켓 09 앞으로 콜이 잡힌 직원의 비활성 거절", ()
   test.describe.configure({ mode: "serial" });
 
   test.beforeAll(async () => {
+    const slots = await prisma.timeSlot.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } });
+    previousServiceDate = addDaysToIsoDate(businessTodayServiceDate(slots), -1);
     await seedAdmin();
     targetId = (await upsertEmployee({ ...target, employeeGroup: "THERAPIST", position: "마사지사" })).id;
     await removeTargetCalls();
     reservedCallId = (await createCall({ serviceDate: tomorrow, startTime: "14:00", status: "예약", assignmentRole: "THERAPIST_2" })).id;
     await createCall({ serviceDate: tomorrow, startTime: "15:00", status: "노쇼", assignmentRole: "THERAPIST_1" });
-    await createCall({ serviceDate: yesterday, startTime: "14:00", status: "방문완료", assignmentRole: "THERAPIST_1" });
+    await createCall({ serviceDate: previousServiceDate, startTime: "14:00", status: "방문완료", assignmentRole: "THERAPIST_1" });
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await removeTargetCalls();
     // 운영월 기본값은 가장 늦은 운영월이라, 남겨 두면 다른 스펙의 원장·정산 기본 운영월이 2039-09가 된다.
     await (prisma as any).operatingMonth.deleteMany({ where: { monthKey: "2039-09" } });
@@ -155,7 +159,7 @@ test.describe("티켓 09 앞으로 콜이 잡힌 직원의 비활성 거절", ()
     expect(await deactivatedAudits()).toBe(auditsBefore + 1);
     // 어제의 방문완료 콜은 비활성을 막지 않았고, 그 배정은 그대로 남는다.
     const pastAssignments = await (prisma as any).serviceCallAssignment.count({
-      where: { employeeId: targetId, isActive: true, serviceCall: { serviceDate: new Date(`${yesterday}T00:00:00.000Z`) } }
+      where: { employeeId: targetId, isActive: true, serviceCall: { serviceDate: new Date(`${previousServiceDate}T00:00:00.000Z`) } }
     });
     expect(pastAssignments).toBe(1);
   });

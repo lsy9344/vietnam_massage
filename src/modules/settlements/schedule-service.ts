@@ -1,3 +1,6 @@
+import { isoDateFieldSchema, plannedWorkingDayCellStatuses, ScheduleDomainError, assertValidParsedDate, toFieldError, unsetPlanStatus, type PlannedWorkingDayCellStatus, type WorkPlanStatus } from "@/modules/masters/planned-working-day-query";
+export { workPlanStatuses, ScheduleDomainError, listPlannedWorkingDayStatusesForDate, unsetPlanStatus, type PlannedWorkingDayCellStatus, type WorkPlanStatus, type PlannedWorkingDayStatusDto } from "@/modules/masters/planned-working-day-query";
+
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
@@ -14,16 +17,6 @@ import { employeeGroups, type EmployeeGroup } from "@/modules/masters/employee-s
  * - 지난주 복사(copyLastWeekSchedule)와 휴무 영향 콜 조회(setPlannedWorkingDay의 impactedCalls)는 티켓 28이 더했다.
  *   영향받는 콜은 콜 서비스(service-call-service.ts)에서 읽기만 하고, 콜의 예약시각·배정·상태는 바꾸지 않는다.
  */
-
-export const workPlanStatuses = ["근무 예정", "휴무"] as const;
-export type WorkPlanStatus = (typeof workPlanStatuses)[number];
-
-const unsetPlanStatus = "미입력" as const;
-export type PlannedWorkingDayCellStatus = WorkPlanStatus | typeof unsetPlanStatus;
-const plannedWorkingDayCellStatuses = [...workPlanStatuses, unsetPlanStatus] as [
-  PlannedWorkingDayCellStatus,
-  ...PlannedWorkingDayCellStatus[]
-];
 
 type EmployeeRecord = {
   id: string;
@@ -62,8 +55,18 @@ type ScheduleServicePrismaClient = {
   serviceCall: {
     findMany(args?: unknown): Promise<unknown[]>;
   };
-  $transaction<T>(callback: (tx: ScheduleServicePrismaClient) => Promise<T>): Promise<T>;
+  // 트랜잭션 콜백 인자(실제 Prisma의 TransactionClient)에는 이게 없다 — 중첩 트랜잭션은 못 연다.
+  // runInTransaction이 이미 트랜잭션 안인지(이 자리가 없는지)를 보고 새 트랜잭션을 열지 정한다.
+  $transaction?<T>(callback: (tx: ScheduleServicePrismaClient) => Promise<T>): Promise<T>;
 };
+
+/** 이미 트랜잭션 안(client가 트랜잭션 콜백 인자라 $transaction이 없음)이면 새로 열지 않고 그대로 쓴다. */
+function runInTransaction<T>(client: ScheduleServicePrismaClient, callback: (tx: ScheduleServicePrismaClient) => Promise<T>) {
+  if (client.$transaction) {
+    return client.$transaction(callback);
+  }
+  return callback(client);
+}
 
 export type PlannedWorkingDayCellDto = {
   date: string;
@@ -91,11 +94,6 @@ export type PlannedWorkingDayWeekDto = {
   groups: PlannedWorkingDayGroupDto[];
 };
 
-export type PlannedWorkingDayStatusDto = {
-  employeeId: string;
-  status: PlannedWorkingDayCellStatus;
-};
-
 export type PlannedWorkingDayCellResultDto = {
   employeeId: string;
   date: string;
@@ -104,23 +102,7 @@ export type PlannedWorkingDayCellResultDto = {
   impactedCalls: AssignedServiceCallSummaryDto[];
 };
 
-export type ScheduleErrorField = "employeeId" | "date" | "status";
-
-export class ScheduleDomainError extends Error {
-  constructor(message: string, public readonly code: string, public readonly field?: ScheduleErrorField) {
-    super(message);
-    this.name = "ScheduleDomainError";
-  }
-}
-
-const isoDateFieldSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "날짜는 YYYY-MM-DD 형식이어야 합니다.");
-
 const weekQuerySchema = z.object({
-  date: isoDateFieldSchema
-});
-
-const statusQuerySchema = z.object({
-  employeeIds: z.array(z.string().trim().min(1)).max(500),
   date: isoDateFieldSchema
 });
 
@@ -157,27 +139,6 @@ function mondayOfWeekContaining(value: string) {
 
 function isEmployeeGroup(value: string): value is EmployeeGroup {
   return (employeeGroups as readonly string[]).includes(value);
-}
-
-const errorFields: readonly ScheduleErrorField[] = ["employeeId", "date", "status"];
-
-function asErrorField(path: PropertyKey | undefined): ScheduleErrorField | undefined {
-  return errorFields.find((field) => field === path);
-}
-
-function invalidInput(message: string, field?: ScheduleErrorField) {
-  return new ScheduleDomainError(message, "INVALID_SCHEDULE_INPUT", field);
-}
-
-function toFieldError(error: z.ZodError) {
-  const issue = error.issues[0];
-  return invalidInput(issue?.message ?? "입력값을 확인하세요.", asErrorField(issue?.path[0]));
-}
-
-function assertValidParsedDate(value: string) {
-  if (toIsoDate(toDate(value)) !== value) {
-    throw invalidInput("날짜가 올바르지 않습니다.", "date");
-  }
 }
 
 async function loadActiveScheduleEmployee(client: ScheduleServicePrismaClient, employeeId: string) {
@@ -251,41 +212,6 @@ export async function listPlannedWorkingDaysForWeek(input: {
   return { weekStartDate, weekEndDate, dates, groups };
 }
 
-// listTherapistAvailability(calls/service-call-service.ts, 티켓 29)가 가능 코스 행에 근무 예정을 붙일 때
-// 재사용할 수 있도록 plannedWorkingDay.findMany만 요구하는 좁은 타입이다. calls 쪽의
-// AssignedCallReadClient(listAssignedServiceCallsForEmployeeOnDate)와 같은 방식.
-type PlannedWorkingDayReadClient = {
-  plannedWorkingDay: { findMany(args?: unknown): Promise<Array<Pick<PlannedWorkingDayRecord, "employeeId" | "planStatus">>> };
-};
-
-/**
- * 직원 목록과 날짜 하나의 근무표 상태를 돌려준다. 가능 코스(29)와 휴무 영향 콜(28)이
- * 재사용하는 직원별·날짜별 조회다. 행이 없는 직원은 미입력으로 채운다.
- */
-export async function listPlannedWorkingDayStatusesForDate(input: {
-  employeeIds: string[];
-  date: string;
-  prismaClient?: PlannedWorkingDayReadClient;
-}): Promise<PlannedWorkingDayStatusDto[]> {
-  const parsed = statusQuerySchema.safeParse(input);
-  if (!parsed.success) throw toFieldError(parsed.error);
-  assertValidParsedDate(parsed.data.date);
-
-  const uniqueEmployeeIds = [...new Set(parsed.data.employeeIds)];
-  if (uniqueEmployeeIds.length === 0) return [];
-
-  const client = input.prismaClient ?? getClient();
-  const rows = await client.plannedWorkingDay.findMany({
-    where: { employeeId: { in: uniqueEmployeeIds }, workDate: toDate(parsed.data.date) }
-  });
-  const statusByEmployeeId = new Map(rows.map((row) => [row.employeeId, row.planStatus as WorkPlanStatus]));
-
-  return uniqueEmployeeIds.map((employeeId) => ({
-    employeeId,
-    status: statusByEmployeeId.get(employeeId) ?? unsetPlanStatus
-  }));
-}
-
 /**
  * 칸 하나를 근무 예정·휴무·미입력으로 설정한다. 미입력으로 설정하면 기존 행을 지운다.
  * 실제로 값이 바뀔 때만 감사 기록(직원, 날짜, 이전 값, 새 값, 처리자)을 남긴다.
@@ -306,7 +232,7 @@ export async function setPlannedWorkingDay(input: {
   const client = getClient(input.prismaClient);
   await loadActiveScheduleEmployee(client, parsed.data.employeeId);
 
-  const written = await client.$transaction(async (tx) => {
+  const written = await runInTransaction(client, async (tx) => {
     // 트랜잭션 안에서 다시 확인한다: 바깥 조회와 트랜잭션 사이에 직원이 비활성화됐을 수 있다.
     await loadActiveScheduleEmployee(tx, parsed.data.employeeId);
     const existing = await findCell(tx, parsed.data.employeeId, parsed.data.date);
@@ -371,10 +297,20 @@ export async function setPlannedWorkingDay(input: {
   return { ...written, impactedCalls };
 }
 
+/** 지난주 복사로 휴무가 된 칸의 영향받는 콜(스토리 102, S8). 칸 하나를 직접 휴무로 바꿀 때와 같은 모양이다. */
+export type PlannedWorkingDayCopyImpactDto = {
+  employeeId: string;
+  employeeName: string;
+  date: string;
+  calls: AssignedServiceCallSummaryDto[];
+};
+
 export type PlannedWorkingDayCopyResultDto = {
   weekStartDate: string;
   weekEndDate: string;
   filledCount: number;
+  /** 채운 칸 중 휴무가 되어 영향받는 콜이 있는 칸만 담는다(없으면 빈 배열). */
+  impacts: PlannedWorkingDayCopyImpactDto[];
 };
 
 const copyLastWeekSchema = z.object({
@@ -385,8 +321,9 @@ const copyLastWeekSchema = z.object({
 /**
  * 지난주(이 날짜가 속한 주의 바로 앞 7일)의 값을 이번 주의 같은 요일 중 미입력 칸에만 채운다(스토리 101).
  * 이미 입력된 근무 예정·휴무는 덮지 않는다. 운영월 경계를 넘는 주도 날짜 기준으로 그대로 복사한다.
- * 칸마다 setPlannedWorkingDay와 같은 경로로 쓰고 같은 감사 기록을 남긴다. 채운 칸 수만 돌려준다 —
- * 복사로 새로 휴무가 된 칸의 영향받는 콜 안내는 칸 하나를 직접 휴무로 바꿀 때만 돌려준다(스토리 102).
+ * 칸마다 setPlannedWorkingDay와 같은 경로로 쓰고 같은 감사 기록을 남기며, 그렇게 휴무가 된 칸의 영향받는
+ * 콜을 모아 돌려준다(S8, 스토리 102). 칸이 몇 개든(활성 직원 수 × 7) 한 트랜잭션으로 묶어(S8) 중간에
+ * 하나라도 실패하면 전체를 되돌린다 — 그래야 일부만 복사된 채로 남지 않는다.
  */
 export async function copyLastWeekSchedule(input: {
   date: string;
@@ -404,38 +341,46 @@ export async function copyLastWeekSchedule(input: {
   const previousDates = Array.from({ length: 7 }, (_, index) => addDays(previousWeekStartDate, index));
 
   const client = getClient(input.prismaClient);
-  const [employees, rows] = await Promise.all([
-    client.employee.findMany({ where: { isActive: true } }),
-    client.plannedWorkingDay.findMany({
-      where: { workDate: { gte: toDate(previousWeekStartDate), lte: toDate(weekEndDate) } }
-    })
-  ]);
 
-  // 행이 있으면 입력된 것(근무 예정 또는 휴무)이고, 없으면 미입력이다(F04).
-  const statusByKey = new Map<string, WorkPlanStatus>();
-  for (const row of rows) {
-    statusByKey.set(`${row.employeeId}::${toIsoDate(row.workDate)}`, row.planStatus as WorkPlanStatus);
-  }
+  const { filledCount, impacts } = await runInTransaction(client, async (tx) => {
+    const [employees, rows] = await Promise.all([
+      tx.employee.findMany({ where: { isActive: true } }),
+      tx.plannedWorkingDay.findMany({
+        where: { workDate: { gte: toDate(previousWeekStartDate), lte: toDate(weekEndDate) } }
+      })
+    ]);
 
-  let filledCount = 0;
-  for (const employee of employees) {
-    if (!isEmployeeGroup(employee.employeeGroup)) continue;
-    for (let index = 0; index < 7; index += 1) {
-      const currentDate = dates[index];
-      if (statusByKey.has(`${employee.id}::${currentDate}`)) continue; // 이미 입력된 칸은 덮지 않는다.
-      const previousStatus = statusByKey.get(`${employee.id}::${previousDates[index]}`);
-      if (previousStatus === undefined) continue; // 지난주도 미입력이면 채울 값이 없다.
-
-      await setPlannedWorkingDay({
-        employeeId: employee.id,
-        date: currentDate,
-        status: previousStatus,
-        actorId: parsed.data.actorId,
-        prismaClient: client
-      });
-      filledCount += 1;
+    // 행이 있으면 입력된 것(근무 예정 또는 휴무)이고, 없으면 미입력이다(F04).
+    const statusByKey = new Map<string, WorkPlanStatus>();
+    for (const row of rows) {
+      statusByKey.set(`${row.employeeId}::${toIsoDate(row.workDate)}`, row.planStatus as WorkPlanStatus);
     }
-  }
 
-  return { weekStartDate, weekEndDate, filledCount };
+    let count = 0;
+    const impactRows: PlannedWorkingDayCopyImpactDto[] = [];
+    for (const employee of employees) {
+      if (!isEmployeeGroup(employee.employeeGroup)) continue;
+      for (let index = 0; index < 7; index += 1) {
+        const currentDate = dates[index];
+        if (statusByKey.has(`${employee.id}::${currentDate}`)) continue; // 이미 입력된 칸은 덮지 않는다.
+        const previousStatus = statusByKey.get(`${employee.id}::${previousDates[index]}`);
+        if (previousStatus === undefined) continue; // 지난주도 미입력이면 채울 값이 없다.
+
+        const written = await setPlannedWorkingDay({
+          employeeId: employee.id,
+          date: currentDate,
+          status: previousStatus,
+          actorId: parsed.data.actorId,
+          prismaClient: tx
+        });
+        count += 1;
+        if (written.impactedCalls.length > 0) {
+          impactRows.push({ employeeId: employee.id, employeeName: employee.displayName, date: currentDate, calls: written.impactedCalls });
+        }
+      }
+    }
+    return { filledCount: count, impacts: impactRows };
+  });
+
+  return { weekStartDate, weekEndDate, filledCount, impacts };
 }

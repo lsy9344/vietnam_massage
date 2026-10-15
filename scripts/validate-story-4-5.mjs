@@ -171,8 +171,9 @@ for (const forbidden of ["saveOpsPayout", "payoutAmount: {", "closing", "snapsho
 }
 
 const action = read("src/app/(erp)/settlements/operations/actions.ts");
+const attendanceErrors = read("src/app/(erp)/settlements/attendance-action-error.ts");
 for (const required of ["requirePermission(\"payout:write\")", "upsertOpsAttendance", "revalidatePath(\"/settlements/operations\")", "OPS_EMPLOYEE_NOT_FOUND"]) {
-  if (!action.includes(required)) errors.push(`operations actions.ts missing ${required}`);
+  if (!action.includes(required) && !attendanceErrors.includes(required)) errors.push(`operations actions.ts missing ${required}`);
 }
 for (const forbidden of ["saveOpsPayout", "listOpsDailyIncentives", "payoutAmount", "recordAuditEvent("]) {
   if (action.includes(forbidden)) errors.push(`operations actions.ts must not add payout calculation mutation/audit behavior: ${forbidden}`);

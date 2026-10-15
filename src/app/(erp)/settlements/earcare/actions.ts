@@ -2,15 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/action-result";
-import { AuthorizationError, requirePermission } from "@/lib/authorization";
-import { AuditDomainError } from "@/modules/audit/audit-event";
-import { t } from "@/lib/i18n";
-import type { Locale } from "@/lib/i18n/config";
+import { requirePermission } from "@/lib/authorization";
 import { getLocale } from "@/lib/i18n/server";
-import { resolveDomainErrorMessage } from "@/lib/i18n/errors";
+import { mapAttendanceActionError } from "@/app/(erp)/settlements/attendance-action-error";
 import { mapPayoutConfirmationActionError } from "@/app/(erp)/settlements/payout-confirmation-action-error";
 import {
-  EarcareAttendanceDomainError,
   upsertEarcareAttendance,
   type EarcareAttendanceDto
 } from "@/modules/settlements/earcare-attendance-service";
@@ -26,65 +22,6 @@ export type EarcareDailySettlementPayoutActionState = ActionResult<EarcareDailyS
 
 function formValue(formData: FormData, key: string) {
   return formData.get(key);
-}
-
-function mapActionError(error: unknown, locale: Locale): ActionResult<EarcareAttendanceDto> {
-  if (error instanceof EarcareAttendanceDomainError) {
-    const message = resolveDomainErrorMessage(locale, error.code, error.message);
-
-    if (error.code === "OPERATING_MONTH_DATE_OUT_OF_RANGE") {
-      return {
-        ok: false,
-        fieldErrors: { attendanceDate: [message] },
-        formError: message,
-        domainErrorCode: error.code
-      };
-    }
-
-    if (error.code === "ATTENDANCE_STATUS_NOT_FOUND") {
-      return {
-        ok: false,
-        fieldErrors: { statusCode: [message] },
-        formError: message,
-        domainErrorCode: error.code
-      };
-    }
-
-    if (error.code === "EARCARE_EMPLOYEE_NOT_FOUND") {
-      return {
-        ok: false,
-        fieldErrors: { employeeId: [message] },
-        formError: message,
-        domainErrorCode: error.code
-      };
-    }
-
-    return {
-      ok: false,
-      formError: message,
-      domainErrorCode: error.code
-    };
-  }
-
-  if (error instanceof AuthorizationError) {
-    return {
-      ok: false,
-      formError: t(locale, "action.error.noPermission")
-    };
-  }
-
-  if (error instanceof AuditDomainError) {
-    return {
-      ok: false,
-      formError: t(locale, "action.error.auditFailed"),
-      domainErrorCode: error.code
-    };
-  }
-
-  return {
-    ok: false,
-    formError: t(locale, "action.error.saveFailed")
-  };
 }
 
 export async function saveEarcareAttendanceAction(
@@ -104,7 +41,7 @@ export async function saveEarcareAttendanceAction(
     revalidatePath("/settlements/earcare");
     return { ok: true, data };
   } catch (error) {
-    return mapActionError(error, locale);
+    return mapAttendanceActionError(error, locale);
   }
 }
 

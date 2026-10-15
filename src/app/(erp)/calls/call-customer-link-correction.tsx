@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import { DetailRow } from "@/components/ui/detail-row";
 import { ScreenState } from "@/components/ui/screen-state";
-import { CustomerCandidateCompare, isCustomerCandidateChosen } from "@/components/domain/customer-candidate-compare";
+import { CustomerCandidateCompare, customerCandidateOptionId, isCustomerCandidateChosen } from "@/components/domain/customer-candidate-compare";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { CustomerDto, CustomerVisitCandidateDto, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 import {
@@ -14,7 +14,7 @@ import {
   searchCustomerLinkCandidatesAction,
   type ServiceCallCustomerLinkCorrectionActionState
 } from "@/app/(erp)/calls/actions";
-import { CUSTOMER_SEARCH_DEBOUNCE_MS, customerScreenHref } from "@/app/(erp)/customers/customer-search";
+import { CUSTOMER_SEARCH_DEBOUNCE_MS, customerScreenHref, moveCandidateIndex } from "@/app/(erp)/customers/customer-search";
 import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
 
 /**
@@ -53,6 +53,7 @@ export function CallCustomerLinkCorrection({
   const [pendingCustomerId, setPendingCustomerId] = useState<string | null>(row.customerId ?? null);
   const [pendingLabel, setPendingLabel] = useState<string | null>(linkedCustomer?.name ?? null);
   const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(-1);
   const [candidates, setCandidates] = useState<CustomerVisitCandidateDto[]>([]);
   const searchTimer = useRef<number | null>(null);
   const searchRequestId = useRef(0);
@@ -118,6 +119,7 @@ export function CallCustomerLinkCorrection({
 
   function selectCandidate(candidate: CustomerVisitCandidateDto) {
     if (candidate.kind !== "customer" || !candidate.customerId) return;
+    setActiveIndex(-1);
     setPendingCustomerId(candidate.customerId);
     setPendingLabel(candidate.label);
   }
@@ -168,12 +170,28 @@ export function CallCustomerLinkCorrection({
           <label className="grid gap-1.5" htmlFor="customer-link-search">
             <span className="text-sm font-semibold text-foreground">{t("calls.detail.customerLink.searchLabel")}</span>
             <input
+              aria-activedescendant={activeIndex >= 0 && activeIndex < customerCandidates.length ? customerCandidateOptionId("customer-link-candidates", activeIndex) : undefined}
+              aria-autocomplete="list"
               aria-controls={customerCandidates.length > 0 ? "customer-link-candidates" : undefined}
               aria-expanded={customerCandidates.length > 0}
               autoComplete="off"
               className={inputFieldClassName({ className: "w-full" })}
               id="customer-link-search"
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => { setQuery(event.target.value); setActiveIndex(-1); }}
+              onKeyDown={(event) => {
+                if (event.nativeEvent.isComposing || event.key === "Process") return;
+                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActiveIndex((current) => moveCandidateIndex(current, event.key as "ArrowDown" | "ArrowUp", customerCandidates.length));
+                } else if (event.key === "Enter") {
+                  event.preventDefault();
+                  const candidate = customerCandidates[activeIndex];
+                  if (candidate) selectCandidate(candidate);
+                } else if (event.key === "Escape") {
+                  setQuery("");
+                  setActiveIndex(-1);
+                }
+              }}
               role="combobox"
               type="text"
               value={query}
@@ -183,7 +201,7 @@ export function CallCustomerLinkCorrection({
           {customerCandidates.length > 0 ? (
             customerCandidates.some((candidate) => candidate.sharedPhone) ? (
               <CustomerCandidateCompare
-                activeIndex={-1}
+                activeIndex={activeIndex}
                 candidates={customerCandidates}
                 label={t("calls.detail.customerLink.searchLabel")}
                 listboxId="customer-link-candidates"
@@ -194,12 +212,14 @@ export function CallCustomerLinkCorrection({
               />
             ) : (
               <ul aria-label={t("calls.detail.customerLink.searchLabel")} className="grid gap-2" id="customer-link-candidates" role="listbox">
-                {customerCandidates.map((candidate) => {
+                {customerCandidates.map((candidate, index) => {
                   const chosen = isCustomerCandidateChosen(candidate, pendingCustomerId, null);
                   return (
                     <li key={candidate.customerId} role="presentation">
                       <button
-                        className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-md px-4 py-2 text-left text-sm transition-colors hover:bg-readonly ${
+                        aria-selected={index === activeIndex}
+                        id={customerCandidateOptionId("customer-link-candidates", index)}
+                        className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-md px-4 py-2 text-left text-sm transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary ${
                           chosen ? "bg-readonly [box-shadow:inset_3px_0_0_var(--brand)]" : "bg-surface"
                         }`}
                         onClick={() => selectCandidate(candidate)}

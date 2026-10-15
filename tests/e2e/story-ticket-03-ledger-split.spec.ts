@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -25,7 +26,7 @@ let rateMissingCallId = "";
 let customerCallId = "";
 
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, sortOrder: number) {
-  return (prisma as any).employee.upsert({
+  return testEmployees.upsert({
     where: { staffCode },
     update: { displayName, employeeGroup, isActive: true },
     create: {
@@ -185,6 +186,7 @@ test.describe("티켓 03 콜 원장 화면 분리", () => {
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanup();
     await prisma.$disconnect();
   });

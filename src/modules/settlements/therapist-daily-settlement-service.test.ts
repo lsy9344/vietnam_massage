@@ -429,6 +429,42 @@ describe("listTherapistDailySettlements", () => {
     assert.equal(therapistLocked?.payoutConfirmation.requiresReconfirmation, false);
   });
 
+  it("S7(ADR 0004): 확인된 단위가 그날 완료 콜이 없는(비활성된) 마사지사여도 금액 0인 행으로 남아 지급 재확인 필요로 보인다", async () => {
+    const vanished = { id: "therapist-vanished", displayName: "그만둔 마사지사", staffCode: "THR-009", employeeGroup: "THERAPIST", sortOrder: 9, isActive: false };
+    const seeded = [
+      {
+        id: "vanished-confirm",
+        unitType: "THERAPIST_DAILY",
+        operatingMonthId: "month-2026-06",
+        serviceDate: dbDate("2026-06-10"),
+        employeeId: vanished.id,
+        eventType: "confirm",
+        amount: 300000,
+        reason: null,
+        actorAccountId: "account-admin",
+        occurredAt: new Date("2026-06-10T13:00:00.000Z"),
+        createdAt: new Date("2026-06-10T13:00:00.000Z")
+      }
+    ];
+
+    const result = await listTherapistDailySettlements({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient: createSettlementPrisma({ extraEmployees: [vanished], seedPayoutConfirmationEvents: seeded })
+    });
+
+    // 비활성이라 그날 완료 콜의 집계 대상이 아닌데도(this.totalCallCount가 아니라 아예 행이 없던 자리),
+    // 확인 사건이 있어 행이 남고 지급 재확인 필요로 보인다 — 사라져서 넘어가지지 않는다.
+    const row = result.settlements.find((settlement) => settlement.employeeId === vanished.id);
+    assert.ok(row, "확인된 단위는 계산 행이 없어도 사라지면 안 된다");
+    assert.equal(row?.displayName, "그만둔 마사지사");
+    assert.equal(row?.totalCallCount, 0);
+    assert.equal(row?.totalCommissionAmount, 0);
+    assert.equal(row?.payoutConfirmation.status, "needs_reconfirmation");
+    assert.equal(row?.payoutConfirmation.lastConfirmedAmount, 300000);
+    assert.equal(row?.payoutConfirmation.currentAmount, 0);
+  });
+
   it("조회 날짜는 YYYY-MM-DD만 허용한다", async () => {
     await assert.rejects(
       () =>

@@ -1,3 +1,7 @@
+import { ServiceCallDomainError } from "./service-call-domain-error";
+export { ServiceCallDomainError } from "./service-call-domain-error";
+export { listAssignedServiceCallsForEmployeeFromDate } from "./assigned-service-call-query";
+
 import { prisma } from "@/lib/prisma";
 import { BUSINESS_TIME_ZONE_OFFSET_MINUTES } from "@/lib/business-time";
 import { defaultLocale, type Locale } from "@/lib/i18n/config";
@@ -9,7 +13,7 @@ import { listActiveCodeItems, listActiveTimeSlots } from "@/modules/masters/code
 import { listActiveCourses } from "@/modules/masters/course-service";
 import { listActiveEmployees } from "@/modules/masters/employee-service";
 import { listActiveRooms } from "@/modules/masters/room-service";
-import { listPlannedWorkingDayStatusesForDate, type PlannedWorkingDayCellStatus } from "@/modules/settlements/schedule-service";
+import { listPlannedWorkingDayStatusesForDate, type PlannedWorkingDayCellStatus } from "@/modules/masters/planned-working-day-query";
 import {
   assignmentRoles,
   customerInputSchema,
@@ -239,7 +243,7 @@ type ServiceCallPrismaClient = {
   therapistAttendance: {
     findMany(args?: unknown): Promise<TherapistAttendanceRecord[]>;
   };
-  // listPlannedWorkingDayStatusesForDate(settlements/schedule-service.ts)가 요구하는 좁은 모양만 둔다. 실제로는
+  // listPlannedWorkingDayStatusesForDate(masters/planned-working-day-query.ts)가 요구하는 좁은 모양만 둔다. 실제로는
   // 같은 prisma 클라이언트라 근무표 서비스가 이 콜 테이블 조회와 함께 근무표 테이블을 읽을 수 있다(티켓 29).
   plannedWorkingDay: {
     findMany(args?: unknown): Promise<Array<{ employeeId: string; planStatus: string }>>;
@@ -481,13 +485,6 @@ export type TherapistAvailabilityRowDto = {
   plannedWorkingDayStatus: PlannedWorkingDayCellStatus;
   courses: TherapistAvailabilityCourseDto[];
 };
-
-export class ServiceCallDomainError extends Error {
-  constructor(message: string, public readonly code: string) {
-    super(message);
-    this.name = "ServiceCallDomainError";
-  }
-}
 
 /**
  * 오래된 저장(STALE_CALL). 화면이 읽은 뒤에 다른 저장이 먼저 들어왔다. 아무것도 쓰지 않았고,
@@ -2000,6 +1997,20 @@ function isUniqueConstraintError(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "P2002";
 }
 
+/** 기존 콜의 고객 연결은 사유를 기록하는 전용 정정 작업으로만 바꾼다. */
+async function assertCustomerLinkUnchanged(
+  client: ServiceCallPrismaClient,
+  before: ServiceCallRecord,
+  customerId: string | null | undefined,
+  expectedUpdatedAt?: string | null
+) {
+  if (customerId === undefined || (customerId ?? null) === linkedCustomerId(before)) return;
+  if (expectedUpdatedAt && before.updatedAt.toISOString() !== new Date(expectedUpdatedAt).toISOString()) {
+    throw new StaleServiceCallError(await toRowDto(client, before));
+  }
+  throw new ServiceCallDomainError("고객 연결은 콜 상세에서 사유와 함께 정정하세요.", "SERVICE_CALL_CUSTOMER_LINK_CORRECTION_REQUIRED");
+}
+
 /**
  * 콜 한 줄을 검사하고 쓴다. serviceCallId가 있으면 화면이 읽은 버전일 때만 고치고, 없으면 새로 만든다.
  * 새로 만들 때 요청 id가 있으면 함께 적는다.
@@ -2033,6 +2044,7 @@ async function writeServiceCallRow(
     ? await tx.serviceCall.findUnique({ where: { id: input.serviceCallId } })
     : null;
   const beforeLinked = beforeRecord ? await findServiceCallWithRelations(tx, beforeRecord.id) : null;
+  if (beforeLinked) await assertCustomerLinkUnchanged(tx, beforeLinked, input.customerId, input.expectedUpdatedAt);
   const customerId = await resolveLinkedCustomerId(tx, input.customerId, beforeLinked?.customerId);
   const linkChanged = linkedCustomerId(beforeLinked ?? {}) !== customerId;
   // A link change is a sensitive call edit. Reject it before the write when no actor can be audited.
@@ -2143,6 +2155,7 @@ export async function autosaveServiceCallRow(
     assertSecondTherapistRequirement({ policy: coursePolicy, therapist2Id: parsed.data.therapist2Id });
 
     const before = await findServiceCallWithRelations(tx, parsed.data.serviceCallId);
+    await assertCustomerLinkUnchanged(tx, before, parsed.data.customerId, parsed.data.expectedUpdatedAt);
     const customerId = await resolveLinkedCustomerId(tx, parsed.data.customerId, before.customerId);
     const data = {
       operatingMonthId: parsed.data.operatingMonthId,
@@ -2157,6 +2170,7 @@ export async function autosaveServiceCallRow(
       discountTypeCode: parsed.data.discountTypeCode ?? null,
       paymentMethodCode: parsed.data.paymentMethodCode ?? null,
       note: parsed.data.note ?? null,
+      visitRequest: parsed.data.visitRequest ?? null,
       confirmationCode: parsed.data.confirmationCode ?? null
     };
 
@@ -2518,6 +2532,16 @@ export async function listCustomerVisitHistory(
     .map(toVisitHistoryRow);
 }
 
+/**
+ * 시간 슬롯 값(HH:mm) → 정렬 순서. mostRecentCustomerVisit(S6)처럼 콜 레코드 없이 시간만 비교해야 하는
+ * 호출자가 listCustomerVisitHistory·compareVisitHistory와 같은 기준으로 비교하게 한다.
+ */
+export async function timeSlotSortOrderMap(input: { prismaClient?: ServiceCallPrismaClient } = {}): Promise<Map<string, number>> {
+  const client = getClient(input.prismaClient);
+  const timeSlots = await client.timeSlot.findMany();
+  return new Map(timeSlots.map((slot) => [slot.value, slot.sortOrder]));
+}
+
 export type CustomerVisitCountsDto = {
   completedCount: number;
   noShowCount: number;
@@ -2537,13 +2561,28 @@ export function customerVisitCountsFromRows(rows: CustomerVisitHistoryRowDto[]):
 /**
  * 날짜·예약시각 기준으로 가장 최근 방문(상태와 상관없이). 빠른 예약 고객 단계가 그 방문의 코스·Therapist·
  * 방문별 요청 중 체크한 항목만 가져온다(B09, 스토리 71-73, 티켓 24). 방문 이력이 없으면 null이다.
+ *
+ * 시간은 글자가 아니라 시간 슬롯 정렬 순서(sortOrderByTime, compareVisitHistory와 같은 기준)로 비교한다
+ * (S6). 영업일은 자정을 넘어 이어져(selectNowSlot과 같은 개념) 같은 서비스 날짜의 "01:00"은 글자로는
+ * "15:00"보다 앞서 보이지만 실제로는 그 영업일의 더 늦은 슬롯이다.
  */
-export function mostRecentCustomerVisit(rows: CustomerVisitHistoryRowDto[]): CustomerVisitHistoryRowDto | null {
+export function mostRecentCustomerVisit(
+  rows: CustomerVisitHistoryRowDto[],
+  sortOrderByTime: Map<string, number>
+): CustomerVisitHistoryRowDto | null {
   let latest: CustomerVisitHistoryRowDto | null = null;
   for (const row of rows) {
-    if (!latest || `${row.serviceDate}T${row.startTime}` > `${latest.serviceDate}T${latest.startTime}`) {
+    if (!latest) {
       latest = row;
+      continue;
     }
+    if (row.serviceDate !== latest.serviceDate) {
+      if (row.serviceDate > latest.serviceDate) latest = row;
+      continue;
+    }
+    const rowOrder = sortOrderByTime.get(row.startTime) ?? -1;
+    const latestOrder = sortOrderByTime.get(latest.startTime) ?? -1;
+    if (rowOrder > latestOrder) latest = row;
   }
   return latest;
 }
@@ -2686,6 +2725,21 @@ export async function searchCustomerVisitCandidates(input: {
     return left.latestVisitDate < right.latestVisitDate ? 1 : -1;
   });
   return candidates;
+}
+
+/**
+ * 고객을 이미 고른 상태(고객 화면 visitCustomer= 직접 진입, 빠른 예약 고객 선택 후)에서도 같은 연락처
+ * 경고를 보이기 위한 질의다(S5, 스펙 F08·F01 단계 1). searchCustomerVisitCandidates의 sharedPhone은
+ * 그 검색 결과 안에서만 비교해, 쿼리 없이 바로 연 고객에게는 경고를 줄 수 없었다 — 여기서는 전체 고객을
+ * 대상으로 숫자만 비교한다(phoneDigits와 같은 기준).
+ */
+export async function customerSharedPhone(input: { customerId: string; prismaClient?: ServiceCallPrismaClient }): Promise<boolean> {
+  const client = getClient(input.prismaClient);
+  const customers = await client.customer.findMany();
+  const target = customers.find((customer) => customer.id === input.customerId);
+  const digits = phoneDigits(target?.phone ?? null);
+  if (!digits) return false;
+  return customers.some((customer) => customer.id !== input.customerId && phoneDigits(customer.phone) === digits);
 }
 
 export async function createDailyExpense(input: DailyExpenseInput & { actorId: string; prismaClient?: ServiceCallPrismaClient }) {

@@ -77,7 +77,7 @@ export function CallDetailPanel({
     <SidePanel onClose={onClose} title={title}>
       <div className="grid gap-6">
         {conflict ? (
-          <CallConflictCompare compare={conflict} customers={customers} key={conflict.latestRow.updatedAt} onRequestClose={onClose} options={options} />
+          <CallConflictCompare compare={conflict} customers={customers} key={conflict.latestRow.updatedAt} options={options} />
         ) : null}
 
         <PanelSection title={t("calls.detail.warnings")}>

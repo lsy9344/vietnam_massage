@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { businessTodayIsoDate } from "@/lib/operating-date";
@@ -29,7 +30,7 @@ let therapist2Id = "";
 let createdMonth = false;
 
 async function seedAccount() {
-  const employee = await (prisma as any).employee.upsert({
+  const employee = await testEmployees.upsert({
     where: { staffCode: account.staffCode },
     update: { displayName: "T29 카운터", employeeGroup: "OPERATIONS", isActive: true },
     create: {
@@ -147,7 +148,7 @@ test.describe("티켓 29 가능 코스의 근무 예정 표시", () => {
     }
 
     async function seedTherapist(staffCode: string, displayName: string, sortOrder: number) {
-      const employee = await (prisma as any).employee.upsert({
+      const employee = await testEmployees.upsert({
         where: { staffCode },
         update: { displayName, employeeGroup: "THERAPIST", isActive: true },
         create: {
@@ -186,6 +187,7 @@ test.describe("티켓 29 가능 코스의 근무 예정 표시", () => {
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanupCalls();
     await setSchedule(therapist1Id, null);
     await setSchedule(therapist2Id, null);

@@ -13,6 +13,7 @@ import {
   correctServiceCallCustomerLink,
   createCustomer,
   createDailyExpense,
+  customerSharedPhone,
   customerVisitCountsFromRows,
   deactivateDailyExpense,
   createQuickBookingServiceCall,
@@ -21,6 +22,7 @@ import {
   listCustomerVisitHistory,
   mostRecentCustomerVisit,
   searchCustomerVisitCandidates,
+  timeSlotSortOrderMap,
   updateCustomer,
   updateDailyExpense,
   redactServiceCallSettlementAmounts,
@@ -444,17 +446,22 @@ export async function searchCustomerLinkCandidatesAction(query: string): Promise
 /**
  * 빠른 예약 고객 단계가 기존 고객을 고르면 부른다(B09, 스토리 71-73, 티켓 24). 방문완료·노쇼·취소 건수와
  * 가장 최근 방문(코스·Therapist·방문별 요청)을 돌려준다. 화면은 체크한 항목만 초안에 가져온다.
+ * sharedPhone은 고른 고객이 검색 밖에서도 같은 연락처 경고를 보이기 위함이다(S5, 스펙 F01 단계 1).
  */
 export async function loadCustomerVisitSummaryAction(
   customerId: string
-): Promise<{ counts: CustomerVisitCountsDto; recentVisit: CustomerVisitHistoryRowDto | null }> {
+): Promise<{ counts: CustomerVisitCountsDto; recentVisit: CustomerVisitHistoryRowDto | null; sharedPhone: boolean }> {
   await requireRouteAccess("/calls");
   const trimmed = typeof customerId === "string" ? customerId.trim() : "";
   if (!trimmed) {
-    return { counts: { completedCount: 0, noShowCount: 0, canceledCount: 0 }, recentVisit: null };
+    return { counts: { completedCount: 0, noShowCount: 0, canceledCount: 0 }, recentVisit: null, sharedPhone: false };
   }
-  const rows = await listCustomerVisitHistory({ kind: "customer", customerId: trimmed });
-  return { counts: customerVisitCountsFromRows(rows), recentVisit: mostRecentCustomerVisit(rows) };
+  const [rows, sharedPhone, sortOrderByTime] = await Promise.all([
+    listCustomerVisitHistory({ kind: "customer", customerId: trimmed }),
+    customerSharedPhone({ customerId: trimmed }),
+    timeSlotSortOrderMap()
+  ]);
+  return { counts: customerVisitCountsFromRows(rows), recentVisit: mostRecentCustomerVisit(rows, sortOrderByTime), sharedPhone };
 }
 
 /**

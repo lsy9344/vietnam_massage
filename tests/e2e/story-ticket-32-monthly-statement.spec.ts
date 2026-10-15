@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -37,7 +38,7 @@ async function freeEmployeeSortOrder(employeeGroup: string, staffCode: string, p
 
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, position: string, preferredSortOrder: number) {
   const sortOrder = await freeEmployeeSortOrder(employeeGroup, staffCode, preferredSortOrder);
-  return (prisma as any).employee.upsert({
+  return testEmployees.upsert({
     where: { staffCode },
     update: { displayName, employeeGroup, position, isActive: true },
     create: {
@@ -158,6 +159,7 @@ test.describe("티켓 32 월 명세서", () => {
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await (prisma as any).monthlyClosing.deleteMany({ where: { operatingMonthId } });
     await (prisma as any).operatingMonth.update({ where: { id: operatingMonthId }, data: { status: "작성중" } });
   });

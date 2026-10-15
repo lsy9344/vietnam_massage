@@ -361,7 +361,7 @@ export const vi: Messages = {
   // 두 명 코스와 경고 확인 후 배정(스펙 F01, 티켓 21)
   "calls.quickBooking.therapist.overrideAssign": "Giao sau khi xác nhận cảnh báo",
   "calls.quickBooking.therapist.overrideTitle": "Bạn muốn giao sau khi xác nhận cảnh báo?",
-  "calls.quickBooking.therapist.overrideTimeShort": "{therapist} không còn đủ thời gian trống cho gói này ở giờ đã chọn. Nếu vẫn giao, sẽ lưu kèm cảnh báo trùng giờ.",
+  "calls.quickBooking.therapist.overrideTimeShort": "{therapist} không còn đủ thời gian trống cho gói này ở giờ đã chọn. Nếu vẫn giao, cuộc gọi được lưu dù không đáp ứng điều kiện trống trên lịch.",
   "calls.quickBooking.therapist.overrideRateMissing": "{therapist} chưa có phụ cấp cho gói này. Nếu vẫn giao, sẽ lưu kèm cảnh báo thiếu phụ cấp.",
   "calls.quickBooking.therapist.secondTitle": "Therapist thứ hai",
   "calls.quickBooking.therapist.secondUnset": "Hãy chọn Therapist thứ hai.",
@@ -395,7 +395,6 @@ export const vi: Messages = {
   "calls.conflict.useMine": "Dùng giá trị của tôi",
   "calls.conflict.useMineAria": "Dùng giá trị của tôi cho {field}",
   "calls.conflict.reapply": "Áp lại và lưu",
-  "calls.conflict.closeConfirmDescription": "Đóng so sánh thì bản nháp vẫn còn ở dòng sổ, bạn có thể mở lại để so sánh. Bạn có muốn đóng không?",
 
   // 콜 계산 상태
   "calls.calc.errorPending": "Tạm hoãn lưu, chờ tính toán",
@@ -564,6 +563,7 @@ export const vi: Messages = {
   "settlements.schedule.dayOff.impact.count": "{count} cuộc gọi bị ảnh hưởng",
   "settlements.schedule.dayOff.impact.guidance": "Hãy phân công lại cuộc gọi cho nhân viên khác, hoặc kiểm tra lại lịch làm việc của nhân viên này.",
   "settlements.schedule.dayOff.impact.listAria": "Danh sách cuộc gọi bị ảnh hưởng của {name} ngày {date}",
+  "settlements.schedule.copy.impactsHeading": "Nhân viên·ngày có cuộc gọi bị ảnh hưởng do sao chép thành nghỉ",
 
   // 마사지사 일일정산
   "settlements.therapist.title": "Đối soát ngày KTV massage",
@@ -833,6 +833,7 @@ export const vi: Messages = {
   "settlements.statement.evidence.column.calls": "Cuộc gọi",
   "settlements.statement.evidence.column.amount": "Số tiền",
   "settlements.statement.evidence.column.payout": "Xác nhận chi trả",
+  "settlements.statement.evidence.appliedPolicy.title": "Chính sách áp dụng",
   "settlements.statement.evidence.empty.title": "Tháng này không có căn cứ theo ngày.",
   "settlements.statement.evidence.noAttendance": "Chưa có bản ghi",
   "settlements.statement.evidence.unavailable.title": "Căn cứ theo ngày",

@@ -93,6 +93,7 @@ for (const forbidden of ["monthly close", "closing snapshot", "ops_daily", "ther
 }
 
 const action = read("src/app/(erp)/settlements/earcare/actions.ts");
+const attendanceErrors = read("src/app/(erp)/settlements/attendance-action-error.ts");
 for (const required of [
   "\"use server\"",
   "requirePermission(\"payout:write\")",
@@ -102,7 +103,7 @@ for (const required of [
   "OPERATING_MONTH_DATE_OUT_OF_RANGE",
   "ATTENDANCE_STATUS_NOT_FOUND"
 ]) {
-  if (!action.includes(required)) errors.push(`earcare actions.ts missing ${required}`);
+  if (!action.includes(required) && !attendanceErrors.includes(required)) errors.push(`earcare actions.ts missing ${required}`);
 }
 
 // ko/vi i18n migration: settlement UI strings moved to t() keys in the ko catalog.

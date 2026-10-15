@@ -16,6 +16,8 @@ import {
 } from "@/app/(erp)/closing/actions";
 import type { MonthlyClosingChecklistCallDto } from "@/modules/closing/monthly-closing-checklist-service";
 import { EvidenceCallItem, EvidenceCallList } from "@/app/(erp)/settlements/settlement-parts";
+import { Button } from "@/components/ui/button";
+import { inputFieldClassName } from "@/components/ui/input-field";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import {
   AlertDialog,
@@ -167,26 +169,26 @@ export function ClosingActionPanel({
         <div className="flex flex-wrap items-start gap-2">
           <form action={reviewAction} className="grid gap-1">
             <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
-            <button
-              className="h-9 border border-border bg-background px-3 text-sm font-semibold text-foreground hover:bg-readonly disabled:cursor-not-allowed disabled:opacity-50"
+            <Button
+              variant="secondary"
               disabled={!canStartReview || reviewPending}
               type="submit"
             >
               {reviewPending ? t("closing.action.processing") : t("closing.action.startReview")}
-            </button>
+            </Button>
             <InlineResult t={t} state={reviewState} />
           </form>
           <div className="grid gap-1">
             {/* Story 5.6: first click opens this AlertDialog; only the second confirmation submits the server action. */}
             <AlertDialog open={confirmDialogOpen} onOpenChange={handleConfirmDialogOpenChange}>
               <AlertDialogTrigger asChild>
-                <button
-                  className="h-9 border border-brand bg-brand px-3 text-sm font-semibold text-brand-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                <Button
+
                   disabled={!canConfirm || confirmPending}
                   type="button"
                 >
                   {confirmPending ? t("closing.action.confirming") : t("closing.action.confirm")}
-                </button>
+                </Button>
               </AlertDialogTrigger>
               {confirmSummary ? (
                 <AlertDialogContent
@@ -197,7 +199,7 @@ export function ClosingActionPanel({
                 >
                   <AlertDialogCancel
                     aria-label={t("closing.action.close")}
-                    className="absolute right-3 top-3 h-8 w-8 px-0 text-base leading-none"
+                    className="absolute right-3 top-3 size-11 justify-center px-0 text-base leading-none"
                     disabled={confirmPending}
                   >
                     ×
@@ -281,10 +283,10 @@ export function ClosingActionPanel({
                               />
                             ))
                           : null}
-                        <label className="flex items-start gap-2 text-sm text-foreground">
+                        <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
                           <input
                             checked={pendingCloseAcknowledged}
-                            className="mt-0.5 h-4 w-4"
+                            className="size-5 accent-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary"
                             disabled={confirmPending}
                             form={CONFIRM_MONTHLY_CLOSE_FORM_ID}
                             onChange={(event) => setPendingCloseAcknowledged(event.target.checked)}
@@ -297,7 +299,7 @@ export function ClosingActionPanel({
                             {t("closing.confirmDialog.pendingCloseCalls.reasonLabel")}
                           </label>
                           <textarea
-                            className="min-h-16 border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-brand disabled:cursor-not-allowed disabled:bg-readonly disabled:text-muted"
+                            className={inputFieldClassName({ className: "h-auto min-h-16 py-2" })}
                             disabled={confirmPending}
                             form={CONFIRM_MONTHLY_CLOSE_FORM_ID}
                             id="pending-close-exception-reason"
@@ -338,13 +340,13 @@ export function ClosingActionPanel({
           {status === "마감확정" ? (
             <form action={lockAction} className="grid gap-1">
               <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
-              <button
-                className="h-9 border border-danger bg-danger px-3 text-sm font-semibold text-danger-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              <Button
+                className="bg-danger text-danger-foreground hover:bg-danger"
                 disabled={!canLock || lockPending}
                 type="submit"
               >
                 {lockPending ? t("closing.action.locking") : t("closing.action.lock")}
-              </button>
+              </Button>
               <InlineResult t={t} state={lockState} />
             </form>
           ) : null}
@@ -360,7 +362,7 @@ export function ClosingActionPanel({
             <textarea
               aria-describedby={reasonHasError ? "reopen-reason-error" : "reopen-help"}
               aria-invalid={reasonHasError}
-              className="min-h-20 border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-brand disabled:cursor-not-allowed disabled:bg-readonly disabled:text-muted"
+              className={inputFieldClassName({ invalid: reasonHasError, className: "h-auto min-h-20 py-2" })}
               disabled={!canReopen || reopenPending}
               id="reopen-reason"
               name="reason"
@@ -372,13 +374,13 @@ export function ClosingActionPanel({
             <ReopenFieldError state={reopenState} />
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              className="h-9 border border-brand bg-brand px-3 text-sm font-semibold text-brand-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            <Button
+
               disabled={!canReopen || reopenPending}
               type="submit"
             >
               {reopenPending ? t("closing.action.reopening") : t("closing.action.reopen")}
-            </button>
+            </Button>
             {!canReopen ? <p className="text-sm text-muted">{t("closing.reopen.adminOnly")}</p> : null}
           </div>
           <InlineResult t={t} state={reopenState} />

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { DateCapsule } from "@/components/ui/date-capsule";
 import { ScreenState } from "@/components/ui/screen-state";
 import { StatusIndicator } from "@/components/ui/status-indicator";
-import { ledgerCallHref } from "@/app/(erp)/calls/ledger-address";
+import { ledgerCallHref } from "@/lib/ledger-address";
 import type { SettlementAmount } from "@/app/(erp)/settlements/settlement-view-model";
 import { t } from "@/lib/i18n";
 import { operatingMonthStatusLabel, serviceStatusLabel } from "@/lib/i18n/codes";

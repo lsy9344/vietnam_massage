@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { PayoutStatusIndicator } from "@/app/(erp)/settlements/payout-confirmation-panel";
-import { PanelSection, vnd } from "@/app/(erp)/settlements/settlement-parts";
-import { ledgerCallHref } from "@/app/(erp)/calls/ledger-address";
+import { AmountText, PanelSection, vnd } from "@/app/(erp)/settlements/settlement-parts";
+import { therapistEvidenceAmount } from "@/app/(erp)/settlements/settlement-view-model";
+import { rateStatus, roleKey } from "@/app/(erp)/settlements/therapist-settlement-view";
+import { COUNT_KING_MIN_CALLS, FULL_ATTENDANCE_THRESHOLD_DAYS } from "@/modules/closing/monthly-closing-thresholds";
+import { ledgerCallHref } from "@/lib/ledger-address";
 import { Button } from "@/components/ui/button";
 import { DateCapsule } from "@/components/ui/date-capsule";
 import { DetailRow } from "@/components/ui/detail-row";
@@ -19,7 +22,7 @@ import type {
   MonthlyStatementDailyEntryDto,
   MonthlyStatementDto,
   MonthlyStatementTherapistSummaryDto
-} from "@/modules/settlements/monthly-statement-service";
+} from "@/modules/closing/monthly-statement-service";
 
 /**
  * 월 명세서 화면(스펙 F05, 티켓 32). 서비스가 돌려준 값을 그대로 그린다 — 금액·근거를 다시 계산하지 않는다.
@@ -27,10 +30,6 @@ import type {
  * (서비스 doc 참고). 인쇄는 브라우저 인쇄 대화상자를 그대로 쓰고(PDF 저장도 같은 경로), 인쇄 버튼·고르기
  * 폼은 print:hidden으로 인쇄물에서 뺀다.
  */
-
-// Count King 40콜 기준은 표시 문구 분기에만 쓴다(계산은 서비스가 이미 끝냈다).
-// monthly-closing-preview-service.ts의 같은 상수를 closing/page.tsx와 같은 방식으로 표시용으로 옮긴다.
-const COUNT_KING_MIN_CALLS = 40;
 
 function formatFullDateTime(locale: Locale, value: string | null) {
   if (!value) return "";
@@ -45,7 +44,7 @@ function fullAttendanceText(t: Translator, locale: Locale, summary: MonthlyState
   if (summary.fullAttendanceDays === null) {
     return t("settlements.statement.basis.fullAttendance.sourceMissing");
   }
-  if (summary.fullAttendanceDays >= 20) {
+  if (summary.fullAttendanceDays >= FULL_ATTENDANCE_THRESHOLD_DAYS) {
     return t("settlements.statement.basis.fullAttendance.eligible", {
       days: summary.fullAttendanceDays,
       amount: formatNumber(locale, summary.fullAttendanceAllowanceAmount)
@@ -180,6 +179,8 @@ function DailyEntryCard({
         <ul aria-label={t("settlements.statement.evidence.column.calls")} className="grid gap-1 pl-1">
           {entry.calls.map((call) => {
             const href = canOpenLedger ? ledgerCallHref(call) : null;
+            // S9(V08): 적용 정책 근거(코스 수당·0원 정책). 같은 콜에 담당 역할이 둘이면(이중 역할) 둘 다 보인다.
+            const policies = entry.appliedPolicies.filter((policy) => policy.serviceCallId === call.serviceCallId);
             const body = (
               <>
                 <DateCapsule>{call.startTime}</DateCapsule>
@@ -190,8 +191,22 @@ function DailyEntryCard({
               </>
             );
             return (
-              <li className="flex flex-wrap items-center gap-2 text-sm" key={call.serviceCallId}>
-                {href ? <a href={href}>{body}</a> : body}
+              <li className="grid gap-1 text-sm" key={call.serviceCallId}>
+                <div className="flex flex-wrap items-center gap-2">{href ? <a href={href}>{body}</a> : body}</div>
+                {policies.length > 0 ? (
+                  <ul aria-label={t("settlements.statement.evidence.appliedPolicy.title")} className="grid gap-1 pl-4">
+                    {policies.map((policy) => {
+                      const status = rateStatus[policy.rateStatus];
+                      return (
+                        <li className="flex flex-wrap items-center gap-2 text-xs text-muted" key={`${policy.serviceCallId}-${policy.role}`}>
+                          <span>{t(roleKey[policy.role])}</span>
+                          <StatusIndicator label={t(status.key)} tone={status.tone} />
+                          <AmountText amount={therapistEvidenceAmount(policy)} locale={locale} />
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
               </li>
             );
           })}

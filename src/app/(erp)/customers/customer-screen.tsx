@@ -19,7 +19,8 @@ export function CustomerScreen({
   customer,
   visitMemo,
   visitCounts,
-  history
+  history,
+  selectedSharedPhone
 }: {
   query: string;
   candidates: CustomerVisitCandidateDto[];
@@ -27,6 +28,8 @@ export function CustomerScreen({
   visitMemo: string | null;
   visitCounts: CustomerVisitCountsDto | null;
   history: CustomerVisitHistoryRowDto[];
+  /** S5: 검색 결과 없이 바로 고른 고객의 같은 연락처 경고. */
+  selectedSharedPhone: boolean;
 }) {
   const router = useRouter();
   const locale = useLocale();
@@ -101,6 +104,7 @@ export function CustomerScreen({
       onSelect={select}
       query={draft}
       selectedMemo={customer ? null : visitMemo}
+      selectedSharedPhone={selectedSharedPhone}
       settledQuery={query}
       visitCounts={visitCounts}
     />

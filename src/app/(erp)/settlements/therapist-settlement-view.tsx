@@ -8,7 +8,7 @@ import {
   releaseTherapistDailySettlementPayoutAction
 } from "@/app/(erp)/settlements/actions";
 import { EmployeeWorkspace, type ComparisonColumn } from "@/app/(erp)/settlements/employee-workspace";
-import { ConfirmPayoutButton, ReasonPayoutForm } from "@/app/(erp)/settlements/payout-confirmation-form";
+import { PayoutConfirmationPanel, PayoutStatusIndicator } from "@/app/(erp)/settlements/payout-confirmation-panel";
 import { AmountText, EvidenceCallItem, EvidenceCallList, PanelSection, StatementLink, vnd } from "@/app/(erp)/settlements/settlement-parts";
 import {
   monthlyStatementHref,
@@ -22,59 +22,22 @@ import { AttendanceRecognition, TherapistAttendanceForm } from "@/app/(erp)/sett
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { Translator } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
-import { formatDateTime } from "@/lib/i18n/format";
 import type { MessageKey } from "@/lib/i18n/types";
-import type { TherapistDailySettlementDto } from "@/modules/settlements/therapist-daily-settlement-service";
-import type { PayoutConfirmationDto, PayoutConfirmationEventDto } from "@/modules/settlements/payout-confirmation-service";
+import type { TherapistDailySettlementDto, TherapistDailySettlementPayoutResultDto } from "@/modules/settlements/therapist-daily-settlement-service";
 
 const courseCodes: SettlementCourseCode[] = ["A", "B", "C", "D", "E"];
 
-const rateStatus: Record<TherapistDailySettlementDto["assignmentEvidence"][number]["rateStatus"], { key: MessageKey; tone: StatusTone }> = {
+// 월 명세서(S9, V08)도 같은 코스 수당 근거를 보이므로 여기서 export해 그대로 재사용한다(monthly-statement-view.tsx).
+export const rateStatus: Record<TherapistDailySettlementDto["assignmentEvidence"][number]["rateStatus"], { key: MessageKey; tone: StatusTone }> = {
   applied: { key: "settlements.therapist.rateStatus.applied", tone: "success" },
   zero_policy: { key: "settlements.therapist.rateStatus.zeroPolicy", tone: "neutral" },
   missing_policy: { key: "settlements.therapist.rateStatus.missingPolicy", tone: "warning" }
 };
 
-const roleKey = {
+export const roleKey = {
   THERAPIST_1: "settlements.therapist.role.therapist1",
   THERAPIST_2: "settlements.therapist.role.therapist2"
 } as const;
-
-/** 지급 확인 네 상태(미확인/확인됨/지급 재확인 필요/확인 금액 미기록)의 문구와 톤. 송금이 아니라 확인 사실만 보인다. */
-const payoutStatusKey: Record<PayoutConfirmationDto["status"], { key: MessageKey; tone: StatusTone }> = {
-  unconfirmed: { key: "settlements.payout.status.unconfirmed", tone: "neutral" },
-  confirmed: { key: "settlements.payout.status.confirmed", tone: "success" },
-  needs_reconfirmation: { key: "settlements.payout.status.needsReconfirmation", tone: "warning" },
-  confirmed_amount_unrecorded: { key: "settlements.payout.status.amountUnrecorded", tone: "neutral" }
-};
-
-function payoutHistoryEventLabel(t: Translator, eventType: PayoutConfirmationEventDto["eventType"]) {
-  if (eventType === "confirm") return t("settlements.payout.history.event.confirm");
-  if (eventType === "reconfirm") return t("settlements.payout.history.event.reconfirm");
-  return t("settlements.payout.history.event.release");
-}
-
-function payoutActorLabel(event: PayoutConfirmationEventDto) {
-  const accountId = event.actor?.accountId ?? event.actorAccountId;
-  const employeeName = event.actor?.employeeDisplayName;
-  return employeeName ? `${accountId} / ${employeeName}` : accountId;
-}
-
-function formatBusinessDateTime(locale: Locale, value: string | null) {
-  if (!value) return null;
-  return formatDateTime(locale, value, {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  });
-}
-
-function PayoutStatusIndicator({ status, t }: { status: PayoutConfirmationDto["status"]; t: Translator }) {
-  const mapped = payoutStatusKey[status];
-  return <StatusIndicator label={t(mapped.key)} tone={mapped.tone} />;
-}
 
 function policyStatus(settlement: TherapistDailySettlementDto, t: Translator) {
   const { missingPolicy, zeroPolicy } = settlement.warningCounts;
@@ -280,71 +243,17 @@ function PayoutConfirmationSection({
   locale: Locale;
   t: Translator;
 }) {
-  const payout = settlement.payoutConfirmation;
-  // 미확인일 때만 "확인"을 쓸 수 있다. 그 밖(확인됨/지급 재확인 필요/확인 금액 미기록)은 재확인·해제를 쓸 수 있다.
-  const hasActiveConfirmation = payout.status !== "unconfirmed";
-  const unit = { operatingMonthId, serviceDate, employeeId: settlement.employeeId };
-
   return (
-    <PanelSection title={t("settlements.therapist.column.payoutConfirmation")}>
-      <div className="grid gap-1 text-sm text-muted">
-        <div>
-          <PayoutStatusIndicator status={payout.status} t={t} />
-        </div>
-        <div>
-          {t("settlements.payout.currentAmount")}: {vnd(locale, payout.currentAmount)}
-        </div>
-        {payout.lastConfirmedAmount !== null ? (
-          <div>
-            {t("settlements.payout.lastConfirmedAmount")}: {vnd(locale, payout.lastConfirmedAmount)}
-          </div>
-        ) : null}
-        {payout.difference !== null && payout.difference !== 0 ? (
-          <div>
-            {t("settlements.payout.difference")}: {vnd(locale, payout.difference)}
-          </div>
-        ) : null}
-      </div>
-
-      {payoutLocked ? null : hasActiveConfirmation ? (
-        <div className="grid gap-3">
-          <ReasonPayoutForm
-            action={reconfirmTherapistDailySettlementPayoutAction}
-            pendingLabel={t("settlements.payout.action.reconfirming")}
-            placeholder={t("settlements.payout.reason.reconfirmPlaceholder")}
-            submitLabel={t("settlements.payout.action.reconfirm")}
-            {...unit}
-          />
-          <ReasonPayoutForm
-            action={releaseTherapistDailySettlementPayoutAction}
-            pendingLabel={t("settlements.payout.action.releasing")}
-            placeholder={t("settlements.payout.reason.releasePlaceholder")}
-            submitLabel={t("settlements.payout.action.release")}
-            {...unit}
-          />
-        </div>
-      ) : (
-        <ConfirmPayoutButton action={confirmTherapistDailySettlementPayoutAction} {...unit} />
-      )}
-
-      {payout.history.length > 0 ? (
-        <div className="border-l border-border pl-3 text-sm text-muted">
-          <div className="font-semibold text-foreground">{t("settlements.payout.history.title", { count: payout.history.length })}</div>
-          <ol className="mt-1 grid gap-2">
-            {payout.history.slice(0, 5).map((event) => (
-              <li key={event.id}>
-                <div>
-                  {payoutHistoryEventLabel(t, event.eventType)} ·{" "}
-                  {event.amount !== null ? vnd(locale, event.amount) : t("settlements.payout.history.amount.unrecorded")}
-                </div>
-                <div>{formatBusinessDateTime(locale, event.occurredAt)}</div>
-                <div>{t("settlements.therapist.handler", { actor: payoutActorLabel(event) })}</div>
-                {event.reason ? <div>{event.reason}</div> : null}
-              </li>
-            ))}
-          </ol>
-        </div>
-      ) : null}
-    </PanelSection>
+    <PayoutConfirmationPanel<TherapistDailySettlementPayoutResultDto>
+      confirmAction={confirmTherapistDailySettlementPayoutAction}
+      reconfirmAction={reconfirmTherapistDailySettlementPayoutAction}
+      releaseAction={releaseTherapistDailySettlementPayoutAction}
+      unit={{ employeeId: settlement.employeeId, operatingMonthId, serviceDate }}
+      payout={settlement.payoutConfirmation}
+      payoutLocked={payoutLocked}
+      locale={locale}
+      t={t}
+      title={t("settlements.therapist.column.payoutConfirmation")}
+    />
   );
 }

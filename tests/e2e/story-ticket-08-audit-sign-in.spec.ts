@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -37,7 +38,7 @@ async function seedAdmin() {
     sortOrder: await freeSortOrder("OPERATIONS", ADMIN.staffCode, 98080),
     isActive: true
   };
-  const employee = await (prisma as any).employee.upsert({
+  const employee = await testEmployees.upsert({
     where: { staffCode: ADMIN.staffCode },
     update: employeeFields,
     create: { staffCode: ADMIN.staffCode, ...employeeFields }
@@ -274,5 +275,6 @@ test.describe("티켓 08 로그인 화면", () => {
 });
 
 test.afterAll(async () => {
+    await testEmployees.deactivateAll();
   await prisma.$disconnect();
 });

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { mapWithConcurrency } from "@/lib/concurrency";
 import { memoizePrismaReads } from "@/lib/prisma-read-cache";
+import { COUNT_KING_MIN_CALLS, FULL_ATTENDANCE_THRESHOLD_DAYS } from "@/modules/closing/monthly-closing-thresholds";
 import {
   getDailyCallLedgerSummary,
   listCompletedServiceCallCalculationsForOperatingMonth,
@@ -311,9 +312,7 @@ const defaultDependencies: MonthlyClosingPreviewDependencies = {
 };
 
 const courseCodes = ["A", "B", "C", "D", "E"] as const;
-const FULL_ATTENDANCE_THRESHOLD_DAYS = 20;
 const FULL_ATTENDANCE_ALLOWANCE_AMOUNT = 2_000_000;
-const COUNT_KING_MIN_CALLS = 40;
 const COUNT_KING_BONUS_BY_RANK = {
   1: 5_000_000,
   2: 3_000_000,

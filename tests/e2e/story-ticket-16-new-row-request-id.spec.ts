@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Page, type Request } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { createServiceCallRow } from "@/modules/calls/service-call-service";
@@ -8,8 +9,8 @@ import { selectGridOption, selectGridOptionByValue } from "./support/call-grid";
 // 티켓 16: 원장 새 행의 요청 id. 응답을 받지 못한 새 행을 다시 보내도, 같은 요청이 동시에 들어와도 콜은 하나다.
 // 13:00은 공용 시드(defaultTimeSlots)의 활성 슬롯이다.
 const account = { accountId: "t16_counter", password: "Ticket16!counter", staffCode: "E2E-T16-COUNTER", sortOrder: 9441 };
-const monthKey = "2038-04";
-const serviceDate = "2038-04-10";
+const monthKey = "2076-04";
+const serviceDate = "2076-04-10";
 const alreadySaved = "이미 저장된 콜입니다.";
 
 let monthId = "";
@@ -21,7 +22,7 @@ let accountDbId = "";
 let createdMonth = false;
 
 async function seedAccount() {
-  const employee = await (prisma as any).employee.upsert({
+  const employee = await testEmployees.upsert({
     where: { staffCode: account.staffCode },
     update: { displayName: "T16 카운터", employeeGroup: "OPERATIONS", isActive: true },
     create: {
@@ -125,7 +126,7 @@ test.describe("티켓 16 새 행 요청 id로 중복 생성 막기", () => {
     } else {
       await (prisma as any).coursePolicy.create({ data: { courseId, effectiveFromMonth: monthKey, ...policy } });
     }
-    const therapist = await (prisma as any).employee.upsert({
+    const therapist = await testEmployees.upsert({
       where: { staffCode: "E2E-T16-THR-1" },
       update: { displayName: "T16 마사지사", employeeGroup: "THERAPIST", isActive: true },
       create: {
@@ -148,6 +149,7 @@ test.describe("티켓 16 새 행 요청 id로 중복 생성 막기", () => {
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanup();
     // 코스 정책과 운영월은 다른 스펙의 화면에도 보인다. 이 스펙이 만든 것은 지운다.
     await (prisma as any).coursePolicy.deleteMany({ where: { name: "T16 A", effectiveFromMonth: monthKey } });

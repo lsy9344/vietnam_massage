@@ -49,7 +49,7 @@ describe("CustomerCandidateCompare(B09, 스토리 78-80)", () => {
     assert.match(html, /role="alert"[^>]*>[\s\S]*같은 연락처의 고객이 여러 명입니다/);
     assert.match(html, /<div aria-label="고객 검색"[^>]*id="candidates"[^>]*role="listbox"/);
     for (const header of ["이름", "연락처", "최근 방문일", "방문완료 건수"]) {
-      assert.match(html, new RegExp(`<th[^>]*>${header}</th>`));
+      assert.match(html, new RegExp(`<span[^>]*>${header}</span>`));
     }
 
     const options = [...html.matchAll(/<button[^>]*role="option"[^>]*>[\s\S]*?<\/button>/g)].map((match) => match[0]);
@@ -80,7 +80,7 @@ describe("CustomerCandidateCompare(B09, 스토리 78-80)", () => {
     );
 
     assert.match(html, /Có nhiều khách hàng dùng cùng một số liên lạc\./);
-    assert.match(html, /<th[^>]*>Tên<\/th>/);
-    assert.match(html, /<th[^>]*>Số liên lạc<\/th>/);
+    assert.match(html, /<span[^>]*>Tên<\/span>/);
+    assert.match(html, /<span[^>]*>Số liên lạc<\/span>/);
   });
 });

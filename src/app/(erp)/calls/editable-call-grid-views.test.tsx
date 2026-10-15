@@ -124,10 +124,22 @@ describe("ledger view column grouping (ticket 19)", () => {
     const head = tableHead(html);
     const row = dataRow(html);
 
-    for (const label of ["시간", "고객/메모", "결제수단", "결제금액", "확인값", "비고", "방문별 요청"]) {
+    // S4: 스펙 F02의 수납·정산 보기 정의(예약시각, 고객/메모, 상태, 할인, 결제수단, 결제금액, 확인
+    // 코드, 비고)대로다. "할인"(discountAmount, calls.column.discount)이 빠져 있었다.
+    for (const label of ["시간", "고객/메모", "할인", "결제수단", "결제금액", "확인값", "비고"]) {
       assert.match(head, new RegExp(label), `${label}이 수납·정산 보기에 없다`);
     }
-    for (const field of ["actualEntryTime", "roomId", "courseId", "therapist1Id", "therapist2Id", "earcareEmployeeId", "customerId"]) {
+    for (const field of [
+      "actualEntryTime",
+      "roomId",
+      "courseId",
+      "therapist1Id",
+      "therapist2Id",
+      "earcareEmployeeId",
+      "customerId",
+      // S4: 방문별 요청은 "드물게 쓰는 입력"(스토리 97)이라 상시 열이 아니라 콜 상세 패널에서 펼쳐 본다.
+      "visitRequest"
+    ]) {
       assert.doesNotMatch(row, new RegExp(`data-call-cell-column="${field}"`), `${field}은 수납·정산 보기에 없어야 한다`);
     }
     assert.doesNotMatch(row, /data-call-cell-column="warnings"/, "경고 열은 수납·정산 보기에 없어야 한다");
@@ -137,15 +149,15 @@ describe("ledger view column grouping (ticket 19)", () => {
       "customerMemo",
       "status",
       "discountTypeCode",
+      "discountAmount",
       "paymentMethodCode",
       "confirmationCode",
-      "note",
-      "visitRequest"
+      "note"
     ]);
     assert.deepEqual(order, [...order].sort((a, b) => a - b), "열 순서가 고정열 다음 보기 열 순서를 따르지 않는다");
   });
 
-  it("all view keeps every column, unaffected by the new view switch (existing behavior)", () => {
+  it("all view shows every column, with the same pinned leading order as the other views (S4)", () => {
     const html = render({ view: "all" });
     const row = dataRow(html);
 
@@ -155,7 +167,6 @@ describe("ledger view column grouping (ticket 19)", () => {
       "roomId",
       "courseId",
       "customerMemo",
-      "customerId",
       "therapist1Id",
       "therapist2Id",
       "earcareEmployeeId",
@@ -169,6 +180,14 @@ describe("ledger view column grouping (ticket 19)", () => {
       assert.match(row, new RegExp(`data-call-cell-column="${field}"`), `${field}은 전체 보기에 있어야 한다`);
     }
     assert.match(row, /data-call-cell-column="warnings"/);
+    assert.match(row, /aria-label="고객 연결 정정"/);
+    assert.doesNotMatch(row, /<select[^>]*data-call-cell-column="customerId"/);
+
+    // S4(스펙 F02): 예약시각, 고객/메모, 상태 열은 모든 보기에서 같은 순서로 맨 앞에 있어야 한다.
+    const order = columnOrder(row, ["startTime", "customerMemo", "status"]);
+    assert.deepEqual(order, [...order].sort((a, b) => a - b), "전체 보기도 고정 세 열이 같은 순서로 맨 앞에 있어야 한다");
+    const firstEditableColumn = columnOrder(row, ["actualEntryTime"])[0];
+    assert.ok(order[2] < firstEditableColumn, "고정 세 열 다음에야 다른 보기 열이 와야 한다");
   });
 
   it("defaults to the all view when no view prop is given (keeps the pre-existing behavior)", () => {

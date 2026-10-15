@@ -29,3 +29,5 @@
   - 새 E2E 3건(`story-ticket-18-unsaved-input-leave-guard.spec.ts`: 탭·다른 화면 이동 안내와 취소/나가기, 저장하지 않은 입력 없음·보기 전환 무안내, 브라우저 닫기·새로고침 beforeunload)은 2·3 workers로 각 3회 반복 모두 통과.
   - 원장 관련 기존 스펙(2-1, 2-2, 2-3, 2-4, 2-6, i18n-vi, ticket-03, ticket-15, ticket-16, ticket-19, client-revision)과 새 스펙을 함께 2 workers로 돌리니 44개 중 2개만 실패했고, 둘 다 메모의 기존 목록과 같다: `story-2-1:285`(흔들림, 같은 strict-mode 중복 "이 날짜의 콜이 없습니다" 증상)과 `client-revision-verification:310`(새 행 추가 뒤 pending 고착). 내 변경과 겹치는 파일인지 `git diff --stat <통합 브랜치 커밋>`으로 확인했는데 둘 다 내가 건드린 파일과 무관했다.
   - 전체 E2E는 돌리지 않았다(메모리 제약, 다른 세션과 동시 실행). 띄운 서버 PID만 껐다.
+
+- 2026-10-16 사용자 결정: 날짜·운영월 변경에도 미저장 입력 이탈 안내를 유지한다(사용자 명시 선택).

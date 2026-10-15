@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { businessTodayIsoDate } from "@/lib/operating-date";
+import { businessTodayServiceDate } from "@/lib/operating-date";
+import { listAssignedServiceCallsForEmployeeFromDate } from "@/modules/calls/assigned-service-call-query";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
 import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
 import {
@@ -148,36 +149,35 @@ export class EmployeeHasFutureCallsError extends EmployeeDomainError {
   }
 }
 
-// 노쇼와 취소는 점유하지 않으므로 비활성을 막지 않는다(콜 서비스의 isNoShowStatus·isCanceledStatus와 같은 값).
-const NON_BLOCKING_CALL_STATUSES = ["노쇼", "NO_SHOW", "취소", "CANCELED"];
-
+/**
+ * S10: "오늘"은 달력날이 아니라 지금이 들어 있는 영업일의 서비스 날짜다(스펙 226줄, 티켓 10 결정) —
+ * 자정부터 첫 활성 슬롯 전까지는 전날 서비스 날짜가 오늘이다. 원장 직접 조회와 노쇼·취소 상태 복제도
+ * 콜 서비스의 질의 함수(listAssignedServiceCallsForEmployeeFromDate)로 옮긴다(src/modules/README.md).
+ */
 async function findFutureCalls(tx: EmployeePrismaClient, employeeId: string, now: Date): Promise<FutureCallSummary[]> {
-  const records = await tx.serviceCall.findMany({
-    where: {
-      serviceDate: { gte: toDbDate(businessTodayIsoDate(now)) },
-      status: { notIn: NON_BLOCKING_CALL_STATUSES },
-      assignments: { some: { employeeId, isActive: true } }
-    },
-    select: { id: true, serviceDate: true, startTime: true }
+  const timeSlots = await tx.timeSlot.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
+  const today = businessTodayServiceDate(timeSlots, now);
+  const records = await listAssignedServiceCallsForEmployeeFromDate({
+    employeeId,
+    fromDate: today,
+    prismaClient: tx as unknown as Parameters<typeof listAssignedServiceCallsForEmployeeFromDate>[0]["prismaClient"]
   });
   if (records.length === 0) {
     return [];
   }
-  const timeSlots = await tx.timeSlot.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
   // 원장처럼 같은 날 안에서는 시간 슬롯 순서로 놓는다(01:00 슬롯은 그 서비스 날짜의 끝이다).
   const sortOrderByTime = new Map(timeSlots.map((slot) => [slot.value, slot.sortOrder]));
   const slotOrder = (startTime: string) => sortOrderByTime.get(startTime) ?? Number.MAX_SAFE_INTEGER;
-  records.sort(
-    (a, b) =>
-      a.serviceDate.getTime() - b.serviceDate.getTime() ||
-      slotOrder(a.startTime) - slotOrder(b.startTime) ||
-      a.startTime.localeCompare(b.startTime)
-  );
-  return records.map((record) => ({
-    serviceCallId: record.id,
-    serviceDate: record.serviceDate.toISOString().slice(0, 10),
-    startTime: record.startTime
-  }));
+  return [...records]
+    .sort(
+      (a, b) =>
+        a.serviceDate.localeCompare(b.serviceDate) || slotOrder(a.startTime) - slotOrder(b.startTime) || a.startTime.localeCompare(b.startTime)
+    )
+    .map((record) => ({
+      serviceCallId: record.serviceCallId,
+      serviceDate: record.serviceDate,
+      startTime: record.startTime
+    }));
 }
 
 function getClient(client?: EmployeePrismaClient) {

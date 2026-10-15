@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -35,7 +36,7 @@ const createdOperatingMonthIds: string[] = [];
 const createdRoomIds: string[] = [];
 
 async function seedAccount(input: { accountId: string; password: string; staffCode: string; sortOrder: number; role: string }) {
-  const employee = await (prisma as any).employee.upsert({
+  const employee = await testEmployees.upsert({
     where: { staffCode: input.staffCode },
     update: { displayName: `T36 ${input.role}`, employeeGroup: "OPERATIONS", isActive: true },
     create: {
@@ -110,7 +111,7 @@ async function seedCoursePolicy(monthKey: string, name: string, basePrice: numbe
 }
 
 async function seedTherapist(staffCode: string, displayName: string, sortOrder: number, courseId: string, monthKey: string, rateAmount: number) {
-  const employee = await (prisma as any).employee.upsert({
+  const employee = await testEmployees.upsert({
     where: { staffCode },
     update: { displayName, employeeGroup: "THERAPIST", isActive: true },
     create: {
@@ -161,6 +162,7 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     if (createdOperatingMonthIds.length > 0) {
       const calls = await (prisma as any).serviceCall.findMany({ where: { operatingMonthId: { in: createdOperatingMonthIds } }, select: { id: true } });
       const callIds = calls.map((call: { id: string }) => call.id);

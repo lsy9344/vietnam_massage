@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DetailRow } from "@/components/ui/detail-row";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import { ModalPanel } from "@/components/ui/panel";
+import { ScreenState } from "@/components/ui/screen-state";
 import { CustomerCandidateCompare } from "@/components/domain/customer-candidate-compare";
 import { CustomerVisitCounts } from "@/components/domain/customer-visit-counts";
 import {
@@ -122,13 +123,13 @@ export function StepperNav({
           <button
             aria-current={candidate === step ? "step" : undefined}
             className={`flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors ${
-              candidate === step ? "border-brand bg-brand/10 text-foreground" : "border-border text-muted hover:bg-readonly"
+              candidate === step ? "border-brand bg-brand text-brand-foreground" : "border-border text-muted hover:bg-readonly"
             }`}
             disabled={disabled}
             onClick={() => onSelect(candidate)}
             type="button"
           >
-            <span aria-hidden="true" className="inline-flex size-5 items-center justify-center rounded-full bg-readonly text-[11px] font-bold">
+            <span aria-hidden="true" className="inline-flex size-5 items-center justify-center rounded-full bg-readonly text-foreground text-xs font-bold">
               {index + 1}
             </span>
             {t(stepLabelKey[candidate])}
@@ -158,10 +159,7 @@ export function ErrorSummary({
   if (!message && entries.length === 0) return null;
 
   return (
-    <div className="mb-4 grid gap-2 rounded-md border border-danger bg-danger/5 p-3" role="alert">
-      <p className="text-sm font-semibold text-danger">{t("calls.quickBooking.errorSummary.title")}</p>
-      {message ? <p className="text-sm text-danger">{message}</p> : null}
-      {entries.length > 0 ? (
+    <ScreenState className="mb-4" kind="error" label={t("calls.quickBooking.errorSummary.title")} title={message ?? t("calls.quickBooking.errorSummary.title")} action={entries.length > 0 ? (
         <ul className="grid gap-1">
           {entries.map(([field, messages]) => (
             <li key={field}>
@@ -175,8 +173,7 @@ export function ErrorSummary({
             </li>
           ))}
         </ul>
-      ) : null}
-    </div>
+      ) : null} />
   );
 }
 
@@ -203,8 +200,11 @@ type CustomerStepProps = StepProps & {
   onQueryChange: (value: string) => void;
   onSelectCandidate: (candidate: CustomerVisitCandidateDto) => void;
   query: string;
-  /** 고른 고객의 방문완료·노쇼·취소 건수와 가장 최근 방문(B09, 스토리 71-73). 고른 고객이 없으면 null이다. */
-  visitSummary: { counts: CustomerVisitCountsDto; recentVisit: CustomerVisitHistoryRowDto | null } | null;
+  /**
+   * 고른 고객의 방문완료·노쇼·취소 건수와 가장 최근 방문(B09, 스토리 71-73), 같은 연락처 경고(S5).
+   * 고른 고객이 없으면 null이다.
+   */
+  visitSummary: { counts: CustomerVisitCountsDto; recentVisit: CustomerVisitHistoryRowDto | null; sharedPhone: boolean } | null;
 };
 
 /**
@@ -331,6 +331,10 @@ export function CustomerStep({
               </Button>
             </div>
           </Field>
+          {/* S5: 검색 목록이 아니라 고른 고객 칸에서도 같은 연락처 경고를 보인다(스펙 F01 단계 1). */}
+          {visitSummary?.sharedPhone ? (
+            <ScreenState kind="warning" label={t("customers.duplicatePhone.chip")} title={t("customers.duplicatePhone.title")} />
+          ) : null}
           {visitSummary ? (
             <div className="grid gap-3 rounded-md border border-border bg-surface p-3">
               <CustomerVisitCounts counts={visitSummary.counts} locale={locale} />
@@ -829,6 +833,7 @@ export function QuickBookingPanel({
   const t = useT();
   const locale = useLocale();
   const [open, setOpen] = useState(false);
+  const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const ledger = useMemo(() => ({ operatingMonthId, serviceDate }), [operatingMonthId, serviceDate]);
   const [state, dispatch] = useReducer(quickBookingReducer, ledger, (initial) => initialQuickBookingState(initial, newRequestId()));
@@ -896,9 +901,13 @@ export function QuickBookingPanel({
     setCustomerQuery("");
   }
 
-  // 고른 고객의 방문완료·노쇼·취소 건수와 가장 최근 방문(B09, 스토리 71-73, 티켓 24). 고른 고객이 바뀔
-  // 때마다 다시 불러온다. 고객을 고르지 않았으면(해제 포함) null이다.
-  const [visitSummary, setVisitSummary] = useState<{ counts: CustomerVisitCountsDto; recentVisit: CustomerVisitHistoryRowDto | null } | null>(null);
+  // 고른 고객의 방문완료·노쇼·취소 건수와 가장 최근 방문(B09, 스토리 71-73, 티켓 24), 같은 연락처
+  // 경고(S5). 고른 고객이 바뀔 때마다 다시 불러온다. 고객을 고르지 않았으면(해제 포함) null이다.
+  const [visitSummary, setVisitSummary] = useState<{
+    counts: CustomerVisitCountsDto;
+    recentVisit: CustomerVisitHistoryRowDto | null;
+    sharedPhone: boolean;
+  } | null>(null);
   useEffect(() => {
     const customerId = draft.customerId;
     if (!customerId) {
@@ -952,6 +961,7 @@ export function QuickBookingPanel({
           const result = await createQuickBookingServiceCallAction(request);
           if (result.ok) {
             const createdId = result.data.id;
+            setSavedNotice(result.notice ?? null);
             dispatch({ type: "saved", request, notice: result.notice ?? null, nextRequestId: newRequestId() });
             setOpen(false);
             focusCreatedRow(createdId);
@@ -998,17 +1008,12 @@ export function QuickBookingPanel({
 
   return (
     <>
-      {/* 빠른 예약은 원장 탭 머리의 주요 버튼이다(명세 F08). 휴대폰 폭에서는 제공하지 않는다(티켓 20). */}
-      <div className="hidden min-[600px]:block">
-        <Button aria-haspopup="dialog" disabled={isLocked} onClick={() => setOpen(true)} type="button">
-          {t("calls.quickBooking.open")}
-        </Button>
-      </div>
-
+      <div aria-live="polite" className={savedNotice ? "text-sm text-foreground" : "sr-only"} role="status">{savedNotice}</div>
       <ModalPanel
         description={t("calls.quickBooking.description")}
         onOpenChange={(next) => {
           if (next) {
+            setSavedNotice(null);
             setOpen(true);
             return;
           }
@@ -1016,6 +1021,15 @@ export function QuickBookingPanel({
         }}
         open={open}
         title={t("calls.quickBooking.title")}
+        trigger={
+          // 빠른 예약은 원장 탭 머리의 주요 버튼이다(명세 F08). 휴대폰 폭에서는 제공하지 않는다(티켓 20).
+          // ModalPanel의 trigger로 등록해야 Radix가 이 버튼을 패널의 Dialog.Trigger로 알아, 패널을
+          // 닫을 때 포커스를 여기로 돌려준다(S3, 스토리 70) — 트리거 없이 따로 둔 버튼은 그 연결이 없어
+          // 닫은 뒤 포커스가 body로 빠졌다.
+          <Button aria-haspopup="dialog" className="hidden min-[600px]:inline-flex" disabled={isLocked} type="button">
+            {t("calls.quickBooking.open")}
+          </Button>
+        }
       >
         <StepperNav disabled={locked} errorSteps={errorSteps} onSelect={(next) => dispatch({ type: "step", step: next })} step={step} />
         <ErrorSummary fieldErrors={fieldErrors} message={message} onJump={(next) => dispatch({ type: "step", step: next })} />

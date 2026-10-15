@@ -8,6 +8,7 @@ import {
   createDailyExpense,
   createQuickBookingServiceCall,
   createServiceCallRow,
+  customerSharedPhone,
   customerVisitCountsFromRows,
   deactivateDailyExpense,
   getDailyCallLedgerSummary,
@@ -1394,6 +1395,39 @@ describe("service call service", () => {
     });
   });
 
+  it("autosave writes an edited visit request instead of reverting it to the old value (S1)", async () => {
+    const prismaClient = createMemoryPrisma();
+    const original = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      status: "예약",
+      visitRequest: "조용한 방으로 부탁드립니다",
+      prismaClient
+    });
+    assert.equal(original.visitRequest, "조용한 방으로 부탁드립니다");
+
+    const saved = await autosaveServiceCallRow({
+      serviceCallId: original.id,
+      expectedUpdatedAt: original.updatedAt,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      status: "예약",
+      visitRequest: "창가 쪽으로 바꿔주세요",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(saved.visitRequest, "창가 쪽으로 바꿔주세요");
+  });
+
   it("autosave from 예약 to 방문완료 immediately returns computed readonly values", async () => {
     const prismaClient = createMemoryPrisma();
     const original = await saveBasicServiceCallRow({
@@ -2506,17 +2540,11 @@ describe("service call service", () => {
       ]
     );
 
-    const linked = await autosaveServiceCallRow({
+    const linked = await correctServiceCallCustomerLink({
       serviceCallId: saved.id,
+      reason: "연결 확인 후 정정",
       expectedUpdatedAt: saved.updatedAt,
-      operatingMonthId: "month-2026-06",
-      serviceDate: "2026-06-10",
-      startTime: "11:00",
-      roomId: "room-101",
-      courseId: "course-a",
-      customerMemo: "090111 단골이라고 적힘",
       customerId: sua.id,
-      status: "예약",
       actorId: "counter-account",
       prismaClient
     });
@@ -2524,17 +2552,11 @@ describe("service call service", () => {
     assert.equal(linked.customerId, sua.id);
     assert.equal(linked.customerMemo, "090111 단골이라고 적힘");
 
-    const unlinked = await autosaveServiceCallRow({
+    const unlinked = await correctServiceCallCustomerLink({
       serviceCallId: saved.id,
+      reason: "연결 확인 후 정정",
       expectedUpdatedAt: linked.updatedAt,
-      operatingMonthId: "month-2026-06",
-      serviceDate: "2026-06-10",
-      startTime: "11:00",
-      roomId: "room-101",
-      courseId: "course-a",
-      customerMemo: "090111 단골이라고 적힘",
       customerId: null,
-      status: "예약",
       actorId: "counter-account",
       prismaClient
     });
@@ -2642,24 +2664,18 @@ describe("service call service", () => {
       status: "예약",
       prismaClient
     });
-    await autosaveServiceCallRow({
+    await correctServiceCallCustomerLink({
       serviceCallId: saved.id,
+      reason: "고객 확인 후 연결 정정",
       expectedUpdatedAt: saved.updatedAt,
-      operatingMonthId: "month-2026-06",
-      serviceDate: "2026-06-10",
-      startTime: "11:00",
-      roomId: "room-101",
-      courseId: "course-a",
-      customerMemo: "원장 표기",
       customerId: created.id,
-      status: "예약",
       actorId: "counter-account",
       prismaClient
     });
 
     assert.deepEqual(
       prismaClient.auditEvents.map((event: { action: string }) => event.action),
-      ["customer.created", "customer.changed", "service_call.row_changed"]
+      ["customer.created", "customer.changed", "service_call.customer_link_corrected"]
     );
     assert.equal(prismaClient.auditEvents[0].targetType, "customer");
     assert.equal(prismaClient.auditEvents[0].actorId, "counter-account");
@@ -2674,13 +2690,12 @@ describe("service call service", () => {
     assert.equal(prismaClient.auditEvents[2].targetId, saved.id);
     assert.equal(prismaClient.auditEvents[2].beforeValue.customerId, null);
     assert.equal(prismaClient.auditEvents[2].afterValue.customerId, created.id);
-    assert.equal(prismaClient.auditEvents[2].beforeValue.customerMemo, "원장 표기");
-    assert.equal(prismaClient.auditEvents[2].afterValue.customerMemo, "원장 표기");
+    assert.equal((await getServiceCallRow({ serviceCallId: saved.id, prismaClient })).customerMemo, "원장 표기");
+    assert.equal(prismaClient.auditEvents[2].reason, "고객 확인 후 연결 정정");
   });
 
   it("carries the visit request along in the row_changed audit snapshot untouched (F06, 티켓 23)", async () => {
     const prismaClient = createMemoryPrisma();
-    const created = await createCustomer({ name: "민아", phone: "090111", memo: "단골", actorId: "counter-account", prismaClient });
     const saved = await saveBasicServiceCallRow({
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
@@ -2692,7 +2707,7 @@ describe("service call service", () => {
       prismaClient
     });
 
-    // 고객 연결만 바꾸는 감사 기록이라도, 그 시점의 방문별 요청이 전후 모두 그대로 찍힌다.
+    // 실제입장만 바꾸는 민감한 행 정정에도 방문별 요청은 감사 스냅샷에 그대로 남는다.
     await autosaveServiceCallRow({
       serviceCallId: saved.id,
       expectedUpdatedAt: saved.updatedAt,
@@ -2701,7 +2716,7 @@ describe("service call service", () => {
       startTime: "11:00",
       roomId: "room-101",
       courseId: "course-a",
-      customerId: created.id,
+      actualEntryTime: "11:00",
       status: "예약",
       visitRequest: "창가 자리 선호",
       actorId: "counter-account",
@@ -2783,7 +2798,7 @@ describe("service call service", () => {
           actorId: " ",
           prismaClient
         }),
-      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "ACTOR_REQUIRED"
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "SERVICE_CALL_CUSTOMER_LINK_CORRECTION_REQUIRED"
     );
     await assert.rejects(
       () =>
@@ -2814,6 +2829,16 @@ describe("service call service", () => {
       prismaClient.auditEvents.map((event: { action: string }) => event.action),
       ["customer.created"]
     );
+  });
+
+  it("기존 콜의 고객 연결은 일반 자동저장 직접 호출로도 바꿀 수 없다 (ticket 37)", async () => {
+    const prismaClient = createMemoryPrisma();
+    const customer = await createCustomer({ name: "정정 대상", actorId: "counter-account", prismaClient });
+    const saved = await saveBasicServiceCallRow({ operatingMonthId: "month-2026-06", serviceDate: "2026-06-10", startTime: "11:00", roomId: "room-101", courseId: "course-a", status: "예약", prismaClient });
+    const auditCount = prismaClient.auditEvents.length;
+    await assert.rejects(() => autosaveServiceCallRow({ serviceCallId: saved.id, expectedUpdatedAt: saved.updatedAt, operatingMonthId: saved.operatingMonthId, serviceDate: saved.serviceDate, startTime: saved.startTime, roomId: saved.roomId, courseId: saved.courseId, status: saved.status, customerId: customer.id, actorId: "counter-account", prismaClient }), (error: unknown) => error instanceof ServiceCallDomainError && error.code === "SERVICE_CALL_CUSTOMER_LINK_CORRECTION_REQUIRED");
+    assert.equal((await getServiceCallRow({ serviceCallId: saved.id, prismaClient })).customerId, null);
+    assert.equal(prismaClient.auditEvents.length, auditCount);
   });
 
   it("returns one call per visit row, completed visits first, and still reads a locked month", async () => {
@@ -3234,6 +3259,21 @@ describe("service call service", () => {
     assert.equal(sharedByLabel.get("국가번호 전화"), false);
     // 연락처가 빈 고객은 비교 대상이 아니다.
     assert.equal(sharedByLabel.get("전화 없음"), false);
+  });
+
+  it("S5: finds a shared phone for an already-chosen customer even without a search query", async () => {
+    const prismaClient = createMemoryPrisma();
+    const mina = await createCustomer({ name: "민아", phone: "090111", memo: null, actorId: "counter-account", prismaClient });
+    const sua = await createCustomer({ name: "수아", phone: "090111", memo: null, actorId: "counter-account", prismaClient });
+    const lan = await createCustomer({ name: "Lan", phone: "091000", memo: null, actorId: "counter-account", prismaClient });
+
+    // 검색 결과 밖(쿼리 없음)에서도 고객 화면 직접 진입(visitCustomer=)·빠른 예약 고객 선택 후와 같은
+    // 모양으로 확인한다. searchCustomerVisitCandidates의 query가 ""면 빈 배열이라 이 경고를 줄 수 없다.
+    assert.deepEqual(await searchCustomerVisitCandidates({ query: "", prismaClient }), []);
+
+    assert.equal(await customerSharedPhone({ customerId: mina.id, prismaClient }), true);
+    assert.equal(await customerSharedPhone({ customerId: sua.id, prismaClient }), true);
+    assert.equal(await customerSharedPhone({ customerId: lan.id, prismaClient }), false);
   });
 });
 
@@ -4709,16 +4749,37 @@ describe("customer visit counts", () => {
 });
 
 describe("most recent customer visit (B09, 스토리 71-73, 티켓 24)", () => {
+  // 영업일은 자정을 넘어 이어진다(11:00 ~ 다음날 01:00 같은 슬롯 순서, selectNowSlot과 같은 개념). 그래서
+  // 같은 서비스 날짜 안에서는 시간 슬롯 정렬 순서(sortOrderByTime)로 비교해야 한다 — 글자 비교라면
+  // "01:00"이 "15:00"보다 앞서 보이지만, 실제로는 자정을 넘긴 그 영업일의 더 늦은 슬롯이다(S6).
+  const sortOrderByTime = new Map([
+    ["11:00", 0],
+    ["15:00", 8],
+    ["23:30", 25],
+    ["00:00", 26],
+    ["00:30", 27],
+    ["01:00", 28]
+  ]);
+
   it("picks the row with the latest date and time regardless of status, not the completed-first order", () => {
     const older = visitHistoryRow({ serviceCallId: "older", serviceDate: "2026-06-01", startTime: "11:00", status: "방문완료" });
     const latestReservation = visitHistoryRow({ serviceCallId: "latest", serviceDate: "2026-06-20", startTime: "15:00", status: "예약" });
-    const sameDayEarlier = visitHistoryRow({ serviceCallId: "same-day-earlier", serviceDate: "2026-06-20", startTime: "01:00", status: "노쇼" });
+    const sameDayEarlier = visitHistoryRow({ serviceCallId: "same-day-earlier", serviceDate: "2026-06-10", startTime: "23:30", status: "노쇼" });
 
-    assert.equal(mostRecentCustomerVisit([older, latestReservation, sameDayEarlier])?.serviceCallId, "latest");
+    assert.equal(mostRecentCustomerVisit([older, latestReservation, sameDayEarlier], sortOrderByTime)?.serviceCallId, "latest");
+  });
+
+  it("S6: within the same service date, a past-midnight slot (01:00) sorts after an earlier-clock slot (15:00), by time-slot order not string order", () => {
+    const afternoon = visitHistoryRow({ serviceCallId: "afternoon", serviceDate: "2026-06-20", startTime: "15:00", status: "예약" });
+    const pastMidnight = visitHistoryRow({ serviceCallId: "past-midnight", serviceDate: "2026-06-20", startTime: "01:00", status: "노쇼" });
+
+    assert.equal(mostRecentCustomerVisit([afternoon, pastMidnight], sortOrderByTime)?.serviceCallId, "past-midnight");
+    // 글자 비교("01:00" < "15:00")로는 틀린 답(afternoon)이 나왔던 자리다.
+    assert.notEqual(mostRecentCustomerVisit([afternoon, pastMidnight], sortOrderByTime)?.serviceCallId, "afternoon");
   });
 
   it("returns null for an empty history", () => {
-    assert.equal(mostRecentCustomerVisit([]), null);
+    assert.equal(mostRecentCustomerVisit([], sortOrderByTime), null);
   });
 });
 

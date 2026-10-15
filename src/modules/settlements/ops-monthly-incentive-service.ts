@@ -7,8 +7,9 @@ import {
 import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/modules/settlements/settlement-evidence-call";
 import {
   confirmPayoutConfirmation,
-  derivePayoutConfirmationStatus,
-  listPayoutConfirmations,
+  listActivelyConfirmedUnitEmployeeIds,
+  attachPayoutConfirmationsToRows,
+  toPayoutConfirmationPrismaClient,
   reconfirmPayoutConfirmation,
   releasePayoutConfirmation,
   type PayoutConfirmationDto
@@ -381,41 +382,6 @@ function rowForEmployee(employee: EmployeeRecord, role: OpsMonthlyIncentiveTeamR
   };
 }
 
-function toPayoutConfirmationPrismaClient(client: OpsMonthlyIncentivePrismaClient) {
-  return client as unknown as Parameters<typeof listPayoutConfirmations>[0]["prismaClient"];
-}
-
-/**
- * 지급 확인(ADR 0004, 티켓 30·31)을 행마다 붙인다. 월 단위라 serviceDate는 항상 null이다.
- * 호출하는 쪽의 메모리 Prisma가 지급 확인 저장소를 흉내 내지 않으면 모두 미확인으로 둔다.
- */
-async function attachPayoutConfirmations(input: {
-  client: OpsMonthlyIncentivePrismaClient;
-  operatingMonthId: string;
-  operatingMonthStatus: string;
-  rows: Array<Omit<OpsMonthlyIncentiveRowDto, "payoutConfirmation">>;
-}): Promise<OpsMonthlyIncentiveRowDto[]> {
-  if (!input.client.payoutConfirmationEvent) {
-    return input.rows.map((row) => ({
-      ...row,
-      payoutConfirmation: derivePayoutConfirmationStatus([], row.payoutAmount, input.operatingMonthStatus)
-    }));
-  }
-
-  const confirmations = await listPayoutConfirmations({
-    unitType: "OPS_MONTHLY",
-    operatingMonthId: input.operatingMonthId,
-    serviceDate: null,
-    operatingMonthStatus: input.operatingMonthStatus,
-    units: input.rows.map((row) => ({ employeeId: row.employeeId, currentAmount: row.payoutAmount })),
-    prismaClient: toPayoutConfirmationPrismaClient(input.client)
-  });
-
-  return input.rows.map((row) => ({
-    ...row,
-    payoutConfirmation: confirmations.get(row.employeeId) ?? derivePayoutConfirmationStatus([], row.payoutAmount, input.operatingMonthStatus)
-  }));
-}
 
 /** 지급 확인을 쓰려는(확인/재확인/해제) 운영팀 직원이 활성 OPERATIONS인지 확인한다. */
 async function assertActiveOpsEmployee(input: { client: OpsMonthlyIncentivePrismaClient; employeeId: string }) {
@@ -493,7 +459,37 @@ export async function listOpsMonthlyIncentivePreview(input: {
     appliedRule: ruleSelection.appliedRule
   });
   const isClosedOrLocked = operatingMonth.status === "마감확정" || operatingMonth.status === "잠금";
-  const rowsWithPayoutConfirmation = await attachPayoutConfirmations({
+
+  // S7(ADR 0004): 확인 사건이 있는 단위는 이 운영월에 활성 운영팀 직원이 아니게 되어도(비활성) 금액
+  // 0인 행으로 남긴다. 그래야 attachPayoutConfirmations가 "지급 재확인 필요"로 가리고, 마감 점검도
+  // 이 차이를 막을 수 있다.
+  if (client.payoutConfirmationEvent) {
+    const confirmedEmployeeIds = await listActivelyConfirmedUnitEmployeeIds({
+      unitType: "OPS_MONTHLY",
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate: null,
+      prismaClient: toPayoutConfirmationPrismaClient(client)
+    });
+    const presentIds = new Set(distribution.rows.map((row) => row.employeeId));
+    for (const employeeId of confirmedEmployeeIds) {
+      if (presentIds.has(employeeId)) continue;
+      const employee = await client.employee.findUnique?.({ where: { id: employeeId } });
+      const fallback: EmployeeRecord = employee ?? {
+        id: employeeId,
+        staffCode: employeeId,
+        displayName: employeeId,
+        employeeGroup: "OPERATIONS",
+        position: "",
+        sortOrder: 9999,
+        isActive: false
+      };
+      distribution.rows.push(rowForEmployee(fallback, teamRole(fallback), 0, "확인 사건은 있지만 이 운영월 계산 대상이 아닙니다."));
+    }
+  }
+
+  const rowsWithPayoutConfirmation = await attachPayoutConfirmationsToRows({
+      unitType: "OPS_MONTHLY",
+      currentAmount: (row) => row.payoutAmount,
     client,
     operatingMonthId: parsed.data.operatingMonthId,
     operatingMonthStatus: operatingMonth.status,

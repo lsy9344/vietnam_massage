@@ -12,7 +12,7 @@ import type { PayoutConfirmationDto, PayoutConfirmationEventDto } from "@/module
 /**
  * 지급 확인(ADR 0004, 티켓 30) 현재 상태와 확인/재확인/해제 폼, 이력을 그리는 공용 패널 구역.
  * 티켓 30은 Therapist 직원 패널 안에 이 모양을 직접 그렸고(therapist-settlement-view.tsx), 티켓 31이 귀케어·운영팀
- * 일일·운영팀 월까지 세 곳 더 붙이면서 그 자리를 그대로 옮겨 여기 하나로 공유한다(Therapist 쪽은 손대지 않았다).
+ * 일일·운영팀 월까지 같은 구역을 공유한다. Therapist도 이 컴포넌트를 사용한다(T8).
  */
 const payoutStatusKey: Record<PayoutConfirmationDto["status"], { key: MessageKey; tone: StatusTone }> = {
   unconfirmed: { key: "settlements.payout.status.unconfirmed", tone: "neutral" },

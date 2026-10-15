@@ -41,13 +41,12 @@ export const screenRoutes: readonly ScreenRoute[] = [
   { path: "/live", labelKey: "shell.tab.live", zone: "floor", roles: ["administrator", "counter"], dateContext: "serviceDate" },
   { path: "/tv", labelKey: "shell.tab.tv", zone: "floor", roles: ["administrator", "counter", "read_only_viewer"], dateContext: "serviceDate", notATab: true },
   { path: "/customers", labelKey: "shell.tab.customers", zone: "customers", roles: ["administrator", "counter"] },
+  // 근무표는 운영월과 무관해 dateContext가 없다. 정산 업무의 주기 순서로 맨 앞에 둔다.
+  { path: "/settlements/schedule", labelKey: "shell.tab.schedule", zone: "settlements", roles: ["administrator", "settlement_manager"] },
   { path: "/settlements", labelKey: "shell.tab.therapist", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "serviceDate" },
   { path: "/settlements/earcare", labelKey: "shell.tab.earcare", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "attendanceDate" },
   { path: "/settlements/operations", labelKey: "shell.tab.opsDaily", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "attendanceDate" },
   { path: "/settlements/operations/monthly", labelKey: "shell.tab.opsMonthly", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "month" },
-  // 근무표는 운영월과 무관해 dateContext가 없다. design.md의 주기 순서(근무표 → 일별 → 월별) 제안과 달리
-  // 끝에 둔다: 정산 구역의 기존 첫 탭(관리자·정산 담당의 dock 진입 첫 화면 = Therapist 정산)을 그대로 지킨다(가정, Comments 참고).
-  { path: "/settlements/schedule", labelKey: "shell.tab.schedule", zone: "settlements", roles: ["administrator", "settlement_manager"] },
   // 월 명세서(티켓 32)는 각 정산 화면의 직원 패널에서 직원을 고르고 연다. TV와 같은 이유로 구역 안 탭에는 두지 않는다.
   { path: "/settlements/statement", labelKey: "shell.tab.statement", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "month", notATab: true },
   { path: "/closing", labelKey: "shell.tab.closing", zone: "closing", roles: ["administrator", "settlement_manager"], dateContext: "month" },
@@ -138,9 +137,10 @@ export function screenHref(route: ScreenRoute, context: ScreenContext) {
   return query ? `${route.path}?${query}` : route.path;
 }
 
-// 도크로 구역에 들어가면 그 역할이 들어갈 수 있는 첫 탭이 열린다. 원장 구역은 늘 원장 탭이다.
+// 도크는 첫 탭으로 들어간다. 정산은 기존 날짜·운영월 맥락을 지키는 Therapist 화면으로 들어간다.
 export function getZoneHref(role: Role, zone: Zone, context: ScreenContext) {
-  const firstTab = getZoneTabs(role, zone)[0];
+  const tabs = getZoneTabs(role, zone);
+  const firstTab = (zone === "settlements" ? tabs.find((tab) => tab.path === "/settlements") : null) ?? tabs[0];
   return firstTab ? screenHref(firstTab, context) : null;
 }
 

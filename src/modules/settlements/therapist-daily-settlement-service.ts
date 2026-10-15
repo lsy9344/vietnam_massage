@@ -8,8 +8,10 @@ import {
 import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/modules/settlements/settlement-evidence-call";
 import {
   confirmPayoutConfirmation,
+  listActivelyConfirmedUnitEmployeeIds,
   derivePayoutConfirmationStatus,
-  listPayoutConfirmations,
+  attachPayoutConfirmationsToRows,
+  toPayoutConfirmationPrismaClient,
   reconfirmPayoutConfirmation,
   releasePayoutConfirmation,
   type PayoutConfirmationDto
@@ -216,6 +218,18 @@ function employeeFallback(assignee: ServiceCallAssigneeDto): EmployeeRecord {
   };
 }
 
+/** S7: 확인 사건은 있는데 직원 조회(findUnique)조차 없는(그 double이 흉내 내지 않는) 드문 자리에서 id만으로 행을 만든다. */
+function fallbackEmployeeForId(employeeId: string): EmployeeRecord {
+  return {
+    id: employeeId,
+    displayName: employeeId,
+    staffCode: employeeId,
+    employeeGroup: "THERAPIST",
+    sortOrder: 9999,
+    isActive: false
+  };
+}
+
 function createSettlement(employee: EmployeeRecord): TherapistDailySettlementDto {
   return {
     employeeId: employee.id,
@@ -276,45 +290,6 @@ async function assertPayoutHasSettlement(input: {
   return settlement;
 }
 
-function toPayoutConfirmationPrismaClient(client: TherapistDailySettlementPrismaClient) {
-  return client as unknown as Parameters<typeof listPayoutConfirmations>[0]["prismaClient"];
-}
-
-async function attachPayoutConfirmations(input: {
-  client: TherapistDailySettlementPrismaClient;
-  operatingMonthId: string;
-  serviceDate: string;
-  operatingMonthStatus: string;
-  settlements: TherapistDailySettlementDto[];
-}) {
-  if (input.settlements.length === 0) {
-    return input.settlements;
-  }
-
-  // 다른 서비스(대시보드, 이관 대조 등)가 쓰는 소비자 메모리 Prisma는 지급 확인 저장소를 흉내 내지 않을 수 있다.
-  // 그런 경우는 모두 미확인으로 둔다(계산 결과는 그대로다).
-  if (!input.client.payoutConfirmationEvent) {
-    return input.settlements.map((settlement) => ({
-      ...settlement,
-      payoutConfirmation: derivePayoutConfirmationStatus([], settlement.totalCommissionAmount, input.operatingMonthStatus)
-    }));
-  }
-
-  const confirmations = await listPayoutConfirmations({
-    unitType: "THERAPIST_DAILY",
-    operatingMonthId: input.operatingMonthId,
-    serviceDate: input.serviceDate,
-    operatingMonthStatus: input.operatingMonthStatus,
-    units: input.settlements.map((settlement) => ({ employeeId: settlement.employeeId, currentAmount: settlement.totalCommissionAmount })),
-    prismaClient: toPayoutConfirmationPrismaClient(input.client)
-  });
-
-  return input.settlements.map((settlement) => ({
-    ...settlement,
-    payoutConfirmation:
-      confirmations.get(settlement.employeeId) ?? derivePayoutConfirmationStatus([], settlement.totalCommissionAmount, input.operatingMonthStatus)
-  }));
-}
 
 function evidenceForRole(input: {
   rateLookup: TherapistRateLookup;
@@ -484,17 +459,36 @@ export async function listTherapistDailySettlements(input: {
     }
   }
 
+  // S7(ADR 0004): 확인 사건이 있는 단위는 그날 완료 콜이 없어도(콜이 취소·노쇼로 정정되거나 마사지사가
+  // 비활성되어도) 금액 0인 행으로 남긴다. 그래야 attachPayoutConfirmations가 "지급 재확인 필요"로
+  // 가리고, 마감 점검도 이 차이를 막을 수 있다.
+  if (client.payoutConfirmationEvent) {
+    const confirmedEmployeeIds = await listActivelyConfirmedUnitEmployeeIds({
+      unitType: "THERAPIST_DAILY",
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate: parsed.data.serviceDate,
+      prismaClient: toPayoutConfirmationPrismaClient(client)
+    });
+    for (const employeeId of confirmedEmployeeIds) {
+      if (settlementsByEmployeeId.has(employeeId)) continue;
+      const employee = employeesById.get(employeeId) ?? (await client.employee.findUnique?.({ where: { id: employeeId } })) ?? null;
+      settlementsByEmployeeId.set(employeeId, createSettlement(employee ?? fallbackEmployeeForId(employeeId)));
+    }
+  }
+
   const settlements = [...settlementsByEmployeeId.values()].sort((a, b) => a.sortOrder - b.sortOrder || a.staffCode.localeCompare(b.staffCode));
 
   return {
     operatingMonthId: parsed.data.operatingMonthId,
     serviceDate: parsed.data.serviceDate,
-    settlements: await attachPayoutConfirmations({
+    settlements: await attachPayoutConfirmationsToRows({
+      unitType: "THERAPIST_DAILY",
+      currentAmount: (row) => row.totalCommissionAmount,
       client,
       operatingMonthId: parsed.data.operatingMonthId,
       serviceDate: parsed.data.serviceDate,
       operatingMonthStatus: operatingMonth.status,
-      settlements
+      rows: settlements
     }),
     warningCounts,
     excludedCallCount
