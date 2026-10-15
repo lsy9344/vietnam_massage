@@ -52,7 +52,8 @@ describe("ScreenToolbar", () => {
       { href: "/settlements?operatingMonthId=m-2026-10&serviceDate=2026-10-14", label: "Therapist", current: false },
       { href: "/settlements/earcare?operatingMonthId=m-2026-10&attendanceDate=2026-10-14", label: "귀케어", current: true },
       { href: "/settlements/operations?operatingMonthId=m-2026-10&attendanceDate=2026-10-14", label: "운영팀 일일", current: false },
-      { href: "/settlements/operations/monthly?operatingMonthId=m-2026-10", label: "운영팀 월", current: false }
+      { href: "/settlements/operations/monthly?operatingMonthId=m-2026-10", label: "운영팀 월", current: false },
+      { href: "/settlements/schedule", label: "근무표", current: false }
     ]);
   });
 

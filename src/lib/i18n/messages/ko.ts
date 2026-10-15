@@ -28,6 +28,7 @@ export const ko = {
   "shell.tab.rooms": "객실",
   "shell.tab.live": "실시간",
   "shell.tab.tv": "TV 화면",
+  "shell.tab.schedule": "근무표",
   "shell.tab.therapist": "Therapist",
   "shell.tab.earcare": "귀케어",
   "shell.tab.opsDaily": "운영팀 일일",
@@ -163,6 +164,11 @@ export const ko = {
   "operatingMonthStatus.검토중": "검토중",
   "operatingMonthStatus.마감확정": "마감확정",
   "operatingMonthStatus.잠금": "잠금",
+
+  // 근무표 칸 상태(PlannedWorkingDay.planStatus 한국어 key → 라벨). 29의 가능 코스 표시도 재사용한다.
+  "scheduleStatus.근무 예정": "근무 예정",
+  "scheduleStatus.휴무": "휴무",
+  "scheduleStatus.미입력": "미입력",
 
   // /live /rooms /tv 화면
   // 첫화면(실시간 현황)
@@ -431,6 +437,34 @@ export const ko = {
   "settlements.earcare.panel.basis": "풀 분배 근거",
   "settlements.ops.panel.basis": "일일 인센 근거",
   "settlements.opsMonthly.panel.basis": "월 인센 근거",
+
+  // /settlements/schedule 근무표(티켓 27)
+  "settlements.schedule.title": "근무표",
+  "settlements.schedule.error.title": "근무표 조회 실패",
+  "settlements.schedule.error.fallback": "근무표를 조회하지 못했습니다.",
+  "settlements.schedule.empty.title": "근무표 대상 직원이 없습니다",
+  "settlements.schedule.empty.description": "세 직군(운영팀, 귀케어팀, 마사지사)에 활성 직원이 없습니다.",
+  "settlements.schedule.weekRangeAria": "표시 중인 주",
+  "settlements.schedule.nav.previousWeek": "이전주",
+  "settlements.schedule.nav.nextWeek": "다음주",
+  "settlements.schedule.nav.today": "오늘",
+  "settlements.schedule.summary.aria": "근무표 요약",
+  "settlements.schedule.summary.planned": "근무 예정",
+  "settlements.schedule.summary.dayOff": "휴무",
+  "settlements.schedule.summary.unset": "미입력",
+  "settlements.schedule.legend.aria": "근무표 상태 안내",
+  "settlements.schedule.table.title": "직군별 근무표",
+  "settlements.schedule.column.employee": "직원",
+  "settlements.schedule.weekday.mon": "월",
+  "settlements.schedule.weekday.tue": "화",
+  "settlements.schedule.weekday.wed": "수",
+  "settlements.schedule.weekday.thu": "목",
+  "settlements.schedule.weekday.fri": "금",
+  "settlements.schedule.weekday.sat": "토",
+  "settlements.schedule.weekday.sun": "일",
+  "settlements.schedule.panel.note": "근무 예정은 특정 시각까지 근무한다는 보장이 아닙니다. 실제 출퇴근은 각 직군 정산의 직원 패널에서 따로 정정합니다.",
+  "settlements.schedule.cell.statusLabel": "근무 상태",
+  "settlements.schedule.cell.statusAria": "{name}의 {date} 근무 상태",
 
   // 마사지사 일일정산
   "settlements.payment.saveFailed": "지급완료 상태 저장 중 오류가 발생했습니다.",

@@ -53,6 +53,7 @@ model Employee {
   opsAttendances         OpsAttendance[]
   therapistAttendances   TherapistAttendance[]
   therapistDailySettlementPayments TherapistDailySettlementPayment[]
+  plannedWorkingDays     PlannedWorkingDay[]
 
   @@unique([employeeGroup, sortOrder], map: "uq_employees_employee_group_sort_order")
   @@map("employees")
@@ -369,6 +370,22 @@ model TherapistAttendance {
   @@unique([operatingMonthId, attendanceDate, employeeId], map: "uq_therapist_attendances_month_date_employee")
   @@index([employeeId, attendanceDate], map: "idx_therapist_attendances_employee_date")
   @@map("therapist_attendances")
+}
+
+// 근무표: (직원, 날짜) 한 칸의 근무 예정/휴무 계획. 행이 없으면 미입력이다. 운영월과
+// 무관하며(F04), 실제 출퇴근 기록(TherapistAttendance 등)을 만들거나 바꾸지 않는다.
+model PlannedWorkingDay {
+  id         String   @id @default(cuid())
+  employeeId String   @map("employee_id")
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  workDate   DateTime @map("work_date") @db.Date
+  planStatus String   @map("plan_status")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([employeeId, workDate], map: "uq_planned_working_days_employee_date")
+  @@index([workDate], map: "idx_planned_working_days_work_date")
+  @@map("planned_working_days")
 }
 
 model TherapistDailySettlementPayment {

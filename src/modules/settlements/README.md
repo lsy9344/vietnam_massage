@@ -11,6 +11,19 @@ Owns daily settlement calculations.
 - operations-team attendance
 - operations-team daily incentive
 - operations-team monthly incentive preview
+- weekly planned-working-day schedule (F04)
+
+## Schedule Service
+
+`schedule-service.ts` owns the per-employee-per-date planned-working-day calendar (ticket 27), independent of any operating month.
+
+- A cell is `PlannedWorkingDay(employeeId, workDate)` with `planStatus` of `"근무 예정"` or `"휴무"`. No row means `"미입력"`; a missing record is never treated as a day off.
+- `listPlannedWorkingDaysForWeek({ date })` snaps any given date to the Monday-starting week that contains it (date math only; no operating month lookup or clamping) and returns the three employee groups' active employees, each with all 7 days.
+- `listPlannedWorkingDayStatusesForDate({ employeeIds, date })` is the per-employee-per-date lookup ticket 28 (day-off impact) and ticket 29 (planned working day on availability) reuse; it fills in `"미입력"` for any requested employee with no row.
+- `setPlannedWorkingDay()` writes one cell (or deletes it when set back to `"미입력"`) and records a `planned_working_day.created` / `.changed` / `.cleared` audit event (employee, date, previous value, new value, actor) — but only when the status actually changes; a no-op write is not audited.
+- Never touches `TherapistAttendance`, full-attendance recognition, payout, or `ServiceCall` rows. Does not block call/reservation writes.
+- Edits require `payout:write` (administrator, settlement manager); enforced in the `/settlements/schedule` server action, not in this service.
+- Copying last week's values into unset cells and surfacing calls assigned to an employee being marked off are ticket 28's additions on top of this service.
 
 ## Therapist Daily Settlement Service
 

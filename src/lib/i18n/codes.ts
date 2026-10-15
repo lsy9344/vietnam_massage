@@ -104,3 +104,10 @@ export function serviceStatusLabel(locale: Locale, status: string): string {
   if (fromCode !== status) return fromCode;
   return codeLabelFromKoreanLabel(locale, "SERVICE_STATUS", status);
 }
+
+/**
+ * 근무표 칸 상태(근무 예정/휴무/미입력)를 화면 라벨로 번역한다. 근무표(27)와 가능 코스 표시(29)가 함께 쓴다.
+ */
+export function scheduleStatusLabel(locale: Locale, status: "근무 예정" | "휴무" | "미입력"): string {
+  return t(locale, `scheduleStatus.${status}`);
+}
