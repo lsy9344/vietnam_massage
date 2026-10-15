@@ -613,6 +613,29 @@ describe("monthly closing service", () => {
     assert.equal(prismaClient.state.auditLogs[0].afterValue.closeVersion, 1);
   });
 
+  it("reopens a 마감확정 monthly close directly to 검토중 without requiring lock first", async () => {
+    const prismaClient = createPrisma({ status: "마감확정", existingClosing: existingClosing() });
+
+    const result = await reopenMonthlyClose({
+      operatingMonthId: "month-1",
+      actorId: "account-admin",
+      reason: "마감확정 상태에서 바로 재오픈",
+      prismaClient,
+      clock: () => new Date("2026-06-10T06:00:00.000Z")
+    });
+
+    assert.equal(result.status, "검토중");
+    assert.equal(prismaClient.state.operatingMonth.status, "검토중");
+    assert.equal(prismaClient.state.closing.snapshotJson.totals.grandPayoutAmount, 10);
+    assert.equal(prismaClient.state.closing.reopenReason, "마감확정 상태에서 바로 재오픈");
+    assert.equal(prismaClient.state.closing.reopenedByAccountId, "account-admin");
+    assert.equal(prismaClient.state.auditLogs.length, 1);
+    assert.equal(prismaClient.state.auditLogs[0].action, "monthly_close.reopened");
+    assert.equal(prismaClient.state.auditLogs[0].beforeValue.status, "마감확정");
+    assert.equal(prismaClient.state.auditLogs[0].afterValue.status, "검토중");
+    assert.equal(prismaClient.state.auditLogs[0].afterValue.reopenedByAccountId, "account-admin");
+  });
+
   it("blocks reopen when reason is blank or too short without side effects", async () => {
     const prismaClient = createPrisma({ status: "잠금", existingClosing: existingClosing() });
 
@@ -630,8 +653,8 @@ describe("monthly closing service", () => {
     assert.equal(prismaClient.state.auditLogs.length, 0);
   });
 
-  it("blocks reopen unless the operating month is 잠금", async () => {
-    for (const status of ["작성중", "검토중", "마감확정"]) {
+  it("blocks reopen unless the operating month is 마감확정 or 잠금", async () => {
+    for (const status of ["작성중", "검토중"]) {
       const prismaClient = createPrisma({ status, existingClosing: existingClosing() });
 
       await assert.rejects(

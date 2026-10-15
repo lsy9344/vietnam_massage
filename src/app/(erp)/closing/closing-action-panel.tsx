@@ -246,7 +246,7 @@ export function ClosingActionPanel({
           ) : null}
         </div>
       </div>
-      {status === "잠금" ? (
+      {status === "잠금" || status === "마감확정" ? (
         <form action={reopenAction} className="mt-4 grid gap-2 border-t border-border pt-4">
           <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
           <div className="grid gap-1">

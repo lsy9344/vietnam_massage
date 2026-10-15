@@ -749,7 +749,7 @@ export const vi: Messages = {
   "closing.reopen.label": "Lý do mở lại",
   "closing.reopen.placeholder": "Hãy nhập lý do mở lại.",
   "closing.reopen.adminOnly": "Chỉ quản trị viên mới có thể mở lại.",
-  "closing.reopen.help": "Mở lại chỉ khả dụng ở trạng thái đã khóa và lý do được ghi vào nhật ký kiểm tra.",
+  "closing.reopen.help": "Mở lại khả dụng ở trạng thái đã chốt hoặc đã khóa và lý do được ghi vào nhật ký kiểm tra.",
 
   // /dashboard 화면
   // 공통 (대시보드 3개 화면 공유)
