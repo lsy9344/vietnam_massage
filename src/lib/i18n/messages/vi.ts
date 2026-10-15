@@ -252,6 +252,20 @@ export const vi: Messages = {
   "calls.detail.notFound": "Không tìm thấy cuộc gọi này trong sổ ngày này.",
   "calls.detail.rowAria": "Mở chi tiết cuộc gọi lúc {time}",
 
+  // 콜 상세 패널: 고객 연결 정정(F06, ADR 0003)
+  "calls.detail.customerLink.title": "Chỉnh sửa liên kết khách",
+  "calls.detail.customerLink.current": "Đang liên kết",
+  "calls.detail.customerLink.unlinked": "Chưa liên kết khách nào",
+  "calls.detail.customerLink.goToCustomerScreen": "Đi đến màn hình khách",
+  "calls.detail.customerLink.searchLabel": "Tìm khách để liên kết lại",
+  "calls.detail.customerLink.pendingSelected": "Sẽ đổi sang: {customer}",
+  "calls.detail.customerLink.pendingUnlinked": "Sẽ đổi thành: hủy liên kết",
+  "calls.detail.customerLink.unlinkAction": "Đổi thành hủy liên kết",
+  "calls.detail.customerLink.reasonLabel": "Lý do chỉnh sửa",
+  "calls.detail.customerLink.submit": "Chỉnh sửa liên kết khách",
+  "calls.detail.customerLink.success": "Đã chỉnh sửa liên kết khách.",
+  "calls.detail.customerLink.locked": "Tháng vận hành đã chốt hoặc đã khóa. Quản trị viên phải mở lại mới chỉnh sửa được liên kết khách.",
+
   // 콜 그리드 placeholder/empty 라벨
   "calls.actualEntry.helper": "Giờ đặt giữ nguyên.",
   "calls.actualEntry.displayEnd": "Giờ kết thúc hiển thị {time}",

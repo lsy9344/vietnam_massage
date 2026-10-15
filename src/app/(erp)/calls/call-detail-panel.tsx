@@ -1,12 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { DetailRow } from "@/components/ui/detail-row";
 import { SidePanel } from "@/components/ui/panel";
 import { WarningList } from "@/components/ui/warning-summary";
 import { PanelSection } from "@/app/(erp)/settlements/settlement-parts";
 import { useT } from "@/lib/i18n/client";
-import type { ServiceCallFormOptions, ServiceCallRowDto } from "@/modules/calls/service-call-service";
+import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 import { callWarningLabel } from "@/app/(erp)/calls/call-warning-label";
+import { CallCustomerLinkCorrection } from "@/app/(erp)/calls/call-customer-link-correction";
 
 function relatedCallIds(row: ServiceCallRowDto) {
   const ids: string[] = [];
@@ -24,12 +26,16 @@ function relatedCallIds(row: ServiceCallRowDto) {
  * `row`가 null이면 주소의 콜 id가 이 날짜 원장에 없는 것이다.
  */
 export function CallDetailPanel({
+  customers,
+  isLocked,
   row,
   rows,
   options,
   onClose,
   onSelectCall
 }: {
+  customers: CustomerDto[];
+  isLocked: boolean;
   row: ServiceCallRowDto | null;
   rows: ServiceCallRowDto[];
   options: ServiceCallFormOptions;
@@ -37,8 +43,15 @@ export function CallDetailPanel({
   onSelectCall: (callId: string) => void;
 }) {
   const t = useT();
+  // 고객 연결 정정이나 "최신 내용으로 다시 불러오기"는 원장이 서버에서 다시 받아오는 rows prop과
+  // 별개로 패널에만 바로 반영한다. 다른 콜을 고르면(주소의 콜 id가 바뀌면) 지운다.
+  const [override, setOverride] = useState<ServiceCallRowDto | null>(null);
+  useEffect(() => {
+    setOverride(null);
+  }, [row?.id]);
+  const current = override ?? row;
 
-  if (!row) {
+  if (!current) {
     return (
       <SidePanel onClose={onClose} title={t("calls.detail.fallbackTitle")}>
         <p className="text-sm text-muted" role="status">
@@ -49,34 +62,44 @@ export function CallDetailPanel({
   }
 
   const statusLabel = (value: string) => options.statuses.find((option) => option.value === value)?.label ?? value;
-  const related = relatedCallIds(row)
+  const related = relatedCallIds(current)
     .map((id) => rows.find((candidate) => candidate.id === id))
     .filter((candidate): candidate is ServiceCallRowDto => Boolean(candidate));
-  const title = row.customerMemo
-    ? t("calls.detail.titleWithMemo", { time: row.startTime, memo: row.customerMemo })
-    : t("calls.detail.title", { time: row.startTime });
+  const title = current.customerMemo
+    ? t("calls.detail.titleWithMemo", { time: current.startTime, memo: current.customerMemo })
+    : t("calls.detail.title", { time: current.startTime });
 
   return (
     <SidePanel onClose={onClose} title={title}>
       <div className="grid gap-6">
         <PanelSection title={t("calls.detail.warnings")}>
-          {row.warnings.length === 0 ? (
+          {current.warnings.length === 0 ? (
             <p className="text-sm text-muted">{t("calls.detail.noWarnings")}</p>
           ) : (
-            <WarningList label={t("calls.detail.warnings")} warnings={row.warnings.map((warning) => callWarningLabel(t, warning))} />
+            <WarningList label={t("calls.detail.warnings")} warnings={current.warnings.map((warning) => callWarningLabel(t, warning))} />
           )}
         </PanelSection>
 
         <dl>
-          <DetailRow label={t("calls.column.time")} value={row.startTime} />
-          <DetailRow label={t("calls.column.actualEntry")} value={row.actualEntryTime ?? "-"} />
-          <DetailRow label={t("calls.detail.displayEnd")} value={row.displayEnd} />
-          <DetailRow label={t("calls.column.room")} value={row.roomLabel} />
-          <DetailRow label={t("calls.column.course")} value={row.courseLabel} />
-          <DetailRow label={t("calls.column.therapist1")} value={row.therapist1?.displayName ?? "-"} />
-          <DetailRow label={t("calls.column.therapist2")} value={row.therapist2?.displayName ?? "-"} />
-          <DetailRow label={t("calls.column.reservationStatus")} value={statusLabel(row.status)} />
+          <DetailRow label={t("calls.column.time")} value={current.startTime} />
+          <DetailRow label={t("calls.column.actualEntry")} value={current.actualEntryTime ?? "-"} />
+          <DetailRow label={t("calls.detail.displayEnd")} value={current.displayEnd} />
+          <DetailRow label={t("calls.column.room")} value={current.roomLabel} />
+          <DetailRow label={t("calls.column.course")} value={current.courseLabel} />
+          <DetailRow label={t("calls.column.therapist1")} value={current.therapist1?.displayName ?? "-"} />
+          <DetailRow label={t("calls.column.therapist2")} value={current.therapist2?.displayName ?? "-"} />
+          <DetailRow label={t("calls.column.reservationStatus")} value={statusLabel(current.status)} />
         </dl>
+
+        <PanelSection title={t("calls.detail.customerLink.title")}>
+          <CallCustomerLinkCorrection
+            customers={customers}
+            isLocked={isLocked}
+            key={current.id}
+            onCorrected={setOverride}
+            row={current}
+          />
+        </PanelSection>
 
         <PanelSection title={t("calls.detail.related")}>
           {related.length === 0 ? (

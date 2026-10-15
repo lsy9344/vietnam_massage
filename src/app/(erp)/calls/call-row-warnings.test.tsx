@@ -153,7 +153,7 @@ describe("call detail panel", () => {
   function renderPanel(locale: "ko" | "vi", row: ServiceCallRowDto | null, rows: ServiceCallRowDto[]) {
     return render(
       locale,
-      createElement(CallDetailPanel, { onClose: () => {}, onSelectCall: () => {}, options, row, rows })
+      createElement(CallDetailPanel, { customers: [], isLocked: false, onClose: () => {}, onSelectCall: () => {}, options, row, rows })
     );
   }
 

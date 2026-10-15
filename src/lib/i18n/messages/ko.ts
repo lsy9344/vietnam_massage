@@ -252,6 +252,20 @@ export const ko = {
   "calls.detail.notFound": "이 날짜의 원장에서 그 콜을 찾을 수 없습니다.",
   "calls.detail.rowAria": "{time} 콜 상세 열기",
 
+  // 콜 상세 패널: 고객 연결 정정(F06, ADR 0003)
+  "calls.detail.customerLink.title": "고객 연결 정정",
+  "calls.detail.customerLink.current": "지금 연결",
+  "calls.detail.customerLink.unlinked": "연결된 고객 없음",
+  "calls.detail.customerLink.goToCustomerScreen": "고객 화면으로 이동",
+  "calls.detail.customerLink.searchLabel": "새로 연결할 고객 검색",
+  "calls.detail.customerLink.pendingSelected": "바꿀 고객: {customer}",
+  "calls.detail.customerLink.pendingUnlinked": "바꿀 값: 연결 해제",
+  "calls.detail.customerLink.unlinkAction": "연결 해제로 바꾸기",
+  "calls.detail.customerLink.reasonLabel": "정정 사유",
+  "calls.detail.customerLink.submit": "고객 연결 정정",
+  "calls.detail.customerLink.success": "고객 연결을 정정했습니다.",
+  "calls.detail.customerLink.locked": "마감확정 또는 잠금 운영월입니다. 관리자가 재오픈해야 고객 연결을 정정할 수 있습니다.",
+
   // 콜 그리드 placeholder/empty 라벨
   "calls.actualEntry.helper": "예약시각은 그대로입니다.",
   "calls.actualEntry.displayEnd": "표시 종료 {time}",

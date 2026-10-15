@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   autosaveServiceCallRow,
   calculationWarningCallsFromRows,
+  correctServiceCallCustomerLink,
   createCustomer,
   createDailyExpense,
   createServiceCallRow,
@@ -5169,5 +5170,233 @@ describe("new row request id", () => {
     assert.deepEqual(results[0].row, results[1].row);
     assert.deepEqual((await callsOnDate(prismaClient)).map((row) => row.id), [results[0].row.id]);
     assert.equal(prismaClient.auditEvents.length - auditsBefore, 1);
+  });
+});
+
+describe("customer link correction", () => {
+  function reservedCall(prismaClient: ReturnType<typeof createMemoryPrisma>, overrides: Partial<Parameters<typeof saveBasicServiceCallRow>[0]> = {}) {
+    return saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      customerMemo: "원장 표기",
+      status: "예약",
+      prismaClient,
+      ...overrides
+    });
+  }
+
+  it("rejects without a reason and writes nothing", async () => {
+    const prismaClient = createMemoryPrisma();
+    const customer = await createCustomer({ name: "민아", phone: "090111", memo: null, actorId: "counter-account", prismaClient });
+    const call = await reservedCall(prismaClient);
+    const auditCountBefore = prismaClient.auditEvents.length;
+
+    await assert.rejects(
+      () =>
+        correctServiceCallCustomerLink({
+          serviceCallId: call.id,
+          customerId: customer.id,
+          reason: "   ",
+          expectedUpdatedAt: call.updatedAt,
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "SERVICE_CALL_CUSTOMER_LINK_REASON_REQUIRED"
+    );
+    assert.equal(prismaClient.serviceCalls.get(call.id).customerId, null);
+    assert.equal(prismaClient.auditEvents.length, auditCountBefore);
+  });
+
+  it("corrects the link, records previous customer, new customer, reason and actor in the audit log, and leaves the call memo untouched", async () => {
+    const prismaClient = createMemoryPrisma();
+    const wrong = await createCustomer({ name: "민아", phone: "090111", memo: null, actorId: "counter-account", prismaClient });
+    const right = await createCustomer({ name: "수진", phone: "090222", memo: null, actorId: "counter-account", prismaClient });
+    const call = await reservedCall(prismaClient, { customerId: wrong.id, actorId: "counter-account" });
+    const auditCountBefore = prismaClient.auditEvents.length;
+
+    const corrected = await correctServiceCallCustomerLink({
+      serviceCallId: call.id,
+      customerId: right.id,
+      reason: "다른 손님 전화번호로 잘못 연결됨",
+      expectedUpdatedAt: call.updatedAt,
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(corrected.customerId, right.id);
+    assert.equal(corrected.customerMemo, "원장 표기");
+    assert.notEqual(corrected.updatedAt, call.updatedAt);
+
+    assert.equal(prismaClient.auditEvents.length, auditCountBefore + 1);
+    const event = prismaClient.auditEvents.at(-1);
+    assert.equal(event.action, "service_call.customer_link_corrected");
+    assert.equal(event.targetType, "service_call");
+    assert.equal(event.targetId, call.id);
+    assert.equal(event.actorId, "counter-account");
+    assert.equal(event.reason, "다른 손님 전화번호로 잘못 연결됨");
+    assert.equal(event.beforeValue.customerId, wrong.id);
+    assert.equal(event.afterValue.customerId, right.id);
+    assert.equal(prismaClient.serviceCalls.get(call.id).customerMemo, "원장 표기");
+  });
+
+  it("unlinks the customer when given null and still records the correction", async () => {
+    const prismaClient = createMemoryPrisma();
+    const linked = await createCustomer({ name: "민아", phone: "090111", memo: null, actorId: "counter-account", prismaClient });
+    const call = await reservedCall(prismaClient, { customerId: linked.id, actorId: "counter-account" });
+
+    const corrected = await correctServiceCallCustomerLink({
+      serviceCallId: call.id,
+      customerId: null,
+      reason: "다른 손님과 혼동됨",
+      expectedUpdatedAt: call.updatedAt,
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(corrected.customerId, null);
+    assert.equal(corrected.customerMemo, "원장 표기");
+    const event = prismaClient.auditEvents.at(-1);
+    assert.equal(event.beforeValue.customerId, linked.id);
+    assert.equal(event.afterValue.customerId, null);
+  });
+
+  it("rejects a call in a locked operating month, even with a reason and the right version, and does not write or audit", async () => {
+    const prismaClient = createMemoryPrisma();
+    const customer = await createCustomer({ name: "민아", phone: "090111", memo: null, actorId: "counter-account", prismaClient });
+    const lockedCall = await prismaClient.serviceCall.create({
+      data: {
+        operatingMonthId: "month-locked",
+        serviceDate: dbDate("2026-07-05"),
+        startTime: "11:00",
+        roomId: "room-101",
+        courseId: "course-a",
+        customerId: null,
+        customerMemo: "잠긴 달 콜",
+        status: "예약",
+        discountTypeCode: null,
+        paymentMethodCode: null,
+        note: null,
+        confirmationCode: null
+      }
+    });
+    const auditCountBefore = prismaClient.auditEvents.length;
+
+    await assert.rejects(
+      () =>
+        correctServiceCallCustomerLink({
+          serviceCallId: lockedCall.id,
+          customerId: customer.id,
+          reason: "정정 사유",
+          expectedUpdatedAt: lockedCall.updatedAt.toISOString(),
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
+    assert.equal(prismaClient.serviceCalls.get(lockedCall.id).customerId, null);
+    assert.equal(prismaClient.auditEvents.length, auditCountBefore);
+  });
+
+  it("allows the correction once an administrator reopens the operating month", async () => {
+    const prismaClient = createMemoryPrisma();
+    const customer = await createCustomer({ name: "민아", phone: "090111", memo: null, actorId: "counter-account", prismaClient });
+    const reopenedCall = await saveBasicServiceCallRow({
+      operatingMonthId: "month-reopened",
+      serviceDate: "2026-09-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "예약",
+      prismaClient
+    });
+
+    const corrected = await correctServiceCallCustomerLink({
+      serviceCallId: reopenedCall.id,
+      customerId: customer.id,
+      reason: "재오픈 후 정정",
+      expectedUpdatedAt: reopenedCall.updatedAt,
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(corrected.customerId, customer.id);
+  });
+
+  it("gives STALE_CALL with the current row and no write or audit when another screen saved the call first", async () => {
+    const prismaClient = createMemoryPrisma();
+    const customer = await createCustomer({ name: "민아", phone: "090111", memo: null, actorId: "counter-account", prismaClient });
+    const call = await reservedCall(prismaClient);
+    const laterSave = await saveBasicServiceCallRow({
+      serviceCallId: call.id,
+      expectedUpdatedAt: call.updatedAt,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      customerMemo: "다른 화면이 먼저 저장",
+      status: "예약",
+      prismaClient
+    });
+    const auditCountBefore = prismaClient.auditEvents.length;
+
+    await assert.rejects(
+      () =>
+        correctServiceCallCustomerLink({
+          serviceCallId: call.id,
+          customerId: customer.id,
+          reason: "오래된 화면에서 정정",
+          expectedUpdatedAt: call.updatedAt,
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error: unknown) =>
+        error instanceof ServiceCallDomainError &&
+        error.code === "STALE_CALL" &&
+        (error as unknown as { currentRow: ServiceCallRowDto }).currentRow.updatedAt === laterSave.updatedAt
+    );
+    assert.equal(prismaClient.serviceCalls.get(call.id).customerId, null);
+    assert.equal(prismaClient.serviceCalls.get(call.id).customerMemo, "다른 화면이 먼저 저장");
+    assert.equal(prismaClient.auditEvents.length, auditCountBefore);
+  });
+
+  it("rejects without an actor and keeps the link unchanged", async () => {
+    const prismaClient = createMemoryPrisma();
+    const customer = await createCustomer({ name: "민아", phone: "090111", memo: null, actorId: "counter-account", prismaClient });
+    const call = await reservedCall(prismaClient);
+
+    await assert.rejects(
+      () =>
+        correctServiceCallCustomerLink({
+          serviceCallId: call.id,
+          customerId: customer.id,
+          reason: "사유",
+          expectedUpdatedAt: call.updatedAt,
+          prismaClient
+        }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "ACTOR_REQUIRED"
+    );
+    assert.equal(prismaClient.serviceCalls.get(call.id).customerId, null);
+  });
+
+  it("rejects a customer id that does not exist", async () => {
+    const prismaClient = createMemoryPrisma();
+    const call = await reservedCall(prismaClient);
+
+    await assert.rejects(
+      () =>
+        correctServiceCallCustomerLink({
+          serviceCallId: call.id,
+          customerId: "missing-customer",
+          reason: "사유",
+          expectedUpdatedAt: call.updatedAt,
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "CUSTOMER_NOT_FOUND"
+    );
   });
 });
