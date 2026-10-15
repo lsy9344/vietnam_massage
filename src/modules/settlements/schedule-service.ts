@@ -1,0 +1,343 @@
+import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import { recordAuditEvent } from "@/modules/audit/audit-service";
+import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
+import { employeeGroups, type EmployeeGroup } from "@/modules/masters/employee-schema";
+
+/**
+ * 근무표 서비스: (직원, 날짜) 한 칸의 근무 예정/휴무 계획.
+ *
+ * - 행이 없으면 미입력이다. 미입력을 휴무로 취급하지 않는다(F04).
+ * - 운영월과 무관하다. 운영월 잠금 검사를 하지 않고, 운영월 경계를 넘는 주도 날짜 기준으로 그대로 읽고 쓴다.
+ * - 출퇴근 기록, 만근, 수당을 만들거나 바꾸지 않으며 예약 저장을 막지 않는다.
+ * - 지난주 복사와 휴무 영향 콜(배정된 콜 목록)은 티켓 28이 이 서비스 위에 더한다.
+ */
+
+export const workPlanStatuses = ["근무 예정", "휴무"] as const;
+export type WorkPlanStatus = (typeof workPlanStatuses)[number];
+
+const unsetPlanStatus = "미입력" as const;
+export type PlannedWorkingDayCellStatus = WorkPlanStatus | typeof unsetPlanStatus;
+const plannedWorkingDayCellStatuses = [...workPlanStatuses, unsetPlanStatus] as [
+  PlannedWorkingDayCellStatus,
+  ...PlannedWorkingDayCellStatus[]
+];
+
+type EmployeeRecord = {
+  id: string;
+  displayName: string;
+  staffCode: string;
+  employeeGroup: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+type PlannedWorkingDayRecord = {
+  id: string;
+  employeeId: string;
+  workDate: Date;
+  planStatus: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type ScheduleServicePrismaClient = {
+  employee: {
+    findMany(args?: unknown): Promise<EmployeeRecord[]>;
+    findUnique(args: unknown): Promise<EmployeeRecord | null>;
+  };
+  plannedWorkingDay: {
+    findMany(args?: unknown): Promise<PlannedWorkingDayRecord[]>;
+    findUnique(args: unknown): Promise<PlannedWorkingDayRecord | null>;
+    upsert(args: unknown): Promise<PlannedWorkingDayRecord>;
+    delete(args: unknown): Promise<PlannedWorkingDayRecord>;
+  };
+  auditLog: {
+    create(args: unknown): Promise<unknown>;
+  };
+  $transaction<T>(callback: (tx: ScheduleServicePrismaClient) => Promise<T>): Promise<T>;
+};
+
+export type PlannedWorkingDayCellDto = {
+  date: string;
+  status: PlannedWorkingDayCellStatus;
+};
+
+export type PlannedWorkingDayEmployeeRowDto = {
+  employeeId: string;
+  staffCode: string;
+  displayName: string;
+  employeeGroup: EmployeeGroup;
+  sortOrder: number;
+  days: PlannedWorkingDayCellDto[];
+};
+
+export type PlannedWorkingDayGroupDto = {
+  employeeGroup: EmployeeGroup;
+  employees: PlannedWorkingDayEmployeeRowDto[];
+};
+
+export type PlannedWorkingDayWeekDto = {
+  weekStartDate: string;
+  weekEndDate: string;
+  dates: string[];
+  groups: PlannedWorkingDayGroupDto[];
+};
+
+export type PlannedWorkingDayStatusDto = {
+  employeeId: string;
+  status: PlannedWorkingDayCellStatus;
+};
+
+export type PlannedWorkingDayCellResultDto = {
+  employeeId: string;
+  date: string;
+  status: PlannedWorkingDayCellStatus;
+};
+
+export type ScheduleErrorField = "employeeId" | "date" | "status";
+
+export class ScheduleDomainError extends Error {
+  constructor(message: string, public readonly code: string, public readonly field?: ScheduleErrorField) {
+    super(message);
+    this.name = "ScheduleDomainError";
+  }
+}
+
+const isoDateFieldSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "날짜는 YYYY-MM-DD 형식이어야 합니다.");
+
+const weekQuerySchema = z.object({
+  date: isoDateFieldSchema
+});
+
+const statusQuerySchema = z.object({
+  employeeIds: z.array(z.string().trim().min(1)).max(500),
+  date: isoDateFieldSchema
+});
+
+const setCellSchema = z.object({
+  employeeId: z.string().trim().min(1, "직원을 선택하세요."),
+  date: isoDateFieldSchema,
+  status: z.enum(plannedWorkingDayCellStatuses, { error: "근무 상태가 올바르지 않습니다." }),
+  actorId: z.string().trim().min(1, "행위자 계정이 필요합니다.")
+});
+
+function getClient(client?: ScheduleServicePrismaClient) {
+  return client ?? (prisma as unknown as ScheduleServicePrismaClient);
+}
+
+function toDate(value: string) {
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+function toIsoDate(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function addDays(value: string, days: number) {
+  const [year, month, day] = value.split("-").map(Number);
+  return toIsoDate(new Date(Date.UTC(year, month - 1, day + days)));
+}
+
+// 월요일 시작 주. 자바스크립트 getUTCDay()는 0=일 ~ 6=토이므로, 일요일만 -6, 나머지는 1 - day.
+function mondayOfWeekContaining(value: string) {
+  const day = toDate(value).getUTCDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  return addDays(value, diffToMonday);
+}
+
+function isEmployeeGroup(value: string): value is EmployeeGroup {
+  return (employeeGroups as readonly string[]).includes(value);
+}
+
+const errorFields: readonly ScheduleErrorField[] = ["employeeId", "date", "status"];
+
+function asErrorField(path: PropertyKey | undefined): ScheduleErrorField | undefined {
+  return errorFields.find((field) => field === path);
+}
+
+function invalidInput(message: string, field?: ScheduleErrorField) {
+  return new ScheduleDomainError(message, "INVALID_SCHEDULE_INPUT", field);
+}
+
+function toFieldError(error: z.ZodError) {
+  const issue = error.issues[0];
+  return invalidInput(issue?.message ?? "입력값을 확인하세요.", asErrorField(issue?.path[0]));
+}
+
+function assertValidParsedDate(value: string) {
+  if (toIsoDate(toDate(value)) !== value) {
+    throw invalidInput("날짜가 올바르지 않습니다.", "date");
+  }
+}
+
+async function loadActiveScheduleEmployee(client: ScheduleServicePrismaClient, employeeId: string) {
+  const employee = await client.employee.findUnique({ where: { id: employeeId } });
+  if (!employee || !employee.isActive || !isEmployeeGroup(employee.employeeGroup)) {
+    throw new ScheduleDomainError("활성 직원을 찾을 수 없습니다.", "SCHEDULE_EMPLOYEE_NOT_FOUND", "employeeId");
+  }
+  return employee;
+}
+
+async function findCell(client: ScheduleServicePrismaClient, employeeId: string, date: string) {
+  return client.plannedWorkingDay.findUnique({
+    where: { employeeId_workDate: { employeeId, workDate: toDate(date) } }
+  });
+}
+
+function cellSnapshot(employeeId: string, date: string, status: PlannedWorkingDayCellStatus): AuditJsonSnapshot {
+  return { employeeId, date, status };
+}
+
+/** 월요일 시작 7일(해당 날짜가 속한 주)의 근무표를 직군별로 묶어 반환한다. */
+export async function listPlannedWorkingDaysForWeek(input: {
+  date: string;
+  prismaClient?: ScheduleServicePrismaClient;
+}): Promise<PlannedWorkingDayWeekDto> {
+  const parsed = weekQuerySchema.safeParse(input);
+  if (!parsed.success) throw toFieldError(parsed.error);
+  assertValidParsedDate(parsed.data.date);
+
+  const weekStartDate = mondayOfWeekContaining(parsed.data.date);
+  const dates = Array.from({ length: 7 }, (_, index) => addDays(weekStartDate, index));
+  const weekEndDate = dates[6];
+
+  const client = getClient(input.prismaClient);
+  const [employees, rows] = await Promise.all([
+    client.employee.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { staffCode: "asc" }, { id: "asc" }]
+    }),
+    client.plannedWorkingDay.findMany({
+      where: { workDate: { gte: toDate(weekStartDate), lte: toDate(weekEndDate) } }
+    })
+  ]);
+
+  const employeesByGroup = new Map<EmployeeGroup, EmployeeRecord[]>(employeeGroups.map((group) => [group, []]));
+  for (const employee of employees) {
+    if (!isEmployeeGroup(employee.employeeGroup)) continue;
+    employeesByGroup.get(employee.employeeGroup)?.push(employee);
+  }
+
+  const statusByKey = new Map<string, WorkPlanStatus>();
+  for (const row of rows) {
+    statusByKey.set(`${row.employeeId}::${toIsoDate(row.workDate)}`, row.planStatus as WorkPlanStatus);
+  }
+
+  const groups: PlannedWorkingDayGroupDto[] = employeeGroups.map((employeeGroup) => ({
+    employeeGroup,
+    employees: (employeesByGroup.get(employeeGroup) ?? []).map((employee) => ({
+      employeeId: employee.id,
+      staffCode: employee.staffCode,
+      displayName: employee.displayName,
+      employeeGroup,
+      sortOrder: employee.sortOrder,
+      days: dates.map((date) => ({
+        date,
+        status: statusByKey.get(`${employee.id}::${date}`) ?? unsetPlanStatus
+      }))
+    }))
+  }));
+
+  return { weekStartDate, weekEndDate, dates, groups };
+}
+
+/**
+ * 직원 목록과 날짜 하나의 근무표 상태를 돌려준다. 가능 코스(29)와 휴무 영향 콜(28)이
+ * 재사용하는 직원별·날짜별 조회다. 행이 없는 직원은 미입력으로 채운다.
+ */
+export async function listPlannedWorkingDayStatusesForDate(input: {
+  employeeIds: string[];
+  date: string;
+  prismaClient?: ScheduleServicePrismaClient;
+}): Promise<PlannedWorkingDayStatusDto[]> {
+  const parsed = statusQuerySchema.safeParse(input);
+  if (!parsed.success) throw toFieldError(parsed.error);
+  assertValidParsedDate(parsed.data.date);
+
+  const uniqueEmployeeIds = [...new Set(parsed.data.employeeIds)];
+  if (uniqueEmployeeIds.length === 0) return [];
+
+  const client = getClient(input.prismaClient);
+  const rows = await client.plannedWorkingDay.findMany({
+    where: { employeeId: { in: uniqueEmployeeIds }, workDate: toDate(parsed.data.date) }
+  });
+  const statusByEmployeeId = new Map(rows.map((row) => [row.employeeId, row.planStatus as WorkPlanStatus]));
+
+  return uniqueEmployeeIds.map((employeeId) => ({
+    employeeId,
+    status: statusByEmployeeId.get(employeeId) ?? unsetPlanStatus
+  }));
+}
+
+/**
+ * 칸 하나를 근무 예정·휴무·미입력으로 설정한다. 미입력으로 설정하면 기존 행을 지운다.
+ * 실제로 값이 바뀔 때만 감사 기록(직원, 날짜, 이전 값, 새 값, 처리자)을 남긴다.
+ */
+export async function setPlannedWorkingDay(input: {
+  employeeId: string;
+  date: string;
+  status: PlannedWorkingDayCellStatus;
+  actorId: string;
+  prismaClient?: ScheduleServicePrismaClient;
+}): Promise<PlannedWorkingDayCellResultDto> {
+  const parsed = setCellSchema.safeParse(input);
+  if (!parsed.success) throw toFieldError(parsed.error);
+  assertValidParsedDate(parsed.data.date);
+
+  const client = getClient(input.prismaClient);
+  await loadActiveScheduleEmployee(client, parsed.data.employeeId);
+
+  return client.$transaction(async (tx) => {
+    // 트랜잭션 안에서 다시 확인한다: 바깥 조회와 트랜잭션 사이에 직원이 비활성화됐을 수 있다.
+    await loadActiveScheduleEmployee(tx, parsed.data.employeeId);
+    const existing = await findCell(tx, parsed.data.employeeId, parsed.data.date);
+    const previousStatus: PlannedWorkingDayCellStatus = existing ? (existing.planStatus as WorkPlanStatus) : unsetPlanStatus;
+
+    if (previousStatus === parsed.data.status) {
+      return { employeeId: parsed.data.employeeId, date: parsed.data.date, status: previousStatus };
+    }
+
+    if (parsed.data.status === unsetPlanStatus) {
+      // previousStatus !== status이고 status가 미입력이면 existing은 반드시 있다.
+      const removed = existing as PlannedWorkingDayRecord;
+      await tx.plannedWorkingDay.delete({
+        where: { employeeId_workDate: { employeeId: parsed.data.employeeId, workDate: toDate(parsed.data.date) } }
+      });
+
+      await recordAuditEvent(
+        {
+          actorId: parsed.data.actorId,
+          action: "planned_working_day.cleared",
+          targetType: "planned_working_day",
+          targetId: removed.id,
+          beforeValue: cellSnapshot(parsed.data.employeeId, parsed.data.date, previousStatus),
+          afterValue: cellSnapshot(parsed.data.employeeId, parsed.data.date, unsetPlanStatus)
+        },
+        { prismaClient: tx as any }
+      );
+
+      return { employeeId: parsed.data.employeeId, date: parsed.data.date, status: unsetPlanStatus };
+    }
+
+    const after = await tx.plannedWorkingDay.upsert({
+      where: { employeeId_workDate: { employeeId: parsed.data.employeeId, workDate: toDate(parsed.data.date) } },
+      create: { employeeId: parsed.data.employeeId, workDate: toDate(parsed.data.date), planStatus: parsed.data.status },
+      update: { planStatus: parsed.data.status }
+    });
+
+    await recordAuditEvent(
+      {
+        actorId: parsed.data.actorId,
+        action: existing ? "planned_working_day.changed" : "planned_working_day.created",
+        targetType: "planned_working_day",
+        targetId: after.id,
+        beforeValue: cellSnapshot(parsed.data.employeeId, parsed.data.date, previousStatus),
+        afterValue: cellSnapshot(parsed.data.employeeId, parsed.data.date, parsed.data.status)
+      },
+      { prismaClient: tx as any }
+    );
+
+    return { employeeId: parsed.data.employeeId, date: parsed.data.date, status: parsed.data.status };
+  });
+}
