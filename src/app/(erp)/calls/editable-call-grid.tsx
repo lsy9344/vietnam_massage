@@ -33,10 +33,12 @@ import {
 } from "@/app/(erp)/calls/call-row-save";
 import {
   initialNewCallRowSave,
+  isNewRowSaveHeld,
   isNewRowSaveLocked,
   newCallRowSaveReducer,
   type NewCallRowDraft
 } from "@/app/(erp)/calls/call-new-row-save";
+import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
 import { CallRowSaveStatus, NewCallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
 import { CallPhoneCardList } from "@/app/(erp)/calls/call-phone-card-list";
 import { ledgerCallAnchorId, type LedgerView } from "@/app/(erp)/calls/ledger-address";
@@ -758,6 +760,8 @@ function AddRowForm({
     initialNewCallRowSave(ledger, newRequestId())
   );
   const { draft, fieldErrors } = save;
+  // 저장 실패나 저장 여부 확인 중은 떠나기 전 안내 대상이다(스펙 B07, 티켓 18).
+  useUnsavedGuard(isNewRowSaveHeld(save.status));
   const [, startTransition] = useTransition();
   const request = save.inFlight;
   const disabled = isLocked || isNewRowSaveLocked(save.status);
@@ -1237,6 +1241,8 @@ function EditableCallRow({
   // 다른 행을 저장하면 이 행의 경고도 바뀐다. 저장 뒤 서버가 다시 준 행(row)이 이 행의 저장 결과보다 새로우면 그 경고를 쓴다.
   const freshestRow = row.savedAt >= serverRow.savedAt ? row : serverRow;
   const saveHeld = isSaveHeld(saveStatus);
+  // 저장 실패나 충돌 확인 필요는 떠나기 전 안내 대상이다(스펙 B07, 티켓 18).
+  useUnsavedGuard(saveHeld);
   const [, startTransition] = useTransition();
   const request = save.inFlight;
   // 키보드 이동 순서는 보이는 열의 순서를 따른다(명세 F02 기준, 티켓 19). 보기가 바뀌면 다시 계산한다.

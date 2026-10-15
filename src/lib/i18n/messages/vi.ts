@@ -350,10 +350,7 @@ export const vi: Messages = {
   "calls.quickBooking.previous": "Trước",
   "calls.quickBooking.next": "Tiếp",
   "calls.quickBooking.save": "Lưu đặt lịch",
-  "calls.quickBooking.leaveGuard.title": "Có giá trị chưa lưu",
-  "calls.quickBooking.leaveGuard.description": "Nếu đóng bây giờ, giá trị đã nhập sẽ mất. Vẫn đóng chứ?",
-  "calls.quickBooking.leaveGuard.confirm": "Đóng",
-  "calls.quickBooking.leaveGuard.cancel": "Hủy",
+  // 패널을 저장 없이 닫을 때의 안내는 calls.leaveGuard.*(티켓 18)를 그대로 쓴다.
 
   // 콜 행 저장 상태
   "calls.save.saved": "Đã lưu",
@@ -362,6 +359,11 @@ export const vi: Messages = {
   "calls.save.autosaveFailed": "Tự động lưu dòng cuộc gọi thất bại.",
   "calls.save.alreadySaved": "Cuộc gọi này đã được lưu trước đó.",
   "calls.save.checkingHint": "Không nhận được phản hồi. Thử lại sẽ gửi cùng một yêu cầu nên cuộc gọi không bị tạo hai lần.",
+
+  // 떠나기 전 안내(스펙 B07, 티켓 18)
+  "calls.leaveGuard.title": "Bạn có nội dung chưa lưu",
+  "calls.leaveGuard.description": "Nếu rời đi ngay bây giờ, nội dung chưa lưu sẽ bị mất. Bạn có muốn tiếp tục không?",
+  "calls.leaveGuard.confirm": "Rời đi",
 
   // 콜 계산 상태
   "calls.calc.errorPending": "Tạm hoãn lưu, chờ tính toán",

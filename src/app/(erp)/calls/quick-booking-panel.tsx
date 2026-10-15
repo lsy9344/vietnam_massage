@@ -23,6 +23,7 @@ import {
 } from "@/app/(erp)/calls/quick-booking-draft";
 import { selectNowSlot } from "@/app/(erp)/calls/quick-booking-now-slot";
 import { TherapistAvailabilityView, type AvailabilityCourseChoice } from "@/app/(erp)/calls/therapist-availability-view";
+import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { Locale } from "@/lib/i18n/config";
 import type { MessageKey } from "@/lib/i18n/types";
@@ -488,6 +489,9 @@ export function QuickBookingPanel({
   const ledger = useMemo(() => ({ operatingMonthId, serviceDate }), [operatingMonthId, serviceDate]);
   const [state, dispatch] = useReducer(quickBookingReducer, ledger, (initial) => initialQuickBookingState(initial, newRequestId()));
   const { step, save, touched } = state;
+  // 패널을 닫지 않고 다른 화면으로 옮기거나 브라우저를 닫으려 하면(티켓 18) 같은 안내를 받는다. 패널
+  // 자체를 닫을 때의 안내(스토리 51)는 아래 onOpenChange/ConfirmDialog가 따로 맡는다.
+  useUnsavedGuard(touched);
   const { draft, fieldErrors, message } = save;
   const locked = isLocked || isQuickBookingLocked(state);
   const [, startTransition] = useTransition();
@@ -682,16 +686,18 @@ export function QuickBookingPanel({
       </ModalPanel>
 
       <ConfirmDialog
-        cancelLabel={t("calls.quickBooking.leaveGuard.cancel")}
-        confirmLabel={t("calls.quickBooking.leaveGuard.confirm")}
-        description={t("calls.quickBooking.leaveGuard.description")}
+        cancelLabel={t("common.confirm.cancel")}
+        confirmLabel={t("calls.leaveGuard.confirm")}
+        description={t("calls.leaveGuard.description")}
         onConfirm={() => {
           setConfirmClose(false);
           setOpen(false);
+          // 저장 없이 닫기로 확정하면 초안을 버린다. 다음에 다시 열면 새 요청 id로 처음부터 시작한다.
+          dispatch({ type: "discard", nextRequestId: newRequestId() });
         }}
         onOpenChange={setConfirmClose}
         open={confirmClose}
-        title={t("calls.quickBooking.leaveGuard.title")}
+        title={t("calls.leaveGuard.title")}
       />
     </>
   );

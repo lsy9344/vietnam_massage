@@ -350,10 +350,7 @@ export const ko = {
   "calls.quickBooking.previous": "이전",
   "calls.quickBooking.next": "다음",
   "calls.quickBooking.save": "예약 저장",
-  "calls.quickBooking.leaveGuard.title": "저장하지 않은 입력이 있습니다",
-  "calls.quickBooking.leaveGuard.description": "지금 닫으면 입력한 값이 사라집니다. 계속 닫을까요?",
-  "calls.quickBooking.leaveGuard.confirm": "닫기",
-  "calls.quickBooking.leaveGuard.cancel": "취소",
+  // 패널을 저장 없이 닫을 때의 안내는 calls.leaveGuard.*(티켓 18)를 그대로 쓴다.
 
   // 콜 행 저장 상태
   "calls.save.saved": "저장됨",
@@ -362,6 +359,11 @@ export const ko = {
   "calls.save.autosaveFailed": "콜 행 자동저장에 실패했습니다.",
   "calls.save.alreadySaved": "이미 저장된 콜입니다.",
   "calls.save.checkingHint": "응답을 받지 못했습니다. 재시도해도 같은 요청으로 보내므로 콜이 두 번 생기지 않습니다.",
+
+  // 떠나기 전 안내(스펙 B07, 티켓 18)
+  "calls.leaveGuard.title": "저장하지 않은 입력이 있습니다",
+  "calls.leaveGuard.description": "지금 떠나면 저장하지 않은 입력이 사라집니다. 계속하시겠습니까?",
+  "calls.leaveGuard.confirm": "나가기",
 
   // 콜 계산 상태
   "calls.calc.errorPending": "저장 보류 계산 대기",

@@ -34,7 +34,11 @@ export type QuickBookingState = {
   save: NewCallRowSave;
 };
 
-export type QuickBookingEvent = { type: "step"; step: QuickBookingStep } | NewCallRowSaveEvent;
+export type QuickBookingEvent =
+  | { type: "step"; step: QuickBookingStep }
+  /** 패널을 저장 없이 닫기로 확정했을 때(떠나기 전 안내에서 "닫기"를 고름). 새 요청 id로 처음부터 시작한다. */
+  | { type: "discard"; nextRequestId: string }
+  | NewCallRowSaveEvent;
 
 export function initialQuickBookingState(
   ledger: { operatingMonthId: string; serviceDate: string },
@@ -51,6 +55,12 @@ export function initialQuickBookingState(
 export function quickBookingReducer(state: QuickBookingState, event: QuickBookingEvent): QuickBookingState {
   if (event.type === "step") {
     return { ...state, step: event.step };
+  }
+  if (event.type === "discard") {
+    return initialQuickBookingState(
+      { operatingMonthId: state.save.draft.operatingMonthId, serviceDate: state.save.draft.serviceDate },
+      event.nextRequestId
+    );
   }
 
   const save = newCallRowSaveReducer(state.save, event);
