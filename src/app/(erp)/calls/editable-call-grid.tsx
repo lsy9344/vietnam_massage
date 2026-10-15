@@ -38,6 +38,7 @@ import {
   type NewCallRowDraft
 } from "@/app/(erp)/calls/call-new-row-save";
 import { CallRowSaveStatus, NewCallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
+import { CallPhoneCardList } from "@/app/(erp)/calls/call-phone-card-list";
 import { ledgerCallAnchorId, type LedgerView } from "@/app/(erp)/calls/ledger-address";
 import { CallWarningCell } from "@/app/(erp)/calls/call-warning-cell";
 import { spokenClock } from "@/app/(erp)/calls/call-warning-label";
@@ -1796,50 +1797,58 @@ export function EditableCallGrid({
         <span className="text-xs text-muted">{t("calls.grid.rowCount", { count: rows.length })}</span>
       </div>
 
-      {rows.length === 0 ? (
-        <div className="grid gap-3 px-4 py-8">
-          <div>
-            <p className="text-sm font-medium text-foreground">{t("calls.grid.empty.title")}</p>
-            <p className="mt-1 text-xs text-muted">{t("calls.grid.empty.description")}</p>
-          </div>
-        </div>
-      ) : (
-        <div className="relative overflow-x-auto">
-          <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(view, showSettlementColumns) }}>
-            <CallGridColgroup showSettlementColumns={showSettlementColumns} view={view} />
-            <CallGridHead showSettlementColumns={showSettlementColumns} view={view} />
-            <tbody>
-              {table.getRowModel().rows.map((tableRow, index) => (
-                <EditableCallRow
-                  customers={customers}
-                  isLocked={isLocked}
-                  key={tableRow.original.id}
-                  onOpenDetail={onOpenDetail}
-                  options={options}
-                  row={tableRow.original}
-                  rowCount={table.getRowModel().rows.length + 1}
-                  rowIndex={index}
-                  selected={tableRow.original.id === selectedCallId}
-                  showSettlementColumns={showSettlementColumns}
-                  view={view}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {/* 휴대폰 폭(600px 미만): 넓은 표를 축소하지 않고 짧은 카드 목록을 대신 보여 준다(명세 F08, 티켓 26). */}
+      <div className="min-[600px]:hidden">
+        <CallPhoneCardList onOpenDetail={onOpenDetail} options={options} rows={rows} selectedCallId={selectedCallId} />
+      </div>
 
-      <AddRowForm
-        courseChoice={courseChoice}
-        customers={customers}
-        existingRowCount={table.getRowModel().rows.length}
-        isLocked={isLocked}
-        operatingMonthId={operatingMonthId}
-        options={options}
-        serviceDate={serviceDate}
-        showSettlementColumns={showSettlementColumns}
-        view={view}
-      />
+      {/* 태블릿 폭 이상: 넓은 표와 새 행 직접 입력(표 편집). 휴대폰에서는 이 블록 전체가 카드 목록으로 대체된다. */}
+      <div className="hidden min-[600px]:block">
+        {rows.length === 0 ? (
+          <div className="grid gap-3 px-4 py-8">
+            <div>
+              <p className="text-sm font-medium text-foreground">{t("calls.grid.empty.title")}</p>
+              <p className="mt-1 text-xs text-muted">{t("calls.grid.empty.description")}</p>
+            </div>
+          </div>
+        ) : (
+          <div className="relative overflow-x-auto">
+            <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(view, showSettlementColumns) }}>
+              <CallGridColgroup showSettlementColumns={showSettlementColumns} view={view} />
+              <CallGridHead showSettlementColumns={showSettlementColumns} view={view} />
+              <tbody>
+                {table.getRowModel().rows.map((tableRow, index) => (
+                  <EditableCallRow
+                    customers={customers}
+                    isLocked={isLocked}
+                    key={tableRow.original.id}
+                    onOpenDetail={onOpenDetail}
+                    options={options}
+                    row={tableRow.original}
+                    rowCount={table.getRowModel().rows.length + 1}
+                    rowIndex={index}
+                    selected={tableRow.original.id === selectedCallId}
+                    showSettlementColumns={showSettlementColumns}
+                    view={view}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <AddRowForm
+          courseChoice={courseChoice}
+          customers={customers}
+          existingRowCount={table.getRowModel().rows.length}
+          isLocked={isLocked}
+          operatingMonthId={operatingMonthId}
+          options={options}
+          serviceDate={serviceDate}
+          showSettlementColumns={showSettlementColumns}
+          view={view}
+        />
+      </div>
     </section>
   );
 }

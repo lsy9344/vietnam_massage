@@ -10,6 +10,21 @@ import type { AvailabilityCourseChoice } from "@/app/(erp)/calls/therapist-avail
 import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
 
 /**
+ * 같은 콜 id의 속성을 가진 여러 노드 중 실제로 보이는 것 하나를 고른다. 휴대폰 폭의 카드 목록과
+ * 태블릿 이상의 표는 같은 `data-service-call-id`/`data-call-open`을 CSS로만 서로 숨겨 쓰는데(티켓 26),
+ * `querySelector`는 숨은 쪽을 먼저 찾을 수 있어 스크롤·포커스 복귀가 틀린 노드를 집는다.
+ */
+function firstVisible<T extends Element>(selector: string): T | null {
+  const nodes = document.querySelectorAll<T>(selector);
+  for (const node of nodes) {
+    if (node instanceof HTMLElement && node.offsetParent !== null) {
+      return node;
+    }
+  }
+  return nodes[0] ?? null;
+}
+
+/**
  * 열린 콜 상세는 주소의 call 매개변수 하나로만 들고, history.replaceState로 바꾼다(서버를 다시 부르지 않는다).
  * 주소가 바뀌면(다른 화면의 링크) 패널도 따라 열리고 닫힌다. 원장 표는 패널과 상관없이 같은 자리에 있어
  * 날짜와 입력 중인 초안이 그대로다. 닫으면 패널을 처음 연 행으로 포커스를 돌려준다.
@@ -29,7 +44,7 @@ function useCallSelection() {
       const scroll = !openedHere.current || reveal.current === selected;
       reveal.current = null;
       if (scroll) {
-        document.querySelector<HTMLElement>(`[data-service-call-id="${CSS.escape(selected)}"]`)?.scrollIntoView({ block: "center" });
+        firstVisible<HTMLElement>(`[data-service-call-id="${CSS.escape(selected)}"]`)?.scrollIntoView({ block: "center" });
       }
       return;
     }
@@ -39,7 +54,7 @@ function useCallSelection() {
     origin.current = null;
     if (!id) return;
     // 패널은 처음 연 자리로 포커스를 돌려주므로(SidePanel), 그 뒤에 그 콜의 행으로 옮긴다.
-    document.querySelector<HTMLElement>(`[data-call-open="${CSS.escape(id)}"]`)?.focus();
+    firstVisible<HTMLElement>(`[data-call-open="${CSS.escape(id)}"]`)?.focus();
   }, [selected]);
 
   function select(id: string | null, { scrollToRow = false }: { scrollToRow?: boolean } = {}) {
@@ -89,14 +104,18 @@ export function CallLedgerWorkspace({
 
   return (
     <>
-      <TherapistAvailabilityPanel
-        initialRows={availabilityRows}
-        initialTime={availabilityTime}
-        onChoose={(next) => setChoice((current) => ({ ...next, id: (current?.id ?? 0) + 1 }))}
-        operatingMonthId={operatingMonthId}
-        serviceDate={serviceDate}
-        timeSlots={options.timeSlots}
-      />
+      {/* 가능 코스는 티켓 20에서 빠른 예약 패널로 옮길 때까지의 자리다. 빠른 예약과 표 편집은 태블릿 폭
+          이상에서만 보인다(명세 F08, 티켓 26) — 휴대폰에서는 아예 띄우지 않는다. */}
+      <div className="hidden min-[600px]:block">
+        <TherapistAvailabilityPanel
+          initialRows={availabilityRows}
+          initialTime={availabilityTime}
+          onChoose={(next) => setChoice((current) => ({ ...next, id: (current?.id ?? 0) + 1 }))}
+          operatingMonthId={operatingMonthId}
+          serviceDate={serviceDate}
+          timeSlots={options.timeSlots}
+        />
+      </div>
       {/* 표는 패널이 열려도 같은 자리에 둔다(초안 유지). 1200px 미만에서는 패널이 표 위에 쌓인다. */}
       <div className={selected ? "grid grid-cols-1 items-start gap-6 min-[1200px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "grid grid-cols-1"}>
         <div className="min-w-0">
