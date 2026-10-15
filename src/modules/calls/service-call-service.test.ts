@@ -4758,16 +4758,37 @@ describe("customer visit counts", () => {
 });
 
 describe("most recent customer visit (B09, 스토리 71-73, 티켓 24)", () => {
+  // 영업일은 자정을 넘어 이어진다(11:00 ~ 다음날 01:00 같은 슬롯 순서, selectNowSlot과 같은 개념). 그래서
+  // 같은 서비스 날짜 안에서는 시간 슬롯 정렬 순서(sortOrderByTime)로 비교해야 한다 — 글자 비교라면
+  // "01:00"이 "15:00"보다 앞서 보이지만, 실제로는 자정을 넘긴 그 영업일의 더 늦은 슬롯이다(S6).
+  const sortOrderByTime = new Map([
+    ["11:00", 0],
+    ["15:00", 8],
+    ["23:30", 25],
+    ["00:00", 26],
+    ["00:30", 27],
+    ["01:00", 28]
+  ]);
+
   it("picks the row with the latest date and time regardless of status, not the completed-first order", () => {
     const older = visitHistoryRow({ serviceCallId: "older", serviceDate: "2026-06-01", startTime: "11:00", status: "방문완료" });
     const latestReservation = visitHistoryRow({ serviceCallId: "latest", serviceDate: "2026-06-20", startTime: "15:00", status: "예약" });
-    const sameDayEarlier = visitHistoryRow({ serviceCallId: "same-day-earlier", serviceDate: "2026-06-20", startTime: "01:00", status: "노쇼" });
+    const sameDayEarlier = visitHistoryRow({ serviceCallId: "same-day-earlier", serviceDate: "2026-06-10", startTime: "23:30", status: "노쇼" });
 
-    assert.equal(mostRecentCustomerVisit([older, latestReservation, sameDayEarlier])?.serviceCallId, "latest");
+    assert.equal(mostRecentCustomerVisit([older, latestReservation, sameDayEarlier], sortOrderByTime)?.serviceCallId, "latest");
+  });
+
+  it("S6: within the same service date, a past-midnight slot (01:00) sorts after an earlier-clock slot (15:00), by time-slot order not string order", () => {
+    const afternoon = visitHistoryRow({ serviceCallId: "afternoon", serviceDate: "2026-06-20", startTime: "15:00", status: "예약" });
+    const pastMidnight = visitHistoryRow({ serviceCallId: "past-midnight", serviceDate: "2026-06-20", startTime: "01:00", status: "노쇼" });
+
+    assert.equal(mostRecentCustomerVisit([afternoon, pastMidnight], sortOrderByTime)?.serviceCallId, "past-midnight");
+    // 글자 비교("01:00" < "15:00")로는 틀린 답(afternoon)이 나왔던 자리다.
+    assert.notEqual(mostRecentCustomerVisit([afternoon, pastMidnight], sortOrderByTime)?.serviceCallId, "afternoon");
   });
 
   it("returns null for an empty history", () => {
-    assert.equal(mostRecentCustomerVisit([]), null);
+    assert.equal(mostRecentCustomerVisit([], sortOrderByTime), null);
   });
 });
 

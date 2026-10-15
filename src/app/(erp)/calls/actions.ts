@@ -22,6 +22,7 @@ import {
   listCustomerVisitHistory,
   mostRecentCustomerVisit,
   searchCustomerVisitCandidates,
+  timeSlotSortOrderMap,
   updateCustomer,
   updateDailyExpense,
   redactServiceCallSettlementAmounts,
@@ -455,11 +456,12 @@ export async function loadCustomerVisitSummaryAction(
   if (!trimmed) {
     return { counts: { completedCount: 0, noShowCount: 0, canceledCount: 0 }, recentVisit: null, sharedPhone: false };
   }
-  const [rows, sharedPhone] = await Promise.all([
+  const [rows, sharedPhone, sortOrderByTime] = await Promise.all([
     listCustomerVisitHistory({ kind: "customer", customerId: trimmed }),
-    customerSharedPhone({ customerId: trimmed })
+    customerSharedPhone({ customerId: trimmed }),
+    timeSlotSortOrderMap()
   ]);
-  return { counts: customerVisitCountsFromRows(rows), recentVisit: mostRecentCustomerVisit(rows), sharedPhone };
+  return { counts: customerVisitCountsFromRows(rows), recentVisit: mostRecentCustomerVisit(rows, sortOrderByTime), sharedPhone };
 }
 
 /**

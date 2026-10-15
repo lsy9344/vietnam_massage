@@ -2519,6 +2519,16 @@ export async function listCustomerVisitHistory(
     .map(toVisitHistoryRow);
 }
 
+/**
+ * 시간 슬롯 값(HH:mm) → 정렬 순서. mostRecentCustomerVisit(S6)처럼 콜 레코드 없이 시간만 비교해야 하는
+ * 호출자가 listCustomerVisitHistory·compareVisitHistory와 같은 기준으로 비교하게 한다.
+ */
+export async function timeSlotSortOrderMap(input: { prismaClient?: ServiceCallPrismaClient } = {}): Promise<Map<string, number>> {
+  const client = getClient(input.prismaClient);
+  const timeSlots = await client.timeSlot.findMany();
+  return new Map(timeSlots.map((slot) => [slot.value, slot.sortOrder]));
+}
+
 export type CustomerVisitCountsDto = {
   completedCount: number;
   noShowCount: number;
@@ -2538,13 +2548,28 @@ export function customerVisitCountsFromRows(rows: CustomerVisitHistoryRowDto[]):
 /**
  * 날짜·예약시각 기준으로 가장 최근 방문(상태와 상관없이). 빠른 예약 고객 단계가 그 방문의 코스·Therapist·
  * 방문별 요청 중 체크한 항목만 가져온다(B09, 스토리 71-73, 티켓 24). 방문 이력이 없으면 null이다.
+ *
+ * 시간은 글자가 아니라 시간 슬롯 정렬 순서(sortOrderByTime, compareVisitHistory와 같은 기준)로 비교한다
+ * (S6). 영업일은 자정을 넘어 이어져(selectNowSlot과 같은 개념) 같은 서비스 날짜의 "01:00"은 글자로는
+ * "15:00"보다 앞서 보이지만 실제로는 그 영업일의 더 늦은 슬롯이다.
  */
-export function mostRecentCustomerVisit(rows: CustomerVisitHistoryRowDto[]): CustomerVisitHistoryRowDto | null {
+export function mostRecentCustomerVisit(
+  rows: CustomerVisitHistoryRowDto[],
+  sortOrderByTime: Map<string, number>
+): CustomerVisitHistoryRowDto | null {
   let latest: CustomerVisitHistoryRowDto | null = null;
   for (const row of rows) {
-    if (!latest || `${row.serviceDate}T${row.startTime}` > `${latest.serviceDate}T${latest.startTime}`) {
+    if (!latest) {
       latest = row;
+      continue;
     }
+    if (row.serviceDate !== latest.serviceDate) {
+      if (row.serviceDate > latest.serviceDate) latest = row;
+      continue;
+    }
+    const rowOrder = sortOrderByTime.get(row.startTime) ?? -1;
+    const latestOrder = sortOrderByTime.get(latest.startTime) ?? -1;
+    if (rowOrder > latestOrder) latest = row;
   }
   return latest;
 }
