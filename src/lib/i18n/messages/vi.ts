@@ -221,6 +221,24 @@ export const vi: Messages = {
   "calls.column.earcarePool": "Quỹ chăm sóc tai",
   "calls.column.opsCallCredit": "Công nhận cuộc gọi",
   "calls.column.saveStatus": "Trạng thái lưu",
+  "calls.column.warnings": "Cảnh báo",
+
+  // 콜 행 경고와 콜 상세 패널
+  "calls.warning.previousServiceUnfinished": "Dịch vụ trước vẫn chưa kết thúc",
+  "calls.warning.roomOverlap": "Phòng này có cuộc gọi lúc {time}",
+  "calls.warning.calculationError": "Lỗi tính toán",
+  "calls.warning.openDetail": "Mở chi tiết cuộc gọi",
+  "calls.detail.title": "Chi tiết cuộc gọi · {time}",
+  "calls.detail.titleWithMemo": "Chi tiết cuộc gọi · {time} {memo}",
+  "calls.detail.fallbackTitle": "Chi tiết cuộc gọi",
+  "calls.detail.displayEnd": "Giờ kết thúc hiển thị",
+  "calls.detail.warnings": "Cảnh báo",
+  "calls.detail.noWarnings": "Không có cảnh báo",
+  "calls.detail.related": "Cuộc gọi liên quan",
+  "calls.detail.noRelated": "Không có cuộc gọi liên quan",
+  "calls.detail.goToCall": "Đi đến cuộc gọi này",
+  "calls.detail.notFound": "Không tìm thấy cuộc gọi này trong sổ ngày này.",
+  "calls.detail.rowAria": "Mở chi tiết cuộc gọi lúc {time}",
 
   // 콜 그리드 placeholder/empty 라벨
   "calls.actualEntry.helper": "Giờ đặt giữ nguyên.",

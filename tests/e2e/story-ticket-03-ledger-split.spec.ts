@@ -260,11 +260,12 @@ test.describe("티켓 03 콜 원장 화면 분리", () => {
     await expect(warnings.getByRole("row", { name: /13:00 T03 수당 없음 마사지사 수당 정책을 찾을 수 없습니다/ })).toBeVisible();
     await warnings.getByRole("link", { name: "원장에서 보기" }).click();
 
-    await expect(page).toHaveURL(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}#call-${rateMissingCallId}`);
+    await expect(page).toHaveURL(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}&call=${rateMissingCallId}`);
     await expect(toolbarTabs(page).getByRole("link", { name: "원장", exact: true })).toHaveAttribute("aria-current", "page");
     const target = page.locator(`tr#call-${rateMissingCallId}`);
     await expect(target).toBeInViewport();
-    expect(await target.evaluate((row) => row.matches(":target"))).toBe(true);
+    await expect(target).toHaveAttribute("data-selected", "true");
+    await expect(page.getByRole("complementary", { name: /^콜 상세/ })).toBeVisible();
   });
 
   for (const role of ["administrator", "counter"] as const) {
@@ -312,8 +313,9 @@ test.describe("티켓 03 콜 원장 화면 분리", () => {
     await expect(page.getByRole("complementary", { name: customerName })).toBeVisible();
 
     await history.getByRole("link", { name: serviceDate }).click();
-    await expect(page).toHaveURL(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}#call-${customerCallId}`);
+    await expect(page).toHaveURL(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}&call=${customerCallId}`);
     await expect(page.locator(`tr#call-${customerCallId}`)).toBeInViewport();
+    await expect(page.locator(`tr#call-${customerCallId}`)).toHaveAttribute("data-selected", "true");
   });
 
   test("고객 등록과 정정은 고객 화면에서 저장된다", async ({ page }) => {

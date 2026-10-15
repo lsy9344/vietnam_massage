@@ -3636,6 +3636,7 @@ function ledgerRow(overrides: Partial<ServiceCallRowDto>): ServiceCallRowDto {
     actualEntryTime: null,
     displayEnd: "12:00",
     warningTime: null,
+    warnings: [],
     roomId: "room-101",
     roomLabel: "101",
     courseId: "course-a",
@@ -3738,5 +3739,237 @@ describe("ledger status counts", () => {
       noShowCount: 0,
       canceledCount: 0
     });
+  });
+});
+
+describe("row warnings", () => {
+  // 영업일 2026-06-10의 16:05(현지 UTC+7)
+  const at = (time: string) => new Date(`2026-06-10T${String(Number(time.slice(0, 2)) - 7).padStart(2, "0")}:${time.slice(3)}:00.000Z`);
+
+  async function rowsAt(prismaClient: ReturnType<typeof createMemoryPrisma>, now: Date) {
+    return listServiceCallsForDate({ operatingMonthId: "month-2026-06", serviceDate: availabilityDate, prismaClient, now });
+  }
+
+  function yieldedPair(prismaClient: ReturnType<typeof createMemoryPrisma>) {
+    // 15:00 사용중 콜은 16:00 예약에 양보해 표시 종료가 16:00이다.
+    addAvailabilityCall(prismaClient, {
+      id: "front",
+      startTime: "15:00",
+      actualEntryTime: "15:20",
+      courseId: "course-a",
+      status: "사용중",
+      createdAt: new Date("2026-06-10T00:00:00.000Z"),
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "back",
+      startTime: "16:00",
+      courseId: "course-a",
+      status: "예약",
+      createdAt: new Date("2026-06-10T00:01:00.000Z"),
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+  }
+
+  it("flags the later call as unfinished once now passes the yielded display end, and keeps the earlier call's yield warning", async () => {
+    const prismaClient = createMemoryPrisma();
+    yieldedPair(prismaClient);
+
+    const rows = await rowsAt(prismaClient, at("16:05"));
+    const front = rows.find((row) => row.id === "front");
+    const back = rows.find((row) => row.id === "back");
+
+    assert.equal(back?.startTime, "16:00");
+    assert.deepEqual(back?.warnings, [
+      { code: "previous_service_unfinished", relatedTime: "16:00", relatedCallIds: ["front"] }
+    ]);
+    assert.equal(front?.displayEnd, "16:00");
+    assert.equal(front?.warningTime, "16:00");
+    assert.deepEqual(front?.warnings, [{ code: "yield_to_reservation", relatedTime: "16:00", relatedCallIds: ["back"] }]);
+  });
+
+  it("does not flag while now is at or before the display end", async () => {
+    const prismaClient = createMemoryPrisma();
+    yieldedPair(prismaClient);
+
+    const before = (await rowsAt(prismaClient, at("15:50"))).find((row) => row.id === "back");
+    const exactly = (await rowsAt(prismaClient, at("16:00"))).find((row) => row.id === "back");
+
+    assert.deepEqual(before?.warnings, []);
+    assert.deepEqual(exactly?.warnings, []);
+  });
+
+  it("counts the previous call's second assignment role and ignores other therapists and non in-use statuses", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "assistant-front",
+      startTime: "14:00",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [
+        { role: "THERAPIST_1", employeeId: "therapist-2" },
+        { role: "THERAPIST_2", employeeId: "therapist-1" }
+      ]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "cleaning-front",
+      startTime: "14:00",
+      courseId: "course-a",
+      status: "청소중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-3" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "mine",
+      startTime: "15:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "cleaning-back",
+      startTime: "15:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-3" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "elsewhere",
+      startTime: "15:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-4" }]
+    });
+
+    const rows = await rowsAt(prismaClient, at("15:30"));
+    const warningsOf = (id: string) => rows.find((row) => row.id === id)?.warnings;
+
+    assert.deepEqual(warningsOf("mine"), [
+      { code: "previous_service_unfinished", relatedTime: "15:00", relatedCallIds: ["assistant-front"] }
+    ]);
+    assert.deepEqual(warningsOf("cleaning-back"), []);
+    assert.deepEqual(warningsOf("elsewhere"), []);
+  });
+
+  it("leaves no-show and canceled calls without the unfinished sentence", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "front",
+      startTime: "14:00",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "no-show",
+      startTime: "15:00",
+      courseId: "course-a",
+      status: "노쇼",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "canceled",
+      startTime: "15:30",
+      courseId: "course-a",
+      status: "취소",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const rows = await rowsAt(prismaClient, at("16:30"));
+
+    assert.deepEqual(rows.find((row) => row.id === "no-show")?.warnings, []);
+    assert.deepEqual(rows.find((row) => row.id === "canceled")?.warnings, []);
+  });
+
+  it("does not flag a call that starts before, or with, the in-use call's start", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "in-use",
+      startTime: "14:00",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "earlier",
+      startTime: "13:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "same-start",
+      startTime: "14:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const rows = await rowsAt(prismaClient, at("16:00"));
+
+    assert.deepEqual(rows.find((row) => row.id === "earlier")?.warnings, []);
+    assert.deepEqual(rows.find((row) => row.id === "same-start")?.warnings, []);
+  });
+
+  it("orders unfinished, yield, then calculation error", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "front",
+      startTime: "14:00",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "subject",
+      startTime: "15:00",
+      courseId: "course-missing-rate",
+      status: "방문완료",
+      paymentMethodCode: "현금",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "after",
+      startTime: "15:30",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const subject = (await rowsAt(prismaClient, at("15:10"))).find((row) => row.id === "subject");
+
+    assert.deepEqual(
+      subject?.warnings.map((warning) => warning.code),
+      ["previous_service_unfinished", "yield_to_reservation", "calculation_error"]
+    );
+    assert.deepEqual(subject?.warnings[2], { code: "calculation_error", relatedTime: null, relatedCallIds: [] });
+  });
+});
+
+describe("row warnings with an unreadable earlier start time", () => {
+  it("ignores an in-use call whose start time is not a clock time", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "broken",
+      startTime: "미정",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "later",
+      startTime: "16:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const rows = await listServiceCallsForDate({
+      operatingMonthId: "month-2026-06",
+      serviceDate: availabilityDate,
+      prismaClient,
+      now: new Date("2026-06-10T14:00:00.000Z")
+    });
+
+    assert.deepEqual(rows.find((row) => row.id === "later")?.warnings, []);
   });
 });

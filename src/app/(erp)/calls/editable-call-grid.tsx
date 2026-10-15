@@ -25,6 +25,8 @@ import { autosaveServiceCallRowAction, saveBasicServiceCallRowAction, type Servi
 import type { AvailabilityCourseChoice } from "@/app/(erp)/calls/therapist-availability-view";
 import { calculationErrorMessageKey } from "@/app/(erp)/calls/calculation-status-message";
 import { ledgerCallAnchorId } from "@/app/(erp)/calls/ledger-address";
+import { CallWarningCell } from "@/app/(erp)/calls/call-warning-cell";
+import { spokenClock } from "@/app/(erp)/calls/call-warning-label";
 import {
   EDITABLE_CALL_FIELDS,
   cancelCellDraft,
@@ -64,6 +66,7 @@ const CALL_GRID_COLUMNS = [
   { id: "therapist2Commission", labelKey: "calls.column.therapist2Commission", width: "7rem", settlement: true },
   { id: "earcarePool", labelKey: "calls.column.earcarePool", width: "6.5rem", settlement: true },
   { id: "opsCallCredit", labelKey: "calls.column.opsCallCredit", width: "6rem", settlement: true },
+  { id: "warnings", labelKey: "calls.column.warnings", width: "13rem" },
   { id: "saveStatus", labelKey: "calls.column.saveStatus", width: "10rem" }
 ] as const satisfies ReadonlyArray<{ id: string; labelKey: MessageKey; width: string; settlement?: boolean }>;
 
@@ -72,7 +75,7 @@ function visibleCallGridColumns(showSettlementColumns: boolean) {
 }
 
 function callGridMinWidth(showSettlementColumns: boolean) {
-  return showSettlementColumns ? "195rem" : "168rem";
+  return showSettlementColumns ? "208rem" : "181rem";
 }
 
 function CallGridColgroup({ showSettlementColumns }: { showSettlementColumns: boolean }) {
@@ -580,14 +583,6 @@ const TEN_MINUTE_ENTRY_OPTIONS: ServiceCallOption[] = Array.from({ length: 24 * 
   return { value, label: value };
 });
 
-function spokenClock(value: string) {
-  const [hourText, minute] = value.split(":");
-  const hour = Number(hourText);
-  if (!Number.isInteger(hour) || minute === undefined) return value;
-  const spokenHour = hour % 12 === 0 ? 12 : hour % 12;
-  return `${spokenHour}:${minute}`;
-}
-
 function ActualEntryCell({
   disabled,
   displayEnd,
@@ -884,7 +879,7 @@ function AddRowForm({
                   rowIndex={rowIndex}
                 />
               </td>
-              <td className="border-b border-border bg-readonly px-2 py-2" colSpan={showSettlementColumns ? 7 : 3}>
+              <td className="border-b border-border bg-readonly px-2 py-2" colSpan={showSettlementColumns ? 8 : 4}>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button className="h-8 whitespace-nowrap px-3 text-xs" disabled={disabled} type="submit">
                     {t("calls.addRow.submit")}
@@ -1043,18 +1038,22 @@ function ComputedCell({
 function EditableCallRow({
   customers,
   isLocked,
+  onOpenDetail,
   options,
   row,
   rowCount,
   rowIndex,
+  selected,
   showSettlementColumns
 }: {
   customers: CustomerDto[];
   isLocked: boolean;
+  onOpenDetail: (callId: string) => void;
   options: ServiceCallFormOptions;
   row: ServiceCallRowDto;
   rowCount: number;
   rowIndex: number;
+  selected: boolean;
   showSettlementColumns: boolean;
 }) {
   const t = useT();
@@ -1065,6 +1064,8 @@ function EditableCallRow({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [savedAt, setSavedAt] = useState(row.savedAt);
+  // 다른 행을 저장하면 이 행의 경고도 바뀐다. 저장 뒤 서버가 다시 준 행(row)이 이 행의 저장 결과보다 새로우면 그 경고를 쓴다.
+  const freshestRow = row.savedAt >= serverRow.savedAt ? row : serverRow;
   const [, startTransition] = useTransition();
   const navigableFields = useMemo(
     () => [
@@ -1161,11 +1162,16 @@ function EditableCallRow({
   }
 
   return (
-    // 다른 화면에서 #call-… 로 들어오면 이 행이 선택된 행 모양이 된다(design.md 6.6).
+    // 콜 상세 패널이 열린 행은 선택된 행 모양이 된다(design.md 6.6). 입력칸·버튼이 아닌 자리를 누르면 패널이 열린다.
     <tr
-      className="align-top target:bg-readonly [&:target>td:first-child]:[box-shadow:inset_3px_0_0_var(--brand)]"
+      className="align-top data-[selected=true]:bg-readonly [&[data-selected=true]>td:first-child]:[box-shadow:inset_3px_0_0_var(--brand)]"
+      data-selected={selected}
       data-service-call-id={row.id}
       id={ledgerCallAnchorId(row.id)}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("input, select, textarea, button, a, [role='option'], [role='combobox']")) return;
+        onOpenDetail(row.id);
+      }}
     >
       <td className="border-b border-border px-2 py-2 text-xs">
         {draft.serviceDate}
@@ -1436,6 +1442,9 @@ function EditableCallRow({
           />
         </>
       ) : null}
+      <td className="border-b border-border px-2 py-2" data-call-cell-column="warnings">
+        <CallWarningCell callId={row.id} onOpen={onOpenDetail} startTime={serverRow.startTime} warnings={freshestRow.warnings} />
+      </td>
       <td
         className="border-b border-border bg-readonly px-2 py-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-brand"
         data-call-cell-column="calculationStatus"
@@ -1475,18 +1484,23 @@ export function EditableCallGrid({
   courseChoice = null,
   customers = [],
   isLocked,
+  onOpenDetail = () => {},
   operatingMonthId,
   options,
   rows,
+  selectedCallId = null,
   serviceDate,
   showSettlementColumns
 }: {
   courseChoice?: (AvailabilityCourseChoice & { id: number }) | null;
   customers?: CustomerDto[];
   isLocked: boolean;
+  /** 행이나 경고를 눌렀을 때. 콜 상세 패널을 여는 쪽이 정한다. */
+  onOpenDetail?: (callId: string) => void;
   operatingMonthId: string;
   options: ServiceCallFormOptions;
   rows: ServiceCallRowDto[];
+  selectedCallId?: string | null;
   serviceDate: string;
   showSettlementColumns: boolean;
 }) {
@@ -1551,10 +1565,12 @@ export function EditableCallGrid({
                   customers={customers}
                   isLocked={isLocked}
                   key={tableRow.original.id}
+                  onOpenDetail={onOpenDetail}
                   options={options}
                   row={tableRow.original}
                   rowCount={table.getRowModel().rows.length + 1}
                   rowIndex={index}
+                  selected={tableRow.original.id === selectedCallId}
                   showSettlementColumns={showSettlementColumns}
                 />
               ))}

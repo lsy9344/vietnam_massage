@@ -155,7 +155,7 @@ describe("customer screen view", () => {
     assert.match(panel, /마사지사1/);
     assert.match(panel, />예약</);
     assert.match(panel, /잠긴 달/);
-    assert.match(panel, /href="\/calls\?operatingMonthId=month-locked&amp;serviceDate=2026-07-02#call-call-1">2026-07-02</);
+    assert.match(panel, /href="\/calls\?operatingMonthId=month-locked&amp;serviceDate=2026-07-02&amp;call=call-1">2026-07-02</);
     assert.match(panel, />닫기</);
 
     const vietnamese = renderView({ customer: minah, history: [row()] }, "vi");

@@ -122,7 +122,7 @@ describe("therapist settlement view", () => {
   it("links each evidence call to that date and call in the ledger for an administrator", () => {
     const html = render({ canOpenLedger: true });
 
-    assert.match(html, /href="\/calls\?operatingMonthId=m-2026-10&amp;serviceDate=2026-10-14#call-call-1"/);
+    assert.match(html, /href="\/calls\?operatingMonthId=m-2026-10&amp;serviceDate=2026-10-14&amp;call=call-1"/);
     assert.match(html, /원장에서 보기/);
   });
 

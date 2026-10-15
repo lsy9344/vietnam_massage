@@ -12,6 +12,7 @@ function row(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDto {
     actualEntryTime: "14:05",
     displayEnd: "15:05",
     warningTime: null,
+    warnings: [],
     roomId: "room-1",
     roomLabel: "301",
     courseId: "course-a",
