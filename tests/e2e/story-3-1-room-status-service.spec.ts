@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { displayEndInstantsForDate } from "@/modules/calls/service-call-service";
+import { roomFloorFactsForDate } from "@/modules/calls/service-call-service";
 import { listRoomStatuses } from "@/modules/rooms/room-status-service";
 import type { RoomStatusDto } from "@/modules/rooms/dtos";
 
@@ -237,7 +237,7 @@ test.describe("Story 3.1 room status DTO service", () => {
         prismaClient: client
       })
     );
-    const displayEnds = await displayEndInstantsForDate({
+    const { displayEnds } = await roomFloorFactsForDate({
       operatingMonthId,
       serviceDate,
       prismaClient: client

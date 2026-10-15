@@ -1515,10 +1515,6 @@ export async function roomFloorFactsForDate(
   return { displayEnds, roomOverlaps };
 }
 
-export async function displayEndInstantsForDate(input: DayFactsInput): Promise<Map<string, Date>> {
-  return (await roomFloorFactsForDate(input)).displayEnds;
-}
-
 async function displayEndContextFor(tx: ServiceCallPrismaClient, record: ServiceCallRecord): Promise<DisplayEndContext> {
   return loadDisplayEndContext(tx, {
     operatingMonthId: record.operatingMonthId,
