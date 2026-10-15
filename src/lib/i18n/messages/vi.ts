@@ -833,6 +833,7 @@ export const vi: Messages = {
   "settlements.statement.evidence.column.calls": "Cuộc gọi",
   "settlements.statement.evidence.column.amount": "Số tiền",
   "settlements.statement.evidence.column.payout": "Xác nhận chi trả",
+  "settlements.statement.evidence.appliedPolicy.title": "Chính sách áp dụng",
   "settlements.statement.evidence.empty.title": "Tháng này không có căn cứ theo ngày.",
   "settlements.statement.evidence.noAttendance": "Chưa có bản ghi",
   "settlements.statement.evidence.unavailable.title": "Căn cứ theo ngày",

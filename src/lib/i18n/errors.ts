@@ -78,7 +78,9 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   // 월 명세서(티켓 32)
   INVALID_MONTHLY_STATEMENT_INPUT: "Dữ liệu tra cứu phiếu lương tháng không hợp lệ.",
   UNSUPPORTED_EMPLOYEE_GROUP: "Không hỗ trợ phiếu lương tháng cho nhân viên này.",
-  MONTHLY_STATEMENT_VERSION_NOT_FOUND: "Không tìm thấy phiên bản chốt tháng đó."
+  MONTHLY_STATEMENT_VERSION_NOT_FOUND: "Không tìm thấy phiên bản chốt tháng đó.",
+  // S9: 마감확정·잠금인데 스냅샷이 없을 때(monthly-statement-service.ts, monthly-closing-service.ts와 같은 code)
+  MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND: "Không tìm thấy bản ghi đã chốt."
 };
 
 /**

@@ -834,6 +834,8 @@ export const ko = {
   "settlements.statement.evidence.column.calls": "콜",
   "settlements.statement.evidence.column.amount": "금액",
   "settlements.statement.evidence.column.payout": "지급 확인",
+  // S9(V08): 코스 수당·0원 정책 근거.
+  "settlements.statement.evidence.appliedPolicy.title": "적용 정책",
   "settlements.statement.evidence.empty.title": "이 달에는 날짜별 근거가 없습니다.",
   "settlements.statement.evidence.noAttendance": "기록 없음",
   "settlements.statement.evidence.unavailable.title": "날짜별 근거",

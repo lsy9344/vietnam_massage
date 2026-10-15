@@ -12,7 +12,8 @@ import {
 import { type SettlementEvidenceCallDto } from "@/modules/settlements/settlement-evidence-call";
 import {
   listTherapistDailyPayoutConfirmationsForMonth,
-  listTherapistDailySettlements
+  listTherapistDailySettlements,
+  type TherapistAssignmentEvidenceDto
 } from "@/modules/settlements/therapist-daily-settlement-service";
 import { listTherapistAttendanceForDate } from "@/modules/settlements/therapist-attendance-service";
 import {
@@ -127,6 +128,12 @@ export type MonthlyStatementDailyEntryDto = {
   callCount: number;
   amount: number;
   calls: SettlementEvidenceCallDto[];
+  /**
+   * S9(V08): 적용 정책 근거(코스 수당·0원 정책). Therapist만 콜마다 담당 역할(role)·적용 코스 수당
+   * (commissionAmount)·그 코스 수당의 상태(rateStatus: applied/zero_policy/missing_policy)를 둔다.
+   * 귀케어·운영팀은 코스 수당 개념이 없어 항상 빈 배열이다.
+   */
+  appliedPolicies: TherapistAssignmentEvidenceDto[];
   /** 그 날 이 직원 단위의 지급 확인. 그 단위가 없으면(예: 담당 콜 없는 Therapist의 날) null. */
   payoutConfirmation: PayoutConfirmationDto | null;
 };
@@ -329,6 +336,8 @@ async function buildDraftDailyEntries(input: {
         callCount: settlement?.totalCallCount ?? 0,
         amount: settlement?.totalCommissionAmount ?? 0,
         calls: settlement ? settlement.assignmentEvidence.map((evidence) => evidence.call) : [],
+        // S9(V08): 코스 수당 근거(적용/0원/수당 없음)를 담당 역할·콜별로 그대로 둔다.
+        appliedPolicies: settlement ? settlement.assignmentEvidence : [],
         payoutConfirmation: settlement?.payoutConfirmation ?? null
       });
       continue;
@@ -348,6 +357,8 @@ async function buildDraftDailyEntries(input: {
         callCount: result.poolEvidence.length,
         amount: row.payoutAmount,
         calls: result.poolEvidence.flatMap((evidence) => (evidence.call ? [evidence.call] : [])),
+        // 귀케어는 코스 수당이 아니라 풀 분배라 적용 정책(코스 수당) 개념이 없다.
+        appliedPolicies: [],
         payoutConfirmation: row.payoutConfirmation
       });
       continue;
@@ -366,6 +377,8 @@ async function buildDraftDailyEntries(input: {
       callCount: result.callEvidence.length,
       amount: row.payoutAmount,
       calls: result.callEvidence.flatMap((evidence) => (evidence.call ? [evidence.call] : [])),
+      // 운영팀도 코스 수당이 아니라 인센 규칙이라 적용 정책(코스 수당) 개념이 없다.
+      appliedPolicies: [],
       payoutConfirmation: row.payoutConfirmation
     });
   }
@@ -471,10 +484,18 @@ export async function getMonthlyStatement(input: GetMonthlyStatementInput): Prom
     if (!targetVersion) {
       throw new MonthlyStatementDomainError("해당 마감 버전을 찾을 수 없습니다.", "MONTHLY_STATEMENT_VERSION_NOT_FOUND");
     }
-  } else {
-    // 버전을 고르지 않았으면 있는 만큼 가장 최근 버전을 기본으로 본다(재오픈해 검토중으로 돌아간 뒤에도 그대로,
-    // ops-monthly 화면의 기존 관례와 같다). 한 번도 마감하지 않았으면 null → 지금 계산.
+  } else if (operatingMonth.status === "마감확정" || operatingMonth.status === "잠금") {
+    // S9: 마감확정·잠금은 가장 최근 확정 스냅샷이 기본이다. 스냅샷이 없으면(있어야 하는데 없는 상태) 지금
+    // 계산으로 내려가지 않고 바로 거절한다(_bmad-output/project-context.md:190, getMonthlyClosingSnapshot과
+    // 같은 코드).
     targetVersion = versions[0] ?? null;
+    if (!targetVersion) {
+      throw new MonthlyStatementDomainError("확정 스냅샷을 찾을 수 없습니다.", "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND");
+    }
+  } else {
+    // S9: 작성중·검토중(재오픈 포함)은 버전을 고르지 않았으면 언제나 미확정 지금 계산이 기본이다(ops-monthly
+    // 화면처럼 재오픈된 이전 스냅샷을 현재 기준과 섞지 않는다). 이전 마감 버전은 availableVersions로 고를 수 있다.
+    targetVersion = null;
   }
 
   let opsMonthlyRow: OpsMonthlyIncentiveRowDto | null = null;

@@ -9,13 +9,13 @@ function dbDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
-function createMemoryPrisma(options: { employeeGroup?: string; missingEmployee?: boolean } = {}) {
+function createMemoryPrisma(options: { employeeGroup?: string; missingEmployee?: boolean; operatingMonthStatus?: string } = {}) {
   const operatingMonth = {
     id: "month-1",
     monthKey: "2026-06",
     startDate: dbDate("2026-06-01"),
     endDate: dbDate("2026-06-02"),
-    status: "작성중"
+    status: options.operatingMonthStatus ?? "작성중"
   };
   const employee = {
     id: "emp-1",
@@ -205,8 +205,8 @@ describe("getMonthlyStatement", () => {
     assert.equal(result.payoutUnits[0].payoutConfirmation.status, "confirmed");
   });
 
-  it("마감 버전이 있으면 기본으로 가장 최근 버전의 스냅샷을 보여주고, 날짜별 근거는 '저장되지 않았습니다'로 대신한다", async () => {
-    const prismaClient = createMemoryPrisma();
+  it("마감확정 운영월은 마감 버전이 있으면 기본으로 가장 최근 버전의 스냅샷을 보여주고, 날짜별 근거는 '저장되지 않았습니다'로 대신한다(S9)", async () => {
+    const prismaClient = createMemoryPrisma({ operatingMonthStatus: "마감확정" });
     const dependencies: Partial<MonthlyStatementDependencies> = {
       listMonthlyClosingVersions: async () => [oneVersion({ closeVersion: 2, confirmedAt: "2026-07-05T00:00:00.000Z" }), oneVersion({ closeVersion: 1 })],
       getMonthlyClosingSnapshotByVersion: async ({ closeVersion }: any) =>
@@ -280,8 +280,49 @@ describe("getMonthlyStatement", () => {
     );
   });
 
+  it("S9: 작성중·검토중(재오픈 포함) 운영월은 마감 버전이 있어도 기본으로 지금 계산(미확정)을 보여주고, 이전 버전은 목록에서 고를 수 있다", async () => {
+    for (const status of ["작성중", "검토중"]) {
+      const prismaClient = createMemoryPrisma({ operatingMonthStatus: status });
+      const dependencies: Partial<MonthlyStatementDependencies> = {
+        listMonthlyClosingVersions: async () => [oneVersion({ closeVersion: 1 })],
+        listMonthlyClosingPreview: async () => therapistPreview(),
+        listTherapistDailySettlements: async ({ serviceDate }: any) =>
+          ({
+            operatingMonthId: "month-1",
+            serviceDate,
+            settlements: [],
+            warningCounts: { coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
+            excludedCallCount: 0
+          }) as any,
+        listTherapistAttendanceForDate: async ({ attendanceDate }: any) => ({ operatingMonthId: "month-1", attendanceDate, isLocked: false, rows: [] })
+      };
+
+      const result = await getMonthlyStatement({ operatingMonthId: "month-1", employeeId: "emp-1", prismaClient, dependencies });
+
+      assert.equal(result.isConfirmed, false, `${status} 운영월은 미확정 현재 계산을 기본으로 보여야 한다`);
+      assert.equal(result.closeVersion, null);
+      assert.equal(result.availableVersions.length, 1);
+      assert.equal(result.evidence.available, true);
+    }
+  });
+
+  it("S9: 마감확정·잠금 운영월에 확정 스냅샷이 없으면 지금 계산으로 내려가지 않고 거절한다", async () => {
+    for (const status of ["마감확정", "잠금"]) {
+      const prismaClient = createMemoryPrisma({ operatingMonthStatus: status });
+      const dependencies: Partial<MonthlyStatementDependencies> = {
+        listMonthlyClosingVersions: async () => noVersions()
+      };
+
+      await assert.rejects(
+        () => getMonthlyStatement({ operatingMonthId: "month-1", employeeId: "emp-1", prismaClient, dependencies }),
+        (error: unknown) => error instanceof MonthlyStatementDomainError && error.code === "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND",
+        `${status} 운영월은 스냅샷이 없으면 거절해야 한다`
+      );
+    }
+  });
+
   it("마감 스냅샷에 이 직원의 정산 행이 없으면(그 직원보다 먼저 만들어진 버전) 금액 0과 summary null을 만들어 내지 않고 그대로 보인다", async () => {
-    const prismaClient = createMemoryPrisma();
+    const prismaClient = createMemoryPrisma({ operatingMonthStatus: "마감확정" });
     const dependencies: Partial<MonthlyStatementDependencies> = {
       listMonthlyClosingVersions: async () => [oneVersion({ closeVersion: 1 })],
       getMonthlyClosingSnapshotByVersion: async () =>

@@ -29,13 +29,14 @@ import type { PayoutConfirmationDto, PayoutConfirmationEventDto } from "@/module
 
 const courseCodes: SettlementCourseCode[] = ["A", "B", "C", "D", "E"];
 
-const rateStatus: Record<TherapistDailySettlementDto["assignmentEvidence"][number]["rateStatus"], { key: MessageKey; tone: StatusTone }> = {
+// 월 명세서(S9, V08)도 같은 코스 수당 근거를 보이므로 여기서 export해 그대로 재사용한다(monthly-statement-view.tsx).
+export const rateStatus: Record<TherapistDailySettlementDto["assignmentEvidence"][number]["rateStatus"], { key: MessageKey; tone: StatusTone }> = {
   applied: { key: "settlements.therapist.rateStatus.applied", tone: "success" },
   zero_policy: { key: "settlements.therapist.rateStatus.zeroPolicy", tone: "neutral" },
   missing_policy: { key: "settlements.therapist.rateStatus.missingPolicy", tone: "warning" }
 };
 
-const roleKey = {
+export const roleKey = {
   THERAPIST_1: "settlements.therapist.role.therapist1",
   THERAPIST_2: "settlements.therapist.role.therapist2"
 } as const;

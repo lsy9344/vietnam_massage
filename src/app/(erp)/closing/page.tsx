@@ -19,6 +19,7 @@ import {
   type MonthlyClosingPreviewDto,
   type MonthlyClosingTherapistRowDto
 } from "@/modules/closing/monthly-closing-preview-service";
+import { COUNT_KING_MIN_CALLS, FULL_ATTENDANCE_THRESHOLD_DAYS } from "@/modules/closing/monthly-closing-thresholds";
 import {
   listMonthlyClosingChecklist,
   type MonthlyClosingChecklistCallDto,
@@ -48,9 +49,6 @@ function formatVnd(locale: Locale, t: Translator, amount: number) {
 const COUNT_KING_TIE_BREAKER_BASIS =
   "tie-breaker: totalCallCount desc, monthlySettlementAmount desc, staffCode asc, Employee.id asc";
 
-// Count-king eligibility threshold; matches COUNT_KING_MIN_CALLS in monthly-closing-preview-service.
-const COUNT_KING_MIN_CALLS = 40;
-
 /**
  * Reconstructs the localized full-attendance basis text from the row's structured fields,
  * instead of rendering the Korean `row.fullAttendanceBasis` the service produces for audit/snapshot.
@@ -59,7 +57,7 @@ function fullAttendanceBasisText(locale: Locale, t: Translator, row: MonthlyClos
   if (row.fullAttendanceDays === null) {
     return t("closing.therapist.basis.fullAttendance.sourceMissing");
   }
-  if (row.fullAttendanceDays >= 20) {
+  if (row.fullAttendanceDays >= FULL_ATTENDANCE_THRESHOLD_DAYS) {
     return t("closing.therapist.basis.fullAttendance.eligible", {
       days: row.fullAttendanceDays,
       amount: formatCurrencyVnd(locale, row.fullAttendanceAllowanceAmount)

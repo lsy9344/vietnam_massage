@@ -54,6 +54,9 @@ function draftTherapistResult(overrides: Partial<MonthlyStatementDto> = {}): Mon
           callCount: 2,
           amount: 1600000,
           calls: [call("call-a", "14:00")],
+          appliedPolicies: [
+            { serviceCallId: "call-a", courseId: "course-a", courseCode: "A", role: "THERAPIST_1", employeeId: "emp-1", commissionAmount: 1600000, rateStatus: "applied", call: call("call-a", "14:00") }
+          ],
           payoutConfirmation: { status: "confirmed", currentAmount: 1600000, lastConfirmedAmount: 1600000, difference: 0, requiresReconfirmation: false, history: [] }
         }
       ]
@@ -78,6 +81,39 @@ describe("MonthlyStatementView", () => {
     assert.match(html, /원장에서 보기/);
     assert.match(html, /확인됨/);
     assert.match(html, /이 문서는 수당 명세이며 송금 영수증이 아닙니다/);
+    // S9(V08): 적용 정책 근거(코스 수당).
+    assert.match(html, /적용 정책/);
+    assert.match(html, /마사지사1/);
+    assert.match(html, /정책 적용/);
+    assert.match(html, /1,600,000/);
+  });
+
+  it("S9(V08): 코스 수당이 0원 정책이거나 아예 없으면(이중 역할 포함) 콜마다 그 상태를 함께 보인다", () => {
+    const withPolicies = draftTherapistResult({
+      evidence: {
+        available: true,
+        dailyEntries: [
+          {
+            serviceDate: "2026-06-01",
+            attendanceSummary: "09:00–18:00",
+            callCount: 1,
+            amount: 0,
+            calls: [call("call-b", "15:00")],
+            appliedPolicies: [
+              { serviceCallId: "call-b", courseId: "course-a", courseCode: "A", role: "THERAPIST_1", employeeId: "emp-1", commissionAmount: 0, rateStatus: "zero_policy", call: call("call-b", "15:00") },
+              { serviceCallId: "call-b", courseId: "course-a", courseCode: "A", role: "THERAPIST_2", employeeId: "emp-1", commissionAmount: 0, rateStatus: "missing_policy", call: call("call-b", "15:00") }
+            ],
+            payoutConfirmation: null
+          }
+        ]
+      }
+    });
+    const html = renderToStaticMarkup(renderInShell(<MonthlyStatementView canOpenLedger={true} result={withPolicies} />, "ko"));
+
+    assert.match(html, /마사지사1/);
+    assert.match(html, /마사지사2/);
+    assert.match(html, /0원 정책/);
+    assert.match(html, /정책 없음/);
   });
 
   it("관리자가 아니면(canOpenLedger=false) 근거 콜에 원장 링크를 주지 않는다", () => {
