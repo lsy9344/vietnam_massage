@@ -102,3 +102,7 @@ Owns monthly close and payout snapshots.
 - daily attendance entry
 - room status
 - service-call UI state
+
+## Monthly Statements
+
+`monthly-statement-service.ts` composes settlement calculations and this module's closing snapshots. It belongs here to preserve settlements → closing dependency direction. The settlement statement route consumes it for all three employee groups; see `../settlements/README.md` for payout-event handoff.

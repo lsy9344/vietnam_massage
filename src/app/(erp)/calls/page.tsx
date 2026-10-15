@@ -30,7 +30,7 @@ import {
   parseLedgerView,
   type LedgerTab,
   type LedgerView
-} from "@/app/(erp)/calls/ledger-address";
+} from "@/lib/ledger-address";
 import { DateContextControls } from "@/components/shell/date-context-controls";
 import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-notice";
 import { ScreenToolbar } from "@/components/shell/screen-toolbar";

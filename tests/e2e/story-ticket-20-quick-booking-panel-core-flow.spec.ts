@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { businessTodayIsoDate } from "@/lib/operating-date";
@@ -28,7 +29,7 @@ let therapistId2 = "";
 let createdMonth = false;
 
 async function seedAccount() {
-  const employee = await (prisma as any).employee.upsert({
+  const employee = await testEmployees.upsert({
     where: { staffCode: account.staffCode },
     update: { displayName: "T20 카운터", employeeGroup: "OPERATIONS", isActive: true },
     create: {
@@ -126,7 +127,7 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
     // 둘 다 같은 코스 수당을 둔다. 두 테스트(PC·태블릿)가 "지금"으로 같은 실제 시각 근처를 고를 수 있어,
     // 한 명뿐이면 뒤 테스트의 가능 코스가 앞 테스트가 만든 콜로 막힐 수 있다(B01, 두 번째 Therapist로 비껴간다).
     async function seedTherapist(staffCode: string, displayName: string, sortOrder: number) {
-      const employee = await (prisma as any).employee.upsert({
+      const employee = await testEmployees.upsert({
         where: { staffCode },
         update: { displayName, employeeGroup: "THERAPIST", isActive: true },
         create: {
@@ -158,6 +159,7 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanup();
     await (prisma as any).therapistCourseRate.deleteMany({ where: { therapistId: { in: [therapistId, therapistId2] }, courseId } });
     await (prisma as any).coursePolicy.deleteMany({ where: { name: "T20 A", effectiveFromMonth: monthKey } });
@@ -212,6 +214,7 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
 
     // 저장하면 패널이 닫히고, 그 콜이 원장 표에 나타나며 포커스가 그 행으로 간다(스토리 65).
     await expect(dialog).toBeHidden();
+    await expect(page.getByText("이미 저장된 콜입니다.", { exact: true })).toBeHidden();
     const created = await (prisma as any).serviceCall.findMany({ where: { customerMemo: memo } });
     expect(created).toHaveLength(1);
     expect(created[0].status).toBe("RESERVED");
@@ -226,6 +229,41 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
     const row = page.locator(`tr[data-service-call-id="${created[0].id}"]`);
     await expect(row).toBeVisible({ timeout: 10_000 });
     await expect(row.locator('input:not([type="hidden"]), select, button, a, [tabindex]').first()).toBeFocused({ timeout: 10_000 });
+  });
+
+  test("응답 유실 뒤 같은 요청으로 재시도하면 패널 밖에 이미 저장 안내가 남고 저장된 행으로 포커스가 간다 (티켓 38)", async ({ page }) => {
+    const memo = `T38-lost-${Date.now().toString(36)}`;
+    await login(page, account.accountId, account.password);
+    await openQuickBooking(page, monthId, today);
+    const dialog = panel(page);
+    await dialog.getByLabel("고객/메모").fill(memo);
+    await dialog.getByRole("button", { name: "다음" }).click();
+    await dialog.getByLabel("시간").selectOption("15:00");
+    await dialog.getByRole("button", { name: "다음" }).click();
+    const therapist = dialog.getByRole("rowheader", { name: "T20 마사지사", exact: true }).locator("xpath=ancestor::tr[1]");
+    await therapist.getByRole("button", { name: /A 60분 가능/ }).click();
+    await dialog.getByRole("button", { name: "다음" }).click();
+    await dialog.getByRole("button", { name: "다음" }).click();
+    let dropped = false;
+    await page.route((url) => url.pathname === "/calls", async (route) => {
+      const request = route.request();
+      if (!dropped && request.method() === "POST" && request.headers()["next-action"] && request.postData()?.includes(memo)) {
+        dropped = true;
+        await route.fetch();
+        await route.abort("failed");
+        return;
+      }
+      await route.continue();
+    });
+    await dialog.getByRole("button", { name: "예약 저장" }).click();
+    await expect(dialog.locator("[data-save-state]")).toHaveAttribute("data-save-state", "checking");
+    await dialog.getByRole("button", { name: "재시도" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole("status").filter({ hasText: "이미 저장된 콜입니다." })).toBeVisible();
+    const calls = await prisma.serviceCall.findMany({ where: { customerMemo: memo } });
+    expect(calls).toHaveLength(1);
+    const row = page.locator(`tr[data-service-call-id="${calls[0].id}"]`);
+    await expect(row.locator('input:not([type="hidden"]), select, button, a, [tabindex]').first()).toBeFocused();
   });
 
   test("태블릿 폭(768px): 같은 흐름으로 예약을 만들 수 있다", async ({ page }) => {
@@ -329,7 +367,7 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
     // 2단계: 날짜·예약시각. 앞선 테스트들이 "지금" 시각 슬롯을 이미 채워 뒀을 수 있어, 네이티브 select를
     // 키보드로 다뤄 비어 있는 다른 시간을 고른다("지금" 버튼 자체는 PC 폭 테스트가 이미 본다, B05).
     await dialog.getByLabel("시간").focus();
-    await dialog.getByLabel("시간").selectOption("15:00");
+    await dialog.getByLabel("시간").selectOption("16:00");
     await dialog.getByRole("button", { name: "다음" }).focus();
     await page.keyboard.press("Enter");
 

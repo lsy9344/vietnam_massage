@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { getMonthlyStatement, MonthlyStatementDomainError, type MonthlyStatementDependencies } from "@/modules/settlements/monthly-statement-service";
+import { getMonthlyStatement, MonthlyStatementDomainError, type MonthlyStatementDependencies } from "@/modules/closing/monthly-statement-service";
 import type { MonthlyClosingPreviewDto } from "@/modules/closing/monthly-closing-preview-service";
 import type { MonthlyClosingDto, MonthlyClosingVersionSummaryDto } from "@/modules/closing/monthly-closing-service";
 import type { PayoutConfirmationDto } from "@/modules/settlements/payout-confirmation-service";

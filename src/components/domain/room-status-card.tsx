@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/domain/status-badge";
 import { DateCapsule } from "@/components/ui/date-capsule";
 import { StatusIndicator } from "@/components/ui/status-indicator";
-import { ledgerCallHref } from "@/app/(erp)/calls/ledger-address";
+import { ledgerCallHref } from "@/lib/ledger-address";
 import { defaultLocale, type Locale } from "@/lib/i18n/config";
 import { createTranslator } from "@/lib/i18n";
 import { roomStatusLabel, serviceStatusLabel } from "@/lib/i18n/codes";

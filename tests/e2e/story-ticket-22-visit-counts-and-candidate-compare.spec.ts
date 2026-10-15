@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -21,7 +22,7 @@ let minaId = "";
 let suaId = "";
 
 async function seedEmployee(staffCode: string, displayName: string, sortOrder: number) {
-  return (prisma as any).employee.upsert({
+  return testEmployees.upsert({
     where: { staffCode },
     update: { displayName, isActive: true },
     create: {
@@ -116,6 +117,7 @@ test.describe("티켓 22 방문 건수와 같은 연락처 후보 비교", () =>
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanup();
     await prisma.$disconnect();
   });
@@ -129,15 +131,15 @@ test.describe("티켓 22 방문 건수와 같은 연락처 후보 비교", () =>
 
     await expect(page.getByText("같은 연락처의 고객이 여러 명입니다")).toBeVisible();
     const compare = page.getByRole("listbox", { name: "고객 검색" });
-    await expect(compare.getByRole("columnheader", { name: "이름" })).toBeVisible();
-    await expect(compare.getByRole("columnheader", { name: "연락처" })).toBeVisible();
-    await expect(compare.getByRole("columnheader", { name: "최근 방문일" })).toBeVisible();
-    await expect(compare.getByRole("columnheader", { name: "방문완료 건수" })).toBeVisible();
+    await expect(compare.getByText("이름", { exact: true })).toBeVisible();
+    await expect(compare.getByText("연락처", { exact: true })).toBeVisible();
+    await expect(compare.getByText("최근 방문일", { exact: true })).toBeVisible();
+    await expect(compare.getByText("방문완료 건수", { exact: true })).toBeVisible();
 
     // 후보 표기는 가장 최근 방문의 고객/메모다(ADR 0003) — 민아는 17:00 예약이 가장 늦다.
-    const minaRow = compare.getByRole("row", { name: /T22 민아 예약/ });
+    const minaRow = compare.getByRole("option", { name: /T22 민아 예약/ });
     await expect(minaRow).toContainText(sharedPhone);
-    const suaRow = compare.getByRole("row", { name: /T22 수아 완료/ });
+    const suaRow = compare.getByRole("option", { name: /T22 수아 완료/ });
     await expect(suaRow).toContainText(sharedPhone);
 
     // 고르기 전에는 어떤 콜도 고객에 다시 연결되지 않는다(검색은 읽기만 한다).
@@ -148,7 +150,7 @@ test.describe("티켓 22 방문 건수와 같은 연락처 후보 비교", () =>
       .poll(async () => (await (prisma as any).serviceCall.findMany({ where: { customerId: suaId } })).length)
       .toBe(1);
 
-    await suaRow.getByRole("option", { name: "T22 수아 완료" }).click();
+    await suaRow.click();
     await expect(page).toHaveURL(new RegExp(`visitCustomer=${suaId}`));
 
     const panel = page.getByRole("complementary", { name: "T22 수아" });
@@ -159,7 +161,7 @@ test.describe("티켓 22 방문 건수와 같은 연락처 후보 비교", () =>
     await expect(counts).toContainText("취소0건");
 
     await page.getByRole("combobox", { name: "고객 검색" }).fill(sharedPhone);
-    await minaRow.getByRole("option", { name: "T22 민아 예약" }).click();
+    await minaRow.click();
     await expect(page).toHaveURL(new RegExp(`visitCustomer=${minaId}`));
 
     const minaPanel = page.getByRole("complementary", { name: "T22 민아" });

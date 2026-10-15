@@ -123,13 +123,13 @@ export function StepperNav({
           <button
             aria-current={candidate === step ? "step" : undefined}
             className={`flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors ${
-              candidate === step ? "border-brand bg-brand/10 text-foreground" : "border-border text-muted hover:bg-readonly"
+              candidate === step ? "border-brand bg-brand text-brand-foreground" : "border-border text-muted hover:bg-readonly"
             }`}
             disabled={disabled}
             onClick={() => onSelect(candidate)}
             type="button"
           >
-            <span aria-hidden="true" className="inline-flex size-5 items-center justify-center rounded-full bg-readonly text-[11px] font-bold">
+            <span aria-hidden="true" className="inline-flex size-5 items-center justify-center rounded-full bg-readonly text-foreground text-xs font-bold">
               {index + 1}
             </span>
             {t(stepLabelKey[candidate])}
@@ -159,10 +159,7 @@ export function ErrorSummary({
   if (!message && entries.length === 0) return null;
 
   return (
-    <div className="mb-4 grid gap-2 rounded-md border border-danger bg-danger/5 p-3" role="alert">
-      <p className="text-sm font-semibold text-danger">{t("calls.quickBooking.errorSummary.title")}</p>
-      {message ? <p className="text-sm text-danger">{message}</p> : null}
-      {entries.length > 0 ? (
+    <ScreenState className="mb-4" kind="error" label={t("calls.quickBooking.errorSummary.title")} title={message ?? t("calls.quickBooking.errorSummary.title")} action={entries.length > 0 ? (
         <ul className="grid gap-1">
           {entries.map(([field, messages]) => (
             <li key={field}>
@@ -176,8 +173,7 @@ export function ErrorSummary({
             </li>
           ))}
         </ul>
-      ) : null}
-    </div>
+      ) : null} />
   );
 }
 
@@ -837,6 +833,7 @@ export function QuickBookingPanel({
   const t = useT();
   const locale = useLocale();
   const [open, setOpen] = useState(false);
+  const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const ledger = useMemo(() => ({ operatingMonthId, serviceDate }), [operatingMonthId, serviceDate]);
   const [state, dispatch] = useReducer(quickBookingReducer, ledger, (initial) => initialQuickBookingState(initial, newRequestId()));
@@ -964,6 +961,7 @@ export function QuickBookingPanel({
           const result = await createQuickBookingServiceCallAction(request);
           if (result.ok) {
             const createdId = result.data.id;
+            setSavedNotice(result.notice ?? null);
             dispatch({ type: "saved", request, notice: result.notice ?? null, nextRequestId: newRequestId() });
             setOpen(false);
             focusCreatedRow(createdId);
@@ -1010,10 +1008,12 @@ export function QuickBookingPanel({
 
   return (
     <>
+      <div aria-live="polite" className={savedNotice ? "text-sm text-foreground" : "sr-only"} role="status">{savedNotice}</div>
       <ModalPanel
         description={t("calls.quickBooking.description")}
         onOpenChange={(next) => {
           if (next) {
+            setSavedNotice(null);
             setOpen(true);
             return;
           }

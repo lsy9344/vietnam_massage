@@ -167,7 +167,6 @@ describe("ledger view column grouping (ticket 19)", () => {
       "roomId",
       "courseId",
       "customerMemo",
-      "customerId",
       "therapist1Id",
       "therapist2Id",
       "earcareEmployeeId",
@@ -181,6 +180,8 @@ describe("ledger view column grouping (ticket 19)", () => {
       assert.match(row, new RegExp(`data-call-cell-column="${field}"`), `${field}은 전체 보기에 있어야 한다`);
     }
     assert.match(row, /data-call-cell-column="warnings"/);
+    assert.match(row, /aria-label="고객 연결 정정"/);
+    assert.doesNotMatch(row, /<select[^>]*data-call-cell-column="customerId"/);
 
     // S4(스펙 F02): 예약시각, 고객/메모, 상태 열은 모든 보기에서 같은 순서로 맨 앞에 있어야 한다.
     const order = columnOrder(row, ["startTime", "customerMemo", "status"]);

@@ -1,0 +1,5 @@
+# Keep logs locally for review, while committing scripts and the result summary.
+*/
+*.log
+*.json
+*.pid

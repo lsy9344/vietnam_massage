@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -24,7 +25,7 @@ let eveningCallId = "";
 let createdMonth = false;
 
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, sortOrder: number) {
-  return (prisma as any).employee.upsert({
+  return testEmployees.upsert({
     where: { staffCode },
     update: { displayName, employeeGroup, isActive: true },
     create: {
@@ -153,6 +154,7 @@ test.describe("티켓 14 객실 겹침", () => {
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanup();
     await removeSeededMasters();
     await prisma.$disconnect();

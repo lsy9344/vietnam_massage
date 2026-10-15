@@ -508,3 +508,32 @@ export async function listActivelyConfirmedUnitEmployeeIds(input: {
 
   return [...latestByEmployeeId.entries()].filter(([, record]) => record.eventType !== "release").map(([employeeId]) => employeeId);
 }
+
+/** 계산 서비스가 넘기는 클라이언트를 지급 확인 저장소의 좁은 경계로 맞춘다. */
+export function toPayoutConfirmationPrismaClient(client: unknown) {
+  return client as Parameters<typeof listPayoutConfirmations>[0]["prismaClient"];
+}
+
+/** 계산된 직원 행에 동일한 사건 조회·현재 금액 비교를 적용한다. */
+export async function attachPayoutConfirmationsToRows<T extends { employeeId: string }>(input: {
+  client: unknown;
+  unitType: PayoutConfirmationUnitType;
+  operatingMonthId: string;
+  serviceDate?: string | null;
+  operatingMonthStatus: string;
+  rows: T[];
+  currentAmount: (row: T) => number;
+}): Promise<Array<T & { payoutConfirmation: PayoutConfirmationDto }>> {
+  if (input.rows.length === 0) return [];
+  const client = toPayoutConfirmationPrismaClient(input.client);
+  const confirmations = client?.payoutConfirmationEvent ? await listPayoutConfirmations({
+    ...input,
+    serviceDate: input.serviceDate ?? null,
+    units: input.rows.map((row) => ({ employeeId: row.employeeId, currentAmount: input.currentAmount(row) })),
+    prismaClient: client
+  }) : new Map<string, PayoutConfirmationDto>();
+  return input.rows.map((row) => ({
+    ...row,
+    payoutConfirmation: confirmations.get(row.employeeId) ?? derivePayoutConfirmationStatus([], input.currentAmount(row), input.operatingMonthStatus)
+  }));
+}

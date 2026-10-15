@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { defaultRooms } from "@/modules/masters/room-schema";
@@ -40,7 +41,7 @@ async function freeEmployeeSortOrder(employeeGroup: string, staffCode: string, p
 }
 
 async function seedAccount(account: (typeof accounts)[keyof typeof accounts]) {
-  const employee = await (prisma as any).employee.upsert({
+  const employee = await testEmployees.upsert({
     where: { staffCode: account.staffCode },
     update: { isActive: true },
     create: {
@@ -128,7 +129,7 @@ async function seed() {
   for (const [index, name] of ["Mai", "Linh", "Thu"].entries()) {
     const staffCode = `E2E-T04-THR-${index}`;
     therapists.push(
-      await (prisma as any).employee.upsert({
+      await testEmployees.upsert({
         where: { staffCode },
         update: { isActive: true },
         create: {
@@ -252,6 +253,7 @@ test.describe("Ticket 04 floor screens", () => {
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanupCalls();
     await prisma.$disconnect();
   });

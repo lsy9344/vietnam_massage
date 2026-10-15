@@ -6,7 +6,7 @@ import { AmountText, PanelSection, vnd } from "@/app/(erp)/settlements/settlemen
 import { therapistEvidenceAmount } from "@/app/(erp)/settlements/settlement-view-model";
 import { rateStatus, roleKey } from "@/app/(erp)/settlements/therapist-settlement-view";
 import { COUNT_KING_MIN_CALLS, FULL_ATTENDANCE_THRESHOLD_DAYS } from "@/modules/closing/monthly-closing-thresholds";
-import { ledgerCallHref } from "@/app/(erp)/calls/ledger-address";
+import { ledgerCallHref } from "@/lib/ledger-address";
 import { Button } from "@/components/ui/button";
 import { DateCapsule } from "@/components/ui/date-capsule";
 import { DetailRow } from "@/components/ui/detail-row";
@@ -22,7 +22,7 @@ import type {
   MonthlyStatementDailyEntryDto,
   MonthlyStatementDto,
   MonthlyStatementTherapistSummaryDto
-} from "@/modules/settlements/monthly-statement-service";
+} from "@/modules/closing/monthly-statement-service";
 
 /**
  * 월 명세서 화면(스펙 F05, 티켓 32). 서비스가 돌려준 값을 그대로 그린다 — 금액·근거를 다시 계산하지 않는다.

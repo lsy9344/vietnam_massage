@@ -33,6 +33,7 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   INVALID_CUSTOMER_INPUT: "Dữ liệu khách không hợp lệ.",
 
   // 콜 상세 패널: 고객 연결 정정(F06)
+  SERVICE_CALL_CUSTOMER_LINK_CORRECTION_REQUIRED: "Vui lòng chỉnh sửa liên kết khách trong chi tiết cuộc gọi và nhập lý do.",
   SERVICE_CALL_CUSTOMER_LINK_REASON_REQUIRED: "Vui lòng nhập lý do chỉnh sửa.",
   INVALID_SERVICE_CALL_CUSTOMER_LINK_INPUT: "Dữ liệu chỉnh sửa liên kết khách không hợp lệ.",
 

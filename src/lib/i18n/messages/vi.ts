@@ -361,7 +361,7 @@ export const vi: Messages = {
   // 두 명 코스와 경고 확인 후 배정(스펙 F01, 티켓 21)
   "calls.quickBooking.therapist.overrideAssign": "Giao sau khi xác nhận cảnh báo",
   "calls.quickBooking.therapist.overrideTitle": "Bạn muốn giao sau khi xác nhận cảnh báo?",
-  "calls.quickBooking.therapist.overrideTimeShort": "{therapist} không còn đủ thời gian trống cho gói này ở giờ đã chọn. Nếu vẫn giao, sẽ lưu kèm cảnh báo trùng giờ.",
+  "calls.quickBooking.therapist.overrideTimeShort": "{therapist} không còn đủ thời gian trống cho gói này ở giờ đã chọn. Nếu vẫn giao, cuộc gọi được lưu dù không đáp ứng điều kiện trống trên lịch.",
   "calls.quickBooking.therapist.overrideRateMissing": "{therapist} chưa có phụ cấp cho gói này. Nếu vẫn giao, sẽ lưu kèm cảnh báo thiếu phụ cấp.",
   "calls.quickBooking.therapist.secondTitle": "Therapist thứ hai",
   "calls.quickBooking.therapist.secondUnset": "Hãy chọn Therapist thứ hai.",

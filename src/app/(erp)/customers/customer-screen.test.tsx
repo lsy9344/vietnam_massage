@@ -142,7 +142,7 @@ describe("customer screen view", () => {
     assert.doesNotMatch(options[0], /090111/);
     assert.match(options[1], /aria-selected="true"/);
     assert.match(options[1], /민아 메모/);
-    assert.match(html, /aria-activedescendant="customer-option-1"/);
+    assert.match(html, /aria-activedescendant="customer-candidates-option-1"/);
   });
 
   it("switches to a comparison table with a same-phone warning when two or more candidates' phones match by digits, and either stays pickable", () => {
@@ -173,7 +173,7 @@ describe("customer screen view", () => {
     assert.match(html, /role="alert"[^>]*>[\s\S]*같은 연락처의 고객이 여러 명입니다/);
     assert.doesNotMatch(html, /<ul[^>]*id="customer-candidates"/);
     for (const header of ["이름", "연락처", "최근 방문일", "방문완료 건수"]) {
-      assert.match(html, new RegExp(`<th[^>]*>${header}</th>`));
+      assert.match(html, new RegExp(`<span[^>]*>${header}</span>`));
     }
     const options = [...html.matchAll(/<button[^>]*role="option"[^>]*>[\s\S]*?<\/button>/g)].map((match) => match[0]);
     assert.equal(options.length, 2);

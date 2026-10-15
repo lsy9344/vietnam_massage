@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { businessTodayIsoDate } from "@/lib/operating-date";
@@ -38,7 +39,7 @@ async function freeEmployeeSortOrder(employeeGroup: string, staffCode: string, p
 }
 
 async function seedAccount() {
-  const employee = await (prisma as any).employee.upsert({
+  const employee = await testEmployees.upsert({
     where: { staffCode: account.staffCode },
     update: { displayName: "T21 카운터", employeeGroup: "OPERATIONS", isActive: true },
     create: {
@@ -143,7 +144,7 @@ test.describe("티켓 21 빠른 예약: 두 명 코스와 경고 확인 후 배�
     }
 
     async function seedTherapist(staffCode: string, displayName: string, sortOrder: number, withRate: boolean) {
-      const employee = await (prisma as any).employee.upsert({
+      const employee = await testEmployees.upsert({
         where: { staffCode },
         update: { displayName, employeeGroup: "THERAPIST", isActive: true },
         create: {
@@ -185,6 +186,7 @@ test.describe("티켓 21 빠른 예약: 두 명 코스와 경고 확인 후 배�
   test.beforeEach(cleanup);
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanup();
     await (prisma as any).therapistCourseRate.deleteMany({
       where: { therapistId: { in: [therapist1Id, therapist2Id, therapist3NoRateId] }, courseId }

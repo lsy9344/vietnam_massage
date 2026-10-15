@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Browser, type Locator } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -12,8 +13,8 @@ const accounts = {
 } as const;
 type AccountKey = keyof typeof accounts;
 
-const monthKey = "2038-03";
-const serviceDate = "2038-03-10";
+const monthKey = "2075-03";
+const serviceDate = "2075-03-10";
 const staleMessage = "다른 화면에서 이 콜이 바뀌었습니다. 다시 불러온 뒤에 저장하세요.";
 
 let monthId = "";
@@ -25,7 +26,7 @@ const accountDbIds: Record<AccountKey, string> = { counterA: "", counterB: "" };
 
 async function seedAccount(key: AccountKey) {
   const account = accounts[key];
-  const employee = await (prisma as any).employee.upsert({
+  const employee = await testEmployees.upsert({
     where: { staffCode: account.staffCode },
     update: { displayName: `T15 ${key}`, employeeGroup: "OPERATIONS", isActive: true },
     create: {
@@ -142,7 +143,7 @@ test.describe("티켓 15 기존 행 저장 충돌 거절과 행 저장 상태", 
     } else {
       await (prisma as any).coursePolicy.create({ data: { courseId, effectiveFromMonth: monthKey, ...policy } });
     }
-    const therapist = await (prisma as any).employee.upsert({
+    const therapist = await testEmployees.upsert({
       where: { staffCode: "E2E-T15-THR-1" },
       update: { displayName: "T15 마사지사", employeeGroup: "THERAPIST", isActive: true },
       create: {
@@ -161,6 +162,7 @@ test.describe("티켓 15 기존 행 저장 충돌 거절과 행 저장 상태", 
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanup();
     // 코스 정책과 운영월은 다른 스펙의 화면에도 보인다. 이 스펙이 만든 것은 지운다.
     await (prisma as any).coursePolicy.deleteMany({ where: { name: "T15 A", effectiveFromMonth: monthKey } });

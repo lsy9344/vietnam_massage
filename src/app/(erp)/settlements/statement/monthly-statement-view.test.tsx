@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { renderInShell } from "@/components/shell/test-harness";
 import { MonthlyStatementView } from "@/app/(erp)/settlements/statement/monthly-statement-view";
-import type { MonthlyStatementDto } from "@/modules/settlements/monthly-statement-service";
+import type { MonthlyStatementDto } from "@/modules/closing/monthly-statement-service";
 
 function call(serviceCallId: string, startTime: string) {
   return {

@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -42,7 +43,7 @@ async function freeEmployeeSortOrder(employeeGroup: string, staffCode: string, p
 }
 
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, preferredSortOrder: number) {
-  return (prisma as any).employee.upsert({
+  return testEmployees.upsert({
     where: { staffCode },
     update: { displayName, employeeGroup, isActive: true },
     create: {
@@ -161,6 +162,7 @@ test.describe("티켓 28 근무표 지난주 복사·휴무 영향 콜", () => {
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanupCalls();
     await cleanupPlannedWorkingDays();
     await removeSeededMasters();

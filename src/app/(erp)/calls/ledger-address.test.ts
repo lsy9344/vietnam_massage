@@ -9,7 +9,7 @@ import {
   ledgerViewParams,
   parseLedgerTab,
   parseLedgerView
-} from "@/app/(erp)/calls/ledger-address";
+} from "@/lib/ledger-address";
 
 const october14 = { operatingMonthId: "m-2026-10", serviceDate: "2026-10-14" };
 

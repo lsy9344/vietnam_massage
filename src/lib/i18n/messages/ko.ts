@@ -361,7 +361,7 @@ export const ko = {
   // 두 명 코스와 경고 확인 후 배정(스펙 F01, 티켓 21)
   "calls.quickBooking.therapist.overrideAssign": "경고 확인 후 배정",
   "calls.quickBooking.therapist.overrideTitle": "경고를 확인하고 배정하시겠습니까?",
-  "calls.quickBooking.therapist.overrideTimeShort": "{therapist}님은 이 시각에 코스 길이만큼 비어 있지 않습니다. 그래도 배정하면 시간 겹침 경고와 함께 저장됩니다.",
+  "calls.quickBooking.therapist.overrideTimeShort": "{therapist}님은 이 시각에 코스 길이만큼 비어 있지 않습니다. 그래도 배정하면 시간표상 가능 조건을 만족하지 않는 콜로 저장됩니다.",
   "calls.quickBooking.therapist.overrideRateMissing": "{therapist}님에게 이 코스 수당이 없습니다. 그래도 배정하면 수당 없음 경고와 함께 저장됩니다.",
   "calls.quickBooking.therapist.secondTitle": "두 번째 Therapist",
   "calls.quickBooking.therapist.secondUnset": "두 번째 Therapist를 고르세요.",

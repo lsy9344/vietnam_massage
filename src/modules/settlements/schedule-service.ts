@@ -1,3 +1,6 @@
+import { isoDateFieldSchema, plannedWorkingDayCellStatuses, ScheduleDomainError, assertValidParsedDate, toFieldError, unsetPlanStatus, type PlannedWorkingDayCellStatus, type WorkPlanStatus } from "@/modules/masters/planned-working-day-query";
+export { workPlanStatuses, ScheduleDomainError, listPlannedWorkingDayStatusesForDate, unsetPlanStatus, type PlannedWorkingDayCellStatus, type WorkPlanStatus, type PlannedWorkingDayStatusDto } from "@/modules/masters/planned-working-day-query";
+
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
@@ -14,16 +17,6 @@ import { employeeGroups, type EmployeeGroup } from "@/modules/masters/employee-s
  * - 지난주 복사(copyLastWeekSchedule)와 휴무 영향 콜 조회(setPlannedWorkingDay의 impactedCalls)는 티켓 28이 더했다.
  *   영향받는 콜은 콜 서비스(service-call-service.ts)에서 읽기만 하고, 콜의 예약시각·배정·상태는 바꾸지 않는다.
  */
-
-export const workPlanStatuses = ["근무 예정", "휴무"] as const;
-export type WorkPlanStatus = (typeof workPlanStatuses)[number];
-
-const unsetPlanStatus = "미입력" as const;
-export type PlannedWorkingDayCellStatus = WorkPlanStatus | typeof unsetPlanStatus;
-const plannedWorkingDayCellStatuses = [...workPlanStatuses, unsetPlanStatus] as [
-  PlannedWorkingDayCellStatus,
-  ...PlannedWorkingDayCellStatus[]
-];
 
 type EmployeeRecord = {
   id: string;
@@ -101,11 +94,6 @@ export type PlannedWorkingDayWeekDto = {
   groups: PlannedWorkingDayGroupDto[];
 };
 
-export type PlannedWorkingDayStatusDto = {
-  employeeId: string;
-  status: PlannedWorkingDayCellStatus;
-};
-
 export type PlannedWorkingDayCellResultDto = {
   employeeId: string;
   date: string;
@@ -114,23 +102,7 @@ export type PlannedWorkingDayCellResultDto = {
   impactedCalls: AssignedServiceCallSummaryDto[];
 };
 
-export type ScheduleErrorField = "employeeId" | "date" | "status";
-
-export class ScheduleDomainError extends Error {
-  constructor(message: string, public readonly code: string, public readonly field?: ScheduleErrorField) {
-    super(message);
-    this.name = "ScheduleDomainError";
-  }
-}
-
-const isoDateFieldSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "날짜는 YYYY-MM-DD 형식이어야 합니다.");
-
 const weekQuerySchema = z.object({
-  date: isoDateFieldSchema
-});
-
-const statusQuerySchema = z.object({
-  employeeIds: z.array(z.string().trim().min(1)).max(500),
   date: isoDateFieldSchema
 });
 
@@ -167,27 +139,6 @@ function mondayOfWeekContaining(value: string) {
 
 function isEmployeeGroup(value: string): value is EmployeeGroup {
   return (employeeGroups as readonly string[]).includes(value);
-}
-
-const errorFields: readonly ScheduleErrorField[] = ["employeeId", "date", "status"];
-
-function asErrorField(path: PropertyKey | undefined): ScheduleErrorField | undefined {
-  return errorFields.find((field) => field === path);
-}
-
-function invalidInput(message: string, field?: ScheduleErrorField) {
-  return new ScheduleDomainError(message, "INVALID_SCHEDULE_INPUT", field);
-}
-
-function toFieldError(error: z.ZodError) {
-  const issue = error.issues[0];
-  return invalidInput(issue?.message ?? "입력값을 확인하세요.", asErrorField(issue?.path[0]));
-}
-
-function assertValidParsedDate(value: string) {
-  if (toIsoDate(toDate(value)) !== value) {
-    throw invalidInput("날짜가 올바르지 않습니다.", "date");
-  }
 }
 
 async function loadActiveScheduleEmployee(client: ScheduleServicePrismaClient, employeeId: string) {
@@ -259,41 +210,6 @@ export async function listPlannedWorkingDaysForWeek(input: {
   }));
 
   return { weekStartDate, weekEndDate, dates, groups };
-}
-
-// listTherapistAvailability(calls/service-call-service.ts, 티켓 29)가 가능 코스 행에 근무 예정을 붙일 때
-// 재사용할 수 있도록 plannedWorkingDay.findMany만 요구하는 좁은 타입이다. calls 쪽의
-// AssignedCallReadClient(listAssignedServiceCallsForEmployeeOnDate)와 같은 방식.
-type PlannedWorkingDayReadClient = {
-  plannedWorkingDay: { findMany(args?: unknown): Promise<Array<Pick<PlannedWorkingDayRecord, "employeeId" | "planStatus">>> };
-};
-
-/**
- * 직원 목록과 날짜 하나의 근무표 상태를 돌려준다. 가능 코스(29)와 휴무 영향 콜(28)이
- * 재사용하는 직원별·날짜별 조회다. 행이 없는 직원은 미입력으로 채운다.
- */
-export async function listPlannedWorkingDayStatusesForDate(input: {
-  employeeIds: string[];
-  date: string;
-  prismaClient?: PlannedWorkingDayReadClient;
-}): Promise<PlannedWorkingDayStatusDto[]> {
-  const parsed = statusQuerySchema.safeParse(input);
-  if (!parsed.success) throw toFieldError(parsed.error);
-  assertValidParsedDate(parsed.data.date);
-
-  const uniqueEmployeeIds = [...new Set(parsed.data.employeeIds)];
-  if (uniqueEmployeeIds.length === 0) return [];
-
-  const client = input.prismaClient ?? getClient();
-  const rows = await client.plannedWorkingDay.findMany({
-    where: { employeeId: { in: uniqueEmployeeIds }, workDate: toDate(parsed.data.date) }
-  });
-  const statusByEmployeeId = new Map(rows.map((row) => [row.employeeId, row.planStatus as WorkPlanStatus]));
-
-  return uniqueEmployeeIds.map((employeeId) => ({
-    employeeId,
-    status: statusByEmployeeId.get(employeeId) ?? unsetPlanStatus
-  }));
 }
 
 /**

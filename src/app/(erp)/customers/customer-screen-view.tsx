@@ -1,6 +1,6 @@
 import type { KeyboardEvent } from "react";
 import { SidePanel } from "@/components/ui/panel";
-import { CustomerCandidateCompare, isCustomerCandidateChosen } from "@/components/domain/customer-candidate-compare";
+import { CustomerCandidateCompare, customerCandidateOptionId, isCustomerCandidateChosen } from "@/components/domain/customer-candidate-compare";
 import { CustomerVisitCounts } from "@/components/domain/customer-visit-counts";
 import { ScreenState } from "@/components/ui/screen-state";
 import { serviceStatusLabel } from "@/lib/i18n/codes";
@@ -12,7 +12,7 @@ import type {
   CustomerVisitCountsDto,
   CustomerVisitHistoryRowDto
 } from "@/modules/calls/service-call-service";
-import { ledgerCallHref } from "@/app/(erp)/calls/ledger-address";
+import { ledgerCallHref } from "@/lib/ledger-address";
 import { CustomerEditForm } from "@/app/(erp)/customers/customer-forms";
 
 const cellClassName = "border-b border-border px-3 py-2";
@@ -61,7 +61,7 @@ export function CustomerScreenView({
 }) {
   const label = t(locale, "calls.search.label");
   const showEmpty = settledQuery.trim() !== "" && query.trim() === settledQuery.trim() && candidates.length === 0;
-  const activeId = activeIndex >= 0 ? `customer-option-${activeIndex}` : undefined;
+  const activeId = activeIndex >= 0 ? customerCandidateOptionId("customer-candidates", activeIndex) : undefined;
   const panelOpen = customer !== null || selectedMemo !== null;
 
   return (
@@ -117,7 +117,7 @@ export function CustomerScreenView({
                       className={`flex min-h-14 w-full flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md px-4 py-2 text-left transition-colors hover:bg-readonly ${
                         chosen ? "bg-readonly [box-shadow:inset_3px_0_0_var(--brand)]" : "bg-surface"
                       } ${active ? "outline-2 outline-offset-2 outline-brand-secondary" : ""}`}
-                      id={`customer-option-${index}`}
+                      id={customerCandidateOptionId("customer-candidates", index)}
                       onClick={() => onSelect(candidate)}
                       role="option"
                       tabIndex={-1}

@@ -43,7 +43,7 @@ import { useRegisterCallConflict, type CallConflictCompareData } from "@/app/(er
 import { CallRowSaveStatus, NewCallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
 import { CallPhoneCardList } from "@/app/(erp)/calls/call-phone-card-list";
 import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
-import { ledgerCallAnchorId, type LedgerView } from "@/app/(erp)/calls/ledger-address";
+import { ledgerCallAnchorId, type LedgerView } from "@/lib/ledger-address";
 import { CallWarningCell } from "@/app/(erp)/calls/call-warning-cell";
 import { spokenClock } from "@/app/(erp)/calls/call-warning-label";
 import {
@@ -1493,15 +1493,17 @@ function EditableCallRow({
     ),
     customer: (
       <td className="border-b border-border px-2 py-2" key="customer">
-        <CustomerLinkSelect
-          columnId="customerId"
-          customers={customers}
-          disabled={isLocked}
-          onChange={(value) => updateDraftAndCommit("customerId", nullableValue(value))}
-          onKeyDown={(event) => handleGridKeyDown("customerId", event)}
-          rowIndex={rowIndex}
-          value={draft.customerId ?? ""}
-        />
+        <button
+          aria-label={t("calls.detail.customerLink.submit")}
+          data-call-cell-column="customerId"
+          data-call-cell-row={rowIndex}
+          onKeyDown={(event) => { if (event.key !== "Enter" && event.key !== " ") handleGridKeyDown("customerId", event); }}
+          className="min-h-8 w-full rounded-sm px-2 text-left text-xs text-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-secondary"
+          onClick={() => onOpenDetail(row.id)}
+          type="button"
+        >
+          {customers.find((customer) => customer.id === draft.customerId)?.name ?? t("calls.customer.unlinked")}
+        </button>
       </td>
     ),
     therapist1: (

@@ -32,10 +32,12 @@ if (!packageJson.scripts?.lint?.includes("validate-story-5-1.mjs && node scripts
 }
 
 const service = read("src/modules/closing/monthly-closing-preview-service.ts");
+const thresholds = read("src/modules/closing/monthly-closing-thresholds.ts");
+for (const required of ["FULL_ATTENDANCE_THRESHOLD_DAYS = 20", "COUNT_KING_MIN_CALLS = 40"]) {
+  if (!thresholds.includes(required)) errors.push(`monthly-closing-thresholds.ts missing ${required}`);
+}
 for (const required of [
-  "FULL_ATTENDANCE_THRESHOLD_DAYS = 20",
   "FULL_ATTENDANCE_ALLOWANCE_AMOUNT = 2_000_000",
-  "COUNT_KING_MIN_CALLS = 40",
   "1: 5_000_000",
   "2: 3_000_000",
   "3: 1_000_000",

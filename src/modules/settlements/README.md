@@ -1,6 +1,6 @@
 # Settlements Module
 
-Owns daily settlement calculations.
+Owns daily settlement calculations and payout confirmation events.
 
 ## Includes
 
@@ -138,3 +138,9 @@ Owns daily settlement calculations.
 - service-call input
 - monthly close confirmation
 - audit persistence
+
+## Payout Confirmation and Monthly Statements (tickets 30–32)
+
+- `payout-confirmation-service.ts` owns confirm/reconfirm/release events for Therapist daily, earcare daily, operations daily and operations monthly units (ADR 0004). Calculators pass current amounts; `attachPayoutConfirmationsToRows()` adds the event-derived state consistently. Existing confirmed units remain visible at 0 when calculations or active staff rows disappear, so reconfirmation and closing checks still see differences.
+- `monthly-statement-service.ts` lives in `../closing/`: it composes settlement calculations with immutable closing snapshots, downstream of settlements. Draft/review months default to current unconfirmed calculations, including reopened months; explicit earlier versions remain selectable. Confirmed/locked months require a snapshot. Historical versions never acquire newly calculated evidence.
+- The read-only planned-work lookup and status vocabulary live in `../masters/planned-working-day-query.ts`. Schedule mutations stay here and ask calls for day-off impact. This prevents availability lookup from importing the schedule mutation service.

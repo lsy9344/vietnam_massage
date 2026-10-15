@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { businessTodayServiceDate } from "@/lib/operating-date";
-import { listAssignedServiceCallsForEmployeeFromDate } from "@/modules/calls/service-call-service";
+import { listAssignedServiceCallsForEmployeeFromDate } from "@/modules/calls/assigned-service-call-query";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
 import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
 import {

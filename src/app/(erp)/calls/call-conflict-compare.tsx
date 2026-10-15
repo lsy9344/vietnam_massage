@@ -202,6 +202,7 @@ export function CallConflictCompareFields({
   const rows = callConflictFieldRows(compare.draft, draftFromRow(compare.latestRow), options, customers, t);
 
   function toggle(field: EditableCallField) {
+    if (field === "customerId") return;
     setChosen((current) => {
       const next = new Set(current);
       if (next.has(field)) next.delete(field);
@@ -213,6 +214,7 @@ export function CallConflictCompareFields({
   function reapply() {
     const changes: Partial<CallRowDraft> = {};
     for (const field of chosen) {
+      if (field === "customerId") continue;
       (changes as Record<string, unknown>)[field] = compare.draft[field];
     }
     compare.onReapply(changes);
@@ -259,6 +261,7 @@ export function CallConflictCompareFields({
                         checked={chosen.has(row.field)}
                         className="h-5 w-5 accent-brand"
                         data-conflict-field={row.field}
+                        disabled={row.field === "customerId"}
                         onChange={() => toggle(row.field)}
                         type="checkbox"
                       />

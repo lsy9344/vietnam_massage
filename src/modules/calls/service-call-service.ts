@@ -1,3 +1,7 @@
+import { ServiceCallDomainError } from "./service-call-domain-error";
+export { ServiceCallDomainError } from "./service-call-domain-error";
+export { listAssignedServiceCallsForEmployeeFromDate } from "./assigned-service-call-query";
+
 import { prisma } from "@/lib/prisma";
 import { BUSINESS_TIME_ZONE_OFFSET_MINUTES } from "@/lib/business-time";
 import { defaultLocale, type Locale } from "@/lib/i18n/config";
@@ -9,7 +13,7 @@ import { listActiveCodeItems, listActiveTimeSlots } from "@/modules/masters/code
 import { listActiveCourses } from "@/modules/masters/course-service";
 import { listActiveEmployees } from "@/modules/masters/employee-service";
 import { listActiveRooms } from "@/modules/masters/room-service";
-import { listPlannedWorkingDayStatusesForDate, type PlannedWorkingDayCellStatus } from "@/modules/settlements/schedule-service";
+import { listPlannedWorkingDayStatusesForDate, type PlannedWorkingDayCellStatus } from "@/modules/masters/planned-working-day-query";
 import {
   assignmentRoles,
   customerInputSchema,
@@ -239,7 +243,7 @@ type ServiceCallPrismaClient = {
   therapistAttendance: {
     findMany(args?: unknown): Promise<TherapistAttendanceRecord[]>;
   };
-  // listPlannedWorkingDayStatusesForDate(settlements/schedule-service.ts)가 요구하는 좁은 모양만 둔다. 실제로는
+  // listPlannedWorkingDayStatusesForDate(masters/planned-working-day-query.ts)가 요구하는 좁은 모양만 둔다. 실제로는
   // 같은 prisma 클라이언트라 근무표 서비스가 이 콜 테이블 조회와 함께 근무표 테이블을 읽을 수 있다(티켓 29).
   plannedWorkingDay: {
     findMany(args?: unknown): Promise<Array<{ employeeId: string; planStatus: string }>>;
@@ -482,13 +486,6 @@ export type TherapistAvailabilityRowDto = {
   courses: TherapistAvailabilityCourseDto[];
 };
 
-export class ServiceCallDomainError extends Error {
-  constructor(message: string, public readonly code: string) {
-    super(message);
-    this.name = "ServiceCallDomainError";
-  }
-}
-
 /**
  * 오래된 저장(STALE_CALL). 화면이 읽은 뒤에 다른 저장이 먼저 들어왔다. 아무것도 쓰지 않았고,
  * 화면이 다시 불러올 수 있게 지금의 행(currentRow)을 함께 돌려준다.
@@ -525,10 +522,6 @@ function isNoShowStatus(status: string) {
 function isCanceledStatus(status: string) {
   return status === "취소" || status === "CANCELED";
 }
-
-// isNoShowStatus·isCanceledStatus와 같은 값이다(S10). listAssignedServiceCallsForEmployeeFromDate가
-// SQL where에 그대로 쓴다 — masters/employee-service.ts가 손으로 복제해 두던 자리를 여기로 모은다.
-const NO_SHOW_OR_CANCELED_STATUSES = ["노쇼", "NO_SHOW", "취소", "CANCELED"];
 
 function requiresAssignedRoom(status: string) {
   return isInUseStatus(status) || isCleaningStatus(status) || isCompletedServiceCallStatus(status);
@@ -2004,6 +1997,20 @@ function isUniqueConstraintError(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "P2002";
 }
 
+/** 기존 콜의 고객 연결은 사유를 기록하는 전용 정정 작업으로만 바꾼다. */
+async function assertCustomerLinkUnchanged(
+  client: ServiceCallPrismaClient,
+  before: ServiceCallRecord,
+  customerId: string | null | undefined,
+  expectedUpdatedAt?: string | null
+) {
+  if (customerId === undefined || (customerId ?? null) === linkedCustomerId(before)) return;
+  if (expectedUpdatedAt && before.updatedAt.toISOString() !== new Date(expectedUpdatedAt).toISOString()) {
+    throw new StaleServiceCallError(await toRowDto(client, before));
+  }
+  throw new ServiceCallDomainError("고객 연결은 콜 상세에서 사유와 함께 정정하세요.", "SERVICE_CALL_CUSTOMER_LINK_CORRECTION_REQUIRED");
+}
+
 /**
  * 콜 한 줄을 검사하고 쓴다. serviceCallId가 있으면 화면이 읽은 버전일 때만 고치고, 없으면 새로 만든다.
  * 새로 만들 때 요청 id가 있으면 함께 적는다.
@@ -2037,6 +2044,7 @@ async function writeServiceCallRow(
     ? await tx.serviceCall.findUnique({ where: { id: input.serviceCallId } })
     : null;
   const beforeLinked = beforeRecord ? await findServiceCallWithRelations(tx, beforeRecord.id) : null;
+  if (beforeLinked) await assertCustomerLinkUnchanged(tx, beforeLinked, input.customerId, input.expectedUpdatedAt);
   const customerId = await resolveLinkedCustomerId(tx, input.customerId, beforeLinked?.customerId);
   const linkChanged = linkedCustomerId(beforeLinked ?? {}) !== customerId;
   // A link change is a sensitive call edit. Reject it before the write when no actor can be audited.
@@ -2147,6 +2155,7 @@ export async function autosaveServiceCallRow(
     assertSecondTherapistRequirement({ policy: coursePolicy, therapist2Id: parsed.data.therapist2Id });
 
     const before = await findServiceCallWithRelations(tx, parsed.data.serviceCallId);
+    await assertCustomerLinkUnchanged(tx, before, parsed.data.customerId, parsed.data.expectedUpdatedAt);
     const customerId = await resolveLinkedCustomerId(tx, parsed.data.customerId, before.customerId);
     const data = {
       operatingMonthId: parsed.data.operatingMonthId,
@@ -3254,45 +3263,4 @@ export async function listAssignedServiceCallsForEmployeeOnDate(input: {
       status: record.status
     }))
     .sort((a, b) => a.startTime.localeCompare(b.startTime) || a.serviceCallId.localeCompare(b.serviceCallId));
-}
-
-/** 근무표(28)와 같은 좁은 타입: 직원 비활성 거절(B08, masters/employee-service.ts)이 요구하는 모양만 둔다. */
-type AssignedCallFromDateReadClient = {
-  serviceCall: { findMany(args: unknown): Promise<{ id: string; serviceDate: Date; startTime: string }[]> };
-};
-
-/**
- * 그 직원이 주어진 날짜(포함)부터 어느 배정 역할로든 배정된, 노쇼·취소가 아닌 콜 요약(S10). 직원
- * 비활성 거절(B08)이 원장 테이블을 직접 읽고 노쇼·취소 상태를 복제하던 자리를 이 질의로 옮긴다
- * (isNoShowStatus·isCanceledStatus와 같은 기준). 날짜·시간 순 정렬은 호출하는 쪽이 한다(시간 슬롯
- * 정렬 순서를 알아야 하는데, 그 정보는 master data라 이 함수가 갖고 있지 않다).
- */
-export async function listAssignedServiceCallsForEmployeeFromDate(input: {
-  employeeId: string;
-  fromDate: string;
-  prismaClient?: AssignedCallFromDateReadClient;
-}): Promise<Array<{ serviceCallId: string; serviceDate: string; startTime: string }>> {
-  const employeeId = input.employeeId.trim();
-  if (!employeeId) {
-    throw new ServiceCallDomainError("직원을 선택하세요.", "INVALID_SERVICE_CALL_QUERY");
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.fromDate)) {
-    throw new ServiceCallDomainError("날짜는 YYYY-MM-DD 형식이어야 합니다.", "INVALID_SERVICE_CALL_QUERY");
-  }
-
-  const client = input.prismaClient ?? (getClient() as unknown as AssignedCallFromDateReadClient);
-  const records = await client.serviceCall.findMany({
-    where: {
-      serviceDate: { gte: toDateOnly(input.fromDate) },
-      status: { notIn: NO_SHOW_OR_CANCELED_STATUSES },
-      assignments: { some: { employeeId, isActive: true } }
-    },
-    select: { id: true, serviceDate: true, startTime: true }
-  });
-
-  return records.map((record) => ({
-    serviceCallId: record.id,
-    serviceDate: toIsoDateOnly(record.serviceDate),
-    startTime: record.startTime
-  }));
 }

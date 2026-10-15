@@ -1,5 +1,7 @@
 "use client";
 
+import { inputFieldClassName } from "@/components/ui/input-field";
+
 import { useActionState, useId } from "react";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n/client";
@@ -75,7 +77,7 @@ export function ReasonPayoutForm<T>({
       </label>
       <textarea
         aria-describedby={formError ? errorId : reasonErrorId}
-        className="min-h-20 rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground"
+        className={inputFieldClassName({ className: "h-auto min-h-20 py-2" })}
         disabled={pending}
         id={reasonId}
         name="reason"

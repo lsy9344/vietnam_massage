@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useT } from "@/lib/i18n/client";
-import { LEAVE_GUARD_SKIP_ATTRIBUTE } from "@/app/(erp)/calls/ledger-address";
+import { LEAVE_GUARD_SKIP_ATTRIBUTE } from "@/lib/ledger-address";
 
 type UnsavedGuardApi = {
   setUnsaved: (id: string, unsaved: boolean) => void;

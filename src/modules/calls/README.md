@@ -115,3 +115,13 @@ Owns the reservation and service-call ledger.
 - attendance input
 - monthly close locking
 - monthly-close snapshot persistence for derived amount columns
+
+## App Expansion (tickets 17–29, 33–34, 37–38)
+
+- Save conflict comparison lives in the nonmodal call detail panel. Reapply uses the latest row version and selected fields; customer links must use the dedicated correction flow. Pending inputs survive retry and navigation is guarded for tabs, screens, dates and operating months (user decision 2026-10-16).
+- Ledger views share time, customer/memo and status at the left. Infrequent fields are disclosed in detail. Phone widths show read-only row cards; larger widths keep the editable grid. Cross-screen call links use `src/lib/ledger-address.ts`.
+- Quick booking owns one request id through response loss/retry, creates an optional new customer in the same transaction, rejects duplicate Therapist assignments, and returns focus to the saved row. Duplicate-save notices stay outside the drawer after it closes. The “now” action fills the current date/time and advances to Therapist (user decision 2026-10-16).
+- Customer search returns visit counts, comparable same-phone candidates and recent visits ordered by service date and time-slot order. Customer-wide preferences and per-visit requests remain distinct; importing a recent visit requires explicit selection.
+- `correctServiceCallCustomerLink()` is the only existing-call link mutation: reason, current version, writable operating month and actor are required; its audit records previous/new ids and reason (ADR 0003). Ordinary row saves reject link changes; the grid's customer action opens the detail panel. New rows may still choose a customer at creation.
+- Planned working-day facts come from the masters read-only query, alongside availability; day off and unset never imply attendance or block booking. Assigned-call queries supply schedule impact without exposing customer/contact/amount data. `assigned-service-call-query.ts` is a dependency-free read boundary used when masters rejects employee deactivation with assigned future calls.
+- Closing reads call calculation errors and unfinished calls through services. Exceptional close requires the displayed unfinished-call ids and a recorded reason (ADR 0005); closing never marks them completed.

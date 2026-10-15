@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -21,7 +22,7 @@ function grid(page: Page) {
 }
 
 async function seed() {
-  const employee = await (prisma as any).employee.upsert({
+  const employee = await testEmployees.upsert({
     where: { staffCode: "E2E-T19-OPS" },
     update: { displayName: "T19 카운터", employeeGroup: "OPERATIONS", isActive: true },
     create: {
@@ -96,7 +97,7 @@ async function seed() {
   await upsertPolicy(courseA.id, "T19 A", false);
   await upsertPolicy(courseD.id, "T19 D", true);
 
-  const therapist1 = await (prisma as any).employee.upsert({
+  const therapist1 = await testEmployees.upsert({
     where: { staffCode: "E2E-T19-THR-1" },
     update: { displayName: "T19 마사지사1", employeeGroup: "THERAPIST", isActive: true },
     create: {
@@ -161,6 +162,7 @@ test.describe("티켓 19 원장 보기 전환", () => {
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanupCalls();
     await prisma.$disconnect();
   });

@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -38,7 +39,7 @@ async function freeEmployeeSortOrder(employeeGroup: string, staffCode: string, p
 }
 
 async function seedAdmin() {
-  const employee = await (prisma as any).employee.upsert({
+  const employee = await testEmployees.upsert({
     where: { staffCode: admin.staffCode },
     update: { isActive: true },
     create: {
@@ -109,6 +110,7 @@ test.describe("티켓 07 기준정보 화면", () => {
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await (prisma as any).room.deleteMany({ where: { migrationReferenceName: inactiveRoom.migrationReferenceName } });
     await prisma.$disconnect();
   });

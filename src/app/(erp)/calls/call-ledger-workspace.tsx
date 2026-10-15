@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { CallDetailPanel } from "@/app/(erp)/calls/call-detail-panel";
 import { CallConflictProvider } from "@/app/(erp)/calls/call-conflict-compare";
 import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
-import { CALL_PARAM, type LedgerView } from "@/app/(erp)/calls/ledger-address";
+import { CALL_PARAM, type LedgerView } from "@/lib/ledger-address";
 import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 
 /**

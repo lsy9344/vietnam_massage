@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Browser, type Locator } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -12,8 +13,8 @@ const accounts = {
 } as const;
 type AccountKey = keyof typeof accounts;
 
-const monthKey = "2038-04";
-const serviceDate = "2038-04-10";
+const monthKey = "2077-04";
+const serviceDate = "2077-04-10";
 
 let monthId = "";
 let roomId = "";
@@ -23,7 +24,7 @@ let createdMonth = false;
 
 async function seedAccount(key: AccountKey) {
   const account = accounts[key];
-  const employee = await (prisma as any).employee.upsert({
+  const employee = await testEmployees.upsert({
     where: { staffCode: account.staffCode },
     update: { displayName: `T17 ${key}`, employeeGroup: "OPERATIONS", isActive: true },
     create: {
@@ -139,7 +140,7 @@ test.describe("티켓 17 저장 충돌 비교와 다시 반영", () => {
     } else {
       await (prisma as any).coursePolicy.create({ data: { courseId, effectiveFromMonth: monthKey, ...policy } });
     }
-    const therapist = await (prisma as any).employee.upsert({
+    const therapist = await testEmployees.upsert({
       where: { staffCode: "E2E-T17-THR-1" },
       update: { displayName: "T17 마사지사", employeeGroup: "THERAPIST", isActive: true },
       create: {
@@ -158,6 +159,7 @@ test.describe("티켓 17 저장 충돌 비교와 다시 반영", () => {
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanup();
     await (prisma as any).coursePolicy.deleteMany({ where: { name: "T17 A", effectiveFromMonth: monthKey } });
     // 활성 객실은 모두 객실 화면에 나온다(support/README). 이 스펙의 객실은 끈다.
@@ -188,7 +190,7 @@ test.describe("티켓 17 저장 충돌 비교와 다시 반영", () => {
 
       // 충돌 확인 필요가 되고, 콜 상세 패널에 비교가 저절로 열린다(체크 1).
       await expect(saveState(bRow)).toHaveAttribute("data-save-state", "conflict", { timeout: 20_000 });
-      const dialog = b.page.getByRole("dialog", { name: "저장 충돌 비교" });
+      const dialog = b.page.getByRole("region", { name: "저장 충돌 비교" });
       await expect(dialog).toBeVisible();
 
       // 내가 고친 필드(고객/메모)와, 다른 화면이 고친 필드(결제수단) 둘 다 "다르다"로 보인다 — 원장 필드 순서대로.
@@ -202,15 +204,13 @@ test.describe("티켓 17 저장 충돌 비교와 다시 반영", () => {
       expect(memoIndex).toBeGreaterThanOrEqual(0);
       expect(memoIndex).toBeLessThan(paymentIndex);
 
-      // 강제 덮어쓰기 버튼은 없다 — 패널 닫기 버튼 외에는 다시 불러오기·다시 반영뿐이다(체크 2).
-      await expect(dialog.getByRole("button")).toHaveText(["닫기", "최신 내용으로 다시 불러오기", "다시 반영하고 저장"]);
+      // 강제 덮어쓰기 버튼은 없다 — 비교 구역에는 다시 불러오기·다시 반영뿐이다(체크 2).
+      await expect(dialog.getByRole("button")).toHaveText(["최신 내용으로 다시 불러오기", "다시 반영하고 저장"]);
       await expect(dialog.getByRole("button", { name: "다시 반영하고 저장" })).toBeDisabled();
 
-      // Esc로 닫으려 하면 먼저 확인을 받고, 취소하면 비교는 그대로 열려 있다(체크 5, 패널 닫기 안내).
-      await b.page.keyboard.press("Escape");
-      const closeConfirm = b.page.getByRole("alertdialog", { name: "저장하지 않은 입력이 있습니다" });
-      await expect(closeConfirm).toBeVisible();
-      await closeConfirm.getByRole("button", { name: "취소" }).click();
+      // 비교는 비모달 상세 구역이다(S2). 원장 입력을 계속 쓸 수 있고 비교가 포커스를 가두지 않는다.
+      await bMemo.focus();
+      await expect(bMemo).toBeFocused();
       await expect(dialog).toBeVisible();
 
       // 결제수단은 고르지 않고(최신 값 "카드" 그대로 둔다), 고객/메모만 내 값 쓰기로 고른다 — 키보드로.
@@ -256,7 +256,7 @@ test.describe("티켓 17 저장 충돌 비교와 다시 반영", () => {
     await memo.press("Enter");
 
     await expect(saveState(row)).toHaveAttribute("data-save-state", "conflict", { timeout: 20_000 });
-    const dialog = page.getByRole("dialog", { name: "저장 충돌 비교" });
+    const dialog = page.getByRole("region", { name: "저장 충돌 비교" });
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText("T17 내가 고친 값");
     await expect(dialog).toContainText("T17 다른 화면이 적은 비고");

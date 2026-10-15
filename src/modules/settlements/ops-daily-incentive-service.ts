@@ -9,9 +9,9 @@ import { listOpsAttendanceForDate, type OpsAttendanceDto } from "@/modules/settl
 import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/modules/settlements/settlement-evidence-call";
 import {
   confirmPayoutConfirmation,
-  derivePayoutConfirmationStatus,
   listActivelyConfirmedUnitEmployeeIds,
-  listPayoutConfirmations,
+  attachPayoutConfirmationsToRows,
+  toPayoutConfirmationPrismaClient,
   reconfirmPayoutConfirmation,
   releasePayoutConfirmation,
   type PayoutConfirmationDto
@@ -231,39 +231,6 @@ function calculationBasis(input: {
   return `일 총콜 ${input.dailyOpsCallCredit}콜 / ${input.appliedThresholdCallCount}콜 이상 개인 ${input.personalIncentiveAmount} VND`;
 }
 
-function toPayoutConfirmationPrismaClient(client: OpsDailyIncentivePrismaClient) {
-  return client as unknown as Parameters<typeof listPayoutConfirmations>[0]["prismaClient"];
-}
-
-/** 지급 확인(ADR 0004, 티켓 30·31)을 행마다 붙인다. 호출하는 쪽의 메모리 Prisma가 지급 확인 저장소를 흉내 내지 않으면 모두 미확인으로 둔다. */
-async function attachPayoutConfirmations(input: {
-  client: OpsDailyIncentivePrismaClient;
-  operatingMonthId: string;
-  serviceDate: string;
-  operatingMonthStatus: string;
-  rows: Array<Omit<OpsDailyIncentiveRowDto, "payoutConfirmation">>;
-}): Promise<OpsDailyIncentiveRowDto[]> {
-  if (!input.client.payoutConfirmationEvent) {
-    return input.rows.map((row) => ({
-      ...row,
-      payoutConfirmation: derivePayoutConfirmationStatus([], row.payoutAmount, input.operatingMonthStatus)
-    }));
-  }
-
-  const confirmations = await listPayoutConfirmations({
-    unitType: "OPS_DAILY",
-    operatingMonthId: input.operatingMonthId,
-    serviceDate: input.serviceDate,
-    operatingMonthStatus: input.operatingMonthStatus,
-    units: input.rows.map((row) => ({ employeeId: row.employeeId, currentAmount: row.payoutAmount })),
-    prismaClient: toPayoutConfirmationPrismaClient(input.client)
-  });
-
-  return input.rows.map((row) => ({
-    ...row,
-    payoutConfirmation: confirmations.get(row.employeeId) ?? derivePayoutConfirmationStatus([], row.payoutAmount, input.operatingMonthStatus)
-  }));
-}
 
 /** 지급 확인을 쓰려는(확인/재확인/해제) 운영팀 직원이 활성 OPERATIONS인지 확인한다. */
 async function assertActiveOpsEmployee(input: { client: OpsDailyIncentivePrismaClient; employeeId: string }) {
@@ -396,7 +363,9 @@ export async function listOpsDailyIncentives(input: {
     }
   }
 
-  const rowsWithPayoutConfirmation = await attachPayoutConfirmations({
+  const rowsWithPayoutConfirmation = await attachPayoutConfirmationsToRows({
+      unitType: "OPS_DAILY",
+      currentAmount: (row) => row.payoutAmount,
     client,
     operatingMonthId: parsed.data.operatingMonthId,
     serviceDate: parsed.data.serviceDate,

@@ -8,9 +8,10 @@ import {
 import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/modules/settlements/settlement-evidence-call";
 import {
   confirmPayoutConfirmation,
-  derivePayoutConfirmationStatus,
   listActivelyConfirmedUnitEmployeeIds,
-  listPayoutConfirmations,
+  derivePayoutConfirmationStatus,
+  attachPayoutConfirmationsToRows,
+  toPayoutConfirmationPrismaClient,
   reconfirmPayoutConfirmation,
   releasePayoutConfirmation,
   type PayoutConfirmationDto
@@ -289,45 +290,6 @@ async function assertPayoutHasSettlement(input: {
   return settlement;
 }
 
-function toPayoutConfirmationPrismaClient(client: TherapistDailySettlementPrismaClient) {
-  return client as unknown as Parameters<typeof listPayoutConfirmations>[0]["prismaClient"];
-}
-
-async function attachPayoutConfirmations(input: {
-  client: TherapistDailySettlementPrismaClient;
-  operatingMonthId: string;
-  serviceDate: string;
-  operatingMonthStatus: string;
-  settlements: TherapistDailySettlementDto[];
-}) {
-  if (input.settlements.length === 0) {
-    return input.settlements;
-  }
-
-  // 다른 서비스(대시보드, 이관 대조 등)가 쓰는 소비자 메모리 Prisma는 지급 확인 저장소를 흉내 내지 않을 수 있다.
-  // 그런 경우는 모두 미확인으로 둔다(계산 결과는 그대로다).
-  if (!input.client.payoutConfirmationEvent) {
-    return input.settlements.map((settlement) => ({
-      ...settlement,
-      payoutConfirmation: derivePayoutConfirmationStatus([], settlement.totalCommissionAmount, input.operatingMonthStatus)
-    }));
-  }
-
-  const confirmations = await listPayoutConfirmations({
-    unitType: "THERAPIST_DAILY",
-    operatingMonthId: input.operatingMonthId,
-    serviceDate: input.serviceDate,
-    operatingMonthStatus: input.operatingMonthStatus,
-    units: input.settlements.map((settlement) => ({ employeeId: settlement.employeeId, currentAmount: settlement.totalCommissionAmount })),
-    prismaClient: toPayoutConfirmationPrismaClient(input.client)
-  });
-
-  return input.settlements.map((settlement) => ({
-    ...settlement,
-    payoutConfirmation:
-      confirmations.get(settlement.employeeId) ?? derivePayoutConfirmationStatus([], settlement.totalCommissionAmount, input.operatingMonthStatus)
-  }));
-}
 
 function evidenceForRole(input: {
   rateLookup: TherapistRateLookup;
@@ -519,12 +481,14 @@ export async function listTherapistDailySettlements(input: {
   return {
     operatingMonthId: parsed.data.operatingMonthId,
     serviceDate: parsed.data.serviceDate,
-    settlements: await attachPayoutConfirmations({
+    settlements: await attachPayoutConfirmationsToRows({
+      unitType: "THERAPIST_DAILY",
+      currentAmount: (row) => row.totalCommissionAmount,
       client,
       operatingMonthId: parsed.data.operatingMonthId,
       serviceDate: parsed.data.serviceDate,
       operatingMonthStatus: operatingMonth.status,
-      settlements
+      rows: settlements
     }),
     warningCounts,
     excludedCallCount

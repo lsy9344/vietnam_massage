@@ -7,9 +7,9 @@ import {
 import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/modules/settlements/settlement-evidence-call";
 import {
   confirmPayoutConfirmation,
-  derivePayoutConfirmationStatus,
   listActivelyConfirmedUnitEmployeeIds,
-  listPayoutConfirmations,
+  attachPayoutConfirmationsToRows,
+  toPayoutConfirmationPrismaClient,
   reconfirmPayoutConfirmation,
   releasePayoutConfirmation,
   type PayoutConfirmationDto
@@ -382,41 +382,6 @@ function rowForEmployee(employee: EmployeeRecord, role: OpsMonthlyIncentiveTeamR
   };
 }
 
-function toPayoutConfirmationPrismaClient(client: OpsMonthlyIncentivePrismaClient) {
-  return client as unknown as Parameters<typeof listPayoutConfirmations>[0]["prismaClient"];
-}
-
-/**
- * 지급 확인(ADR 0004, 티켓 30·31)을 행마다 붙인다. 월 단위라 serviceDate는 항상 null이다.
- * 호출하는 쪽의 메모리 Prisma가 지급 확인 저장소를 흉내 내지 않으면 모두 미확인으로 둔다.
- */
-async function attachPayoutConfirmations(input: {
-  client: OpsMonthlyIncentivePrismaClient;
-  operatingMonthId: string;
-  operatingMonthStatus: string;
-  rows: Array<Omit<OpsMonthlyIncentiveRowDto, "payoutConfirmation">>;
-}): Promise<OpsMonthlyIncentiveRowDto[]> {
-  if (!input.client.payoutConfirmationEvent) {
-    return input.rows.map((row) => ({
-      ...row,
-      payoutConfirmation: derivePayoutConfirmationStatus([], row.payoutAmount, input.operatingMonthStatus)
-    }));
-  }
-
-  const confirmations = await listPayoutConfirmations({
-    unitType: "OPS_MONTHLY",
-    operatingMonthId: input.operatingMonthId,
-    serviceDate: null,
-    operatingMonthStatus: input.operatingMonthStatus,
-    units: input.rows.map((row) => ({ employeeId: row.employeeId, currentAmount: row.payoutAmount })),
-    prismaClient: toPayoutConfirmationPrismaClient(input.client)
-  });
-
-  return input.rows.map((row) => ({
-    ...row,
-    payoutConfirmation: confirmations.get(row.employeeId) ?? derivePayoutConfirmationStatus([], row.payoutAmount, input.operatingMonthStatus)
-  }));
-}
 
 /** 지급 확인을 쓰려는(확인/재확인/해제) 운영팀 직원이 활성 OPERATIONS인지 확인한다. */
 async function assertActiveOpsEmployee(input: { client: OpsMonthlyIncentivePrismaClient; employeeId: string }) {
@@ -522,7 +487,9 @@ export async function listOpsMonthlyIncentivePreview(input: {
     }
   }
 
-  const rowsWithPayoutConfirmation = await attachPayoutConfirmations({
+  const rowsWithPayoutConfirmation = await attachPayoutConfirmationsToRows({
+      unitType: "OPS_MONTHLY",
+      currentAmount: (row) => row.payoutAmount,
     client,
     operatingMonthId: parsed.data.operatingMonthId,
     operatingMonthStatus: operatingMonth.status,

@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -30,7 +31,7 @@ function auditRow(page: Page, targetId: string) {
 }
 
 async function seedAccount(accountId: string, password: string, role: "counter" | "administrator", staffCode: string, sortOrder: number) {
-  const employee = await (prisma as any).employee.upsert({
+  const employee = await testEmployees.upsert({
     where: { staffCode },
     update: { displayName: `T25 ${role}`, isActive: true },
     create: {
@@ -135,6 +136,7 @@ test.describe("티켓 25 콜 상세 패널의 고객 연결 정정", () => {
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanup();
     await prisma.$disconnect();
   });
@@ -144,7 +146,7 @@ test.describe("티켓 25 콜 상세 패널의 고객 연결 정정", () => {
 
     await login(page, counter.accountId, counter.password);
     await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
-    await page.locator(`tr[data-service-call-id="${call.id}"] td`).first().click();
+    await page.locator(`tr[data-service-call-id="${call.id}"]`).getByRole("button", { name: "고객 연결 정정", exact: true }).click();
 
     const panel = page.getByRole("complementary", { name: /^콜 상세 · 15:00/ });
     await expect(panel).toBeVisible();
@@ -152,7 +154,11 @@ test.describe("티켓 25 콜 상세 패널의 고객 연결 정정", () => {
     await expect(panel).toContainText("T25 민아");
 
     await panel.getByRole("combobox", { name: "새로 연결할 고객 검색" }).fill("T25 수아");
-    await panel.getByRole("option", { name: "T25 수아" }).click();
+    const search = panel.getByRole("combobox", { name: "새로 연결할 고객 검색" });
+    await expect(panel.getByRole("option", { name: "T25 수아" })).toBeVisible();
+    await search.press("ArrowDown");
+    await expect(search).toHaveAttribute("aria-activedescendant", "customer-link-candidates-option-0");
+    await search.press("Enter");
     await expect(panel.getByText("바꿀 고객: T25 수아")).toBeVisible();
 
     await panel.getByLabel("정정 사유").fill("T25 다른 손님 전화로 잘못 연결됨");
