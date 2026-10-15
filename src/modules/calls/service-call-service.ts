@@ -407,12 +407,16 @@ export type ServiceCallFormOptions = {
   expenseHandlers: ServiceCallOption[];
 };
 
+// rate_missing: 이 운영월에 유효한 수당이 없다(두 명 코스는 수당을 가진 다른 활성 Therapist도 없다). 시간보다 앞선다.
+// time_short: 수당은 있으나 이 Therapist나 수당을 가진 짝이 코스 길이만큼 비어 있지 않다.
+export type TherapistAvailabilityCourseVerdict = "possible" | "time_short" | "rate_missing";
+
 export type TherapistAvailabilityCourseDto = {
   courseId: string;
   courseCode: string;
   courseName: string;
   durationMinutes: number;
-  possible: boolean;
+  verdict: TherapistAvailabilityCourseVerdict;
 };
 
 export type TherapistAvailabilityRowDto = {
@@ -657,6 +661,10 @@ async function prefetchCalculationSources(
     current.push(policy);
     policiesByCourseId.set(policy.courseId, current);
   }
+  return { policiesByCourseId, ratesByTherapistCourse: groupRatesByTherapistCourse(rates) };
+}
+
+function groupRatesByTherapistCourse(rates: TherapistCourseRateRecord[]) {
   const ratesByTherapistCourse = new Map<string, TherapistCourseRateRecord[]>();
   for (const rate of rates) {
     const key = rateSourceKey(rate.therapistId, rate.courseId);
@@ -664,8 +672,7 @@ async function prefetchCalculationSources(
     current.push(rate);
     ratesByTherapistCourse.set(key, current);
   }
-
-  return { policiesByCourseId, ratesByTherapistCourse };
+  return ratesByTherapistCourse;
 }
 
 async function findCoursePolicyForCalculation(
@@ -1427,13 +1434,21 @@ export async function listTherapistAvailability(input: {
 
   const client = getClient(input.prismaClient);
   const month = await requireOperatingMonth(client, parsed.data.operatingMonthId);
-  const [therapists, courses, policies, slots, attendances, calls] = await Promise.all([
+  const [therapists, courses, policies, rates, slots, attendances, calls] = await Promise.all([
     client.employee.findMany({
       where: { isActive: true, employeeGroup: "THERAPIST" },
       orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }]
     }),
     client.course.findMany(),
     client.coursePolicy.findMany({ where: { isActive: true } }),
+    client.therapistCourseRate.findMany({
+      where: {
+        isActive: true,
+        effectiveFromMonth: { lte: month.monthKey },
+        OR: [{ effectiveToMonth: null }, { effectiveToMonth: { gte: month.monthKey } }],
+        therapist: { isActive: true, employeeGroup: "THERAPIST" }
+      }
+    }),
     client.timeSlot.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }),
     client.therapistAttendance.findMany({
       where: {
@@ -1515,6 +1530,14 @@ export async function listTherapistAvailability(input: {
     .filter((therapist) => therapist.isActive && therapist.employeeGroup === "THERAPIST")
     .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0) || left.displayName.localeCompare(right.displayName));
 
+  // 방문완료 금액 계산과 같은 firstCurrentRate로 고른다. 0 VND도 수당이다.
+  const ratesByTherapistCourse = groupRatesByTherapistCourse(rates);
+  const hasRate = (therapistId: string, courseId: string) =>
+    firstCurrentRate(ratesByTherapistCourse.get(rateSourceKey(therapistId, courseId)) ?? [], month.monthKey) !== undefined;
+  const rateHoldersByCourse = new Map(
+    offeredCourses.map((course) => [course.courseId, activeTherapists.filter((therapist) => hasRate(therapist.id, course.courseId))])
+  );
+
   return activeTherapists.map((therapist) => {
     const booked = intervalsByTherapist.get(therapist.id) ?? [];
     const overruns = overrunsByTherapist.get(therapist.id) ?? [];
@@ -1543,16 +1566,21 @@ export async function listTherapistAvailability(input: {
       priorServiceEndCheck: overruns.length > 0,
       courses: offeredCourses.map((course) => {
         const fits = available && freeMinutes !== null && course.durationMinutes <= freeMinutes;
-        const partnerFree = activeTherapists.some((other) => {
-          if (other.id === therapist.id) return false;
-          return !intervalOverlaps(occupancyOf(other.id), at, at + course.durationMinutes);
-        });
+        const rateHolders = rateHoldersByCourse.get(course.courseId) ?? [];
+        const partners = course.requiresSecondTherapist ? rateHolders.filter((other) => other.id !== therapist.id) : [];
+        const partnerFree = partners.some((other) => !intervalOverlaps(occupancyOf(other.id), at, at + course.durationMinutes));
+        const verdict: TherapistAvailabilityCourseVerdict =
+          !rateHolders.some((holder) => holder.id === therapist.id) || (course.requiresSecondTherapist && partners.length === 0)
+            ? "rate_missing"
+            : fits && (!course.requiresSecondTherapist || partnerFree)
+              ? "possible"
+              : "time_short";
         return {
           courseId: course.courseId,
           courseCode: course.courseCode,
           courseName: course.courseName,
           durationMinutes: course.durationMinutes,
-          possible: fits && (!course.requiresSecondTherapist || partnerFree)
+          verdict
         };
       })
     };

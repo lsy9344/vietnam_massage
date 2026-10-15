@@ -641,6 +641,7 @@ function createMemoryPrisma() {
     auditEvents,
     courses,
     coursePolicies,
+    therapistCourseRates,
     employees,
     timeSlots,
     therapistAttendances
@@ -2970,6 +2971,53 @@ function addAvailabilityCourse(
   });
 }
 
+function addTherapist(prismaClient: ReturnType<typeof createMemoryPrisma>, id: string) {
+  const createdAt = new Date("2026-06-01T00:00:00.000Z");
+  prismaClient.employees.set(id, {
+    id,
+    displayName: id,
+    staffCode: id.toUpperCase(),
+    employeeGroup: "THERAPIST",
+    position: "마사지사",
+    shiftType: "전체",
+    baseSalary: 0,
+    phone: null,
+    birthday: null,
+    hireDate: null,
+    employmentStatus: "재직",
+    sortOrder: 90 + prismaClient.employees.size,
+    isActive: true,
+    createdAt,
+    updatedAt: createdAt
+  });
+}
+
+function addAvailabilityRate(
+  prismaClient: ReturnType<typeof createMemoryPrisma>,
+  input: {
+    therapistId: string;
+    courseId: string;
+    amount?: number;
+    effectiveFromMonth?: string;
+    effectiveToMonth?: string | null;
+    isActive?: boolean;
+  }
+) {
+  const createdAt = new Date("2026-06-01T00:00:00.000Z");
+  const id = `rate-${input.therapistId}-${input.courseId}-${prismaClient.therapistCourseRates.size}`;
+  prismaClient.therapistCourseRates.set(id, {
+    id,
+    therapistId: input.therapistId,
+    courseId: input.courseId,
+    amount: input.amount ?? 500000,
+    effectiveFromMonth: input.effectiveFromMonth ?? "2026-06",
+    effectiveToMonth: input.effectiveToMonth ?? null,
+    isActive: input.isActive ?? true,
+    createdAt,
+    updatedAt: createdAt
+  });
+}
+
 function addAvailabilityCall(
   prismaClient: ReturnType<typeof createMemoryPrisma>,
   input: {
@@ -3026,8 +3074,8 @@ function availabilityAt(prismaClient: ReturnType<typeof createMemoryPrisma>, tim
   });
 }
 
-function courseFlag(rows: Awaited<ReturnType<typeof listTherapistAvailability>>, therapistId: string, courseId: string) {
-  return rows.find((row) => row.therapistId === therapistId)?.courses.find((course) => course.courseId === courseId)?.possible;
+function courseVerdict(rows: Awaited<ReturnType<typeof listTherapistAvailability>>, therapistId: string, courseId: string) {
+  return rows.find((row) => row.therapistId === therapistId)?.courses.find((course) => course.courseId === courseId)?.verdict;
 }
 
 describe("therapist availability", () => {
@@ -3057,7 +3105,7 @@ describe("therapist availability", () => {
     assert.equal(therapist1?.freeFrom, "15:30");
     assert.equal(therapist1?.freeMinutes, null);
     assert.equal(therapist1?.attendance, "not_entered");
-    assert.equal(courseFlag(rows, "therapist-1", "course-a"), false);
+    assert.equal(courseVerdict(rows, "therapist-1", "course-a"), "time_short");
     assert.equal(therapist2?.available, true);
     assert.equal(therapist2?.freeFrom, null);
   });
@@ -3116,12 +3164,12 @@ describe("therapist availability", () => {
     assert.equal(row?.nextReservationTime, "16:00");
     assert.equal(row?.freeMinutes, 60);
     assert.deepEqual(
-      row?.courses.map((course) => ({ courseId: course.courseId, durationMinutes: course.durationMinutes, possible: course.possible })),
+      row?.courses.map((course) => ({ courseId: course.courseId, durationMinutes: course.durationMinutes, verdict: course.verdict })),
       [
-        { courseId: "course-a", durationMinutes: 60, possible: true },
-        { courseId: "course-missing-rate", durationMinutes: 90, possible: false },
-        { courseId: "course-c", durationMinutes: 120, possible: false },
-        { courseId: "course-d", durationMinutes: 90, possible: false }
+        { courseId: "course-a", durationMinutes: 60, verdict: "possible" },
+        { courseId: "course-missing-rate", durationMinutes: 90, verdict: "rate_missing" },
+        { courseId: "course-c", durationMinutes: 120, verdict: "rate_missing" },
+        { courseId: "course-d", durationMinutes: 90, verdict: "time_short" }
       ]
     );
   });
@@ -3204,12 +3252,13 @@ describe("therapist availability", () => {
   it("offers a second-therapist course only when another active therapist is free for the whole duration", async () => {
     const open = createMemoryPrisma();
     addAvailabilityCourse(open, { id: "course-c", code: "C", name: "C 120", durationMinutes: 120 });
+    addAvailabilityRate(open, { therapistId: "therapist-1", courseId: "course-c" });
     const openRows = await availabilityAt(open, "15:00");
     const openTherapist = openRows.find((row) => row.therapistId === "therapist-1");
     assert.equal(openTherapist?.freeMinutes, 600);
-    assert.equal(courseFlag(openRows, "therapist-1", "course-a"), true);
-    assert.equal(courseFlag(openRows, "therapist-1", "course-c"), true);
-    assert.equal(courseFlag(openRows, "therapist-1", "course-d"), true);
+    assert.equal(courseVerdict(openRows, "therapist-1", "course-a"), "possible");
+    assert.equal(courseVerdict(openRows, "therapist-1", "course-c"), "possible");
+    assert.equal(courseVerdict(openRows, "therapist-1", "course-d"), "possible");
 
     const blockedPartner = createMemoryPrisma();
     addAvailabilityCall(blockedPartner, {
@@ -3221,16 +3270,16 @@ describe("therapist availability", () => {
     });
     const blockedRows = await availabilityAt(blockedPartner, "15:00");
     assert.equal(blockedRows.find((row) => row.therapistId === "therapist-1")?.freeMinutes, 600);
-    assert.equal(courseFlag(blockedRows, "therapist-1", "course-a"), true);
-    assert.equal(courseFlag(blockedRows, "therapist-1", "course-missing-rate"), true);
-    assert.equal(courseFlag(blockedRows, "therapist-1", "course-d"), false);
+    assert.equal(courseVerdict(blockedRows, "therapist-1", "course-a"), "possible");
+    assert.equal(courseVerdict(blockedRows, "therapist-1", "course-missing-rate"), "rate_missing");
+    assert.equal(courseVerdict(blockedRows, "therapist-1", "course-d"), "time_short");
 
     const alone = createMemoryPrisma();
     alone.employees.get("therapist-2").isActive = false;
     const aloneRows = await availabilityAt(alone, "15:00");
     assert.deepEqual(aloneRows.map((row) => row.therapistId), ["therapist-1"]);
-    assert.equal(courseFlag(aloneRows, "therapist-1", "course-a"), true);
-    assert.equal(courseFlag(aloneRows, "therapist-1", "course-d"), false);
+    assert.equal(courseVerdict(aloneRows, "therapist-1", "course-a"), "possible");
+    assert.equal(courseVerdict(aloneRows, "therapist-1", "course-d"), "rate_missing");
   });
 
   it("lists every active therapist, with attendance as a label, and leaves out earcare, operations, and inactive therapists", async () => {
@@ -3292,7 +3341,7 @@ describe("therapist availability", () => {
     });
 
     const before = await availabilityAt(prismaClient, "15:00");
-    assert.equal(courseFlag(before, "therapist-1", "course-missing-rate"), false);
+    assert.equal(courseVerdict(before, "therapist-1", "course-missing-rate"), "rate_missing");
 
     const saved = await saveBasicServiceCallRow({
       operatingMonthId: "month-2026-06",
@@ -3308,6 +3357,144 @@ describe("therapist availability", () => {
     assert.equal(saved.startTime, "15:00");
     assert.equal(saved.courseId, "course-missing-rate");
     assert.equal(saved.therapist1?.id, "therapist-1");
+  });
+});
+
+describe("therapist availability with course rates", () => {
+  it("calls a course without a rate impossible for this course, even when the time is free or also short", async () => {
+    const prismaClient = createMemoryPrisma();
+    const free = (await availabilityAt(prismaClient, "15:00")).find((row) => row.therapistId === "therapist-1");
+    assert.equal(free?.available, true);
+    assert.equal(free?.freeMinutes, 600);
+    assert.equal(courseVerdict([free!], "therapist-1", "course-missing-rate"), "rate_missing");
+    assert.equal(courseVerdict([free!], "therapist-1", "course-a"), "possible");
+
+    // 15:00–16:00 예약 다음의 15:30은 시간도 부족하다. 그래도 수당 쪽 판정이다.
+    addAvailabilityCall(prismaClient, {
+      id: "call-1500",
+      startTime: "15:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    const busy = (await availabilityAt(prismaClient, "15:30")).find((row) => row.therapistId === "therapist-1");
+    assert.equal(busy?.available, false);
+    assert.equal(courseVerdict([busy!], "therapist-1", "course-missing-rate"), "rate_missing");
+    assert.equal(courseVerdict([busy!], "therapist-1", "course-a"), "time_short");
+  });
+
+  it("treats a valid 0 VND rate as a rate and judges the course by time", async () => {
+    const prismaClient = createMemoryPrisma();
+    // therapist-2의 A 수당은 0 VND다.
+    addAvailabilityCall(prismaClient, {
+      id: "call-1600",
+      startTime: "16:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-2" }]
+    });
+    assert.equal(courseVerdict(await availabilityAt(prismaClient, "15:00"), "therapist-2", "course-a"), "possible");
+    assert.equal(courseVerdict(await availabilityAt(prismaClient, "15:30"), "therapist-2", "course-a"), "time_short");
+  });
+
+  it("offers a 60 minute course when 60 free minutes remain, and not when 59 do", async () => {
+    const sixty = createMemoryPrisma();
+    addAvailabilityCall(sixty, {
+      id: "call-1600",
+      startTime: "16:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    const at1500 = await availabilityAt(sixty, "15:00");
+    assert.equal(at1500.find((row) => row.therapistId === "therapist-1")?.freeMinutes, 60);
+    assert.equal(courseVerdict(at1500, "therapist-1", "course-a"), "possible");
+
+    const at1501 = await availabilityAt(sixty, "15:01");
+    assert.equal(at1501.find((row) => row.therapistId === "therapist-1")?.freeMinutes, 59);
+    assert.equal(courseVerdict(at1501, "therapist-1", "course-a"), "time_short");
+  });
+
+  it("offers a two-therapist course only when this therapist and another free active therapist both have its rate", async () => {
+    // 기본: therapist-1, therapist-2 모두 D 수당이 있고 비어 있다.
+    const both = createMemoryPrisma();
+    assert.equal(courseVerdict(await availabilityAt(both, "15:00"), "therapist-1", "course-d"), "possible");
+
+    // 이 Therapist에게 수당이 없으면 다른 사람이 있어도 수당 쪽 판정이다.
+    const selfMissing = createMemoryPrisma();
+    selfMissing.therapistCourseRates.delete("rate-therapist-1-d");
+    assert.equal(courseVerdict(await availabilityAt(selfMissing, "15:00"), "therapist-1", "course-d"), "rate_missing");
+    assert.equal(courseVerdict(await availabilityAt(selfMissing, "15:00"), "therapist-2", "course-d"), "rate_missing");
+
+    // 비어 있는 다른 사람에게 수당이 없으면 짝이 없다.
+    const partnerMissing = createMemoryPrisma();
+    partnerMissing.therapistCourseRates.get("rate-therapist-2-d").effectiveToMonth = "2026-05";
+    assert.equal(courseVerdict(await availabilityAt(partnerMissing, "15:00"), "therapist-1", "course-d"), "rate_missing");
+
+    // 수당이 있는 짝은 같은 구간에 바쁘고, 비어 있는 다른 사람은 수당이 없다.
+    const partnerBusy = createMemoryPrisma();
+    addTherapist(partnerBusy, "therapist-3");
+    addAvailabilityCall(partnerBusy, {
+      id: "call-partner-1600",
+      startTime: "16:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-2" }]
+    });
+    const busyRows = await availabilityAt(partnerBusy, "15:00");
+    assert.equal(busyRows.find((row) => row.therapistId === "therapist-3")?.available, true);
+    assert.equal(courseVerdict(busyRows, "therapist-1", "course-d"), "time_short");
+
+    // 그 비어 있는 사람에게 수당이 생기면 짝이 된다.
+    addAvailabilityRate(partnerBusy, { therapistId: "therapist-3", courseId: "course-d", amount: 0 });
+    assert.equal(courseVerdict(await availabilityAt(partnerBusy, "15:00"), "therapist-1", "course-d"), "possible");
+  });
+
+  it("chooses the rate for the month the same way the completed amount calculation does", async () => {
+    const scenarios: Array<{ name: string; rates: Array<Parameters<typeof addAvailabilityRate>[1]>; commission: number | null }> = [
+      { name: "no rate", rates: [], commission: null },
+      { name: "open-ended from this month", rates: [{ therapistId: "therapist-1", courseId: "course-missing-rate", amount: 400000 }], commission: 400000 },
+      { name: "inactive", rates: [{ therapistId: "therapist-1", courseId: "course-missing-rate", isActive: false }], commission: null },
+      { name: "starts next month", rates: [{ therapistId: "therapist-1", courseId: "course-missing-rate", effectiveFromMonth: "2026-07" }], commission: null },
+      { name: "ended last month", rates: [{ therapistId: "therapist-1", courseId: "course-missing-rate", effectiveFromMonth: "2026-01", effectiveToMonth: "2026-05" }], commission: null },
+      {
+        name: "ends this month",
+        rates: [{ therapistId: "therapist-1", courseId: "course-missing-rate", amount: 300000, effectiveFromMonth: "2026-01", effectiveToMonth: "2026-06" }],
+        commission: 300000
+      },
+      { name: "zero VND", rates: [{ therapistId: "therapist-1", courseId: "course-missing-rate", amount: 0 }], commission: 0 },
+      {
+        name: "two valid, the later start wins",
+        rates: [
+          { therapistId: "therapist-1", courseId: "course-missing-rate", amount: 500000, effectiveFromMonth: "2026-01" },
+          { therapistId: "therapist-1", courseId: "course-missing-rate", amount: 0, effectiveFromMonth: "2026-06" }
+        ],
+        commission: 0
+      },
+      { name: "another therapist only", rates: [{ therapistId: "therapist-2", courseId: "course-missing-rate" }], commission: null }
+    ];
+
+    for (const scenario of scenarios) {
+      const prismaClient = createMemoryPrisma();
+      for (const rate of scenario.rates) addAvailabilityRate(prismaClient, rate);
+      const completed = await saveBasicServiceCallRow({
+        operatingMonthId: "month-2026-06",
+        serviceDate: availabilityDate,
+        startTime: "11:00",
+        roomId: "room-101",
+        courseId: "course-missing-rate",
+        therapist1Id: "therapist-1",
+        status: "방문완료",
+        paymentMethodCode: "현금",
+        prismaClient
+      });
+      const verdict = courseVerdict(await availabilityAt(prismaClient, "15:00"), "therapist-1", "course-missing-rate");
+
+      assert.equal(completed.calculationStatus === "calculated", scenario.commission !== null, scenario.name);
+      assert.equal(verdict === "possible", completed.calculationStatus === "calculated", scenario.name);
+      assert.equal(verdict, scenario.commission === null ? "rate_missing" : "possible", scenario.name);
+      if (scenario.commission !== null) assert.equal(completed.therapist1Commission, scenario.commission, scenario.name);
+    }
   });
 });
 
@@ -3340,14 +3527,14 @@ describe("therapist availability with an in-use call past its display end", () =
     assert.equal(at1500?.unavailableReason, "in_service_past_display_end");
     assert.equal(at1500?.inServiceDisplayEnd, "15:00");
     assert.equal(at1500?.freeFrom, "15:20");
-    assert.equal(at1500?.courses.find((course) => course.courseId === "course-a")?.possible, false);
+    assert.equal(courseVerdict([at1500!], "therapist-1", "course-a"), "time_short");
 
     const at1530 = (await overrunAvailabilityAt(prismaClient, "15:30")).find((row) => row.therapistId === "therapist-1");
     assert.equal(at1530?.available, true);
     assert.equal(at1530?.unavailableReason, null);
     assert.equal(at1530?.freeFrom, null);
     assert.equal(at1530?.priorServiceEndCheck, true);
-    assert.equal(at1530?.courses.find((course) => course.courseId === "course-a")?.possible, true);
+    assert.equal(courseVerdict([at1530!], "therapist-1", "course-a"), "possible");
 
     const atNow = (await overrunAvailabilityAt(prismaClient, "15:20")).find((row) => row.therapistId === "therapist-1");
     assert.equal(atNow?.available, true);
@@ -3438,7 +3625,7 @@ describe("therapist availability with an in-use call past its display end", () =
     assert.equal(row?.available, true);
     assert.equal(row?.nextReservationTime, null);
     assert.equal(row?.freeMinutes, 30);
-    assert.equal(courseFlag([row!], "therapist-1", "course-a"), false);
+    assert.equal(courseVerdict([row!], "therapist-1", "course-a"), "time_short");
   });
 
   it("adds no hold for a reserved call, for yesterday, or for cleaning, completed, no-show, and canceled calls", async () => {
@@ -3555,8 +3742,8 @@ describe("therapist availability with an in-use call past its display end", () =
     const partnerRows = await overrunAvailabilityAt(heldPartner, "15:10");
     assert.equal(partnerRows.find((row) => row.therapistId === "therapist-2")?.unavailableReason, "in_service_past_display_end");
     assert.equal(partnerRows.find((row) => row.therapistId === "therapist-1")?.priorServiceEndCheck, false);
-    assert.equal(courseFlag(partnerRows, "therapist-1", "course-a"), true);
-    assert.equal(courseFlag(partnerRows, "therapist-1", "course-d"), false);
+    assert.equal(courseVerdict(partnerRows, "therapist-1", "course-a"), "possible");
+    assert.equal(courseVerdict(partnerRows, "therapist-1", "course-d"), "time_short");
   });
 
   it("leaves the display end, the next call's reservation time, the course, and the amount as they were", async () => {

@@ -33,6 +33,13 @@ function ThisTime({ locale, row }: { locale: Locale; row: TherapistAvailabilityR
   );
 }
 
+function impossibleCourseLabel(locale: Locale, course: TherapistAvailabilityRowDto["courses"][number]) {
+  const values = { code: course.courseCode, minutes: course.durationMinutes };
+  return course.verdict === "rate_missing"
+    ? t(locale, "calls.availability.courseRateMissing", values)
+    : t(locale, "calls.availability.courseTimeShort", values);
+}
+
 function nextLabel(locale: Locale, row: TherapistAvailabilityRowDto) {
   const next = row.nextReservationTime ?? t(locale, "calls.availability.nextNone");
   if (!row.available || row.freeMinutes === null) return next;
@@ -118,7 +125,7 @@ export function TherapistAvailabilityView({
                 <tbody>
                   {rows.map((row) => {
                     const priorEndNoteId = `therapist-availability-prior-end-${row.therapistId}`;
-                    const showPriorEndNote = row.priorServiceEndCheck && row.courses.some((course) => course.possible);
+                    const showPriorEndNote = row.priorServiceEndCheck && row.courses.some((course) => course.verdict === "possible");
                     return (
                       <tr className="align-top hover:bg-readonly" key={row.therapistId}>
                         <th className={`${cellClassName} font-semibold text-foreground`} scope="row">{row.therapistName}</th>
@@ -135,7 +142,7 @@ export function TherapistAvailabilityView({
                               </span>
                             ) : null}
                             {row.courses.map((course) =>
-                              course.possible ? (
+                              course.verdict === "possible" ? (
                                 <Button
                                   aria-describedby={showPriorEndNote ? priorEndNoteId : undefined}
                                   className="h-auto min-h-11 max-w-full whitespace-normal text-left"
@@ -150,7 +157,7 @@ export function TherapistAvailabilityView({
                                 </Button>
                               ) : (
                                 <span className="inline-flex min-h-11 items-center text-muted" key={course.courseId}>
-                                  {t(locale, "calls.availability.courseImpossible", { code: course.courseCode, minutes: course.durationMinutes })}
+                                  {impossibleCourseLabel(locale, course)}
                                 </span>
                               )
                             )}

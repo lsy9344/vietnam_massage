@@ -39,8 +39,8 @@ function row(overrides: Partial<TherapistAvailabilityRowDto> = {}): TherapistAva
     freeMinutes: 60,
     priorServiceEndCheck: false,
     courses: [
-      { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, possible: true },
-      { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, possible: false }
+      { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "possible" },
+      { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, verdict: "time_short" }
     ],
     ...overrides
   };
@@ -96,8 +96,8 @@ describe("therapist availability panel", () => {
           nextReservationTime: null,
           freeMinutes: null,
           courses: [
-            { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, possible: false },
-            { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, possible: false }
+            { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "time_short" },
+            { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, verdict: "time_short" }
           ]
         })
       ]
@@ -118,8 +118,8 @@ describe("therapist availability panel", () => {
     assert.match(html, /data-course-id="course-a"/);
     assert.match(html, /data-therapist-id="therapist-1"/);
     assert.match(html, /data-start-time="15:00"/);
-    assert.match(html, /<span[^>]*>B 90분 불가<\/span>/);
-    assert.doesNotMatch(html, /<button[^>]*>B 90분 불가<\/button>/);
+    assert.match(html, /<span[^>]*>B 90분 · 시간 부족<\/span>/);
+    assert.doesNotMatch(html, /<button[^>]*>B 90분 · 시간 부족<\/button>/);
     assert.match(html, /flex flex-wrap/);
     assert.match(html, /<button[^>]*class="[^"]*rounded-full[^"]*transition-colors[^"]*"[^>]*>A 60분 가능<\/button>/);
 
@@ -152,7 +152,7 @@ describe("therapist availability panel", () => {
           nextReservationTime: null,
           freeMinutes: null,
           priorServiceEndCheck: true,
-          courses: [{ courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, possible: false }]
+          courses: [{ courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "time_short" }]
         })
       ]
     });
@@ -182,6 +182,32 @@ describe("therapist availability panel", () => {
 
     const vietnamese = renderView({ locale: "vi", open: true, rows: [row({ priorServiceEndCheck: true })] });
     assert.match(vietnamese, /Có thể theo lịch · cần xác nhận ca trước đã xong/);
+  });
+
+  it("draws each course verdict from the service: possible as a button, short time, and no rate without a free time", () => {
+    const courses: TherapistAvailabilityRowDto["courses"] = [
+      { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "possible" },
+      { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, verdict: "time_short" },
+      { courseId: "course-c", courseCode: "C", courseName: "C 120", durationMinutes: 120, verdict: "rate_missing" }
+    ];
+    const html = renderView({ open: true, rows: [row({ courses })] });
+    assert.match(html, /<button[^>]*>A 60분 가능<\/button>/);
+    assert.match(html, /<span[^>]*>B 90분 · 시간 부족<\/span>/);
+    assert.match(html, /<span[^>]*>C 120분 · 이 코스 불가<\/span>/);
+    assert.doesNotMatch(html, /<button[^>]*data-course-id="course-c"/);
+    assert.doesNotMatch(html, /C 120분[^<]*\d{2}:\d{2}/);
+
+    // 판정만 바뀌면 같은 코스도 다르게 그린다. 화면은 수당을 다시 보지 않는다.
+    const flipped = renderView({
+      open: true,
+      rows: [row({ courses: [{ courseId: "course-c", courseCode: "C", courseName: "C 120", durationMinutes: 120, verdict: "possible" }] })]
+    });
+    assert.match(flipped, /<button[^>]*data-course-id="course-c"[^>]*>C 120분 가능<\/button>/);
+
+    const vietnamese = renderView({ locale: "vi", open: true, rows: [row({ courses })] });
+    assert.match(vietnamese, /A 60 phút, có thể/);
+    assert.match(vietnamese, /B 90 phút · không đủ thời gian/);
+    assert.match(vietnamese, /<span[^>]*>C 120 phút · không làm được gói này<\/span>/);
   });
 
   it("says there is nobody to show and what to look at next", () => {
