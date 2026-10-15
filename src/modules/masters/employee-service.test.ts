@@ -19,10 +19,10 @@ function createMemoryPrisma() {
   const serviceCalls: any[] = [];
   // 영업일은 12:00에 시작해 다음 날 01:00 슬롯까지 이어진다.
   const timeSlots = [
-    { value: "12:00", sortOrder: 1 },
-    { value: "14:00", sortOrder: 2 },
-    { value: "23:00", sortOrder: 3 },
-    { value: "01:00", sortOrder: 4 }
+    { value: "12:00", sortOrder: 1, isActive: true },
+    { value: "14:00", sortOrder: 2, isActive: true },
+    { value: "23:00", sortOrder: 3, isActive: true },
+    { value: "01:00", sortOrder: 4, isActive: true }
   ];
   let employeeSeq = 1;
   let accountSeq = 1;
@@ -170,8 +170,8 @@ function createMemoryPrisma() {
       }
     },
     timeSlot: {
-      async findMany() {
-        return [...timeSlots].sort((a, b) => a.sortOrder - b.sortOrder);
+      async findMany({ where }: any = {}) {
+        return [...timeSlots].filter((slot) => where?.isActive === undefined || slot.isActive === where.isActive).sort((a, b) => a.sortOrder - b.sortOrder);
       }
     },
     async $transaction(callback: (tx: any) => Promise<unknown>) {
@@ -582,10 +582,12 @@ describe("employee deactivation with future calls", () => {
     assert.equal(prismaClient.auditEvents.length, auditCount);
   });
 
-  it("counts today's completed call and any assignment role, using the Ho Chi Minh calendar day as today", async () => {
+  it("S10: counts today's completed call and any assignment role, using the service date of the business day now falls in (not the calendar day)", async () => {
     const { prismaClient, target } = await seededTherapist();
-    // UTC로는 오늘(10-14)이지만 호찌민으로는 어제다.
-    addCall(prismaClient, { id: "yesterday", serviceDate: "2026-10-14", startTime: "23:00", status: "예약", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+    // now(2026-10-14T17:30:00.000Z)는 호찌민 달력날로 10-15 00:30이지만, 영업일은 첫 활성 슬롯(12:00)
+    // 부터 다음 날 그 슬롯 전까지라서 00:30은 아직 10-14 영업일 안이다 — 그래서 10-14 서비스 날짜가
+    // "오늘"이고, 이 23:00 콜도 오늘(차단 대상)이다(스펙 226줄, 티켓 10 결정).
+    addCall(prismaClient, { id: "today-business-day", serviceDate: "2026-10-14", startTime: "23:00", status: "예약", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
     addCall(prismaClient, { id: "today-done", serviceDate: "2026-10-15", startTime: "12:00", status: "방문완료", assignments: [{ employeeId: target.id, assignmentRole: "EARCARE" }] });
     addCall(prismaClient, { id: "later", serviceDate: "2026-10-17", startTime: "15:00", status: "예약", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
 
@@ -594,6 +596,7 @@ describe("employee deactivation with future calls", () => {
       (error: any) => {
         assert.equal(error.code, "HAS_FUTURE_CALLS");
         assert.deepEqual(error.futureCalls, [
+          { serviceCallId: "today-business-day", serviceDate: "2026-10-14", startTime: "23:00" },
           { serviceCallId: "today-done", serviceDate: "2026-10-15", startTime: "12:00" },
           { serviceCallId: "later", serviceDate: "2026-10-17", startTime: "15:00" }
         ]);
@@ -607,7 +610,9 @@ describe("employee deactivation with future calls", () => {
     addCall(prismaClient, { id: "no-show", serviceDate: "2026-10-16", startTime: "14:00", status: "노쇼", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
     addCall(prismaClient, { id: "canceled", serviceDate: "2026-10-16", startTime: "15:00", status: "취소", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_2" }] });
     addCall(prismaClient, { id: "released", serviceDate: "2026-10-16", startTime: "16:00", status: "예약", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1", isActive: false }] });
-    addCall(prismaClient, { id: "past", serviceDate: "2026-10-14", startTime: "14:00", status: "방문완료", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+    // S10: 영업일은 전날 첫 활성 슬롯부터 이어지므로(now=2026-10-14T17:30Z는 호찌민 10-15 00:30이고
+    // 오늘의 서비스 날짜는 10-14다), 확실히 지난 날로 보려면 10-13으로 둔다.
+    addCall(prismaClient, { id: "past", serviceDate: "2026-10-13", startTime: "14:00", status: "방문완료", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
     addCall(prismaClient, { id: "other-staff", serviceDate: "2026-10-16", startTime: "17:00", status: "예약", assignments: [{ employeeId: "someone-else", assignmentRole: "THERAPIST_1" }] });
 
     const after = await deactivateEmployee({ actorId: "admin-1", employeeId: target.id, now, prismaClient });
