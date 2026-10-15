@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { DetailRow } from "@/components/ui/detail-row";
 import { ScreenState } from "@/components/ui/screen-state";
 import { StatusIndicator, type StatusTone } from "@/components/ui/status-indicator";
 import { createTranslator } from "@/lib/i18n";
@@ -108,10 +109,7 @@ export function AmountRows({ rows, className }: { rows: Array<{ label: string; v
   return (
     <dl className={cn("mt-2", className)}>
       {rows.map((row) => (
-        <div className="flex items-baseline justify-between gap-4 border-b border-border py-2 text-sm last:border-b-0" key={row.label}>
-          <dt className="text-muted">{row.label}</dt>
-          <dd className="text-right font-semibold text-foreground">{row.value}</dd>
-        </div>
+        <DetailRow key={row.label} label={row.label} value={row.value} />
       ))}
     </dl>
   );
