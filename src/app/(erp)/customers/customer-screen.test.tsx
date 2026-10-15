@@ -29,10 +29,14 @@ function row(overrides: Partial<CustomerVisitHistoryRowDto> = {}): CustomerVisit
     operatingMonthId: "month-locked",
     serviceDate: "2026-07-02",
     startTime: "11:00",
+    courseId: "course-a",
     courseLabel: "A A 누루60",
+    therapist1Id: "therapist-1",
+    therapist2Id: null,
     therapistLabel: "마사지사1",
     status: "예약",
     customerMemo: "잠긴 달",
+    visitRequest: null,
     ...overrides
   };
 }

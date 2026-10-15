@@ -16,6 +16,7 @@ import {
   listCustomerVisitHistory,
   listCustomers,
   ledgerStatusCountsFromRows,
+  mostRecentCustomerVisit,
   listDailyExpensesForDate,
   listCompletedServiceCallCalculationsForDate,
   listServiceCallStatusHistory,
@@ -2960,6 +2961,10 @@ describe("service call service", () => {
     assert.equal(rows[0].therapistLabel, "마사지사1");
     assert.equal(rows[0].customerMemo, "민아 방문");
     assert.equal(rows[0].operatingMonthId, "month-2026-06");
+    // 빠른 예약 고객 단계의 최근 방문 가져오기(티켓 24)가 쓰는 코스·Therapist id와 방문별 요청.
+    assert.equal(rows[0].courseId, "course-a");
+    assert.equal(rows[0].therapist1Id, "therapist-1");
+    assert.equal(rows[0].therapist2Id, null);
     const lockedRow = rows.find((row) => row.serviceCallId === locked.id);
     assert.equal(lockedRow?.operatingMonthId, "month-locked");
     assert.equal(lockedRow?.serviceDate, "2026-07-02");
@@ -4577,10 +4582,14 @@ function visitHistoryRow(overrides: Partial<CustomerVisitHistoryRowDto>): Custom
     operatingMonthId: "month-2026-06",
     serviceDate: "2026-06-10",
     startTime: "11:00",
+    courseId: "course-a",
     courseLabel: "A 누루60",
+    therapist1Id: "therapist-1",
+    therapist2Id: null,
     therapistLabel: "마사지사1",
     status: "방문완료",
     customerMemo: null,
+    visitRequest: null,
     ...overrides
   };
 }
@@ -4607,6 +4616,20 @@ describe("customer visit counts", () => {
       noShowCount: 0,
       canceledCount: 0
     });
+  });
+});
+
+describe("most recent customer visit (B09, 스토리 71-73, 티켓 24)", () => {
+  it("picks the row with the latest date and time regardless of status, not the completed-first order", () => {
+    const older = visitHistoryRow({ serviceCallId: "older", serviceDate: "2026-06-01", startTime: "11:00", status: "방문완료" });
+    const latestReservation = visitHistoryRow({ serviceCallId: "latest", serviceDate: "2026-06-20", startTime: "15:00", status: "예약" });
+    const sameDayEarlier = visitHistoryRow({ serviceCallId: "same-day-earlier", serviceDate: "2026-06-20", startTime: "01:00", status: "노쇼" });
+
+    assert.equal(mostRecentCustomerVisit([older, latestReservation, sameDayEarlier])?.serviceCallId, "latest");
+  });
+
+  it("returns null for an empty history", () => {
+    assert.equal(mostRecentCustomerVisit([]), null);
   });
 });
 
@@ -5349,6 +5372,78 @@ describe("new row request id", () => {
     assert.deepEqual(results[0].row, results[1].row);
     assert.deepEqual((await callsOnDate(prismaClient)).map((row) => row.id), [results[0].row.id]);
     assert.equal(prismaClient.auditEvents.length - auditsBefore, 1);
+  });
+});
+
+describe("quick booking: new customer saved with the call (F01, 스토리 57·68, 티켓 24)", () => {
+  function newRowWithNewCustomer(
+    prismaClient: ReturnType<typeof createMemoryPrisma>,
+    requestId: string,
+    changes: Partial<Parameters<typeof createServiceCallRow>[0]> = {}
+  ) {
+    return createServiceCallRow({
+      requestId,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      status: "예약",
+      actorId: "counter-account",
+      newCustomer: { name: "새손님", phone: "0909999999", preferenceNote: "조용한 방 선호" },
+      prismaClient,
+      ...changes
+    });
+  }
+
+  it("creates the new customer and the call in the same write, with name/phone/preference note and no memo", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const result = await newRowWithNewCustomer(prismaClient, "request-new-1");
+
+    assert.equal(result.alreadySaved, false);
+    assert.ok(result.row.customerId);
+    const customers = await listCustomers({ prismaClient });
+    assert.equal(customers.length, 1);
+    assert.deepEqual(customers[0], {
+      id: result.row.customerId,
+      name: "새손님",
+      phone: "0909999999",
+      memo: null,
+      preferenceNote: "조용한 방 선호"
+    });
+    assert.deepEqual(
+      prismaClient.auditEvents.map((event: { action: string }) => event.action),
+      ["customer.created", "service_call.row_changed"]
+    );
+  });
+
+  it("retrying the same request id returns the same call and customer instead of making a second customer", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const first = await newRowWithNewCustomer(prismaClient, "request-new-2");
+    const auditsAfterFirst = prismaClient.auditEvents.length;
+    const again = await newRowWithNewCustomer(prismaClient, "request-new-2");
+
+    assert.equal(first.alreadySaved, false);
+    assert.equal(again.alreadySaved, true);
+    assert.deepEqual(again.row, first.row);
+    const customers = await listCustomers({ prismaClient });
+    assert.equal(customers.length, 1);
+    assert.equal(customers[0].id, first.row.customerId);
+    assert.equal(prismaClient.auditEvents.length, auditsAfterFirst);
+  });
+
+  it("rejects specifying both an existing customer id and a new customer", async () => {
+    const prismaClient = createMemoryPrisma();
+    const existing = await createCustomer({ name: "민아", actorId: "counter-account", prismaClient });
+
+    await assert.rejects(
+      () => newRowWithNewCustomer(prismaClient, "request-new-3", { customerId: existing.id }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "INVALID_SERVICE_CALL_INPUT"
+    );
+    assert.equal((await listCustomers({ prismaClient })).length, 1);
   });
 });
 
