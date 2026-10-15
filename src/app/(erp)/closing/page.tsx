@@ -31,6 +31,7 @@ import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import { DateContextControls } from "@/components/shell/date-context-controls";
 import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-notice";
 import { ScreenToolbar } from "@/components/shell/screen-toolbar";
+import { DateCapsule } from "@/components/ui/date-capsule";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { EvidenceCallItem, EvidenceCallList, PanelSection } from "@/app/(erp)/settlements/settlement-parts";
 import { calculationErrorMessageKey } from "@/app/(erp)/calls/calculation-status-message";
@@ -523,15 +524,37 @@ const PAYOUT_UNIT_LABEL_KEY: Record<PayoutConfirmationUnitType, MessageKey> = {
   OPS_MONTHLY: "closing.checklist.unitLabel.opsMonthly"
 };
 
-function payoutUnitTypeHref(unitType: PayoutConfirmationUnitType, context: ScreenContext) {
+/**
+ * S12: 날짜 있는 단위(THERAPIST_DAILY·EARCARE_DAILY·OPS_DAILY)는 그 날짜로 바로 가는 링크를 만든다
+ * (serviceDate가 context의 기준 날짜를 덮는다). 월 단위(OPS_MONTHLY)는 날짜가 없고 그 화면도 날짜
+ * 매개변수를 쓰지 않아(routes.ts dateContext="month") context 그대로 쓴다.
+ */
+function payoutUnitTypeHref(unitType: PayoutConfirmationUnitType, serviceDate: string | null, context: ScreenContext) {
   const route = findScreenRoute(PAYOUT_UNIT_ROUTE_PATH[unitType]);
-  return route ? screenHref(route, context) : null;
+  if (!route) return null;
+  return screenHref(route, serviceDate ? { ...context, date: serviceDate } : context);
 }
 
-function groupPayoutReconfirmationUnits(units: MonthlyClosingPayoutReconfirmationUnitDto[]) {
-  return payoutConfirmationUnitTypes
-    .map((unitType) => ({ unitType, count: units.filter((unit) => unit.unitType === unitType).length }))
-    .filter((group) => group.count > 0);
+/**
+ * S12: unitType만으로 묶으면 같은 직군의 다른 날짜들이 한 건수로 합쳐져, 그 묶음의 링크가 특정 날짜로
+ * 가지 못했다(마감 점검 전체의 기준 날짜로만 갔다). unitType·serviceDate로 묶어 그룹마다 하나의 날짜로
+ * 바로 갈 수 있게 한다.
+ */
+export function groupPayoutReconfirmationUnits(units: MonthlyClosingPayoutReconfirmationUnitDto[]) {
+  const groups = new Map<string, { unitType: PayoutConfirmationUnitType; serviceDate: string | null; count: number }>();
+  for (const unit of units) {
+    const key = `${unit.unitType}::${unit.serviceDate ?? ""}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      groups.set(key, { unitType: unit.unitType, serviceDate: unit.serviceDate, count: 1 });
+    }
+  }
+  return [...groups.values()].sort((a, b) => {
+    const typeOrder = payoutConfirmationUnitTypes.indexOf(a.unitType) - payoutConfirmationUnitTypes.indexOf(b.unitType);
+    return typeOrder !== 0 ? typeOrder : (a.serviceDate ?? "").localeCompare(b.serviceDate ?? "");
+  });
 }
 
 function ChecklistCallErrorDetail({ t, call }: { t: Translator; call: MonthlyClosingChecklistCallDto }) {
@@ -630,12 +653,13 @@ function PayoutReconfirmationSection({
       ) : (
         <ul className="grid gap-2">
           {groups.map((group) => {
-            const href = payoutUnitTypeHref(group.unitType, context);
+            const href = payoutUnitTypeHref(group.unitType, group.serviceDate, context);
             return (
-              <li className="flex flex-wrap items-center justify-between gap-2 border border-border bg-background px-3 py-2" key={group.unitType}>
+              <li className="flex flex-wrap items-center justify-between gap-2 border border-border bg-background px-3 py-2" key={`${group.unitType}:${group.serviceDate ?? ""}`}>
                 <span className="flex flex-wrap items-center gap-2">
                   <StatusIndicator label={t("closing.checklist.payoutReconfirmations.blocked", { count: group.count })} tone="warning" />
                   <span className="text-sm font-semibold text-foreground">{t(PAYOUT_UNIT_LABEL_KEY[group.unitType])}</span>
+                  {group.serviceDate ? <DateCapsule>{group.serviceDate}</DateCapsule> : null}
                 </span>
                 {href ? (
                   <a className="text-sm font-semibold text-foreground underline underline-offset-4" href={href}>
