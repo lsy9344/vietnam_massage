@@ -328,6 +328,33 @@ export const vi: Messages = {
   // 휴대폰 폭 원장 카드 목록(명세 F08, 티켓 26)
   "calls.phoneCard.aria": "Danh sách thẻ sổ cuộc gọi",
 
+  // 빠른 예약 패널(스펙 F01·F08, 티켓 20)
+  "calls.quickBooking.open": "Đặt lịch nhanh",
+  "calls.quickBooking.title": "Đặt lịch nhanh",
+  "calls.quickBooking.description": "Thực hiện theo thứ tự: Khách hàng → Ngày giờ đặt → Therapist·Gói → Phòng·Ghi chú → Lưu.",
+  "calls.quickBooking.stepper.aria": "Các bước đặt lịch nhanh",
+  "calls.quickBooking.step.customer": "Khách hàng",
+  "calls.quickBooking.step.schedule": "Ngày·giờ đặt",
+  "calls.quickBooking.step.therapist": "Therapist·Gói",
+  "calls.quickBooking.step.room": "Phòng·Ghi chú",
+  "calls.quickBooking.step.review": "Xác nhận",
+  "calls.quickBooking.errorSummary.title": "Kiểm tra trước khi lưu",
+  "calls.quickBooking.customer.searchLabel": "Tìm khách hàng",
+  "calls.quickBooking.customer.clear": "Bỏ chọn",
+  "calls.quickBooking.customer.memoPlaceholder": "Nếu chưa chọn khách hàng, hãy ghi tên hoặc ghi chú.",
+  "calls.quickBooking.schedule.now": "Ngay bây giờ",
+  "calls.quickBooking.therapist.unset": "Hãy chọn Therapist và gói trong danh sách gói có thể.",
+  "calls.quickBooking.therapist.chosen": "{course} · {therapist}",
+  "calls.quickBooking.review.unset": "Chưa chọn",
+  "calls.quickBooking.review.customerNone": "Không có khách hàng",
+  "calls.quickBooking.previous": "Trước",
+  "calls.quickBooking.next": "Tiếp",
+  "calls.quickBooking.save": "Lưu đặt lịch",
+  "calls.quickBooking.leaveGuard.title": "Có giá trị chưa lưu",
+  "calls.quickBooking.leaveGuard.description": "Nếu đóng bây giờ, giá trị đã nhập sẽ mất. Vẫn đóng chứ?",
+  "calls.quickBooking.leaveGuard.confirm": "Đóng",
+  "calls.quickBooking.leaveGuard.cancel": "Hủy",
+
   // 콜 행 저장 상태
   "calls.save.saved": "Đã lưu",
   "calls.save.retry": "Thử lại",

@@ -1,20 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { CallDetailPanel } from "@/app/(erp)/calls/call-detail-panel";
 import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
 import { CALL_PARAM, type LedgerView } from "@/app/(erp)/calls/ledger-address";
-import { TherapistAvailabilityPanel } from "@/app/(erp)/calls/therapist-availability-panel";
-import type { AvailabilityCourseChoice } from "@/app/(erp)/calls/therapist-availability-view";
-import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
+import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 
 /**
  * 같은 콜 id의 속성을 가진 여러 노드 중 실제로 보이는 것 하나를 고른다. 휴대폰 폭의 카드 목록과
  * 태블릿 이상의 표는 같은 `data-service-call-id`/`data-call-open`을 CSS로만 서로 숨겨 쓰는데(티켓 26),
- * `querySelector`는 숨은 쪽을 먼저 찾을 수 있어 스크롤·포커스 복귀가 틀린 노드를 집는다.
+ * `querySelector`는 숨은 쪽을 먼저 찾을 수 있어 스크롤·포커스 복귀가 틀린 노드를 집는다. 빠른 예약 패널이
+ * 저장 직후 새 행에 포커스를 줄 때도 같은 함정이 있어(티켓 20) 그쪽에서도 이 함수를 그대로 가져다 쓴다.
  */
-function firstVisible<T extends Element>(selector: string): T | null {
+export function firstVisible<T extends Element>(selector: string): T | null {
   const nodes = document.querySelectorAll<T>(selector);
   for (const node of nodes) {
     if (node instanceof HTMLElement && node.offsetParent !== null) {
@@ -75,8 +74,6 @@ function useCallSelection() {
 }
 
 export function CallLedgerWorkspace({
-  availabilityRows,
-  availabilityTime,
   customers,
   isLocked,
   operatingMonthId,
@@ -86,8 +83,6 @@ export function CallLedgerWorkspace({
   showSettlementColumns,
   view = "all"
 }: {
-  availabilityRows: TherapistAvailabilityRowDto[];
-  availabilityTime: string;
   customers?: CustomerDto[];
   isLocked: boolean;
   operatingMonthId: string;
@@ -98,29 +93,15 @@ export function CallLedgerWorkspace({
   /** 원장 보기(명세 F02, 티켓 19). page.tsx가 주소의 view 매개변수에서 읽어 넘긴다. 기본은 전체(기존 동작). */
   view?: LedgerView;
 }) {
-  const [choice, setChoice] = useState<(AvailabilityCourseChoice & { id: number }) | null>(null);
   const { selected, select } = useCallSelection();
   const selectedRow = selected ? (rows.find((row) => row.id === selected) ?? null) : null;
 
   return (
     <>
-      {/* 가능 코스는 티켓 20에서 빠른 예약 패널로 옮길 때까지의 자리다. 빠른 예약과 표 편집은 태블릿 폭
-          이상에서만 보인다(명세 F08, 티켓 26) — 휴대폰에서는 아예 띄우지 않는다. */}
-      <div className="hidden min-[600px]:block">
-        <TherapistAvailabilityPanel
-          initialRows={availabilityRows}
-          initialTime={availabilityTime}
-          onChoose={(next) => setChoice((current) => ({ ...next, id: (current?.id ?? 0) + 1 }))}
-          operatingMonthId={operatingMonthId}
-          serviceDate={serviceDate}
-          timeSlots={options.timeSlots}
-        />
-      </div>
       {/* 표는 패널이 열려도 같은 자리에 둔다(초안 유지). 1200px 미만에서는 패널이 표 위에 쌓인다. */}
       <div className={selected ? "grid grid-cols-1 items-start gap-6 min-[1200px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "grid grid-cols-1"}>
         <div className="min-w-0">
           <EditableCallGrid
-            courseChoice={choice}
             customers={customers}
             isLocked={isLocked}
             onOpenDetail={(id) => select(id)}

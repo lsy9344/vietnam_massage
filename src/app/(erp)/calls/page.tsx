@@ -18,6 +18,7 @@ import { AddExpensePanel, DailyExpensePanel } from "@/app/(erp)/calls/daily-expe
 import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { CallLedgerWorkspace } from "@/app/(erp)/calls/call-ledger-workspace";
 import { LedgerStatusCounts } from "@/app/(erp)/calls/ledger-status-counts";
+import { QuickBookingPanel } from "@/app/(erp)/calls/quick-booking-panel";
 import {
   LEDGER_VIEWS,
   ledgerHref,
@@ -159,7 +160,21 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="screen">
-      {toolbar()}
+      {/* 빠른 예약(명세 F01·F08, 티켓 20): 원장 탭 머리의 주요 버튼이다. 원장 위에 항상 펼쳐 두던 가능
+          코스 영역은 없애고 패널 안으로 옮겼다. */}
+      {toolbar(
+        <QuickBookingPanel
+          customers={customers}
+          initialAvailabilityRows={availabilityRows}
+          initialAvailabilityTime={availabilityTime}
+          isLocked={isLocked}
+          monthEndDate={selectedMonth.endDate}
+          monthStartDate={selectedMonth.startDate}
+          operatingMonthId={selectedMonth.id}
+          options={options}
+          serviceDate={serviceDate}
+        />
+      )}
       <LedgerStatusCounts
         counts={ledgerStatusCountsFromRows(rows)}
         customerHref={linkToScreen(account.role, "/customers", { operatingMonthId: selectedMonth.id, date: serviceDate })}
@@ -178,11 +193,8 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
           </Link>
         ))}
       </nav>
-      {/* 가능 코스 영역은 티켓 20에서 빠른 예약 패널로 옮길 때까지 원장 위에 둔다. */}
       <CallLedgerWorkspace
         key={`${selectedMonth.id}:${serviceDate}`}
-        availabilityRows={availabilityRows}
-        availabilityTime={availabilityTime}
         customers={customers}
         isLocked={isLocked}
         operatingMonthId={selectedMonth.id}

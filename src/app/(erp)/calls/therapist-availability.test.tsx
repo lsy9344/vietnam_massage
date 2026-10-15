@@ -1,30 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CallLedgerWorkspace } from "@/app/(erp)/calls/call-ledger-workspace";
-import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
 import { TherapistAvailabilityView } from "@/app/(erp)/calls/therapist-availability-view";
-import { LocaleProvider } from "@/lib/i18n/client";
-import type { ServiceCallFormOptions, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
+import type { TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
 
 const timeSlots = [{ value: "15:00", label: "15:00" }, { value: "16:00", label: "16:00" }];
-
-const options: ServiceCallFormOptions = {
-  rooms: [{ value: "room-101", label: "101 호실" }],
-  timeSlots,
-  courses: [
-    { value: "course-a", label: "A 누루60" },
-    { value: "course-b", label: "B 90" }
-  ],
-  statuses: [{ value: "RESERVED", label: "예약" }],
-  discountTypes: [],
-  paymentMethods: [],
-  confirmationCodes: [],
-  therapists: [{ value: "therapist-1", label: "마사지사1" }],
-  earcareEmployees: [],
-  expenseHandlers: []
-};
 
 function row(overrides: Partial<TherapistAvailabilityRowDto> = {}): TherapistAvailabilityRowDto {
   return {
@@ -63,11 +43,6 @@ function renderView(overrides: Partial<Parameters<typeof TherapistAvailabilityVi
       {...overrides}
     />
   );
-}
-
-function hiddenValue(html: string, name: string) {
-  const match = html.match(new RegExp(`name="${name}"[^>]*value="([^"]*)"`));
-  return match?.[1] ?? null;
 }
 
 describe("therapist availability panel", () => {
@@ -245,50 +220,7 @@ describe("therapist availability panel", () => {
     assert.match(vietnamese, /Hãy kiểm tra Therapist đang hoạt động trong danh mục nhân viên\./);
   });
 
-  it("fills the new row time, therapist, and course from a possible course and does not save", () => {
-    const html = renderToStaticMarkup(
-      createElement(LocaleProvider, {
-        locale: "ko",
-        children: createElement(EditableCallGrid, {
-          courseChoice: { id: 1, startTime: "15:00", therapistId: "therapist-1", courseId: "course-a" },
-          isLocked: false,
-          operatingMonthId: "month-1",
-          options,
-          rows: [],
-          serviceDate: "2026-06-10",
-          showSettlementColumns: false
-        })
-      })
-    );
-
-    assert.equal(hiddenValue(html, "startTime"), "15:00");
-    assert.equal(hiddenValue(html, "therapist1Id"), "therapist-1");
-    assert.equal(hiddenValue(html, "courseId"), "course-a");
-    assert.equal(hiddenValue(html, "therapist2Id"), "");
-    assert.match(html, /새 콜 행 추가/);
-    assert.doesNotMatch(html, /저장됨/);
-  });
-
-  it("places the availability controls before the ledger", () => {
-    const html = renderToStaticMarkup(
-      createElement(LocaleProvider, {
-        locale: "ko",
-        children: createElement(CallLedgerWorkspace, {
-          availabilityRows: [row()],
-          availabilityTime: "15:00",
-          isLocked: false,
-          operatingMonthId: "month-1",
-          options,
-          rows: [],
-          serviceDate: "2026-06-10",
-          showSettlementColumns: false
-        })
-      })
-    );
-
-    const timeAt = html.indexOf('id="therapist-availability-time"');
-    const expandAt = html.indexOf('id="therapist-availability-expand"');
-    const ledgerAt = html.indexOf("콜 원장 그리드");
-    assert.ok(timeAt >= 0 && timeAt < expandAt && expandAt < ledgerAt);
-  });
+  // 가능 코스에서 고르면 원장 새 행이 아니라 빠른 예약 패널의 Therapist·코스를 채운다(티켓 20).
+  // 그 연결은 quick-booking-panel.test.tsx가 확인하고, 콜 원장 위에 항상 펼쳐 두던 이 패널의 자리는
+  // 없어졌으므로(명세 F08) 여기서는 TherapistAvailabilityView 자체의 렌더만 다룬다.
 });
