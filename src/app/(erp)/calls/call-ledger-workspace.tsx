@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CallDetailPanel } from "@/app/(erp)/calls/call-detail-panel";
 import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
-import { CALL_PARAM } from "@/app/(erp)/calls/ledger-address";
+import { CALL_PARAM, type LedgerView } from "@/app/(erp)/calls/ledger-address";
 import { TherapistAvailabilityPanel } from "@/app/(erp)/calls/therapist-availability-panel";
 import type { AvailabilityCourseChoice } from "@/app/(erp)/calls/therapist-availability-view";
 import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
@@ -68,7 +68,8 @@ export function CallLedgerWorkspace({
   options,
   rows,
   serviceDate,
-  showSettlementColumns
+  showSettlementColumns,
+  view = "all"
 }: {
   availabilityRows: TherapistAvailabilityRowDto[];
   availabilityTime: string;
@@ -79,6 +80,8 @@ export function CallLedgerWorkspace({
   rows: ServiceCallRowDto[];
   serviceDate: string;
   showSettlementColumns: boolean;
+  /** 원장 보기(명세 F02, 티켓 19). page.tsx가 주소의 view 매개변수에서 읽어 넘긴다. 기본은 전체(기존 동작). */
+  view?: LedgerView;
 }) {
   const [choice, setChoice] = useState<(AvailabilityCourseChoice & { id: number }) | null>(null);
   const { selected, select } = useCallSelection();
@@ -108,6 +111,7 @@ export function CallLedgerWorkspace({
             selectedCallId={selected}
             serviceDate={serviceDate}
             showSettlementColumns={showSettlementColumns}
+            view={view}
           />
         </div>
         {selected ? (

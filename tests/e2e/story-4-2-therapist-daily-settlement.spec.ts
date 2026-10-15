@@ -98,6 +98,8 @@ async function cleanupStoryCalls(operatingMonthId: string) {
 }
 
 async function cleanupStorySettlementPayments(operatingMonthId: string) {
+  // 지급 확인(ADR 0004, 티켓 30) 사건은 payoutConfirmationEvent에 쓴다. 옛 지급완료 표는 더 쓰지 않지만 비어 있는지 함께 정리한다.
+  await (prisma as any).payoutConfirmationEvent.deleteMany({ where: { operatingMonthId } });
   await (prisma as any).therapistDailySettlementPaymentHistory.deleteMany({ where: { operatingMonthId } });
   await (prisma as any).therapistDailySettlementPayment.deleteMany({ where: { operatingMonthId } });
 }
@@ -270,27 +272,33 @@ test.describe("Story 4.2 therapist daily settlement", () => {
     await expect(therapist3Panel.getByRole("listitem").filter({ hasText: "정책 없음" }).first()).toBeVisible();
   });
 
-  test("settlement manager can mark payment and review actor history", async ({ page }) => {
+  test("settlement manager can confirm payout, reconfirm, and release with a reason, reviewing actor history", async ({ page }) => {
     await login(page, "story42_settlement", "Story42!settlement");
     await page.goto(`/settlements?operatingMonthId=${seededData.operatingMonthId}&serviceDate=2034-02-12`);
 
-    // 지급완료는 직원 패널에서 한다. 표의 행에는 지급 상태만 보인다(티켓 05).
-    const therapist1Summary = await openEmployeePanel(page, "E2E42 마사지사1");
-    await therapist1Summary.getByRole("button", { name: "지급완료" }).click();
+    // 지급 확인(ADR 0004, 티켓 30)은 직원 패널에서 한다. 표의 행에는 확인 상태만 보인다.
+    const therapist1Panel = await openEmployeePanel(page, "E2E42 마사지사1");
+    await expect(therapist1Panel).toContainText("미확인");
+    await therapist1Panel.getByRole("button", { name: "지급 확인" }).click();
 
-    await expect(therapist1Summary).toContainText("지급완료");
-    await expect(therapist1Summary).toContainText("처리자: story42_settlement");
-    await expect(therapist1Summary).toContainText("E2E42 정산담당");
+    await expect(therapist1Panel).toContainText("확인됨");
+    await expect(therapist1Panel).toContainText("확인 이력 1건");
+    await expect(therapist1Panel).toContainText("처리자: story42_settlement / E2E42 정산담당");
+    await expect(employeeRow(page, "E2E42 마사지사1")).toContainText("확인됨");
 
-    await therapist1Summary.getByText("변경 이력 1건").click();
-    await expect(therapist1Summary).toContainText("미지급 -> 지급완료");
-    await expect(therapist1Summary).toContainText("처리자: story42_settlement / E2E42 정산담당");
+    // 재확인은 사유가 필수다.
+    await therapist1Panel.getByLabel("사유").first().fill("출근 정정으로 다시 확인");
+    await therapist1Panel.getByRole("button", { name: "재확인" }).click();
+    await expect(therapist1Panel).toContainText("확인 이력 2건");
+    await expect(therapist1Panel).toContainText("출근 정정으로 다시 확인");
 
-    await therapist1Summary.getByRole("button", { name: "완료 취소" }).click();
-    await expect(therapist1Summary).toContainText("미지급");
-    await expect(therapist1Summary).toContainText("변경 이력 2건");
-    await expect(therapist1Summary).toContainText("지급완료 -> 미지급");
-    await expect(employeeRow(page, "E2E42 마사지사1")).toContainText("미지급");
+    // 해제도 사유가 필수고, 해제 뒤에는 미확인으로 돌아간다.
+    await therapist1Panel.getByLabel("사유").last().fill("정산 오류로 확인 해제");
+    await therapist1Panel.getByRole("button", { name: "확인 해제" }).click();
+    await expect(therapist1Panel).toContainText("미확인");
+    await expect(therapist1Panel).toContainText("확인 이력 3건");
+    await expect(therapist1Panel).toContainText("정산 오류로 확인 해제");
+    await expect(employeeRow(page, "E2E42 마사지사1")).toContainText("미확인");
   });
 
   test("empty date shows explicit empty state", async ({ page }) => {

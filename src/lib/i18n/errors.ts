@@ -68,7 +68,11 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   INVALID_ACCOUNT_LINK_INPUT: "Dữ liệu liên kết tài khoản không hợp lệ.",
   ACCOUNT_ID_CONFLICTS_WITH_EMPLOYEE_ACCOUNT: "ID tài khoản khác với tài khoản đã liên kết của nhân viên này.",
   EMAIL_CONFLICTS_WITH_EMPLOYEE_ACCOUNT: "Email khác với tài khoản đã liên kết của nhân viên này.",
-  ACCOUNT_ID_EMAIL_MISMATCH: "ID tài khoản và email thuộc về các tài khoản khác nhau."
+  ACCOUNT_ID_EMAIL_MISMATCH: "ID tài khoản và email thuộc về các tài khoản khác nhau.",
+
+  // 지급 확인(ADR 0004, 티켓 30)
+  PAYOUT_CONFIRMATION_ALREADY_CONFIRMED: "Đã xác nhận chi trả. Nếu số tiền thay đổi, hãy xác nhận lại.",
+  PAYOUT_CONFIRMATION_NOT_CONFIRMED: "Chưa có xác nhận chi trả nên không thể xác nhận lại hoặc hủy xác nhận."
 };
 
 /**
@@ -93,18 +97,26 @@ export function hasDomainErrorTranslation(code: string): boolean {
  * 화이트리스트(한국어→vi)로 매핑한다. 매핑이 없으면 한국어 원문을 그대로 반환한다.
  */
 const KOREAN_MESSAGE_VI: Record<string, string> = {
-  // 지급완료(마사지사 일일정산) action 안전 메시지
+  // 지급 확인(ADR 0004, 티켓 30) action 안전 메시지
   "운영월을 선택하세요.": "Vui lòng chọn tháng vận hành.",
   "조회 날짜는 YYYY-MM-DD 형식이어야 합니다.": "Ngày tra cứu phải theo định dạng YYYY-MM-DD.",
   "마사지사를 선택하세요.": "Vui lòng chọn kỹ thuật viên.",
+  "직원을 선택하세요.": "Vui lòng chọn nhân viên.",
   "처리자를 확인할 수 없습니다.": "Không xác định được người xử lý.",
   "운영월을 찾을 수 없습니다.": "Không tìm thấy tháng vận hành.",
-  "마감확정 또는 잠금 운영월의 지급완료 상태는 변경할 수 없습니다.": "Không thể đổi trạng thái đã thanh toán của tháng đã chốt hoặc đã khóa.",
   "운영월 범위를 벗어난 날짜입니다.": "Ngày nằm ngoài phạm vi tháng vận hành.",
   "마사지사를 찾을 수 없습니다.": "Không tìm thấy kỹ thuật viên.",
-  "활성 마사지사만 지급완료 상태를 변경할 수 있습니다.": "Chỉ kỹ thuật viên đang hoạt động mới có thể đổi trạng thái đã thanh toán.",
-  "해당 날짜에 정산 대상 콜이 없는 마사지사는 지급완료로 표시할 수 없습니다.": "Không thể đánh dấu đã thanh toán cho kỹ thuật viên không có cuộc gọi cần đối soát trong ngày.",
-  "지급완료 상태값이 올바르지 않습니다.": "Giá trị trạng thái đã thanh toán không hợp lệ.",
+  "활성 마사지사만 지급 확인을 변경할 수 있습니다.": "Chỉ kỹ thuật viên đang hoạt động mới có thể thay đổi xác nhận chi trả.",
+  "해당 날짜에 정산 대상 콜이 없는 마사지사는 지급 확인을 할 수 없습니다.": "Không thể xác nhận chi trả cho kỹ thuật viên không có cuộc gọi cần đối soát trong ngày.",
+  "이 지급 확인 단위에는 날짜가 필요합니다.": "Đơn vị xác nhận chi trả này cần có ngày.",
+  "월 단위 지급 확인에는 날짜를 지정할 수 없습니다.": "Không thể chỉ định ngày cho xác nhận chi trả theo tháng.",
+  "금액은 0 이상의 정수여야 합니다.": "Số tiền phải là số nguyên từ 0 trở lên.",
+  "사유는 500자 이하로 입력하세요.": "Vui lòng nhập lý do tối đa 500 ký tự.",
+  "재확인 사유를 입력하세요.": "Vui lòng nhập lý do xác nhận lại.",
+  "해제 사유를 입력하세요.": "Vui lòng nhập lý do hủy xác nhận.",
+  "지급 확인 입력값이 올바르지 않습니다.": "Dữ liệu xác nhận chi trả không hợp lệ.",
+  "지급 재확인 입력값이 올바르지 않습니다.": "Dữ liệu xác nhận lại chi trả không hợp lệ.",
+  "지급 확인 해제 입력값이 올바르지 않습니다.": "Dữ liệu hủy xác nhận chi trả không hợp lệ.",
   // 월마감 재오픈 등 Zod field-level 메시지
   "재오픈 사유를 5자 이상 입력하세요.": "Vui lòng nhập lý do mở lại từ 5 ký tự trở lên.",
   // 콜 상세 패널: 고객 연결 정정 Zod field-level 메시지

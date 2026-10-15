@@ -36,7 +36,7 @@ const mai: TherapistDailySettlementDto = {
     { serviceCallId: "call-2", courseId: "course-a", courseCode: "A", role: "THERAPIST_2", employeeId: "thr-1", commissionAmount: 0, rateStatus: "missing_policy", call: call("call-2", "16:30") }
   ],
   warningCounts: { zeroPolicy: 0, missingPolicy: 1 },
-  paymentStatus: { isPaid: false, paidAt: null, paidByAccountId: null, paidBy: null, history: [] }
+  payoutConfirmation: { status: "unconfirmed", currentAmount: 700000, lastConfirmedAmount: null, difference: null, requiresReconfirmation: false, history: [] }
 };
 
 const maiAttendance: TherapistAttendanceDto = {
@@ -117,7 +117,8 @@ describe("therapist settlement view", () => {
     // 정책이 없어 0원으로 남은 담당 건은 0원이 아니라 근거 없음이다.
     assert.match(html, /2026-10-14 16:30[\s\S]*?근거 없음/);
     assert.match(html, /A 수량\/금액/);
-    assert.match(html, />지급완료<\/button>/);
+    assert.match(html, />미확인</);
+    assert.match(html, />지급 확인<\/button>/);
   });
 
   it("links each evidence call to that date and call in the ledger for an administrator", () => {
@@ -151,7 +152,7 @@ describe("therapist settlement view", () => {
     const html = render({ attendanceDisabled: true, paymentLocked: true });
 
     assert.match(html, /aria-label="Mai 출근시간"[^>]*disabled=""/);
-    assert.doesNotMatch(html, />지급완료<\/button>/);
+    assert.doesNotMatch(html, />지급 확인<\/button>/);
     assert.match(html, />잠금</);
   });
 
