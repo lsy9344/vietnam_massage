@@ -80,7 +80,14 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   UNSUPPORTED_EMPLOYEE_GROUP: "Không hỗ trợ phiếu lương tháng cho nhân viên này.",
   MONTHLY_STATEMENT_VERSION_NOT_FOUND: "Không tìm thấy phiên bản chốt tháng đó.",
   // S9: 마감확정·잠금인데 스냅샷이 없을 때(monthly-statement-service.ts, monthly-closing-service.ts와 같은 code)
-  MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND: "Không tìm thấy bản ghi đã chốt."
+  MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND: "Không tìm thấy bản ghi đã chốt.",
+
+  // S11: 마감 확정 거절(월마감 확정 흐름, 티켓 33·34)
+  MONTHLY_CLOSE_CALCULATION_ERRORS_PENDING: "Không thể chốt tháng vì vẫn còn cuộc gọi bị lỗi tính toán.",
+  MONTHLY_CLOSE_PAYOUT_RECONFIRMATION_PENDING: "Không thể chốt tháng vì vẫn còn mục cần xác nhận lại chi trả.",
+  MONTHLY_CLOSE_PENDING_CLOSE_REASON_REQUIRED: "Vui lòng nhập lý do ngoại lệ.",
+  MONTHLY_CLOSE_PENDING_CALLS_CHANGED:
+    "Sau khi bạn xác nhận danh sách, có thêm cuộc gọi mới cần xác nhận trước khi chốt tháng nên không thể chốt. Hãy xác nhận lại danh sách mới."
 };
 
 /**
@@ -165,6 +172,8 @@ const KOREAN_MESSAGE_VI: Record<string, string> = {
   "카운터팀 대상자가 없어 카운터팀 몫을 미배분으로 남겼습니다.": "Không có đối tượng nhóm quầy nên phần của nhóm quầy được để chưa phân bổ.",
   "웨이터팀 대상자가 없어 웨이터팀 몫을 미배분으로 남겼습니다.": "Không có đối tượng nhóm phục vụ nên phần của nhóm phục vụ được để chưa phân bổ.",
   "Story 4.1 마사지사 출퇴근/만근 인정 source가 없어 만근수당을 계산하지 않았습니다.": "Không có source chấm công/công nhận đủ công của KTV massage Story 4.1 nên không tính phụ cấp đủ công.",
+  // 월 명세서(S11, 티켓 32) 고정 문구 — 마감 버전을 보는 중일 때 날짜별 근거 자리에 쓴다.
+  "이 마감 버전에는 해당 근거가 저장되지 않았습니다.": "Phiên bản chốt này không lưu căn cứ đó.",
   // 운영팀 월 인센 calculationBasis 고정 문구 (표시 직전 번역)
   "월 인센 지급 조건 미충족": "Chưa đạt điều kiện chi thưởng tháng",
   "팀장 중복 대상 / deterministic order 후순위": "Trùng đối tượng trưởng nhóm / xếp sau theo deterministic order",
