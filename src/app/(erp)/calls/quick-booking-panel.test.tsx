@@ -239,7 +239,7 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
       nextReservationTime: null,
       freeMinutes: 60,
       priorServiceEndCheck: false,
-      courses: [{ courseId: "course-a", courseCode: "A", courseName: "A 60분", durationMinutes: 60, verdict: "possible" }]
+      courses: [{ courseId: "course-a", courseCode: "A", courseName: "A 60분", durationMinutes: 60, verdict: "possible", requiresSecondTherapist: false }]
     };
 
     const unset = render(
@@ -249,14 +249,19 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
         availabilityPending={false}
         availabilityRows={[row]}
         availabilityTime="15:00"
+        courseId=""
         courseLabel={null}
         disabled={false}
         fieldErrors={{}}
         locale="ko"
         onChoose={() => undefined}
+        onChooseSecond={() => undefined}
         onClear={() => undefined}
+        onClearSecond={() => undefined}
         onTimeChange={() => undefined}
         options={options}
+        therapist1Id={null}
+        therapist2Label={null}
         therapistLabel={null}
       />
     );
@@ -264,6 +269,8 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
     assert.doesNotMatch(unset, /선택 해제/);
     // 가능 목록은 늘 펼친 채로 보인다(접기 버튼을 눌러도 바뀌지 않는다, onToggle no-op).
     assert.match(unset, /A 60분 가능/);
+    // 1인 코스는 두 번째 Therapist 영역이 보이지 않는다.
+    assert.doesNotMatch(unset, /두 번째 Therapist/);
 
     const chosen = render(
       "ko",
@@ -272,20 +279,130 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
         availabilityPending={false}
         availabilityRows={[row]}
         availabilityTime="15:00"
+        courseId="course-a"
         courseLabel="A 60분"
         disabled={false}
         fieldErrors={{ courseId: ["코스를 선택하세요."] }}
         locale="ko"
         onChoose={() => undefined}
+        onChooseSecond={() => undefined}
         onClear={() => undefined}
+        onClearSecond={() => undefined}
         onTimeChange={() => undefined}
         options={options}
+        therapist1Id="therapist-1"
+        therapist2Label={null}
         therapistLabel="마사지사1"
       />
     );
     assert.match(chosen, /A 60분 · 마사지사1/);
     assert.match(chosen, />선택 해제</);
     assert.match(chosen, /role="alert">코스를 선택하세요\.</);
+  });
+
+  it("Therapist·코스 단계: 두 명 코스는 두 번째 Therapist를 따로 고르고, 시간 부족·수당 없음은 경고 확인 후 배정 버튼이다", () => {
+    const rows: TherapistAvailabilityRowDto[] = [
+      {
+        therapistId: "therapist-1",
+        therapistName: "마사지사1",
+        attendance: "before_check_in",
+        shiftCheck: false,
+        available: true,
+        unavailableReason: null,
+        inServiceDisplayEnd: null,
+        freeFrom: null,
+        nextReservationTime: null,
+        freeMinutes: 90,
+        priorServiceEndCheck: false,
+        courses: [{ courseId: "course-d", courseCode: "D", courseName: "D 2:1 90", durationMinutes: 90, verdict: "possible", requiresSecondTherapist: true }]
+      },
+      {
+        therapistId: "therapist-2",
+        therapistName: "마사지사2",
+        attendance: "checked_in",
+        shiftCheck: false,
+        available: true,
+        unavailableReason: null,
+        inServiceDisplayEnd: null,
+        freeFrom: null,
+        nextReservationTime: null,
+        freeMinutes: 90,
+        priorServiceEndCheck: false,
+        courses: [{ courseId: "course-d", courseCode: "D", courseName: "D 2:1 90", durationMinutes: 90, verdict: "time_short", requiresSecondTherapist: true }]
+      },
+      {
+        therapistId: "therapist-3",
+        therapistName: "마사지사3",
+        attendance: "before_check_in",
+        shiftCheck: false,
+        available: false,
+        unavailableReason: "booked",
+        inServiceDisplayEnd: null,
+        freeFrom: "16:00",
+        nextReservationTime: null,
+        freeMinutes: null,
+        priorServiceEndCheck: false,
+        courses: [{ courseId: "course-d", courseCode: "D", courseName: "D 2:1 90", durationMinutes: 90, verdict: "rate_missing", requiresSecondTherapist: true }]
+      }
+    ];
+
+    const noSecondYet = render(
+      "ko",
+      <TherapistStep
+        availabilityFailed={false}
+        availabilityPending={false}
+        availabilityRows={rows}
+        availabilityTime="15:00"
+        courseId="course-d"
+        courseLabel="D 2:1 90"
+        disabled={false}
+        fieldErrors={{}}
+        locale="ko"
+        onChoose={() => undefined}
+        onChooseSecond={() => undefined}
+        onClear={() => undefined}
+        onClearSecond={() => undefined}
+        onTimeChange={() => undefined}
+        options={options}
+        therapist1Id="therapist-1"
+        therapist2Label={null}
+        therapistLabel="마사지사1"
+      />
+    );
+    assert.match(noSecondYet, /두 번째 Therapist/);
+    // 두 번째 후보 목록(<ul>...</ul>)만 떼어 본다. 이미 고른 첫 번째 Therapist(therapist-1)는 거기서 빠진다.
+    const secondCandidateList = noSecondYet.slice(noSecondYet.indexOf("<ul"), noSecondYet.lastIndexOf("</ul>"));
+    assert.doesNotMatch(secondCandidateList, /마사지사1/);
+    // 시간 부족·수당 없음 후보는 "가능"과 다른 문구의 경고 확인 버튼이다.
+    assert.match(secondCandidateList, /마사지사2[\s\S]*?D 90분 · 시간 부족 · 경고 확인 후 배정/);
+    assert.match(secondCandidateList, /마사지사3[\s\S]*?D 90분 · 이 코스 불가 · 경고 확인 후 배정/);
+    assert.doesNotMatch(secondCandidateList, /마사지사2[\s\S]*?D 90분 가능/);
+
+    const secondChosen = render(
+      "ko",
+      <TherapistStep
+        availabilityFailed={false}
+        availabilityPending={false}
+        availabilityRows={rows}
+        availabilityTime="15:00"
+        courseId="course-d"
+        courseLabel="D 2:1 90"
+        disabled={false}
+        fieldErrors={{ therapist2Id: ["Therapist 1과 Therapist 2는 서로 다른 사람이어야 합니다."] }}
+        locale="ko"
+        onChoose={() => undefined}
+        onChooseSecond={() => undefined}
+        onClear={() => undefined}
+        onClearSecond={() => undefined}
+        onTimeChange={() => undefined}
+        options={options}
+        therapist1Id="therapist-1"
+        therapist2Label="마사지사2"
+        therapistLabel="마사지사1"
+      />
+    );
+    assert.match(secondChosen, />마사지사2</);
+    assert.match(secondChosen, /role="alert">Therapist 1과 Therapist 2는 서로 다른 사람이어야 합니다\.</);
   });
 
   it("객실·메모 단계: 객실은 선택이고 메모는 500자까지다", () => {
@@ -343,6 +460,7 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
         onSave={() => undefined}
         roomLabel="101 호실"
         status="idle"
+        therapist2Label="마사지사2"
         therapistLabel="마사지사1"
       />
     );
@@ -350,6 +468,9 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
     assert.match(html, /2026-06-10 15:00/);
     assert.match(html, /A 60분/);
     assert.match(html, /101 호실/);
+    assert.match(html, /마사지사1/);
+    // 두 번째 Therapist가 있으면 요약에 함께 보인다(티켓 21).
+    assert.match(html, /마사지사2/);
     assert.match(html, /<button[^>]*>예약 저장<\/button>/);
     assert.match(html, /<button[^>]*>취소<\/button>/);
 
@@ -367,12 +488,15 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
         onSave={() => undefined}
         roomLabel={null}
         status="idle"
+        therapist2Label={null}
         therapistLabel={null}
       />
     );
     assert.match(noCustomer, /고객 없음/);
     assert.match(noCustomer, /선택 안 함/);
     assert.match(noCustomer, /미배정/);
+    // 두 번째 Therapist가 없으면 그 행을 그리지 않는다.
+    assert.doesNotMatch(noCustomer, /마사지사2/);
   });
 
   it("단계 이동줄: 다섯 단계가 번호로 보이고 지금 단계가 표시되며, 오류가 있는 단계에 표시가 붙는다", () => {

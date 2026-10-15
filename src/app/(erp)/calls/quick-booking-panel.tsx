@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DetailRow } from "@/components/ui/detail-row";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import { ModalPanel } from "@/components/ui/panel";
-import { createServiceCallRowAction, loadTherapistAvailabilityAction } from "@/app/(erp)/calls/actions";
+import { createQuickBookingServiceCallAction, loadTherapistAvailabilityAction } from "@/app/(erp)/calls/actions";
 import { firstVisible } from "@/app/(erp)/calls/call-ledger-workspace";
 import type { NewRowSaveStatus } from "@/app/(erp)/calls/call-new-row-save";
 import { newRequestId } from "@/app/(erp)/calls/call-request-id";
@@ -22,7 +22,13 @@ import {
   type QuickBookingStep
 } from "@/app/(erp)/calls/quick-booking-draft";
 import { selectNowSlot } from "@/app/(erp)/calls/quick-booking-now-slot";
-import { TherapistAvailabilityView, type AvailabilityCourseChoice } from "@/app/(erp)/calls/therapist-availability-view";
+import {
+  attendanceKey,
+  impossibleCourseLabel,
+  TherapistAvailabilityView,
+  type AvailabilityCourseChoice,
+  type AvailabilityCourseOverrideChoice
+} from "@/app/(erp)/calls/therapist-availability-view";
 import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { Locale } from "@/lib/i18n/config";
@@ -304,36 +310,69 @@ export function ScheduleStep({
   );
 }
 
+/** 시간 부족·수당 없음 코스를 "경고 확인 후 배정"으로 받기 전에 먼저 보여줄 경고(스펙 F01, 티켓 21). */
+type PendingTherapistOverride =
+  | { kind: "first"; choice: AvailabilityCourseOverrideChoice; therapistName: string }
+  | { kind: "second"; therapistId: string; therapistName: string; verdict: "time_short" | "rate_missing" };
+
 export function TherapistStep({
   availabilityFailed,
   availabilityPending,
   availabilityRows,
   availabilityTime,
+  courseId,
   courseLabel,
   disabled,
   fieldErrors,
   locale,
   onChoose,
+  onChooseSecond,
   onClear,
+  onClearSecond,
   onTimeChange,
   options,
+  therapist1Id,
+  therapist2Label,
   therapistLabel
 }: {
   availabilityFailed: boolean;
   availabilityPending: boolean;
   availabilityRows: TherapistAvailabilityRowDto[];
   availabilityTime: string;
+  courseId: string;
   courseLabel: string | null;
   disabled: boolean;
   fieldErrors: Record<string, string[]>;
   locale: Locale;
   onChoose: (choice: AvailabilityCourseChoice) => void;
+  /** 두 번째 Therapist를 고른다(티켓 21). 코스·시각은 첫 번째 선택으로 이미 고정돼 있어 id만 받는다. */
+  onChooseSecond: (therapistId: string) => void;
   onClear: () => void;
+  onClearSecond: () => void;
   onTimeChange: (time: string) => void;
   options: ServiceCallFormOptions;
+  therapist1Id: string | null | undefined;
+  therapist2Label: string | null;
   therapistLabel: string | null;
 }) {
   const t = useT();
+  // 경고 확인 후 배정은 버튼을 누른 즉시 적용하지 않고, 경고 문장을 먼저 보여준 뒤 확인을 받는다(스펙 F01).
+  const [pendingOverride, setPendingOverride] = useState<PendingTherapistOverride | null>(null);
+
+  // 코스 정책상 두 번째 Therapist가 필요한지는 가능 코스 행이 코스마다 함께 알려준다(티켓 11). 같은 코스는
+  // 어느 행에서 찾아도 같은 값이다.
+  const requiresSecondTherapist = Boolean(
+    courseId &&
+      availabilityRows
+        .flatMap((row) => row.courses)
+        .find((course) => course.courseId === courseId)?.requiresSecondTherapist
+  );
+  // 같은 사람을 Therapist 1·2로 고르는 것은 저장 오류라, 후보 목록에서 이미 고른 첫 번째 Therapist는 뺀다.
+  const secondCandidates = availabilityRows.filter((row) => row.therapistId !== therapist1Id);
+
+  const overrideVerdict = pendingOverride ? (pendingOverride.kind === "first" ? pendingOverride.choice.verdict : pendingOverride.verdict) : null;
+  const overrideTherapistName = pendingOverride?.therapistName ?? "";
+
   return (
     <div className="grid gap-4">
       <StepHeading>{t("calls.quickBooking.step.therapist")}</StepHeading>
@@ -358,11 +397,16 @@ export function TherapistStep({
         가능 코스 화면(TherapistAvailabilityView, 티켓 10–12)을 그대로 재사용한다. 원장 위에 늘 펼쳐 두던
         자리(티켓 20 이전)와 달리 이 단계에서는 늘 펼친 채로 두고(open 고정, onToggle은 no-op), 시각은
         "날짜·예약시각" 단계와 같은 값을 공유한다. 가능 버튼은 Therapist와 코스만 채운다(스펙 F01).
+        시간 부족·수당 없음 코스는 onOverride로 "경고 확인 후 배정" 경로를 더한다(티켓 21).
       */}
       <TherapistAvailabilityView
         failed={availabilityFailed}
         locale={locale}
         onChoose={onChoose}
+        onOverride={(choice) => {
+          const therapistName = availabilityRows.find((row) => row.therapistId === choice.therapistId)?.therapistName ?? choice.therapistId;
+          setPendingOverride({ kind: "first", choice, therapistName });
+        }}
         onTimeChange={onTimeChange}
         onToggle={() => {}}
         open
@@ -370,6 +414,89 @@ export function TherapistStep({
         rows={availabilityRows}
         time={availabilityTime}
         timeSlots={options.timeSlots}
+      />
+
+      {/* 두 명 코스는 두 번째 Therapist를 따로 고른다(스펙 F01, 티켓 21). 코스가 그 정책일 때만 보인다. */}
+      {requiresSecondTherapist ? (
+        <div className="grid gap-3 rounded-lg border border-border bg-surface p-4">
+          <h3 className="text-[0.9375rem] font-semibold text-foreground">{t("calls.quickBooking.therapist.secondTitle")}</h3>
+          {therapist2Label ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
+              <span className="text-sm font-semibold text-foreground">{therapist2Label}</span>
+              <Button disabled={disabled} onClick={onClearSecond} type="button" variant="secondary">
+                {t("calls.quickBooking.customer.clear")}
+              </Button>
+            </div>
+          ) : secondCandidates.length === 0 ? (
+            <p className="text-sm text-muted">{t("calls.quickBooking.therapist.secondEmpty")}</p>
+          ) : (
+            <>
+              <p className="text-sm text-muted">{t("calls.quickBooking.therapist.secondUnset")}</p>
+              <ul className="grid gap-2">
+                {secondCandidates.map((row) => {
+                  const course = row.courses.find((candidate) => candidate.courseId === courseId);
+                  if (!course) return null;
+                  const verdict = course.verdict;
+                  return (
+                    <li className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border px-3 py-2" key={row.therapistId}>
+                      <span className="text-sm">
+                        <span className="font-semibold text-foreground">{row.therapistName}</span>{" "}
+                        <span className="text-muted">{t(attendanceKey[row.attendance])}</span>
+                      </span>
+                      {verdict === "possible" ? (
+                        <Button disabled={disabled} onClick={() => onChooseSecond(row.therapistId)} type="button" variant="secondary">
+                          {t("calls.availability.coursePossible", { code: course.courseCode, minutes: course.durationMinutes })}
+                        </Button>
+                      ) : (
+                        <Button
+                          className="border-warning text-warning hover:bg-warning-soft"
+                          disabled={disabled}
+                          onClick={() => setPendingOverride({ kind: "second", therapistId: row.therapistId, therapistName: row.therapistName, verdict })}
+                          type="button"
+                          variant="secondary"
+                        >
+                          {impossibleCourseLabel(locale, course)} · {t("calls.quickBooking.therapist.overrideAssign")}
+                        </Button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+          {fieldErrors.therapist2Id?.[0] ? (
+            <span className="text-xs text-danger" role="alert">
+              {fieldErrors.therapist2Id[0]}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      <ConfirmDialog
+        cancelLabel={t("common.confirm.cancel")}
+        confirmLabel={t("calls.quickBooking.therapist.overrideAssign")}
+        description={
+          overrideVerdict
+            ? t(
+                overrideVerdict === "rate_missing" ? "calls.quickBooking.therapist.overrideRateMissing" : "calls.quickBooking.therapist.overrideTimeShort",
+                { therapist: overrideTherapistName }
+              )
+            : undefined
+        }
+        onConfirm={() => {
+          if (!pendingOverride) return;
+          if (pendingOverride.kind === "first") {
+            onChoose(pendingOverride.choice);
+          } else {
+            onChooseSecond(pendingOverride.therapistId);
+          }
+          setPendingOverride(null);
+        }}
+        onOpenChange={(open) => {
+          if (!open) setPendingOverride(null);
+        }}
+        open={pendingOverride !== null}
+        title={t("calls.quickBooking.therapist.overrideTitle")}
       />
     </div>
   );
@@ -430,6 +557,7 @@ export function ReviewStep({
   onSave,
   roomLabel,
   status,
+  therapist2Label,
   therapistLabel
 }: {
   courseLabel: string | null;
@@ -443,6 +571,7 @@ export function ReviewStep({
   onSave: () => void;
   roomLabel: string | null;
   status: NewRowSaveStatus;
+  therapist2Label: string | null;
   therapistLabel: string | null;
 }) {
   const t = useT();
@@ -457,6 +586,7 @@ export function ReviewStep({
         <DetailRow label={t("calls.quickBooking.step.schedule")} value={`${draft.serviceDate} ${draft.startTime || "—"}`} />
         <DetailRow label={t("calls.column.course")} value={courseLabel ?? t("calls.quickBooking.review.unset")} />
         <DetailRow label={t("calls.column.therapist1")} value={therapistLabel ?? t("calls.quickBooking.review.unset")} />
+        {therapist2Label ? <DetailRow label={t("calls.column.therapist2")} value={therapist2Label} /> : null}
         <DetailRow label={t("calls.column.room")} value={roomLabel ?? t("calls.placeholder.roomUnassigned")} />
       </dl>
       <div className="flex flex-wrap items-center gap-3">
@@ -552,8 +682,18 @@ export function QuickBookingPanel({
 
   function chooseCourse(choice: AvailabilityCourseChoice) {
     // 가능 버튼은 패널의 Therapist와 코스만 채운다(스펙 F01, 티켓 20). 시각은 이미 이 단계의 예약시각과
-    // 같아(가능 목록 자체가 그 시각 기준) 다시 쓰지 않는다.
-    dispatch({ type: "choose", changes: { courseId: choice.courseId, therapist1Id: choice.therapistId } });
+    // 같아(가능 목록 자체가 그 시각 기준) 다시 쓰지 않는다. 코스·첫 번째 Therapist를 새로 고르면 앞서
+    // 고른 두 번째 Therapist는 그 짝과 맞지 않을 수 있어 함께 비운다(티켓 21).
+    dispatch({ type: "choose", changes: { courseId: choice.courseId, therapist1Id: choice.therapistId, therapist2Id: null } });
+  }
+
+  // 두 명 코스의 두 번째 Therapist(티켓 21). 코스·시각은 이미 고정돼 있어 id만 받는다.
+  function chooseSecondTherapist(therapistId: string) {
+    dispatch({ type: "choose", changes: { therapist2Id: therapistId } });
+  }
+
+  function clearSecondTherapist() {
+    dispatch({ type: "choose", changes: { therapist2Id: null } });
   }
 
   // 응답을 받지 못하면(네트워크 오류, 시간 초과) 초안과 요청 id를 둔 채 "저장 여부 확인 중"이 된다(티켓 16).
@@ -563,7 +703,7 @@ export function QuickBookingPanel({
       void (async () => {
         const giveUp = window.setTimeout(() => dispatch({ type: "lost", request }), QUICK_BOOKING_SAVE_TIMEOUT_MS);
         try {
-          const result = await createServiceCallRowAction(request);
+          const result = await createQuickBookingServiceCallAction(request);
           if (result.ok) {
             const createdId = result.data.id;
             dispatch({ type: "saved", request, notice: result.notice ?? null, nextRequestId: newRequestId() });
@@ -604,6 +744,7 @@ export function QuickBookingPanel({
   const stepProps: StepProps = { customers, disabled: locked, draft, fieldErrors, monthEndDate, monthStartDate, onEdit: edit, options };
   const courseLabel = options.courses.find((option) => option.value === draft.courseId)?.label ?? null;
   const therapistLabel = draft.therapist1Id ? (options.therapists.find((option) => option.value === draft.therapist1Id)?.label ?? draft.therapist1Id) : null;
+  const therapist2Label = draft.therapist2Id ? (options.therapists.find((option) => option.value === draft.therapist2Id)?.label ?? draft.therapist2Id) : null;
   const roomLabel = draft.roomId ? (options.rooms.find((option) => option.value === draft.roomId)?.label ?? draft.roomId) : null;
   const customerLabel = draft.customerId ? (customers.find((customer) => customer.id === draft.customerId)?.name ?? draft.customerId) : null;
 
@@ -650,14 +791,19 @@ export function QuickBookingPanel({
             availabilityPending={availabilityPending}
             availabilityRows={availabilityRows}
             availabilityTime={availabilityTime}
+            courseId={draft.courseId}
             courseLabel={courseLabel}
             disabled={locked}
             fieldErrors={fieldErrors}
             locale={locale}
             onChoose={chooseCourse}
-            onClear={() => dispatch({ type: "edit", changes: { courseId: "", therapist1Id: null } })}
+            onChooseSecond={chooseSecondTherapist}
+            onClear={() => dispatch({ type: "edit", changes: { courseId: "", therapist1Id: null, therapist2Id: null } })}
+            onClearSecond={clearSecondTherapist}
             onTimeChange={(next) => setSchedule(draft.serviceDate, next)}
             options={options}
+            therapist1Id={draft.therapist1Id}
+            therapist2Label={therapist2Label}
             therapistLabel={therapistLabel}
           />
         ) : null}
@@ -675,6 +821,7 @@ export function QuickBookingPanel({
             onSave={() => dispatch({ type: "submit" })}
             roomLabel={roomLabel}
             status={save.status}
+            therapist2Label={therapist2Label}
             therapistLabel={therapistLabel}
           />
         ) : null}

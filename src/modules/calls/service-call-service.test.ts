@@ -6,6 +6,7 @@ import {
   correctServiceCallCustomerLink,
   createCustomer,
   createDailyExpense,
+  createQuickBookingServiceCall,
   createServiceCallRow,
   customerVisitCountsFromRows,
   deactivateDailyExpense,
@@ -3733,6 +3734,14 @@ describe("therapist availability with course rates", () => {
     assert.equal(courseVerdict(await availabilityAt(partnerBusy, "15:00"), "therapist-1", "course-d"), "possible");
   });
 
+  it("코스별 판정에 두 번째 Therapist 필수 여부를 함께 담는다(티켓 21, 빠른 예약이 쓴다)", async () => {
+    const prismaClient = createMemoryPrisma();
+    const rows = await availabilityAt(prismaClient, "15:00");
+    const row = rows.find((candidate) => candidate.therapistId === "therapist-1")!;
+    assert.equal(row.courses.find((course) => course.courseId === "course-a")?.requiresSecondTherapist, false);
+    assert.equal(row.courses.find((course) => course.courseId === "course-d")?.requiresSecondTherapist, true);
+  });
+
   it("chooses the rate for the month the same way the completed amount calculation does", async () => {
     const scenarios: Array<{ name: string; rates: Array<Parameters<typeof addAvailabilityRate>[1]>; commission: number | null }> = [
       { name: "no rate", rates: [], commission: null },
@@ -5340,6 +5349,116 @@ describe("new row request id", () => {
     assert.deepEqual(results[0].row, results[1].row);
     assert.deepEqual((await callsOnDate(prismaClient)).map((row) => row.id), [results[0].row.id]);
     assert.equal(prismaClient.auditEvents.length - auditsBefore, 1);
+  });
+});
+
+describe("quick booking: two-therapist courses and the override path (F01, 티켓 21)", () => {
+  /** 빠른 예약의 새 콜 초안 하나. 두 명 코스(course-d)를 기본값으로 쓴다. */
+  function quickBookingDraft(
+    prismaClient: ReturnType<typeof createMemoryPrisma>,
+    requestId: string,
+    changes: Partial<Parameters<typeof createQuickBookingServiceCall>[0]> = {}
+  ) {
+    return createQuickBookingServiceCall({
+      requestId,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: null,
+      courseId: "course-d",
+      customerMemo: "빠른 예약",
+      therapist1Id: "therapist-1",
+      therapist2Id: "therapist-2",
+      status: "예약",
+      actorId: "counter-account",
+      prismaClient,
+      ...changes
+    });
+  }
+
+  it("두 명 코스에서 같은 사람을 Therapist 1·2로 고르면 저장 오류다", async () => {
+    const prismaClient = createMemoryPrisma();
+    await assert.rejects(
+      () => quickBookingDraft(prismaClient, "request-dup", { therapist2Id: "therapist-1" }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "D_QUICK_BOOKING_DUPLICATE_THERAPIST"
+    );
+    assert.deepEqual(await listServiceCallsForDate({ operatingMonthId: "month-2026-06", serviceDate: "2026-06-10", prismaClient }), []);
+  });
+
+  it("두 명 코스에서 필수인 두 번째 Therapist가 비어 있으면 저장 오류다(원장 저장과 같은 검사)", async () => {
+    const prismaClient = createMemoryPrisma();
+    await assert.rejects(
+      () => quickBookingDraft(prismaClient, "request-missing-second", { therapist2Id: null }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "D_COURSE_SECOND_THERAPIST_REQUIRED"
+    );
+  });
+
+  it("서로 다른 두 명을 고르면 저장되고, 같은 요청 id를 다시 보내면 이미 만든 콜을 돌려준다", async () => {
+    const prismaClient = createMemoryPrisma();
+    const first = await quickBookingDraft(prismaClient, "request-ok");
+    assert.equal(first.alreadySaved, false);
+    assert.equal(first.row.therapist1?.id, "therapist-1");
+    assert.equal(first.row.therapist2?.id, "therapist-2");
+
+    const again = await quickBookingDraft(prismaClient, "request-ok");
+    assert.equal(again.alreadySaved, true);
+    assert.deepEqual(again.row, first.row);
+  });
+
+  it("시간이 겹치거나 수당이 없는 배정도 경고일 뿐 저장을 막지 않는다", async () => {
+    const prismaClient = createMemoryPrisma();
+    // course-a(60분)는 수당이 있지만 1인 코스다. therapist-2는 course-a 수당이 0원으로 있다(유효 수당).
+    // 겹침 자체는 가능 코스 판정(listTherapistAvailability)의 몫이고, 저장 경로는 겹쳐도 그대로 쓴다.
+    const overlapping = await createQuickBookingServiceCall({
+      requestId: "request-overlap-1",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: null,
+      courseId: "course-a",
+      customerMemo: "첫 배정",
+      therapist1Id: "therapist-2",
+      status: "예약",
+      actorId: "counter-account",
+      prismaClient
+    });
+    const sameSlotSameTherapist = await createQuickBookingServiceCall({
+      requestId: "request-overlap-2",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: null,
+      courseId: "course-a",
+      customerMemo: "겹치는 배정(경고 확인 후 배정)",
+      therapist1Id: "therapist-2",
+      status: "예약",
+      actorId: "counter-account",
+      prismaClient
+    });
+    assert.equal(overlapping.alreadySaved, false);
+    assert.equal(sameSlotSameTherapist.alreadySaved, false);
+    assert.notEqual(overlapping.row.id, sameSlotSameTherapist.row.id);
+  });
+
+  it("원장 직접 입력(createServiceCallRow)은 같은 사람을 Therapist 1·2로 두 번 골라도 저장 오류를 내지 않는다(소급하지 않음)", async () => {
+    const prismaClient = createMemoryPrisma();
+    const row = await createServiceCallRow({
+      requestId: "request-direct-input",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: null,
+      courseId: "course-a",
+      customerMemo: "원장 직접 입력",
+      therapist1Id: "therapist-1",
+      therapist2Id: "therapist-1",
+      status: "예약",
+      actorId: "counter-account",
+      prismaClient
+    });
+    assert.equal(row.alreadySaved, false);
+    assert.equal(row.row.therapist1?.id, "therapist-1");
+    assert.equal(row.row.therapist2?.id, "therapist-1");
   });
 });
 

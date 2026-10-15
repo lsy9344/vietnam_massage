@@ -348,6 +348,14 @@ export const ko = {
   "calls.quickBooking.schedule.now": "지금",
   "calls.quickBooking.therapist.unset": "가능 코스에서 Therapist와 코스를 고르세요.",
   "calls.quickBooking.therapist.chosen": "{course} · {therapist}",
+  // 두 명 코스와 경고 확인 후 배정(스펙 F01, 티켓 21)
+  "calls.quickBooking.therapist.overrideAssign": "경고 확인 후 배정",
+  "calls.quickBooking.therapist.overrideTitle": "경고를 확인하고 배정하시겠습니까?",
+  "calls.quickBooking.therapist.overrideTimeShort": "{therapist}님은 이 시각에 코스 길이만큼 비어 있지 않습니다. 그래도 배정하면 시간 겹침 경고와 함께 저장됩니다.",
+  "calls.quickBooking.therapist.overrideRateMissing": "{therapist}님에게 이 코스 수당이 없습니다. 그래도 배정하면 수당 없음 경고와 함께 저장됩니다.",
+  "calls.quickBooking.therapist.secondTitle": "두 번째 Therapist",
+  "calls.quickBooking.therapist.secondUnset": "두 번째 Therapist를 고르세요.",
+  "calls.quickBooking.therapist.secondEmpty": "고를 수 있는 다른 Therapist가 없습니다.",
   "calls.quickBooking.review.unset": "선택 안 함",
   "calls.quickBooking.review.customerNone": "고객 없음",
   "calls.quickBooking.previous": "이전",
@@ -367,6 +375,17 @@ export const ko = {
   "calls.leaveGuard.title": "저장하지 않은 입력이 있습니다",
   "calls.leaveGuard.description": "지금 떠나면 저장하지 않은 입력이 사라집니다. 계속하시겠습니까?",
   "calls.leaveGuard.confirm": "나가기",
+
+  // 저장 충돌 비교와 다시 반영(스펙 B07, 티켓 17)
+  "calls.conflict.title": "저장 충돌 비교",
+  "calls.conflict.description": "다른 화면이 먼저 저장했습니다. 원장 순서대로 내 값과 최신 값을 비교하고, 필요한 값만 내 값으로 다시 반영해 저장하세요.",
+  "calls.conflict.columnField": "필드",
+  "calls.conflict.columnMine": "내 값",
+  "calls.conflict.columnLatest": "최신 값",
+  "calls.conflict.useMine": "내 값 쓰기",
+  "calls.conflict.useMineAria": "{field} 내 값 쓰기",
+  "calls.conflict.reapply": "다시 반영하고 저장",
+  "calls.conflict.closeConfirmDescription": "비교를 닫아도 초안은 원장 행에 남고, 다시 열어 비교할 수 있습니다. 닫으시겠습니까?",
 
   // 콜 계산 상태
   "calls.calc.errorPending": "저장 보류 계산 대기",
@@ -921,6 +940,12 @@ export const ko = {
   "closing.confirmDialog.operations": "운영팀",
   "closing.confirmDialog.opsDetail": "{count}명 / 일일 {daily} / 월 {monthly}",
   "closing.confirmDialog.earcare": "귀케어",
+  "closing.confirmDialog.pendingCloseCalls.title": "마감 확인 대상 콜",
+  "closing.confirmDialog.pendingCloseCalls.description": "예약·사용중·청소중 콜입니다. 콜 상태는 바뀌지 않으며, 확인 후 사유를 적어야 예외로 마감할 수 있습니다.",
+  "closing.confirmDialog.pendingCloseCalls.ackLabel": "위 {count}건을 확인했습니다",
+  "closing.confirmDialog.pendingCloseCalls.reasonLabel": "예외 마감 사유",
+  "closing.confirmDialog.pendingCloseCalls.reasonPlaceholder": "예외로 마감하는 사유를 입력하세요.",
+  "closing.confirmDialog.pendingCloseCalls.reasonHelp": "확인한 콜과 사유, 처리자는 이번 마감 버전에 저장됩니다.",
   "closing.reopen.label": "재오픈 사유",
   "closing.reopen.placeholder": "재오픈 사유를 입력하세요.",
   "closing.reopen.adminOnly": "관리자만 재오픈할 수 있습니다.",
@@ -942,9 +967,11 @@ export const ko = {
   "closing.checklist.pendingCloseCalls.title": "마감 확인 대상 콜",
   "closing.checklist.pendingCloseCalls.count": "{count}건",
   "closing.checklist.pendingCloseCalls.empty": "마감 확인 대상 콜 없음",
-  "closing.checklist.pendingCloseCalls.description": "예약·사용중·청소중 상태인 콜입니다. 콜 상태는 바뀌지 않으며, 이 목록은 마감 확정을 막지 않습니다.",
+  "closing.checklist.pendingCloseCalls.description": "예약·사용중·청소중 상태인 콜입니다. 확인하고 사유를 적으면 콜 상태를 바꾸지 않고 예외로 마감할 수 있습니다.",
   "closing.checklist.financials.title": "금액 확인",
   "closing.checklist.blockedNotice": "계산 오류와 지급 재확인을 먼저 해결하세요.",
+  "closing.snapshot.pendingCloseException.title": "예외 마감 콜",
+  "closing.snapshot.pendingCloseException.reason": "사유: {reason}",
 
   // /dashboard 화면
   // 공통 (대시보드 3개 화면 공유)

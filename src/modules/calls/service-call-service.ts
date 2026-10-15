@@ -450,6 +450,8 @@ export type TherapistAvailabilityCourseDto = {
   courseName: string;
   durationMinutes: number;
   verdict: TherapistAvailabilityCourseVerdict;
+  // 코스 정책상 두 번째 Therapist가 필요한지(티켓 21). 빠른 예약 패널이 두 번째 Therapist 선택을 보일지 정한다.
+  requiresSecondTherapist: boolean;
 };
 
 export type TherapistAvailabilityRowDto = {
@@ -1799,7 +1801,8 @@ export async function listTherapistAvailability(input: {
           courseCode: course.courseCode,
           courseName: course.courseName,
           durationMinutes: course.durationMinutes,
-          verdict
+          verdict,
+          requiresSecondTherapist: course.requiresSecondTherapist
         };
       })
     };
@@ -1934,6 +1937,32 @@ export async function createServiceCallRow(
     }
     return { row: existing, alreadySaved: true };
   }
+}
+
+// 같은 사람을 Therapist 1·2에 두 번 고르는 것은 빠른 예약에서만 저장 오류다(스펙 F01, 티켓 21).
+// 원장 직접 입력(createServiceCallRow를 그대로 쓰는 새 행 입력)과 과거 데이터에는 소급하지 않는다.
+function assertDistinctTherapists(input: { therapist1Id?: string | null; therapist2Id?: string | null }) {
+  const therapist1Id = input.therapist1Id?.trim() || null;
+  const therapist2Id = input.therapist2Id?.trim() || null;
+  if (therapist1Id && therapist2Id && therapist1Id === therapist2Id) {
+    throw new ServiceCallDomainError(
+      "Therapist 1과 Therapist 2는 서로 다른 사람이어야 합니다.",
+      "D_QUICK_BOOKING_DUPLICATE_THERAPIST"
+    );
+  }
+}
+
+/**
+ * 빠른 예약 저장(F01, 티켓 21). createServiceCallRow와 같은 콜 생성 하나이지만, 같은 사람을
+ * Therapist 1·2로 두 번 고르는 것을 빠른 예약에서만 저장 오류로 더 막는다. 필수인 두 번째
+ * Therapist가 비어 있는 검사는 createServiceCallRow(writeServiceCallRow)가 이미 원장 직접
+ * 입력과 똑같이 한다.
+ */
+export async function createQuickBookingServiceCall(
+  input: ServiceCallCreateInput & { actorId?: string; prismaClient?: ServiceCallPrismaClient }
+): Promise<ServiceCallCreateResult> {
+  assertDistinctTherapists(input);
+  return createServiceCallRow(input);
 }
 
 async function findServiceCallRowByRequestId(client: ServiceCallPrismaClient, requestId: string) {
