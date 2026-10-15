@@ -329,6 +329,30 @@ export const ko = {
   // 휴대폰 폭 원장 카드 목록(명세 F08, 티켓 26)
   "calls.phoneCard.aria": "원장 카드 목록",
 
+  // 빠른 예약 패널(스펙 F01·F08, 티켓 20)
+  "calls.quickBooking.open": "빠른 예약",
+  "calls.quickBooking.title": "빠른 예약",
+  "calls.quickBooking.description": "고객 → 날짜·예약시각 → Therapist·코스 → 객실·메모 → 저장 순서로 진행합니다.",
+  "calls.quickBooking.stepper.aria": "빠른 예약 단계",
+  "calls.quickBooking.step.customer": "고객",
+  "calls.quickBooking.step.schedule": "날짜·예약시각",
+  "calls.quickBooking.step.therapist": "Therapist·코스",
+  "calls.quickBooking.step.room": "객실·메모",
+  "calls.quickBooking.step.review": "확인",
+  "calls.quickBooking.errorSummary.title": "저장하기 전에 확인하세요",
+  "calls.quickBooking.customer.searchLabel": "고객 검색",
+  "calls.quickBooking.customer.clear": "선택 해제",
+  "calls.quickBooking.customer.memoPlaceholder": "고객을 고르지 않았다면 이름이나 메모를 적으세요.",
+  "calls.quickBooking.schedule.now": "지금",
+  "calls.quickBooking.therapist.unset": "가능 코스에서 Therapist와 코스를 고르세요.",
+  "calls.quickBooking.therapist.chosen": "{course} · {therapist}",
+  "calls.quickBooking.review.unset": "선택 안 함",
+  "calls.quickBooking.review.customerNone": "고객 없음",
+  "calls.quickBooking.previous": "이전",
+  "calls.quickBooking.next": "다음",
+  "calls.quickBooking.save": "예약 저장",
+  // 패널을 저장 없이 닫을 때의 안내는 calls.leaveGuard.*(티켓 18)를 그대로 쓴다.
+
   // 콜 행 저장 상태
   "calls.save.saved": "저장됨",
   "calls.save.retry": "재시도",
@@ -336,6 +360,11 @@ export const ko = {
   "calls.save.autosaveFailed": "콜 행 자동저장에 실패했습니다.",
   "calls.save.alreadySaved": "이미 저장된 콜입니다.",
   "calls.save.checkingHint": "응답을 받지 못했습니다. 재시도해도 같은 요청으로 보내므로 콜이 두 번 생기지 않습니다.",
+
+  // 떠나기 전 안내(스펙 B07, 티켓 18)
+  "calls.leaveGuard.title": "저장하지 않은 입력이 있습니다",
+  "calls.leaveGuard.description": "지금 떠나면 저장하지 않은 입력이 사라집니다. 계속하시겠습니까?",
+  "calls.leaveGuard.confirm": "나가기",
 
   // 콜 계산 상태
   "calls.calc.errorPending": "저장 보류 계산 대기",
@@ -894,6 +923,26 @@ export const ko = {
   "closing.reopen.placeholder": "재오픈 사유를 입력하세요.",
   "closing.reopen.adminOnly": "관리자만 재오픈할 수 있습니다.",
   "closing.reopen.help": "재오픈은 마감확정과 잠금 상태에서 가능하며 사유는 감사 로그에 기록된다.",
+  "closing.checklist.aria": "마감 전 점검",
+  "closing.checklist.title": "마감 전 점검",
+  "closing.checklist.description": "계산 오류와 지급 재확인 미처리가 남아 있으면 마감 확정이 거절됩니다.",
+  "closing.checklist.calculationErrors.title": "계산 오류",
+  "closing.checklist.calculationErrors.blocked": "{count}건 해결 필요",
+  "closing.checklist.calculationErrors.empty": "계산 오류 없음",
+  "closing.checklist.payoutReconfirmations.title": "지급 재확인 미처리",
+  "closing.checklist.payoutReconfirmations.blocked": "{count}건 해결 필요",
+  "closing.checklist.payoutReconfirmations.empty": "지급 재확인 미처리 없음",
+  "closing.checklist.payoutReconfirmations.openSettlement": "정산 화면 열기",
+  "closing.checklist.unitLabel.therapistDaily": "마사지사 일일 정산",
+  "closing.checklist.unitLabel.earcareDaily": "귀케어 일일 정산",
+  "closing.checklist.unitLabel.opsDaily": "운영팀 일일 인센티브",
+  "closing.checklist.unitLabel.opsMonthly": "운영팀 월 인센티브",
+  "closing.checklist.pendingCloseCalls.title": "마감 확인 대상 콜",
+  "closing.checklist.pendingCloseCalls.count": "{count}건",
+  "closing.checklist.pendingCloseCalls.empty": "마감 확인 대상 콜 없음",
+  "closing.checklist.pendingCloseCalls.description": "예약·사용중·청소중 상태인 콜입니다. 콜 상태는 바뀌지 않으며, 이 목록은 마감 확정을 막지 않습니다.",
+  "closing.checklist.financials.title": "금액 확인",
+  "closing.checklist.blockedNotice": "계산 오류와 지급 재확인을 먼저 해결하세요.",
 
   // /dashboard 화면
   // 공통 (대시보드 3개 화면 공유)

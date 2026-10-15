@@ -22,8 +22,8 @@ import type { Locale } from "@/lib/i18n/config";
 import type { MessageKey } from "@/lib/i18n/types";
 import type { CustomerDto, ServiceCallCalculationStatus, ServiceCallFormOptions, ServiceCallOption, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 import { autosaveServiceCallRowAction, createServiceCallRowAction, reloadServiceCallRowAction } from "@/app/(erp)/calls/actions";
-import type { AvailabilityCourseChoice } from "@/app/(erp)/calls/therapist-availability-view";
 import { calculationErrorMessageKey } from "@/app/(erp)/calls/calculation-status-message";
+import { newRequestId } from "@/app/(erp)/calls/call-request-id";
 import {
   callRowSaveReducer,
   isSaveHeld,
@@ -33,10 +33,12 @@ import {
 } from "@/app/(erp)/calls/call-row-save";
 import {
   initialNewCallRowSave,
+  isNewRowSaveHeld,
   isNewRowSaveLocked,
   newCallRowSaveReducer,
   type NewCallRowDraft
 } from "@/app/(erp)/calls/call-new-row-save";
+import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
 import { CallRowSaveStatus, NewCallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
 import { CallPhoneCardList } from "@/app/(erp)/calls/call-phone-card-list";
 import { ledgerCallAnchorId, type LedgerView } from "@/app/(erp)/calls/ledger-address";
@@ -733,13 +735,7 @@ function ActualEntryCell({
 /** 새 행 저장 응답을 이만큼 기다려도 오지 않으면 "저장 여부 확인 중"이 된다. 그 뒤에 온 응답도 받아들인다. */
 const NEW_ROW_SAVE_TIMEOUT_MS = 15_000;
 
-/** 새 행 초안의 요청 id. randomUUID는 보안 문맥(https)에서만 있어, 어디서나 있는 getRandomValues로 만든다. */
-function newRequestId() {
-  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
 function AddRowForm({
-  courseChoice,
   customers,
   existingRowCount,
   isLocked,
@@ -749,7 +745,6 @@ function AddRowForm({
   showSettlementColumns,
   view
 }: {
-  courseChoice: (AvailabilityCourseChoice & { id: number }) | null;
   customers: CustomerDto[];
   existingRowCount: number;
   isLocked: boolean;
@@ -765,21 +760,10 @@ function AddRowForm({
     initialNewCallRowSave(ledger, newRequestId())
   );
   const { draft, fieldErrors } = save;
+  // 저장 실패나 저장 여부 확인 중은 떠나기 전 안내 대상이다(스펙 B07, 티켓 18).
+  useUnsavedGuard(isNewRowSaveHeld(save.status));
   const [, startTransition] = useTransition();
   const request = save.inFlight;
-  const choiceId = courseChoice?.id ?? 0;
-  // 가능 코스에서 고르면 시각·코스·Therapist를 채운다. 처음 그릴 때 이미 고른 것이 있어도 채운다.
-  // 보내는 중이거나 저장 여부를 모르는 동안 고른 것은 초안이 풀린 뒤에 채운다.
-  const [seenChoiceId, setSeenChoiceId] = useState(0);
-  if (seenChoiceId !== choiceId && !isNewRowSaveLocked(save.status)) {
-    setSeenChoiceId(choiceId);
-    if (courseChoice) {
-      dispatch({
-        type: "choose",
-        changes: { startTime: courseChoice.startTime, courseId: courseChoice.courseId, therapist1Id: courseChoice.therapistId }
-      });
-    }
-  }
   const disabled = isLocked || isNewRowSaveLocked(save.status);
   const rowIndex = existingRowCount;
   const rowCount = existingRowCount + 1;
@@ -1257,6 +1241,8 @@ function EditableCallRow({
   // 다른 행을 저장하면 이 행의 경고도 바뀐다. 저장 뒤 서버가 다시 준 행(row)이 이 행의 저장 결과보다 새로우면 그 경고를 쓴다.
   const freshestRow = row.savedAt >= serverRow.savedAt ? row : serverRow;
   const saveHeld = isSaveHeld(saveStatus);
+  // 저장 실패나 충돌 확인 필요는 떠나기 전 안내 대상이다(스펙 B07, 티켓 18).
+  useUnsavedGuard(saveHeld);
   const [, startTransition] = useTransition();
   const request = save.inFlight;
   // 키보드 이동 순서는 보이는 열의 순서를 따른다(명세 F02 기준, 티켓 19). 보기가 바뀌면 다시 계산한다.
@@ -1728,7 +1714,6 @@ function EditableCallRow({
 }
 
 export function EditableCallGrid({
-  courseChoice = null,
   customers = [],
   isLocked,
   onOpenDetail = () => {},
@@ -1740,7 +1725,6 @@ export function EditableCallGrid({
   showSettlementColumns,
   view = "all"
 }: {
-  courseChoice?: (AvailabilityCourseChoice & { id: number }) | null;
   customers?: CustomerDto[];
   isLocked: boolean;
   /** 행이나 경고를 눌렀을 때. 콜 상세 패널을 여는 쪽이 정한다. */
@@ -1838,7 +1822,6 @@ export function EditableCallGrid({
         )}
 
         <AddRowForm
-          courseChoice={courseChoice}
           customers={customers}
           existingRowCount={table.getRowModel().rows.length}
           isLocked={isLocked}

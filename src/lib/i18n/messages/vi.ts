@@ -329,6 +329,30 @@ export const vi: Messages = {
   // 휴대폰 폭 원장 카드 목록(명세 F08, 티켓 26)
   "calls.phoneCard.aria": "Danh sách thẻ sổ cuộc gọi",
 
+  // 빠른 예약 패널(스펙 F01·F08, 티켓 20)
+  "calls.quickBooking.open": "Đặt lịch nhanh",
+  "calls.quickBooking.title": "Đặt lịch nhanh",
+  "calls.quickBooking.description": "Thực hiện theo thứ tự: Khách hàng → Ngày giờ đặt → Therapist·Gói → Phòng·Ghi chú → Lưu.",
+  "calls.quickBooking.stepper.aria": "Các bước đặt lịch nhanh",
+  "calls.quickBooking.step.customer": "Khách hàng",
+  "calls.quickBooking.step.schedule": "Ngày·giờ đặt",
+  "calls.quickBooking.step.therapist": "Therapist·Gói",
+  "calls.quickBooking.step.room": "Phòng·Ghi chú",
+  "calls.quickBooking.step.review": "Xác nhận",
+  "calls.quickBooking.errorSummary.title": "Kiểm tra trước khi lưu",
+  "calls.quickBooking.customer.searchLabel": "Tìm khách hàng",
+  "calls.quickBooking.customer.clear": "Bỏ chọn",
+  "calls.quickBooking.customer.memoPlaceholder": "Nếu chưa chọn khách hàng, hãy ghi tên hoặc ghi chú.",
+  "calls.quickBooking.schedule.now": "Ngay bây giờ",
+  "calls.quickBooking.therapist.unset": "Hãy chọn Therapist và gói trong danh sách gói có thể.",
+  "calls.quickBooking.therapist.chosen": "{course} · {therapist}",
+  "calls.quickBooking.review.unset": "Chưa chọn",
+  "calls.quickBooking.review.customerNone": "Không có khách hàng",
+  "calls.quickBooking.previous": "Trước",
+  "calls.quickBooking.next": "Tiếp",
+  "calls.quickBooking.save": "Lưu đặt lịch",
+  // 패널을 저장 없이 닫을 때의 안내는 calls.leaveGuard.*(티켓 18)를 그대로 쓴다.
+
   // 콜 행 저장 상태
   "calls.save.saved": "Đã lưu",
   "calls.save.retry": "Thử lại",
@@ -336,6 +360,11 @@ export const vi: Messages = {
   "calls.save.autosaveFailed": "Tự động lưu dòng cuộc gọi thất bại.",
   "calls.save.alreadySaved": "Cuộc gọi này đã được lưu trước đó.",
   "calls.save.checkingHint": "Không nhận được phản hồi. Thử lại sẽ gửi cùng một yêu cầu nên cuộc gọi không bị tạo hai lần.",
+
+  // 떠나기 전 안내(스펙 B07, 티켓 18)
+  "calls.leaveGuard.title": "Bạn có nội dung chưa lưu",
+  "calls.leaveGuard.description": "Nếu rời đi ngay bây giờ, nội dung chưa lưu sẽ bị mất. Bạn có muốn tiếp tục không?",
+  "calls.leaveGuard.confirm": "Rời đi",
 
   // 콜 계산 상태
   "calls.calc.errorPending": "Tạm hoãn lưu, chờ tính toán",
@@ -893,6 +922,26 @@ export const vi: Messages = {
   "closing.reopen.placeholder": "Hãy nhập lý do mở lại.",
   "closing.reopen.adminOnly": "Chỉ quản trị viên mới có thể mở lại.",
   "closing.reopen.help": "Mở lại khả dụng ở trạng thái đã chốt hoặc đã khóa và lý do được ghi vào nhật ký kiểm tra.",
+  "closing.checklist.aria": "Kiểm tra trước khi chốt tháng",
+  "closing.checklist.title": "Kiểm tra trước khi chốt tháng",
+  "closing.checklist.description": "Nếu còn lỗi tính toán hoặc xác nhận chi trả chưa xử lý, việc chốt tháng sẽ bị từ chối.",
+  "closing.checklist.calculationErrors.title": "Lỗi tính toán",
+  "closing.checklist.calculationErrors.blocked": "{count} mục cần xử lý",
+  "closing.checklist.calculationErrors.empty": "Không có lỗi tính toán",
+  "closing.checklist.payoutReconfirmations.title": "Xác nhận chi trả chưa xử lý",
+  "closing.checklist.payoutReconfirmations.blocked": "{count} mục cần xử lý",
+  "closing.checklist.payoutReconfirmations.empty": "Không có xác nhận chi trả chưa xử lý",
+  "closing.checklist.payoutReconfirmations.openSettlement": "Mở màn hình quyết toán",
+  "closing.checklist.unitLabel.therapistDaily": "Quyết toán ngày của KTV massage",
+  "closing.checklist.unitLabel.earcareDaily": "Quyết toán ngày của chăm sóc tai",
+  "closing.checklist.unitLabel.opsDaily": "Thưởng ngày của nhóm vận hành",
+  "closing.checklist.unitLabel.opsMonthly": "Thưởng tháng của nhóm vận hành",
+  "closing.checklist.pendingCloseCalls.title": "Cuộc gọi cần xác nhận khi chốt",
+  "closing.checklist.pendingCloseCalls.count": "{count} cuộc gọi",
+  "closing.checklist.pendingCloseCalls.empty": "Không có cuộc gọi cần xác nhận khi chốt",
+  "closing.checklist.pendingCloseCalls.description": "Đây là các cuộc gọi ở trạng thái đặt trước, đang sử dụng hoặc đang dọn. Trạng thái cuộc gọi không đổi, và danh sách này không chặn việc chốt tháng.",
+  "closing.checklist.financials.title": "Kiểm tra số tiền",
+  "closing.checklist.blockedNotice": "Hãy xử lý lỗi tính toán và xác nhận chi trả trước.",
 
   // /dashboard 화면
   // 공통 (대시보드 3개 화면 공유)

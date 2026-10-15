@@ -18,7 +18,10 @@ import { AddExpensePanel, DailyExpensePanel } from "@/app/(erp)/calls/daily-expe
 import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { CallLedgerWorkspace } from "@/app/(erp)/calls/call-ledger-workspace";
 import { LedgerStatusCounts } from "@/app/(erp)/calls/ledger-status-counts";
+import { QuickBookingPanel } from "@/app/(erp)/calls/quick-booking-panel";
+import { CallLeaveGuard } from "@/app/(erp)/calls/unsaved-guard";
 import {
+  LEAVE_GUARD_SKIP_ATTRIBUTE,
   LEDGER_VIEWS,
   ledgerHref,
   ledgerTabParams,
@@ -159,39 +162,60 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="screen">
-      {toolbar()}
-      <LedgerStatusCounts
-        counts={ledgerStatusCountsFromRows(rows)}
-        customerHref={linkToScreen(account.role, "/customers", { operatingMonthId: selectedMonth.id, date: serviceDate })}
-        locale={locale}
-      />
-      {/* 원장 보기 전환(명세 F02, 티켓 19): 같은 표를 다른 열 묶음으로 보여 준다. 역할·저장 규칙·데이터는 그대로다. */}
-      <nav aria-label={t("calls.view.aria")} className="mb-4 flex flex-wrap gap-2">
-        {LEDGER_VIEWS.map((item) => (
-          <Link
-            aria-current={item === view ? "page" : undefined}
-            className="screen-tab"
-            href={ledgerHref(ledgerDate, "ledger", item)}
-            key={item}
-          >
-            {t(ledgerViewLabelKeys[item])}
-          </Link>
-        ))}
-      </nav>
-      {/* 가능 코스 영역은 티켓 20에서 빠른 예약 패널로 옮길 때까지 원장 위에 둔다. */}
-      <CallLedgerWorkspace
-        key={`${selectedMonth.id}:${serviceDate}`}
-        availabilityRows={availabilityRows}
-        availabilityTime={availabilityTime}
-        customers={customers}
-        isLocked={isLocked}
-        operatingMonthId={selectedMonth.id}
-        options={options}
-        rows={visibleRows}
-        serviceDate={serviceDate}
-        showSettlementColumns={canViewSettlementAmounts}
-        view={view}
-      />
+      {/*
+        원장 탭을 저장하지 않은 입력이 있는 동안 떠나기 전 안내로 감싼다(스펙 B07, 티켓 18). 빠른 예약
+        패널(20)은 원장 탭 머리의 주요 버튼이라 CallLedgerWorkspace 밖(이 탭의 형제)에 있으므로, 공통
+        조상인 여기서 건다 — CallLedgerWorkspace 자신의 useUnsavedGuard 등록(행 저장, 콜 상세)도 이 안에서
+        그대로 된다.
+      */}
+      <CallLeaveGuard>
+        {/* 빠른 예약(명세 F01·F08, 티켓 20): 원장 탭 머리의 주요 버튼이다. 원장 위에 항상 펼쳐 두던 가능
+            코스 영역은 없애고 패널 안으로 옮겼다. */}
+        {toolbar(
+          <QuickBookingPanel
+            customers={customers}
+            initialAvailabilityRows={availabilityRows}
+            initialAvailabilityTime={availabilityTime}
+            isLocked={isLocked}
+            monthEndDate={selectedMonth.endDate}
+            monthStartDate={selectedMonth.startDate}
+            operatingMonthId={selectedMonth.id}
+            options={options}
+            serviceDate={serviceDate}
+          />
+        )}
+        <LedgerStatusCounts
+          counts={ledgerStatusCountsFromRows(rows)}
+          customerHref={linkToScreen(account.role, "/customers", { operatingMonthId: selectedMonth.id, date: serviceDate })}
+          locale={locale}
+        />
+        {/* 원장 보기 전환(명세 F02, 티켓 19): 같은 표를 다른 열 묶음으로 보여 준다. 역할·저장 규칙·데이터는 그대로다. */}
+        <nav aria-label={t("calls.view.aria")} className="mb-4 flex flex-wrap gap-2">
+          {LEDGER_VIEWS.map((item) => (
+            <Link
+              aria-current={item === view ? "page" : undefined}
+              className="screen-tab"
+              href={ledgerHref(ledgerDate, "ledger", item)}
+              key={item}
+              // 보기 전환은 같은 화면의 표시 방식만 바꾸므로 떠나기 전 안내를 받지 않는다(티켓 18).
+              {...{ [LEAVE_GUARD_SKIP_ATTRIBUTE]: "" }}
+            >
+              {t(ledgerViewLabelKeys[item])}
+            </Link>
+          ))}
+        </nav>
+        <CallLedgerWorkspace
+          key={`${selectedMonth.id}:${serviceDate}`}
+          customers={customers}
+          isLocked={isLocked}
+          operatingMonthId={selectedMonth.id}
+          options={options}
+          rows={visibleRows}
+          serviceDate={serviceDate}
+          showSettlementColumns={canViewSettlementAmounts}
+          view={view}
+        />
+      </CallLeaveGuard>
     </div>
   );
 }

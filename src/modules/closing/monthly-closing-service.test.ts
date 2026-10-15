@@ -12,6 +12,7 @@ import {
   type MonthlyClosingSnapshotDto
 } from "@/modules/closing/monthly-closing-service";
 import type { MonthlyClosingPreviewDto } from "@/modules/closing/monthly-closing-preview-service";
+import type { MonthlyClosingChecklistDto } from "@/modules/closing/monthly-closing-checklist-service";
 
 function dbDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
@@ -189,6 +190,28 @@ function preview(overrides: Partial<MonthlyClosingPreviewDto> = {}): MonthlyClos
         earcare: ["call-1"]
       }
     },
+    ...overrides
+  };
+}
+
+function checklist(overrides: Partial<MonthlyClosingChecklistDto> = {}): MonthlyClosingChecklistDto {
+  return {
+    operatingMonthId: "month-1",
+    monthKey: "2026-06",
+    startDate: "2026-06-01",
+    endDate: "2026-06-30",
+    status: "검토중",
+    calculationErrorCalls: [],
+    payoutReconfirmationUnits: [],
+    pendingCloseCalls: [],
+    financials: {
+      paymentMethodTotals: { cash: 0, card: 0, bank: 0, other: 0 },
+      expenseTotal: 0,
+      cashBalance: 0,
+      bankBalance: 0,
+      netSales: 0
+    },
+    isConfirmBlocked: false,
     ...overrides
   };
 }
@@ -402,7 +425,8 @@ describe("monthly closing service", () => {
       clock: () => new Date("2026-06-10T04:00:00.000Z"),
       idFactory: () => "closing-1",
       dependencies: {
-        listMonthlyClosingPreview: async () => preview()
+        listMonthlyClosingPreview: async () => preview(),
+        listMonthlyClosingChecklist: async () => checklist()
       }
     });
 
@@ -480,7 +504,8 @@ describe("monthly closing service", () => {
       clock: () => new Date("2026-06-10T04:00:00.000Z"),
       idFactory: () => "closing-1",
       dependencies: {
-        listMonthlyClosingPreview: async () => closingPreview
+        listMonthlyClosingPreview: async () => closingPreview,
+        listMonthlyClosingChecklist: async () => checklist()
       }
     });
 
@@ -498,13 +523,126 @@ describe("monthly closing service", () => {
           operatingMonthId: "month-1",
           actorId: "account-1",
           prismaClient,
-          dependencies: { listMonthlyClosingPreview: async () => preview({ status: "마감확정", previewStatus: "closed_current" }) }
+          dependencies: {
+            listMonthlyClosingPreview: async () => preview({ status: "마감확정", previewStatus: "closed_current" }),
+            listMonthlyClosingChecklist: async () => checklist()
+          }
         }),
       (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "INVALID_MONTHLY_CLOSE_TRANSITION"
     );
 
     assert.equal(prismaClient.state.closing, null);
     assert.equal(prismaClient.state.auditLogs.length, 0);
+  });
+
+  it("blocks confirmation when the re-checked closing checklist still has calculation error calls, without status/snapshot/audit changes (F07)", async () => {
+    const prismaClient = createPrisma({ status: "검토중" });
+
+    await assert.rejects(
+      () =>
+        confirmMonthlyClose({
+          operatingMonthId: "month-1",
+          actorId: "account-1",
+          prismaClient,
+          dependencies: {
+            listMonthlyClosingPreview: async () => preview(),
+            listMonthlyClosingChecklist: async () =>
+              checklist({
+                calculationErrorCalls: [
+                  {
+                    serviceCallId: "call-error",
+                    operatingMonthId: "month-1",
+                    serviceDate: "2026-06-10",
+                    startTime: "14:00",
+                    courseCode: "A",
+                    therapistNames: ["마사지사 원"],
+                    status: "방문완료",
+                    calculationStatus: "course_policy_missing"
+                  }
+                ],
+                isConfirmBlocked: true
+              })
+          }
+        }),
+      (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_CALCULATION_ERRORS_PENDING"
+    );
+
+    assert.equal(prismaClient.state.operatingMonth.status, "검토중");
+    assert.equal(prismaClient.state.closing, null);
+    assert.equal(prismaClient.state.auditLogs.length, 0);
+  });
+
+  it("blocks confirmation when a payout unit still needs reconfirmation, without status/snapshot/audit changes (F07)", async () => {
+    const prismaClient = createPrisma({ status: "검토중" });
+
+    await assert.rejects(
+      () =>
+        confirmMonthlyClose({
+          operatingMonthId: "month-1",
+          actorId: "account-1",
+          prismaClient,
+          dependencies: {
+            listMonthlyClosingPreview: async () => preview(),
+            listMonthlyClosingChecklist: async () =>
+              checklist({
+                payoutReconfirmationUnits: [
+                  {
+                    unitType: "THERAPIST_DAILY",
+                    operatingMonthId: "month-1",
+                    serviceDate: "2026-06-10",
+                    employeeId: "emp-therapist-1",
+                    payoutConfirmation: {
+                      status: "needs_reconfirmation",
+                      currentAmount: 800000,
+                      lastConfirmedAmount: 700000,
+                      difference: 100000,
+                      requiresReconfirmation: true,
+                      history: []
+                    }
+                  }
+                ],
+                isConfirmBlocked: true
+              })
+          }
+        }),
+      (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_PAYOUT_RECONFIRMATION_PENDING"
+    );
+
+    assert.equal(prismaClient.state.operatingMonth.status, "검토중");
+    assert.equal(prismaClient.state.closing, null);
+    assert.equal(prismaClient.state.auditLogs.length, 0);
+  });
+
+  it("does not block confirmation when only pending-close calls remain (reservation/in-use/cleaning list is confirm-and-reason work for ticket 34)", async () => {
+    const prismaClient = createPrisma({ status: "검토중" });
+
+    const result = await confirmMonthlyClose({
+      operatingMonthId: "month-1",
+      actorId: "account-1",
+      prismaClient,
+      clock: () => new Date("2026-06-10T04:00:00.000Z"),
+      idFactory: () => "closing-1",
+      dependencies: {
+        listMonthlyClosingPreview: async () => preview(),
+        listMonthlyClosingChecklist: async () =>
+          checklist({
+            pendingCloseCalls: [
+              {
+                serviceCallId: "call-reserved",
+                operatingMonthId: "month-1",
+                serviceDate: "2026-06-10",
+                startTime: "16:00",
+                courseCode: "A",
+                therapistNames: [],
+                status: "예약",
+                calculationStatus: "not_completed"
+              }
+            ]
+          })
+      }
+    });
+
+    assert.equal(result.status, "마감확정");
   });
 
   it("rolls back status and snapshot when audit fails inside confirmation transaction", async () => {
@@ -515,7 +653,10 @@ describe("monthly closing service", () => {
         operatingMonthId: "month-1",
         actorId: "account-1",
         prismaClient,
-        dependencies: { listMonthlyClosingPreview: async () => preview() }
+        dependencies: {
+          listMonthlyClosingPreview: async () => preview(),
+          listMonthlyClosingChecklist: async () => checklist()
+        }
       })
     );
 
@@ -533,7 +674,10 @@ describe("monthly closing service", () => {
           operatingMonthId: "month-1",
           actorId: "account-1",
           prismaClient,
-          dependencies: { listMonthlyClosingPreview: async () => preview() }
+          dependencies: {
+            listMonthlyClosingPreview: async () => preview(),
+            listMonthlyClosingChecklist: async () => checklist()
+          }
         }),
       (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_VERSION_CONFLICT"
     );
@@ -559,7 +703,8 @@ describe("monthly closing service", () => {
                 ...preview().totals,
                 grandPayoutAmount: Number.NaN
               }
-            })
+            }),
+            listMonthlyClosingChecklist: async () => checklist()
           }
         }),
       (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "INVALID_MONTHLY_CLOSE_INPUT"
@@ -717,7 +862,8 @@ describe("monthly closing service", () => {
       clock: () => new Date("2026-06-11T04:00:00.000Z"),
       idFactory: () => "closing-2",
       dependencies: {
-        listMonthlyClosingPreview: async () => preview({ therapists: { ...preview().therapists, payoutAmount: 2200000 } })
+        listMonthlyClosingPreview: async () => preview({ therapists: { ...preview().therapists, payoutAmount: 2200000 } }),
+        listMonthlyClosingChecklist: async () => checklist()
       }
     });
 

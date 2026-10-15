@@ -64,9 +64,10 @@ function InlineResult({ t, state }: { t: Translator; state: MonthlyClosingAction
   );
 }
 
-function disabledReason(t: Translator, status: string, canWrite: boolean, hasConfirmSummary: boolean) {
+function disabledReason(t: Translator, status: string, canWrite: boolean, hasConfirmSummary: boolean, checklistBlocked: boolean) {
   if (!canWrite) return t("closing.disabled.noPermission");
   if (status === "검토중" && !hasConfirmSummary) return t("closing.disabled.needPreview");
+  if (status === "검토중" && checklistBlocked) return t("closing.checklist.blockedNotice");
   if (status === "작성중" || status === "검토중") return t("closing.disabled.needConfirmFirst");
   if (status === "잠금") return t("closing.disabled.locked");
   return t("closing.disabled.noAction");
@@ -87,13 +88,16 @@ export function ClosingActionPanel({
   status,
   canWrite,
   canReopen,
-  confirmSummary
+  confirmSummary,
+  checklistBlocked
 }: {
   operatingMonthId: string;
   status: string;
   canWrite: boolean;
   canReopen: boolean;
   confirmSummary: ConfirmDialogSummary | null;
+  /** F07: 마감 전 점검에 계산 오류나 지급 재확인 미처리가 남아 있으면 확정을 막는다(서버가 다시 검사). */
+  checklistBlocked: boolean;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -104,9 +108,9 @@ export function ClosingActionPanel({
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const confirmCancelRef = useRef<HTMLButtonElement>(null);
   const canStartReview = canWrite && status === "작성중";
-  const canConfirm = canWrite && status === "검토중" && Boolean(confirmSummary);
+  const canConfirm = canWrite && status === "검토중" && Boolean(confirmSummary) && !checklistBlocked;
   const canLock = canWrite && status === "마감확정";
-  const reason = disabledReason(t, status, canWrite, Boolean(confirmSummary));
+  const reason = disabledReason(t, status, canWrite, Boolean(confirmSummary), checklistBlocked);
   const reasonHasError = Boolean(reopenState && !reopenState.ok && reopenState.fieldErrors?.reason?.[0]);
 
   useEffect(() => {
