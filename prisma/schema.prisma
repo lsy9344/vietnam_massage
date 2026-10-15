@@ -251,6 +251,7 @@ model ServiceCall {
   paymentMethodCode String?                    @map("payment_method_code")
   note              String?
   confirmationCode  String?                    @map("confirmation_code")
+  requestId         String?                    @unique @map("request_id")
   createdAt         DateTime                   @default(now()) @map("created_at")
   updatedAt         DateTime                   @updatedAt @map("updated_at")
   assignments       ServiceCallAssignment[]

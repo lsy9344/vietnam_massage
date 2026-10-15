@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useActionState,
   useCallback,
   useEffect,
   useId,
@@ -22,12 +21,7 @@ import { formatNumber } from "@/lib/i18n/format";
 import type { Locale } from "@/lib/i18n/config";
 import type { MessageKey } from "@/lib/i18n/types";
 import type { CustomerDto, ServiceCallCalculationStatus, ServiceCallFormOptions, ServiceCallOption, ServiceCallRowDto } from "@/modules/calls/service-call-service";
-import {
-  autosaveServiceCallRowAction,
-  reloadServiceCallRowAction,
-  saveBasicServiceCallRowAction,
-  type ServiceCallActionState
-} from "@/app/(erp)/calls/actions";
+import { autosaveServiceCallRowAction, createServiceCallRowAction, reloadServiceCallRowAction } from "@/app/(erp)/calls/actions";
 import type { AvailabilityCourseChoice } from "@/app/(erp)/calls/therapist-availability-view";
 import { calculationErrorMessageKey } from "@/app/(erp)/calls/calculation-status-message";
 import {
@@ -37,7 +31,13 @@ import {
   type CallRowDraft,
   type RowSaveStatus
 } from "@/app/(erp)/calls/call-row-save";
-import { CallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
+import {
+  initialNewCallRowSave,
+  isNewRowSaveLocked,
+  newCallRowSaveReducer,
+  type NewCallRowDraft
+} from "@/app/(erp)/calls/call-new-row-save";
+import { CallRowSaveStatus, NewCallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
 import { ledgerCallAnchorId, type LedgerView } from "@/app/(erp)/calls/ledger-address";
 import { CallWarningCell } from "@/app/(erp)/calls/call-warning-cell";
 import { spokenClock } from "@/app/(erp)/calls/call-warning-label";
@@ -197,19 +197,7 @@ function CallGridHead({ showSettlementColumns, view }: { showSettlementColumns: 
   );
 }
 
-function fieldError(state: ServiceCallActionState, field: string) {
-  if (!state || state.ok) {
-    return null;
-  }
-  return state.fieldErrors?.[field]?.[0] ?? null;
-}
-
-function InlineError({ state, field }: { state: ServiceCallActionState; field?: string }) {
-  if (!state || state.ok) {
-    return null;
-  }
-
-  const message = field ? fieldError(state, field) : state.formError;
+function InlineError({ message }: { message: string | null }) {
   if (!message) {
     return null;
   }
@@ -741,6 +729,14 @@ function ActualEntryCell({
   );
 }
 
+/** 새 행 저장 응답을 이만큼 기다려도 오지 않으면 "저장 여부 확인 중"이 된다. 그 뒤에 온 응답도 받아들인다. */
+const NEW_ROW_SAVE_TIMEOUT_MS = 15_000;
+
+/** 새 행 초안의 요청 id. randomUUID는 보안 문맥(https)에서만 있어, 어디서나 있는 getRandomValues로 만든다. */
+function newRequestId() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 function AddRowForm({
   courseChoice,
   customers,
@@ -763,20 +759,58 @@ function AddRowForm({
   view: LedgerView;
 }) {
   const t = useT();
-  const [state, formAction, pending] = useActionState<ServiceCallActionState, FormData>(saveBasicServiceCallRowAction, null);
+  // 운영월·날짜는 처음 그릴 때의 값을 쓴다. 날짜를 바꾸면 원장 화면이 key로 새로 그려져 이 초안도 새로 시작한다(page.tsx).
+  const [save, dispatch] = useReducer(newCallRowSaveReducer, { operatingMonthId, serviceDate }, (ledger) =>
+    initialNewCallRowSave(ledger, newRequestId())
+  );
+  const { draft, fieldErrors } = save;
+  const [, startTransition] = useTransition();
+  const request = save.inFlight;
   const choiceId = courseChoice?.id ?? 0;
-  const [seenChoiceId, setSeenChoiceId] = useState(choiceId);
-  const [hiddenState, setHiddenState] = useState<ServiceCallActionState>(null);
-  // A course choice fills three fields. It is not a save, so the previous result stays off the row.
-  if (seenChoiceId !== choiceId) {
+  // 가능 코스에서 고르면 시각·코스·Therapist를 채운다. 처음 그릴 때 이미 고른 것이 있어도 채운다.
+  // 보내는 중이거나 저장 여부를 모르는 동안 고른 것은 초안이 풀린 뒤에 채운다.
+  const [seenChoiceId, setSeenChoiceId] = useState(0);
+  if (seenChoiceId !== choiceId && !isNewRowSaveLocked(save.status)) {
     setSeenChoiceId(choiceId);
-    setHiddenState(state);
+    if (courseChoice) {
+      dispatch({
+        type: "choose",
+        changes: { startTime: courseChoice.startTime, courseId: courseChoice.courseId, therapist1Id: courseChoice.therapistId }
+      });
+    }
   }
-  const rowState = state === hiddenState ? null : state;
-  const disabled = isLocked || pending;
+  const disabled = isLocked || isNewRowSaveLocked(save.status);
   const rowIndex = existingRowCount;
   const rowCount = existingRowCount + 1;
   const rowEditableFields = useMemo(() => editableFieldsForView(view, showSettlementColumns), [view, showSettlementColumns]);
+
+  // 응답을 받지 못하면(네트워크 오류, 시간 초과) 초안과 요청 id를 둔 채 "저장 여부 확인 중"이 된다(newCallRowSaveReducer).
+  useEffect(() => {
+    if (!request) {
+      return;
+    }
+    startTransition(() => {
+      void (async () => {
+        const giveUp = window.setTimeout(() => dispatch({ type: "lost", request }), NEW_ROW_SAVE_TIMEOUT_MS);
+        try {
+          const result = await createServiceCallRowAction(request);
+          if (result.ok) {
+            dispatch({ type: "saved", request, notice: result.notice ?? null, nextRequestId: newRequestId() });
+          } else {
+            dispatch({ type: "failed", request, message: result.formError ?? null, fieldErrors: result.fieldErrors });
+          }
+        } catch {
+          dispatch({ type: "lost", request });
+        } finally {
+          window.clearTimeout(giveUp);
+        }
+      })();
+    });
+  }, [request]);
+
+  function update<Key extends keyof NewCallRowDraft>(key: Key, value: NewCallRowDraft[Key]) {
+    dispatch({ type: "edit", changes: { [key]: value } });
+  }
 
   function handleAddRowKeyDown(columnId: EditableCallField, event: KeyboardEvent<HTMLElement>) {
     if (disabled) {
@@ -835,23 +869,29 @@ function AddRowForm({
       <td className="border-b border-border px-2 py-2" key="time">
         <SelectCell
           columnId="startTime"
-          defaultValue={courseChoice?.startTime}
           disabled={disabled}
-          key={courseChoice ? `choice-${courseChoice.id}` : "blank"}
           label={t("calls.column.time")}
           name="startTime"
+          onChange={(value) => update("startTime", value)}
           onGridKeyDown={(event) => handleAddRowKeyDown("startTime", event)}
           options={options.timeSlots}
           required
           rowIndex={rowIndex}
+          value={draft.startTime}
         />
-        <InlineError field="startTime" state={rowState} />
+        <InlineError message={firstFieldError(fieldErrors, "startTime")} />
       </td>
     ),
     actualEntry: (
       <td className="border-b border-border px-2 py-2" key="actualEntry">
-        <ActualEntryCell disabled={disabled} onGridKeyDown={(event) => handleAddRowKeyDown("actualEntryTime", event)} rowIndex={rowIndex} />
-        <InlineError field="actualEntryTime" state={rowState} />
+        <ActualEntryCell
+          disabled={disabled}
+          onChange={(value) => update("actualEntryTime", nullableValue(value))}
+          onGridKeyDown={(event) => handleAddRowKeyDown("actualEntryTime", event)}
+          rowIndex={rowIndex}
+          value={draft.actualEntryTime ?? ""}
+        />
+        <InlineError message={firstFieldError(fieldErrors, "actualEntryTime")} />
       </td>
     ),
     room: (
@@ -862,28 +902,30 @@ function AddRowForm({
           emptyLabel={t("calls.placeholder.roomUnassigned")}
           label={t("calls.column.room")}
           name="roomId"
+          onChange={(value) => update("roomId", nullableValue(value))}
           onGridKeyDown={(event) => handleAddRowKeyDown("roomId", event)}
           options={options.rooms}
           rowIndex={rowIndex}
+          value={draft.roomId ?? ""}
         />
-        <InlineError field="roomId" state={rowState} />
+        <InlineError message={firstFieldError(fieldErrors, "roomId")} />
       </td>
     ),
     course: (
       <td className="border-b border-border px-2 py-2" key="course">
         <SelectCell
           columnId="courseId"
-          defaultValue={courseChoice?.courseId}
           disabled={disabled}
-          key={courseChoice ? `choice-${courseChoice.id}` : "blank"}
           label={t("calls.column.course")}
           name="courseId"
+          onChange={(value) => update("courseId", value)}
           onGridKeyDown={(event) => handleAddRowKeyDown("courseId", event)}
           options={options.courses}
           required
           rowIndex={rowIndex}
+          value={draft.courseId}
         />
-        <InlineError field="courseId" state={rowState} />
+        <InlineError message={firstFieldError(fieldErrors, "courseId")} />
       </td>
     ),
     customerMemo: (
@@ -893,9 +935,11 @@ function AddRowForm({
           disabled={disabled}
           label={t("calls.column.customerMemo")}
           name="customerMemo"
+          onChange={(value) => update("customerMemo", nullableValue(value))}
           onKeyDown={(event) => handleAddRowKeyDown("customerMemo", event)}
           placeholder={t("calls.column.customerMemo")}
           rowIndex={rowIndex}
+          value={draft.customerMemo ?? ""}
         />
       </td>
     ),
@@ -906,8 +950,10 @@ function AddRowForm({
           customers={customers}
           disabled={disabled}
           name="customerId"
+          onChange={(value) => update("customerId", nullableValue(value))}
           onKeyDown={(event) => handleAddRowKeyDown("customerId", event)}
           rowIndex={rowIndex}
+          value={draft.customerId ?? ""}
         />
       </td>
     ),
@@ -915,14 +961,14 @@ function AddRowForm({
       <td className="border-b border-border px-2 py-2" key="therapist1">
         <SelectCell
           columnId="therapist1Id"
-          defaultValue={courseChoice?.therapistId}
           disabled={disabled}
-          key={courseChoice ? `choice-${courseChoice.id}` : "blank"}
           label={t("calls.column.therapist1")}
           name="therapist1Id"
+          onChange={(value) => update("therapist1Id", nullableValue(value))}
           onGridKeyDown={(event) => handleAddRowKeyDown("therapist1Id", event)}
           options={options.therapists}
           rowIndex={rowIndex}
+          value={draft.therapist1Id ?? ""}
         />
       </td>
     ),
@@ -931,13 +977,15 @@ function AddRowForm({
         <SelectCell
           disabled={disabled}
           errorId="add-call-therapist2-error"
-          errorMessage={fieldError(rowState, "therapist2Id")}
+          errorMessage={firstFieldError(fieldErrors, "therapist2Id")}
           columnId="therapist2Id"
           label={t("calls.column.therapist2")}
           name="therapist2Id"
+          onChange={(value) => update("therapist2Id", nullableValue(value))}
           onGridKeyDown={(event) => handleAddRowKeyDown("therapist2Id", event)}
           options={options.therapists}
           rowIndex={rowIndex}
+          value={draft.therapist2Id ?? ""}
         />
       </td>
     ),
@@ -948,9 +996,11 @@ function AddRowForm({
           disabled={disabled}
           label={t("calls.column.earcare")}
           name="earcareEmployeeId"
+          onChange={(value) => update("earcareEmployeeId", nullableValue(value))}
           onGridKeyDown={(event) => handleAddRowKeyDown("earcareEmployeeId", event)}
           options={options.earcareEmployees}
           rowIndex={rowIndex}
+          value={draft.earcareEmployeeId ?? ""}
         />
       </td>
     ),
@@ -958,16 +1008,17 @@ function AddRowForm({
       <td className="border-b border-border px-2 py-2" key="reservationStatus">
         <SelectCell
           columnId="status"
-          defaultValue="RESERVED"
           disabled={disabled}
           label={t("calls.column.status")}
           name="status"
+          onChange={(value) => update("status", value)}
           onGridKeyDown={(event) => handleAddRowKeyDown("status", event)}
           options={options.statuses}
           required
           rowIndex={rowIndex}
+          value={draft.status}
         />
-        <InlineError field="status" state={rowState} />
+        <InlineError message={firstFieldError(fieldErrors, "status")} />
       </td>
     ),
     discountType: (
@@ -977,9 +1028,11 @@ function AddRowForm({
           disabled={disabled}
           label={t("calls.column.discountType")}
           name="discountTypeCode"
+          onChange={(value) => update("discountTypeCode", nullableValue(value))}
           onGridKeyDown={(event) => handleAddRowKeyDown("discountTypeCode", event)}
           options={options.discountTypes}
           rowIndex={rowIndex}
+          value={draft.discountTypeCode ?? ""}
         />
       </td>
     ),
@@ -990,9 +1043,11 @@ function AddRowForm({
           disabled={disabled}
           label={t("calls.column.paymentMethod")}
           name="paymentMethodCode"
+          onChange={(value) => update("paymentMethodCode", nullableValue(value))}
           onGridKeyDown={(event) => handleAddRowKeyDown("paymentMethodCode", event)}
           options={options.paymentMethods}
           rowIndex={rowIndex}
+          value={draft.paymentMethodCode ?? ""}
         />
       </td>
     ),
@@ -1003,9 +1058,11 @@ function AddRowForm({
           disabled={disabled}
           label={t("calls.column.note")}
           name="note"
+          onChange={(value) => update("note", nullableValue(value))}
           onKeyDown={(event) => handleAddRowKeyDown("note", event)}
           placeholder={t("calls.column.note")}
           rowIndex={rowIndex}
+          value={draft.note ?? ""}
         />
       </td>
     ),
@@ -1016,9 +1073,11 @@ function AddRowForm({
           disabled={disabled}
           label={t("calls.column.confirmation")}
           name="confirmationCode"
+          onChange={(value) => update("confirmationCode", nullableValue(value))}
           onGridKeyDown={(event) => handleAddRowKeyDown("confirmationCode", event)}
           options={options.confirmationCodes}
           rowIndex={rowIndex}
+          value={draft.confirmationCode ?? ""}
         />
       </td>
     )
@@ -1030,9 +1089,13 @@ function AddRowForm({
   const trailingCount = visibleColumns.length - leadingColumns.length;
 
   return (
-    <form action={formAction} className="border-t border-border bg-surface">
-      <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
-      <input name="serviceDate" type="hidden" value={serviceDate} />
+    <form
+      className="border-t border-border bg-surface"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!disabled) dispatch({ type: "submit" });
+      }}
+    >
       <div className="relative overflow-x-auto">
         <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(view, showSettlementColumns) }}>
           <CallGridColgroup showSettlementColumns={showSettlementColumns} view={view} />
@@ -1045,8 +1108,12 @@ function AddRowForm({
                   <Button className="h-8 whitespace-nowrap px-3 text-xs" disabled={disabled} type="submit">
                     {t("calls.addRow.submit")}
                   </Button>
-                  <InlineError state={rowState} />
-                  {rowState?.ok ? <span className="text-xs text-muted">{t("calls.save.saved")}</span> : null}
+                  <NewCallRowSaveStatus
+                    message={save.message}
+                    notice={save.notice}
+                    onRetry={() => dispatch({ type: "submit" })}
+                    state={save.status}
+                  />
                 </div>
               </td>
             </tr>

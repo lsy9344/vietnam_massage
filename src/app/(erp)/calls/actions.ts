@@ -13,12 +13,12 @@ import {
   createCustomer,
   createDailyExpense,
   deactivateDailyExpense,
+  createServiceCallRow,
   getServiceCallRow,
   updateCustomer,
   updateDailyExpense,
   redactServiceCallSettlementAmounts,
   listTherapistAvailability,
-  saveBasicServiceCallRow,
   ServiceCallDomainError,
   StaleServiceCallError,
   type CustomerDto,
@@ -32,11 +32,11 @@ import {
   dailyExpenseInputSchema,
   dailyExpenseUpdateSchema,
   serviceCallAutosaveInputSchema,
-  serviceCallInputSchema,
-  type ServiceCallAutosaveInput
+  serviceCallCreateInputSchema,
+  type ServiceCallAutosaveInput,
+  type ServiceCallCreateInput
 } from "@/modules/calls/service-call-schema";
 
-export type ServiceCallActionState = ActionResult<ServiceCallRowDto> | null;
 /** 오래된 저장(STALE_CALL)이면 저장은 거절되고, 화면이 다시 불러올 수 있게 지금의 행을 함께 받는다. */
 export type ServiceCallAutosaveResult =
   | ActionResult<ServiceCallRowDto>
@@ -145,31 +145,10 @@ function visibleServiceCallRowForRole(row: ServiceCallRowDto, role: string) {
   return canViewSettlementAmounts(role) ? row : redactServiceCallSettlementAmounts(row);
 }
 
-export async function saveBasicServiceCallRowAction(
-  _previousState: ServiceCallActionState,
-  formData: FormData
-): Promise<ServiceCallActionState> {
+/** 원장 새 행 저장. 같은 요청 id로 이미 만든 콜이면 새로 만들지 않고 그 콜을 "이미 저장된 콜입니다"와 함께 돌려준다. */
+export async function createServiceCallRowAction(input: ServiceCallCreateInput): Promise<ActionResult<ServiceCallRowDto>> {
   const locale = await getLocale();
-  const parsed = serviceCallInputSchema.safeParse({
-    serviceCallId: formValue(formData, "serviceCallId"),
-    expectedUpdatedAt: formValue(formData, "expectedUpdatedAt"),
-    operatingMonthId: formValue(formData, "operatingMonthId"),
-    serviceDate: formValue(formData, "serviceDate"),
-    startTime: formValue(formData, "startTime"),
-    actualEntryTime: formData.has("actualEntryTime") ? formValue(formData, "actualEntryTime") : undefined,
-    roomId: formValue(formData, "roomId"),
-    courseId: formValue(formData, "courseId"),
-    customerMemo: formValue(formData, "customerMemo"),
-    customerId: formData.has("customerId") ? formValue(formData, "customerId") : undefined,
-    therapist1Id: formValue(formData, "therapist1Id"),
-    therapist2Id: formValue(formData, "therapist2Id"),
-    earcareEmployeeId: formValue(formData, "earcareEmployeeId"),
-    status: formValue(formData, "status"),
-    discountTypeCode: formValue(formData, "discountTypeCode"),
-    paymentMethodCode: formValue(formData, "paymentMethodCode"),
-    note: formValue(formData, "note"),
-    confirmationCode: formValue(formData, "confirmationCode")
-  });
+  const parsed = serviceCallCreateInputSchema.safeParse(input);
 
   if (!parsed.success) {
     return {
@@ -181,9 +160,10 @@ export async function saveBasicServiceCallRowAction(
 
   try {
     const account = await requirePermission("call:write");
-    const data = await saveBasicServiceCallRow({ ...parsed.data, actorId: account.id });
+    const { row, alreadySaved } = await createServiceCallRow({ ...parsed.data, actorId: account.id });
     revalidatePath("/calls");
-    return { ok: true, data: visibleServiceCallRowForRole(data, account.role) };
+    const data = visibleServiceCallRowForRole(row, account.role);
+    return alreadySaved ? { ok: true, data, notice: t(locale, "calls.save.alreadySaved") } : { ok: true, data };
   } catch (error) {
     return mapActionError<ServiceCallRowDto>(error, locale);
   }

@@ -316,6 +316,8 @@ export const vi: Messages = {
   "calls.save.retry": "Thử lại",
   "calls.save.reloadLatest": "Tải lại nội dung mới nhất",
   "calls.save.autosaveFailed": "Tự động lưu dòng cuộc gọi thất bại.",
+  "calls.save.alreadySaved": "Cuộc gọi này đã được lưu trước đó.",
+  "calls.save.checkingHint": "Không nhận được phản hồi. Thử lại sẽ gửi cùng một yêu cầu nên cuộc gọi không bị tạo hai lần.",
 
   // 콜 계산 상태
   "calls.calc.errorPending": "Tạm hoãn lưu, chờ tính toán",
