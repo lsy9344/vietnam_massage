@@ -43,6 +43,7 @@ function ledgerRow(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDt
     discountTypeCode: null,
     paymentMethodCode: "현금",
     note: null,
+    visitRequest: null,
     confirmationCode: null,
     basePrice: 1500000,
     paymentAmount: 1500000,

@@ -337,7 +337,8 @@ export async function createCustomerAction(
   const parsed = customerInputSchema.safeParse({
     name: formValue(formData, "name"),
     phone: formValue(formData, "phone"),
-    memo: formValue(formData, "memo")
+    memo: formValue(formData, "memo"),
+    preferenceNote: formValue(formData, "preferenceNote")
   });
 
   if (!parsed.success) {
@@ -369,7 +370,8 @@ export async function updateCustomerAction(
     customerId: formValue(formData, "customerId"),
     name: formValue(formData, "name"),
     phone: formValue(formData, "phone"),
-    memo: formValue(formData, "memo")
+    memo: formValue(formData, "memo"),
+    preferenceNote: formValue(formData, "preferenceNote")
   });
 
   if (!parsed.success) {

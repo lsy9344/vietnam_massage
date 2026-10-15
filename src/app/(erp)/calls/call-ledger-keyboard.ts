@@ -12,6 +12,7 @@ export const EDITABLE_CALL_FIELDS = [
   "discountTypeCode",
   "paymentMethodCode",
   "note",
+  "visitRequest",
   "confirmationCode"
 ] as const;
 

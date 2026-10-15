@@ -89,6 +89,8 @@ export function CallDetailPanel({
           <DetailRow label={t("calls.column.therapist1")} value={current.therapist1?.displayName ?? "-"} />
           <DetailRow label={t("calls.column.therapist2")} value={current.therapist2?.displayName ?? "-"} />
           <DetailRow label={t("calls.column.reservationStatus")} value={statusLabel(current.status)} />
+          {/* 방문별 요청(F06, 티켓 23). 고객 공통 선호·주의사항은 고객 화면에, 이 콜만의 요청은 여기와 빠른 예약 객실·메모 단계에 있다. */}
+          <DetailRow label={t("calls.column.visitRequest")} value={current.visitRequest ?? "-"} />
         </dl>
 
         <PanelSection title={t("calls.detail.customerLink.title")}>

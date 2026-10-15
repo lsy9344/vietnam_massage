@@ -614,6 +614,7 @@ function createMemoryPrisma() {
           name: data.name,
           phone: data.phone ?? null,
           memo: data.memo ?? null,
+          preferenceNote: data.preferenceNote ?? null,
           createdAt: new Date(`2026-06-09T04:0${customers.size}:00.000Z`),
           updatedAt: new Date(`2026-06-09T04:0${customers.size}:00.000Z`)
         };
@@ -634,6 +635,7 @@ function createMemoryPrisma() {
           name: data.name ?? record.name,
           phone: data.phone === undefined ? record.phone : data.phone,
           memo: data.memo === undefined ? record.memo : data.memo,
+          preferenceNote: data.preferenceNote === undefined ? record.preferenceNote : data.preferenceNote,
           updatedAt: new Date("2026-06-09T05:00:00.000Z")
         });
         return { count: 1 };
@@ -726,6 +728,97 @@ describe("service call service", () => {
     assert.equal(saved.courseId, "course-a");
     assert.equal(saved.status, "예약");
     assert.equal(saved.paymentMethodCode, "현금");
+  });
+
+  it("saves the call's visit request apart from its note, and both show up distinctly on reload (F06, 티켓 23)", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const row = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "예약",
+      note: "카운터 전달용 비고",
+      visitRequest: "조명을 어둡게 해 주세요",
+      prismaClient
+    });
+
+    assert.equal(row.note, "카운터 전달용 비고");
+    assert.equal(row.visitRequest, "조명을 어둡게 해 주세요");
+
+    const reloaded = await getServiceCallRow({ serviceCallId: row.id, prismaClient });
+    assert.equal(reloaded.note, "카운터 전달용 비고");
+    assert.equal(reloaded.visitRequest, "조명을 어둡게 해 주세요");
+
+    const edited = await saveBasicServiceCallRow({
+      serviceCallId: row.id,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "예약",
+      note: "카운터 전달용 비고",
+      visitRequest: "조명은 그대로, 향은 라벤더로",
+      expectedUpdatedAt: row.updatedAt,
+      prismaClient
+    });
+
+    // 방문별 요청만 고쳤는데 비고가 그대로인 것으로, 두 칸이 서로 독립임을 확인한다.
+    assert.equal(edited.note, "카운터 전달용 비고");
+    assert.equal(edited.visitRequest, "조명은 그대로, 향은 라벤더로");
+  });
+
+  it("rejects a visit-request-only edit under STALE_CALL the same way other fields are (F06, 티켓 23)", async () => {
+    const prismaClient = createMemoryPrisma();
+    const row = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "예약",
+      visitRequest: "원래 요청",
+      prismaClient
+    });
+
+    await assert.rejects(
+      () =>
+        saveBasicServiceCallRow({
+          serviceCallId: row.id,
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-06-10",
+          startTime: "11:00",
+          roomId: "room-101",
+          courseId: "course-a",
+          status: "예약",
+          visitRequest: "다른 화면이 먼저 바꾼 요청",
+          expectedUpdatedAt: "2000-01-01T00:00:00.000Z",
+          prismaClient
+        }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "STALE_CALL"
+    );
+  });
+
+  it("blocks a visit-request edit into a locked operating month, same as every other field (F06, 티켓 23)", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    await assert.rejects(
+      () =>
+        saveBasicServiceCallRow({
+          operatingMonthId: "month-locked",
+          serviceDate: "2026-07-10",
+          startTime: "11:00",
+          roomId: "room-101",
+          courseId: "course-a",
+          status: "예약",
+          visitRequest: "잠긴 월의 요청",
+          prismaClient
+        }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
   });
 
   it("allows reservation rows to be saved without assigning a room yet", async () => {
@@ -2288,8 +2381,24 @@ describe("service call service", () => {
     const listed = await listCustomers({ prismaClient });
     assert.deepEqual(
       listed.find((customer) => customer.id === created.id),
-      { id: created.id, name: "민아", phone: "090111", memo: "단골" }
+      { id: created.id, name: "민아", phone: "090111", memo: "단골", preferenceNote: null }
     );
+  });
+
+  it("creates a customer with a common preference/caution note kept apart from the call memo (F06, 티켓 23)", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const created = await createCustomer({
+      name: "민아",
+      phone: "090111",
+      memo: "단골",
+      preferenceNote: "라벤더 오일 알레르기",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(created.memo, "단골");
+    assert.equal(created.preferenceNote, "라벤더 오일 알레르기");
   });
 
   it("corrects a customer's name, phone, and memo", async () => {
@@ -2316,8 +2425,33 @@ describe("service call service", () => {
     assert.equal(updated.phone, "091222");
     assert.equal(updated.memo, "메모수정");
     assert.deepEqual(await listCustomers({ prismaClient }), [
-      { id: created.id, name: "민아정정", phone: "091222", memo: "메모수정" }
+      { id: created.id, name: "민아정정", phone: "091222", memo: "메모수정", preferenceNote: null }
     ]);
+  });
+
+  it("corrects a customer's common preference/caution note without touching the memo (F06, 티켓 23)", async () => {
+    const prismaClient = createMemoryPrisma();
+    const created = await createCustomer({
+      name: "민아",
+      phone: "090111",
+      memo: "단골",
+      preferenceNote: "조용한 방 선호",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    const updated = await updateCustomer({
+      customerId: created.id,
+      name: "민아",
+      phone: "090111",
+      memo: "단골",
+      preferenceNote: "라벤더 오일 알레르기",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(updated.memo, "단골");
+    assert.equal(updated.preferenceNote, "라벤더 오일 알레르기");
   });
 
   it("does not attach a customer from a shared phone until one is chosen, and keeps the call memo", async () => {
@@ -2528,6 +2662,41 @@ describe("service call service", () => {
     assert.equal(prismaClient.auditEvents[2].afterValue.customerId, created.id);
     assert.equal(prismaClient.auditEvents[2].beforeValue.customerMemo, "원장 표기");
     assert.equal(prismaClient.auditEvents[2].afterValue.customerMemo, "원장 표기");
+  });
+
+  it("carries the visit request along in the row_changed audit snapshot untouched (F06, 티켓 23)", async () => {
+    const prismaClient = createMemoryPrisma();
+    const created = await createCustomer({ name: "민아", phone: "090111", memo: "단골", actorId: "counter-account", prismaClient });
+    const saved = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      status: "예약",
+      visitRequest: "창가 자리 선호",
+      prismaClient
+    });
+
+    // 고객 연결만 바꾸는 감사 기록이라도, 그 시점의 방문별 요청이 전후 모두 그대로 찍힌다.
+    await autosaveServiceCallRow({
+      serviceCallId: saved.id,
+      expectedUpdatedAt: saved.updatedAt,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      customerId: created.id,
+      status: "예약",
+      visitRequest: "창가 자리 선호",
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    const rowChanged = prismaClient.auditEvents.find((event: { action: string }) => event.action === "service_call.row_changed");
+    assert.equal(rowChanged.beforeValue.visitRequest, "창가 자리 선호");
+    assert.equal(rowChanged.afterValue.visitRequest, "창가 자리 선호");
   });
 
   it("records a customer chosen while adding a call row without changing the call memo", async () => {
@@ -4301,6 +4470,7 @@ function ledgerRow(overrides: Partial<ServiceCallRowDto>): ServiceCallRowDto {
     discountTypeCode: null,
     paymentMethodCode: null,
     note: null,
+    visitRequest: null,
     confirmationCode: null,
     basePrice: 0,
     paymentAmount: 0,

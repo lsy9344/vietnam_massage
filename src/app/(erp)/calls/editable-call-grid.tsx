@@ -74,6 +74,7 @@ const CALL_GRID_COLUMNS = [
   { id: "discountType", labelKey: "calls.column.discountType", width: "9rem" },
   { id: "paymentMethod", labelKey: "calls.column.paymentMethod", width: "9rem" },
   { id: "note", labelKey: "calls.column.note", width: "11rem" },
+  { id: "visitRequest", labelKey: "calls.column.visitRequest", width: "11rem" },
   { id: "confirmation", labelKey: "calls.column.confirmation", width: "9rem" },
   { id: "paymentAmount", labelKey: "calls.column.paymentAmount", width: "8rem" },
   { id: "discount", labelKey: "calls.column.discount", width: "6rem" },
@@ -113,6 +114,7 @@ const LEDGER_VIEW_COLUMN_IDS = {
     "paymentAmount",
     "confirmation",
     "note",
+    "visitRequest",
     "therapist1Commission",
     "therapist2Commission",
     "earcarePool",
@@ -139,6 +141,7 @@ const CALL_GRID_COLUMN_FIELD: Record<(typeof CALL_GRID_COLUMNS)[number]["id"], s
   discountType: "discountTypeCode",
   paymentMethod: "paymentMethodCode",
   note: "note",
+  visitRequest: "visitRequest",
   confirmation: "confirmationCode",
   paymentAmount: "paymentAmount",
   discount: "discountAmount",
@@ -1051,6 +1054,21 @@ function AddRowForm({
         />
       </td>
     ),
+    visitRequest: (
+      <td className="border-b border-border px-2 py-2" key="visitRequest">
+        <TextCell
+          columnId="visitRequest"
+          disabled={disabled}
+          label={t("calls.column.visitRequest")}
+          name="visitRequest"
+          onChange={(value) => update("visitRequest", nullableValue(value))}
+          onKeyDown={(event) => handleAddRowKeyDown("visitRequest", event)}
+          placeholder={t("calls.column.visitRequest")}
+          rowIndex={rowIndex}
+          value={draft.visitRequest ?? ""}
+        />
+      </td>
+    ),
     confirmation: (
       <td className="border-b border-border px-2 py-2" key="confirmation">
         <SelectCell
@@ -1571,6 +1589,22 @@ function EditableCallRow({
           placeholder={t("calls.column.note")}
           rowIndex={rowIndex}
           value={draft.note ?? ""}
+        />
+      </td>
+    ),
+    visitRequest: (
+      <td className="border-b border-border px-2 py-2" key="visitRequest">
+        <TextCell
+          columnId="visitRequest"
+          disabled={isLocked}
+          label={t("calls.column.visitRequest")}
+          name="visitRequest"
+          onBlur={() => commit()}
+          onChange={(value) => updateDraft("visitRequest", nullableValue(value))}
+          onKeyDown={(event) => handleGridKeyDown("visitRequest", event)}
+          placeholder={t("calls.column.visitRequest")}
+          rowIndex={rowIndex}
+          value={draft.visitRequest ?? ""}
         />
       </td>
     ),

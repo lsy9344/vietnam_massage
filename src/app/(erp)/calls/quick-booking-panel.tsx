@@ -404,6 +404,16 @@ export function RoomStep({ disabled, draft, fieldErrors, onEdit, options }: Step
           value={draft.note ?? ""}
         />
       </Field>
+      {/* 방문별 요청(F06, 티켓 23). 비고(note)와는 다른 칸이라 나란히 두되 하나로 합치지 않는다. */}
+      <Field error={fieldErrors.visitRequest?.[0] ?? null} label={t("calls.column.visitRequest")}>
+        <textarea
+          className={inputFieldClassName({ className: "h-24 py-2", invalid: Boolean(fieldErrors.visitRequest?.[0]) })}
+          disabled={disabled}
+          maxLength={500}
+          onChange={(event) => onEdit("visitRequest", event.target.value === "" ? null : event.target.value)}
+          value={draft.visitRequest ?? ""}
+        />
+      </Field>
     </div>
   );
 }

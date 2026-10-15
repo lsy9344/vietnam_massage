@@ -57,6 +57,8 @@ export const serviceCallInputSchema = z.object({
   discountTypeCode: optionalCode,
   paymentMethodCode: optionalCode,
   note: optionalText,
+  // 이번 콜의 방문별 요청(F06, 티켓 23). 고객 공통 선호·주의사항(customerInputSchema.preferenceNote)과는 다른 칸이다.
+  visitRequest: optionalText,
   confirmationCode: optionalCode,
   /** serviceCallId가 있으면(기존 행 저장) 서비스가 필수로 요구한다. */
   expectedUpdatedAt: z.preprocess(emptyToNull, savedVersion.nullable().optional())
@@ -93,7 +95,9 @@ export const dailyExpenseDeactivateSchema = z.object({
 export const customerInputSchema = z.object({
   name: z.string().trim().min(1, "이름을 입력하세요.").max(200, "200자 이하로 입력하세요."),
   phone: optionalText,
-  memo: optionalText
+  memo: optionalText,
+  // 고객 공통 선호·주의사항(F06, 티켓 23). 기존 memo(고객 메모)와는 다른 칸이다.
+  preferenceNote: optionalText
 });
 
 export const customerUpdateSchema = customerInputSchema.extend({
