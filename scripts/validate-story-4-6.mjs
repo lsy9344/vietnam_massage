@@ -109,13 +109,15 @@ function requireMoved(contents, fileLabel, key, korean) {
   if (!koCatalog.includes(korean)) errors.push(`ko.ts missing ${korean}`);
 }
 
-const page = read("src/app/(erp)/settlements/operations/monthly/page.tsx");
+// 티켓 05부터 직원별 금액 표와 규칙 근거 패널은 클라이언트 뷰에 있다. 쓰기 금지 검사는 페이지 파일만 본다.
+const pageFile = read("src/app/(erp)/settlements/operations/monthly/page.tsx");
+const page = [pageFile, read("src/app/(erp)/settlements/operations/monthly/ops-monthly-view.tsx")].join("\n");
 for (const required of [
   "requireRouteAccess(\"/settlements/operations/monthly\")",
   "selectedOperatingMonthFor",
   "listOperatingMonths",
   "listOpsMonthlyIncentivePreview",
-  "role=\"alert\""
+  "SettlementErrorNotice"
 ]) {
   if (!page.includes(required)) errors.push(`monthly page.tsx missing ${required}`);
 }
@@ -133,7 +135,7 @@ requireMoved(page, "monthly page.tsx", "settlements.opsMonthly.preview.draft", "
 requireMoved(page, "monthly page.tsx", "settlements.opsMonthly.preview.current", "현재 기준 미리보기");
 requireMoved(page, "monthly page.tsx", "settlements.opsMonthly.preview.closedDescription", "확정값은 월마감 스냅샷 기준");
 for (const forbidden of ["use server", "action=", "saveOps", "revalidatePath", "recordAuditEvent", "snapshot 생성"]) {
-  if (page.includes(forbidden)) errors.push(`monthly page.tsx must not add write/closing behavior: ${forbidden}`);
+  if (pageFile.includes(forbidden)) errors.push(`monthly page.tsx must not add write/closing behavior: ${forbidden}`);
 }
 
 // 구역 안 탭 링크는 더 이상 각 화면에 직접 적히지 않는다: routes.ts의 screenRoutes를 ScreenToolbar가 그린다.

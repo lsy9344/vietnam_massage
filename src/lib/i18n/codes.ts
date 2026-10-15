@@ -95,3 +95,12 @@ export function operatingMonthStatusLabel(locale: Locale, status: string): strin
   }
   return status;
 }
+
+/**
+ * 콜 상태를 화면 라벨로 번역한다. 저장된 상태는 코드(VISIT_COMPLETE)일 수도, 한국어 라벨(방문완료)일 수도 있다.
+ */
+export function serviceStatusLabel(locale: Locale, status: string): string {
+  const fromCode = codeLabel(locale, "SERVICE_STATUS", status, true);
+  if (fromCode !== status) return fromCode;
+  return codeLabelFromKoreanLabel(locale, "SERVICE_STATUS", status);
+}

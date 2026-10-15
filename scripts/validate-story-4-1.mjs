@@ -23,7 +23,7 @@ function readJson(path) {
   "src/modules/settlements/therapist-attendance-service.ts",
   "src/modules/settlements/therapist-attendance-service.test.ts",
   "src/app/(erp)/settlements/actions.ts",
-  "src/app/(erp)/settlements/therapist-attendance-table.tsx",
+  "src/app/(erp)/settlements/therapist-attendance-form.tsx",
   "src/app/(erp)/settlements/page.tsx",
   "src/modules/closing/monthly-closing-preview-service.ts",
   "src/modules/closing/monthly-closing-preview-service.test.ts",
@@ -197,8 +197,8 @@ function requireMoved(contents, fileLabel, key, korean) {
   if (!koCatalog.includes(korean)) errors.push(`ko.ts missing ${korean}`);
 }
 
-// Client table
-const table = read("src/app/(erp)/settlements/therapist-attendance-table.tsx");
+// Client form (티켓 05: 출퇴근 정정은 직원 패널의 폼으로 옮겼다)
+const table = read("src/app/(erp)/settlements/therapist-attendance-form.tsx");
 for (const required of [
   "use client",
   "useActionState",
@@ -213,26 +213,30 @@ for (const required of [
   "aria-describedby",
   "role=\"alert\""
 ]) {
-  if (!table.includes(required)) errors.push(`therapist-attendance-table.tsx missing ${required}`);
+  if (!table.includes(required)) errors.push(`therapist-attendance-form.tsx missing ${required}`);
 }
-requireMoved(table, "therapist-attendance-table.tsx", "settlements.therapist.attendance.action.clear", "비우기");
-requireMoved(table, "therapist-attendance-table.tsx", "settlements.therapist.attendance.fullRecognized", "만근");
-requireMoved(table, "therapist-attendance-table.tsx", "settlements.therapist.attendance.action.saving", "저장중");
-requireMoved(table, "therapist-attendance-table.tsx", "settlements.therapist.attendance.status.saved", "저장됨");
-requireMoved(table, "therapist-attendance-table.tsx", "settlements.therapist.attendance.action.retry", "재시도");
-requireMoved(table, "therapist-attendance-table.tsx", "settlements.therapist.attendance.status.locked", "잠금");
+requireMoved(table, "therapist-attendance-form.tsx", "settlements.therapist.attendance.action.clear", "비우기");
+requireMoved(table, "therapist-attendance-form.tsx", "settlements.therapist.attendance.fullRecognized", "만근");
+requireMoved(table, "therapist-attendance-form.tsx", "settlements.therapist.attendance.action.saving", "저장중");
+requireMoved(table, "therapist-attendance-form.tsx", "settlements.therapist.attendance.status.saved", "저장됨");
+requireMoved(table, "therapist-attendance-form.tsx", "settlements.therapist.attendance.action.retry", "재시도");
+requireMoved(table, "therapist-attendance-form.tsx", "settlements.therapist.attendance.status.locked", "잠금");
 // Review finding R3-#3: stale errors from the previous action must not remain after the opposite action wins.
 if (!table.includes("lastAction.current === \"save\" ? inlineError(state)") || !table.includes("lastAction.current === \"clear\" ? inlineError(clearState)")) {
-  errors.push("therapist-attendance-table.tsx must gate save/clear errors by the latest action");
+  errors.push("therapist-attendance-form.tsx must gate save/clear errors by the latest action");
 }
 
-// Page wiring keeps Story 4.2 behavior and adds attendance
-const page = read("src/app/(erp)/settlements/page.tsx");
+// Page wiring keeps Story 4.2 behavior and adds attendance. 티켓 05부터 표와 패널은 클라이언트 뷰에, 공통 상태 안내는 settlement-parts에 있다.
+const page = [
+  "src/app/(erp)/settlements/page.tsx",
+  "src/app/(erp)/settlements/therapist-settlement-view.tsx",
+  "src/app/(erp)/settlements/settlement-parts.tsx"
+].map(read).join("\n");
 for (const required of [
   "requireRouteAccess(\"/settlements\")",
   "listTherapistDailySettlements",
   "listTherapistAttendanceForDate",
-  "TherapistAttendanceTable",
+  "TherapistAttendanceForm",
   // Review finding #6: attendance read must not be hidden when the settlement read fails.
   "Promise.allSettled",
   "attendanceErrorMessage"

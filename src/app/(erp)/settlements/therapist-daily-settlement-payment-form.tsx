@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useId } from "react";
+import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n/client";
 import {
   setTherapistDailySettlementPaymentAction,
@@ -29,21 +30,16 @@ export function TherapistDailySettlementPaymentForm({
   const formError = state && !state.ok ? state.formError ?? t("settlements.therapist.payment.error") : null;
 
   return (
-    <form action={formAction} className="mt-2">
+    <form action={formAction} className="grid justify-items-start gap-1.5">
       <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
       <input name="serviceDate" type="hidden" value={serviceDate} />
       <input name="employeeId" type="hidden" value={employeeId} />
       <input name="isPaid" type="hidden" value={isPaid ? "false" : "true"} />
-      <button
-        aria-describedby={formError ? errorId : undefined}
-        className="h-8 border border-border bg-background px-2 text-xs font-semibold text-foreground hover:bg-readonly disabled:cursor-not-allowed disabled:opacity-60"
-        disabled={pending}
-        type="submit"
-      >
+      <Button aria-describedby={formError ? errorId : undefined} disabled={pending} type="submit" variant="secondary">
         {pending ? t("settlements.therapist.payment.processing") : isPaid ? t("settlements.therapist.payment.cancel") : t("settlements.therapist.payment.markPaid")}
-      </button>
+      </Button>
       {formError ? (
-        <p id={errorId} role="alert" className="mt-1 text-xs text-danger">
+        <p id={errorId} role="alert" className="text-sm text-danger">
           {formError}
         </p>
       ) : null}

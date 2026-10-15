@@ -9,6 +9,7 @@ import {
   listEarcareAttendanceForDate,
   type EarcareAttendanceDto
 } from "@/modules/settlements/earcare-attendance-service";
+import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/modules/settlements/settlement-evidence-call";
 
 type OperatingMonthRecord = {
   id: string;
@@ -49,6 +50,8 @@ export type EarcarePoolEvidenceDto = {
   serviceCallId: string;
   serviceDate: string;
   earcarePoolAmount: number;
+  /** 같은 조회에서 읽은 콜 행이 없으면(그 사이 바뀐 경우) null이다. */
+  call: SettlementEvidenceCallDto | null;
 };
 
 export type EarcareDailySettlementResultDto = {
@@ -175,6 +178,7 @@ export async function listEarcareDailySettlements(input: {
   ]);
 
   const earcarePoolTotal = completedCalculations.reduce((sum, calculation) => sum + calculation.earcarePoolAmount, 0);
+  const callRowsById = new Map(callRows.map((row) => [row.id, row]));
   const eligibleRows = attendance.rows.filter((row) => row.isPayoutEligible);
   const eligibleCount = eligibleRows.length;
   const baseShareAmount = eligibleCount > 0 ? Math.floor(earcarePoolTotal / eligibleCount) : 0;
@@ -224,10 +228,14 @@ export async function listEarcareDailySettlements(input: {
     undistributedAmount: earcarePoolTotal - distributedAmount,
     warningCounts: warningCounts(callRows),
     rows,
-    poolEvidence: completedCalculations.map((calculation) => ({
-      serviceCallId: calculation.serviceCallId,
-      serviceDate: calculation.serviceDate,
-      earcarePoolAmount: calculation.earcarePoolAmount
-    }))
+    poolEvidence: completedCalculations.map((calculation) => {
+      const callRow = callRowsById.get(calculation.serviceCallId);
+      return {
+        serviceCallId: calculation.serviceCallId,
+        serviceDate: calculation.serviceDate,
+        earcarePoolAmount: calculation.earcarePoolAmount,
+        call: callRow ? settlementEvidenceCall(callRow) : null
+      };
+    })
   };
 }

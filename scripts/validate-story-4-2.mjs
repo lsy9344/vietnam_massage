@@ -79,13 +79,19 @@ function requireMoved(contents, fileLabel, key, korean) {
   if (!koCatalog.includes(korean)) errors.push(`ko.ts missing ${korean}`);
 }
 
-const page = read("src/app/(erp)/settlements/page.tsx");
+// 티켓 05부터 표와 직원 패널(근거 콜, 코스별 수당)은 클라이언트 뷰에, 오류·빈 상태 안내는 settlement-parts에 있다.
+const pageFile = read("src/app/(erp)/settlements/page.tsx");
+const page = [
+  pageFile,
+  read("src/app/(erp)/settlements/therapist-settlement-view.tsx"),
+  read("src/app/(erp)/settlements/settlement-parts.tsx")
+].join("\n");
 for (const required of [
   "requireRouteAccess(\"/settlements\")",
   "listTherapistDailySettlements",
   "selectedOperatingMonthFor",
   "clampDateToOperatingMonth",
-  "courseCodes.map"
+  "settlement.courseBreakdown[courseCode]"
 ]) {
   if (!page.includes(required)) errors.push(`settlements/page.tsx missing ${required}`);
 }
@@ -103,7 +109,7 @@ requireMoved(page, "settlements/page.tsx", "settlements.therapist.rateStatus.zer
 requireMoved(page, "settlements/page.tsx", "settlements.therapist.rateStatus.applied", "정책 적용");
 requireMoved(page, "settlements/page.tsx", "settlements.therapist.column.courseQtyAmount", "수량/금액");
 for (const forbidden of ["use server", "revalidatePath", "requirePermission(\"payout:write\")", "Server Action"]) {
-  if (page.includes(forbidden)) errors.push(`settlements/page.tsx must stay read-only and not include ${forbidden}`);
+  if (pageFile.includes(forbidden)) errors.push(`settlements/page.tsx must stay read-only and not include ${forbidden}`);
 }
 
 const actions = read("src/app/(erp)/settlements/actions.ts");
@@ -170,8 +176,9 @@ for (const required of [
   "콜별 산출 근거",
   "정책 warning / 제외 콜",
   "1건 / 1건",
+  // 티켓 05부터 코스별 수당은 직원 패널에 그날 담당한 코스만 보인다.
   "A 수량/금액",
-  "E 수량/금액",
+  "D 수량/금액",
   "E2E42 마사지사3",
   "정책 없음",
   "이 날짜의 방문완료 콜이 없습니다",

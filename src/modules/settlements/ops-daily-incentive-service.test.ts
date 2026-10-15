@@ -298,6 +298,24 @@ describe("listOpsDailyIncentives", () => {
     );
   });
 
+  it("attaches the call summary (date, start time, course, therapists, status) to each call evidence", async () => {
+    const result = await listOpsDailyIncentives({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient: createMemoryPrisma()
+    });
+
+    assert.deepEqual(result.callEvidence[1]?.call, {
+      serviceCallId: "call-b",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      courseCode: "B",
+      therapistNames: ["마사지사1"],
+      status: "VISIT_COMPLETE"
+    });
+  });
+
   it("returns below_threshold with zero payout when daily ops call credit is under 30", async () => {
     const result = await listOpsDailyIncentives({
       operatingMonthId: "month-2026-06",

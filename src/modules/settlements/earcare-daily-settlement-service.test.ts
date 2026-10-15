@@ -293,6 +293,28 @@ describe("listEarcareDailySettlements", () => {
     );
   });
 
+  it("attaches the call summary (date, start time, course, therapists, status) to each pool evidence call", async () => {
+    const result = await listEarcareDailySettlements({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient: createMemoryPrisma()
+    });
+
+    assert.deepEqual(result.poolEvidence[0]?.call, {
+      serviceCallId: "call-a",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      courseCode: "A",
+      therapistNames: ["마사지사1"],
+      status: "방문완료"
+    });
+    assert.deepEqual(
+      result.poolEvidence.map((evidence) => evidence.call?.serviceCallId),
+      result.poolEvidence.map((evidence) => evidence.serviceCallId)
+    );
+  });
+
   it("returns zero payouts and undistributed pool when no earcare employee is NORMAL and 근무상태 변경 반영 is visible", async () => {
     const result = await listEarcareDailySettlements({
       operatingMonthId: "month-2026-06",

@@ -1,12 +1,11 @@
 import { requireRouteAccess } from "@/lib/authorization";
 import { selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
-import { formatCurrencyVnd, formatNumber } from "@/lib/i18n/format";
 import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
 import { resolveDomainErrorMessage, resolveKoreanMessage } from "@/lib/i18n/errors";
-import { settlementBasisText } from "@/lib/i18n/settlement-basis";
 import type { Locale } from "@/lib/i18n/config";
 import type { Translator } from "@/lib/i18n";
+import { linkToScreen } from "@/lib/routes";
 import {
   getMonthlyClosingSnapshot,
   MonthlyClosingDomainError,
@@ -15,41 +14,32 @@ import {
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import {
   listOpsMonthlyIncentivePreview,
-  type OpsMonthlyIncentiveResultDto,
-  type OpsMonthlyIncentiveTeamRole
+  type OpsMonthlyIncentiveResultDto
 } from "@/modules/settlements/ops-monthly-incentive-service";
+import { OpsMonthlyView } from "@/app/(erp)/settlements/operations/monthly/ops-monthly-view";
+import {
+  amountLabel,
+  AmountText,
+  EvidenceCallItem,
+  EvidenceCallList,
+  SettlementEmptyNotice,
+  SettlementErrorNotice,
+  SettlementWarningLine,
+  summaryAmount,
+  vnd
+} from "@/app/(erp)/settlements/settlement-parts";
+import { EMPLOYEE_PARAM, incentiveRuleHasBasis, settlementAmount } from "@/app/(erp)/settlements/settlement-view-model";
 import { DateContextControls } from "@/components/shell/date-context-controls";
 import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-notice";
 import { ScreenToolbar } from "@/components/shell/screen-toolbar";
+import { DetailRow } from "@/components/ui/detail-row";
+import { StatusIndicator } from "@/components/ui/status-indicator";
+import { SummaryCard, SummaryCards } from "@/components/ui/summary-card";
 
 type OpsMonthlyIncentivePageSearchParams = {
   operatingMonthId?: string;
+  employee?: string;
 };
-
-// 팀 역할 라벨은 stable teamRole 키로 번역한다(서비스의 한국어 teamShareLabel 대신).
-function teamRoleLabel(t: Translator, role: OpsMonthlyIncentiveTeamRole) {
-  return t(`settlements.opsMonthly.team.${role}`);
-}
-
-// 분배율/팀 몫 컬럼: row의 teamRole에 해당하는 share(비율)·team amount를 result.shares에서 재구성한다.
-// (이전엔 산출근거와 동일 문구가 중복 표시됐음)
-function shareTeamPortionText(locale: Locale, t: Translator, shares: OpsMonthlyIncentiveResultDto["shares"], role: OpsMonthlyIncentiveTeamRole) {
-  const byRole = {
-    lead: { share: shares.leadShare, amount: shares.leadAmount },
-    counter: { share: shares.counterTeamShare, amount: shares.counterTeamAmount },
-    waiter: { share: shares.waiterTeamShare, amount: shares.waiterTeamAmount }
-  } as const;
-  if (role === "unassigned") return t("settlements.opsMonthly.shareTeamPortion.none");
-  const { share, amount } = byRole[role];
-  return t("settlements.opsMonthly.shareTeamPortion.value", {
-    percent: formatNumber(locale, Math.round(share * 100)),
-    amount: formatNumber(locale, amount)
-  });
-}
-
-function formatVnd(locale: Locale, t: Translator, amount: number) {
-  return `${formatCurrencyVnd(locale, amount)} ${t("settlements.vndSuffix")}`;
-}
 
 function formatShare(value: number) {
   return `${Math.round(value * 10000) / 100}%`;
@@ -97,16 +87,21 @@ function thresholdLabel(t: Translator, result: OpsMonthlyIncentiveResultDto) {
   return t("settlements.opsMonthly.threshold.applied", { count: result.appliedThresholdCallCount ?? 0 });
 }
 
+const sectionClassName = "rounded-lg border border-border bg-surface p-4";
+
 function PreviewNotice({ locale, t, selectedMonth, result }: { locale: Locale; t: Translator; selectedMonth: { status: string }; result: OpsMonthlyIncentiveResultDto }) {
   const isClosed = result.isClosedOrLocked;
   const isReopenedReview = selectedMonth.status === "검토중";
   return (
-    <section className="mb-4 border border-border bg-surface px-4 py-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex border border-border bg-readonly px-2 py-1 text-xs font-semibold text-muted">
-          {isClosed ? t("settlements.opsMonthly.preview.current") : t("settlements.opsMonthly.preview.draft")}
+    <section className={sectionClassName}>
+      <div className="flex flex-wrap items-center gap-3">
+        <StatusIndicator
+          label={isClosed ? t("settlements.opsMonthly.preview.current") : t("settlements.opsMonthly.preview.draft")}
+          tone={isClosed ? "info" : "neutral"}
+        />
+        <span className="text-sm font-semibold text-foreground">
+          {t("common.operatingMonthStatusPrefix")}: {operatingMonthStatusLabel(locale, selectedMonth.status)}
         </span>
-        <span className="text-sm font-semibold text-foreground">{t("common.operatingMonthStatusPrefix")}: {operatingMonthStatusLabel(locale, selectedMonth.status)}</span>
       </div>
       <p className="mt-2 text-sm text-muted">
         {isClosed
@@ -127,184 +122,53 @@ function SnapshotSummary({ locale, t, closing, currentStatus }: { locale: Locale
     ? t("settlements.opsMonthly.snapshot.headingPrevious", { monthKey: closing.snapshot.month.monthKey })
     : t("settlements.opsMonthly.snapshot.headingConfirmed", { monthKey: closing.snapshot.month.monthKey });
   return (
-    <section className="mb-4 border border-border bg-surface px-4 py-3" aria-label={t("settlements.opsMonthly.snapshot.aria", { label })}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="inline-flex border border-success bg-success/10 px-2 py-1 text-xs font-semibold text-success">{label}</div>
-          <h2 className="mt-2 text-base font-semibold text-foreground">{heading}</h2>
-          <p className="mt-1 text-sm text-muted">
-            {t("settlements.opsMonthly.snapshot.meta", { id: closing.snapshot.id, version: closing.closeVersion, confirmedAt: closing.confirmedAt })}
-          </p>
-          {isHistoricalAfterReopen ? <p className="mt-1 text-sm text-muted">{t("settlements.opsMonthly.snapshot.currentEditable")}</p> : null}
-        </div>
-        <div className="text-right">
-          <div className="text-xs font-medium text-muted">{t("settlements.opsMonthly.snapshot.totalPayout")}</div>
-          <div className="text-lg font-semibold text-foreground tabular-nums">{formatVnd(locale, t, operations.totalOpsPayoutAmount)}</div>
-        </div>
-      </div>
-      <div className="mt-3 grid gap-2 text-sm md:grid-cols-3">
-        <div className="border border-border bg-background px-3 py-2">
-          <div className="text-xs text-muted">{t("settlements.opsMonthly.snapshot.dailyIncentive")}</div>
-          <div className="font-semibold tabular-nums">{formatVnd(locale, t, operations.dailyIncentiveAmount)}</div>
-        </div>
-        <div className="border border-border bg-background px-3 py-2">
-          <div className="text-xs text-muted">{t("settlements.opsMonthly.snapshot.monthlyIncentive")}</div>
-          <div className="font-semibold tabular-nums">{formatVnd(locale, t, operations.monthlyIncentiveAmount)}</div>
-        </div>
-        <div className="border border-border bg-background px-3 py-2">
-          <div className="text-xs text-muted">{t("settlements.opsMonthly.snapshot.monthlyTotalCalls")}</div>
-          <div className="font-semibold tabular-nums">{operations.monthlyOpsCallCredit}{t("settlements.callSuffix")}</div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function OpsMonthlySummary({ locale, t, result }: { locale: Locale; t: Translator; result: OpsMonthlyIncentiveResultDto }) {
-  return (
-    <section aria-label={t("settlements.opsMonthly.summary.aria")} className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <div className="border border-border bg-surface px-4 py-3">
-        <div className="text-xs font-medium text-muted">{t("settlements.opsMonthly.summary.monthlyTotalCalls")}</div>
-        <div className="mt-1 text-xl font-semibold text-foreground">{result.monthlyOpsCallCredit}{t("settlements.callSuffix")}</div>
-        <div className="mt-1 text-xs text-muted">{t("settlements.opsMonthly.summary.monthlyTotalCallsBasis", { count: result.sourceCallCount })}</div>
-      </div>
-      <div className="border border-border bg-surface px-4 py-3">
-        <div className="text-xs font-medium text-muted">{t("settlements.opsMonthly.summary.appliedThreshold")}</div>
-        <div className="mt-1 text-xl font-semibold text-foreground">{thresholdLabel(t, result)}</div>
-        <div className="mt-1 text-xs text-muted">{t("settlements.opsMonthly.summary.totalMonthly", { amount: formatVnd(locale, t, result.totalMonthlyIncentiveAmount) })}</div>
-      </div>
-      <div className="border border-border bg-surface px-4 py-3">
-        <div className="text-xs font-medium text-muted">{t("settlements.opsMonthly.summary.employeeTotal")}</div>
-        <div className="mt-1 text-xl font-semibold text-foreground">
-          {formatVnd(locale, t, result.rows.reduce((sum, row) => sum + row.payoutAmount, 0))}
-        </div>
-        <div className="mt-1 text-xs text-muted">{t("settlements.opsMonthly.summary.undistributed", { amount: formatVnd(locale, t, result.shares.undistributedAmount) })}</div>
-      </div>
-      <div className="border border-border bg-surface px-4 py-3">
-        <div className="text-xs font-medium text-muted">{t("settlements.opsMonthly.summary.warningExcluded")}</div>
-        <div className="mt-1 text-xl font-semibold text-foreground">{warningTotal(result)}{t("settlements.countSuffix")}</div>
-        <div className="mt-1 text-xs text-muted">
-          {t("settlements.opsMonthly.summary.warningBreakdown", {
-            notCompleted: result.warningCounts.notCompleted,
-            policyMissing: result.warningCounts.coursePolicyMissing,
-            rateMissing: result.warningCounts.therapistRateMissing,
-            secondRequired: result.warningCounts.secondTherapistRequired
-          })}
-        </div>
-      </div>
+    <section aria-label={t("settlements.opsMonthly.snapshot.aria", { label })} className={sectionClassName}>
+      <StatusIndicator label={label} tone={isHistoricalAfterReopen ? "neutral" : "success"} />
+      <h2 className="mt-3 text-[0.9375rem] font-semibold text-foreground">{heading}</h2>
+      <p className="mt-1 text-sm text-muted">
+        {t("settlements.opsMonthly.snapshot.meta", { id: closing.snapshot.id, version: closing.closeVersion, confirmedAt: closing.confirmedAt })}
+      </p>
+      {isHistoricalAfterReopen ? <p className="mt-1 text-sm text-muted">{t("settlements.opsMonthly.snapshot.currentEditable")}</p> : null}
+      <dl className="mt-3">
+        <DetailRow label={t("settlements.opsMonthly.snapshot.totalPayout")} value={vnd(locale, operations.totalOpsPayoutAmount)} />
+        <DetailRow label={t("settlements.opsMonthly.snapshot.dailyIncentive")} value={vnd(locale, operations.dailyIncentiveAmount)} />
+        <DetailRow label={t("settlements.opsMonthly.snapshot.monthlyIncentive")} value={vnd(locale, operations.monthlyIncentiveAmount)} />
+        <DetailRow
+          label={t("settlements.opsMonthly.snapshot.monthlyTotalCalls")}
+          value={`${operations.monthlyOpsCallCredit}${t("settlements.callSuffix")}`}
+        />
+      </dl>
     </section>
   );
 }
 
 function ShareSummary({ locale, t, result }: { locale: Locale; t: Translator; result: OpsMonthlyIncentiveResultDto }) {
+  const hasBasis = incentiveRuleHasBasis(result.ruleStatus);
   const rows = [
     [t("settlements.opsMonthly.share.lead"), result.shares.leadShare, result.shares.leadAmount],
     [t("settlements.opsMonthly.share.counterTeam"), result.shares.counterTeamShare, result.shares.counterTeamAmount],
     [t("settlements.opsMonthly.share.waiterTeam"), result.shares.waiterTeamShare, result.shares.waiterTeamAmount]
   ] as const;
   return (
-    <section className="mb-4 border border-border bg-surface">
-      <div className="border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-foreground">{t("settlements.opsMonthly.share.title")}</h2>
-        <p className="mt-1 text-sm text-muted">{t("settlements.opsMonthly.share.description")}</p>
-      </div>
-      <div className="grid gap-0 sm:grid-cols-3">
+    <section aria-label={t("settlements.opsMonthly.share.title")} className={sectionClassName}>
+      <h2 className="text-[0.9375rem] font-semibold text-foreground">{t("settlements.opsMonthly.share.title")}</h2>
+      <p className="mt-1 text-sm text-muted">{t("settlements.opsMonthly.share.description")}</p>
+      <dl className="mt-2">
         {rows.map(([label, share, amount]) => (
-          <div key={label} className="border-b border-border px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
-            <div className="text-xs font-medium text-muted">{label}</div>
-            <div className="mt-1 text-lg font-semibold text-foreground">{formatVnd(locale, t, amount)}</div>
-            <div className="mt-1 text-xs text-muted">{t("settlements.opsMonthly.share.ratio", { value: formatShare(share) })}</div>
-          </div>
+          <DetailRow
+            key={label}
+            label={label}
+            value={
+              <>
+                <AmountText amount={settlementAmount(amount, hasBasis)} locale={locale} />
+                {hasBasis ? (
+                  <span className="ml-2 font-normal text-muted">{t("settlements.opsMonthly.share.ratio", { value: formatShare(share) })}</span>
+                ) : null}
+              </>
+            }
+          />
         ))}
-      </div>
-    </section>
-  );
-}
-
-function EmployeePayoutTable({ locale, t, result }: { locale: Locale; t: Translator; result: OpsMonthlyIncentiveResultDto }) {
-  if (result.rows.length === 0) {
-    return (
-      <section className="mb-4 border border-border bg-surface px-4 py-5">
-        <h2 className="text-base font-semibold text-foreground">{t("settlements.opsMonthly.employeeTable.empty.title")}</h2>
-        <p className="mt-2 text-sm text-muted">{t("settlements.opsMonthly.employeeTable.empty.description")}</p>
-      </section>
-    );
-  }
-
-  return (
-    <section className="mb-4 overflow-x-auto border border-border bg-surface">
-      <div className="border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-foreground">{t("settlements.opsMonthly.employeeTable.title")}</h2>
-        <p className="mt-1 text-sm text-muted">{t("settlements.opsMonthly.employeeTable.description")}</p>
-      </div>
-      <table className="min-w-[980px] w-full border-collapse text-sm">
-        <thead className="bg-readonly text-left text-xs font-semibold uppercase text-muted">
-          <tr>
-            <th className="border-b border-border px-3 py-2">{t("settlements.opsMonthly.column.opsStaff")}</th>
-            <th className="border-b border-border px-3 py-2">{t("settlements.opsMonthly.column.position")}</th>
-            <th className="border-b border-border px-3 py-2">{t("settlements.opsMonthly.column.teamRole")}</th>
-            <th className="border-b border-border px-3 py-2">{t("settlements.opsMonthly.column.shareTeamPortion")}</th>
-            <th className="border-b border-border px-3 py-2 text-right">{t("settlements.opsMonthly.column.expectedPayout")}</th>
-            <th className="border-b border-border px-3 py-2">{t("settlements.opsMonthly.column.basis")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {result.rows.map((row) => (
-            <tr key={row.employeeId} className="border-b border-border last:border-b-0">
-              <td className="px-3 py-2">
-                <div className="font-semibold text-foreground">{row.displayName}</div>
-                <div className="text-xs text-muted">{row.staffCode}</div>
-              </td>
-              <td className="px-3 py-2">{row.position}</td>
-              <td className="px-3 py-2">{teamRoleLabel(t, row.teamRole)}</td>
-              <td className="px-3 py-2 tabular-nums">{shareTeamPortionText(locale, t, result.shares, row.teamRole)}</td>
-              <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(locale, t, row.payoutAmount)}</td>
-              <td className="px-3 py-2 text-muted">{settlementBasisText(locale, row.calculationBasis)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
-}
-
-function CallEvidenceTable({ t, result }: { t: Translator; result: OpsMonthlyIncentiveResultDto }) {
-  if (result.callEvidence.length === 0) {
-    return (
-      <section className="mb-4 border border-border bg-surface px-4 py-5">
-        <h2 className="text-base font-semibold text-foreground">{t("settlements.opsMonthly.callEvidence.empty.title")}</h2>
-        <p className="mt-2 text-sm text-muted">{t("settlements.opsMonthly.callEvidence.empty.description")}</p>
-      </section>
-    );
-  }
-
-  const visibleEvidence = result.callEvidence.slice(0, 50);
-  return (
-    <section className="mb-4 overflow-x-auto border border-border bg-surface">
-      <div className="border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-foreground">{t("settlements.opsMonthly.callEvidence.title")}</h2>
-        <p className="mt-1 text-sm text-muted">
-          {t("settlements.opsMonthly.callEvidence.description", { count: result.callEvidence.length })}
-        </p>
-      </div>
-      <table className="min-w-[640px] w-full border-collapse text-sm">
-        <thead className="bg-readonly text-left text-xs font-semibold uppercase text-muted">
-          <tr>
-            <th className="border-b border-border px-3 py-2">{t("settlements.opsMonthly.callEvidence.callId")}</th>
-            <th className="border-b border-border px-3 py-2">{t("settlements.opsMonthly.callEvidence.serviceDate")}</th>
-            <th className="border-b border-border px-3 py-2 text-right">opsCallCredit</th>
-          </tr>
-        </thead>
-        <tbody>
-          {visibleEvidence.map((evidence) => (
-            <tr key={evidence.serviceCallId} className="border-b border-border last:border-b-0">
-              <td className="px-3 py-2 font-mono text-xs text-muted">{evidence.serviceCallId}</td>
-              <td className="px-3 py-2">{evidence.serviceDate}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{evidence.opsCallCredit}{t("settlements.callSuffix")}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      </dl>
     </section>
   );
 }
@@ -359,11 +223,16 @@ export default async function OperationsMonthlyIncentivePage({
     errorMessage = resolveDomainErrorMessage(locale, code, koFallback);
   }
 
+  const context = { operatingMonthId: selectedMonth.id, date: null };
+  const canOpenLedger = linkToScreen(account.role, "/calls", context) !== null;
+  const hasBasis = result ? incentiveRuleHasBasis(result.ruleStatus) : false;
+  const visibleEvidence = result ? result.callEvidence.slice(0, 50) : [];
+
   return (
     <div className="screen">
       <ScreenToolbar
         account={account}
-        context={{ operatingMonthId: selectedMonth.id, date: null }}
+        context={context}
         dateControls={
           <DateContextControls date={null} locale={locale} months={operatingMonths} path="/settlements/operations/monthly" selectedMonth={selectedMonth} />
         }
@@ -373,37 +242,101 @@ export default async function OperationsMonthlyIncentivePage({
       />
 
       {errorMessage ? (
-        <section className="border border-danger bg-surface px-4 py-5" role="alert">
-          <h2 className="text-base font-semibold text-danger">{t("settlements.opsMonthly.error.title")}</h2>
-          <p className="mt-2 text-sm text-muted">{errorMessage}</p>
-          <form className="mt-4" method="get">
-            <input name="operatingMonthId" type="hidden" value={selectedMonth.id} />
-            <button className="h-9 border border-border bg-background px-3 text-sm font-semibold text-foreground hover:bg-readonly" type="submit">
-              {t("settlements.requery")}
-            </button>
-          </form>
-        </section>
+        <SettlementErrorNotice
+          locale={locale}
+          message={errorMessage}
+          query={{ operatingMonthId: selectedMonth.id }}
+          title={t("settlements.opsMonthly.error.title")}
+        />
       ) : result ? (
-        <>
-          {closingSnapshot ? <SnapshotSummary locale={locale} t={t} closing={closingSnapshot} currentStatus={selectedMonth.status} /> : null}
+        <div className="grid gap-6">
+          {closingSnapshot ? <SnapshotSummary closing={closingSnapshot} currentStatus={selectedMonth.status} locale={locale} t={t} /> : null}
           {snapshotErrorMessage ? (
-            <section className="mb-4 border border-warning bg-surface px-4 py-3" role="status">
-              <h2 className="text-sm font-semibold text-warning">{t("settlements.opsMonthly.snapshotMissing.title")}</h2>
-              <p className="mt-1 text-sm text-muted">{snapshotErrorMessage}</p>
-            </section>
+            <SettlementWarningLine detail={snapshotErrorMessage} label={t("settlements.opsMonthly.snapshotMissing.title")} />
           ) : null}
-          <PreviewNotice locale={locale} t={t} result={result} selectedMonth={selectedMonth} />
-          {result.warningMessage ? (
-            <section className="mb-4 border border-warning bg-surface px-4 py-3" role="status">
-              <h2 className="text-sm font-semibold text-warning">{t("settlements.opsMonthly.warning.title")}</h2>
-              <p className="mt-1 text-sm text-muted">{opsMonthlyWarningText(locale, result.warningMessage)}</p>
-            </section>
-          ) : null}
-          <OpsMonthlySummary locale={locale} t={t} result={result} />
-          <ShareSummary locale={locale} t={t} result={result} />
-          <EmployeePayoutTable locale={locale} t={t} result={result} />
-          <CallEvidenceTable t={t} result={result} />
-        </>
+          <PreviewNotice locale={locale} result={result} selectedMonth={selectedMonth} t={t} />
+          <div className="grid gap-4">
+            <SummaryCards label={t("settlements.opsMonthly.summary.aria")}>
+              <SummaryCard
+                accent="mint"
+                label={t("settlements.opsMonthly.summary.monthlyTotalCalls")}
+                note={t("settlements.opsMonthly.summary.monthlyTotalCallsBasis", { count: result.sourceCallCount })}
+                value={`${result.monthlyOpsCallCredit}${t("settlements.callSuffix")}`}
+              />
+              <SummaryCard
+                accent="peach"
+                label={t("settlements.opsMonthly.summary.totalMonthly")}
+                note={`${t("settlements.opsMonthly.summary.appliedThreshold")}: ${thresholdLabel(t, result)}`}
+                {...summaryAmount(settlementAmount(result.totalMonthlyIncentiveAmount, hasBasis), locale)}
+              />
+              <SummaryCard
+                accent="peach"
+                label={t("settlements.opsMonthly.summary.employeeTotal")}
+                note={t("settlements.opsMonthly.summary.undistributed", {
+                  amount: amountLabel(settlementAmount(result.shares.undistributedAmount, hasBasis), locale)
+                })}
+                {...summaryAmount(
+                  settlementAmount(
+                    result.rows.reduce((sum, row) => sum + row.payoutAmount, 0),
+                    hasBasis
+                  ),
+                  locale
+                )}
+              />
+            </SummaryCards>
+            {result.warningMessage ? (
+              <SettlementWarningLine detail={opsMonthlyWarningText(locale, result.warningMessage)} label={t("settlements.opsMonthly.warning.title")} />
+            ) : null}
+            {warningTotal(result) > 0 ? (
+              <SettlementWarningLine
+                detail={t("settlements.opsMonthly.summary.warningBreakdown", {
+                  notCompleted: result.warningCounts.notCompleted,
+                  policyMissing: result.warningCounts.coursePolicyMissing,
+                  rateMissing: result.warningCounts.therapistRateMissing,
+                  secondRequired: result.warningCounts.secondTherapistRequired
+                })}
+                label={t("settlements.warning.excluded", { count: warningTotal(result) })}
+              />
+            ) : null}
+          </div>
+          <ShareSummary locale={locale} result={result} t={t} />
+          {result.rows.length > 0 ? (
+            <OpsMonthlyView initialEmployeeId={params[EMPLOYEE_PARAM] ?? null} key={selectedMonth.id} result={result} />
+          ) : (
+            <SettlementEmptyNotice
+              description={t("settlements.opsMonthly.employeeTable.empty.description")}
+              locale={locale}
+              title={t("settlements.opsMonthly.employeeTable.empty.title")}
+            />
+          )}
+          <section aria-label={t("settlements.opsMonthly.callEvidence.title")} className="grid gap-3">
+            <div>
+              <h2 className="text-[0.9375rem] font-semibold text-foreground">{t("settlements.opsMonthly.callEvidence.title")}</h2>
+              {result.callEvidence.length > 0 ? (
+                <p className="mt-1 text-sm text-muted">
+                  {t("settlements.opsMonthly.callEvidence.description", { count: result.callEvidence.length })}
+                </p>
+              ) : null}
+            </div>
+            {visibleEvidence.length > 0 ? (
+              <EvidenceCallList label={t("settlements.opsMonthly.callEvidence.title")}>
+                {visibleEvidence.map((evidence) => (
+                  <li key={evidence.serviceCallId}>
+                    <EvidenceCallItem
+                      amount={`${evidence.opsCallCredit}${t("settlements.callSuffix")}`}
+                      call={evidence.call}
+                      canOpenLedger={canOpenLedger}
+                      locale={locale}
+                      serviceDate={evidence.serviceDate}
+                    />
+                  </li>
+                ))}
+              </EvidenceCallList>
+            ) : (
+              <p className="text-sm text-muted">{t("settlements.opsMonthly.callEvidence.empty.title")}</p>
+            )}
+          </section>
+        </div>
       ) : null}
     </div>
   );

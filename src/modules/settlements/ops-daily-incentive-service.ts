@@ -6,6 +6,7 @@ import {
   listServiceCallsForDate
 } from "@/modules/calls/service-call-service";
 import { listOpsAttendanceForDate, type OpsAttendanceDto } from "@/modules/settlements/ops-attendance-service";
+import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/modules/settlements/settlement-evidence-call";
 
 type OperatingMonthRecord = {
   id: string;
@@ -59,6 +60,8 @@ export type OpsDailyCallEvidenceDto = {
   serviceCallId: string;
   serviceDate: string;
   opsCallCredit: number;
+  /** 같은 조회에서 읽은 콜 행이 없으면(그 사이 바뀐 경우) null이다. */
+  call: SettlementEvidenceCallDto | null;
 };
 
 export type OpsDailyIncentiveResultDto = {
@@ -226,6 +229,7 @@ export async function listOpsDailyIncentives(input: {
   ]);
 
   const dailyOpsCallCredit = completedCalculations.reduce((sum, calculation) => sum + calculation.opsCallCredit, 0);
+  const callRowsById = new Map(callRows.map((row) => [row.id, row]));
   const ruleSelection = selectRule({ rules, monthKey: operatingMonth.monthKey, dailyOpsCallCredit });
   const rows = attendance.rows.map((row): OpsDailyIncentiveRowDto => {
     const payoutAmount = row.isPayoutEligible && ruleSelection.ruleStatus === "applied" ? ruleSelection.personalIncentiveAmount : 0;
@@ -261,10 +265,14 @@ export async function listOpsDailyIncentives(input: {
     distributedAmount: rows.reduce((sum, row) => sum + row.payoutAmount, 0),
     warningCounts: warningCounts(callRows),
     rows,
-    callEvidence: completedCalculations.map((calculation) => ({
-      serviceCallId: calculation.serviceCallId,
-      serviceDate: calculation.serviceDate,
-      opsCallCredit: calculation.opsCallCredit
-    }))
+    callEvidence: completedCalculations.map((calculation) => {
+      const callRow = callRowsById.get(calculation.serviceCallId);
+      return {
+        serviceCallId: calculation.serviceCallId,
+        serviceDate: calculation.serviceDate,
+        opsCallCredit: calculation.opsCallCredit,
+        call: callRow ? settlementEvidenceCall(callRow) : null
+      };
+    })
   };
 }

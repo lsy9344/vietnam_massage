@@ -6,6 +6,7 @@ import {
   type ServiceCallRowDto
 } from "@/modules/calls/service-call-service";
 import { assertOperatingMonthPayoutWritable } from "@/modules/closing/month-lock-guard";
+import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/modules/settlements/settlement-evidence-call";
 
 const courseCodes = ["A", "B", "C", "D", "E"] as const;
 const assignmentRoles = ["THERAPIST_1", "THERAPIST_2"] as const;
@@ -115,6 +116,7 @@ export type TherapistAssignmentEvidenceDto = {
   employeeId: string;
   commissionAmount: number;
   rateStatus: TherapistRateStatus;
+  call: SettlementEvidenceCallDto;
 };
 
 export type TherapistDailySettlementPaymentActorDto = {
@@ -463,7 +465,8 @@ function evidenceForRole(input: {
       role: input.role,
       employeeId: input.assignee.id,
       commissionAmount: 0,
-      rateStatus: "missing_policy"
+      rateStatus: "missing_policy",
+      call: settlementEvidenceCall(input.row)
     };
   }
 
@@ -481,7 +484,8 @@ function evidenceForRole(input: {
       role: input.role,
       employeeId: input.assignee.id,
       commissionAmount: 0,
-      rateStatus: "missing_policy"
+      rateStatus: "missing_policy",
+      call: settlementEvidenceCall(input.row)
     };
   }
 
@@ -493,7 +497,8 @@ function evidenceForRole(input: {
     role: input.role,
     employeeId: input.assignee.id,
     commissionAmount,
-    rateStatus: commissionAmount === 0 ? "zero_policy" : "applied"
+    rateStatus: commissionAmount === 0 ? "zero_policy" : "applied",
+    call: settlementEvidenceCall(input.row)
   };
 }
 

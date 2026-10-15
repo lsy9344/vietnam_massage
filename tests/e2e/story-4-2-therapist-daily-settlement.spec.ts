@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { employeeRow, openEmployeePanel } from "./support/settlement";
 
 
 type SeededData = {
@@ -245,35 +246,36 @@ test.describe("Story 4.2 therapist daily settlement", () => {
     await expect(page.getByRole("heading", { name: "마사지사 일일정산" })).toBeVisible({ timeout: 45000 });
     await expect(page.getByLabel("운영월")).toHaveValue(seededData.operatingMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2034-02-12");
-    const therapist1Summary = page.getByRole("row").filter({ hasText: "E2E42 마사지사1" }).filter({ hasText: "1,600,000 VND" }).first();
-    const therapist2Summary = page.getByRole("row").filter({ hasText: "E2E42 마사지사2" }).filter({ hasText: "900,000 VND" }).first();
-    const therapist3Summary = page.getByRole("row").filter({ hasText: "E2E42 마사지사3" }).first();
-    await expect(therapist1Summary).toBeVisible();
-    await expect(therapist2Summary).toBeVisible();
-    await expect(therapist3Summary).toBeVisible();
-    await expect(page.getByText("정책 warning / 제외 콜")).toBeVisible();
-    await expect(page.getByText("1건 / 1건")).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "A 수량/금액" })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "B 수량/금액" })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "C 수량/금액" })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "D 수량/금액" })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "E 수량/금액" })).toBeVisible();
-
+    // 직원 비교 표: 담당 콜 수와 당일정산. 수당 정책이 없는 마사지사3은 0원이 아니라 근거 없음이다(티켓 05).
+    const therapist1Summary = employeeRow(page, "E2E42 마사지사1");
+    await expect(therapist1Summary).toContainText("1,600,000 VND");
     await expect(therapist1Summary).toContainText("2건");
-    await expect(therapist1Summary).toContainText("700,000 VND");
-    await expect(therapist1Summary).toContainText("900,000 VND");
+    await expect(employeeRow(page, "E2E42 마사지사2")).toContainText("900,000 VND");
+    await expect(employeeRow(page, "E2E42 마사지사3")).toContainText("근거 없음");
+    await expect(page.getByText("정책 warning / 제외 콜 1건 / 1건")).toBeVisible();
 
-    await expect(page.getByRole("heading", { name: "콜별 산출 근거" })).toBeVisible();
-    await expect(page.getByRole("row").filter({ hasText: "E2E42 마사지사2" }).filter({ hasText: "마사지사2" }).filter({ hasText: "0원 정책" }).first()).toBeVisible();
-    await expect(page.getByRole("row").filter({ hasText: "정책 적용" }).first()).toBeVisible();
-    await expect(page.getByRole("row").filter({ hasText: "E2E42 마사지사3" }).filter({ hasText: "정책 없음" }).first()).toBeVisible();
+    // 고른 직원의 근거(코스별 수당, 콜별 산출 근거와 정책 상태)는 직원 패널에 따로 보인다.
+    const therapist1Panel = await openEmployeePanel(page, "E2E42 마사지사1");
+    await expect(therapist1Panel.getByText("A 수량/금액")).toBeVisible();
+    await expect(therapist1Panel.getByText("D 수량/금액")).toBeVisible();
+    await expect(therapist1Panel).toContainText("700,000 VND");
+    await expect(therapist1Panel).toContainText("900,000 VND");
+    await expect(therapist1Panel.getByRole("heading", { name: "콜별 산출 근거" })).toBeVisible();
+    await expect(therapist1Panel.getByRole("listitem").filter({ hasText: "정책 적용" }).first()).toBeVisible();
+
+    const therapist2Panel = await openEmployeePanel(page, "E2E42 마사지사2");
+    await expect(therapist2Panel.getByRole("listitem").filter({ hasText: "마사지사2" }).filter({ hasText: "0원 정책" }).first()).toBeVisible();
+
+    const therapist3Panel = await openEmployeePanel(page, "E2E42 마사지사3");
+    await expect(therapist3Panel.getByRole("listitem").filter({ hasText: "정책 없음" }).first()).toBeVisible();
   });
 
   test("settlement manager can mark payment and review actor history", async ({ page }) => {
     await login(page, "story42_settlement", "Story42!settlement");
     await page.goto(`/settlements?operatingMonthId=${seededData.operatingMonthId}&serviceDate=2034-02-12`);
 
-    const therapist1Summary = page.getByRole("row").filter({ hasText: "E2E42 마사지사1" }).first();
+    // 지급완료는 직원 패널에서 한다. 표의 행에는 지급 상태만 보인다(티켓 05).
+    const therapist1Summary = await openEmployeePanel(page, "E2E42 마사지사1");
     await therapist1Summary.getByRole("button", { name: "지급완료" }).click();
 
     await expect(therapist1Summary).toContainText("지급완료");
@@ -288,6 +290,7 @@ test.describe("Story 4.2 therapist daily settlement", () => {
     await expect(therapist1Summary).toContainText("미지급");
     await expect(therapist1Summary).toContainText("변경 이력 2건");
     await expect(therapist1Summary).toContainText("지급완료 -> 미지급");
+    await expect(employeeRow(page, "E2E42 마사지사1")).toContainText("미지급");
   });
 
   test("empty date shows explicit empty state", async ({ page }) => {

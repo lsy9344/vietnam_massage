@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { employeeRow, openEmployeePanel } from "./support/settlement";
 
 
 type SeededData = {
@@ -302,19 +303,21 @@ test.describe("Story 4.4 earcare daily settlement", () => {
     await expect(page.getByRole("heading", { name: "귀케어 일일정산", level: 1 })).toBeVisible();
     await expect(page.getByLabel("운영월")).toHaveValue(seededData.writableOperatingMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2034-05-12");
-    // 같은 문구가 요약 타일과 근거 표 양쪽에 나오므로 요약 region으로 좁힌다.
-    const summary = page.getByRole("region", { name: "귀케어 일일정산 요약" });
+    // 같은 문구가 요약 카드와 직원 패널 양쪽에 나오므로 요약 카드 목록으로 좁힌다.
+    const summary = page.getByLabel("귀케어 일일정산 요약");
     await expect(summary.getByText("방문완료 풀")).toBeVisible();
     await expect(summary.getByText("500,001 VND").first()).toBeVisible();
     await expect(summary.getByText("정상 근무자")).toBeVisible();
     await expect(summary.getByText("2명")).toBeVisible();
     await expect(summary.getByText("잔여 배분 1 VND")).toBeVisible();
-    await expect(page.getByText("귀케어사별 지급액").first()).toBeVisible();
-    await expect(page.getByRole("row").filter({ hasText: "E2E44 귀케어1" }).getByText("250,001 VND").first()).toBeVisible();
-    await expect(page.getByRole("row").filter({ hasText: "E2E44 귀케어2" }).getByText("250,000 VND").first()).toBeVisible();
-    await expect(page.getByRole("row").filter({ hasText: "E2E44 귀케어3" }).getByText("제외: 휴무").first()).toBeVisible();
-    await expect(page.getByRole("row").filter({ hasText: "E2E44 귀케어1" }).getByText("잔여 1 VND 배분").first()).toBeVisible();
-    await expect(page.getByText("풀 산출 근거").first()).toBeVisible();
+    await expect(page.getByRole("table", { name: "귀케어사별 지급액" })).toBeVisible();
+    await expect(employeeRow(page, "E2E44 귀케어1")).toContainText("250,001 VND");
+    await expect(employeeRow(page, "E2E44 귀케어2")).toContainText("250,000 VND");
+    await expect(employeeRow(page, "E2E44 귀케어3")).toContainText("제외: 휴무");
+    // 산출 근거와 풀을 만든 콜은 고른 직원의 패널에 보인다(티켓 05).
+    const earcare1Panel = await openEmployeePanel(page, "E2E44 귀케어1");
+    await expect(earcare1Panel.getByText("잔여 1 VND 배분", { exact: false })).toBeVisible();
+    await expect(earcare1Panel.getByRole("heading", { name: "풀 산출 근거" })).toBeVisible();
     await expect(page.getByText("비완료 1, 정책없음 0, 수당없음 1, D코스누락 1").first()).toBeVisible();
     await expect(page.getByRole("button", { name: /지급/ })).toHaveCount(0);
   });
@@ -323,7 +326,7 @@ test.describe("Story 4.4 earcare daily settlement", () => {
     await login(page, "story44_settlement", "Story44!settlement");
     await page.goto(`/settlements/earcare?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2034-05-12`);
 
-    const earcare2Row = page.getByRole("row").filter({ has: page.getByLabel("E2E44 귀케어2 근무상태") });
+    const earcare2Row = await openEmployeePanel(page, "E2E44 귀케어2");
     await earcare2Row.getByLabel("E2E44 귀케어2 근무상태").selectOption("DAY_OFF");
     await earcare2Row.getByRole("button", { name: "저장" }).click();
     await expect(earcare2Row.getByText("저장됨")).toBeVisible();
@@ -331,19 +334,19 @@ test.describe("Story 4.4 earcare daily settlement", () => {
     await page.goto(`/settlements/earcare?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2034-05-12`);
     await expect(page.getByText("정상 근무자").first()).toBeVisible();
     await expect(page.getByText("1명").first()).toBeVisible();
-    await expect(page.getByRole("row").filter({ hasText: "E2E44 귀케어1" }).first().getByText("500,001 VND").first()).toBeVisible();
-    await expect(page.getByRole("row").filter({ hasText: "E2E44 귀케어2" }).first().getByText("제외: 휴무").first()).toBeVisible();
+    await expect(employeeRow(page, "E2E44 귀케어1")).toContainText("500,001 VND");
+    await expect(employeeRow(page, "E2E44 귀케어2")).toContainText("제외: 휴무");
   });
 
   test("zero normal earcare workers keeps the pool undistributed", async ({ page }) => {
     await login(page, "story44_settlement", "Story44!settlement");
     await page.goto(`/settlements/earcare?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2034-05-13`);
 
-    // "정상 근무자 0명"은 한 문장이 아니라 요약 타일의 라벨/값으로 나뉘어 있다.
-    const summary = page.getByRole("region", { name: "귀케어 일일정산 요약" });
+    // "정상 근무자 0명"은 한 문장이 아니라 요약 카드의 라벨/값으로 나뉘어 있다.
+    const summary = page.getByLabel("귀케어 일일정산 요약");
     await expect(summary.getByText("정상 근무자")).toBeVisible();
     await expect(summary.getByText("0명")).toBeVisible();
-    await expect(summary.getByText("500,001 VND /")).toBeVisible();
+    await expect(summary.locator("div", { has: page.getByText("미분배", { exact: true }) })).toContainText("500,001 VND");
   });
 
   test("locked operating month still shows read-only payout calculation", async ({ page }) => {
@@ -351,10 +354,11 @@ test.describe("Story 4.4 earcare daily settlement", () => {
     await page.goto(`/settlements/earcare?operatingMonthId=${seededData.lockedOperatingMonthId}&attendanceDate=2034-06-12`);
 
     await expect(page.getByText("잠긴 운영월입니다").first()).toBeVisible();
-    const lockedSummary = page.getByRole("region", { name: "귀케어 일일정산 요약" });
+    const lockedSummary = page.getByLabel("귀케어 일일정산 요약");
     await expect(lockedSummary.getByText("방문완료 풀")).toBeVisible();
     await expect(lockedSummary.getByText("300,001 VND").first()).toBeVisible();
-    await expect(page.getByLabel("E2E44 귀케어1 근무상태")).toBeDisabled();
+    const lockedPanel = await openEmployeePanel(page, "E2E44 귀케어1");
+    await expect(lockedPanel.getByLabel("E2E44 귀케어1 근무상태")).toBeDisabled();
   });
 
   test("counter direct access redirects away from earcare settlements", async ({ page }) => {

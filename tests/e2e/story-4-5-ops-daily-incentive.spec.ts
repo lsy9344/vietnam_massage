@@ -1,7 +1,15 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { employeeRow, openEmployeePanel } from "./support/settlement";
+
+const summaryLabel = "운영팀 일일 인센 요약";
+
+/** 요약 카드 하나(라벨과 값, 설명). 라벨과 값은 서로 다른 칸이라 카드로 찾아 값을 확인한다. */
+function summaryCard(page: Page, label: string) {
+  return page.getByLabel(summaryLabel).locator("div", { has: page.getByText(label, { exact: true }) });
+}
 
 
 type SeededData = {
@@ -314,21 +322,21 @@ test.describe("Story 4.5 operations daily incentive", () => {
     await expect(page.getByRole("heading", { name: "운영팀 근무/일일인센" })).toBeVisible();
     await expect(page.getByLabel("운영월")).toHaveValue(seededData.writableOperatingMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2035-05-12");
-    // 같은 문구가 요약 타일과 근거 표 양쪽에 나오므로 요약 region으로 좁힌다.
-    const summary = page.getByRole("region", { name: "운영팀 일일 인센 요약" });
+    // 같은 문구가 요약 카드와 직원 패널 양쪽에 나오므로 요약 카드 목록으로 좁힌다.
+    const summary = page.getByLabel(summaryLabel);
     await expect(summary.getByText("일 총콜")).toBeVisible();
     await expect(summary.getByText("40콜").first()).toBeVisible();
     await expect(summary.getByText("40콜 이상")).toBeVisible();
-    await expect(summary.getByText("개인별 100,000 VND")).toBeVisible();
-    await expect(summary.getByText("지급 합계 300,000 VND")).toBeVisible();
-    await expect(page.getByText("운영팀 직원별 일일 인센").first()).toBeVisible();
-    await expect(page.getByLabel("E2E45 팀장 근무상태").locator("option")).toContainText(["정상", "휴무", "지각", "조퇴", "결근"]);
-    // 지급액/제외 사유는 근무상태 입력 표가 아니라 "운영팀 직원별 일일 인센" 표에 있다.
-    const payoutTable = page.locator("section").filter({ has: page.getByRole("heading", { name: "운영팀 직원별 일일 인센" }) });
-    await expect(payoutTable.getByRole("row").filter({ hasText: "E2E45 팀장" }).getByText("100,000 VND")).toBeVisible();
-    await expect(payoutTable.getByRole("row").filter({ hasText: "E2E45 카운터2" }).getByText("제외: 휴무").first()).toBeVisible();
-    await expect(payoutTable.getByRole("row").filter({ hasText: "E2E45 웨이터1" }).getByText("제외: 지각").first()).toBeVisible();
-    await expect(page.getByText("일 총콜 산출 근거").first()).toBeVisible();
+    await expect(summaryCard(page, "개인별 인센")).toContainText("100,000 VND");
+    await expect(summaryCard(page, "지급 합계")).toContainText("300,000 VND");
+    // 지급액과 제외 사유는 직원 비교 표에, 근무상태 정정과 근거 콜은 직원 패널에 있다(티켓 05).
+    await expect(page.getByRole("table", { name: "운영팀 직원별 일일 인센" })).toBeVisible();
+    await expect(employeeRow(page, "E2E45 팀장")).toContainText("100,000 VND");
+    await expect(employeeRow(page, "E2E45 카운터2")).toContainText("제외: 휴무");
+    await expect(employeeRow(page, "E2E45 웨이터1")).toContainText("제외: 지각");
+    const leadPanel = await openEmployeePanel(page, "E2E45 팀장");
+    await expect(leadPanel.getByLabel("E2E45 팀장 근무상태").locator("option")).toContainText(["정상", "휴무", "지각", "조퇴", "결근"]);
+    await expect(leadPanel.getByRole("heading", { name: "일 총콜 산출 근거" })).toBeVisible();
     await expect(page.getByText("비완료 1, 정책없음 0, 수당없음 0, D코스누락 0").first()).toBeVisible();
     await expect(page.getByRole("button", { name: /지급/ })).toHaveCount(0);
   });
@@ -337,38 +345,38 @@ test.describe("Story 4.5 operations daily incentive", () => {
     await login(page, "story45_settlement", "Story45!settlement");
     await page.goto(`/settlements/operations?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2035-05-12`);
 
-    const counter1Row = page.getByRole("row").filter({ has: page.getByLabel("E2E45 카운터1 근무상태") });
+    const counter1Row = await openEmployeePanel(page, "E2E45 카운터1");
     await counter1Row.getByLabel("E2E45 카운터1 근무상태").selectOption("DAY_OFF");
     await counter1Row.getByRole("button", { name: "저장" }).click();
     await expect(counter1Row.getByText("저장됨")).toBeVisible();
 
-    const updatedSummary = page.getByRole("region", { name: "운영팀 일일 인센 요약" });
-    const payoutTableAfterChange = page.locator("section").filter({ has: page.getByRole("heading", { name: "운영팀 직원별 일일 인센" }) });
+    const updatedSummary = page.getByLabel(summaryLabel);
     await expect(updatedSummary.getByText("정상 지급 대상")).toBeVisible();
     await expect(updatedSummary.getByText("2명")).toBeVisible();
-    await expect(updatedSummary.getByText("지급 합계 200,000 VND")).toBeVisible();
-    await expect(payoutTableAfterChange.getByRole("row").filter({ hasText: "E2E45 카운터1" }).getByText("제외: 휴무").first()).toBeVisible();
+    await expect(summaryCard(page, "지급 합계")).toContainText("200,000 VND");
+    await expect(employeeRow(page, "E2E45 카운터1")).toContainText("제외: 휴무");
   });
 
   test("shows 30 미만, 30콜, and 50콜 threshold bands", async ({ page }) => {
     await login(page, "story45_settlement", "Story45!settlement");
-    const bandSummary = page.getByRole("region", { name: "운영팀 일일 인센 요약" });
+    const bandSummary = page.getByLabel(summaryLabel);
     await page.goto(`/settlements/operations?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2035-05-13`);
     await expect(bandSummary.getByText("20콜").first()).toBeVisible();
     await expect(bandSummary.getByText("30콜 미만")).toBeVisible();
-    await expect(bandSummary.getByText("지급 합계 0 VND")).toBeVisible();
+    // 기준 미달의 0은 정책이 정한 결과라 근거 없음이 아니라 0이다.
+    await expect(summaryCard(page, "지급 합계")).toContainText("0 VND");
 
     await page.goto(`/settlements/operations?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2035-05-11`);
     await expect(bandSummary.getByText("30콜").first()).toBeVisible();
     await expect(bandSummary.getByText("30콜 이상")).toBeVisible();
-    await expect(bandSummary.getByText("개인별 50,000 VND")).toBeVisible();
-    await expect(bandSummary.getByText("지급 합계 150,000 VND")).toBeVisible();
+    await expect(summaryCard(page, "개인별 인센")).toContainText("50,000 VND");
+    await expect(summaryCard(page, "지급 합계")).toContainText("150,000 VND");
 
     await page.goto(`/settlements/operations?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2035-05-14`);
     await expect(bandSummary.getByText("50콜").first()).toBeVisible();
     await expect(bandSummary.getByText("50콜 이상")).toBeVisible();
-    await expect(bandSummary.getByText("개인별 200,000 VND")).toBeVisible();
-    await expect(bandSummary.getByText("지급 합계 600,000 VND")).toBeVisible();
+    await expect(summaryCard(page, "개인별 인센")).toContainText("200,000 VND");
+    await expect(summaryCard(page, "지급 합계")).toContainText("600,000 VND");
   });
 
   test("locked operating month remains readable and disables attendance save", async ({ page }) => {
@@ -376,21 +384,23 @@ test.describe("Story 4.5 operations daily incentive", () => {
     await page.goto(`/settlements/operations?operatingMonthId=${seededData.lockedOperatingMonthId}&attendanceDate=2035-06-12`);
 
     await expect(page.getByText("잠긴 운영월입니다").first()).toBeVisible();
-    await expect(page.getByRole("region", { name: "운영팀 일일 인센 요약" }).getByText("50콜").first()).toBeVisible();
-    await expect(page.getByLabel("E2E45 팀장 근무상태")).toBeDisabled();
+    await expect(page.getByLabel(summaryLabel).getByText("50콜").first()).toBeVisible();
+    const lockedPanel = await openEmployeePanel(page, "E2E45 팀장");
+    await expect(lockedPanel.getByLabel("E2E45 팀장 근무상태")).toBeDisabled();
   });
 
-  test("missing daily incentive policy is shown as an explicit warning with zero payout", async ({ page }) => {
+  test("missing daily incentive policy is shown as an explicit warning with no calculation basis instead of zero payout", async ({ page }) => {
     await login(page, "story45_settlement", "Story45!settlement");
     await page.goto(`/settlements/operations?operatingMonthId=${seededData.missingPolicyOperatingMonthId}&attendanceDate=1999-01-12`);
 
-    const missingPolicySummary = page.getByRole("region", { name: "운영팀 일일 인센 요약" });
+    const missingPolicySummary = page.getByLabel(summaryLabel);
     await expect(missingPolicySummary.getByText("정책 없음").first()).toBeVisible();
     await expect(page.getByText("적용월에 활성 운영팀 일일 인센 정책이 없습니다.").first()).toBeVisible();
-    await expect(missingPolicySummary.getByText("개인별 0 VND")).toBeVisible();
-    await expect(missingPolicySummary.getByText("지급 합계 0 VND")).toBeVisible();
-    const missingPolicyPayoutTable = page.locator("section").filter({ has: page.getByRole("heading", { name: "운영팀 직원별 일일 인센" }) });
-    await expect(missingPolicyPayoutTable.getByRole("row").filter({ hasText: "E2E45 팀장" }).getByText("정책 없음").first()).toBeVisible();
+    // 계산 근거가 없으면 0 대신 근거 없음이다(티켓 05).
+    await expect(summaryCard(page, "개인별 인센")).toContainText("계산 근거 없음");
+    await expect(summaryCard(page, "지급 합계")).toContainText("계산 근거 없음");
+    await expect(employeeRow(page, "E2E45 팀장")).toContainText("정책 없음");
+    await expect(employeeRow(page, "E2E45 팀장")).toContainText("근거 없음");
   });
 
   test("counter direct access redirects away from operations settlements", async ({ page }) => {

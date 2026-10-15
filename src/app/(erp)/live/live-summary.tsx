@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { DetailRow } from "@/components/ui/detail-row";
 import { StatusIndicator, type StatusTone } from "@/components/ui/status-indicator";
 import { SummaryCard, SummaryCards } from "@/components/ui/summary-card";
 import { createTranslator } from "@/lib/i18n";
@@ -14,15 +15,6 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
       <h2 className="text-[0.9375rem] font-semibold text-foreground">{title}</h2>
       {children}
     </section>
-  );
-}
-
-function Row({ label, value }: { label: ReactNode; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4 border-b border-border py-2 text-sm last:border-b-0">
-      <dt className="flex min-h-7 items-center text-muted">{label}</dt>
-      <dd className="text-right font-semibold text-foreground">{value}</dd>
-    </div>
   );
 }
 
@@ -89,7 +81,7 @@ export function LiveSummaryDetails({ summary, locale }: { summary: DailyCallLedg
           {statusRows.map((row) => {
             const label = t(row.labelKey);
             return (
-              <Row
+              <DetailRow
                 key={row.labelKey}
                 label={row.tone ? <StatusIndicator label={label} tone={row.tone} /> : label}
                 value={count(row.value)}
@@ -101,16 +93,16 @@ export function LiveSummaryDetails({ summary, locale }: { summary: DailyCallLedg
       <Card title={t("live.payment.aria")}>
         {/* REQ-004: 카운터 직원이 돈통 현금 흐름을 한눈에 보도록 결제수단별 집계를 첫화면에도 노출한다. */}
         <dl className="mt-2">
-          <Row label={codeLabel(locale, "PAYMENT_METHOD", "CASH", true)} value={vnd(summary.paymentMethodTotals.cash)} />
-          <Row label={codeLabel(locale, "PAYMENT_METHOD", "CARD", true)} value={vnd(summary.paymentMethodTotals.card)} />
-          <Row label={codeLabel(locale, "PAYMENT_METHOD", "BANK_TRANSFER", true)} value={vnd(summary.paymentMethodTotals.bank)} />
-          <Row label={codeLabel(locale, "PAYMENT_METHOD", "OTHER", true)} value={vnd(summary.paymentMethodTotals.other)} />
+          <DetailRow label={codeLabel(locale, "PAYMENT_METHOD", "CASH", true)} value={vnd(summary.paymentMethodTotals.cash)} />
+          <DetailRow label={codeLabel(locale, "PAYMENT_METHOD", "CARD", true)} value={vnd(summary.paymentMethodTotals.card)} />
+          <DetailRow label={codeLabel(locale, "PAYMENT_METHOD", "BANK_TRANSFER", true)} value={vnd(summary.paymentMethodTotals.bank)} />
+          <DetailRow label={codeLabel(locale, "PAYMENT_METHOD", "OTHER", true)} value={vnd(summary.paymentMethodTotals.other)} />
         </dl>
       </Card>
       <Card title={t("live.kpi.courseCompleted")}>
         <dl className="mt-2">
           {summary.courseSummaries.map((course) => (
-            <Row key={course.courseCode} label={course.courseCode} value={count(course.completedCount)} />
+            <DetailRow key={course.courseCode} label={course.courseCode} value={count(course.completedCount)} />
           ))}
         </dl>
       </Card>

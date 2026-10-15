@@ -421,6 +421,31 @@ describe("listTherapistDailySettlements", () => {
 	    );
   });
 
+  it("근거 콜마다 원장 링크나 그 자리 요약에 쓸 콜 요약(날짜, 예약시각, 코스, 마사지사, 상태)을 함께 반환한다", async () => {
+    const result = await listTherapistDailySettlements({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient: createSettlementPrisma()
+    });
+
+    const therapist = result.settlements.find((row) => row.employeeId === therapist2.id);
+    assert.ok(therapist);
+    const evidence = therapist.assignmentEvidence.find((item) => item.serviceCallId === "call-a");
+    assert.deepEqual(evidence?.call, {
+      serviceCallId: "call-a",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      courseCode: "A",
+      therapistNames: ["마사지사1", "마사지사2"],
+      status: "VISIT_COMPLETE"
+    });
+    const missingPolicy = result.settlements
+      .find((row) => row.employeeId === therapist1.id)
+      ?.assignmentEvidence.find((item) => item.serviceCallId === "call-no-policy");
+    assert.equal(missingPolicy?.call.serviceCallId, "call-no-policy");
+  });
+
   it("비완료와 invalid D row는 제외하고 missing rate는 0원 warning 담당 건으로 남긴다", async () => {
     const result = await listTherapistDailySettlements({
       operatingMonthId: "month-2026-06",

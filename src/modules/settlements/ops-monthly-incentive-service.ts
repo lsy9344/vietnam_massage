@@ -4,6 +4,7 @@ import {
   completedServiceCallCalculationsFromRows,
   listServiceCallsForOperatingMonth
 } from "@/modules/calls/service-call-service";
+import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/modules/settlements/settlement-evidence-call";
 
 type OperatingMonthRecord = {
   id: string;
@@ -85,6 +86,7 @@ export type OpsMonthlyCallEvidenceDto = {
   serviceCallId: string;
   serviceDate: string;
   opsCallCredit: number;
+  call: SettlementEvidenceCallDto | null;
 };
 
 export type OpsMonthlyIncentiveResultDto = {
@@ -389,6 +391,7 @@ export async function listOpsMonthlyIncentivePreview(input: {
   ]);
 
   const completedCalculations = completedServiceCallCalculationsFromRows(callRows);
+  const callRowsById = new Map(callRows.map((row) => [row.id, row]));
   const monthlyOpsCallCredit = completedCalculations.reduce((sum, calculation) => sum + calculation.opsCallCredit, 0);
   const ruleSelection = selectRule({ rules, monthKey: operatingMonth.monthKey, monthlyOpsCallCredit });
   const distribution = buildDistribution({
@@ -414,10 +417,14 @@ export async function listOpsMonthlyIncentivePreview(input: {
     shares: distribution.shares,
     rows: distribution.rows,
     warningCounts: warningCounts(callRows),
-    callEvidence: completedCalculations.map((calculation) => ({
-      serviceCallId: calculation.serviceCallId,
-      serviceDate: calculation.serviceDate,
-      opsCallCredit: calculation.opsCallCredit
-    }))
+    callEvidence: completedCalculations.map((calculation) => {
+      const callRow = callRowsById.get(calculation.serviceCallId);
+      return {
+        serviceCallId: calculation.serviceCallId,
+        serviceDate: calculation.serviceDate,
+        opsCallCredit: calculation.opsCallCredit,
+        call: callRow ? settlementEvidenceCall(callRow) : null
+      };
+    })
   };
 }

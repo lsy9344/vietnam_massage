@@ -140,8 +140,10 @@ test.describe("i18n 업무 화면 베트남어(vi)", () => {
     await loginVi(page);
     await page.goto(`/settlements/operations/monthly?operatingMonthId=${seeded.monthId}`);
     await expect(page.locator("html")).toHaveAttribute("lang", "vi");
-    // 운영팀 직원 row의 산출근거가 vi로 번역된다(서비스 한국어 "월 인센 지급 조건 미충족" → vi).
-    await expect(page.getByText("Chưa đạt điều kiện chi thưởng tháng").first()).toBeVisible();
+    // 운영팀 직원의 산출근거가 vi로 번역된다(서비스 한국어 "월 인센 지급 조건 미충족" → vi).
+    // 티켓 05: 산출근거는 직원 패널에 있다. 첫 직원을 골라 패널을 연다.
+    await page.locator("tbody tr").first().getByRole("button").first().click();
+    await expect(page.getByRole("complementary").getByText("Chưa đạt điều kiện chi thưởng tháng")).toBeVisible();
     // 팀 역할 라벨도 vi.
     await expect(page.getByText("Trưởng nhóm").first()).toBeVisible();
     // 한국어 산출근거가 row에 남아 있지 않다.

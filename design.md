@@ -220,11 +220,11 @@ UI를 만들거나 고치기 전에 이 문서를 읽는다. 화면에 새 모�
 
 ### 6.9 날짜 캡슐
 
-카드와 목록 행 안의 예약시각·방문일은 캡슐로 감싼다: `inline-flex h-7 items-center rounded-full border border-border bg-surface-float px-2.5 text-xs font-semibold`. 표 셀 안에서는 캡슐 없이 글자로 둔다.
+카드와 목록 행 안의 예약시각·방문일은 캡슐로 감싼다(`DateCapsule`, `src/components/ui/date-capsule.tsx`): `inline-flex h-7 items-center rounded-full border border-border bg-surface-float px-2.5 text-xs font-semibold`. 표 셀 안에서는 캡슐 없이 글자로 둔다.
 
 ### 6.10 목록 행 카드
 
-하나를 골라 들어가는 짧은 목록(예: 고객 검색 후보)에 쓴다. `min-h-14 rounded-md bg-surface px-4` 행을 `gap-2`로 쌓는다. 행 전체가 링크나 버튼이면 포커스 링을 갖는다. 열을 비교해야 하면 표로 바꾼다.
+하나를 골라 들어가는 짧은 목록(예: 고객 검색 후보)에 쓴다. `min-h-14 rounded-md bg-surface px-4` 행을 `gap-2`로 쌓는다. 행 전체가 링크나 버튼이면 포커스 링을 갖는다. 열을 비교해야 하면 표로 바꾼다. 패널처럼 바탕이 같은 `--surface`인 곳에 놓으면 `border border-border`를 더해 나눈다(예: 정산 직원 패널의 근거 콜).
 
 ### 6.11 패널, 서랍, 다이얼로그 — `src/components/ui/panel.tsx`, `alert-dialog.tsx`, `confirm-dialog.tsx`
 

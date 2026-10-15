@@ -298,6 +298,23 @@ describe("listOpsMonthlyIncentivePreview", () => {
     );
   });
 
+  it("attaches the call summary (date, start time, course, therapists, status) to each call evidence", async () => {
+    const result = await listOpsMonthlyIncentivePreview({
+      operatingMonthId: "month-2026-06",
+      prismaClient: createMemoryPrisma()
+    });
+
+    assert.deepEqual(result.callEvidence[1]?.call, {
+      serviceCallId: "call-b",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-15",
+      startTime: "11:00",
+      courseCode: "B",
+      therapistNames: ["마사지사1"],
+      status: "방문완료"
+    });
+  });
+
   it("selects the highest satisfied seed threshold through the 1500-call monthly incentive band", async () => {
     const result = await listOpsMonthlyIncentivePreview({
       operatingMonthId: "month-2026-06",

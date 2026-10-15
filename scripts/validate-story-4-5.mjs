@@ -26,7 +26,7 @@ function readJson(path) {
   "src/modules/settlements/ops-daily-incentive-service.test.ts",
   "src/app/(erp)/settlements/operations/page.tsx",
   "src/app/(erp)/settlements/operations/actions.ts",
-  "src/app/(erp)/settlements/operations/ops-attendance-table.tsx",
+  "src/app/(erp)/settlements/operations/ops-attendance-form.tsx",
   "tests/e2e/story-4-5-ops-daily-incentive.spec.ts",
   "src/modules/settlements/README.md",
   "_bmad-output/implementation-artifacts/4-5-운영팀-근무상태와-일일-인센.md"
@@ -137,15 +137,21 @@ function requireMoved(contents, fileLabel, key, korean) {
   if (!koCatalog.includes(korean)) errors.push(`ko.ts missing ${korean}`);
 }
 
-const page = read("src/app/(erp)/settlements/operations/page.tsx");
+// 티켓 05부터 비교 표와 직원 패널은 클라이언트 뷰에, 기준 라벨은 ops-threshold에, 잠금·오류 안내는 settlement-parts에 있다.
+const page = [
+  "src/app/(erp)/settlements/operations/page.tsx",
+  "src/app/(erp)/settlements/operations/ops-daily-view.tsx",
+  "src/app/(erp)/settlements/operations/ops-threshold.ts",
+  "src/app/(erp)/settlements/settlement-parts.tsx"
+].map(read).join("\n");
 for (const required of [
   "requireRouteAccess(\"/settlements/operations\")",
   "selectedOperatingMonthFor",
   "clampDateToOperatingMonth",
   "listOpsAttendanceForDate",
   "listOpsDailyIncentives",
-  "OpsIncentiveSummary",
-  "OpsAttendanceTable"
+  "SummaryCards",
+  "OpsAttendanceForm"
 ]) {
   if (!page.includes(required)) errors.push(`operations page.tsx missing ${required}`);
 }
@@ -160,7 +166,8 @@ requireMoved(page, "operations page.tsx", "settlements.locked.title", "잠긴 �
 requireMoved(page, "operations page.tsx", "settlements.ops.threshold.missingPolicy", "정책 없음");
 requireMoved(page, "operations page.tsx", "settlements.ops.threshold.belowThreshold", "30콜 미만");
 for (const forbidden of ["saveOpsPayout", "payoutAmount: {", "closing", "snapshot", "monthly preview"]) {
-  if (page.includes(forbidden)) errors.push(`operations page.tsx must not implement out-of-scope ${forbidden}`);
+  // 금지어는 페이지 파일만 본다. 함께 읽는 공용 파일의 낱말에 걸리지 않게 한다.
+  if (read("src/app/(erp)/settlements/operations/page.tsx").includes(forbidden)) errors.push(`operations page.tsx must not implement out-of-scope ${forbidden}`);
 }
 
 const action = read("src/app/(erp)/settlements/operations/actions.ts");
@@ -171,21 +178,21 @@ for (const forbidden of ["saveOpsPayout", "listOpsDailyIncentives", "payoutAmoun
   if (action.includes(forbidden)) errors.push(`operations actions.ts must not add payout calculation mutation/audit behavior: ${forbidden}`);
 }
 
-const table = read("src/app/(erp)/settlements/operations/ops-attendance-table.tsx");
+const table = read("src/app/(erp)/settlements/operations/ops-attendance-form.tsx");
 for (const required of [
   "useActionState",
   "useRouter",
   "router.refresh()"
 ]) {
-  if (!table.includes(required)) errors.push(`ops-attendance-table.tsx missing existing save UX ${required}`);
+  if (!table.includes(required)) errors.push(`ops-attendance-form.tsx missing existing save UX ${required}`);
 }
-requireMoved(table, "ops-attendance-table.tsx", "settlements.therapist.attendance.action.saving", "저장중");
-requireMoved(table, "ops-attendance-table.tsx", "settlements.therapist.attendance.status.saved", "저장됨");
-requireMoved(table, "ops-attendance-table.tsx", "settlements.therapist.attendance.action.retry", "재시도");
-requireMoved(table, "ops-attendance-table.tsx", "settlements.therapist.attendance.saveFailed", "저장 실패");
-requireMoved(table, "ops-attendance-table.tsx", "settlements.ops.payoutEligible", "지급 대상");
-requireMoved(table, "ops-attendance-table.tsx", "settlements.ops.excluded", "제외:");
-requireMoved(table, "ops-attendance-table.tsx", "settlements.therapist.attendance.status.locked", "잠금");
+requireMoved(table, "ops-attendance-form.tsx", "settlements.therapist.attendance.action.saving", "저장중");
+requireMoved(table, "ops-attendance-form.tsx", "settlements.therapist.attendance.status.saved", "저장됨");
+requireMoved(table, "ops-attendance-form.tsx", "settlements.therapist.attendance.action.retry", "재시도");
+requireMoved(table, "ops-attendance-form.tsx", "settlements.therapist.attendance.saveFailed", "저장 실패");
+requireMoved(table, "ops-attendance-form.tsx", "settlements.ops.payoutEligible", "지급 대상");
+requireMoved(table, "ops-attendance-form.tsx", "settlements.ops.excluded", "제외:");
+requireMoved(table, "ops-attendance-form.tsx", "settlements.therapist.attendance.status.locked", "잠금");
 
 const attendanceTest = read("src/modules/settlements/ops-attendance-service.test.ts");
 for (const required of [

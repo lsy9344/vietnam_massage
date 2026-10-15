@@ -1,6 +1,6 @@
 import type { KeyboardEvent } from "react";
 import { SidePanel } from "@/components/ui/panel";
-import { codeLabel, codeLabelFromKoreanLabel } from "@/lib/i18n/codes";
+import { serviceStatusLabel } from "@/lib/i18n/codes";
 import { t } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
 import type { CustomerDto, CustomerVisitCandidateDto, CustomerVisitHistoryRowDto } from "@/modules/calls/service-call-service";
@@ -8,12 +8,6 @@ import { ledgerCallHref } from "@/app/(erp)/calls/ledger-address";
 import { CustomerEditForm } from "@/app/(erp)/customers/customer-forms";
 
 const cellClassName = "border-b border-border px-3 py-2";
-
-function visitStatusLabel(locale: Locale, status: string) {
-  const fromCode = codeLabel(locale, "SERVICE_STATUS", status, true);
-  if (fromCode !== status) return fromCode;
-  return codeLabelFromKoreanLabel(locale, "SERVICE_STATUS", status);
-}
 
 function isChosen(candidate: CustomerVisitCandidateDto, selectedCustomerId: string | null, selectedMemo: string | null) {
   return (
@@ -167,7 +161,7 @@ export function CustomerScreenView({
                           <td className={cellClassName}>{visit.startTime}</td>
                           <td className={cellClassName}>{visit.courseLabel}</td>
                           <td className={cellClassName}>{visit.therapistLabel}</td>
-                          <td className={cellClassName}>{visitStatusLabel(locale, visit.status)}</td>
+                          <td className={cellClassName}>{serviceStatusLabel(locale, visit.status)}</td>
                           <td className={cellClassName}>{visit.customerMemo}</td>
                         </tr>
                       ))}

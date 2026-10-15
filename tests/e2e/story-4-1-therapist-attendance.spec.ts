@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { employeeRow, openEmployeePanel } from "./support/settlement";
 
 const THERAPIST_COUNT = 50;
 
@@ -144,7 +145,6 @@ test.describe("Story 4.1 therapist attendance", () => {
     await page.goto(`/settlements?operatingMonthId=${seededData.writableOperatingMonthId}&serviceDate=2035-03-12`);
 
     await expect(page.getByRole("heading", { name: "마사지사 일일정산" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "마사지사 출퇴근 입력" })).toBeVisible();
     await expect(page.getByLabel("운영월")).toHaveValue(seededData.writableOperatingMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2035-03-12");
 
@@ -152,15 +152,18 @@ test.describe("Story 4.1 therapist attendance", () => {
     await expect(page.getByText("E2E41 마사지사50", { exact: true })).toBeVisible();
     await expect(page.getByText("E2E41 비활성 마사지사")).toHaveCount(0);
 
-    const therapist1Row = page.getByRole("row").filter({ hasText: "E2E41 마사지사1" }).first();
-    await therapist1Row.getByLabel("E2E41 마사지사1 출근시간").fill("22:00");
+    // 출퇴근 정정은 직원 비교 표에서 고른 직원의 패널에서 한다(티켓 05).
+    const therapist1Panel = await openEmployeePanel(page, "E2E41 마사지사1");
+    await expect(therapist1Panel.getByRole("heading", { name: "마사지사 출퇴근 입력" })).toBeVisible();
+    await therapist1Panel.getByLabel("E2E41 마사지사1 출근시간").fill("22:00");
     // 만근 기준은 대기시간 600분(10시간)이다. 자정을 넘긴 22:00~08:00이 정확히 600분이다.
-    await therapist1Row.getByLabel("E2E41 마사지사1 퇴근시간").fill("08:00");
-    await therapist1Row.getByRole("button", { name: "저장" }).click();
+    await therapist1Panel.getByLabel("E2E41 마사지사1 퇴근시간").fill("08:00");
+    await therapist1Panel.getByRole("button", { name: "저장" }).click();
 
-    // 저장이 성공하면 행이 저장된 값으로 remount되므로 "저장됨" 배지는 남지 않는다. 결과로 확인한다.
-    await expect(therapist1Row.getByText("만근 인정 (600분)")).toBeVisible();
-    await expect(therapist1Row.getByLabel("E2E41 마사지사1 퇴근시간")).toHaveValue("08:00");
+    // 저장이 성공하면 폼이 저장된 값으로 remount되므로 "저장됨" 배지는 남지 않는다. 결과로 확인한다.
+    await expect(therapist1Panel.getByText("만근 인정 (600분)")).toBeVisible();
+    await expect(therapist1Panel.getByLabel("E2E41 마사지사1 퇴근시간")).toHaveValue("08:00");
+    await expect(employeeRow(page, "E2E41 마사지사1")).toContainText("22:00–08:00");
 
     await expect
       .poll(async () => {
@@ -206,33 +209,33 @@ test.describe("Story 4.1 therapist attendance", () => {
     await login(page, "story41_settlement", "Story41!settlement");
     await page.goto(`/settlements?operatingMonthId=${seededData.writableOperatingMonthId}&serviceDate=2035-03-13`);
 
-    const therapist2Row = page.getByRole("row").filter({ hasText: "E2E41 마사지사2" }).first();
-    await therapist2Row.getByLabel("E2E41 마사지사2 출근시간").fill("10:00");
-    await therapist2Row.getByLabel("E2E41 마사지사2 퇴근시간").fill("17:59");
-    await therapist2Row.getByRole("button", { name: "저장" }).click();
+    const therapist2Panel = await openEmployeePanel(page, "E2E41 마사지사2");
+    await therapist2Panel.getByLabel("E2E41 마사지사2 출근시간").fill("10:00");
+    await therapist2Panel.getByLabel("E2E41 마사지사2 퇴근시간").fill("17:59");
+    await therapist2Panel.getByRole("button", { name: "저장" }).click();
 
-    await expect(therapist2Row.getByText("만근 미인정 (479분)")).toBeVisible();
+    await expect(therapist2Panel.getByText("만근 미인정 (479분)")).toBeVisible();
   });
 
   test("invalid time input shows inline retry without writing attendance", async ({ page }) => {
     await login(page, "story41_settlement", "Story41!settlement");
     await page.goto(`/settlements?operatingMonthId=${seededData.writableOperatingMonthId}&serviceDate=2035-03-14`);
 
-    const therapist3Row = page.getByRole("row").filter({ hasText: "E2E41 마사지사3" }).first();
+    const therapist3Panel = await openEmployeePanel(page, "E2E41 마사지사3");
     // bypass the native time picker by injecting an invalid value
-    await therapist3Row.getByLabel("E2E41 마사지사3 출근시간").evaluate((input: HTMLInputElement) => {
+    await therapist3Panel.getByLabel("E2E41 마사지사3 출근시간").evaluate((input: HTMLInputElement) => {
       input.removeAttribute("type");
       input.value = "99:99";
       input.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    await therapist3Row.getByLabel("E2E41 마사지사3 퇴근시간").fill("18:00");
-    await therapist3Row.getByRole("button", { name: "저장" }).click();
+    await therapist3Panel.getByLabel("E2E41 마사지사3 퇴근시간").fill("18:00");
+    await therapist3Panel.getByRole("button", { name: "저장" }).click();
 
-    await expect(therapist3Row.getByRole("button", { name: "재시도" })).toBeVisible();
+    await expect(therapist3Panel.getByRole("button", { name: "재시도" })).toBeVisible();
     // The invalid input must surface a safe Korean error message via role="alert".
-    const therapist3Alert = therapist3Row.getByRole("alert");
+    const therapist3Alert = therapist3Panel.getByRole("alert");
     await expect(therapist3Alert.first()).toBeVisible();
-    await expect(therapist3Row.getByText("HH:mm 형식이어야 합니다", { exact: false }).first()).toBeVisible();
+    await expect(therapist3Panel.getByText("HH:mm 형식이어야 합니다", { exact: false }).first()).toBeVisible();
     const createdAttendance = await (prisma as any).therapistAttendance.findUnique({
       where: {
         operatingMonthId_attendanceDate_employeeId: {
@@ -250,8 +253,9 @@ test.describe("Story 4.1 therapist attendance", () => {
     await page.goto(`/settlements?operatingMonthId=${seededData.lockedOperatingMonthId}&serviceDate=2035-04-12`);
 
     await expect(page.getByText("잠긴 운영월입니다", { exact: false })).toBeVisible();
-    await expect(page.getByLabel("E2E41 마사지사1 출근시간")).toBeDisabled();
-    await expect(page.getByRole("button", { name: "저장" }).first()).toBeDisabled();
+    const therapist1Panel = await openEmployeePanel(page, "E2E41 마사지사1");
+    await expect(therapist1Panel.getByLabel("E2E41 마사지사1 출근시간")).toBeDisabled();
+    await expect(therapist1Panel.getByRole("button", { name: "저장" })).toBeDisabled();
   });
 
   test("counter direct access redirects away from settlements", async ({ page }) => {

@@ -270,13 +270,14 @@ test.describe("Story 4.6 operations monthly incentive", () => {
     await login(page, "story46_settlement", "Story46!settlement");
     await page.goto(`/settlements/operations/monthly?operatingMonthId=${seededData.missingPolicyOperatingMonthId}`);
     await page.getByLabel("운영월").selectOption(seededData.writableOperatingMonthId);
-    await page.getByRole("button", { name: "조회" }).click();
+    // 직원 이름도 버튼이라("조회 전용" 직원 등) 조회 버튼은 이름이 정확히 같은 것으로 고른다.
+    await page.getByRole("button", { name: "조회", exact: true }).click();
 
     await expect(page.getByRole("heading", { name: "운영팀 월인센" })).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`operatingMonthId=${seededData.writableOperatingMonthId}`));
     await expect(page.getByText("미확정 미리보기").first()).toBeVisible();
-    // 같은 문구가 요약 타일과 근거 표 양쪽에 나오므로 요약 region으로 좁힌다.
-    const summary = page.getByRole("region", { name: "운영팀 월 인센 요약" });
+    // 같은 문구가 요약 카드와 직원 패널 양쪽에 나오므로 요약 카드 목록으로 좁힌다.
+    const summary = page.getByLabel("운영팀 월 인센 요약");
     await expect(summary.getByText("월 총콜")).toBeVisible();
     await expect(summary.getByText("1100콜 이상")).toBeVisible();
     await expect(summary.getByText("5,000,000 VND").first()).toBeVisible();
@@ -296,7 +297,10 @@ test.describe("Story 4.6 operations monthly incentive", () => {
 
     await expect(page.getByText("최저 구간 미달").first()).toBeVisible();
     await expect(page.getByText("900콜").first()).toBeVisible();
-    await expect(page.getByText("전체 월인센 0 VND").first()).toBeVisible();
+    // 기준 미달의 0은 정책이 정한 결과라 근거 없음이 아니라 0이다. 라벨과 값은 요약 카드의 다른 칸이다.
+    await expect(
+      page.getByLabel("운영팀 월 인센 요약").locator("div", { has: page.getByText("전체 월인센", { exact: true }) })
+    ).toContainText("0 VND");
     await expect(page.getByText("1000콜 미만으로 운영팀 월 인센이 없습니다.").first()).toBeVisible();
   });
 
@@ -306,6 +310,10 @@ test.describe("Story 4.6 operations monthly incentive", () => {
 
     await expect(page.getByText("정책 없음").first()).toBeVisible();
     await expect(page.getByText("적용월에 활성 운영팀 월 인센 정책이 없습니다.").first()).toBeVisible();
+    // 정책이 없으면 월 인센과 직원 금액은 0 대신 근거 없음이다(티켓 05).
+    await expect(
+      page.getByLabel("운영팀 월 인센 요약").locator("div", { has: page.getByText("전체 월인센", { exact: true }) })
+    ).toContainText("계산 근거 없음");
   });
 
   test("separates locked month current preview from closing snapshot values", async ({ page }) => {
