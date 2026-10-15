@@ -18,6 +18,7 @@ import {
   dailyExpenseUpdateSchema,
   savedVersionMessage,
   serviceCallAutosaveInputSchema,
+  serviceCallCustomerLinkCorrectionSchema,
   serviceCallInputSchema,
   type CustomerInput,
   type CustomerUpdateInput,
@@ -26,6 +27,7 @@ import {
   type DailyExpenseUpdateInput,
   type ServiceCallAssignmentRole,
   type ServiceCallAutosaveInput,
+  type ServiceCallCustomerLinkCorrectionInput,
   type ServiceCallInput
 } from "@/modules/calls/service-call-schema";
 
@@ -2091,6 +2093,71 @@ export async function autosaveServiceCallRow(
         { prismaClient: tx as any }
       );
     }
+
+    return toRowDto(tx, after);
+  });
+}
+
+/**
+ * 잘못 연결된 콜의 고객을 사유와 함께 바로잡거나 연결을 해제한다(F06, ADR 0003, 스토리 81-83).
+ * 원장 행 저장(saveBasicServiceCallRow/autosaveServiceCallRow)과는 별개의 전용 작업이다: 콜의
+ * 고객/메모(customerMemo)는 건드리지 않고 customerId 연결만 바꾸며, 사유가 항상 필수이고 감사에
+ * 이전 고객·새 고객·사유·처리자가 남는다. 마감확정·잠금 운영월은 거절되고(관리자 재오픈 후에만
+ * 가능), 화면이 마지막으로 읽은 updatedAt이 아니면 STALE_CALL로 거절되며 이때는 쓰기와 감사가 없다.
+ */
+export async function correctServiceCallCustomerLink(
+  input: ServiceCallCustomerLinkCorrectionInput & { actorId?: string; prismaClient?: ServiceCallPrismaClient }
+) {
+  const parsed = serviceCallCustomerLinkCorrectionSchema.safeParse(input);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const code =
+      issue?.path[0] === "reason" ? "SERVICE_CALL_CUSTOMER_LINK_REASON_REQUIRED" : "INVALID_SERVICE_CALL_CUSTOMER_LINK_INPUT";
+    throw new ServiceCallDomainError(issue?.message ?? "고객 연결 정정 입력값이 올바르지 않습니다.", code);
+  }
+
+  const actorId = requireActor(input.actorId);
+  const client = getClient(input.prismaClient);
+
+  return runInTransaction(client, async (tx) => {
+    const before = await findServiceCallWithRelations(tx, parsed.data.serviceCallId);
+    const month = await requireOperatingMonth(tx, before.operatingMonthId);
+    try {
+      assertOperatingMonthPayoutWritable(month, "마감확정 또는 잠금 운영월입니다. 고객 연결을 정정할 수 없습니다.");
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "OPERATING_MONTH_LOCKED") {
+        throw new ServiceCallDomainError(error.message, "OPERATING_MONTH_LOCKED");
+      }
+      throw error;
+    }
+
+    const beforeCustomerId = linkedCustomerId(before);
+    const newCustomerId = parsed.data.customerId ? (await requireCustomer(tx, parsed.data.customerId)).id : null;
+
+    await updateServiceCallAtVersion(
+      tx,
+      {
+        serviceCallId: parsed.data.serviceCallId,
+        operatingMonthId: before.operatingMonthId,
+        expectedUpdatedAt: parsed.data.expectedUpdatedAt
+      },
+      { customerId: newCustomerId }
+    );
+
+    const after = await findServiceCallWithRelations(tx, parsed.data.serviceCallId);
+
+    await recordAuditEvent(
+      {
+        actorId,
+        action: "service_call.customer_link_corrected",
+        targetType: "service_call",
+        targetId: after.id,
+        beforeValue: { serviceCallId: after.id, customerId: beforeCustomerId },
+        afterValue: { serviceCallId: after.id, customerId: linkedCustomerId(after) },
+        reason: parsed.data.reason
+      },
+      { prismaClient: tx as any }
+    );
 
     return toRowDto(tx, after);
   });

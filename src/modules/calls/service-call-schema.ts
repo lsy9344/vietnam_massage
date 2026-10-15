@@ -95,6 +95,14 @@ export const customerUpdateSchema = customerInputSchema.extend({
   customerId: z.string().trim().min(1, "고객을 선택하세요.")
 });
 
+// 고객 연결 정정(F06): 콜 id, 새 고객(연결 해제는 null), 필수 사유, 화면이 마지막으로 받은 updatedAt.
+export const serviceCallCustomerLinkCorrectionSchema = z.object({
+  serviceCallId: z.string().trim().min(1, "콜 행 ID가 올바르지 않습니다."),
+  customerId: z.preprocess(emptyToNull, z.string().trim().min(1, "선택값이 올바르지 않습니다.").nullable()),
+  reason: z.string().trim().min(1, "정정 사유를 입력하세요.").max(500, "500자 이하로 입력하세요."),
+  expectedUpdatedAt: savedVersion
+});
+
 export type ServiceCallInput = z.infer<typeof serviceCallInputSchema>;
 export type ServiceCallAutosaveInput = z.infer<typeof serviceCallAutosaveInputSchema>;
 export type DailyExpenseInput = Omit<z.infer<typeof dailyExpenseInputSchema>, "method"> & {
@@ -106,3 +114,4 @@ export type DailyExpenseUpdateInput = Omit<z.infer<typeof dailyExpenseUpdateSche
 export type DailyExpenseDeactivateInput = z.infer<typeof dailyExpenseDeactivateSchema>;
 export type CustomerInput = z.infer<typeof customerInputSchema>;
 export type CustomerUpdateInput = z.infer<typeof customerUpdateSchema>;
+export type ServiceCallCustomerLinkCorrectionInput = z.infer<typeof serviceCallCustomerLinkCorrectionSchema>;

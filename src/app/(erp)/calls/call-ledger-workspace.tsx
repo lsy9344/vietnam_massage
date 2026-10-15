@@ -113,6 +113,8 @@ export function CallLedgerWorkspace({
         {selected ? (
           <div className="order-first min-w-0 min-[1200px]:sticky min-[1200px]:top-4 min-[1200px]:order-none">
             <CallDetailPanel
+              customers={customers ?? []}
+              isLocked={isLocked}
               onClose={() => select(null)}
               onSelectCall={(id) => select(id, { scrollToRow: true })}
               options={options}

@@ -31,6 +31,10 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   CUSTOMER_NOT_FOUND: "Không tìm thấy khách.",
   INVALID_CUSTOMER_INPUT: "Dữ liệu khách không hợp lệ.",
 
+  // 콜 상세 패널: 고객 연결 정정(F06)
+  SERVICE_CALL_CUSTOMER_LINK_REASON_REQUIRED: "Vui lòng nhập lý do chỉnh sửa.",
+  INVALID_SERVICE_CALL_CUSTOMER_LINK_INPUT: "Dữ liệu chỉnh sửa liên kết khách không hợp lệ.",
+
   // 일별 지출
   DAILY_EXPENSE_NOT_FOUND: "Không tìm thấy mục chi phí trong ngày.",
   DAILY_EXPENSE_NOT_ACTIVE: "Không thể sửa mục chi phí đã vô hiệu hóa.",
@@ -103,6 +107,8 @@ const KOREAN_MESSAGE_VI: Record<string, string> = {
   "지급완료 상태값이 올바르지 않습니다.": "Giá trị trạng thái đã thanh toán không hợp lệ.",
   // 월마감 재오픈 등 Zod field-level 메시지
   "재오픈 사유를 5자 이상 입력하세요.": "Vui lòng nhập lý do mở lại từ 5 ký tự trở lên.",
+  // 콜 상세 패널: 고객 연결 정정 Zod field-level 메시지
+  "정정 사유를 입력하세요.": "Vui lòng nhập lý do chỉnh sửa.",
   // 콜 원장/일별 지출 Zod field-level 메시지 (inline 표시)
   "날짜는 YYYY-MM-DD 형식이어야 합니다.": "Ngày phải theo định dạng YYYY-MM-DD.",
   "시간은 HH:mm 형식이어야 합니다.": "Giờ phải theo định dạng HH:mm.",

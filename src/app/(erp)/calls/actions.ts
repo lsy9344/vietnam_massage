@@ -10,10 +10,12 @@ import { getLocale } from "@/lib/i18n/server";
 import { resolveDomainErrorMessage, resolveKoreanMessage } from "@/lib/i18n/errors";
 import {
   autosaveServiceCallRow,
+  correctServiceCallCustomerLink,
   createCustomer,
   createDailyExpense,
   deactivateDailyExpense,
   getServiceCallRow,
+  searchCustomerVisitCandidates,
   updateCustomer,
   updateDailyExpense,
   redactServiceCallSettlementAmounts,
@@ -22,6 +24,7 @@ import {
   ServiceCallDomainError,
   StaleServiceCallError,
   type CustomerDto,
+  type CustomerVisitCandidateDto,
   type DailyExpenseDto,
   type ServiceCallRowDto
 } from "@/modules/calls/service-call-service";
@@ -32,6 +35,7 @@ import {
   dailyExpenseInputSchema,
   dailyExpenseUpdateSchema,
   serviceCallAutosaveInputSchema,
+  serviceCallCustomerLinkCorrectionSchema,
   serviceCallInputSchema,
   type ServiceCallAutosaveInput
 } from "@/modules/calls/service-call-schema";
@@ -41,6 +45,8 @@ export type ServiceCallActionState = ActionResult<ServiceCallRowDto> | null;
 export type ServiceCallAutosaveResult =
   | ActionResult<ServiceCallRowDto>
   | { ok: false; formError: string; domainErrorCode: "STALE_CALL"; currentRow: ServiceCallRowDto };
+/** 고객 연결 정정(F06)도 같은 모양: STALE_CALL이면 쓰기·감사 없이 지금의 행을 함께 돌려준다. */
+export type ServiceCallCustomerLinkCorrectionActionState = ServiceCallAutosaveResult | null;
 export type DailyExpenseActionState = ActionResult<DailyExpenseDto> | null;
 export type CustomerActionState = ActionResult<CustomerDto> | null;
 
@@ -69,6 +75,15 @@ function mapActionError<T>(
       return {
         ok: false,
         fieldErrors: { therapist2Id: [message] },
+        formError: message,
+        domainErrorCode: error.code
+      };
+    }
+
+    if (error.code === "SERVICE_CALL_CUSTOMER_LINK_REASON_REQUIRED") {
+      return {
+        ok: false,
+        fieldErrors: { reason: [message] },
         formError: message,
         domainErrorCode: error.code
       };
@@ -400,4 +415,58 @@ export async function updateCustomerAction(
 export async function loadTherapistAvailabilityAction(input: { operatingMonthId: string; serviceDate: string; time: string }) {
   await requireRouteAccess("/calls");
   return listTherapistAvailability(input);
+}
+
+/** 콜 상세 패널의 고객 연결 정정이 검색할 때 쓴다. 22의 방문 건수·같은 연락처 비교 정보를 그대로 돌려준다. */
+export async function searchCustomerLinkCandidatesAction(query: string): Promise<CustomerVisitCandidateDto[]> {
+  await requirePermission("call:write");
+  const trimmed = typeof query === "string" ? query.trim() : "";
+  if (!trimmed) return [];
+  return searchCustomerVisitCandidates({ query: trimmed });
+}
+
+/**
+ * 콜 상세 패널에서 잘못 연결된 고객을 사유와 함께 바꾸거나 연결을 해제한다(F06, ADR 0003).
+ * 원장 행 저장과는 별개의 전용 작업이라, saveBasicServiceCallRowAction/autosaveServiceCallRowAction과
+ * 달리 콜의 다른 필드는 건드리지 않는다. STALE_CALL이면 autosave와 같은 모양으로 지금의 행을 함께 돌려준다.
+ */
+export async function correctServiceCallCustomerLinkAction(
+  _previousState: ServiceCallCustomerLinkCorrectionActionState,
+  formData: FormData
+): Promise<ServiceCallCustomerLinkCorrectionActionState> {
+  const locale = await getLocale();
+  const parsed = serviceCallCustomerLinkCorrectionSchema.safeParse({
+    serviceCallId: formValue(formData, "serviceCallId"),
+    customerId: formValue(formData, "customerId"),
+    reason: formValue(formData, "reason"),
+    expectedUpdatedAt: formValue(formData, "expectedUpdatedAt")
+  });
+
+  if (!parsed.success) {
+    return {
+      ok: false,
+      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors, locale),
+      formError: t(locale, "action.error.invalidInput")
+    };
+  }
+
+  let role: string | null = null;
+  try {
+    const account = await requirePermission("call:write");
+    role = account.role;
+    const data = await correctServiceCallCustomerLink({ ...parsed.data, actorId: account.id });
+    revalidatePath("/calls");
+    revalidatePath("/customers");
+    return { ok: true, data: visibleServiceCallRowForRole(data, account.role) };
+  } catch (error) {
+    if (error instanceof StaleServiceCallError && role) {
+      return {
+        ok: false,
+        formError: resolveDomainErrorMessage(locale, error.code, error.message),
+        domainErrorCode: "STALE_CALL",
+        currentRow: visibleServiceCallRowForRole(error.currentRow, role)
+      };
+    }
+    return mapActionError<ServiceCallRowDto>(error, locale);
+  }
 }
