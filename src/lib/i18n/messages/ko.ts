@@ -300,10 +300,9 @@ export const ko = {
   "calls.grid.empty.description": "아래 입력 행에서 원본 실시간콜입력 A:S 의미의 기본 필드를 기록한다.",
 
   // 콜 행 저장 상태
-  "calls.save.saving": "저장중",
   "calls.save.saved": "저장됨",
-  "calls.save.error": "저장 보류",
   "calls.save.retry": "재시도",
+  "calls.save.reloadLatest": "최신 내용으로 다시 불러오기",
   "calls.save.autosaveFailed": "콜 행 자동저장에 실패했습니다.",
 
   // 콜 계산 상태

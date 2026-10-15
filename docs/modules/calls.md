@@ -57,7 +57,7 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 
 - Row autosave is scoped to one existing `ServiceCall` row and must require `serviceCallId`.
 - The status-history table is `service_call_status_histories` via `ServiceCallStatusHistory`.
-- The visible save state model is `idle`, `saving`, `saved`, and `error`; user-facing labels are `저장중`, `저장됨`, and `저장 보류`.
+- The visible save state model is `idle`, `saving`, `saved`, `failed`, and `conflict`; user-facing labels come from the shared `SaveStatus`: `저장 중`, `저장됨`, `저장 실패`, `충돌 확인 필요` (Ticket 15 replaced the Story 2.2 labels `저장중` and `저장 보류`). Existing-row saves carry `expectedUpdatedAt` and are rejected with `STALE_CALL` when another screen saved first.
 - Status transitions write `service_call.status_changed`; sensitive row changes such as payment method, discount type, assignments, and confirmation write `service_call.row_changed`.
 - Failed autosave keeps the draft on screen and exposes inline retry using the same draft payload.
 - Locked operating months and users without `call:write` are blocked by the Server Action/domain boundary and shown safe Korean errors.
@@ -132,7 +132,7 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 - `Tab` and `Shift+Tab` move through editable cells and wrap between rows. Computed readonly cells are skipped in tab order.
 - `Enter` commits the current row draft through the existing autosave action and moves to the same field on the next row.
 - Arrow keys move to adjacent ledger cells. Readonly computed cells can be focus targets for navigation semantics, but they do not open edit mode.
-- `Esc` cancels the active draft back to the last server row and must not call autosave.
+- `Esc` cancels the active draft back to the last server row (or to the draft being sent while a save is in flight) and must not call autosave. In the conflict state it leaves the draft as it is.
 - Type-ahead combobox cells filter by visible label and stable value. Hidden form/draft values remain stable IDs/codes such as `Room.id`, `Course.id`, `Employee.id`, code values, and `TimeSlot.value`.
 - Combobox accessibility uses a visible/sr-only label, `aria-expanded`, `aria-controls`, and `aria-activedescendant`. Dropdown options expose text labels even when a decorative swatch is shown.
 - Computed readonly cells keep `bg-readonly`, right-aligned tabular numbers, server-derived values, and stale-failed-draft handling (`저장 보류 계산 대기`).

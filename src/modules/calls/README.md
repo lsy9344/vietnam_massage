@@ -13,7 +13,7 @@ Owns the reservation and service-call ledger.
 ## Story 2.2 Scope
 
 - `ServiceCallStatusHistory` stores call status transitions in `service_call_status_histories`.
-- row autosave uses the `idle`, `saving`, `saved`, and `error` state model and displays Korean row states: `저장중`, `저장됨`, and `저장 보류`.
+- row autosave used the `idle`, `saving`, `saved`, and `error` state model with the Korean row states `저장중`, `저장됨`, and `저장 보류`. Ticket 15 replaced these (see Ticket 15 Scope below).
 - Status changes record `service_call.status_changed`; sensitive row changes record `service_call.row_changed`.
 - Autosave retry must preserve the local draft instead of replacing failed input with the last server value.
 
@@ -62,6 +62,15 @@ Owns the reservation and service-call ledger.
 - Combobox accessibility uses `aria-expanded`, `aria-controls`, and `aria-activedescendant` with a listbox popup. Dropdown options always include visible text labels; swatches are decorative only.
 - Computed readonly cells remain server-derived, `bg-readonly`, tabular, and visually distinct from editable cells.
 - D-course therapist2 errors keep `aria-invalid`, `aria-describedby`, visible Korean copy, and the existing autosave retry/draft-preservation behavior.
+
+## Ticket 15 Scope (저장 충돌 거절과 행 저장 상태)
+
+- Saving an existing row requires `expectedUpdatedAt`, the `updatedAt` of the row the screen last received. Both `autosaveServiceCallRow()` and the existing-row path of `saveBasicServiceCallRow()` update with one conditional `updateMany` on `id`, `operatingMonthId`, and `updatedAt`, so no other save can slip in between the version check and the write.
+- When no row was updated but the call still exists in that month, the service throws `StaleServiceCallError` (`STALE_CALL`, "다른 화면에서 이 콜이 바뀌었습니다. 다시 불러온 뒤에 저장하세요.") carrying the current row. Nothing is written: no assignment, status history, or audit entry. There is no force overwrite.
+- `getServiceCallRow()` reads one call as saved now. The ledger's "최신 내용으로 다시 불러오기" uses it, because the row returned with the rejection may already be outdated.
+- The ledger sends at most one save per row (`call-row-save.ts`). Edits made while waiting are collected and sent with the `updatedAt` from the response, so a row's own autosaves never conflict and a late response never reverts newer input. Inputs stay enabled while a save is in flight.
+- Row save states now use the shared `SaveStatus` chip in the 저장상태 cell, apart from the warnings cell: `저장 중`, `저장됨` (also for a row not yet edited on this screen), `저장 실패`, `충돌 확인 필요`. The Story 2.2 labels `저장중` and `저장 보류` are no longer shown for the save state (`저장 보류 계산 대기` remains in the calculation cell).
+- Daily expense and customer saves are unchanged and have no version check.
 
 ## Includes
 

@@ -7,6 +7,7 @@ import {
   useId,
   useLayoutEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
   useTransition,
@@ -16,20 +17,31 @@ import { createPortal } from "react-dom";
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { useLocale, useT } from "@/lib/i18n/client";
-import { formatDateTime, formatNumber } from "@/lib/i18n/format";
+import { formatNumber } from "@/lib/i18n/format";
 import type { Locale } from "@/lib/i18n/config";
 import type { MessageKey } from "@/lib/i18n/types";
 import type { CustomerDto, ServiceCallCalculationStatus, ServiceCallFormOptions, ServiceCallOption, ServiceCallRowDto } from "@/modules/calls/service-call-service";
-import type { ServiceCallAutosaveInput } from "@/modules/calls/service-call-schema";
-import { autosaveServiceCallRowAction, saveBasicServiceCallRowAction, type ServiceCallActionState } from "@/app/(erp)/calls/actions";
+import {
+  autosaveServiceCallRowAction,
+  reloadServiceCallRowAction,
+  saveBasicServiceCallRowAction,
+  type ServiceCallActionState
+} from "@/app/(erp)/calls/actions";
 import type { AvailabilityCourseChoice } from "@/app/(erp)/calls/therapist-availability-view";
 import { calculationErrorMessageKey } from "@/app/(erp)/calls/calculation-status-message";
+import {
+  callRowSaveReducer,
+  isSaveHeld,
+  initialCallRowSave,
+  type CallRowDraft,
+  type RowSaveStatus
+} from "@/app/(erp)/calls/call-row-save";
+import { CallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
 import { ledgerCallAnchorId } from "@/app/(erp)/calls/ledger-address";
 import { CallWarningCell } from "@/app/(erp)/calls/call-warning-cell";
 import { spokenClock } from "@/app/(erp)/calls/call-warning-label";
 import {
   EDITABLE_CALL_FIELDS,
-  cancelCellDraft,
   isEditableCallField,
   moveAdjacentCell,
   moveEnterCell,
@@ -38,7 +50,6 @@ import {
   type EditableCallField
 } from "@/app/(erp)/calls/call-ledger-keyboard";
 
-type RowSaveState = "idle" | "saving" | "saved" | "error";
 type FieldErrors = Record<string, string[]>;
 
 // Shared fixed column widths so the data table and the add-row table align
@@ -306,10 +317,11 @@ function SelectCell({
     }
   }
 
+  // 표시값은 팝업이 닫힐 때 위 effect가 지금 고른 값의 라벨로 되돌린다. 여기서 라벨을 직접 넣으면
+  // blur 지연(120ms) 사이에 바깥에서 바뀐 값(다시 불러오기 등)을 그 전 값으로 덮는다.
   function closeAndRestore() {
     setOpen(false);
     setActiveIndex(0);
-    setInputValue(optionLabel(options, selectedValue, emptyLabel));
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -896,44 +908,8 @@ function AddRowForm({
   );
 }
 
-function draftFromRow(row: ServiceCallRowDto): ServiceCallAutosaveInput {
-  return {
-    serviceCallId: row.id,
-    operatingMonthId: row.operatingMonthId,
-    serviceDate: row.serviceDate,
-    startTime: row.startTime,
-    actualEntryTime: row.actualEntryTime,
-    roomId: row.roomId,
-    courseId: row.courseId,
-    customerMemo: row.customerMemo ?? null,
-    customerId: row.customerId ?? null,
-    therapist1Id: row.therapist1?.id ?? null,
-    therapist2Id: row.therapist2?.id ?? null,
-    earcareEmployeeId: row.earcare?.id ?? null,
-    status: row.status,
-    discountTypeCode: row.discountTypeCode ?? null,
-    paymentMethodCode: row.paymentMethodCode ?? null,
-    note: row.note ?? null,
-    confirmationCode: row.confirmationCode ?? null
-  };
-}
-
 function nullableValue(value: string) {
   return value.trim() === "" ? null : value;
-}
-
-function saveStateLabel(state: RowSaveState, t: (key: MessageKey) => string) {
-  if (state === "saving") return t("calls.save.saving");
-  if (state === "saved") return t("calls.save.saved");
-  if (state === "error") return t("calls.save.error");
-  return "idle";
-}
-
-function saveStateClassName(state: RowSaveState) {
-  if (state === "saving") return "text-brand";
-  if (state === "saved") return "text-muted";
-  if (state === "error") return "text-danger";
-  return "text-muted";
 }
 
 function calcMessage(t: (key: MessageKey) => string, status: ServiceCallCalculationStatus) {
@@ -957,11 +933,11 @@ function PaymentAmountCell({
   onKeyDown?: (event: KeyboardEvent<HTMLTableCellElement>) => void;
   row: ServiceCallRowDto;
   rowIndex: number;
-  saveStatus: RowSaveState;
+  saveStatus: RowSaveStatus;
 }) {
   const t = useT();
   const locale = useLocale();
-  const isStaleFailedDraft = saveStatus === "error";
+  const isStaleFailedDraft = isSaveHeld(saveStatus);
   const canShowAmount = row.calculationStatus === "calculated" && !isStaleFailedDraft;
   const title = isStaleFailedDraft
     ? t("calls.calc.staleDraftTitle")
@@ -1004,12 +980,12 @@ function ComputedCell({
   onKeyDown?: (event: KeyboardEvent<HTMLTableCellElement>) => void;
   row: ServiceCallRowDto;
   rowIndex: number;
-  saveStatus: RowSaveState;
+  saveStatus: RowSaveStatus;
   value: number;
 }) {
   const t = useT();
   const locale = useLocale();
-  const isStaleFailedDraft = saveStatus === "error";
+  const isStaleFailedDraft = isSaveHeld(saveStatus);
   const displayValue = row.calculationStatus === "calculated" && !isStaleFailedDraft ? formatVnd(locale, value) : "—";
   return (
     <td
@@ -1057,16 +1033,13 @@ function EditableCallRow({
   showSettlementColumns: boolean;
 }) {
   const t = useT();
-  const locale = useLocale();
-  const [draft, setDraft] = useState<ServiceCallAutosaveInput>(() => draftFromRow(row));
-  const [serverRow, setServerRow] = useState<ServiceCallRowDto>(row);
-  const [saveStatus, setSaveStatus] = useState<RowSaveState>("idle");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [savedAt, setSavedAt] = useState(row.savedAt);
+  const [save, dispatch] = useReducer(callRowSaveReducer, row, initialCallRowSave);
+  const { draft, fieldErrors, savedRow: serverRow, status: saveStatus } = save;
   // 다른 행을 저장하면 이 행의 경고도 바뀐다. 저장 뒤 서버가 다시 준 행(row)이 이 행의 저장 결과보다 새로우면 그 경고를 쓴다.
   const freshestRow = row.savedAt >= serverRow.savedAt ? row : serverRow;
+  const saveHeld = isSaveHeld(saveStatus);
   const [, startTransition] = useTransition();
+  const request = save.inFlight;
   const navigableFields = useMemo(
     () => [
       ...EDITABLE_CALL_FIELDS,
@@ -1078,45 +1051,60 @@ function EditableCallRow({
     [showSettlementColumns]
   );
 
-  function updateDraft<Key extends keyof ServiceCallAutosaveInput>(key: Key, value: ServiceCallAutosaveInput[Key]) {
-    setDraft((current) => ({ ...current, [key]: value }));
-  }
-
-  function updateDraftAndCommit<Key extends keyof ServiceCallAutosaveInput>(key: Key, value: ServiceCallAutosaveInput[Key]) {
-    const nextDraft = { ...draft, [key]: value };
-    setDraft(nextDraft);
-    commit(nextDraft);
-  }
-
-  function commit(nextDraft = draft) {
-    if (isLocked || saveStatus === "saving") {
+  // 저장은 행마다 하나씩 보낸다. 응답을 받으면 모아 둔 수정이 다음 저장으로 inFlight에 들어온다(callRowSaveReducer).
+  useEffect(() => {
+    if (!request) {
       return;
     }
-
-    setSaveStatus("saving");
-    setErrorMessage(null);
-    setFieldErrors({});
     startTransition(() => {
       void (async () => {
-        const result = await autosaveServiceCallRowAction(nextDraft);
-        if (result.ok) {
-          setDraft(draftFromRow(result.data));
-          setServerRow(result.data);
-          setSavedAt(result.data.savedAt);
-          setSaveStatus("saved");
-          setFieldErrors({});
-          return;
+        try {
+          const result = await autosaveServiceCallRowAction(request);
+          if (result.ok) {
+            dispatch({ type: "saved", row: result.data });
+          } else if ("currentRow" in result) {
+            dispatch({ type: "stale", row: result.currentRow, message: result.formError });
+          } else {
+            dispatch({ type: "failed", message: result.formError ?? null, fieldErrors: result.fieldErrors });
+          }
+        } catch {
+          // 응답을 받지 못했다. 초안은 남고, 같은 초안으로 다시 시도할 수 있다.
+          dispatch({ type: "failed", message: null });
         }
-
-        setErrorMessage(result.formError ?? t("calls.save.autosaveFailed"));
-        setFieldErrors(result.fieldErrors ?? {});
-        setSaveStatus("error");
       })();
     });
+  }, [request]);
+
+  function updateDraft<Key extends keyof CallRowDraft>(key: Key, value: CallRowDraft[Key]) {
+    dispatch({ type: "edit", changes: { [key]: value } });
+  }
+
+  function updateDraftAndCommit<Key extends keyof CallRowDraft>(key: Key, value: CallRowDraft[Key]) {
+    if (isLocked) {
+      updateDraft(key, value);
+      return;
+    }
+    dispatch({ type: "commit", changes: { [key]: value } });
+  }
+
+  function commit() {
+    if (isLocked) {
+      return;
+    }
+    dispatch({ type: "commit" });
+  }
+
+  async function reloadLatest() {
+    const result = await reloadServiceCallRowAction(row.id).catch(() => null);
+    // 지금 행을 읽지 못하면 거절 때 받은 행으로 바꾼다. 그 사이 또 바뀌었으면 다음 저장이 다시 충돌로 알린다.
+    const latest = result?.ok ? result.data : save.latestRow;
+    if (latest) {
+      dispatch({ type: "reload", row: latest });
+    }
   }
 
   function handleGridKeyDown(columnId: EditableCallField, event: KeyboardEvent<HTMLElement>) {
-    if (isLocked || saveStatus === "saving") {
+    if (isLocked) {
       return;
     }
 
@@ -1137,10 +1125,7 @@ function EditableCallRow({
 
     if (event.key === "Escape") {
       event.preventDefault();
-      setDraft(cancelCellDraft(draft, draftFromRow(serverRow)));
-      setErrorMessage(null);
-      setFieldErrors({});
-      setSaveStatus("idle");
+      dispatch({ type: "cancel" });
       return;
     }
 
@@ -1180,7 +1165,7 @@ function EditableCallRow({
       <td className="border-b border-border px-2 py-2">
         <SelectCell
           columnId="startTime"
-          disabled={isLocked || saveStatus === "saving"}
+          disabled={isLocked}
           label={t("calls.column.time")}
           name="startTime"
           onBlur={() => commit()}
@@ -1195,7 +1180,7 @@ function EditableCallRow({
       </td>
       <td className="border-b border-border px-2 py-2">
         <ActualEntryCell
-          disabled={isLocked || saveStatus === "saving"}
+          disabled={isLocked}
           displayEnd={serverRow.displayEnd}
           errorMessage={firstFieldError(fieldErrors, "actualEntryTime")}
           onBlur={() => commit()}
@@ -1210,7 +1195,7 @@ function EditableCallRow({
       <td className="border-b border-border px-2 py-2">
         <SelectCell
           columnId="roomId"
-          disabled={isLocked || saveStatus === "saving"}
+          disabled={isLocked}
           emptyLabel={t("calls.placeholder.roomUnassigned")}
           label={t("calls.column.room")}
           name="roomId"
@@ -1226,7 +1211,7 @@ function EditableCallRow({
       <td className="border-b border-border px-2 py-2">
         <SelectCell
           columnId="courseId"
-          disabled={isLocked || saveStatus === "saving"}
+          disabled={isLocked}
           label={t("calls.column.course")}
           name="courseId"
           onBlur={() => commit()}
@@ -1242,7 +1227,7 @@ function EditableCallRow({
       <td className="border-b border-border px-2 py-2">
         <TextCell
           columnId="customerMemo"
-          disabled={isLocked || saveStatus === "saving"}
+          disabled={isLocked}
           label={t("calls.column.customerMemo")}
           name="customerMemo"
           onBlur={() => commit()}
@@ -1258,7 +1243,7 @@ function EditableCallRow({
         <CustomerLinkSelect
           columnId="customerId"
           customers={customers}
-          disabled={isLocked || saveStatus === "saving"}
+          disabled={isLocked}
           onChange={(value) => updateDraftAndCommit("customerId", nullableValue(value))}
           onKeyDown={(event) => handleGridKeyDown("customerId", event)}
           rowIndex={rowIndex}
@@ -1268,7 +1253,7 @@ function EditableCallRow({
       <td className="border-b border-border px-2 py-2">
         <SelectCell
           columnId="therapist1Id"
-          disabled={isLocked || saveStatus === "saving"}
+          disabled={isLocked}
           label={t("calls.column.therapist1")}
           name="therapist1Id"
           onBlur={() => commit()}
@@ -1283,7 +1268,7 @@ function EditableCallRow({
       <td className="border-b border-border px-2 py-2">
         <SelectCell
           columnId="therapist2Id"
-          disabled={isLocked || saveStatus === "saving"}
+          disabled={isLocked}
           errorId={`call-${row.id}-therapist2-error`}
           errorMessage={firstFieldError(fieldErrors, "therapist2Id")}
           label={t("calls.column.therapist2")}
@@ -1300,7 +1285,7 @@ function EditableCallRow({
       <td className="border-b border-border px-2 py-2">
         <SelectCell
           columnId="earcareEmployeeId"
-          disabled={isLocked || saveStatus === "saving"}
+          disabled={isLocked}
           label={t("calls.column.earcare")}
           name="earcareEmployeeId"
           onBlur={() => commit()}
@@ -1315,7 +1300,7 @@ function EditableCallRow({
       <td className="border-b border-border px-2 py-2">
         <SelectCell
           columnId="status"
-          disabled={isLocked || saveStatus === "saving"}
+          disabled={isLocked}
           label={t("calls.column.status")}
           name="status"
           onBlur={() => commit()}
@@ -1331,7 +1316,7 @@ function EditableCallRow({
       <td className="border-b border-border px-2 py-2">
         <SelectCell
           columnId="discountTypeCode"
-          disabled={isLocked || saveStatus === "saving"}
+          disabled={isLocked}
           label={t("calls.column.discountType")}
           name="discountTypeCode"
           onBlur={() => commit()}
@@ -1346,7 +1331,7 @@ function EditableCallRow({
       <td className="border-b border-border px-2 py-2">
         <SelectCell
           columnId="paymentMethodCode"
-          disabled={isLocked || saveStatus === "saving"}
+          disabled={isLocked}
           label={t("calls.column.paymentMethod")}
           name="paymentMethodCode"
           onBlur={() => commit()}
@@ -1361,7 +1346,7 @@ function EditableCallRow({
       <td className="border-b border-border px-2 py-2">
         <TextCell
           columnId="note"
-          disabled={isLocked || saveStatus === "saving"}
+          disabled={isLocked}
           label={t("calls.column.note")}
           name="note"
           onBlur={() => commit()}
@@ -1375,7 +1360,7 @@ function EditableCallRow({
       <td className="border-b border-border px-2 py-2">
         <SelectCell
           columnId="confirmationCode"
-          disabled={isLocked || saveStatus === "saving"}
+          disabled={isLocked}
           label={t("calls.column.confirmation")}
           name="confirmationCode"
           onBlur={() => commit()}
@@ -1453,27 +1438,22 @@ function EditableCallRow({
         tabIndex={-1}
       >
         <div className="grid w-full gap-1">
-          {saveStatus === "error" ? <span className="text-danger">{t("calls.calc.errorPending")}</span> : null}
-          {serverRow.calculationStatus === "calculated" && saveStatus !== "error" ? <span>{t("calls.calc.calculated")}</span> : null}
-          {serverRow.calculationStatus === "not_completed" && saveStatus !== "error" ? <span>{t("calls.calc.notCompleted")}</span> : null}
+          {saveHeld ? <span className="text-danger">{t("calls.calc.errorPending")}</span> : null}
+          {serverRow.calculationStatus === "calculated" && !saveHeld ? <span>{t("calls.calc.calculated")}</span> : null}
+          {serverRow.calculationStatus === "not_completed" && !saveHeld ? <span>{t("calls.calc.notCompleted")}</span> : null}
           {(serverRow.calculationStatus === "course_policy_missing" ||
             serverRow.calculationStatus === "therapist_rate_missing" ||
             serverRow.calculationStatus === "second_therapist_required") &&
-          saveStatus !== "error" ? (
+          !saveHeld ? (
             <span className="text-danger">{calcMessage(t, serverRow.calculationStatus)}</span>
           ) : null}
-          <span aria-live="polite" className={saveStateClassName(saveStatus)}>
-            {saveStateLabel(saveStatus, t)}
-            {saveStatus === "saved" ? ` ${formatDateTime(locale, savedAt, { hour: "2-digit", minute: "2-digit" })}` : ""}
-          </span>
-          {saveStatus === "error" ? (
-            <span className="grid gap-1">
-              <span className="text-danger">{errorMessage ?? t("calls.save.error")}</span>
-              <Button className="h-7 justify-self-start px-2 text-xs" onClick={() => commit()} type="button" variant="secondary">
-                {t("calls.save.retry")}
-              </Button>
-            </span>
-          ) : null}
+          <CallRowSaveStatus
+            message={save.message}
+            onReload={() => void reloadLatest()}
+            onRetry={() => commit()}
+            savedAt={serverRow.savedAt}
+            state={saveStatus}
+          />
         </div>
       </td>
     </tr>

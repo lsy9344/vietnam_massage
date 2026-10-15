@@ -27,6 +27,7 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   EMPLOYEE_NOT_ACTIVE: "Vui lòng chọn nhân viên phụ trách đang hoạt động.",
   D_COURSE_SECOND_THERAPIST_REQUIRED: "Gói D cần kỹ thuật viên thứ hai.",
   SERVICE_CALL_NOT_FOUND: "Không tìm thấy dòng sổ cuộc gọi.",
+  STALE_CALL: "Cuộc gọi này đã được thay đổi ở màn hình khác. Hãy tải lại rồi mới lưu.",
   CUSTOMER_NOT_FOUND: "Không tìm thấy khách.",
   INVALID_CUSTOMER_INPUT: "Dữ liệu khách không hợp lệ.",
 
@@ -119,6 +120,7 @@ const KOREAN_MESSAGE_VI: Record<string, string> = {
   "선택값이 올바르지 않습니다.": "Giá trị lựa chọn không hợp lệ.",
   "이름을 입력하세요.": "Vui lòng nhập tên.",
   "고객을 선택하세요.": "Vui lòng chọn khách.",
+  "저장 기준 시각이 올바르지 않습니다. 다시 불러온 뒤에 저장하세요.": "Thời điểm của bản đã đọc không hợp lệ. Hãy tải lại rồi mới lưu.",
   // 운영팀 월 인센/월마감 보너스 고정 warning (표시 직전 번역; 서비스는 한국어 원문 유지)
   "적용월에 활성 운영팀 월 인센 정책이 없습니다.": "Không có chính sách thưởng tháng nhóm vận hành đang hoạt động trong tháng áp dụng.",
   "활성 운영팀 직원이 없어 전체 월 인센을 미배분으로 남겼습니다.": "Không có nhân viên nhóm vận hành đang hoạt động nên toàn bộ thưởng tháng được để chưa phân bổ.",

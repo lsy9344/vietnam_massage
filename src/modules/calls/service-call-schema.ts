@@ -22,6 +22,12 @@ const optionalTenMinuteTime = z.preprocess(
     .nullable()
     .optional()
 );
+// 화면이 마지막으로 받은 행의 updatedAt(toISOString 형식). 기존 행 저장은 이 버전일 때만 갱신된다.
+export const savedVersionMessage = "저장 기준 시각이 올바르지 않습니다. 다시 불러온 뒤에 저장하세요.";
+const savedVersion = z
+  .string({ error: savedVersionMessage })
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/, savedVersionMessage);
 const wholeVndAmount = z.preprocess((value) => {
   if (typeof value === "string" && /^\d+$/.test(value.trim())) {
     return Number(value.trim());
@@ -51,11 +57,14 @@ export const serviceCallInputSchema = z.object({
   discountTypeCode: optionalCode,
   paymentMethodCode: optionalCode,
   note: optionalText,
-  confirmationCode: optionalCode
+  confirmationCode: optionalCode,
+  /** serviceCallId가 있으면(기존 행 저장) 서비스가 필수로 요구한다. */
+  expectedUpdatedAt: z.preprocess(emptyToNull, savedVersion.nullable().optional())
 });
 
 export const serviceCallAutosaveInputSchema = serviceCallInputSchema.extend({
-  serviceCallId: z.string().trim().min(1, "콜 행 ID가 올바르지 않습니다.")
+  serviceCallId: z.string().trim().min(1, "콜 행 ID가 올바르지 않습니다."),
+  expectedUpdatedAt: savedVersion
 });
 
 export const dailyExpenseInputSchema = z.object({

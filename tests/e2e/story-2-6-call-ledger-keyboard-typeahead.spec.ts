@@ -215,7 +215,7 @@ test.describe("Story 2.6 keyboard-first call ledger type-ahead", () => {
     await memoCell.fill("Story 2.6 cancel draft");
     await page.keyboard.press("Escape");
     await expect(memoCell).toHaveValue("Story 2.6 row one");
-    await expect(grid.getByText("저장중")).toHaveCount(0);
+    await expect(grid.getByText("저장 중")).toHaveCount(0);
     await expect(grid.getByText("저장 보류 계산 대기")).toHaveCount(0);
 
     // 앞선 셀의 blur 처리(120ms 지연)와 자동저장 후 재렌더가 겹치면 focus가 곧바로 풀린다.
@@ -248,7 +248,8 @@ test.describe("Story 2.6 keyboard-first call ledger type-ahead", () => {
     // D코스로 바꾸는 순간 마사지사2가 없어 서버가 저장을 거부한다. 같은 문구가 계산 상태 셀에도
     // 뜨므로 필드 오류는 id로 특정한다.
     await expect(row.locator('[id$="-therapist2-error"]')).toContainText("D코스는 마사지사2 필수입니다. 마사지사2를 배정해야 저장됩니다.");
-    await expect(row.getByText("저장 보류", { exact: true })).toBeVisible();
+    // 저장 상태 칩은 기호와 글자가 한 요소라 정확히 일치시키지 않는다.
+    await expect(row.getByText("저장 실패")).toBeVisible();
 
     const statusCombobox = row.getByRole("combobox", { name: "상태" });
     await expect(async () => {

@@ -16,6 +16,7 @@ import {
   dailyExpenseDeactivateSchema,
   dailyExpenseInputSchema,
   dailyExpenseUpdateSchema,
+  savedVersionMessage,
   serviceCallAutosaveInputSchema,
   serviceCallInputSchema,
   type CustomerInput,
@@ -451,6 +452,17 @@ export class ServiceCallDomainError extends Error {
   constructor(message: string, public readonly code: string) {
     super(message);
     this.name = "ServiceCallDomainError";
+  }
+}
+
+/**
+ * 오래된 저장(STALE_CALL). 화면이 읽은 뒤에 다른 저장이 먼저 들어왔다. 아무것도 쓰지 않았고,
+ * 화면이 다시 불러올 수 있게 지금의 행(currentRow)을 함께 돌려준다.
+ */
+export class StaleServiceCallError extends ServiceCallDomainError {
+  constructor(public readonly currentRow: ServiceCallRowDto) {
+    super("다른 화면에서 이 콜이 바뀌었습니다. 다시 불러온 뒤에 저장하세요.", "STALE_CALL");
+    this.name = "StaleServiceCallError";
   }
 }
 
@@ -1057,6 +1069,30 @@ async function findServiceCallWithRelations(tx: ServiceCallPrismaClient, id: str
   }
 
   return record;
+}
+
+/**
+ * 기존 행을 화면이 읽은 버전(expectedUpdatedAt)일 때만 고친다. 버전 확인과 쓰기가 한 번의 조건부 갱신이라
+ * 그 사이에 다른 저장이 끼어들 수 없다. 고친 행이 없으면 행이 없는지, 다른 저장이 먼저 들어왔는지 가린다.
+ */
+async function updateServiceCallAtVersion(
+  tx: ServiceCallPrismaClient,
+  target: { serviceCallId: string; operatingMonthId: string; expectedUpdatedAt: string },
+  data: Record<string, unknown>
+) {
+  const updateResult = await tx.serviceCall.updateMany({
+    where: { id: target.serviceCallId, operatingMonthId: target.operatingMonthId, updatedAt: new Date(target.expectedUpdatedAt) },
+    data
+  });
+  if (updateResult.count === 1) {
+    return;
+  }
+
+  const current = await findServiceCallWithRelations(tx, target.serviceCallId);
+  if (current.operatingMonthId !== target.operatingMonthId) {
+    throw new ServiceCallDomainError("콜 원장 행을 찾을 수 없습니다.", "SERVICE_CALL_NOT_FOUND");
+  }
+  throw new StaleServiceCallError(await toRowDto(tx, current));
 }
 
 function assignmentEmployeeId(record: ServiceCallRecord, role: ServiceCallAssignmentRole) {
@@ -1740,10 +1776,20 @@ export async function listServiceCallsForOperatingMonth(input: {
   });
 }
 
+/** 콜 한 줄을 지금 저장된 그대로 읽는다. 저장이 거절된 화면이 "최신 내용으로 다시 불러오기"에 쓴다. */
+export async function getServiceCallRow(input: { serviceCallId: string; prismaClient?: ServiceCallPrismaClient }) {
+  const client = getClient(input.prismaClient);
+  return toRowDto(client, await findServiceCallWithRelations(client, input.serviceCallId));
+}
+
 export async function saveBasicServiceCallRow(input: ServiceCallInput & { actorId?: string; prismaClient?: ServiceCallPrismaClient }) {
   const parsed = serviceCallInputSchema.safeParse(input);
   if (!parsed.success) {
     throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "콜 원장 입력값이 올바르지 않습니다.", "INVALID_SERVICE_CALL_INPUT");
+  }
+  // 기존 행을 고치는 저장은 화면이 읽은 버전을 함께 보내야 한다. 없으면 다른 저장을 덮을 수 있다.
+  if (parsed.data.serviceCallId && !parsed.data.expectedUpdatedAt) {
+    throw new ServiceCallDomainError(savedVersionMessage, "INVALID_SERVICE_CALL_INPUT");
   }
   assertRoomRequiredForStatus({ roomId: parsed.data.roomId, status: parsed.data.status });
 
@@ -1794,14 +1840,16 @@ export async function saveBasicServiceCallRow(input: ServiceCallInput & { actorI
     };
 
     let serviceCall: ServiceCallRecord;
-    if (parsed.data.serviceCallId) {
-      const updateResult = await tx.serviceCall.updateMany({
-        where: { id: parsed.data.serviceCallId, operatingMonthId: parsed.data.operatingMonthId },
+    if (parsed.data.serviceCallId && parsed.data.expectedUpdatedAt) {
+      await updateServiceCallAtVersion(
+        tx,
+        {
+          serviceCallId: parsed.data.serviceCallId,
+          operatingMonthId: parsed.data.operatingMonthId,
+          expectedUpdatedAt: parsed.data.expectedUpdatedAt
+        },
         data
-      });
-      if (updateResult.count !== 1) {
-        throw new ServiceCallDomainError("콜 원장 행을 찾을 수 없습니다.", "SERVICE_CALL_NOT_FOUND");
-      }
+      );
       serviceCall = await findServiceCallWithRelations(tx, parsed.data.serviceCallId);
     } else {
       serviceCall = await tx.serviceCall.create({ data });
@@ -1898,13 +1946,7 @@ export async function autosaveServiceCallRow(
       confirmationCode: parsed.data.confirmationCode ?? null
     };
 
-    const updateResult = await tx.serviceCall.updateMany({
-      where: { id: parsed.data.serviceCallId, operatingMonthId: parsed.data.operatingMonthId },
-      data
-    });
-    if (updateResult.count !== 1) {
-      throw new ServiceCallDomainError("콜 원장 행을 찾을 수 없습니다.", "SERVICE_CALL_NOT_FOUND");
-    }
+    await updateServiceCallAtVersion(tx, parsed.data, data);
 
     await Promise.all([
       writeAssignment(tx, {

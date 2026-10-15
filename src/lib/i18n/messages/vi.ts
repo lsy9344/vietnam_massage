@@ -300,10 +300,9 @@ export const vi: Messages = {
   "calls.grid.empty.description": "Ghi lại các trường cơ bản (nhập cuộc gọi thời gian thực gốc, ý nghĩa A:S) ở dòng nhập bên dưới.",
 
   // 콜 행 저장 상태
-  "calls.save.saving": "Đang lưu",
   "calls.save.saved": "Đã lưu",
-  "calls.save.error": "Tạm hoãn lưu",
   "calls.save.retry": "Thử lại",
+  "calls.save.reloadLatest": "Tải lại nội dung mới nhất",
   "calls.save.autosaveFailed": "Tự động lưu dòng cuộc gọi thất bại.",
 
   // 콜 계산 상태

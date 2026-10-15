@@ -43,7 +43,15 @@ if (!lockfile.includes("'@tanstack/react-table'")) {
   errors.push("pnpm-lock.yaml importer must include @tanstack/react-table");
 }
 
-const grid = read("src/app/(erp)/calls/editable-call-grid.tsx");
+// 행 저장 순서와 저장 상태 표시는 티켓 15에서 call-row-save.ts·call-row-save-status.tsx·공통 SaveStatus로 옮겼다.
+const grid = [
+  "src/app/(erp)/calls/editable-call-grid.tsx",
+  "src/app/(erp)/calls/call-row-save.ts",
+  "src/app/(erp)/calls/call-row-save-status.tsx",
+  "src/components/ui/save-status.tsx"
+]
+  .map(read)
+  .join("\n");
 for (const required of [
   "useReactTable",
   "getCoreRowModel",

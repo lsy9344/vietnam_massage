@@ -7,6 +7,7 @@ import {
   createDailyExpense,
   deactivateDailyExpense,
   getDailyCallLedgerSummary,
+  getServiceCallRow,
   listCustomerVisitHistory,
   listCustomers,
   ledgerStatusCountsFromRows,
@@ -342,6 +343,8 @@ function createMemoryPrisma() {
   const therapistAttendances = new Map<string, any>();
   const statusHistories: any[] = [];
   const auditEvents: any[] = [];
+  // 실제 DB의 @updatedAt처럼 콜을 고칠 때마다 updatedAt이 앞으로 간다. 같은 값이 다시 나오면 오래된 저장을 가려낼 수 없다.
+  let serviceCallClock = Date.parse("2026-06-09T01:00:00.000Z");
 
   function sortByOrder(records: any[]) {
     return records.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0));
@@ -486,7 +489,12 @@ function createMemoryPrisma() {
         if (!record || (where.operatingMonthId && record.operatingMonthId !== where.operatingMonthId)) {
           return { count: 0 };
         }
-        serviceCalls.set(where.id, { ...record, ...data, updatedAt: new Date("2026-06-09T01:00:00.000Z") });
+        // id·updatedAt 조건부 갱신: 조건의 updatedAt이 지금 행과 다르면 실제 DB처럼 아무것도 고치지 않고 0건이다.
+        if (where.updatedAt !== undefined && record.updatedAt.getTime() !== where.updatedAt.getTime()) {
+          return { count: 0 };
+        }
+        serviceCallClock += 1000;
+        serviceCalls.set(where.id, { ...record, ...data, updatedAt: new Date(serviceCallClock) });
         return { count: 1 };
       }
     },
@@ -1123,6 +1131,7 @@ describe("service call service", () => {
       () =>
         autosaveServiceCallRow({
           serviceCallId: original.id,
+          expectedUpdatedAt: original.updatedAt,
           operatingMonthId: "month-2026-06",
           serviceDate: "2026-06-10",
           startTime: "11:00",
@@ -1239,6 +1248,7 @@ describe("service call service", () => {
 
     const saved = await autosaveServiceCallRow({
       serviceCallId: original.id,
+      expectedUpdatedAt: original.updatedAt,
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
       startTime: "11:00",
@@ -1282,6 +1292,7 @@ describe("service call service", () => {
 
     const saved = await autosaveServiceCallRow({
       serviceCallId: original.id,
+      expectedUpdatedAt: original.updatedAt,
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
       startTime: "11:00",
@@ -1346,8 +1357,9 @@ describe("service call service", () => {
       prismaClient
     });
 
-    await autosaveServiceCallRow({
+    const first = await autosaveServiceCallRow({
       serviceCallId: original.id,
+      expectedUpdatedAt: original.updatedAt,
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
       startTime: "11:00",
@@ -1359,6 +1371,7 @@ describe("service call service", () => {
     });
     await autosaveServiceCallRow({
       serviceCallId: original.id,
+      expectedUpdatedAt: first.updatedAt,
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
       startTime: "11:00",
@@ -1391,6 +1404,7 @@ describe("service call service", () => {
 
     await autosaveServiceCallRow({
       serviceCallId: original.id,
+      expectedUpdatedAt: original.updatedAt,
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
       startTime: "11:00",
@@ -1436,6 +1450,7 @@ describe("service call service", () => {
 
     const saved = await autosaveServiceCallRow({
       serviceCallId: original.id,
+      expectedUpdatedAt: original.updatedAt,
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
       startTime: "11:00",
@@ -1471,6 +1486,7 @@ describe("service call service", () => {
       () =>
         autosaveServiceCallRow({
           serviceCallId: original.id,
+          expectedUpdatedAt: original.updatedAt,
           operatingMonthId: "month-locked",
           serviceDate: "2026-07-10",
           startTime: "11:00",
@@ -1487,6 +1503,7 @@ describe("service call service", () => {
       () =>
         autosaveServiceCallRow({
           serviceCallId: original.id,
+          expectedUpdatedAt: original.updatedAt,
           operatingMonthId: "month-confirmed",
           serviceDate: "2026-08-10",
           startTime: "11:00",
@@ -1503,6 +1520,7 @@ describe("service call service", () => {
       () =>
         autosaveServiceCallRow({
           serviceCallId: original.id,
+          expectedUpdatedAt: original.updatedAt,
           operatingMonthId: "month-2026-06",
           serviceDate: "2026-06-10",
           startTime: "11:00",
@@ -2331,6 +2349,7 @@ describe("service call service", () => {
 
     const linked = await autosaveServiceCallRow({
       serviceCallId: saved.id,
+      expectedUpdatedAt: saved.updatedAt,
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
       startTime: "11:00",
@@ -2348,6 +2367,7 @@ describe("service call service", () => {
 
     const unlinked = await autosaveServiceCallRow({
       serviceCallId: saved.id,
+      expectedUpdatedAt: linked.updatedAt,
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
       startTime: "11:00",
@@ -2403,6 +2423,7 @@ describe("service call service", () => {
       () =>
         autosaveServiceCallRow({
           serviceCallId: original.id,
+          expectedUpdatedAt: original.updatedAt,
           operatingMonthId: "month-locked",
           serviceDate: "2026-07-10",
           startTime: "11:00",
@@ -2464,6 +2485,7 @@ describe("service call service", () => {
     });
     await autosaveServiceCallRow({
       serviceCallId: saved.id,
+      expectedUpdatedAt: saved.updatedAt,
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
       startTime: "11:00",
@@ -2555,6 +2577,7 @@ describe("service call service", () => {
       () =>
         saveBasicServiceCallRow({
           serviceCallId: saved.id,
+          expectedUpdatedAt: saved.updatedAt,
           operatingMonthId: "month-2026-06",
           serviceDate: "2026-06-10",
           startTime: "11:00",
@@ -2769,6 +2792,7 @@ describe("service call service", () => {
       () =>
         autosaveServiceCallRow({
           serviceCallId: locked.id,
+          expectedUpdatedAt: locked.updatedAt.toISOString(),
           operatingMonthId: "month-locked",
           serviceDate: "2026-07-02",
           startTime: "11:00",
@@ -3528,6 +3552,7 @@ describe("actual entry and display end", () => {
 
     const saved = await autosaveServiceCallRow({
       serviceCallId: late.id,
+      expectedUpdatedAt: late.updatedAt,
       operatingMonthId: late.operatingMonthId,
       serviceDate: late.serviceDate,
       startTime: late.startTime,
@@ -3579,6 +3604,7 @@ describe("actual entry and display end", () => {
       () =>
         autosaveServiceCallRow({
           serviceCallId: late.id,
+          expectedUpdatedAt: saved.updatedAt,
           operatingMonthId: late.operatingMonthId,
           serviceDate: late.serviceDate,
           startTime: late.startTime,
@@ -3597,6 +3623,7 @@ describe("actual entry and display end", () => {
 
     const cleared = await autosaveServiceCallRow({
       serviceCallId: late.id,
+      expectedUpdatedAt: saved.updatedAt,
       operatingMonthId: late.operatingMonthId,
       serviceDate: late.serviceDate,
       startTime: late.startTime,
@@ -4129,5 +4156,184 @@ describe("room overlap", () => {
         relatedCallIds: overlap.relatedCallIds
       });
     }
+  });
+});
+
+describe("stale save rejection", () => {
+  const staleMessage = "다른 화면에서 이 콜이 바뀌었습니다. 다시 불러온 뒤에 저장하세요.";
+
+  function reservation(prismaClient: ReturnType<typeof createMemoryPrisma>) {
+    return saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      status: "예약",
+      prismaClient
+    });
+  }
+
+  /** 화면이 마지막으로 받은 행(read)의 updatedAt을 붙여 그 행을 다시 저장한다. */
+  function saveFrom(
+    prismaClient: ReturnType<typeof createMemoryPrisma>,
+    read: ServiceCallRowDto,
+    changes: Partial<Parameters<typeof autosaveServiceCallRow>[0]>
+  ) {
+    return autosaveServiceCallRow({
+      serviceCallId: read.id,
+      operatingMonthId: read.operatingMonthId,
+      serviceDate: read.serviceDate,
+      startTime: read.startTime,
+      actualEntryTime: read.actualEntryTime,
+      roomId: read.roomId,
+      courseId: read.courseId,
+      customerMemo: read.customerMemo,
+      customerId: read.customerId,
+      therapist1Id: read.therapist1?.id ?? null,
+      therapist2Id: read.therapist2?.id ?? null,
+      earcareEmployeeId: read.earcare?.id ?? null,
+      status: read.status,
+      discountTypeCode: read.discountTypeCode,
+      paymentMethodCode: read.paymentMethodCode,
+      note: read.note,
+      confirmationCode: read.confirmationCode,
+      expectedUpdatedAt: read.updatedAt,
+      actorId: "counter-account",
+      prismaClient,
+      ...changes
+    });
+  }
+
+  function isStale(error: unknown): error is ServiceCallDomainError & { currentRow: ServiceCallRowDto } {
+    return error instanceof ServiceCallDomainError && error.code === "STALE_CALL";
+  }
+
+  it("lets one of two saves from the same updatedAt through and gives the other STALE_CALL, the current row, and no writes", async () => {
+    const prismaClient = createMemoryPrisma();
+    const read = await reservation(prismaClient);
+
+    const results = await Promise.allSettled([
+      saveFrom(prismaClient, read, { customerMemo: "카운터 A", status: "사용중", paymentMethodCode: "현금" }),
+      saveFrom(prismaClient, read, { customerMemo: "카운터 B", status: "취소", therapist1Id: "therapist-2" })
+    ]);
+
+    const saved = results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
+    const rejected = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []));
+    assert.equal(saved.length, 1);
+    assert.equal(rejected.length, 1);
+    const [winner] = saved;
+    const [error] = rejected;
+    assert.ok(isStale(error));
+    assert.equal(error.message, staleMessage);
+    assert.deepEqual(error.currentRow, winner);
+
+    const stored = prismaClient.serviceCalls.get(read.id);
+    assert.equal(stored.customerMemo, winner.customerMemo);
+    assert.equal(stored.status, winner.status);
+    const activeTherapist1 = [...prismaClient.assignments.values()].filter(
+      (assignment: any) => assignment.serviceCallId === read.id && assignment.assignmentRole === "THERAPIST_1" && assignment.isActive !== false
+    );
+    assert.deepEqual(activeTherapist1.map((assignment: any) => assignment.employeeId), [winner.therapist1?.id]);
+    assert.deepEqual(
+      prismaClient.statusHistories.map((history: any) => history.newStatus),
+      [winner.status]
+    );
+    assert.equal(prismaClient.auditEvents.length > 0, true);
+    for (const event of prismaClient.auditEvents) {
+      assert.equal(event.afterValue.customerMemo, winner.customerMemo);
+    }
+  });
+
+  it("rejects a later save from an older read, keeps the first save, and saves again from the updatedAt it returned", async () => {
+    const prismaClient = createMemoryPrisma();
+    const read = await reservation(prismaClient);
+    const first = await saveFrom(prismaClient, read, { customerMemo: "먼저 저장", paymentMethodCode: "현금" });
+    const auditCount = prismaClient.auditEvents.length;
+
+    await assert.rejects(
+      () => saveFrom(prismaClient, read, { customerMemo: "늦은 저장", status: "취소", paymentMethodCode: "카드" }),
+      (error: unknown) => isStale(error) && error.currentRow.customerMemo === "먼저 저장" && error.currentRow.updatedAt === first.updatedAt
+    );
+    assert.equal(prismaClient.serviceCalls.get(read.id).customerMemo, "먼저 저장");
+    assert.equal(prismaClient.serviceCalls.get(read.id).paymentMethodCode, "현금");
+    assert.equal(prismaClient.statusHistories.length, 0);
+    assert.equal(prismaClient.auditEvents.length, auditCount);
+
+    const again = await saveFrom(prismaClient, first, { customerMemo: "다시 저장" });
+    assert.equal(again.customerMemo, "다시 저장");
+    assert.notEqual(again.updatedAt, first.updatedAt);
+  });
+
+  it("reads the row as saved now, so a screen reloading after a rejection gets the latest save and can save from it", async () => {
+    const prismaClient = createMemoryPrisma();
+    const read = await reservation(prismaClient);
+    const first = await saveFrom(prismaClient, read, { customerMemo: "다른 화면 첫 저장" });
+    const rejection = await saveFrom(prismaClient, read, { customerMemo: "늦은 화면" }).catch((error: unknown) => error);
+    assert.ok(isStale(rejection));
+    const second = await saveFrom(prismaClient, first, { customerMemo: "다른 화면 두 번째 저장", paymentMethodCode: "카드" });
+
+    const latest = await getServiceCallRow({ serviceCallId: read.id, prismaClient });
+
+    assert.deepEqual(latest, second);
+    assert.notEqual(rejection.currentRow.updatedAt, latest.updatedAt);
+    const saved = await saveFrom(prismaClient, latest, { customerMemo: "늦은 화면 다시 저장" });
+    assert.equal(saved.customerMemo, "늦은 화면 다시 저장");
+    assert.equal(saved.paymentMethodCode, "카드");
+  });
+
+  it("rejects an existing-row save that does not say which updatedAt it read, on both save paths", async () => {
+    const prismaClient = createMemoryPrisma();
+    const read = await reservation(prismaClient);
+
+    await assert.rejects(
+      () => saveFrom(prismaClient, read, { customerMemo: "버전 없음", expectedUpdatedAt: undefined }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "INVALID_SERVICE_CALL_INPUT"
+    );
+    await assert.rejects(
+      () =>
+        saveBasicServiceCallRow({
+          serviceCallId: read.id,
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-06-10",
+          startTime: "11:00",
+          roomId: "room-101",
+          courseId: "course-a",
+          customerMemo: "버전 없음",
+          status: "예약",
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "INVALID_SERVICE_CALL_INPUT"
+    );
+
+    assert.equal(prismaClient.serviceCalls.get(read.id).customerMemo, null);
+    assert.equal(prismaClient.serviceCalls.get(read.id).updatedAt.toISOString(), read.updatedAt);
+  });
+
+  it("gives a stale saveBasic of an existing row the same STALE_CALL and keeps the newer save", async () => {
+    const prismaClient = createMemoryPrisma();
+    const read = await reservation(prismaClient);
+    const first = await saveFrom(prismaClient, read, { customerMemo: "원장에서 저장" });
+
+    await assert.rejects(
+      () =>
+        saveBasicServiceCallRow({
+          serviceCallId: read.id,
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-06-10",
+          startTime: "11:00",
+          roomId: "room-101",
+          courseId: "course-a",
+          customerMemo: "오래된 화면",
+          status: "예약",
+          expectedUpdatedAt: read.updatedAt,
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error: unknown) => isStale(error) && error.currentRow.updatedAt === first.updatedAt
+    );
+    assert.equal(prismaClient.serviceCalls.get(read.id).customerMemo, "원장에서 저장");
   });
 });

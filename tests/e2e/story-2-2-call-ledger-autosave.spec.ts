@@ -287,14 +287,15 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
     const stableRow = page.locator(`tr[data-service-call-id="${call.id}"]`);
     await stableRow.getByLabel("고객/메모").fill(updatedMemo);
     await stableRow.getByLabel("고객/메모").blur();
-    await expect(rowByText(page, updatedMemo).getByText(/저장중|저장됨/)).toBeVisible();
-    await expect(rowByText(page, updatedMemo).getByText("저장됨")).toBeVisible();
+    // 처음 불러온 행도 "저장됨"으로 보이므로(티켓 15) 이 화면의 저장이 끝났는지는 data-save-state로 본다.
+    const saveState = stableRow.locator("[data-save-state]");
+    await expect(saveState).toHaveAttribute("data-save-state", "saved");
+    await expect(saveState).toContainText("저장됨");
 
     const updatedRow = rowByText(page, updatedMemo);
     await selectGridCombobox(updatedRow, "상태", "사용중");
-    await expect(updatedRow.getByText("저장됨")).toBeVisible();
     await selectGridCombobox(updatedRow, "결제수단", "카드");
-    await expect(updatedRow.getByText("저장됨")).toBeVisible();
+    await expect(saveState).toHaveAttribute("data-save-state", "saved");
 
     await expect
       .poll(async () => {
@@ -323,7 +324,7 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
     );
   });
 
-  test("자동저장 실패는 입력값을 유지하고 저장 보류 상태에서 같은 draft로 재시도한다", async ({ page }) => {
+  test("자동저장 실패는 입력값을 유지하고 저장 실패 상태에서 같은 draft로 재시도한다", async ({ page }) => {
     const originalMemo = `E2E22 retry original ${Date.now().toString(36)}`;
     const retryMemo = `E2E22 retry kept ${Date.now().toString(36)}`;
     const call = await createCallRow({ operatingMonthId: seededData.openMonthId, serviceDate: "2032-03-06", memo: originalMemo });
@@ -336,21 +337,24 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
       const stableRow = page.locator(`tr[data-service-call-id="${call.id}"]`);
       await stableRow.getByLabel("고객/메모").fill(retryMemo);
       await stableRow.getByLabel("고객/메모").blur();
-      await expect(rowByText(page, retryMemo).getByText("저장됨")).toBeVisible();
+      const saveState = stableRow.locator("[data-save-state]");
+      await expect(saveState).toHaveAttribute("data-save-state", "saved");
 
       // 저장 성공은 목록을 다시 불러온다. 그 뒤에 코드를 비활성화해야 화면에는 "카드"가 남아 있고
       // 서버만 거부하는 상태가 되어, 자동저장 실패 경로를 재현할 수 있다.
       await setCodeItemActive("PAYMENT_METHOD", "CARD", false);
       await selectGridCombobox(stableRow, "결제수단", "카드");
 
-      // "저장 보류"(저장 상태)와 "저장 보류 계산 대기"(계산 상태)가 함께 뜨므로 정확히 일치시킨다.
-      await expect(rowByText(page, retryMemo).getByText("저장 보류", { exact: true })).toBeVisible();
+      // 저장 상태 칩은 기호와 글자가 한 요소라 정확히 일치시키지 않는다. 계산 칸에는 "저장 보류 계산 대기"가 뜬다.
+      await expect(rowByText(page, retryMemo).getByText("저장 실패")).toBeVisible();
+      await expect(rowByText(page, retryMemo).getByText("저장 보류 계산 대기")).toBeVisible();
       await expect(rowByText(page, retryMemo).getByRole("button", { name: /재시도|retry/i })).toBeVisible();
       await expect(rowByText(page, retryMemo).getByLabel("고객/메모")).toHaveValue(retryMemo);
 
       await setCodeItemActive("PAYMENT_METHOD", "CARD", true);
       await rowByText(page, retryMemo).getByRole("button", { name: /재시도|retry/i }).click();
-      await expect(rowByText(page, retryMemo).getByText("저장됨")).toBeVisible();
+      await expect(saveState).toHaveAttribute("data-save-state", "saved");
+      await expect(saveState).toContainText("저장됨");
 
       const saved = await (prisma as any).serviceCall.findUnique({ where: { id: call.id } });
       expect(saved).toMatchObject({ customerMemo: retryMemo, paymentMethodCode: "CARD" });
@@ -375,7 +379,7 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
     await expect(row.getByRole("button", { name: /재시도|retry/i })).toHaveCount(0);
   });
 
-  test("권한이 사라진 사용자의 autosave는 서버에서 차단되고 안전한 한국어 오류로 보류된다", async ({ page }) => {
+  test("권한이 사라진 사용자의 autosave는 서버에서 차단되고 안전한 한국어 오류로 저장 실패가 된다", async ({ page }) => {
     const memo = `E2E22 permission ${Date.now().toString(36)}`;
     const draftMemo = `E2E22 permission draft ${Date.now().toString(36)}`;
     const call = await createCallRow({ operatingMonthId: seededData.openMonthId, serviceDate: "2032-03-07", memo });
@@ -393,7 +397,7 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
       await row.getByLabel("고객/메모").fill(draftMemo);
       await row.getByLabel("고객/메모").blur();
 
-      await expect(rowByText(page, draftMemo).getByText("저장 보류", { exact: true })).toBeVisible();
+      await expect(rowByText(page, draftMemo).getByText("저장 실패")).toBeVisible();
       await expect(page.getByText("권한이 없습니다.")).toBeVisible();
       await expect(rowByText(page, draftMemo).getByLabel("고객/메모")).toHaveValue(draftMemo);
 
