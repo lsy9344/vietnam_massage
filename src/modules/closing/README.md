@@ -82,6 +82,16 @@ Owns monthly close and payout snapshots.
 - `/closing` labels the prior snapshot as `이전 확정 스냅샷` for reopened `검토중` months and keeps the current recalculation under `현재 기준 미리보기`.
 - Future dashboard/KPI readers must treat versioned snapshots the same way: `마감확정`/`잠금` reads use the latest saved snapshot, while reopened `검토중` months show current preview as the editable truth and prior snapshots only as historical reference.
 
+## Ticket 33 Pre-Close Checklist
+
+`monthly-closing-checklist-service.ts` (`listMonthlyClosingChecklist()`) is the F07/ADR 0002 pre-close checklist, separate from the preview service above. `confirmMonthlyClose()` recomputes it inside the confirmation transaction and rejects with `MONTHLY_CLOSE_CALCULATION_ERRORS_PENDING` or `MONTHLY_CLOSE_PAYOUT_RECONFIRMATION_PENDING` when either group is non-empty. Existing preview warnings (zero-VND policy, missing full-attendance source, missing ops policy, etc.) stay non-blocking.
+
+- `calculationErrorCalls`: operating-month `방문완료` calls whose `calculationStatus` is `course_policy_missing`, `therapist_rate_missing`, or `second_therapist_required`. Non-completed calls with the same calculation issue (e.g. a pre-paid reservation) are excluded; only completed calls count here.
+- `payoutReconfirmationUnits`: units across all four payout confirmation unit types (`THERAPIST_DAILY`, `EARCARE_DAILY`, `OPS_DAILY`, `OPS_MONTHLY`) whose `payoutConfirmation.requiresReconfirmation` is true. `THERAPIST_DAILY` reuses the new `listTherapistDailyPayoutConfirmationsForMonth()` (mirrors the earcare/ops-daily "ForMonth" helpers added in tickets 30/31); `OPS_MONTHLY` reuses `listOpsMonthlyIncentivePreview()`'s rows directly since that unit is already month-wide.
+- `pendingCloseCalls`: operating-month `예약`/`사용중`/`청소중` calls. This ticket only lists them; they do not block confirmation and call state is never touched. Ticket 34 adds the confirmed-call-id-list + reason requirement and ADR 0005's exception-close path on top of this list.
+- `financials`: reuses `getDailyCallLedgerSummary()` per day for payment-method totals, expense total, and net sales (summed across the month), plus one `includeMonthTill: true` call for the month-wide cash/bank balance (ADR 0002 — `till.month` does not depend on which date is queried, so one call is enough).
+- The checklist call summary shape (`serviceCallId, operatingMonthId, serviceDate, startTime, courseCode, therapistNames, status`) matches `SettlementEvidenceCallDto` plus `calculationStatus`, so `/closing`'s checklist section reuses the existing `EvidenceCallItem`/`EvidenceCallList` components unchanged: administrators get a ledger link, `settlement_manager` gets the same inline summary with no new call-write permission or ledger route.
+
 ## Downstream
 
 - `dashboard` for closed-month summaries
