@@ -328,6 +328,30 @@ export const ko = {
   // 휴대폰 폭 원장 카드 목록(명세 F08, 티켓 26)
   "calls.phoneCard.aria": "원장 카드 목록",
 
+  // 빠른 예약 패널(스펙 F01·F08, 티켓 20)
+  "calls.quickBooking.open": "빠른 예약",
+  "calls.quickBooking.title": "빠른 예약",
+  "calls.quickBooking.description": "고객 → 날짜·예약시각 → Therapist·코스 → 객실·메모 → 저장 순서로 진행합니다.",
+  "calls.quickBooking.stepper.aria": "빠른 예약 단계",
+  "calls.quickBooking.step.customer": "고객",
+  "calls.quickBooking.step.schedule": "날짜·예약시각",
+  "calls.quickBooking.step.therapist": "Therapist·코스",
+  "calls.quickBooking.step.room": "객실·메모",
+  "calls.quickBooking.step.review": "확인",
+  "calls.quickBooking.errorSummary.title": "저장하기 전에 확인하세요",
+  "calls.quickBooking.customer.searchLabel": "고객 검색",
+  "calls.quickBooking.customer.clear": "선택 해제",
+  "calls.quickBooking.customer.memoPlaceholder": "고객을 고르지 않았다면 이름이나 메모를 적으세요.",
+  "calls.quickBooking.schedule.now": "지금",
+  "calls.quickBooking.therapist.unset": "가능 코스에서 Therapist와 코스를 고르세요.",
+  "calls.quickBooking.therapist.chosen": "{course} · {therapist}",
+  "calls.quickBooking.review.unset": "선택 안 함",
+  "calls.quickBooking.review.customerNone": "고객 없음",
+  "calls.quickBooking.previous": "이전",
+  "calls.quickBooking.next": "다음",
+  "calls.quickBooking.save": "예약 저장",
+  // 패널을 저장 없이 닫을 때의 안내는 calls.leaveGuard.*(티켓 18)를 그대로 쓴다.
+
   // 콜 행 저장 상태
   "calls.save.saved": "저장됨",
   "calls.save.retry": "재시도",
