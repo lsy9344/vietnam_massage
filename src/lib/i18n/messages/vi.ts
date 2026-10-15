@@ -395,7 +395,6 @@ export const vi: Messages = {
   "calls.conflict.useMine": "Dùng giá trị của tôi",
   "calls.conflict.useMineAria": "Dùng giá trị của tôi cho {field}",
   "calls.conflict.reapply": "Áp lại và lưu",
-  "calls.conflict.closeConfirmDescription": "Đóng so sánh thì bản nháp vẫn còn ở dòng sổ, bạn có thể mở lại để so sánh. Bạn có muốn đóng không?",
 
   // 콜 계산 상태
   "calls.calc.errorPending": "Tạm hoãn lưu, chờ tính toán",

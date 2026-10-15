@@ -2,8 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { ModalPanel } from "@/components/ui/panel";
+import { PanelSection } from "@/app/(erp)/settlements/settlement-parts";
 import { useT } from "@/lib/i18n/client";
 import type { MessageKey } from "@/lib/i18n/types";
 import type { CustomerDto, ServiceCallFormOptions, ServiceCallOption, ServiceCallRowDto } from "@/modules/calls/service-call-service";
@@ -186,10 +185,8 @@ export function useCallConflict(rowId: string | null): CallConflictCompareData |
 const cellClassName = "border-b border-border px-3 py-2 align-top";
 
 /**
- * 비교 표와 "다시 반영하고 저장"·"최신 내용으로 다시 불러오기" 버튼(ModalPanel의 children). Radix의
- * Dialog.Portal은 document가 없는 정적 렌더 테스트에서 아무것도 그리지 않으므로, ModalPanel 바깥에서
- * 이 부분만 따로 두면(daily-expense-panel.tsx의 AddExpenseForm과 같은 방식) 표·라벨·버튼 상태를
- * 정적 렌더로 확인할 수 있다.
+ * 비교 표와 "다시 반영하고 저장"·"최신 내용으로 다시 불러오기" 버튼. CallConflictCompare(비모달 구역)의
+ * 본문이고, 정적 렌더 테스트에서도 그대로 확인할 수 있다.
  */
 export function CallConflictCompareFields({
   compare,
@@ -290,49 +287,28 @@ export function CallConflictCompareFields({
 }
 
 /**
- * 저장 충돌 비교(스펙 B07, 스토리 39-43, 티켓 17). 콜 상세 패널 안에서 ModalPanel로 열려 포커스를
- * 가두고, 닫히면 연 자리로 돌려준다(design.md). 자동으로 열리므로(트리거 버튼 없음) `open`은 항상
- * true로 두고, 사용자가 Esc·바깥 클릭·닫기로 닫으려 하면 먼저 확인한다 — 확인하면 `onRequestClose`로
- * 패널 전체를 닫는다(패널 안에는 더 보여줄 내용이 없다). 성공(다시 반영/다시 불러오기)하면 이 콜이
- * 더 이상 충돌 상태가 아니게 되어 부르는 쪽(CallDetailPanel)이 이 컴포넌트를 치운다.
+ * 저장 충돌 비교(스펙 B07, 스토리 39-43, 티켓 17, S2로 교정). 스펙 321줄 "저장 충돌 비교 | 콜 상세
+ * 패널의 충돌 상태 | 패널"대로, 이미 비모달로 열려 있는 콜 상세 패널(SidePanel) 안의 한 구역일 뿐이다.
+ * 포커스를 가두거나 배경을 비활성화하지 않는다(design.md 6.11: ModalPanel은 빠른 예약 같은 생성
+ * 흐름에만 쓴다) — 그래서 이 구역이 열려 있는 동안에도 원장의 다른 행을 그대로 다룰 수 있다. 성공
+ * (다시 반영/다시 불러오기)하면 이 콜이 더 이상 충돌 상태가 아니게 되어 부르는 쪽(CallDetailPanel)이
+ * 이 구역을 치운다. 패널 전체를 닫는 것은 그 패널 자신의 닫기 버튼이 하므로 여기에는 없다.
  */
 export function CallConflictCompare({
   compare,
   customers,
-  onRequestClose,
   options
 }: {
   compare: CallConflictCompareData;
   customers: CustomerDto[];
-  onRequestClose: () => void;
   options: ServiceCallFormOptions;
 }) {
   const t = useT();
-  const [confirmClose, setConfirmClose] = useState(false);
 
   return (
-    <>
-      <ModalPanel
-        description={t("calls.conflict.description")}
-        onOpenChange={(next) => {
-          if (!next) setConfirmClose(true);
-        }}
-        open
-        title={t("calls.conflict.title")}
-      >
-        <CallConflictCompareFields compare={compare} customers={customers} options={options} />
-      </ModalPanel>
-      <ConfirmDialog
-        confirmLabel={t("common.panel.close")}
-        description={t("calls.conflict.closeConfirmDescription")}
-        onConfirm={() => {
-          setConfirmClose(false);
-          onRequestClose();
-        }}
-        onOpenChange={setConfirmClose}
-        open={confirmClose}
-        title={t("calls.leaveGuard.title")}
-      />
-    </>
+    <PanelSection title={t("calls.conflict.title")}>
+      <p className="text-sm text-muted">{t("calls.conflict.description")}</p>
+      <CallConflictCompareFields compare={compare} customers={customers} options={options} />
+    </PanelSection>
   );
 }

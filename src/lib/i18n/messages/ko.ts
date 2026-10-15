@@ -395,7 +395,6 @@ export const ko = {
   "calls.conflict.useMine": "내 값 쓰기",
   "calls.conflict.useMineAria": "{field} 내 값 쓰기",
   "calls.conflict.reapply": "다시 반영하고 저장",
-  "calls.conflict.closeConfirmDescription": "비교를 닫아도 초안은 원장 행에 남고, 다시 열어 비교할 수 있습니다. 닫으시겠습니까?",
 
   // 콜 계산 상태
   "calls.calc.errorPending": "저장 보류 계산 대기",
