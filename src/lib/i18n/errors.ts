@@ -26,6 +26,7 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   EMPLOYEE_NOT_ACTIVE_FOR_ROLE: "Vui lòng chọn nhân viên phụ trách đang hoạt động.",
   EMPLOYEE_NOT_ACTIVE: "Vui lòng chọn nhân viên phụ trách đang hoạt động.",
   D_COURSE_SECOND_THERAPIST_REQUIRED: "Gói D cần kỹ thuật viên thứ hai.",
+  D_QUICK_BOOKING_DUPLICATE_THERAPIST: "Kỹ thuật viên 1 và 2 phải là người khác nhau.",
   SERVICE_CALL_NOT_FOUND: "Không tìm thấy dòng sổ cuộc gọi.",
   STALE_CALL: "Cuộc gọi này đã được thay đổi ở màn hình khác. Hãy tải lại rồi mới lưu.",
   CUSTOMER_NOT_FOUND: "Không tìm thấy khách.",

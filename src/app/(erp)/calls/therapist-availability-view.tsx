@@ -14,7 +14,16 @@ export type AvailabilityCourseChoice = {
   courseId: string;
 };
 
-const attendanceKey = {
+/**
+ * 시간이 겹치거나(time_short) 수당이 없는(rate_missing) 배정을 "경고 확인 후 배정" 경로로 받을 때의
+ * 선택(티켓 21). verdict를 함께 담아 부르는 쪽이 보여줄 경고 문장을 고른다.
+ */
+export type AvailabilityCourseOverrideChoice = AvailabilityCourseChoice & {
+  verdict: "time_short" | "rate_missing";
+};
+
+// 두 번째 Therapist 후보 목록(티켓 21)도 같은 출근 표시 문구를 쓴다.
+export const attendanceKey = {
   before_check_in: "calls.availability.attendance.beforeCheckIn",
   checked_in: "calls.availability.attendance.checkedIn",
   checked_out: "calls.availability.attendance.checkedOut"
@@ -45,7 +54,8 @@ function ThisTime({ locale, row }: { locale: Locale; row: TherapistAvailabilityR
   );
 }
 
-function impossibleCourseLabel(locale: Locale, course: TherapistAvailabilityRowDto["courses"][number]) {
+// 두 번째 Therapist 후보 목록(티켓 21)도 같은 "시간 부족"/"이 코스 불가" 문구를 쓴다.
+export function impossibleCourseLabel(locale: Locale, course: TherapistAvailabilityRowDto["courses"][number]) {
   const values = { code: course.courseCode, minutes: course.durationMinutes };
   return course.verdict === "rate_missing"
     ? t(locale, "calls.availability.courseRateMissing", values)
@@ -67,6 +77,7 @@ export function TherapistAvailabilityView({
   time,
   timeSlots,
   onChoose,
+  onOverride,
   onTimeChange,
   onToggle
 }: {
@@ -78,6 +89,11 @@ export function TherapistAvailabilityView({
   time: string;
   timeSlots: ServiceCallOption[];
   onChoose: (choice: AvailabilityCourseChoice) => void;
+  /**
+   * 시간 부족·수당 없음 코스를 "경고 확인 후 배정" 경로로 받을 때(티켓 21). 주면 그 코스에 가능 버튼과
+   * 다른 모양·문구의 버튼을 보이고, 주지 않으면(기존 호출) 흐린 글자만 그대로 보인다.
+   */
+  onOverride?: (choice: AvailabilityCourseOverrideChoice) => void;
   onTimeChange: (time: string) => void;
   onToggle: () => void;
 }) {
@@ -155,8 +171,9 @@ export function TherapistAvailabilityView({
                                 <WarningSummary locale={locale} warnings={[t(locale, "calls.availability.priorServiceEndCheck")]} />
                               </span>
                             ) : null}
-                            {row.courses.map((course) =>
-                              course.verdict === "possible" ? (
+                            {row.courses.map((course) => {
+                              const verdict = course.verdict;
+                              return verdict === "possible" ? (
                                 <Button
                                   aria-describedby={showPriorEndNote ? priorEndNoteId : undefined}
                                   className="h-auto min-h-11 max-w-full whitespace-normal text-left"
@@ -169,12 +186,33 @@ export function TherapistAvailabilityView({
                                 >
                                   {t(locale, "calls.availability.coursePossible", { code: course.courseCode, minutes: course.durationMinutes })}
                                 </Button>
+                              ) : onOverride ? (
+                                <Button
+                                  aria-describedby={showPriorEndNote ? priorEndNoteId : undefined}
+                                  className="h-auto min-h-11 max-w-full whitespace-normal text-left border-warning text-warning hover:bg-warning-soft"
+                                  data-course-id={course.courseId}
+                                  data-override-course-id={course.courseId}
+                                  data-start-time={time}
+                                  data-therapist-id={row.therapistId}
+                                  key={course.courseId}
+                                  onClick={() =>
+                                    onOverride({
+                                      startTime: time,
+                                      therapistId: row.therapistId,
+                                      courseId: course.courseId,
+                                      verdict
+                                    })
+                                  }
+                                  variant="secondary"
+                                >
+                                  {impossibleCourseLabel(locale, course)} · {t(locale, "calls.quickBooking.therapist.overrideAssign")}
+                                </Button>
                               ) : (
                                 <span className="inline-flex min-h-11 items-center text-muted" key={course.courseId}>
                                   {impossibleCourseLabel(locale, course)}
                                 </span>
-                              )
-                            )}
+                              );
+                            })}
                           </div>
                         </td>
                       </tr>
