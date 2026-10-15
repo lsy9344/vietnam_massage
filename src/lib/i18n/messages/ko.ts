@@ -296,6 +296,7 @@ export const ko = {
   "calls.availability.expand": "펼치기",
   "calls.availability.collapse": "접기",
   "calls.availability.column.therapist": "Therapist",
+  "calls.availability.column.schedule": "근무표",
   "calls.availability.column.attendance": "출근",
   "calls.availability.column.thisTime": "이 시각",
   "calls.availability.column.next": "다음 예약",
@@ -317,6 +318,7 @@ export const ko = {
   "calls.availability.emptyNext": "직원 마스터에서 활성 Therapist를 확인해 보세요.",
   "calls.availability.loading": "불러오는 중",
   "calls.availability.loadError": "가능 코스를 불러오지 못했습니다. 시각을 다시 선택해 보세요.",
+  "calls.availability.scheduleNote": "근무표의 근무 예정은 그 시각까지 근무한다는 보장이 아닙니다. 실제 출근 여부는 출근 칸을 확인하세요.",
 
   // 콜 그리드 본문/상태
   "calls.grid.title": "콜 원장 그리드",

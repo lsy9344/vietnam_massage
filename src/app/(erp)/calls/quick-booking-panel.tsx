@@ -30,6 +30,7 @@ import {
   type AvailabilityCourseOverrideChoice
 } from "@/app/(erp)/calls/therapist-availability-view";
 import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
+import { scheduleStatusLabel } from "@/lib/i18n/codes";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { Locale } from "@/lib/i18n/config";
 import type { MessageKey } from "@/lib/i18n/types";
@@ -441,7 +442,9 @@ export function TherapistStep({
                     <li className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border px-3 py-2" key={row.therapistId}>
                       <span className="text-sm">
                         <span className="font-semibold text-foreground">{row.therapistName}</span>{" "}
-                        <span className="text-muted">{t(attendanceKey[row.attendance])}</span>
+                        <span className="text-muted">
+                          {scheduleStatusLabel(locale, row.plannedWorkingDayStatus)} · {t(attendanceKey[row.attendance])}
+                        </span>
                       </span>
                       {verdict === "possible" ? (
                         <Button disabled={disabled} onClick={() => onChooseSecond(row.therapistId)} type="button" variant="secondary">
