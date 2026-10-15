@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   ScheduleDomainError,
+  copyLastWeekSchedule,
   listPlannedWorkingDayStatusesForDate,
   listPlannedWorkingDaysForWeek,
   setPlannedWorkingDay
@@ -23,6 +24,16 @@ function createMemoryPrisma(
   options: {
     failAudit?: boolean;
     seedCells?: Array<{ id: string; employeeId: string; workDate: string; planStatus: string }>;
+    // 휴무 영향 콜(28): 콜 서비스의 listAssignedServiceCallsForEmployeeOnDate가 읽는 모양만 흉내 낸다.
+    seedCalls?: Array<{
+      id: string;
+      serviceDate: string;
+      startTime: string;
+      status: string;
+      courseCode: string;
+      operatingMonthId?: string;
+      assignments: Array<{ employeeId: string; isActive?: boolean }>;
+    }>;
   } = {}
 ) {
   const createdAt = new Date("2026-10-10T00:00:00.000Z");
@@ -50,6 +61,19 @@ function createMemoryPrisma(
       updatedAt
     });
   }
+  const serviceCalls = new Map<string, any>();
+  for (const seed of options.seedCalls ?? []) {
+    serviceCalls.set(seed.id, {
+      id: seed.id,
+      operatingMonthId: seed.operatingMonthId ?? "month-2026-10",
+      serviceDate: dbDate(seed.serviceDate),
+      startTime: seed.startTime,
+      status: seed.status,
+      course: { code: seed.courseCode },
+      assignments: seed.assignments
+    });
+  }
+
   const auditEvents: any[] = [];
 
   function cloneCells() {
@@ -131,6 +155,13 @@ function createMemoryPrisma(
         return record;
       }
     },
+    serviceCall: {
+      async findMany({ where }: any = {}) {
+        return [...serviceCalls.values()].filter(
+          (call) => where?.serviceDate === undefined || toIsoDate(call.serviceDate) === toIsoDate(where.serviceDate)
+        );
+      }
+    },
     async $transaction(callback: (tx: any) => Promise<unknown>) {
       const snapshot = cloneCells();
       const auditSnapshotLength = auditEvents.length;
@@ -143,7 +174,8 @@ function createMemoryPrisma(
       }
     },
     cells,
-    auditEvents
+    auditEvents,
+    serviceCalls
   };
 
   return client;
@@ -245,9 +277,61 @@ describe("schedule service", () => {
     });
 
     assert.equal(result.status, "휴무");
+    assert.deepEqual(result.impactedCalls, []); // 배정된 콜이 없으면 빈 목록이다.
     assert.equal(client.auditEvents.length, 1);
     assert.equal(client.auditEvents[0].action, "planned_working_day.changed");
     assert.deepEqual(client.auditEvents[0].beforeValue, { employeeId: "thr-1", date: "2026-10-14", status: "근무 예정" });
+  });
+
+  it("휴무로 바꾸면 그 직원이 어느 역할로든 배정된, 노쇼·취소가 아닌 콜을 함께 돌려주고 콜은 그대로 둔다", async () => {
+    const client = createMemoryPrisma({
+      seedCalls: [
+        { id: "call-1", serviceDate: "2026-10-14", startTime: "14:00", status: "예약", courseCode: "A", assignments: [{ employeeId: "thr-1" }] },
+        {
+          id: "call-2",
+          serviceDate: "2026-10-14",
+          startTime: "15:00",
+          status: "사용중",
+          courseCode: "B",
+          assignments: [{ employeeId: "other" }, { employeeId: "thr-1" }]
+        },
+        { id: "call-noshow", serviceDate: "2026-10-14", startTime: "16:00", status: "노쇼", courseCode: "A", assignments: [{ employeeId: "thr-1" }] },
+        { id: "call-other-day", serviceDate: "2026-10-15", startTime: "09:00", status: "예약", courseCode: "A", assignments: [{ employeeId: "thr-1" }] }
+      ]
+    });
+    const callBefore = JSON.stringify(client.serviceCalls.get("call-1"));
+
+    const result = await setPlannedWorkingDay({
+      employeeId: "thr-1",
+      date: "2026-10-14",
+      status: "휴무",
+      actorId: "acc-1",
+      prismaClient: client
+    });
+
+    assert.equal(result.status, "휴무");
+    assert.deepEqual(result.impactedCalls.map((call) => call.serviceCallId), ["call-1", "call-2"]);
+    assert.equal(result.impactedCalls[0].courseCode, "A");
+    assert.equal(result.impactedCalls[0].status, "예약");
+    assert.equal(result.impactedCalls[1].status, "사용중");
+    // 콜의 예약시각, 배정, 상태는 바뀌지 않는다.
+    assert.equal(JSON.stringify(client.serviceCalls.get("call-1")), callBefore);
+  });
+
+  it("근무 예정이나 미입력으로 설정할 때는 영향받는 콜을 계산하지 않는다", async () => {
+    const client = createMemoryPrisma({
+      seedCalls: [{ id: "call-1", serviceDate: "2026-10-14", startTime: "14:00", status: "예약", courseCode: "A", assignments: [{ employeeId: "thr-1" }] }]
+    });
+
+    const result = await setPlannedWorkingDay({
+      employeeId: "thr-1",
+      date: "2026-10-14",
+      status: "근무 예정",
+      actorId: "acc-1",
+      prismaClient: client
+    });
+
+    assert.deepEqual(result.impactedCalls, []);
   });
 
   it("미입력으로 설정하면 기존 칸을 지우고 콜은 그대로 둔다(서비스가 콜을 참조하지 않는다)", async () => {
@@ -339,6 +423,61 @@ describe("schedule service", () => {
     assert.deepEqual(
       result.find((row) => row.employeeId === "thr-2"),
       { employeeId: "thr-2", status: "미입력" }
+    );
+  });
+
+  it("지난주 복사는 미입력 칸만 채우고, 이미 입력된 근무 예정·휴무는 덮지 않는다", async () => {
+    const client = createMemoryPrisma({
+      seedCells: [
+        { id: "pwd-1", employeeId: "thr-1", workDate: "2026-10-05", planStatus: "근무 예정" }, // 지난주 월
+        { id: "pwd-2", employeeId: "thr-1", workDate: "2026-10-06", planStatus: "휴무" }, // 지난주 화
+        { id: "pwd-3", employeeId: "thr-1", workDate: "2026-10-13", planStatus: "근무 예정" } // 이번주 화(이미 입력됨)
+      ]
+    });
+
+    const result = await copyLastWeekSchedule({ date: "2026-10-14", actorId: "acc-1", prismaClient: client });
+
+    assert.equal(result.weekStartDate, "2026-10-12");
+    assert.equal(result.weekEndDate, "2026-10-18");
+    // 월요일(10-12)은 미입력이었으니 지난주 월(근무 예정)이 복사된다.
+    assert.equal(client.cells.get(cellKey("thr-1", "2026-10-12"))?.planStatus, "근무 예정");
+    // 화요일(10-13)은 이미 근무 예정으로 입력돼 있었으니 지난주 화(휴무)로 덮이지 않는다.
+    assert.equal(client.cells.get(cellKey("thr-1", "2026-10-13"))?.planStatus, "근무 예정");
+    assert.equal(result.filledCount, 1);
+    assert.equal(client.auditEvents.length, 1);
+    assert.equal(client.auditEvents[0].action, "planned_working_day.created");
+  });
+
+  it("지난주도 미입력이면 채우지 않고 채운 칸 수는 0이다", async () => {
+    const client = createMemoryPrisma();
+
+    const result = await copyLastWeekSchedule({ date: "2026-10-14", actorId: "acc-1", prismaClient: client });
+
+    assert.equal(result.filledCount, 0);
+    assert.equal(client.cells.size, 0);
+  });
+
+  it("지난주가 달 경계를 넘어도 날짜 기준으로 그대로 복사한다", async () => {
+    const client = createMemoryPrisma({
+      seedCells: [{ id: "pwd-1", employeeId: "thr-1", workDate: "2026-01-26", planStatus: "근무 예정" }] // 지난주 월요일(1월)
+    });
+
+    // 이번 주는 2026-02-02(월)~02-08(일)이고 지난주는 2026-01-26(월)~02-01(일)이라 달 경계를 넘는다.
+    const result = await copyLastWeekSchedule({ date: "2026-02-04", actorId: "acc-1", prismaClient: client });
+
+    assert.equal(result.weekStartDate, "2026-02-02");
+    assert.equal(client.cells.get(cellKey("thr-1", "2026-02-02"))?.planStatus, "근무 예정");
+    assert.equal(result.filledCount, 1);
+  });
+
+  it("지난주 복사의 날짜 형식이 올바르지 않으면 거절한다", async () => {
+    await assert.rejects(
+      copyLastWeekSchedule({ date: "2026-02-30", actorId: "acc-1", prismaClient: createMemoryPrisma() }),
+      (error: unknown) => {
+        assert.ok(error instanceof ScheduleDomainError);
+        assert.equal(error.code, "INVALID_SCHEDULE_INPUT");
+        return true;
+      }
     );
   });
 });

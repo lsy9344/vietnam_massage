@@ -2921,3 +2921,67 @@ export async function listServiceCallFormOptions(
     expenseHandlers: expenseHandlers.map((employee) => option(employee.id, `${employee.displayName} (${employee.staffCode})`))
   } satisfies ServiceCallFormOptions;
 }
+
+/** 근무표(28)가 휴무 영향 콜을 보여줄 때 쓰는 콜 하나의 요약. 고객/메모, 연락처, 금액은 담지 않는다. */
+export type AssignedServiceCallSummaryDto = {
+  serviceCallId: string;
+  operatingMonthId: string;
+  serviceDate: string;
+  startTime: string;
+  courseCode: string;
+  status: string;
+};
+
+type AssignedCallRecord = {
+  id: string;
+  operatingMonthId: string;
+  serviceDate: Date;
+  startTime: string;
+  status: string;
+  course?: { code: string } | null;
+  assignments?: Array<{ employeeId: string; isActive?: boolean }>;
+};
+
+// roomFloorFactsForDate(DisplayEndReadClient)와 같은 방식: 근무표 서비스가 자기 클라이언트를
+// 그대로 넘길 수 있도록 serviceCall.findMany만 요구하는 좁은 타입이다.
+type AssignedCallReadClient = {
+  serviceCall: { findMany(args?: unknown): Promise<unknown[]> };
+};
+
+/**
+ * 그 직원이 그 날짜에 어느 배정 역할로든 배정된 콜(노쇼·취소 제외) 요약. 근무표(28)가 칸을 휴무로
+ * 바꿀 때 영향받는 콜을 보여주는 데 쓴다(스토리 102). 조회만 하며 콜의 예약시각·배정·상태는
+ * 건드리지 않는다.
+ */
+export async function listAssignedServiceCallsForEmployeeOnDate(input: {
+  employeeId: string;
+  date: string;
+  prismaClient?: AssignedCallReadClient;
+}): Promise<AssignedServiceCallSummaryDto[]> {
+  const employeeId = input.employeeId.trim();
+  if (!employeeId) {
+    throw new ServiceCallDomainError("직원을 선택하세요.", "INVALID_SERVICE_CALL_QUERY");
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) {
+    throw new ServiceCallDomainError("날짜는 YYYY-MM-DD 형식이어야 합니다.", "INVALID_SERVICE_CALL_QUERY");
+  }
+
+  const client = input.prismaClient ?? getClient();
+  const records = (await client.serviceCall.findMany({
+    where: { serviceDate: toDateOnly(input.date) },
+    include: { course: true, assignments: true }
+  })) as AssignedCallRecord[];
+
+  return records
+    .filter((record) => (record.assignments ?? []).some((assignment) => assignment.employeeId === employeeId && assignment.isActive !== false))
+    .filter((record) => !isNoShowStatus(record.status) && !isCanceledStatus(record.status))
+    .map((record) => ({
+      serviceCallId: record.id,
+      operatingMonthId: record.operatingMonthId,
+      serviceDate: toIsoDateOnly(record.serviceDate),
+      startTime: record.startTime,
+      courseCode: record.course?.code ?? "",
+      status: record.status
+    }))
+    .sort((a, b) => a.startTime.localeCompare(b.startTime) || a.serviceCallId.localeCompare(b.serviceCallId));
+}

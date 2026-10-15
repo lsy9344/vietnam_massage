@@ -17,7 +17,16 @@ import type { PlannedWorkingDayEmployeeRowDto, PlannedWorkingDayWeekDto } from "
  * 근무표의 작업면(티켓 27): 세 직군을 따로 묶은 직원 비교 표와, 고른 직원의 요일별 편집 패널.
  * 직군마다 별도 EmployeeWorkspace를 두지만 같은 EMPLOYEE_PARAM을 공유해 한 번에 한 직원만 열린다.
  */
-export function ScheduleView({ week, initialEmployeeId }: { week: PlannedWorkingDayWeekDto; initialEmployeeId: string | null }) {
+export function ScheduleView({
+  week,
+  initialEmployeeId,
+  canOpenLedger
+}: {
+  week: PlannedWorkingDayWeekDto;
+  initialEmployeeId: string | null;
+  /** 휴무 영향 콜 항목이 원장 링크를 보일지, 요약만 보일지(스토리 148). 관리자만 참이다. */
+  canOpenLedger: boolean;
+}) {
   const t = useT();
   const locale = useLocale();
 
@@ -56,6 +65,7 @@ export function ScheduleView({ week, initialEmployeeId }: { week: PlannedWorking
                   <div>
                     {row.days.map((day, index) => (
                       <ScheduleCellForm
+                        canOpenLedger={canOpenLedger}
                         date={day.date}
                         employeeId={row.employeeId}
                         employeeName={row.displayName}

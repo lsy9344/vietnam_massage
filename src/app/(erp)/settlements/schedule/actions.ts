@@ -9,19 +9,22 @@ import type { Locale } from "@/lib/i18n/config";
 import { getLocale } from "@/lib/i18n/server";
 import { resolveDomainErrorMessage } from "@/lib/i18n/errors";
 import {
+  copyLastWeekSchedule,
   ScheduleDomainError,
   setPlannedWorkingDay,
   type PlannedWorkingDayCellResultDto,
-  type PlannedWorkingDayCellStatus
+  type PlannedWorkingDayCellStatus,
+  type PlannedWorkingDayCopyResultDto
 } from "@/modules/settlements/schedule-service";
 
 export type ScheduleActionState = ActionResult<PlannedWorkingDayCellResultDto> | null;
+export type ScheduleCopyActionState = ActionResult<PlannedWorkingDayCopyResultDto> | null;
 
 function formValue(formData: FormData, key: string) {
   return String(formData.get(key) ?? "");
 }
 
-function mapActionError(error: unknown, locale: Locale): ActionResult<PlannedWorkingDayCellResultDto> {
+function mapActionError<T>(error: unknown, locale: Locale): ActionResult<T> {
   if (error instanceof ScheduleDomainError) {
     const message = resolveDomainErrorMessage(locale, error.code, error.message);
     if (error.field) {
@@ -80,6 +83,29 @@ export async function setPlannedWorkingDayAction(
     revalidatePath("/settlements/schedule");
     return { ok: true, data };
   } catch (error) {
-    return mapActionError(error, locale);
+    return mapActionError<PlannedWorkingDayCellResultDto>(error, locale);
+  }
+}
+
+/**
+ * 지난주 복사(티켓 28). 이 날짜가 속한 주의 미입력 칸만 바로 앞 7일의 값으로 채우고,
+ * 채운 칸 수를 돌려준다. 이미 입력된 근무 예정·휴무는 덮지 않는다. 편집은 setPlannedWorkingDayAction과
+ * 같은 권한(payout:write)만 할 수 있다.
+ */
+export async function copyLastWeekScheduleAction(
+  _previousState: ScheduleCopyActionState,
+  formData: FormData
+): Promise<ScheduleCopyActionState> {
+  const locale = await getLocale();
+  try {
+    const account = await requirePermission("payout:write");
+    const data = await copyLastWeekSchedule({
+      date: formValue(formData, "date"),
+      actorId: account.id
+    });
+    revalidatePath("/settlements/schedule");
+    return { ok: true, data };
+  } catch (error) {
+    return mapActionError<PlannedWorkingDayCopyResultDto>(error, locale);
   }
 }

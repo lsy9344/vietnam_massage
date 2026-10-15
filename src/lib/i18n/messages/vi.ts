@@ -476,6 +476,15 @@ export const vi: Messages = {
   "settlements.schedule.cell.statusLabel": "Trạng thái làm việc",
   "settlements.schedule.cell.statusAria": "Trạng thái làm việc của {name} ngày {date}",
 
+  // Sao chép tuần trước và cuộc gọi bị ảnh hưởng khi nghỉ (ticket 28)
+  "settlements.schedule.copy.action": "Sao chép tuần trước",
+  "settlements.schedule.copy.pending": "Đang sao chép…",
+  "settlements.schedule.copy.result": "Đã điền {count} ô.",
+  "settlements.schedule.copy.failed": "Sao chép thất bại: {message}",
+  "settlements.schedule.dayOff.impact.count": "{count} cuộc gọi bị ảnh hưởng",
+  "settlements.schedule.dayOff.impact.guidance": "Hãy phân công lại cuộc gọi cho nhân viên khác, hoặc kiểm tra lại lịch làm việc của nhân viên này.",
+  "settlements.schedule.dayOff.impact.listAria": "Danh sách cuộc gọi bị ảnh hưởng của {name} ngày {date}",
+
   // 마사지사 일일정산
   "settlements.therapist.title": "Đối soát ngày KTV massage",
   "settlements.therapist.emptyMonthDescription": "Đối soát ngày KTV massage chỉ có thể tra cứu trong khoảng ngày của tháng vận hành.",

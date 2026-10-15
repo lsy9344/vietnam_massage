@@ -1,12 +1,17 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useId } from "react";
 import { Button } from "@/components/ui/button";
+import { DateCapsule } from "@/components/ui/date-capsule";
 import { inputFieldClassName } from "@/components/ui/input-field";
+import { StatusIndicator } from "@/components/ui/status-indicator";
+import { ledgerCallHref } from "@/app/(erp)/calls/ledger-address";
 import { useLocale, useT } from "@/lib/i18n/client";
-import { scheduleStatusLabel } from "@/lib/i18n/codes";
+import { scheduleStatusLabel, serviceStatusLabel } from "@/lib/i18n/codes";
 import { setPlannedWorkingDayAction, type ScheduleActionState } from "@/app/(erp)/settlements/schedule/actions";
 import { ALL_SCHEDULE_CELL_STATUSES } from "@/app/(erp)/settlements/schedule/schedule-view-model";
+import type { AssignedServiceCallSummaryDto } from "@/modules/calls/service-call-service";
 import type { PlannedWorkingDayCellStatus } from "@/modules/settlements/schedule-service";
 
 function inlineError(state: ScheduleActionState, field?: string) {
@@ -14,22 +19,85 @@ function inlineError(state: ScheduleActionState, field?: string) {
   return field ? state.fieldErrors?.[field]?.[0] ?? null : state.formError ?? null;
 }
 
+const impactItemClassName = "block min-h-14 rounded-md border border-border bg-surface px-4 py-2.5 text-sm";
+
+/**
+ * 휴무로 바꾼 칸에 그 직원이 어느 배정 역할로든 들어 있는 콜이 있을 때의 안내(스토리 102, 148).
+ * 원장에 들어갈 수 있는 역할(관리자)에게는 항목 전체가 원장의 그 날짜·그 콜로 가는 링크이고, 원장
+ * 권한이 없는 정산 담당에게는 링크 없이 같은 자리의 콜 요약(날짜, 예약시각, 코스, 상태)만 보인다.
+ * 어느 쪽도 콜의 예약시각·배정·상태를 바꾸지 않는다.
+ */
+export function DayOffImpactNotice({
+  calls,
+  employeeName,
+  date,
+  canOpenLedger
+}: {
+  calls: AssignedServiceCallSummaryDto[];
+  employeeName: string;
+  date: string;
+  canOpenLedger: boolean;
+}) {
+  const t = useT();
+  const locale = useLocale();
+  if (calls.length === 0) return null;
+
+  return (
+    <div className="col-span-3 grid gap-2 rounded-md border border-border bg-surface-float p-3">
+      <StatusIndicator label={t("settlements.schedule.dayOff.impact.count", { count: calls.length })} tone="warning" />
+      <p className="text-sm text-muted">{t("settlements.schedule.dayOff.impact.guidance")}</p>
+      <ul aria-label={t("settlements.schedule.dayOff.impact.listAria", { name: employeeName, date })} className="grid gap-2">
+        {calls.map((call) => {
+          const body = (
+            <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-foreground">
+                <DateCapsule>{`${call.serviceDate} ${call.startTime}`}</DateCapsule>
+                <span className="font-semibold">{call.courseCode}</span>
+                <span className="text-muted">{serviceStatusLabel(locale, call.status)}</span>
+              </span>
+              {canOpenLedger ? (
+                <span className="font-semibold text-foreground underline underline-offset-4">{t("settlements.evidenceCall.openLedger")}</span>
+              ) : null}
+            </span>
+          );
+          return (
+            <li key={call.serviceCallId}>
+              {canOpenLedger ? (
+                <Link
+                  className={`${impactItemClassName} transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary`}
+                  href={ledgerCallHref({ operatingMonthId: call.operatingMonthId, serviceDate: call.serviceDate, serviceCallId: call.serviceCallId })}
+                >
+                  {body}
+                </Link>
+              ) : (
+                <div className={impactItemClassName}>{body}</div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 /**
  * 근무표 패널의 요일 한 줄(티켓 27). 고른 직원의 패널 안에 요일마다 하나씩 쌓인다.
- * 선택·저장만 하고, 그 칸에 배정된 콜 목록(휴무 영향 콜)은 28에서 더한다.
+ * 휴무로 저장되면 그 칸에 배정된 콜(휴무 영향 콜)을 DayOffImpactNotice로 보여준다(28).
  */
 export function ScheduleCellForm({
   employeeId,
   employeeName,
   date,
   weekdayLabel,
-  status
+  status,
+  canOpenLedger
 }: {
   employeeId: string;
   employeeName: string;
   date: string;
   weekdayLabel: string;
   status: PlannedWorkingDayCellStatus;
+  canOpenLedger: boolean;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -38,6 +106,7 @@ export function ScheduleCellForm({
   const formError = inlineError(state);
   const statusError = inlineError(state, "status");
   const saved = state?.ok && state.data.employeeId === employeeId && state.data.date === date;
+  const impactedCalls = state?.ok && state.data.employeeId === employeeId && state.data.date === date ? state.data.impactedCalls : [];
 
   return (
     <form action={formAction} className="grid grid-cols-[3.5rem_1fr_auto] items-center gap-2 border-b border-border py-2 last:border-b-0" noValidate>
@@ -90,6 +159,7 @@ export function ScheduleCellForm({
           {t("settlements.therapist.attendance.saveFailed", { message: formError })}
         </p>
       ) : null}
+      <DayOffImpactNotice calls={impactedCalls} canOpenLedger={canOpenLedger} date={date} employeeName={employeeName} />
     </form>
   );
 }

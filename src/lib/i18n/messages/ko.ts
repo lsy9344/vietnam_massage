@@ -477,6 +477,15 @@ export const ko = {
   "settlements.schedule.cell.statusLabel": "근무 상태",
   "settlements.schedule.cell.statusAria": "{name}의 {date} 근무 상태",
 
+  // 지난주 복사와 휴무 영향 콜(티켓 28)
+  "settlements.schedule.copy.action": "지난주 복사",
+  "settlements.schedule.copy.pending": "복사 중…",
+  "settlements.schedule.copy.result": "{count}칸을 채웠습니다.",
+  "settlements.schedule.copy.failed": "복사 실패: {message}",
+  "settlements.schedule.dayOff.impact.count": "영향받는 콜 {count}건",
+  "settlements.schedule.dayOff.impact.guidance": "배정된 콜을 다른 직원에게 재배정하거나, 해당 직원의 근무 예정을 다시 확인하세요.",
+  "settlements.schedule.dayOff.impact.listAria": "{name}의 {date} 영향받는 콜 목록",
+
   // 마사지사 일일정산
   "settlements.therapist.title": "마사지사 일일정산",
   "settlements.therapist.emptyMonthDescription": "마사지사 일일정산은 운영월 날짜 범위 안에서만 조회할 수 있다.",
