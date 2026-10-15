@@ -89,8 +89,11 @@ const CALL_GRID_COLUMNS = [
 ] as const satisfies ReadonlyArray<{ id: string; labelKey: MessageKey; width: string; settlement?: boolean }>;
 
 // 원장 보기 세 가지(명세 F02, 티켓 19)의 열 묶음. date·saveStatus는 보기와 무관하게 항상 있고,
-// time·customerMemo·reservationStatus는 모든 보기에서 이 자리(앞쪽)에 고정된다. all은 보기가 없던
-// 때의 순서 그대로 둔다(기존 E2E의 키보드 이동 순서를 그대로 지키기 위해 다시 묶지 않는다).
+// time·customerMemo·reservationStatus는 모든 보기(all 포함, S4)에서 이 자리(앞쪽)에 같은 순서로
+// 고정된다. 수납·정산 보기는 스펙의 정의(예약시각, 고객/메모, 상태, 할인, 결제수단, 결제금액, 확인
+// 코드, 비고)만 보여 준다 — 방문별 요청은 "드물게 쓰는 입력"(스토리 97)이라 상시 열이 아니라 콜 상세
+// 패널에서 펼쳐 본다(S4). all은 전체 열을 보여 주되(스펙), 고정 세 열만 앞으로 옮기고 나머지는
+// 기존 순서 그대로 둔다(기존 E2E의 키보드 이동 순서를 지키기 위해 그 밖은 다시 묶지 않는다).
 const LEDGER_VIEW_COLUMN_IDS = {
   booking: [
     "date",
@@ -112,18 +115,26 @@ const LEDGER_VIEW_COLUMN_IDS = {
     "customerMemo",
     "reservationStatus",
     "discountType",
+    "discount",
     "paymentMethod",
     "paymentAmount",
     "confirmation",
     "note",
-    "visitRequest",
     "therapist1Commission",
     "therapist2Commission",
     "earcarePool",
     "opsCallCredit",
     "saveStatus"
   ],
-  all: CALL_GRID_COLUMNS.map((column) => column.id)
+  all: [
+    "date",
+    "time",
+    "customerMemo",
+    "reservationStatus",
+    ...CALL_GRID_COLUMNS.map((column) => column.id).filter(
+      (id) => id !== "date" && id !== "time" && id !== "customerMemo" && id !== "reservationStatus"
+    )
+  ]
 } as const satisfies Record<LedgerView, readonly (typeof CALL_GRID_COLUMNS)[number]["id"][]>;
 
 // 각 열 머리 id가 쓰는 실제 필드 이름(EditableCallField나 읽기전용 계산 필드). date·warnings는 이
