@@ -18,6 +18,8 @@ export type QuickBookingStep = (typeof QUICK_BOOKING_STEPS)[number];
 export const QUICK_BOOKING_STEP_OF_FIELD: Record<string, QuickBookingStep> = {
   customerId: "customer",
   customerMemo: "customer",
+  // 새 고객(F01, 티켓 24). zod 중첩 오류는 "newCustomer" 하나로 모인다.
+  newCustomer: "customer",
   serviceDate: "schedule",
   startTime: "schedule",
   courseId: "therapist",

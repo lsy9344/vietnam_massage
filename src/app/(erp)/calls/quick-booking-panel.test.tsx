@@ -14,10 +14,26 @@ import {
 import { renderInShell } from "@/components/shell/test-harness";
 import type { NewCallRowDraft } from "@/app/(erp)/calls/call-new-row-save";
 import type { Locale } from "@/lib/i18n/config";
-import type { CustomerDto, ServiceCallFormOptions, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
+import type {
+  CustomerDto,
+  CustomerVisitCandidateDto,
+  CustomerVisitCountsDto,
+  CustomerVisitHistoryRowDto,
+  ServiceCallFormOptions,
+  TherapistAvailabilityRowDto
+} from "@/modules/calls/service-call-service";
 
 function render(locale: Locale, node: React.ReactElement) {
   return renderToStaticMarkup(renderInShell(node, locale));
+}
+
+/** html에서 marker 문자열을 담은 <label>...</label> 한 칸을 떼어 본다(체크박스 한 줄, 티켓 24). */
+function labelRowContaining(html: string, marker: string) {
+  const markerIndex = html.indexOf(marker);
+  assert.ok(markerIndex >= 0, `marker not found: ${marker}`);
+  const start = html.lastIndexOf("<label", markerIndex);
+  const end = html.indexOf("</label>", markerIndex) + "</label>".length;
+  return html.slice(start, end);
 }
 
 const options: ServiceCallFormOptions = {
@@ -40,6 +56,19 @@ const customers: CustomerDto[] = [
   { id: "customer-1", name: "지윤", phone: "010-6655-1100", memo: null, preferenceNote: null },
   { id: "customer-2", name: "하나", phone: null, memo: null, preferenceNote: null }
 ];
+
+/** 고객 단계가 Customer검색/최근 방문 가져오기(티켓 24)를 위해 더 받는 props의 기본값. */
+function customerStepExtras(locale: Locale, overrides: Partial<Pick<Parameters<typeof CustomerStep>[0], "candidates" | "onQueryChange" | "onSelectCandidate" | "query" | "visitSummary">> = {}) {
+  return {
+    candidates: [] as CustomerVisitCandidateDto[],
+    locale,
+    onQueryChange: () => undefined,
+    onSelectCandidate: () => undefined,
+    query: "",
+    visitSummary: null as { counts: CustomerVisitCountsDto; recentVisit: CustomerVisitHistoryRowDto | null } | null,
+    ...overrides
+  };
+}
 
 function draft(overrides: Partial<NewCallRowDraft> = {}): NewCallRowDraft {
   return {
@@ -125,6 +154,7 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
     const html = render(
       "ko",
       <CustomerStep
+        {...customerStepExtras("ko")}
         customers={customers}
         disabled={false}
         draft={draft()}
@@ -142,6 +172,7 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
     const vietnamese = render(
       "vi",
       <CustomerStep
+        {...customerStepExtras("vi")}
         customers={customers}
         disabled={false}
         draft={draft()}
@@ -159,6 +190,7 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
     const html = render(
       "ko",
       <CustomerStep
+        {...customerStepExtras("ko")}
         customers={customers}
         disabled={false}
         draft={draft({ customerId: "customer-1" })}
@@ -174,10 +206,113 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
     assert.doesNotMatch(html, /role="combobox"/);
   });
 
+  it("고객 단계: 고객 화면으로 이동하는 링크가 늘 보인다(스토리 91, 티켓 24)", () => {
+    const html = render(
+      "ko",
+      <CustomerStep
+        {...customerStepExtras("ko")}
+        customers={customers}
+        disabled={false}
+        draft={draft({ customerId: "customer-1" })}
+        fieldErrors={{}}
+        monthEndDate="2026-06-30"
+        monthStartDate="2026-06-01"
+        onEdit={() => undefined}
+        options={options}
+      />
+    );
+    assert.match(html, /<a[^>]*href="\/customers\?visitCustomer=customer-1"[^>]*>고객 화면으로 이동<\/a>/);
+  });
+
+  it("고객 단계: 새 고객 만들기를 누르면 이름·연락처·공통 선호 칸이 보이고 검색칸은 숨는다(스토리 57, 티켓 24)", () => {
+    const html = render(
+      "ko",
+      <CustomerStep
+        {...customerStepExtras("ko")}
+        customers={customers}
+        disabled={false}
+        draft={draft({ newCustomer: { name: "새손님", phone: "0909999999", memo: null, preferenceNote: "조용한 방 선호" } })}
+        fieldErrors={{}}
+        monthEndDate="2026-06-30"
+        monthStartDate="2026-06-01"
+        onEdit={() => undefined}
+        options={options}
+      />
+    );
+    assert.match(html, />새 고객 만들기</);
+    assert.match(html, />검색으로 돌아가기</);
+    assert.match(html, /value="새손님"/);
+    assert.match(html, /value="0909999999"/);
+    assert.match(html, />조용한 방 선호</);
+    assert.doesNotMatch(html, /role="combobox"/);
+
+    const withNameError = render(
+      "ko",
+      <CustomerStep
+        {...customerStepExtras("ko")}
+        customers={customers}
+        disabled={false}
+        draft={draft({ newCustomer: { name: "", phone: null, memo: null, preferenceNote: null } })}
+        fieldErrors={{ newCustomer: ["이름을 입력하세요."] }}
+        monthEndDate="2026-06-30"
+        monthStartDate="2026-06-01"
+        onEdit={() => undefined}
+        options={options}
+      />
+    );
+    assert.match(withNameError, /role="alert">이름을 입력하세요\.</);
+  });
+
+  it("고객 단계: 최근 방문 가져오기는 체크한 값만 지금 값과 같게 보이고, 비활성 값은 가져올 수 없다(B09, 스토리 71-73, 티켓 24)", () => {
+    const recentVisit = {
+      serviceCallId: "call-1",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-05",
+      startTime: "15:00",
+      courseId: "course-a",
+      courseLabel: "A 60분",
+      therapist1Id: "therapist-retired",
+      therapist2Id: null,
+      therapistLabel: "그만둔 마사지사",
+      status: "방문완료",
+      customerMemo: "지윤 방문",
+      visitRequest: "조명을 어둡게"
+    };
+    const html = render(
+      "ko",
+      <CustomerStep
+        {...customerStepExtras("ko", {
+          visitSummary: { counts: { completedCount: 1, noShowCount: 0, canceledCount: 0 }, recentVisit }
+        })}
+        customers={customers}
+        disabled={false}
+        draft={draft({ customerId: "customer-1", courseId: "course-a" })}
+        fieldErrors={{}}
+        monthEndDate="2026-06-30"
+        monthStartDate="2026-06-01"
+        onEdit={() => undefined}
+        options={options}
+      />
+    );
+    // 지금 코스(course-a)가 그 방문의 코스와 같고 활성이라 체크돼 있고, 가져올 수 없음 표시가 없다.
+    const courseRow = labelRowContaining(html, "코스 가져오기: A 60분");
+    assert.match(courseRow, /checked=""/);
+    assert.doesNotMatch(courseRow, /가져올 수 없음/);
+    // Therapist는 지금 활성 목록(options.therapists)에 없어 가져올 수 없고, 체크도 꺼져 있다.
+    const therapistRow = labelRowContaining(html, "Therapist 가져오기: 그만둔 마사지사");
+    assert.doesNotMatch(therapistRow, /checked=""/);
+    assert.match(therapistRow, /disabled=""/);
+    assert.match(therapistRow, /가져올 수 없음/);
+    // 방문별 요청은 아직 체크 전이라(지금 값은 null) 체크돼 있지 않다.
+    const visitRequestRow = labelRowContaining(html, "방문별 요청 가져오기: 조명을 어둡게");
+    assert.doesNotMatch(visitRequestRow, /checked=""/);
+  });
+
   it("고객 단계: 필드 오류는 그 칸 옆에 보인다", () => {
     const html = render(
       "ko",
       <CustomerStep
+        {...customerStepExtras("ko")}
         customers={customers}
         disabled={false}
         draft={draft()}

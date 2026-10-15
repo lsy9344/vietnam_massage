@@ -1937,17 +1937,23 @@ export async function createServiceCallRow(
   if (!parsed.success) {
     throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "콜 원장 입력값이 올바르지 않습니다.", "INVALID_SERVICE_CALL_INPUT");
   }
-  const { requestId, ...row } = parsed.data;
+  const { requestId, newCustomer, ...row } = parsed.data;
   const client = getClient(input.prismaClient);
 
   try {
     return await runInTransaction(client, async (tx) => {
-      // 이미 만든 콜을 돌려주는 것은 쓰기가 아니다. 그 사이 운영월이 잠겼어도 같은 답을 준다.
+      // 이미 만든 콜을 돌려주는 것은 쓰기가 아니다. 그 사이 운영월이 잠겼어도 같은 답을 준다. 이미 만든
+      // 콜이 있으면 새 고객도 만들지 않는다 — 다시 보낸 요청이 고객을 두 번 만들지 않게 하는 핵심이다.
       const existing = await findServiceCallRowByRequestId(tx, requestId);
       if (existing) {
         return { row: existing, alreadySaved: true };
       }
-      return { row: await writeServiceCallRow(tx, row, { actorId: input.actorId, requestId }), alreadySaved: false };
+      // 빠른 예약의 새 고객(F01, 티켓 24): 콜과 같은 트랜잭션에서 만든다. 뒤의 콜 생성이 실패하면(동시
+      // 요청의 유일성 위반 등) 트랜잭션 전체가 롤백되어 고객만 남는 부분 성공이 생기지 않는다.
+      const customerId = newCustomer
+        ? (await createCustomerRecord(tx, newCustomer, requireActor(input.actorId))).id
+        : row.customerId;
+      return { row: await writeServiceCallRow(tx, { ...row, customerId }, { actorId: input.actorId, requestId }), alreadySaved: false };
     });
   } catch (error) {
     // 같은 요청 id의 생성이 동시에 들어와 이쪽이 유일성 위반으로 실패했다. 먼저 만든 콜을 같은 응답으로 돌려준다.
@@ -2310,6 +2316,31 @@ function requireActor(actorId: string | null | undefined) {
   return id;
 }
 
+// 고객 레코드를 만들고 생성 감사를 남긴다. createCustomer(단독 등록)와 createServiceCallRow의 새 고객
+// 가져오기(F01, 티켓 24, 콜과 한 트랜잭션)가 같이 쓴다. 입력은 이미 검증된 값이어야 한다.
+async function createCustomerRecord(tx: ServiceCallPrismaClient, input: CustomerInput, actorId: string) {
+  const record = await tx.customer.create({
+    data: {
+      name: input.name,
+      phone: input.phone ?? null,
+      memo: input.memo ?? null,
+      preferenceNote: input.preferenceNote ?? null
+    }
+  });
+  await recordAuditEvent(
+    {
+      actorId,
+      action: "customer.created",
+      targetType: "customer",
+      targetId: record.id,
+      beforeValue: null,
+      afterValue: toCustomerAuditSnapshot(record)
+    },
+    { prismaClient: tx as any }
+  );
+  return record;
+}
+
 export async function createCustomer(input: CustomerInput & { actorId: string; prismaClient?: ServiceCallPrismaClient }) {
   const parsed = customerInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -2320,25 +2351,7 @@ export async function createCustomer(input: CustomerInput & { actorId: string; p
   const client = getClient(input.prismaClient);
 
   return runInTransaction(client, async (tx) => {
-    const record = await tx.customer.create({
-      data: {
-        name: parsed.data.name,
-        phone: parsed.data.phone ?? null,
-        memo: parsed.data.memo ?? null,
-        preferenceNote: parsed.data.preferenceNote ?? null
-      }
-    });
-    await recordAuditEvent(
-      {
-        actorId,
-        action: "customer.created",
-        targetType: "customer",
-        targetId: record.id,
-        beforeValue: null,
-        afterValue: toCustomerAuditSnapshot(record)
-      },
-      { prismaClient: tx as any }
-    );
+    const record = await createCustomerRecord(tx, parsed.data, actorId);
     return toCustomerDto(record);
   });
 }
@@ -2398,10 +2411,15 @@ export type CustomerVisitHistoryRowDto = {
   operatingMonthId: string;
   serviceDate: string;
   startTime: string;
+  courseId: string;
   courseLabel: string;
+  therapist1Id: string | null;
+  therapist2Id: string | null;
   therapistLabel: string;
   status: string;
   customerMemo: string | null;
+  /** 이 방문의 방문별 요청(F06, 티켓 23). 빠른 예약 고객 단계의 최근 방문 가져오기(티켓 24)가 쓴다. */
+  visitRequest: string | null;
 };
 
 export type CustomerVisitCandidateDto = {
@@ -2461,10 +2479,14 @@ function toVisitHistoryRow(record: ServiceCallRecord): CustomerVisitHistoryRowDt
     operatingMonthId: record.operatingMonthId,
     serviceDate: toIsoDateOnly(record.serviceDate),
     startTime: record.startTime,
+    courseId: record.courseId,
     courseLabel: visitCourseLabel(record),
+    therapist1Id: assignmentEmployeeId(record, "THERAPIST_1"),
+    therapist2Id: assignmentEmployeeId(record, "THERAPIST_2"),
     therapistLabel: visitTherapistLabel(record),
     status: record.status,
-    customerMemo: record.customerMemo
+    customerMemo: record.customerMemo,
+    visitRequest: record.visitRequest
   };
 }
 
@@ -2510,6 +2532,20 @@ export function customerVisitCountsFromRows(rows: CustomerVisitHistoryRowDto[]):
     noShowCount: count(isNoShowStatus),
     canceledCount: count(isCanceledStatus)
   };
+}
+
+/**
+ * 날짜·예약시각 기준으로 가장 최근 방문(상태와 상관없이). 빠른 예약 고객 단계가 그 방문의 코스·Therapist·
+ * 방문별 요청 중 체크한 항목만 가져온다(B09, 스토리 71-73, 티켓 24). 방문 이력이 없으면 null이다.
+ */
+export function mostRecentCustomerVisit(rows: CustomerVisitHistoryRowDto[]): CustomerVisitHistoryRowDto | null {
+  let latest: CustomerVisitHistoryRowDto | null = null;
+  for (const row of rows) {
+    if (!latest || `${row.serviceDate}T${row.startTime}` > `${latest.serviceDate}T${latest.startTime}`) {
+      latest = row;
+    }
+  }
+  return latest;
 }
 
 function textIncludes(value: string | null | undefined, query: string) {

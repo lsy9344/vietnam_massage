@@ -69,10 +69,27 @@ export const serviceCallAutosaveInputSchema = serviceCallInputSchema.extend({
   expectedUpdatedAt: savedVersion
 });
 
-// 원장 새 행은 초안마다 화면이 요청 id를 하나 만든다. 응답을 받지 못해 다시 보낼 때도 같은 id를 보낸다.
-export const serviceCallCreateInputSchema = serviceCallInputSchema.omit({ serviceCallId: true, expectedUpdatedAt: true }).extend({
-  requestId: z.string().trim().min(1, "새 행 요청 id가 올바르지 않습니다.").max(100, "새 행 요청 id가 올바르지 않습니다.")
+export const customerInputSchema = z.object({
+  name: z.string().trim().min(1, "이름을 입력하세요.").max(200, "200자 이하로 입력하세요."),
+  phone: optionalText,
+  memo: optionalText,
+  // 고객 공통 선호·주의사항(F06, 티켓 23). 기존 memo(고객 메모)와는 다른 칸이다.
+  preferenceNote: optionalText
 });
+
+// 원장 새 행은 초안마다 화면이 요청 id를 하나 만든다. 응답을 받지 못해 다시 보낼 때도 같은 id를 보낸다.
+export const serviceCallCreateInputSchema = serviceCallInputSchema
+  .omit({ serviceCallId: true, expectedUpdatedAt: true })
+  .extend({
+    requestId: z.string().trim().min(1, "새 행 요청 id가 올바르지 않습니다.").max(100, "새 행 요청 id가 올바르지 않습니다."),
+    // 빠른 예약의 새 고객(F01, 티켓 24): 고객 지정 세 갈래(기존 id/새 고객/고객 없음) 중 하나다. 콜과
+    // 같은 트랜잭션에서 만들어, 같은 요청 id로 다시 보내도 고객이 두 번 생기지 않는다.
+    newCustomer: customerInputSchema.nullable().optional()
+  })
+  .refine((data) => !(data.customerId && data.newCustomer), {
+    message: "기존 고객과 새 고객을 동시에 지정할 수 없습니다.",
+    path: ["newCustomer"]
+  });
 
 export const dailyExpenseInputSchema = z.object({
   operatingMonthId: z.string().trim().min(1, "운영월을 선택하세요."),
@@ -90,14 +107,6 @@ export const dailyExpenseUpdateSchema = dailyExpenseInputSchema.extend({
 
 export const dailyExpenseDeactivateSchema = z.object({
   dailyExpenseId: z.string().trim().min(1, "지출 항목 ID가 올바르지 않습니다.")
-});
-
-export const customerInputSchema = z.object({
-  name: z.string().trim().min(1, "이름을 입력하세요.").max(200, "200자 이하로 입력하세요."),
-  phone: optionalText,
-  memo: optionalText,
-  // 고객 공통 선호·주의사항(F06, 티켓 23). 기존 memo(고객 메모)와는 다른 칸이다.
-  preferenceNote: optionalText
 });
 
 export const customerUpdateSchema = customerInputSchema.extend({
