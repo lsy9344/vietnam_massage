@@ -6,19 +6,26 @@ import { useRouter } from "next/navigation";
 import { CustomerScreenView } from "@/app/(erp)/customers/customer-screen-view";
 import { CUSTOMER_SEARCH_DEBOUNCE_MS, customerScreenHref, moveCandidateIndex } from "@/app/(erp)/customers/customer-search";
 import { useLocale } from "@/lib/i18n/client";
-import type { CustomerDto, CustomerVisitCandidateDto, CustomerVisitHistoryRowDto } from "@/modules/calls/service-call-service";
+import type {
+  CustomerDto,
+  CustomerVisitCandidateDto,
+  CustomerVisitCountsDto,
+  CustomerVisitHistoryRowDto
+} from "@/modules/calls/service-call-service";
 
 export function CustomerScreen({
   query,
   candidates,
   customer,
   visitMemo,
+  visitCounts,
   history
 }: {
   query: string;
   candidates: CustomerVisitCandidateDto[];
   customer: CustomerDto | null;
   visitMemo: string | null;
+  visitCounts: CustomerVisitCountsDto | null;
   history: CustomerVisitHistoryRowDto[];
 }) {
   const router = useRouter();
@@ -95,6 +102,7 @@ export function CustomerScreen({
       query={draft}
       selectedMemo={customer ? null : visitMemo}
       settledQuery={query}
+      visitCounts={visitCounts}
     />
   );
 }

@@ -404,6 +404,11 @@ export const vi: Messages = {
   "customers.detail.memoOnly": "Đây là ghi chú khách trên cuộc gọi, chưa có hồ sơ khách. Chỉ hiện các cuộc gọi ghi đúng ghi chú này.",
   "customers.history.empty": "Chưa có lịch sử ghé.",
   "customers.create.action": "Đăng ký khách",
+  "customers.visitCounts.aria": "Số ca hoàn tất, không đến, đã hủy",
+  "customers.duplicatePhone.chip": "Trùng số liên lạc",
+  "customers.duplicatePhone.title": "Có nhiều khách hàng dùng cùng một số liên lạc.",
+  "customers.compare.column.latestVisit": "Ngày ghé gần nhất",
+  "customers.compare.column.completedVisits": "Số lần hoàn tất",
 
   // /settlements 화면
   // 공통 정산 탭/포맷
