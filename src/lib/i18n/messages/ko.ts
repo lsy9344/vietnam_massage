@@ -311,6 +311,9 @@ export const ko = {
   "calls.grid.empty.title": "이 날짜의 콜이 없습니다",
   "calls.grid.empty.description": "아래 입력 행에서 원본 실시간콜입력 A:S 의미의 기본 필드를 기록한다.",
 
+  // 휴대폰 폭 원장 카드 목록(명세 F08, 티켓 26)
+  "calls.phoneCard.aria": "원장 카드 목록",
+
   // 콜 행 저장 상태
   "calls.save.saved": "저장됨",
   "calls.save.retry": "재시도",

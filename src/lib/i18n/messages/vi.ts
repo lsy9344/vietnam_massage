@@ -311,6 +311,9 @@ export const vi: Messages = {
   "calls.grid.empty.title": "Không có cuộc gọi nào trong ngày này",
   "calls.grid.empty.description": "Ghi lại các trường cơ bản (nhập cuộc gọi thời gian thực gốc, ý nghĩa A:S) ở dòng nhập bên dưới.",
 
+  // 휴대폰 폭 원장 카드 목록(명세 F08, 티켓 26)
+  "calls.phoneCard.aria": "Danh sách thẻ sổ cuộc gọi",
+
   // 콜 행 저장 상태
   "calls.save.saved": "Đã lưu",
   "calls.save.retry": "Thử lại",

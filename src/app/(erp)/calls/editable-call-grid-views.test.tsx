@@ -80,12 +80,13 @@ function render(props: Partial<Parameters<typeof EditableCallGrid>[0]>) {
   return markup;
 }
 
-/** 저장된 행(표의 둘째 tbody가 아니라 첫 tbody) 한 줄의 markup만 잘라낸다. */
+/**
+ * 저장된 행(표의 둘째 tbody가 아니라 첫 tbody) 한 줄의 markup만 잘라낸다. 티켓 26부터는 같은
+ * `data-service-call-id`를 휴대폰 카드 목록도 들고 있어(CSS로만 서로 숨긴다), `<tr` 태그 안의
+ * 것인지까지 확인한다(call-row-warnings.test.tsx의 dataRow와 같은 방식).
+ */
 function dataRow(html: string) {
-  const start = html.indexOf(`data-service-call-id="call-1"`);
-  const rowStart = html.lastIndexOf("<tr", start);
-  const rowEnd = html.indexOf("</tr>", start) + "</tr>".length;
-  return html.slice(rowStart, rowEnd);
+  return html.match(/<tr[^>]*data-service-call-id="call-1"[\s\S]*?<\/tr>/)?.[0] ?? "";
 }
 
 /** 표 머리(<thead>) 한 줄의 markup만 잘라낸다. 열 라벨은 각 행이 아니라 머리에만 있다. */
