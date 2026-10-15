@@ -73,7 +73,12 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
 
   // 지급 확인(ADR 0004, 티켓 30)
   PAYOUT_CONFIRMATION_ALREADY_CONFIRMED: "Đã xác nhận chi trả. Nếu số tiền thay đổi, hãy xác nhận lại.",
-  PAYOUT_CONFIRMATION_NOT_CONFIRMED: "Chưa có xác nhận chi trả nên không thể xác nhận lại hoặc hủy xác nhận."
+  PAYOUT_CONFIRMATION_NOT_CONFIRMED: "Chưa có xác nhận chi trả nên không thể xác nhận lại hoặc hủy xác nhận.",
+
+  // 월 명세서(티켓 32)
+  INVALID_MONTHLY_STATEMENT_INPUT: "Dữ liệu tra cứu phiếu lương tháng không hợp lệ.",
+  UNSUPPORTED_EMPLOYEE_GROUP: "Không hỗ trợ phiếu lương tháng cho nhân viên này.",
+  MONTHLY_STATEMENT_VERSION_NOT_FOUND: "Không tìm thấy phiên bản chốt tháng đó."
 };
 
 /**

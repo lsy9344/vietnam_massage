@@ -165,7 +165,19 @@ function ClosingStepper({ locale, t, status }: { locale: Locale; t: Translator; 
   );
 }
 
-function SnapshotSummary({ locale, t, closing, currentStatus }: { locale: Locale; t: Translator; closing: MonthlyClosingDto; currentStatus: string }) {
+function SnapshotSummary({
+  locale,
+  t,
+  closing,
+  currentStatus,
+  canOpenLedger
+}: {
+  locale: Locale;
+  t: Translator;
+  closing: MonthlyClosingDto;
+  currentStatus: string;
+  canOpenLedger: boolean;
+}) {
   const isHistoricalAfterReopen = currentStatus === "검토중" && closing.reopenedAt !== null;
   const label = isHistoricalAfterReopen ? t("closing.snapshot.previous") : t("closing.snapshot.confirmed");
   const heading = isHistoricalAfterReopen
@@ -215,6 +227,28 @@ function SnapshotSummary({ locale, t, closing, currentStatus }: { locale: Locale
           <div className="font-semibold tabular-nums">{closing.snapshot.warningCounts.total}{t("settlements.countSuffix")}</div>
         </div>
       </div>
+      {closing.snapshot.pendingCloseException ? (
+        <div className="mt-3 border border-border bg-background px-3 py-2">
+          <div className="text-sm font-semibold text-foreground">
+            {t("closing.snapshot.pendingCloseException.title")} {t("closing.checklist.pendingCloseCalls.count", { count: closing.snapshot.pendingCloseException.calls.length })}
+          </div>
+          <p className="mt-1 text-sm text-muted">
+            {t("closing.snapshot.pendingCloseException.reason", { reason: closing.snapshot.pendingCloseException.reason })}
+          </p>
+          <EvidenceCallList label={t("closing.snapshot.pendingCloseException.title")}>
+            {closing.snapshot.pendingCloseException.calls.map((call) => (
+              <EvidenceCallItem
+                amount={null}
+                call={call}
+                canOpenLedger={canOpenLedger}
+                key={call.serviceCallId}
+                locale={locale}
+                serviceDate={call.serviceDate}
+              />
+            ))}
+          </EvidenceCallList>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -747,11 +781,13 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
 
       <ClosingStepper locale={locale} t={t} status={selectedMonth.status} />
       <ClosingActionPanel
+        canOpenLedger={canOpenLedger}
         canReopen={canReopenClosing}
         canWrite={canWriteClosing}
         checklistBlocked={checklist?.isConfirmBlocked ?? false}
         confirmSummary={result ? confirmSummaryFor(result) : null}
         operatingMonthId={selectedMonth.id}
+        pendingCloseCalls={checklist?.pendingCloseCalls ?? []}
         status={selectedMonth.status}
       />
 
@@ -772,7 +808,9 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
         </section>
       ) : result ? (
         <>
-          {closingSnapshot ? <SnapshotSummary locale={locale} t={t} closing={closingSnapshot} currentStatus={selectedMonth.status} /> : null}
+          {closingSnapshot ? (
+            <SnapshotSummary canOpenLedger={canOpenLedger} closing={closingSnapshot} currentStatus={selectedMonth.status} locale={locale} t={t} />
+          ) : null}
           <PreviewNotice locale={locale} t={t} result={result} />
           <SummaryBand locale={locale} t={t} result={result} />
           <TherapistTable locale={locale} t={t} result={result} />

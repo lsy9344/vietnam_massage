@@ -10,6 +10,7 @@ import type { Locale } from "@/lib/i18n/config";
 import { getLocale } from "@/lib/i18n/server";
 import { resolveDomainErrorMessage, resolveKoreanMessage } from "@/lib/i18n/errors";
 import {
+  MonthlyClosePendingCallsChangedError,
   MonthlyClosingDomainError,
   confirmMonthlyClose,
   lockMonthlyClose,
@@ -18,11 +19,29 @@ import {
   type MonthlyCloseReviewDto,
   type MonthlyClosingDto
 } from "@/modules/closing/monthly-closing-service";
+import type { MonthlyClosingChecklistCallDto } from "@/modules/closing/monthly-closing-checklist-service";
 
 export type MonthlyClosingActionState = ActionResult<MonthlyCloseReviewDto | MonthlyClosingDto> | null;
+/**
+ * F07/ADR 0005(티켓 34): 확인한 목록 이후 새 마감 확인 대상 콜이 생겨 거절되면, 다시 체크하도록
+ * 지금의 목록을 함께 돌려준다(StaleServiceCallError + currentRow와 같은 모양, calls/actions.ts 참고).
+ */
+export type ConfirmMonthlyCloseActionState =
+  | MonthlyClosingActionState
+  | {
+      ok: false;
+      formError: string;
+      domainErrorCode: "MONTHLY_CLOSE_PENDING_CALLS_CHANGED";
+      currentPendingCloseCalls: MonthlyClosingChecklistCallDto[];
+    };
 
 const monthlyClosingActionSchema = z.object({
   operatingMonthId: z.string().trim().min(1, "운영월을 선택하세요.")
+});
+
+const confirmMonthlyClosingActionSchema = monthlyClosingActionSchema.extend({
+  confirmedPendingCloseCallIds: z.array(z.string().trim().min(1)).default([]),
+  exceptionReason: z.string().trim().max(500, "사유는 500자 이하로 입력하세요.").default("")
 });
 
 const reopenMonthlyClosingActionSchema = monthlyClosingActionSchema.extend({
@@ -91,12 +110,16 @@ export async function startMonthlyCloseReviewAction(
 }
 
 export async function confirmMonthlyCloseAction(
-  _previousState: MonthlyClosingActionState,
+  _previousState: ConfirmMonthlyCloseActionState,
   formData: FormData
-): Promise<MonthlyClosingActionState> {
+): Promise<ConfirmMonthlyCloseActionState> {
   const locale = await getLocale();
-  const parsed = monthlyClosingActionSchema.safeParse({
-    operatingMonthId: formData.get("operatingMonthId")
+  const parsed = confirmMonthlyClosingActionSchema.safeParse({
+    operatingMonthId: formData.get("operatingMonthId"),
+    confirmedPendingCloseCallIds: formData.getAll("confirmedPendingCloseCallIds"),
+    // 마감 확인 대상 콜이 없으면 그 입력칸 자체를 그리지 않으므로, formData.get()은 null을 돌려준다.
+    // zod .default("")는 undefined에만 적용되어 null은 그대로 통과시켜 거절하므로 여기서 미리 바꾼다.
+    exceptionReason: formData.get("exceptionReason") ?? ""
   });
 
   if (!parsed.success) {
@@ -111,11 +134,22 @@ export async function confirmMonthlyCloseAction(
     const account = await requirePermission("closing:write");
     const data = await confirmMonthlyClose({
       actorId: account.id,
-      operatingMonthId: parsed.data.operatingMonthId
+      operatingMonthId: parsed.data.operatingMonthId,
+      confirmedPendingCloseCallIds: parsed.data.confirmedPendingCloseCallIds,
+      exceptionReason: parsed.data.exceptionReason
     });
     revalidatePath("/closing");
     return { ok: true, data };
   } catch (error) {
+    // F07/ADR 0005(티켓 34): 목록이 바뀌어 거절되면 지금의 목록을 함께 돌려줘 다시 확인할 수 있게 한다.
+    if (error instanceof MonthlyClosePendingCallsChangedError) {
+      return {
+        ok: false,
+        formError: resolveDomainErrorMessage(locale, error.code, error.message),
+        domainErrorCode: "MONTHLY_CLOSE_PENDING_CALLS_CHANGED",
+        currentPendingCloseCalls: error.currentPendingCloseCalls
+      };
+    }
     return mapActionError(error, locale);
   }
 }

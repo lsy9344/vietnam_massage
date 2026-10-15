@@ -154,6 +154,7 @@ export default async function EarcareAttendancePage({ searchParams }: { searchPa
             <EarcareSettlementView
               attendance={result}
               canOpenLedger={linkToScreen(account.role, "/calls", context) !== null}
+              canOpenStatement={linkToScreen(account.role, "/settlements/statement", context) !== null}
               initialEmployeeId={params[EMPLOYEE_PARAM] ?? null}
               key={`${selectedMonth.id}:${attendanceDate}`}
               result={settlementResult}

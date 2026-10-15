@@ -9,6 +9,11 @@ export type SettlementCourseCode = keyof TherapistDailySettlementDto["courseBrea
  */
 export const EMPLOYEE_PARAM = "employee";
 
+/** 직원 패널의 "월 명세서 보기" 링크 주소(티켓 32). 서버 페이지와 클라이언트 뷰가 함께 쓰므로 여기 둔다. */
+export function monthlyStatementHref(operatingMonthId: string, employeeId: string) {
+  return `/settlements/statement?operatingMonthId=${operatingMonthId}&employee=${employeeId}`;
+}
+
 /**
  * 정산 화면에 그릴 금액. 값은 서비스가 준 그대로이고, 계산 근거가 없으면 0 대신 "근거 없음"으로 그린다
  * (티켓 05, design.md 6.7). 0원 정책, 기준 미달, 근무상태 제외처럼 근거가 있는 0은 그대로 0이다.
