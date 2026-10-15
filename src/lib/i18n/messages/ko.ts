@@ -564,6 +564,7 @@ export const ko = {
   "settlements.schedule.dayOff.impact.count": "영향받는 콜 {count}건",
   "settlements.schedule.dayOff.impact.guidance": "배정된 콜을 다른 직원에게 재배정하거나, 해당 직원의 근무 예정을 다시 확인하세요.",
   "settlements.schedule.dayOff.impact.listAria": "{name}의 {date} 영향받는 콜 목록",
+  "settlements.schedule.copy.impactsHeading": "복사로 휴무가 된 칸 중 콜이 배정된 직원·날짜",
 
   // 마사지사 일일정산
   "settlements.therapist.title": "마사지사 일일정산",

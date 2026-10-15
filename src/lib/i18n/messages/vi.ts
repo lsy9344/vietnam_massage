@@ -563,6 +563,7 @@ export const vi: Messages = {
   "settlements.schedule.dayOff.impact.count": "{count} cuộc gọi bị ảnh hưởng",
   "settlements.schedule.dayOff.impact.guidance": "Hãy phân công lại cuộc gọi cho nhân viên khác, hoặc kiểm tra lại lịch làm việc của nhân viên này.",
   "settlements.schedule.dayOff.impact.listAria": "Danh sách cuộc gọi bị ảnh hưởng của {name} ngày {date}",
+  "settlements.schedule.copy.impactsHeading": "Nhân viên·ngày có cuộc gọi bị ảnh hưởng do sao chép thành nghỉ",
 
   // 마사지사 일일정산
   "settlements.therapist.title": "Đối soát ngày KTV massage",

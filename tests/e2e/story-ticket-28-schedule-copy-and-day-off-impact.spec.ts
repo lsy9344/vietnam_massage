@@ -23,6 +23,8 @@ const thisWeekTuesday = "2026-11-10";
 const thisWeekThursday = "2026-11-12";
 const lastWeekMonday = "2026-11-02";
 const lastWeekTuesday = "2026-11-03";
+const lastWeekWednesday = "2026-11-04";
+const thisWeekWednesday = "2026-11-11";
 
 let monthId = "";
 let impactedCallId = "";
@@ -235,6 +237,33 @@ test.describe("티켓 28 근무표 지난주 복사·휴무 영향 콜", () => {
 
     const row = page.locator("tr", { hasText: "T28 마사지사1" });
     await expect(row.getByText("근무 예정").first()).toBeVisible();
+  });
+
+  test("S8: 패널을 열어 둔 채로 지난주 복사를 하면 복사된 값이 select에 바로 반영되고, 그대로 저장해도 지워지지 않는다", async ({ page }) => {
+    await setCell(therapistId, lastWeekWednesday, "근무 예정");
+
+    await login(page, admin.accountId, admin.password);
+    await page.goto(`/settlements/schedule?date=${thisWeekMonday}`);
+
+    // 복사 전에 패널을 미리 열어 둔다 — 비제어 select라면 이 폼 인스턴스가 복사 뒤에도 그대로 남아
+    // 옛 값("미입력")을 들고 있을 자리다(S8, schedule-cell-form.tsx).
+    const row = page.locator("tr", { hasText: "T28 마사지사1" });
+    await row.getByRole("button", { name: /T28 마사지사1/ }).click();
+    const panel = page.getByRole("complementary");
+    const wednesdayForm = panel.locator("form").filter({ hasText: thisWeekWednesday.slice(5) });
+    await expect(wednesdayForm.getByRole("combobox")).toHaveValue("미입력");
+
+    await page.getByRole("button", { name: "지난주 복사" }).click();
+    await expect(page.getByText(/\d+칸을 채웠습니다\./)).toBeVisible();
+
+    // 복사로 수요일 칸이 채워졌으면(지난주 수요일이 "근무 예정") select도 같이 바뀌어야 한다.
+    await expect(wednesdayForm.getByRole("combobox")).toHaveValue("근무 예정");
+
+    // select를 건드리지 않고 그대로 저장한다 — 비제어였다면 옛 값("미입력")을 보내 복사한 값을 지웠을 자리다.
+    await wednesdayForm.getByRole("button", { name: "저장" }).click();
+    await expect(wednesdayForm.getByText("저장됨")).toBeVisible();
+
+    expect(await cellStatus(therapistId, thisWeekWednesday)).toBe("근무 예정");
   });
 
   test("베트남어 화면에서는 지난주 복사 버튼과 영향받는 콜 안내가 번역된다", async ({ page }) => {

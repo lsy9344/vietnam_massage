@@ -23,6 +23,8 @@ function cellKey(employeeId: string, workDate: string) {
 function createMemoryPrisma(
   options: {
     failAudit?: boolean;
+    /** S8: 여러 칸을 쓰는 지난주 복사가 한 트랜잭션인지 보려고, N번째 감사 기록부터만 실패시킨다. */
+    failAuditAfter?: number;
     seedCells?: Array<{ id: string; employeeId: string; workDate: string; planStatus: string }>;
     // 휴무 영향 콜(28): 콜 서비스의 listAssignedServiceCallsForEmployeeOnDate가 읽는 모양만 흉내 낸다.
     seedCalls?: Array<{
@@ -150,6 +152,9 @@ function createMemoryPrisma(
     auditLog: {
       async create({ data }: any) {
         if (options.failAudit) throw new Error("audit failed");
+        if (options.failAuditAfter !== undefined && auditEvents.length >= options.failAuditAfter) {
+          throw new Error("audit failed after limit");
+        }
         const record = { id: `audit-${auditEvents.length + 1}`, createdAt, ...data };
         auditEvents.push(record);
         return record;
@@ -165,8 +170,12 @@ function createMemoryPrisma(
     async $transaction(callback: (tx: any) => Promise<unknown>) {
       const snapshot = cloneCells();
       const auditSnapshotLength = auditEvents.length;
+      // 실제 Prisma의 트랜잭션 콜백 인자(TransactionClient)에는 $transaction이 없다(중첩 트랜잭션
+      // 불가). S8: setPlannedWorkingDay가 이미 트랜잭션 안(지난주 복사)에서 불려도 또 트랜잭션을 열지
+      // 않고 같은 트랜잭션에 참여하는지, 이 double로 그 제약을 그대로 흉내 내 확인한다.
+      const { $transaction: _omit, ...tx } = client;
       try {
-        return await callback(client);
+        return await callback(tx);
       } catch (error) {
         restoreCells(snapshot);
         auditEvents.splice(auditSnapshotLength);
@@ -479,5 +488,58 @@ describe("schedule service", () => {
         return true;
       }
     );
+  });
+
+  it("S8: 복사로 휴무가 된 칸의 영향받는 콜을 모아 돌려준다", async () => {
+    const client = createMemoryPrisma({
+      seedCells: [{ id: "pwd-1", employeeId: "thr-1", workDate: "2026-10-06", planStatus: "휴무" }], // 지난주 화
+      seedCalls: [
+        {
+          id: "call-1",
+          serviceDate: "2026-10-13", // 이번주 화(복사로 휴무가 되는 칸)
+          startTime: "14:00",
+          status: "예약",
+          courseCode: "A",
+          assignments: [{ employeeId: "thr-1" }]
+        }
+      ]
+    });
+
+    const result = await copyLastWeekSchedule({ date: "2026-10-14", actorId: "acc-1", prismaClient: client });
+
+    assert.equal(result.filledCount, 1);
+    assert.equal(client.cells.get(cellKey("thr-1", "2026-10-13"))?.planStatus, "휴무");
+    assert.deepEqual(result.impacts, [
+      { employeeId: "thr-1", employeeName: "마사지사1", date: "2026-10-13", calls: [{ serviceCallId: "call-1", operatingMonthId: "month-2026-10", serviceDate: "2026-10-13", startTime: "14:00", courseCode: "A", status: "예약" }] }
+    ]);
+  });
+
+  it("S8: 영향받는 콜이 없는 칸은 impacts에 담기지 않는다", async () => {
+    const client = createMemoryPrisma({
+      seedCells: [{ id: "pwd-1", employeeId: "thr-1", workDate: "2026-10-05", planStatus: "근무 예정" }] // 지난주 월, 영향 없음
+    });
+
+    const result = await copyLastWeekSchedule({ date: "2026-10-14", actorId: "acc-1", prismaClient: client });
+
+    assert.equal(result.filledCount, 1);
+    assert.deepEqual(result.impacts, []);
+  });
+
+  it("S8: 활성 직원 수×7번의 칸 쓰기를 한 트랜잭션으로 묶어, 중간에 하나가 실패하면 앞서 쓴 칸도 모두 되돌린다", async () => {
+    // thr-1(정렬 10)이 thr-2(정렬 20)보다 먼저 쓰여 월요일 칸이 성공한 뒤 thr-2의 칸에서 실패하게 한다.
+    const client = createMemoryPrisma({
+      seedCells: [
+        { id: "pwd-1", employeeId: "thr-1", workDate: "2026-10-05", planStatus: "근무 예정" },
+        { id: "pwd-2", employeeId: "thr-2", workDate: "2026-10-05", planStatus: "근무 예정" }
+      ],
+      failAuditAfter: 1 // 첫 칸(thr-1 월요일) 감사는 통과하고, 그다음(thr-2 월요일)부터 실패한다.
+    });
+
+    await assert.rejects(copyLastWeekSchedule({ date: "2026-10-14", actorId: "acc-1", prismaClient: client }));
+
+    // 한 트랜잭션이 아니었다면 thr-1의 칸은 이미 커밋돼 남아 있었을 것이다 — 지금은 전체가 되돌려져야 한다.
+    assert.equal(client.cells.has(cellKey("thr-1", "2026-10-12")), false);
+    assert.equal(client.cells.has(cellKey("thr-2", "2026-10-12")), false);
+    assert.equal(client.auditEvents.length, 0);
   });
 });

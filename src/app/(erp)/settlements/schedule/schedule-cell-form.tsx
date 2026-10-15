@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useId } from "react";
+import { useActionState, useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DateCapsule } from "@/components/ui/date-capsule";
 import { inputFieldClassName } from "@/components/ui/input-field";
@@ -108,6 +108,16 @@ export function ScheduleCellForm({
   const saved = state?.ok && state.data.employeeId === employeeId && state.data.date === date;
   const impactedCalls = state?.ok && state.data.employeeId === employeeId && state.data.date === date ? state.data.impactedCalls : [];
 
+  // S8: <select>를 비제어(defaultValue)로 두면 지난주 복사처럼 이 줄 바깥에서 status prop이 바뀌어도
+  // 화면이 갱신되지 않는다(이 컴포넌트는 key가 date뿐이라 다시 마운트되지 않는다, schedule-view.tsx).
+  // 그 상태로 저장하면 브라우저가 들고 있던 옛 값을 보내 복사한 값을 지운다. 제어 상태로 두고 status
+  // prop이 바뀔 때만(복사 등 바깥 변경) 다시 맞춘다 — 저장 직후 반영되는 값도 결국 같은 값이라
+  // "저장됨" 표시(state, 별도 hook)에는 영향이 없다.
+  const [selectedStatus, setSelectedStatus] = useState<PlannedWorkingDayCellStatus>(status);
+  useEffect(() => {
+    setSelectedStatus(status);
+  }, [status]);
+
   return (
     <form action={formAction} className="grid grid-cols-[3.5rem_1fr_auto] items-center gap-2 border-b border-border py-2 last:border-b-0" noValidate>
       <input name="employeeId" type="hidden" value={employeeId} />
@@ -123,9 +133,10 @@ export function ScheduleCellForm({
           aria-invalid={statusError ? "true" : undefined}
           aria-label={t("settlements.schedule.cell.statusAria", { name: employeeName, date })}
           className={inputFieldClassName({ invalid: Boolean(statusError) })}
-          defaultValue={status}
           disabled={pending}
           name="status"
+          onChange={(event) => setSelectedStatus(event.target.value as PlannedWorkingDayCellStatus)}
+          value={selectedStatus}
         >
           {ALL_SCHEDULE_CELL_STATUSES.map((value) => (
             <option key={value} value={value}>
