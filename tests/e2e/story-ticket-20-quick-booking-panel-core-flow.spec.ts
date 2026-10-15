@@ -250,6 +250,29 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
     expect(await (prisma as any).serviceCall.count({ where: { customerMemo: memo } })).toBe(1);
   });
 
+  test("코스를 고르지 않고 저장하면 그 단계로 돌아가 필드 옆과 패널 요약에 함께 오류가 보인다", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const memo = `T20 검증 오류 ${Date.now().toString(36)}`;
+    await login(page, account.accountId, account.password);
+    await openQuickBooking(page, monthId, today);
+    const dialog = panel(page);
+
+    await dialog.getByLabel("고객/메모").fill(memo);
+    await dialog.getByRole("button", { name: "다음" }).click();
+    await dialog.getByLabel("시간").selectOption("11:00");
+    await dialog.getByRole("button", { name: "다음" }).click();
+    // Therapist·코스 단계에서 아무 것도 고르지 않고 끝까지 간다.
+    await dialog.getByRole("button", { name: "다음" }).click();
+    await dialog.getByRole("button", { name: "다음" }).click();
+    await dialog.getByRole("button", { name: "예약 저장" }).click();
+
+    // 저장이 거절되면 그 필드가 있는 단계로 돌아가고, 필드 옆과 패널 요약에 함께 오류가 보인다.
+    await expect(dialog.getByText("저장하기 전에 확인하세요")).toBeVisible();
+    await expect(dialog.getByText("코스를 선택하세요.")).toHaveCount(2); // 요약과 필드 옆.
+    await expect(dialog.getByRole("button", { name: "Therapist·코스" })).toHaveAttribute("aria-current", "step");
+    expect(await (prisma as any).serviceCall.count({ where: { customerMemo: memo } })).toBe(0);
+  });
+
   test("휴대폰 폭(390px)에서는 빠른 예약 버튼을 제공하지 않는다", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, account.accountId, account.password);
