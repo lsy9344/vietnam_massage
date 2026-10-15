@@ -527,6 +527,7 @@ export const ko = {
   "settlements.payout.reason.releasePlaceholder": "확인을 해제하는 사유를 입력하세요.",
   "settlements.payout.reason.required": "재확인·해제에는 사유가 필수입니다.",
   "settlements.payout.error.generic": "지급 확인 처리 중 오류가 발생했습니다.",
+  "settlements.payout.handler": "처리자: {actor}",
 
   // 마사지사 출퇴근 입력 테이블
   "settlements.therapist.attendance.checkInMissing": "출퇴근 미입력",
@@ -579,6 +580,7 @@ export const ko = {
   "settlements.earcare.column.remainder": "잔여 배분",
   "settlements.earcare.column.payout": "지급액",
   "settlements.earcare.column.basis": "산출 근거",
+  "settlements.earcare.column.payoutConfirmation": "지급 확인",
   "settlements.earcare.payoutEligible": "지급 대상",
   "settlements.earcare.excluded": "제외: {reason}",
   "settlements.earcare.poolEvidence.empty.title": "방문완료 귀케어 풀이 없습니다",
@@ -618,6 +620,7 @@ export const ko = {
   "settlements.ops.column.payoutDecision": "지급 판정",
   "settlements.ops.column.payout": "지급액",
   "settlements.ops.column.basis": "산출 근거",
+  "settlements.ops.column.payoutConfirmation": "지급 확인",
   "settlements.ops.payoutEligible": "지급 대상",
   "settlements.ops.excluded": "제외: {reason}",
   "settlements.ops.callEvidence.empty.title": "인센 기준 완료 콜이 없습니다",
@@ -682,6 +685,7 @@ export const ko = {
   "settlements.opsMonthly.shareTeamPortion.none": "-",
   "settlements.opsMonthly.column.expectedPayout": "지급 예상액",
   "settlements.opsMonthly.column.basis": "산출 근거",
+  "settlements.opsMonthly.column.payoutConfirmation": "지급 확인",
   "settlements.opsMonthly.callEvidence.empty.title": "월 총콜 산출 근거가 없습니다",
   "settlements.opsMonthly.callEvidence.title": "월 총콜 산출 근거",
   "settlements.opsMonthly.callEvidence.description": "service DTO는 전체 evidence를 제공하며 화면에는 최대 50건만 표시한다. 총 {count}건.",

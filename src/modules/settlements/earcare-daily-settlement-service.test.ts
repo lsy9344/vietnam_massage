@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  confirmEarcareDailySettlementPayout,
   EarcareDailySettlementDomainError,
-  listEarcareDailySettlements
+  listEarcareDailySettlements,
+  reconfirmEarcareDailySettlementPayout,
+  releaseEarcareDailySettlementPayout
 } from "@/modules/settlements/earcare-daily-settlement-service";
 
 function dbDate(value: string) {
@@ -10,7 +13,13 @@ function dbDate(value: string) {
 }
 
 function createMemoryPrisma(
-  options: { locked?: boolean; allExcluded?: boolean; outsideMonth?: boolean; employeeIdTieBreaker?: boolean } = {}
+  options: {
+    locked?: boolean;
+    allExcluded?: boolean;
+    outsideMonth?: boolean;
+    employeeIdTieBreaker?: boolean;
+    seedPayoutConfirmationEvents?: any[];
+  } = {}
 ) {
   const createdAt = new Date("2026-06-10T00:00:00.000Z");
   const updatedAt = new Date("2026-06-10T00:10:00.000Z");
@@ -75,6 +84,7 @@ function createMemoryPrisma(
     rate("rate-1-c", "thr-1", "course-c", 900000),
     rate("rate-1-d", "thr-1", "course-d", 900000)
   ];
+  const payoutConfirmationEvents: any[] = [...(options.seedPayoutConfirmationEvents ?? [])];
 
   function course(id: string, codeValue: string) {
     return { id, code: codeValue, isActive: true, createdAt, updatedAt };
@@ -170,7 +180,12 @@ function createMemoryPrisma(
     return a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10);
   }
 
-  return {
+  function sameDateOrNull(a: Date | null, b: Date | null) {
+    if (a === null || b === null) return a === b;
+    return sameDate(a, b);
+  }
+
+  const client: any = {
     operatingMonth: {
       async findUnique({ where }: any) {
         return where.id === operatingMonth.id ? operatingMonth : null;
@@ -185,7 +200,46 @@ function createMemoryPrisma(
               (where?.isActive === undefined || record.isActive === where.isActive)
           )
           .sort((a, b) => a.sortOrder - b.sortOrder || a.staffCode.localeCompare(b.staffCode));
+      },
+      async findUnique({ where }: any) {
+        return employees.get(where.id) ?? null;
       }
+    },
+    payoutConfirmationEvent: {
+      async findMany({ where }: any = {}) {
+        const results = payoutConfirmationEvents.filter((record) => {
+          if (where?.unitType !== undefined && record.unitType !== where.unitType) return false;
+          if (where?.operatingMonthId !== undefined && record.operatingMonthId !== where.operatingMonthId) return false;
+          if (where?.serviceDate !== undefined && !sameDateOrNull(record.serviceDate, where.serviceDate)) return false;
+          if (where?.employeeId !== undefined) {
+            if (typeof where.employeeId === "string") {
+              if (record.employeeId !== where.employeeId) return false;
+            } else if (Array.isArray(where.employeeId?.in) && !where.employeeId.in.includes(record.employeeId)) {
+              return false;
+            }
+          }
+          return true;
+        });
+        return [...results].sort(
+          (a, b) => b.occurredAt.getTime() - a.occurredAt.getTime() || b.createdAt.getTime() - a.createdAt.getTime()
+        );
+      },
+      async create({ data }: any) {
+        const record = {
+          id: `payout-event-${payoutConfirmationEvents.length + 1}`,
+          createdAt: new Date(`2026-06-10T15:00:${String(payoutConfirmationEvents.length).padStart(2, "0")}.000Z`),
+          actorAccount:
+            data.actorAccountId === "account-admin"
+              ? { accountId: "admin", employee: { displayName: "관리자", staffCode: "ADM-001" } }
+              : { accountId: data.actorAccountId, employee: null },
+          ...data
+        };
+        payoutConfirmationEvents.push(record);
+        return record;
+      }
+    },
+    async $transaction(callback: (tx: any) => Promise<unknown>) {
+      return callback(client);
     },
     codeItem: {
       async findMany({ where }: any = {}) {
@@ -241,8 +295,11 @@ function createMemoryPrisma(
       async findMany() {
         return [];
       }
-    }
-  } as any;
+    },
+    payoutConfirmationEvents
+  };
+
+  return client;
 }
 
 describe("listEarcareDailySettlements", () => {
@@ -362,6 +419,200 @@ describe("listEarcareDailySettlements", () => {
         prismaClient: createMemoryPrisma()
       }),
       (error) => error instanceof EarcareDailySettlementDomainError && error.code === "OPERATING_MONTH_DATE_OUT_OF_RANGE"
+    );
+  });
+
+  it("지급 확인(ADR 0004, 티켓 30)이 없는 행은 미확인이다", async () => {
+    const result = await listEarcareDailySettlements({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient: createMemoryPrisma()
+    });
+
+    const earcare2 = result.rows.find((row) => row.employeeId === "ear-2");
+    assert.equal(earcare2?.payoutConfirmation.status, "unconfirmed");
+    assert.equal(earcare2?.payoutConfirmation.currentAmount, earcare2?.payoutAmount);
+  });
+});
+
+describe("confirmEarcareDailySettlementPayout", () => {
+  it("그날 계산된 지급액을 사건으로 남기고, 다시 조회하면 확인됨으로 보인다", async () => {
+    const prismaClient = createMemoryPrisma();
+    const result = await confirmEarcareDailySettlementPayout({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: "ear-2",
+      actorId: "account-admin",
+      prismaClient
+    });
+
+    assert.equal(result.payoutConfirmation.status, "confirmed");
+    assert.equal(result.payoutConfirmation.lastConfirmedAmount, 300001);
+
+    const reread = await listEarcareDailySettlements({ operatingMonthId: "month-2026-06", serviceDate: "2026-06-10", prismaClient });
+    const earcare2 = reread.rows.find((row) => row.employeeId === "ear-2");
+    assert.equal(earcare2?.payoutConfirmation.status, "confirmed");
+    assert.equal(earcare2?.payoutConfirmation.history[0]?.actorAccountId, "account-admin");
+  });
+
+  it("비활성이거나 EARCARE가 아닌 직원의 확인을 거절한다", async () => {
+    await assert.rejects(
+      confirmEarcareDailySettlementPayout({
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-06-10",
+        employeeId: "thr-1",
+        actorId: "account-admin",
+        prismaClient: createMemoryPrisma()
+      }),
+      /활성 귀케어사만 지급 확인을 변경할 수 있습니다\./
+    );
+  });
+
+  it("마감확정·잠금 운영월에서는 확인을 쓸 수 없다", async () => {
+    await assert.rejects(
+      confirmEarcareDailySettlementPayout({
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-06-10",
+        employeeId: "ear-2",
+        actorId: "account-admin",
+        prismaClient: createMemoryPrisma({ locked: true })
+      }),
+      /마감확정 또는 잠금 운영월/
+    );
+  });
+
+  it("이미 확인된 단위를 다시 확인하면 거절된다(재확인을 쓰라고 안내)", async () => {
+    const prismaClient = createMemoryPrisma();
+    await confirmEarcareDailySettlementPayout({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: "ear-2",
+      actorId: "account-admin",
+      prismaClient
+    });
+
+    await assert.rejects(
+      confirmEarcareDailySettlementPayout({
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-06-10",
+        employeeId: "ear-2",
+        actorId: "account-admin",
+        prismaClient
+      }),
+      /이미 확인된 지급 확인입니다\./
+    );
+  });
+});
+
+describe("reconfirmEarcareDailySettlementPayout", () => {
+  it("사유와 함께 재확인하면 현재 지급액이 새 기준이 되고, 이전 확인 기록은 남는다", async () => {
+    const prismaClient = createMemoryPrisma();
+    await confirmEarcareDailySettlementPayout({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: "ear-2",
+      actorId: "account-admin",
+      prismaClient
+    });
+
+    const reconfirmed = await reconfirmEarcareDailySettlementPayout({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: "ear-2",
+      actorId: "account-admin",
+      reason: "근무상태 정정으로 금액 재확인",
+      prismaClient
+    });
+
+    assert.equal(reconfirmed.payoutConfirmation.status, "confirmed");
+    assert.equal(reconfirmed.payoutConfirmation.history.length, 2);
+    assert.equal(reconfirmed.payoutConfirmation.history[0].eventType, "reconfirm");
+    assert.equal(reconfirmed.payoutConfirmation.history[0].reason, "근무상태 정정으로 금액 재확인");
+  });
+
+  it("확인된 사건이 없으면 재확인을 거절한다", async () => {
+    await assert.rejects(
+      reconfirmEarcareDailySettlementPayout({
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-06-10",
+        employeeId: "ear-2",
+        actorId: "account-admin",
+        reason: "사유",
+        prismaClient: createMemoryPrisma()
+      }),
+      /확인된 지급 확인이 없어/
+    );
+  });
+
+  it("사유가 비어 있으면 재확인을 거절한다", async () => {
+    const prismaClient = createMemoryPrisma();
+    await confirmEarcareDailySettlementPayout({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: "ear-2",
+      actorId: "account-admin",
+      prismaClient
+    });
+
+    await assert.rejects(
+      reconfirmEarcareDailySettlementPayout({
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-06-10",
+        employeeId: "ear-2",
+        actorId: "account-admin",
+        reason: "",
+        prismaClient
+      }),
+      /재확인 사유를 입력하세요\./
+    );
+  });
+});
+
+describe("releaseEarcareDailySettlementPayout", () => {
+  it("사유와 함께 해제하면 미확인으로 돌아가고, 이전 확인 기록은 남는다", async () => {
+    const prismaClient = createMemoryPrisma();
+    await confirmEarcareDailySettlementPayout({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: "ear-2",
+      actorId: "account-admin",
+      prismaClient
+    });
+
+    const released = await releaseEarcareDailySettlementPayout({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: "ear-2",
+      actorId: "account-admin",
+      reason: "잘못 이관된 확인을 해제",
+      prismaClient
+    });
+
+    assert.equal(released.payoutConfirmation.status, "unconfirmed");
+    assert.equal(released.payoutConfirmation.history[0].eventType, "release");
+    assert.equal(released.payoutConfirmation.history[0].reason, "잘못 이관된 확인을 해제");
+  });
+
+  it("사유 없는 해제는 거절한다", async () => {
+    const prismaClient = createMemoryPrisma();
+    await confirmEarcareDailySettlementPayout({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: "ear-2",
+      actorId: "account-admin",
+      prismaClient
+    });
+
+    await assert.rejects(
+      releaseEarcareDailySettlementPayout({
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-06-10",
+        employeeId: "ear-2",
+        actorId: "account-admin",
+        reason: "",
+        prismaClient
+      }),
+      /해제 사유를 입력하세요\./
     );
   });
 });

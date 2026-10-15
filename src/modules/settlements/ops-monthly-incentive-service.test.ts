@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  confirmOpsMonthlyIncentivePayout,
   OpsMonthlyIncentiveDomainError,
-  listOpsMonthlyIncentivePreview
+  listOpsMonthlyIncentivePreview,
+  reconfirmOpsMonthlyIncentivePayout,
+  releaseOpsMonthlyIncentivePayout
 } from "@/modules/settlements/ops-monthly-incentive-service";
 
 function dbDate(value: string) {
@@ -19,6 +22,7 @@ function createMemoryPrisma(
     duplicateLead?: boolean;
     malformedDateRange?: boolean;
     highThreshold?: boolean;
+    seedPayoutConfirmationEvents?: any[];
   } = {}
 ) {
   const createdAt = new Date("2026-06-10T00:00:00.000Z");
@@ -94,6 +98,7 @@ function createMemoryPrisma(
         monthlyRule("rule-1500", 1500, 25000000, "2026-06", 0.3, 0.35, 0.35),
         { ...monthlyRule("rule-expired", 900, 9999999, "2025-01", 0.3, 0.35, 0.35), effectiveToMonth: "2025-12" }
       ];
+  const payoutConfirmationEvents: any[] = [...(options.seedPayoutConfirmationEvents ?? [])];
 
   function course(id: string, codeValue: string) {
     return { id, code: codeValue, isActive: true, createdAt, updatedAt };
@@ -191,7 +196,12 @@ function createMemoryPrisma(
     return a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10);
   }
 
-  return {
+  function sameDateOrNull(a: Date | null, b: Date | null) {
+    if (a === null || b === null) return a === b;
+    return sameDate(a, b);
+  }
+
+  const client: any = {
     operatingMonth: {
       async findUnique({ where }: any) {
         return where.id === operatingMonth.id ? operatingMonth : null;
@@ -206,7 +216,46 @@ function createMemoryPrisma(
               (where?.isActive === undefined || record.isActive === where.isActive)
           )
           .sort((a, b) => a.sortOrder - b.sortOrder || a.staffCode.localeCompare(b.staffCode) || a.id.localeCompare(b.id));
+      },
+      async findUnique({ where }: any) {
+        return employees.get(where.id) ?? null;
       }
+    },
+    payoutConfirmationEvent: {
+      async findMany({ where }: any = {}) {
+        const results = payoutConfirmationEvents.filter((record) => {
+          if (where?.unitType !== undefined && record.unitType !== where.unitType) return false;
+          if (where?.operatingMonthId !== undefined && record.operatingMonthId !== where.operatingMonthId) return false;
+          if (where?.serviceDate !== undefined && !sameDateOrNull(record.serviceDate, where.serviceDate)) return false;
+          if (where?.employeeId !== undefined) {
+            if (typeof where.employeeId === "string") {
+              if (record.employeeId !== where.employeeId) return false;
+            } else if (Array.isArray(where.employeeId?.in) && !where.employeeId.in.includes(record.employeeId)) {
+              return false;
+            }
+          }
+          return true;
+        });
+        return [...results].sort(
+          (a, b) => b.occurredAt.getTime() - a.occurredAt.getTime() || b.createdAt.getTime() - a.createdAt.getTime()
+        );
+      },
+      async create({ data }: any) {
+        const record = {
+          id: `payout-event-${payoutConfirmationEvents.length + 1}`,
+          createdAt: new Date(`2026-06-10T15:00:${String(payoutConfirmationEvents.length).padStart(2, "0")}.000Z`),
+          actorAccount:
+            data.actorAccountId === "account-admin"
+              ? { accountId: "admin", employee: { displayName: "관리자", staffCode: "ADM-001" } }
+              : { accountId: data.actorAccountId, employee: null },
+          ...data
+        };
+        payoutConfirmationEvents.push(record);
+        return record;
+      }
+    },
+    async $transaction(callback: (tx: any) => Promise<unknown>) {
+      return callback(client);
     },
     serviceCall: {
       async findMany({ where }: any = {}) {
@@ -255,8 +304,11 @@ function createMemoryPrisma(
       async findMany({ where }: any = {}) {
         return monthlyRules.filter((record) => where?.isActive === undefined || record.isActive === where.isActive);
       }
-    }
-  } as any;
+    },
+    payoutConfirmationEvents
+  };
+
+  return client;
 }
 
 describe("listOpsMonthlyIncentivePreview", () => {
@@ -419,5 +471,105 @@ describe("listOpsMonthlyIncentivePreview", () => {
     assert.equal(noEmployees.rows.length, 0);
     assert.equal(noEmployees.shares.undistributedAmount, 5000000);
     assert.ok(noEmployees.warningMessage?.includes("운영팀 직원"));
+  });
+
+  it("지급 확인(ADR 0004, 티켓 30)이 없는 행은 미확인이다", async () => {
+    const result = await listOpsMonthlyIncentivePreview({
+      operatingMonthId: "month-2026-06",
+      prismaClient: createMemoryPrisma()
+    });
+
+    const opsLead = result.rows.find((row) => row.employeeId === "ops-lead");
+    assert.equal(opsLead?.payoutConfirmation.status, "unconfirmed");
+    assert.equal(opsLead?.payoutConfirmation.currentAmount, opsLead?.payoutAmount);
+  });
+});
+
+describe("confirmOpsMonthlyIncentivePayout", () => {
+  it("이 운영월 현재 계산된 지급액을 사건으로 남기고, 다시 조회하면 확인됨으로 보인다", async () => {
+    const prismaClient = createMemoryPrisma();
+    const result = await confirmOpsMonthlyIncentivePayout({
+      operatingMonthId: "month-2026-06",
+      employeeId: "ops-lead",
+      actorId: "account-admin",
+      prismaClient
+    });
+
+    assert.equal(result.payoutConfirmation.status, "confirmed");
+    assert.equal(result.payoutConfirmation.lastConfirmedAmount, 1500000);
+
+    const reread = await listOpsMonthlyIncentivePreview({ operatingMonthId: "month-2026-06", prismaClient });
+    const opsLead = reread.rows.find((row) => row.employeeId === "ops-lead");
+    assert.equal(opsLead?.payoutConfirmation.status, "confirmed");
+    assert.equal(opsLead?.payoutConfirmation.history[0]?.actorAccountId, "account-admin");
+  });
+
+  it("비활성이거나 OPERATIONS가 아닌 직원의 확인을 거절한다", async () => {
+    await assert.rejects(
+      confirmOpsMonthlyIncentivePayout({
+        operatingMonthId: "month-2026-06",
+        employeeId: "thr-1",
+        actorId: "account-admin",
+        prismaClient: createMemoryPrisma()
+      }),
+      /활성 운영팀 직원만 지급 확인을 변경할 수 있습니다\./
+    );
+  });
+
+  it("마감확정·잠금 운영월에서는 확인을 쓸 수 없다", async () => {
+    await assert.rejects(
+      confirmOpsMonthlyIncentivePayout({
+        operatingMonthId: "month-2026-06",
+        employeeId: "ops-lead",
+        actorId: "account-admin",
+        prismaClient: createMemoryPrisma({ monthStatus: "잠금" })
+      }),
+      /마감확정 또는 잠금 운영월/
+    );
+  });
+});
+
+describe("reconfirmOpsMonthlyIncentivePayout / releaseOpsMonthlyIncentivePayout", () => {
+  it("사유와 함께 재확인하면 현재 지급액이 새 기준이 되고, 이전 확인 기록은 남는다", async () => {
+    const prismaClient = createMemoryPrisma();
+    await confirmOpsMonthlyIncentivePayout({
+      operatingMonthId: "month-2026-06",
+      employeeId: "ops-lead",
+      actorId: "account-admin",
+      prismaClient
+    });
+
+    const reconfirmed = await reconfirmOpsMonthlyIncentivePayout({
+      operatingMonthId: "month-2026-06",
+      employeeId: "ops-lead",
+      actorId: "account-admin",
+      reason: "정책 정정으로 금액 재확인",
+      prismaClient
+    });
+
+    assert.equal(reconfirmed.payoutConfirmation.status, "confirmed");
+    assert.equal(reconfirmed.payoutConfirmation.history.length, 2);
+    assert.equal(reconfirmed.payoutConfirmation.history[0].eventType, "reconfirm");
+  });
+
+  it("사유와 함께 해제하면 미확인으로 돌아가고, 이전 확인 기록은 남는다", async () => {
+    const prismaClient = createMemoryPrisma();
+    await confirmOpsMonthlyIncentivePayout({
+      operatingMonthId: "month-2026-06",
+      employeeId: "ops-lead",
+      actorId: "account-admin",
+      prismaClient
+    });
+
+    const released = await releaseOpsMonthlyIncentivePayout({
+      operatingMonthId: "month-2026-06",
+      employeeId: "ops-lead",
+      actorId: "account-admin",
+      reason: "잘못 이관된 확인을 해제",
+      prismaClient
+    });
+
+    assert.equal(released.payoutConfirmation.status, "unconfirmed");
+    assert.equal(released.payoutConfirmation.history[0].eventType, "release");
   });
 });

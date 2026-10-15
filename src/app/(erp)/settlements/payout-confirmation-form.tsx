@@ -4,14 +4,14 @@ import { useActionState, useId } from "react";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n/client";
 import type { ActionResult } from "@/lib/action-result";
-import type { TherapistDailySettlementPayoutResultDto } from "@/modules/settlements/therapist-daily-settlement-service";
 
 /**
  * 지급 확인(ADR 0004, 티켓 30) 사건을 쓰는 세 작은 폼: 확인, 재확인, 해제. 재확인과 해제는 사유가 필수다.
- * 세 직군이 같은 모양의 action state를 쓰므로(단위만 다르다) 직원 패널 어디서나 재사용한다(티켓 31).
+ * 네 단위(Therapist·귀케어·운영팀 일일·운영팀 월, 티켓 30·31)가 같은 모양의 action state를 쓰므로(결과 DTO만 다르다)
+ * T로 그 결과 DTO 타입을 받아 직원 패널 어디서나 재사용한다. 폼은 state.ok/formError만 보고 state.data는 쓰지 않는다.
  */
-export type PayoutConfirmationActionState = ActionResult<TherapistDailySettlementPayoutResultDto> | null;
-type PayoutConfirmationFormAction = (state: PayoutConfirmationActionState, formData: FormData) => Promise<PayoutConfirmationActionState>;
+export type PayoutConfirmationActionState<T> = ActionResult<T> | null;
+type PayoutConfirmationFormAction<T> = (state: PayoutConfirmationActionState<T>, formData: FormData) => Promise<PayoutConfirmationActionState<T>>;
 
 type PayoutUnitFields = { operatingMonthId: string; serviceDate: string; employeeId: string };
 
@@ -26,10 +26,10 @@ function UnitHiddenFields({ operatingMonthId, serviceDate, employeeId }: PayoutU
 }
 
 /** 확인: 사유 없이 바로 쓴다. 이미 확인된 단위에는 보이지 않는다(호출하는 쪽에서 상태로 가린다). */
-export function ConfirmPayoutButton({ action, ...unit }: PayoutUnitFields & { action: PayoutConfirmationFormAction }) {
+export function ConfirmPayoutButton<T>({ action, ...unit }: PayoutUnitFields & { action: PayoutConfirmationFormAction<T> }) {
   const t = useT();
   const errorId = useId();
-  const [state, formAction, pending] = useActionState<PayoutConfirmationActionState, FormData>(action, null);
+  const [state, formAction, pending] = useActionState<PayoutConfirmationActionState<T>, FormData>(action, null);
   const formError = state && !state.ok ? state.formError ?? t("settlements.payout.error.generic") : null;
 
   return (
@@ -48,14 +48,14 @@ export function ConfirmPayoutButton({ action, ...unit }: PayoutUnitFields & { ac
 }
 
 /** 재확인/해제 공용: 사유 입력이 필수다. */
-export function ReasonPayoutForm({
+export function ReasonPayoutForm<T>({
   action,
   submitLabel,
   pendingLabel,
   placeholder,
   ...unit
 }: PayoutUnitFields & {
-  action: PayoutConfirmationFormAction;
+  action: PayoutConfirmationFormAction<T>;
   submitLabel: string;
   pendingLabel: string;
   placeholder: string;
@@ -64,7 +64,7 @@ export function ReasonPayoutForm({
   const errorId = useId();
   const reasonId = useId();
   const reasonErrorId = useId();
-  const [state, formAction, pending] = useActionState<PayoutConfirmationActionState, FormData>(action, null);
+  const [state, formAction, pending] = useActionState<PayoutConfirmationActionState<T>, FormData>(action, null);
   const formError = state && !state.ok ? state.formError ?? t("settlements.payout.error.generic") : null;
 
   return (

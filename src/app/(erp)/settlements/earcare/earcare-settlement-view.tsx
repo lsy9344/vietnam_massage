@@ -2,7 +2,13 @@
 
 import { DetailRow } from "@/components/ui/detail-row";
 import { EarcareAttendanceForm, EarcareEligibility } from "@/app/(erp)/settlements/earcare/earcare-attendance-form";
+import {
+  confirmEarcareDailySettlementPayoutAction,
+  reconfirmEarcareDailySettlementPayoutAction,
+  releaseEarcareDailySettlementPayoutAction
+} from "@/app/(erp)/settlements/earcare/actions";
 import { EmployeeWorkspace, type ComparisonColumn } from "@/app/(erp)/settlements/employee-workspace";
+import { PayoutConfirmationPanel, PayoutStatusIndicator } from "@/app/(erp)/settlements/payout-confirmation-panel";
 import { AmountText, EvidenceCallItem, EvidenceCallList, PanelSection, vnd } from "@/app/(erp)/settlements/settlement-parts";
 import { earcareHasBasis, payoutAmount, settlementAmount } from "@/app/(erp)/settlements/settlement-view-model";
 import { useLocale, useT } from "@/lib/i18n/client";
@@ -48,6 +54,11 @@ export function EarcareSettlementView({
       header: t("settlements.earcare.column.payout"),
       numeric: true,
       cell: (row) => <span className="font-semibold">{rowAmount(row, row.payoutAmount)}</span>
+    },
+    {
+      key: "payoutConfirmation",
+      header: t("settlements.earcare.column.payoutConfirmation"),
+      cell: (row) => <PayoutStatusIndicator status={row.payoutConfirmation.status} t={t} />
     }
   ];
 
@@ -111,6 +122,18 @@ export function EarcareSettlementView({
                 <p className="text-sm text-muted">{t("settlements.earcare.poolEvidence.empty.title")}</p>
               )}
             </PanelSection>
+
+            <PayoutConfirmationPanel
+              confirmAction={confirmEarcareDailySettlementPayoutAction}
+              locale={locale}
+              payout={row.payoutConfirmation}
+              payoutLocked={result.isLocked}
+              reconfirmAction={reconfirmEarcareDailySettlementPayoutAction}
+              releaseAction={releaseEarcareDailySettlementPayoutAction}
+              t={t}
+              title={t("settlements.earcare.column.payoutConfirmation")}
+              unit={{ operatingMonthId: attendance.operatingMonthId, serviceDate: attendance.attendanceDate, employeeId: row.employeeId }}
+            />
           </div>
         );
       }}

@@ -3,8 +3,14 @@
 import { DetailRow } from "@/components/ui/detail-row";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { EmployeeWorkspace, type ComparisonColumn } from "@/app/(erp)/settlements/employee-workspace";
+import {
+  confirmOpsDailyIncentivePayoutAction,
+  reconfirmOpsDailyIncentivePayoutAction,
+  releaseOpsDailyIncentivePayoutAction
+} from "@/app/(erp)/settlements/operations/actions";
 import { OpsAttendanceForm, OpsEligibility } from "@/app/(erp)/settlements/operations/ops-attendance-form";
 import { opsThresholdLabel } from "@/app/(erp)/settlements/operations/ops-threshold";
+import { PayoutConfirmationPanel, PayoutStatusIndicator } from "@/app/(erp)/settlements/payout-confirmation-panel";
 import { AmountText, EvidenceCallItem, EvidenceCallList, PanelSection } from "@/app/(erp)/settlements/settlement-parts";
 import { incentiveRuleHasBasis, payoutAmount, settlementAmount } from "@/app/(erp)/settlements/settlement-view-model";
 import { useLocale, useT } from "@/lib/i18n/client";
@@ -55,7 +61,12 @@ export function OpsDailyView({
           <OpsEligibility row={row} />
         )
     },
-    { key: "payout", header: t("settlements.ops.column.payout"), numeric: true, cell: (row) => <span className="font-semibold">{payout(row)}</span> }
+    { key: "payout", header: t("settlements.ops.column.payout"), numeric: true, cell: (row) => <span className="font-semibold">{payout(row)}</span> },
+    {
+      key: "payoutConfirmation",
+      header: t("settlements.ops.column.payoutConfirmation"),
+      cell: (row) => <PayoutStatusIndicator status={row.payoutConfirmation.status} t={t} />
+    }
   ];
 
   return (
@@ -117,6 +128,18 @@ export function OpsDailyView({
                 <p className="text-sm text-muted">{t("settlements.ops.callEvidence.empty.title")}</p>
               )}
             </PanelSection>
+
+            <PayoutConfirmationPanel
+              confirmAction={confirmOpsDailyIncentivePayoutAction}
+              locale={locale}
+              payout={row.payoutConfirmation}
+              payoutLocked={result.isLocked}
+              reconfirmAction={reconfirmOpsDailyIncentivePayoutAction}
+              releaseAction={releaseOpsDailyIncentivePayoutAction}
+              t={t}
+              title={t("settlements.ops.column.payoutConfirmation")}
+              unit={{ operatingMonthId: attendance.operatingMonthId, serviceDate: attendance.attendanceDate, employeeId: row.employeeId }}
+            />
           </div>
         );
       }}

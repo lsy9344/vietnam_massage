@@ -12,9 +12,15 @@ import type { EarcareDailySettlementResultDto } from "@/modules/settlements/earc
 import type { OpsAttendanceForDateDto } from "@/modules/settlements/ops-attendance-service";
 import type { OpsDailyIncentiveResultDto } from "@/modules/settlements/ops-daily-incentive-service";
 import type { OpsMonthlyIncentiveResultDto } from "@/modules/settlements/ops-monthly-incentive-service";
+import type { PayoutConfirmationDto } from "@/modules/settlements/payout-confirmation-service";
 
 function render(element: ReactElement, locale: "ko" | "vi" = "ko") {
   return renderToStaticMarkup(renderInShell(element, locale));
+}
+
+// 지급 확인(ADR 0004, 티켓 30·31) 기본값: 이 화면 테스트는 상태 전환이 아니라 금액/근거 표시를 본다.
+function unconfirmedPayout(currentAmount: number): PayoutConfirmationDto {
+  return { status: "unconfirmed", currentAmount, lastConfirmedAmount: null, difference: null, requiresReconfirmation: false, history: [] };
 }
 
 const warningCounts = { notCompleted: 0, coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 };
@@ -56,8 +62,8 @@ function earcareResult(overrides: Partial<EarcareDailySettlementResultDto> = {})
     undistributedAmount: 0,
     warningCounts,
     rows: [
-      { employeeId: "ear-1", staffCode: "EAR-001", displayName: "Hoa", statusCode: "NORMAL", statusDisplayName: "정상", isPayoutEligible: true, exclusionReason: null, baseShareAmount: 0, remainderShareAmount: 0, payoutAmount: 0, calculationBasis: "방문완료 풀 0 VND / 정상 근무자 1명" },
-      { employeeId: "ear-2", staffCode: "EAR-002", displayName: "Lan", statusCode: "DAY_OFF", statusDisplayName: "휴무", isPayoutEligible: false, exclusionReason: "휴무", baseShareAmount: 0, remainderShareAmount: 0, payoutAmount: 0, calculationBasis: "휴무 제외" }
+      { employeeId: "ear-1", staffCode: "EAR-001", displayName: "Hoa", statusCode: "NORMAL", statusDisplayName: "정상", isPayoutEligible: true, exclusionReason: null, baseShareAmount: 0, remainderShareAmount: 0, payoutAmount: 0, calculationBasis: "방문완료 풀 0 VND / 정상 근무자 1명", payoutConfirmation: unconfirmedPayout(0) },
+      { employeeId: "ear-2", staffCode: "EAR-002", displayName: "Lan", statusCode: "DAY_OFF", statusDisplayName: "휴무", isPayoutEligible: false, exclusionReason: "휴무", baseShareAmount: 0, remainderShareAmount: 0, payoutAmount: 0, calculationBasis: "휴무 제외", payoutConfirmation: unconfirmedPayout(0) }
     ],
     poolEvidence: [],
     ...overrides
@@ -136,7 +142,7 @@ function opsDaily(overrides: Partial<OpsDailyIncentiveResultDto> = {}): OpsDaily
     distributedAmount: 0,
     warningCounts,
     rows: [
-      { employeeId: "ops-1", staffCode: "OPS-001", displayName: "Minh", position: "팀장", statusCode: "NORMAL", statusDisplayName: "정상", isPayoutEligible: true, exclusionReason: null, payoutAmount: 0, calculationBasis: "정책 없음" }
+      { employeeId: "ops-1", staffCode: "OPS-001", displayName: "Minh", position: "팀장", statusCode: "NORMAL", statusDisplayName: "정상", isPayoutEligible: true, exclusionReason: null, payoutAmount: 0, calculationBasis: "정책 없음", payoutConfirmation: unconfirmedPayout(0) }
     ],
     callEvidence: [],
     ...overrides
@@ -149,7 +155,10 @@ describe("ops daily view", () => {
 
     assert.match(html, /정책 없음/);
     assert.match(html, /근거 없음/);
-    assert.doesNotMatch(html, /0 VND/);
+    // 지급 확인(ADR 0004, 티켓 30·31)의 "현재 계산 금액"은 호출하는 쪽이 넘긴 값을 그대로 보이고 근거 없음으로 바꾸지 않는다.
+    // 이 단언은 계산/근거 표시(표와 일일 인센 근거 구역)만 본다.
+    const beforePayoutConfirmation = html.split('aria-label="지급 확인"')[0];
+    assert.doesNotMatch(beforePayoutConfirmation, /0 VND/);
   });
 
   it("keeps a below-threshold day at a real 0", () => {
@@ -178,7 +187,19 @@ function opsMonthly(overrides: Partial<OpsMonthlyIncentiveResultDto> = {}): OpsM
     ruleStatus: "applied",
     warningMessage: null,
     shares: { leadShare: 0.3, counterTeamShare: 0.35, waiterTeamShare: 0.35, leadAmount: 1500000, counterTeamAmount: 1750000, waiterTeamAmount: 1750000, undistributedAmount: 0 },
-    rows: [{ employeeId: "ops-1", staffCode: "OPS-001", displayName: "Minh", position: "팀장", teamRole: "lead", teamShareLabel: "팀장 몫", payoutAmount: 1500000, calculationBasis: "팀장 몫 1500000 VND / 1명" }],
+    rows: [
+      {
+        employeeId: "ops-1",
+        staffCode: "OPS-001",
+        displayName: "Minh",
+        position: "팀장",
+        teamRole: "lead",
+        teamShareLabel: "팀장 몫",
+        payoutAmount: 1500000,
+        calculationBasis: "팀장 몫 1500000 VND / 1명",
+        payoutConfirmation: unconfirmedPayout(1500000)
+      }
+    ],
     warningCounts,
     callEvidence: [],
     ...overrides

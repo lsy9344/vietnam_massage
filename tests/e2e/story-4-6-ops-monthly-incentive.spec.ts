@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { employeeRow, openEmployeePanel } from "./support/settlement";
 
 
 type SeededData = {
@@ -99,6 +100,8 @@ async function cleanupStoryData(operatingMonthIds: string[]) {
     await (prisma as any).serviceCallStatusHistory.deleteMany({ where: { serviceCallId: { in: callIds } } });
     await (prisma as any).serviceCall.deleteMany({ where: { id: { in: callIds } } });
   }
+  // 지급 확인(ADR 0004, 티켓 31)은 운영월이 고정 monthKey로 upsert되므로, 재실행 때 이전 사건이 남지 않게 함께 정리한다.
+  await (prisma as any).payoutConfirmationEvent.deleteMany({ where: { operatingMonthId: { in: operatingMonthIds } } });
 }
 
 async function createCall(input: {
@@ -289,6 +292,34 @@ test.describe("Story 4.6 operations monthly incentive", () => {
     await expect(page.getByText("제외 warning").first()).toBeVisible();
     await expect(page.getByText("비완료 1", { exact: false }).first()).toBeVisible();
     await expect(page.getByText("월 총콜 산출 근거").first()).toBeVisible();
+  });
+
+  test("settlement manager can confirm payout, reconfirm, and release with a reason, reviewing actor history", async ({ page }) => {
+    await login(page, "story46_settlement", "Story46!settlement");
+    await page.goto(`/settlements/operations/monthly?operatingMonthId=${seededData.writableOperatingMonthId}`);
+
+    // 지급 확인(ADR 0004, 티켓 30·31)은 직원 패널에서 한다. 월 단위라 날짜가 없다. 표의 행에는 확인 상태만 보인다.
+    const leadPanel = await openEmployeePanel(page, "E2E46 팀장");
+    await expect(leadPanel).toContainText("미확인");
+    await leadPanel.getByRole("button", { name: "지급 확인" }).click();
+
+    await expect(leadPanel).toContainText("확인됨");
+    await expect(leadPanel).toContainText("확인 이력 1건");
+    await expect(leadPanel).toContainText("처리자: story46_settlement / E2E46 정산담당");
+    await expect(employeeRow(page, "E2E46 팀장")).toContainText("확인됨");
+
+    // 재확인은 사유가 필수다.
+    await leadPanel.getByLabel("사유").first().fill("정책 정정으로 다시 확인");
+    await leadPanel.getByRole("button", { name: "재확인" }).click();
+    await expect(leadPanel).toContainText("확인 이력 2건");
+    await expect(leadPanel).toContainText("정책 정정으로 다시 확인");
+
+    // 해제도 사유가 필수고, 해제 뒤에는 미확인으로 돌아간다.
+    await leadPanel.getByLabel("사유").last().fill("정산 오류로 확인 해제");
+    await leadPanel.getByRole("button", { name: "확인 해제" }).click();
+    await expect(leadPanel).toContainText("미확인");
+    await expect(leadPanel).toContainText("확인 이력 3건");
+    await expect(employeeRow(page, "E2E46 팀장")).toContainText("미확인");
   });
 
   test("shows below-threshold warning and zero monthly incentive", async ({ page }) => {
