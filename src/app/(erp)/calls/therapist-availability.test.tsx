@@ -30,7 +30,8 @@ function row(overrides: Partial<TherapistAvailabilityRowDto> = {}): TherapistAva
   return {
     therapistId: "therapist-1",
     therapistName: "마사지사1",
-    attendance: "not_entered",
+    attendance: "before_check_in",
+    shiftCheck: false,
     available: true,
     unavailableReason: null,
     inServiceDisplayEnd: null,
@@ -109,7 +110,7 @@ describe("therapist availability panel", () => {
     assert.match(html, /다음 예약/);
     assert.match(html, /가능한 코스/);
     assert.match(html, /마사지사1/);
-    assert.match(html, /미입력/);
+    assert.match(html, /출근 전/);
     assert.match(html, />가능</);
     assert.match(html, /16:00 · 60분/);
     assert.match(html, /마사지사2/);
@@ -135,7 +136,7 @@ describe("therapist availability panel", () => {
     });
     assert.match(vietnamese, /Gói có thể/);
     assert.match(vietnamese, /Không thể · từ 15:30/);
-    assert.match(vietnamese, /Chưa nhập/);
+    assert.match(vietnamese, /Chưa đến/);
     assert.match(vietnamese, /Therapist/);
   });
 
@@ -182,6 +183,29 @@ describe("therapist availability panel", () => {
 
     const vietnamese = renderView({ locale: "vi", open: true, rows: [row({ priorServiceEndCheck: true })] });
     assert.match(vietnamese, /Có thể theo lịch · cần xác nhận ca trước đã xong/);
+  });
+
+  it("tells before check-in, checked in, and checked out apart and asks to check the shift without turning a course off", () => {
+    const html = renderView({
+      open: true,
+      rows: [
+        row({ therapistId: "t-before", therapistName: "전", attendance: "before_check_in", shiftCheck: true }),
+        row({ therapistId: "t-in", therapistName: "중", attendance: "checked_in" }),
+        row({ therapistId: "t-out", therapistName: "후", attendance: "checked_out", shiftCheck: true })
+      ]
+    });
+    const rowOf = (therapistId: string) => html.split("<tr").find((part) => part.includes(`data-therapist-id="${therapistId}"`)) ?? "";
+    assert.match(rowOf("t-before"), /출근 전[\s\S]*근무 확인 필요/);
+    assert.match(rowOf("t-in"), /출근/);
+    assert.doesNotMatch(rowOf("t-in"), /출근 전|퇴근|근무 확인 필요/);
+    assert.match(rowOf("t-out"), /퇴근\(현재 퇴근\)[\s\S]*근무 확인 필요/);
+    for (const therapistId of ["t-before", "t-in", "t-out"]) {
+      assert.match(html, new RegExp(`<button[^>]*data-therapist-id="${therapistId}"[^>]*>A 60분 가능</button>`));
+    }
+
+    const vietnamese = renderView({ locale: "vi", open: true, rows: [row({ attendance: "checked_out", shiftCheck: true })] });
+    assert.match(vietnamese, /Đã về \(hiện đã về\)/);
+    assert.match(vietnamese, /Cần xác nhận ca làm/);
   });
 
   it("draws each course verdict from the service: possible as a button, short time, and no rate without a free time", () => {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { IN_USE_SERVICE_CALL_STATUSES } from "@/modules/calls/service-call-service";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
 import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
 import { assertOperatingMonthPayoutWritable, isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
@@ -35,6 +36,11 @@ type TherapistAttendanceRecord = {
   updatedAt: Date;
 };
 
+type InServiceCallRecord = {
+  id: string;
+  assignments: Array<{ employeeId: string; assignmentRole: string; isActive: boolean }>;
+};
+
 type TherapistAttendancePrismaClient = {
   operatingMonth: {
     findUnique(args: unknown): Promise<OperatingMonthRecord | null>;
@@ -49,12 +55,18 @@ type TherapistAttendancePrismaClient = {
     upsert(args: unknown): Promise<TherapistAttendanceRecord>;
     update(args: unknown): Promise<TherapistAttendanceRecord>;
   };
+  serviceCall: {
+    findMany(args?: unknown): Promise<InServiceCallRecord[]>;
+  };
   auditLog: {
     create(args: unknown): Promise<unknown>;
   };
   $executeRawUnsafe?(query: string, ...values: unknown[]): Promise<unknown>;
   $transaction<T>(callback: (tx: TherapistAttendancePrismaClient) => Promise<T>): Promise<T>;
 };
+
+// 퇴근이 저장됐는데 그날 그 Therapist의 사용중 콜이 있다. 저장은 막지 않고 콜도 바꾸지 않는다.
+export type TherapistAttendanceWarning = { code: "IN_SERVICE_CALL"; serviceCallIds: string[] };
 
 export type TherapistAttendanceDto = {
   id: string | null;
@@ -71,6 +83,7 @@ export type TherapistAttendanceDto = {
   isComplete: boolean;
   incompleteReason: string | null;
   isLocked: boolean;
+  warnings: TherapistAttendanceWarning[];
 };
 
 export type TherapistAttendanceForDateDto = {
@@ -255,10 +268,13 @@ function toDto(input: {
   employee: EmployeeRecord;
   attendance: TherapistAttendanceRecord | null;
   isLocked: boolean;
+  inServiceCallIds: string[];
 }): TherapistAttendanceDto {
   const active = input.attendance?.isActive ? input.attendance : null;
   const hasCheckout = active !== null && active.checkOutMinute !== null;
   const isComplete = hasCheckout;
+  const warnings: TherapistAttendanceWarning[] =
+    hasCheckout && input.inServiceCallIds.length > 0 ? [{ code: "IN_SERVICE_CALL", serviceCallIds: input.inServiceCallIds }] : [];
   return {
     id: active?.id ?? null,
     operatingMonthId: input.operatingMonthId,
@@ -273,8 +289,36 @@ function toDto(input: {
     isFullAttendanceRecognized: active ? active.isFullAttendanceRecognized : false,
     isComplete,
     incompleteReason: active === null ? "출퇴근 미입력" : hasCheckout ? null : "퇴근 미입력",
-    isLocked: input.isLocked
+    isLocked: input.isLocked,
+    warnings
   };
+}
+
+// 그날 Therapist 1·2로 배정된 사용중 콜 id를 Therapist별로 모은다.
+async function loadInServiceCallIdsByTherapist(
+  client: TherapistAttendancePrismaClient,
+  input: { operatingMonthId: string; attendanceDate: string }
+) {
+  const calls = await client.serviceCall.findMany({
+    where: {
+      operatingMonthId: input.operatingMonthId,
+      serviceDate: toDate(input.attendanceDate),
+      status: { in: [...IN_USE_SERVICE_CALL_STATUSES] }
+    },
+    select: { id: true, assignments: { select: { employeeId: true, assignmentRole: true, isActive: true } } },
+    orderBy: { createdAt: "asc" }
+  });
+  const idsByTherapist = new Map<string, string[]>();
+  for (const call of calls) {
+    for (const assignment of call.assignments) {
+      if (!assignment.isActive) continue;
+      if (assignment.assignmentRole !== "THERAPIST_1" && assignment.assignmentRole !== "THERAPIST_2") continue;
+      const ids = idsByTherapist.get(assignment.employeeId) ?? [];
+      if (!ids.includes(call.id)) ids.push(call.id);
+      idsByTherapist.set(assignment.employeeId, ids);
+    }
+  }
+  return idsByTherapist;
 }
 
 async function findAttendance(
@@ -313,7 +357,7 @@ export async function listTherapistAttendanceForDate(input: {
   assertValidParsedDate(parsed.data.attendanceDate);
 
   const client = getClient(input.prismaClient);
-  const [operatingMonth, employees, attendances] = await Promise.all([
+  const [operatingMonth, employees, attendances, inServiceCallIds] = await Promise.all([
     loadOperatingMonth(client, parsed.data.operatingMonthId),
     client.employee.findMany({
       where: { employeeGroup: "THERAPIST", isActive: true },
@@ -325,7 +369,8 @@ export async function listTherapistAttendanceForDate(input: {
         attendanceDate: toDate(parsed.data.attendanceDate),
         isActive: true
       }
-    })
+    }),
+    loadInServiceCallIdsByTherapist(client, parsed.data)
   ]);
   assertDateInOperatingMonth(operatingMonth, parsed.data.attendanceDate);
 
@@ -341,7 +386,8 @@ export async function listTherapistAttendanceForDate(input: {
         attendanceDate: parsed.data.attendanceDate,
         employee,
         attendance: attendanceByEmployeeId.get(employee.id) ?? null,
-        isLocked
+        isLocked,
+        inServiceCallIds: inServiceCallIds.get(employee.id) ?? []
       })
     )
   };
@@ -423,12 +469,14 @@ export async function upsertTherapistAttendance(input: {
       { prismaClient: tx as any }
     );
 
+    const inServiceCallIds = after.checkOutMinute === null ? [] : (await loadInServiceCallIdsByTherapist(tx, parsed.data)).get(after.employeeId) ?? [];
     return toDto({
       operatingMonthId: parsed.data.operatingMonthId,
       attendanceDate: parsed.data.attendanceDate,
       employee: transactionEmployee,
       attendance: after,
-      isLocked: isOperatingMonthPayoutLocked(transactionOperatingMonth.status)
+      isLocked: isOperatingMonthPayoutLocked(transactionOperatingMonth.status),
+      inServiceCallIds
     });
   });
 }
@@ -503,7 +551,8 @@ export async function deactivateTherapistAttendance(input: {
       attendanceDate: parsed.data.attendanceDate,
       employee: transactionEmployee,
       attendance: after,
-      isLocked: isOperatingMonthPayoutLocked(transactionOperatingMonth.status)
+      isLocked: isOperatingMonthPayoutLocked(transactionOperatingMonth.status),
+      inServiceCallIds: []
     });
   });
 }

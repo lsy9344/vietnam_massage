@@ -254,8 +254,10 @@ export const ko = {
   "calls.availability.column.thisTime": "이 시각",
   "calls.availability.column.next": "다음 예약",
   "calls.availability.column.courses": "가능한 코스",
+  "calls.availability.attendance.beforeCheckIn": "출근 전",
   "calls.availability.attendance.checkedIn": "출근",
-  "calls.availability.attendance.notEntered": "미입력",
+  "calls.availability.attendance.checkedOut": "퇴근(현재 퇴근)",
+  "calls.availability.shiftCheck": "근무 확인 필요",
   "calls.availability.available": "가능",
   "calls.availability.unavailableFrom": "불가 · {time}부터",
   "calls.availability.inServiceEndCheck": "시술 중 · {time} 종료 확인",
@@ -475,6 +477,8 @@ export const ko = {
   "settlements.therapist.attendance.status.waiting": "대기",
   "settlements.therapist.attendance.saveFailed": "저장 실패: {message}",
   "settlements.therapist.attendance.clearFailed": "비우기 실패: {message}",
+  "settlements.therapist.attendance.warning.label": "출퇴근 경고",
+  "settlements.therapist.attendance.warning.inServiceCall": "시술 중인 콜이 있습니다",
 
   // 귀케어 일일정산
   "settlements.earcare.title": "귀케어 일일정산",

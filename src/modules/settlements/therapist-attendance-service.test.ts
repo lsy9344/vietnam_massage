@@ -38,6 +38,13 @@ function createMemoryPrisma(
       isActive?: boolean;
     }>;
     therapistCount?: number;
+    seedServiceCalls?: Array<{
+      id: string;
+      serviceDate: string;
+      startTime: string;
+      status: string;
+      assignments: Array<{ employeeId: string; assignmentRole: string; isActive?: boolean }>;
+    }>;
   } = {}
 ) {
   const createdAt = new Date("2026-06-10T00:00:00.000Z");
@@ -84,6 +91,12 @@ function createMemoryPrisma(
   }
   const auditEvents: any[] = [];
   const attendanceLocks: string[] = [];
+  const serviceCalls = (options.seedServiceCalls ?? []).map((call) => ({
+    ...call,
+    operatingMonthId: operatingMonth.id,
+    serviceDate: dbDate(call.serviceDate),
+    assignments: call.assignments.map((assignment) => ({ ...assignment, isActive: assignment.isActive ?? true }))
+  }));
 
   function cloneAttendances() {
     return new Map([...attendances.entries()].map(([key, value]) => [key, { ...value }]));
@@ -174,6 +187,18 @@ function createMemoryPrisma(
         return next;
       }
     },
+    serviceCall: {
+      async findMany({ where }: any = {}) {
+        return serviceCalls
+          .filter(
+            (call) =>
+              (where?.operatingMonthId === undefined || call.operatingMonthId === where.operatingMonthId) &&
+              (where?.serviceDate === undefined || toIsoDate(call.serviceDate) === toIsoDate(where.serviceDate)) &&
+              (where?.status?.in === undefined || where.status.in.includes(call.status))
+          )
+          .map((call) => ({ ...call, assignments: call.assignments.map((assignment) => ({ ...assignment })) }));
+      }
+    },
     auditLog: {
       async create({ data }: any) {
         if (options.failAudit) throw new Error("audit failed");
@@ -202,7 +227,8 @@ function createMemoryPrisma(
     },
     attendances,
     auditEvents,
-    attendanceLocks
+    attendanceLocks,
+    serviceCalls
   };
 
   return client;
@@ -624,6 +650,44 @@ describe("therapist attendance service", () => {
     );
     assert.equal(prismaClient.attendances.size, 0);
     assert.equal(prismaClient.auditEvents.length, 0);
+  });
+
+  it("saves a checkout for a therapist with an in-use call and warns without touching the call", async () => {
+    const prismaClient = createMemoryPrisma({
+      seedServiceCalls: [
+        { id: "call-in-use", serviceDate: "2026-06-10", startTime: "19:00", status: "사용중", assignments: [{ employeeId: "thr-1", assignmentRole: "THERAPIST_2" }] },
+        { id: "call-reserved", serviceDate: "2026-06-10", startTime: "21:00", status: "예약", assignments: [{ employeeId: "thr-1", assignmentRole: "THERAPIST_1" }] },
+        { id: "call-other-day", serviceDate: "2026-06-11", startTime: "19:00", status: "사용중", assignments: [{ employeeId: "thr-1", assignmentRole: "THERAPIST_1" }] },
+        { id: "call-other-therapist", serviceDate: "2026-06-10", startTime: "19:00", status: "사용중", assignments: [{ employeeId: "thr-2", assignmentRole: "THERAPIST_1" }] },
+        { id: "call-removed", serviceDate: "2026-06-10", startTime: "18:00", status: "사용중", assignments: [{ employeeId: "thr-1", assignmentRole: "THERAPIST_1", isActive: false }] }
+      ]
+    });
+    const save = (employeeId: string, checkOutTime: string) =>
+      upsertTherapistAttendance({
+        operatingMonthId: "month-2026-06",
+        attendanceDate: "2026-06-10",
+        employeeId,
+        checkInTime: "10:00",
+        checkOutTime,
+        actorId: "account-1",
+        prismaClient
+      });
+
+    const checkInOnly = await save("thr-1", "");
+    assert.deepEqual(checkInOnly.warnings, []);
+
+    const checkedOut = await save("thr-1", "20:00");
+    assert.equal(checkedOut.checkOutTime, "20:00");
+    assert.deepEqual(checkedOut.warnings, [{ code: "IN_SERVICE_CALL", serviceCallIds: ["call-in-use"] }]);
+    assert.equal(prismaClient.serviceCalls.find((call: any) => call.id === "call-in-use")?.status, "사용중");
+
+    const otherTherapist = await save("thr-3", "20:00");
+    assert.deepEqual(otherTherapist.warnings, []);
+
+    // 저장 뒤 다시 읽어도 같은 경고가 남는다(직원 패널이 저장 결과로 다시 그려진다).
+    const listed = await listTherapistAttendanceForDate({ operatingMonthId: "month-2026-06", attendanceDate: "2026-06-10", prismaClient });
+    assert.deepEqual(listed.rows.find((row) => row.employeeId === "thr-1")?.warnings, [{ code: "IN_SERVICE_CALL", serviceCallIds: ["call-in-use"] }]);
+    assert.deepEqual(listed.rows.find((row) => row.employeeId === "thr-3")?.warnings, []);
   });
 
   it("deactivates an attendance row and records a deactivated audit event", async () => {

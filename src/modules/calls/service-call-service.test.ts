@@ -3104,7 +3104,7 @@ describe("therapist availability", () => {
     assert.equal(therapist1?.available, false);
     assert.equal(therapist1?.freeFrom, "15:30");
     assert.equal(therapist1?.freeMinutes, null);
-    assert.equal(therapist1?.attendance, "not_entered");
+    assert.equal(therapist1?.attendance, "before_check_in");
     assert.equal(courseVerdict(rows, "therapist-1", "course-a"), "time_short");
     assert.equal(therapist2?.available, true);
     assert.equal(therapist2?.freeFrom, null);
@@ -3307,6 +3307,7 @@ describe("therapist availability", () => {
       operatingMonthId: "month-2026-06",
       attendanceDate: dbDate(availabilityDate),
       employeeId: "therapist-1",
+      checkOutMinute: null,
       isActive: true
     });
     prismaClient.therapistAttendances.set("att-2", {
@@ -3314,6 +3315,7 @@ describe("therapist availability", () => {
       operatingMonthId: "month-2026-06",
       attendanceDate: dbDate(availabilityDate),
       employeeId: "therapist-2",
+      checkOutMinute: null,
       isActive: false
     });
 
@@ -3322,7 +3324,7 @@ describe("therapist availability", () => {
       rows.map((row) => ({ therapistId: row.therapistId, attendance: row.attendance })),
       [
         { therapistId: "therapist-1", attendance: "checked_in" },
-        { therapistId: "therapist-2", attendance: "not_entered" }
+        { therapistId: "therapist-2", attendance: "before_check_in" }
       ]
     );
   });
@@ -3778,6 +3780,69 @@ describe("therapist availability with an in-use call past its display end", () =
     assert.equal(next?.startTime, "15:00");
     assert.equal(next?.courseId, "course-a");
     assert.equal(next?.basePrice, before.find((call) => call.id === "call-1500")?.basePrice);
+  });
+});
+
+function addAvailabilityAttendance(
+  prismaClient: ReturnType<typeof createMemoryPrisma>,
+  input: { employeeId: string; checkOutMinute: number | null; isActive?: boolean }
+) {
+  prismaClient.therapistAttendances.set(`att-${input.employeeId}`, {
+    id: `att-${input.employeeId}`,
+    operatingMonthId: "month-2026-06",
+    attendanceDate: dbDate(availabilityDate),
+    employeeId: input.employeeId,
+    checkInMinute: 600,
+    checkOutMinute: input.checkOutMinute,
+    isActive: input.isActive ?? true
+  });
+}
+
+describe("therapist availability attendance and shift check", () => {
+  it("tells before check-in, checked in, and checked out apart from the day's attendance, and keeps every row and course button", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-1", checkOutMinute: null });
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-2", checkOutMinute: 900 });
+
+    const rows = await overrunAvailabilityAt(prismaClient, "15:30");
+    assert.deepEqual(
+      rows.map((row) => ({ therapistId: row.therapistId, attendance: row.attendance })),
+      [
+        { therapistId: "therapist-1", attendance: "checked_in" },
+        { therapistId: "therapist-2", attendance: "checked_out" }
+      ]
+    );
+    assert.equal(courseVerdict(rows, "therapist-1", "course-a"), "possible");
+    assert.equal(courseVerdict(rows, "therapist-2", "course-a"), "possible");
+
+    prismaClient.therapistAttendances.clear();
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-1", checkOutMinute: null, isActive: false });
+    const beforeCheckIn = await overrunAvailabilityAt(prismaClient, "15:30");
+    assert.deepEqual(beforeCheckIn.map((row) => row.attendance), ["before_check_in", "before_check_in"]);
+    assert.equal(courseVerdict(beforeCheckIn, "therapist-1", "course-a"), "possible");
+  });
+
+  it("asks to check the shift only on today, more than 30 minutes after now, for a therapist who is not checked in", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-1", checkOutMinute: null });
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-2", checkOutMinute: 900 });
+    const shiftChecks = async (time: string, now = overrunNow) =>
+      (await overrunAvailabilityAt(prismaClient, time, now)).map((row) => ({ therapistId: row.therapistId, shiftCheck: row.shiftCheck }));
+
+    // 지금 15:20. 40분 뒤는 붙고, 20분 뒤와 정확히 30분 뒤는 붙지 않는다.
+    assert.deepEqual(await shiftChecks("16:00"), [
+      { therapistId: "therapist-1", shiftCheck: false },
+      { therapistId: "therapist-2", shiftCheck: true }
+    ]);
+    assert.deepEqual((await shiftChecks("15:40")).map((row) => row.shiftCheck), [false, false]);
+    assert.deepEqual((await shiftChecks("15:50")).map((row) => row.shiftCheck), [false, false]);
+
+    prismaClient.therapistAttendances.clear();
+    assert.deepEqual((await shiftChecks("16:00")).map((row) => row.shiftCheck), [true, true]);
+
+    // 고른 날짜가 어제(지금은 다음 영업일 15:20)면 붙지 않는다.
+    const nextDay = new Date("2026-06-11T08:20:00.000Z");
+    assert.deepEqual((await shiftChecks("16:00", nextDay)).map((row) => row.shiftCheck), [false, false]);
   });
 });
 

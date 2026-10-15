@@ -254,8 +254,10 @@ export const vi: Messages = {
   "calls.availability.column.thisTime": "Giờ này",
   "calls.availability.column.next": "Lịch tiếp theo",
   "calls.availability.column.courses": "Gói có thể",
+  "calls.availability.attendance.beforeCheckIn": "Chưa đến",
   "calls.availability.attendance.checkedIn": "Đã đến",
-  "calls.availability.attendance.notEntered": "Chưa nhập",
+  "calls.availability.attendance.checkedOut": "Đã về (hiện đã về)",
+  "calls.availability.shiftCheck": "Cần xác nhận ca làm",
   "calls.availability.available": "Có thể",
   "calls.availability.unavailableFrom": "Không thể · từ {time}",
   "calls.availability.inServiceEndCheck": "Đang làm · kiểm tra kết thúc {time}",
@@ -475,6 +477,8 @@ export const vi: Messages = {
   "settlements.therapist.attendance.status.waiting": "Chờ",
   "settlements.therapist.attendance.saveFailed": "Lưu thất bại: {message}",
   "settlements.therapist.attendance.clearFailed": "Xóa thất bại: {message}",
+  "settlements.therapist.attendance.warning.label": "Cảnh báo chấm công",
+  "settlements.therapist.attendance.warning.inServiceCall": "Có ca đang làm",
 
   // 귀케어 일일정산
   "settlements.earcare.title": "Đối soát ngày chăm sóc tai",

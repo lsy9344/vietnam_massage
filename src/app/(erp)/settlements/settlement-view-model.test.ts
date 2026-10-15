@@ -72,6 +72,7 @@ function attendance(overrides: Partial<TherapistAttendanceDto> = {}): TherapistA
     isComplete: false,
     incompleteReason: null,
     isLocked: false,
+    warnings: [],
     ...overrides
   };
 }

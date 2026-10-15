@@ -53,7 +53,8 @@ const maiAttendance: TherapistAttendanceDto = {
   isFullAttendanceRecognized: true,
   isComplete: true,
   incompleteReason: null,
-  isLocked: false
+  isLocked: false,
+  warnings: []
 };
 
 const thuAttendance: TherapistAttendanceDto = {
@@ -136,6 +137,14 @@ describe("therapist settlement view", () => {
     assert.match(html, />A</);
     assert.match(html, /Mai, Linh/);
     assert.match(html, /방문완료/);
+  });
+
+  it("says there is an in-service call when the saved checkout comes back with that warning", () => {
+    const warned = { ...maiAttendance, warnings: [{ code: "IN_SERVICE_CALL" as const, serviceCallIds: ["call-in-use"] }] };
+    const rows = therapistComparisonRows([mai], [warned, thuAttendance]);
+    assert.match(render({ rows }), /시술 중인 콜이 있습니다/);
+    assert.match(render({ rows }, "vi"), /Có ca đang làm/);
+    assert.doesNotMatch(render(), /시술 중인 콜이 있습니다/);
   });
 
   it("keeps a locked month read-only: attendance inputs disabled and no payment change", () => {

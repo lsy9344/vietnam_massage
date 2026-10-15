@@ -14,10 +14,22 @@ export type AvailabilityCourseChoice = {
   courseId: string;
 };
 
-function attendanceLabel(locale: Locale, attendance: TherapistAvailabilityRowDto["attendance"]) {
-  return attendance === "checked_in"
-    ? t(locale, "calls.availability.attendance.checkedIn")
-    : t(locale, "calls.availability.attendance.notEntered");
+const attendanceKey = {
+  before_check_in: "calls.availability.attendance.beforeCheckIn",
+  checked_in: "calls.availability.attendance.checkedIn",
+  checked_out: "calls.availability.attendance.checkedOut"
+} as const;
+
+// 출근 표시와 근무 확인 필요는 서비스가 정한다. 코스 버튼은 이 칸과 상관없이 그대로 둔다.
+function Attendance({ locale, row }: { locale: Locale; row: TherapistAvailabilityRowDto }) {
+  const label = t(locale, attendanceKey[row.attendance]);
+  if (!row.shiftCheck) return label;
+  return (
+    <div className="grid justify-items-start gap-1.5">
+      {label}
+      <WarningSummary locale={locale} warnings={[t(locale, "calls.availability.shiftCheck")]} />
+    </div>
+  );
 }
 
 // 판정과 시각은 서비스가 정한다. 화면은 그 값을 문장으로만 바꾼다.
@@ -129,7 +141,9 @@ export function TherapistAvailabilityView({
                     return (
                       <tr className="align-top hover:bg-readonly" key={row.therapistId}>
                         <th className={`${cellClassName} font-semibold text-foreground`} scope="row">{row.therapistName}</th>
-                        <td className={cellClassName}>{attendanceLabel(locale, row.attendance)}</td>
+                        <td className={cellClassName}>
+                          <Attendance locale={locale} row={row} />
+                        </td>
                         <td className={cellClassName}>
                           <ThisTime locale={locale} row={row} />
                         </td>

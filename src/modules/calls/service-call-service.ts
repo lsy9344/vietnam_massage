@@ -238,6 +238,7 @@ type TherapistAttendanceRecord = {
   employeeId: string;
   operatingMonthId: string;
   attendanceDate: Date;
+  checkOutMinute: number | null;
   isActive: boolean;
 };
 
@@ -422,7 +423,10 @@ export type TherapistAvailabilityCourseDto = {
 export type TherapistAvailabilityRowDto = {
   therapistId: string;
   therapistName: string;
-  attendance: "checked_in" | "not_entered";
+  // 그날의 출근 기록: 없으면 출근 전, 퇴근 시각이 없으면 출근, 있으면 퇴근(현재 퇴근). 판정과 코스 버튼은 바꾸지 않는다.
+  attendance: "before_check_in" | "checked_in" | "checked_out";
+  // 고른 날짜가 오늘이고 고른 시각이 지금보다 30분을 넘겨 뒤인데 출근 상태가 아니다.
+  shiftCheck: boolean;
   available: boolean;
   // 불가 사유. in_service_past_display_end는 예약 점유가 아니라 추가 점유만으로 불가가 된 경우다.
   unavailableReason: "booked" | "in_service_past_display_end" | null;
@@ -450,8 +454,10 @@ function isReservationStatus(status: string) {
   return status === "예약" || status === "RESERVED";
 }
 
+export const IN_USE_SERVICE_CALL_STATUSES: readonly string[] = ["사용중", "IN_USE", "USING"];
+
 function isInUseStatus(status: string) {
-  return status === "사용중" || status === "IN_USE" || status === "USING";
+  return IN_USE_SERVICE_CALL_STATUSES.includes(status);
 }
 
 function isCleaningStatus(status: string) {
@@ -1219,6 +1225,8 @@ export async function listServiceCallsForDate(input: {
 
 const AVAILABILITY_DAY_MINUTES = 24 * 60;
 const AVAILABILITY_DEFAULT_DAY_START = 11 * 60;
+// 오늘 지금보다 이만큼을 넘겨 뒤의 시각이면 출근 상태가 아닌 Therapist에게 근무 확인 필요를 붙인다. 정확히 30분은 붙이지 않는다.
+const AVAILABILITY_SHIFT_CHECK_MINUTES = 30;
 
 function occupiesAvailability(status: string) {
   return isReservationStatus(status) || isInUseStatus(status) || isCleaningStatus(status) || isCompletedServiceCallStatus(status);
@@ -1470,7 +1478,11 @@ export async function listTherapistAvailability(input: {
   const dayStart = activeSlots[0] ? clockMinutes(activeSlots[0].value) : AVAILABILITY_DEFAULT_DAY_START;
   const dayEnd = activeSlots.length > 0 ? businessMinute(activeSlots[activeSlots.length - 1].value, dayStart) : null;
   const at = businessMinute(parsed.data.startTime, dayStart);
-  const checkedIn = new Set(attendances.filter((attendance) => attendance.isActive).map((attendance) => attendance.employeeId));
+  const attendanceByTherapist = new Map(
+    attendances
+      .filter((attendance) => attendance.isActive)
+      .map((attendance) => [attendance.employeeId, attendance.checkOutMinute === null ? "checked_in" as const : "checked_out" as const])
+  );
   const offeredCourses = [...courses]
     .filter((course) => course.isActive)
     .sort((left, right) => left.code.localeCompare(right.code))
@@ -1507,7 +1519,9 @@ export async function listTherapistAvailability(input: {
   const now = input.now ?? new Date();
   const nowMinute = Math.floor((now.getTime() - instantFromBusinessMinute(parsed.data.serviceDate, 0).getTime()) / 60_000);
   const overrunsByTherapist = new Map<string, Array<AvailabilityInterval & { displayEnd: string }>>();
-  if (nowMinute >= dayStart && nowMinute < dayStart + AVAILABILITY_DAY_MINUTES) {
+  const isToday = nowMinute >= dayStart && nowMinute < dayStart + AVAILABILITY_DAY_MINUTES;
+  const pastShiftCheckWindow = isToday && at - nowMinute > AVAILABILITY_SHIFT_CHECK_MINUTES;
+  if (isToday) {
     const displayContext = { dayCalls: calls, dayStart };
     for (const call of calls) {
       if (!isInUseStatus(call.status) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(call.startTime)) continue;
@@ -1553,10 +1567,12 @@ export async function listTherapistAvailability(input: {
     const nextReservation = nextIntervalStart(booked, at);
     const nextStart = nextIntervalStart(intervals, at);
     const freeMinutes = available ? Math.max((nextStart ?? dayEnd ?? at) - at, 0) : null;
+    const attendance = attendanceByTherapist.get(therapist.id) ?? "before_check_in";
     return {
       therapistId: therapist.id,
       therapistName: therapist.displayName,
-      attendance: checkedIn.has(therapist.id) ? "checked_in" as const : "not_entered" as const,
+      attendance,
+      shiftCheck: pastShiftCheckWindow && attendance !== "checked_in",
       available,
       unavailableReason: available ? null : overrunAt ? "in_service_past_display_end" as const : "booked" as const,
       inServiceDisplayEnd: overrunAt?.displayEnd ?? null,
