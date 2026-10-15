@@ -26,6 +26,17 @@ let therapist2Id = "";
 let therapist3NoRateId = "";
 let createdMonth = false;
 
+// 직원은 (직군, 정렬 순서)가 유일하다. story-2-1이 같은 92101·92102를 쓰므로 비어 있는 순서를 찾는다.
+async function freeEmployeeSortOrder(employeeGroup: string, staffCode: string, preferredSortOrder: number) {
+  const existing = await (prisma as any).employee.findUnique({ where: { staffCode }, select: { sortOrder: true } });
+  if (existing) return existing.sortOrder;
+  for (let sortOrder = preferredSortOrder; sortOrder < preferredSortOrder + 100; sortOrder += 1) {
+    const conflicting = await (prisma as any).employee.findFirst({ where: { employeeGroup, sortOrder, NOT: { staffCode } }, select: { id: true } });
+    if (!conflicting) return sortOrder;
+  }
+  throw new Error(`No Ticket 21 employee sortOrder available for ${employeeGroup}:${staffCode}`);
+}
+
 async function seedAccount() {
   const employee = await (prisma as any).employee.upsert({
     where: { staffCode: account.staffCode },
@@ -38,7 +49,7 @@ async function seedAccount() {
       shiftType: "전체",
       baseSalary: 0,
       employmentStatus: "재직",
-      sortOrder: account.sortOrder,
+      sortOrder: await freeEmployeeSortOrder("OPERATIONS", account.staffCode, account.sortOrder),
       isActive: true
     }
   });
@@ -105,9 +116,9 @@ test.describe("티켓 21 빠른 예약: 두 명 코스와 경고 확인 후 배�
     await cleanup();
 
     const room = await (prisma as any).room.upsert({
-      where: { sortOrder: 92101 },
+      where: { sortOrder: 92121 },
       update: { displayName: "T21 호실", isActive: true },
-      create: { displayName: "T21 호실", migrationReferenceName: "T21-ROOM", sortOrder: 92101, isActive: true }
+      create: { displayName: "T21 호실", migrationReferenceName: "T21-ROOM", sortOrder: 92121, isActive: true }
     });
     roomId = room.id;
 
@@ -143,7 +154,7 @@ test.describe("티켓 21 빠른 예약: 두 명 코스와 경고 확인 후 배�
           shiftType: "전체",
           baseSalary: 0,
           employmentStatus: "재직",
-          sortOrder,
+          sortOrder: await freeEmployeeSortOrder("THERAPIST", staffCode, sortOrder),
           isActive: true
         }
       });
