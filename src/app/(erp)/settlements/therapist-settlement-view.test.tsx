@@ -78,6 +78,7 @@ function render(overrides: Partial<Parameters<typeof TherapistSettlementView>[0]
         attendanceAvailable
         attendanceDisabled={false}
         canOpenLedger={false}
+        canOpenStatement={false}
         initialEmployeeId="thr-1"
         operatingMonthId="m-2026-10"
         paymentLocked={false}

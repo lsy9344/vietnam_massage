@@ -48,6 +48,8 @@ export const screenRoutes: readonly ScreenRoute[] = [
   // 근무표는 운영월과 무관해 dateContext가 없다. design.md의 주기 순서(근무표 → 일별 → 월별) 제안과 달리
   // 끝에 둔다: 정산 구역의 기존 첫 탭(관리자·정산 담당의 dock 진입 첫 화면 = Therapist 정산)을 그대로 지킨다(가정, Comments 참고).
   { path: "/settlements/schedule", labelKey: "shell.tab.schedule", zone: "settlements", roles: ["administrator", "settlement_manager"] },
+  // 월 명세서(티켓 32)는 각 정산 화면의 직원 패널에서 직원을 고르고 연다. TV와 같은 이유로 구역 안 탭에는 두지 않는다.
+  { path: "/settlements/statement", labelKey: "shell.tab.statement", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "month", notATab: true },
   { path: "/closing", labelKey: "shell.tab.closing", zone: "closing", roles: ["administrator", "settlement_manager"], dateContext: "month" },
   { path: "/dashboard/today", labelKey: "shell.tab.dashboardToday", zone: "reports", roles: reportRoles, dateContext: "serviceDate" },
   { path: "/dashboard/monthly", labelKey: "shell.tab.dashboardMonthly", zone: "reports", roles: reportRoles, dateContext: "month" },
