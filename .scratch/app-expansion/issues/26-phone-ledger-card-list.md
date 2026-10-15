@@ -28,8 +28,8 @@
 - 넘긴 것: 20(빠른 예약 패널)이 생기면 `TherapistAvailabilityPanel`을 감싼 휴대폰-숨김 래퍼를 그 패널로 옮겨야 한다. 17(충돌 비교)·18(이탈 안내)·16(요청 id)은 표 편집·저장 파이프라인 쪽이라 이 티켓에서 건드리지 않았다(`EditableCallRow`/`AddRowForm`의 내부 로직은 손대지 않고 바깥 래퍼만 추가했다).
 - 검증(전용 DB `vietnam_aesthetic_t26`, 포트 3126):
   - `npx tsc --noEmit` 통과.
-  - `pnpm test:unit` 701개 전부 통과(새 테스트 13개 포함).
-  - `for f in scripts/validate-story-*.mjs; do node "$f" ...; done`: `validate-story-4-6`만 기존 실패(메모 기존 목록과 일치). `validate-story-5-5`도 실패했지만 `git stash`로 되돌린 통합 브랜치 커밋(3f2ffdb, 내 변경 없음)에서 그대로 재현돼 이 티켓 이전부터 있던 실패로 확인했다(`monthly-closing-service.ts missing status !== "잠금"`, 티켓 35쪽으로 보임) — 병합 담당에게 보고.
+  - `pnpm test:unit` 702개 전부 통과(새 테스트 13개 포함).
+  - `for f in scripts/validate-story-*.mjs; do node "$f" ...; done`: 분기 당시(3f2ffdb)엔 `validate-story-4-6`(메모의 기존 실패)과 `validate-story-5-5`가 함께 실패했다. 5-5는 `git stash`로 되돌린 같은 커밋에서도 그대로 재현돼 내 변경과 무관한 통합 브랜치의 기존 실패임을 먼저 확인했다(`monthly-closing-service.ts missing status !== "잠금"`, 티켓 35쪽). 아래 병합에서 그 수정(`b2e2846 fix(closing): validate-story-5-5가 새 재오픈 상태 검사 방식을 보게 고친다`)이 들어와 지금은 `validate-story-4-6`만 남는다.
   - `pnpm build` 성공.
   - E2E(운영 빌드): 새 스펙 3건 통과(390px 카드·숨김·탭·포커스 복귀, 768px 표·빠른예약). 관련 기존 스펙(ticket-13, ticket-19, ticket-03, ticket-14, ticket-15, 2-2, 2-6) 34건 모두 통과 — 특히 ticket-13의 "경고 버튼으로 열고 닫으면 그 버튼에 포커스" 테스트가 `firstVisible` 픽스 이후에도 1440px에서 그대로 통과함을 확인했다.
-- 병합 전 `git merge integration/app-expansion` 재확인: 이미 그 커밋(3f2ffdb) 위에서 분기했으므로 병합할 내용이 없었다(fast-forward 불필요, "Already up to date").
+- 병합 전 `git merge integration/app-expansion` 재확인: 분기 뒤 그 사이에 올라온 `validate-story-5-5` 수정(티켓 35쪽, 커밋 `b2e2846`/`ac936c3`)이 충돌 없이 들어왔다. 병합 뒤 `npx tsc --noEmit`·`pnpm test:unit`(702개)·검증 스크립트 루프를 다시 돌려 `validate-story-4-6`만 남은 것을 확인했다(위 수치에 반영).
