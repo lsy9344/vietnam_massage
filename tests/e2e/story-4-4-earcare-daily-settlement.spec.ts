@@ -92,6 +92,8 @@ async function cleanupStoryData(operatingMonthIds: string[]) {
     await (prisma as any).serviceCall.deleteMany({ where: { id: { in: callIds } } });
   }
   await (prisma as any).earcareAttendance.deleteMany({ where: { operatingMonthId: { in: operatingMonthIds } } });
+  // 지급 확인(ADR 0004, 티켓 31)은 운영월이 고정 monthKey로 upsert되므로, 재실행 때 이전 사건이 남지 않게 함께 정리한다.
+  await (prisma as any).payoutConfirmationEvent.deleteMany({ where: { operatingMonthId: { in: operatingMonthIds } } });
 }
 
 async function createCall(input: {
@@ -319,7 +321,34 @@ test.describe("Story 4.4 earcare daily settlement", () => {
     await expect(earcare1Panel.getByText("잔여 1 VND 배분", { exact: false })).toBeVisible();
     await expect(earcare1Panel.getByRole("heading", { name: "풀 산출 근거" })).toBeVisible();
     await expect(page.getByText("비완료 1, 정책없음 0, 수당없음 1, D코스누락 1").first()).toBeVisible();
-    await expect(page.getByRole("button", { name: /지급/ })).toHaveCount(0);
+  });
+
+  test("settlement manager can confirm payout, reconfirm, and release with a reason, reviewing actor history", async ({ page }) => {
+    await login(page, "story44_settlement", "Story44!settlement");
+    await page.goto(`/settlements/earcare?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2034-05-12`);
+
+    // 지급 확인(ADR 0004, 티켓 30·31)은 직원 패널에서 한다. 표의 행에는 확인 상태만 보인다.
+    const earcare1Panel = await openEmployeePanel(page, "E2E44 귀케어1");
+    await expect(earcare1Panel).toContainText("미확인");
+    await earcare1Panel.getByRole("button", { name: "지급 확인" }).click();
+
+    await expect(earcare1Panel).toContainText("확인됨");
+    await expect(earcare1Panel).toContainText("확인 이력 1건");
+    await expect(earcare1Panel).toContainText("처리자: story44_settlement / E2E44 정산담당");
+    await expect(employeeRow(page, "E2E44 귀케어1")).toContainText("확인됨");
+
+    // 재확인은 사유가 필수다.
+    await earcare1Panel.getByLabel("사유").first().fill("근무상태 정정으로 다시 확인");
+    await earcare1Panel.getByRole("button", { name: "재확인" }).click();
+    await expect(earcare1Panel).toContainText("확인 이력 2건");
+    await expect(earcare1Panel).toContainText("근무상태 정정으로 다시 확인");
+
+    // 해제도 사유가 필수고, 해제 뒤에는 미확인으로 돌아간다.
+    await earcare1Panel.getByLabel("사유").last().fill("정산 오류로 확인 해제");
+    await earcare1Panel.getByRole("button", { name: "확인 해제" }).click();
+    await expect(earcare1Panel).toContainText("미확인");
+    await expect(earcare1Panel).toContainText("확인 이력 3건");
+    await expect(employeeRow(page, "E2E44 귀케어1")).toContainText("미확인");
   });
 
   test("attendance status change updates payout after requery", async ({ page }) => {

@@ -2,6 +2,12 @@
 
 import { DetailRow } from "@/components/ui/detail-row";
 import { EmployeeWorkspace, type ComparisonColumn } from "@/app/(erp)/settlements/employee-workspace";
+import {
+  confirmOpsMonthlyIncentivePayoutAction,
+  reconfirmOpsMonthlyIncentivePayoutAction,
+  releaseOpsMonthlyIncentivePayoutAction
+} from "@/app/(erp)/settlements/operations/monthly/actions";
+import { PayoutConfirmationPanel, PayoutStatusIndicator } from "@/app/(erp)/settlements/payout-confirmation-panel";
 import { AmountText, PanelSection } from "@/app/(erp)/settlements/settlement-parts";
 import { incentiveRuleHasBasis, payoutAmount } from "@/app/(erp)/settlements/settlement-view-model";
 import { useLocale, useT } from "@/lib/i18n/client";
@@ -63,6 +69,11 @@ export function OpsMonthlyView({ result, initialEmployeeId }: { result: OpsMonth
       header: t("settlements.opsMonthly.column.expectedPayout"),
       numeric: true,
       cell: (row) => <span className="font-semibold">{payout(row)}</span>
+    },
+    {
+      key: "payoutConfirmation",
+      header: t("settlements.opsMonthly.column.payoutConfirmation"),
+      cell: (row) => <PayoutStatusIndicator status={row.payoutConfirmation.status} t={t} />
     }
   ];
 
@@ -73,16 +84,30 @@ export function OpsMonthlyView({ result, initialEmployeeId }: { result: OpsMonth
       initialEmployeeId={initialEmployeeId}
       minTableWidth="min-w-[40rem]"
       renderPanel={(row) => (
-        <PanelSection title={t("settlements.opsMonthly.panel.basis")}>
-          <dl>
-            <DetailRow label={t("settlements.opsMonthly.column.teamRole")} value={teamRoleLabel(t, row.teamRole)} />
-            <DetailRow label={t("settlements.opsMonthly.column.shareTeamPortion")} value={portion(row)} />
-            <DetailRow label={t("settlements.opsMonthly.column.expectedPayout")} value={payout(row)} />
-          </dl>
-          <p className="text-sm text-muted">
-            {t("settlements.opsMonthly.column.basis")}: {settlementBasisText(locale, row.calculationBasis)}
-          </p>
-        </PanelSection>
+        <div className="grid gap-6">
+          <PanelSection title={t("settlements.opsMonthly.panel.basis")}>
+            <dl>
+              <DetailRow label={t("settlements.opsMonthly.column.teamRole")} value={teamRoleLabel(t, row.teamRole)} />
+              <DetailRow label={t("settlements.opsMonthly.column.shareTeamPortion")} value={portion(row)} />
+              <DetailRow label={t("settlements.opsMonthly.column.expectedPayout")} value={payout(row)} />
+            </dl>
+            <p className="text-sm text-muted">
+              {t("settlements.opsMonthly.column.basis")}: {settlementBasisText(locale, row.calculationBasis)}
+            </p>
+          </PanelSection>
+
+          <PayoutConfirmationPanel
+            confirmAction={confirmOpsMonthlyIncentivePayoutAction}
+            locale={locale}
+            payout={row.payoutConfirmation}
+            payoutLocked={result.isClosedOrLocked}
+            reconfirmAction={reconfirmOpsMonthlyIncentivePayoutAction}
+            releaseAction={releaseOpsMonthlyIncentivePayoutAction}
+            t={t}
+            title={t("settlements.opsMonthly.column.payoutConfirmation")}
+            unit={{ operatingMonthId: result.operatingMonthId, serviceDate: "", employeeId: row.employeeId }}
+          />
+        </div>
       )}
       rows={result.rows}
       tableLabel={t("settlements.opsMonthly.employeeTable.title")}

@@ -560,6 +560,7 @@ export const vi: Messages = {
   "settlements.payout.reason.releasePlaceholder": "Nhập lý do hủy xác nhận.",
   "settlements.payout.reason.required": "Xác nhận lại và hủy xác nhận đều cần có lý do.",
   "settlements.payout.error.generic": "Đã xảy ra lỗi khi xử lý xác nhận chi trả.",
+  "settlements.payout.handler": "Người xử lý: {actor}",
 
   // 마사지사 출퇴근 입력 테이블
   "settlements.therapist.attendance.checkInMissing": "Chưa nhập chuyên cần",
@@ -612,6 +613,7 @@ export const vi: Messages = {
   "settlements.earcare.column.remainder": "Phân bổ phần dư",
   "settlements.earcare.column.payout": "Số tiền chi trả",
   "settlements.earcare.column.basis": "Căn cứ tính",
+  "settlements.earcare.column.payoutConfirmation": "Xác nhận chi trả",
   "settlements.earcare.payoutEligible": "Đối tượng chi trả",
   "settlements.earcare.excluded": "Loại trừ: {reason}",
   "settlements.earcare.poolEvidence.empty.title": "Không có quỹ chăm sóc tai đã hoàn tất",
@@ -651,6 +653,7 @@ export const vi: Messages = {
   "settlements.ops.column.payoutDecision": "Xét chi trả",
   "settlements.ops.column.payout": "Số tiền chi trả",
   "settlements.ops.column.basis": "Căn cứ tính",
+  "settlements.ops.column.payoutConfirmation": "Xác nhận chi trả",
   "settlements.ops.payoutEligible": "Đối tượng chi trả",
   "settlements.ops.excluded": "Loại trừ: {reason}",
   "settlements.ops.callEvidence.empty.title": "Không có cuộc gọi hoàn tất làm căn cứ thưởng",
@@ -715,6 +718,7 @@ export const vi: Messages = {
   "settlements.opsMonthly.shareTeamPortion.none": "-",
   "settlements.opsMonthly.column.expectedPayout": "Số tiền chi trả dự kiến",
   "settlements.opsMonthly.column.basis": "Căn cứ tính",
+  "settlements.opsMonthly.column.payoutConfirmation": "Xác nhận chi trả",
   "settlements.opsMonthly.callEvidence.empty.title": "Không có căn cứ tính tổng cuộc gọi tháng",
   "settlements.opsMonthly.callEvidence.title": "Căn cứ tính tổng cuộc gọi tháng",
   "settlements.opsMonthly.callEvidence.description": "service DTO cung cấp toàn bộ evidence và màn hình chỉ hiển thị tối đa 50 mục. Tổng {count} mục.",
