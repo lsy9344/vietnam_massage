@@ -5,7 +5,7 @@ import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-no
 import { OpenTvLink } from "@/components/shell/open-tv-link";
 import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 import { LiveSummaryCards, LiveSummaryDetails } from "@/app/(erp)/live/live-summary";
-import { requireRouteAccess } from "@/lib/authorization";
+import { canAccessRoute, requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { getDailyCallLedgerSummary } from "@/modules/calls/service-call-service";
@@ -47,6 +47,8 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
   const lastUpdatedAt = latestRoomStatusUpdatedAt(roomStatuses, new Date().toISOString());
 
   const context = { operatingMonthId: selectedMonth.id, date: serviceDate };
+  // 원장의 콜 상세 링크는 원장에 들어갈 수 있는 역할(관리자·카운터)에게만 준다.
+  const ledgerOperatingMonthId = canAccessRoute(account.role, "/calls") ? selectedMonth.id : null;
 
   return (
     <RoomStatusRefresh lastUpdatedAt={lastUpdatedAt} locale={locale}>
@@ -71,7 +73,7 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
           {roomFloorGroups(roomStatuses).map((group) => (
             <div className={`col-span-full ${floorGridClass(group.statuses.length)}`} key={group.floor}>
               {group.statuses.map((status) => (
-                <RoomStatusCard key={status.roomId} status={status} locale={locale} />
+                <RoomStatusCard key={status.roomId} ledgerOperatingMonthId={ledgerOperatingMonthId} locale={locale} status={status} />
               ))}
             </div>
           ))}

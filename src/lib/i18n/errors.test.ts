@@ -28,6 +28,12 @@ describe("resolveDomainErrorMessage", () => {
     assert.equal(resolveDomainErrorMessage("vi", undefined, "오류입니다."), "오류입니다.");
   });
 
+  it("다른 화면이 먼저 저장한 콜의 거절 문구가 두 언어로 있다", () => {
+    const ko = "다른 화면에서 이 콜이 바뀌었습니다. 다시 불러온 뒤에 저장하세요.";
+    assert.equal(resolveDomainErrorMessage("ko", "STALE_CALL", ko), ko);
+    assert.equal(resolveDomainErrorMessage("vi", "STALE_CALL", ko), "Cuộc gọi này đã được thay đổi ở màn hình khác. Hãy tải lại rồi mới lưu.");
+  });
+
   it("hasDomainErrorTranslation은 매핑 여부를 알려준다", () => {
     assert.equal(hasDomainErrorTranslation("ROOM_REQUIRED_FOR_STATUS"), true);
     assert.equal(hasDomainErrorTranslation("NOPE"), false);

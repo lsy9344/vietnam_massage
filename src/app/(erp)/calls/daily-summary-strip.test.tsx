@@ -181,8 +181,8 @@ describe("하루 수납·지출 탭 요약", () => {
     assert.doesNotMatch(details, /수당 누락/);
     assert.match(text(details), /13:00 민준 마사지사 수당 정책을 찾을 수 없습니다\./);
     assert.match(text(details), /15:30 — D코스는 마사지사2 필수입니다\./);
-    assert.match(details, /href="\/calls\?operatingMonthId=m-2026-10&amp;serviceDate=2026-10-14#call-call-rate"/);
-    assert.match(details, /href="\/calls\?operatingMonthId=m-2026-10&amp;serviceDate=2026-10-14#call-call-second"/);
+    assert.match(details, /href="\/calls\?operatingMonthId=m-2026-10&amp;serviceDate=2026-10-14&amp;call=call-rate"/);
+    assert.match(details, /href="\/calls\?operatingMonthId=m-2026-10&amp;serviceDate=2026-10-14&amp;call=call-second"/);
 
     const admin = text(render({ showSettlementAmounts: true, warningCalls }));
     assert.match(admin, /정책 누락 1건, 수당 누락 1건, 마사지사2 필요 1건은 금액\/코스별 집계에서 제외됐다/);

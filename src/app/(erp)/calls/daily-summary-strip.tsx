@@ -245,7 +245,7 @@ function CalculationWarnings({
                 <td className={cellClassName}>{call.customerMemo || "—"}</td>
                 <td className={`${cellClassName} text-danger`}>{t(locale, calculationErrorMessageKey(call.calculationStatus))}</td>
                 <td className={`${cellClassName} text-right`}>
-                  {/* 주소의 #call-… 로 원장 표의 그 행에 바로 간다. 콜 상세 패널은 티켓 13. */}
+                  {/* 주소의 call 매개변수로 원장 표의 그 행이 선택되고 콜 상세 패널이 열린다. */}
                   <a className="screen-step" href={ledgerCallHref(call)}>
                     {t(locale, "calls.cashbook.warnings.open")}
                   </a>

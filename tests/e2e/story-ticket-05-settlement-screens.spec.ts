@@ -200,7 +200,7 @@ test.describe("Ticket 05 settlement screens", () => {
     await expect(firstCallLink).toContainText("원장에서 보기");
 
     await firstCallLink.click();
-    await expect(page).toHaveURL(new RegExp(`/calls\\?operatingMonthId=${seeded.monthId}&serviceDate=${serviceDate}#call-${seeded.callIds[0]}$`));
+    await expect(page).toHaveURL(new RegExp(`/calls\\?operatingMonthId=${seeded.monthId}&serviceDate=${serviceDate}&call=${seeded.callIds[0]}$`));
     await expect(page.locator(`[id="call-${seeded.callIds[0]}"]`)).toBeAttached();
 
     // 월 총콜 근거 콜도 관리자에게는 원장 링크다(도크의 원장 링크와 구분해 목록 안에서 센다).

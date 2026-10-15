@@ -103,18 +103,28 @@ for (const required of [
   if (!actions.includes(required)) errors.push(`calls actions missing ${required}`);
 }
 
-const grid = read("src/app/(erp)/calls/editable-call-grid.tsx");
+// 행 저장 순서와 저장 상태 표시는 티켓 15에서 call-row-save.ts·call-row-save-status.tsx·공통 SaveStatus로 옮겼다.
+const grid = [
+  "src/app/(erp)/calls/editable-call-grid.tsx",
+  "src/app/(erp)/calls/call-row-save.ts",
+  "src/app/(erp)/calls/call-row-save-status.tsx",
+  "src/components/ui/save-status.tsx"
+]
+  .map(read)
+  .join("\n");
 for (const required of [
   "autosaveServiceCallRowAction",
   "idle",
   "saving",
   "saved",
-  "error",
+  "failed",
+  "conflict",
   // i18n 전환: 저장 상태 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
-  "calls.save.saving",
-  "calls.save.saved",
-  "calls.save.error",
+  // 티켓 15: 저장 중·저장됨·저장 실패·충돌 확인 필요는 공통 SaveStatus의 common.saveState.* 문구다.
+  "SaveStatus",
+  "common.saveState.",
   "calls.save.retry",
+  "calls.save.reloadLatest",
   "onBlur",
   "serviceCallId",
   "disabled={isLocked",
@@ -123,7 +133,7 @@ for (const required of [
   if (!grid.includes(required)) errors.push(`editable-call-grid.tsx missing ${required}`);
 }
 const koMessages = read("src/lib/i18n/messages/ko.ts");
-for (const label of ["저장중", "저장됨", "저장 보류", "재시도"]) {
+for (const label of ["저장 중", "저장됨", "저장 실패", "충돌 확인 필요", "재시도", "최신 내용으로 다시 불러오기"]) {
   if (!koMessages.includes(label)) errors.push(`messages/ko.ts missing call save label: ${label}`);
 }
 // i18n 전환: 액션 에러 한국어 원문은 messages/ko.ts에 보존한다.
@@ -148,9 +158,10 @@ for (const required of [
 const e2e = read("tests/e2e/story-2-2-call-ledger-autosave.spec.ts");
 for (const required of [
   "Story 2.2",
-  "저장중",
+  // 티켓 15: 저장이 끝났는지는 잠깐 보이는 "저장 중" 대신 data-save-state로 기다린다.
+  "data-save-state",
   "저장됨",
-  "저장 보류",
+  "저장 실패",
   "재시도",
   "serviceCallStatusHistory",
   "service_call.status_changed",
@@ -168,9 +179,12 @@ for (const required of [
   "row autosave",
   "service_call.status_changed",
   "service_call.row_changed",
-  "저장중",
+  // 티켓 15: 문서는 Story 2.2 문구(저장중·저장 보류)가 바뀐 것과 새 문구를 함께 적는다.
+  "저장 중",
   "저장됨",
-  "저장 보류"
+  "저장 실패",
+  "충돌 확인 필요",
+  "STALE_CALL"
 ]) {
   if (!docs.includes(required)) errors.push(`calls docs/project context missing ${required}`);
 }

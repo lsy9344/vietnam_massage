@@ -28,6 +28,7 @@ function ledgerRow(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDt
     actualEntryTime: "15:20",
     displayEnd: "16:00",
     warningTime: "16:00",
+    warnings: [{ code: "yield_to_reservation", relatedTime: "16:00", relatedCallIds: ["next"] }],
     roomId: "room-101",
     roomLabel: "101 호실",
     courseId: "course-a",
@@ -107,7 +108,7 @@ describe("actual entry cell", () => {
   });
 
   it("leaves the warning off when the service warning is empty", () => {
-    const html = renderGrid("ko", ledgerRow({ actualEntryTime: null, displayEnd: "16:20", warningTime: null }));
+    const html = renderGrid("ko", ledgerRow({ actualEntryTime: null, displayEnd: "16:20", warningTime: null, warnings: [] }));
     assert.match(html, /표시 종료 16:20/);
     assert.doesNotMatch(html, /예약이 있습니다/);
     assert.match(html, /예약시각은 그대로입니다\./);

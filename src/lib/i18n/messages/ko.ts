@@ -131,6 +131,11 @@ export const ko = {
   "roomCard.field.expectedEnd": "종료예정",
   "roomCard.field.assignee": "담당자",
   "roomCard.minutes": "{value}분",
+  "roomCard.overlap.count": "겹친 콜 {count}건",
+  "roomCard.overlap.listAria": "{room} 겹친 콜 목록",
+  "roomCard.overlap.displayEnd": "표시 종료 {time}",
+  "roomCard.openInLedger": "원장에서 콜 상세 열기",
+  "roomCard.openInLedgerAria": "{room} {time} 콜을 원장에서 열기",
 
   // 실시간 갱신 컨트롤러
   "roomRefresh.aria": "실시간 갱신 상태",
@@ -221,6 +226,25 @@ export const ko = {
   "calls.column.earcarePool": "귀케어풀",
   "calls.column.opsCallCredit": "콜인정",
   "calls.column.saveStatus": "저장상태",
+  "calls.column.warnings": "경고",
+
+  // 콜 행 경고와 콜 상세 패널
+  "calls.warning.previousServiceUnfinished": "앞 시술이 아직 끝나지 않았습니다",
+  "calls.warning.roomOverlap": "이 객실에 {time} 콜이 있습니다",
+  "calls.warning.roomOverlapMore": "이 객실에 {time} 콜이 있습니다 외 {count}건",
+  "calls.warning.calculationError": "계산 오류",
+  "calls.warning.openDetail": "콜 상세 열기",
+  "calls.detail.title": "콜 상세 · {time}",
+  "calls.detail.titleWithMemo": "콜 상세 · {time} {memo}",
+  "calls.detail.fallbackTitle": "콜 상세",
+  "calls.detail.displayEnd": "표시 종료",
+  "calls.detail.warnings": "경고",
+  "calls.detail.noWarnings": "경고가 없습니다",
+  "calls.detail.related": "관련 콜",
+  "calls.detail.noRelated": "관련 콜이 없습니다",
+  "calls.detail.goToCall": "이 콜로 이동",
+  "calls.detail.notFound": "이 날짜의 원장에서 그 콜을 찾을 수 없습니다.",
+  "calls.detail.rowAria": "{time} 콜 상세 열기",
 
   // 콜 그리드 placeholder/empty 라벨
   "calls.actualEntry.helper": "예약시각은 그대로입니다.",
@@ -281,10 +305,9 @@ export const ko = {
   "calls.grid.empty.description": "아래 입력 행에서 원본 실시간콜입력 A:S 의미의 기본 필드를 기록한다.",
 
   // 콜 행 저장 상태
-  "calls.save.saving": "저장중",
   "calls.save.saved": "저장됨",
-  "calls.save.error": "저장 보류",
   "calls.save.retry": "재시도",
+  "calls.save.reloadLatest": "최신 내용으로 다시 불러오기",
   "calls.save.autosaveFailed": "콜 행 자동저장에 실패했습니다.",
 
   // 콜 계산 상태

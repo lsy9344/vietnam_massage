@@ -1,13 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import { BUSINESS_TIME_ZONE_OFFSET_MINUTES } from "@/lib/business-time";
-import { displayEndInstantsForDate } from "@/modules/calls/service-call-service";
-import type { RoomDisplayStatus, RoomStatusAssigneeDto, RoomStatusCourseDto, RoomStatusDto } from "@/modules/rooms/dtos";
+import { roomFloorFactsForDate, type RoomOverlapDto } from "@/modules/calls/service-call-service";
+import type { RoomDisplayStatus, RoomOverlapCallDto, RoomStatusAssigneeDto, RoomStatusCourseDto, RoomStatusDto } from "@/modules/rooms/dtos";
 
 const OPERATING_DAY_START_HOUR = 11;
 const ENDING_SOON_THRESHOLD_MINUTES = 10;
 
 export const ACTIVE_ROOM_OCCUPANCY_STATUSES = ["예약", "RESERVED", "사용중", "IN_USE", "USING", "청소중", "CLEANING"] as const;
 export const EXCLUDED_ROOM_OCCUPANCY_STATUSES = ["방문완료", "VISIT_COMPLETE", "노쇼", "NO_SHOW", "취소", "CANCELED"] as const;
+/** 예약 점유(객실 겹침)에서 빠지는 상태. 콜 서비스의 노쇼·취소 판정과 같은 값이다. */
+const NON_OCCUPYING_RESERVATION_STATUSES = ["노쇼", "NO_SHOW", "취소", "CANCELED"] as const;
 
 export const ROOM_STATUS_GUIDANCE_TEXT: Record<RoomDisplayStatus, string> = {
   예약: "예약 고객 입실 준비가 필요합니다.",
@@ -105,6 +107,8 @@ export type ListRoomStatusesInput = {
   operatingMonthId: string;
   serviceDate: string;
   now?: Date;
+  /** 객실 화면만 켠다. 꺼 두면 overlappingCalls는 비어 있고, 실시간과 TV는 겹침 때문에 더 읽지 않는다. */
+  includeOverlaps?: boolean;
   prismaClient?: RoomStatusPrismaClient;
 };
 
@@ -277,6 +281,39 @@ function latestActiveCallByRoom(calls: ServiceCallRecord[]) {
   return grouped;
 }
 
+// 겹침 판정과 순서는 콜 서비스가 정한다. 여기서는 그 결과에 든 콜을 객실별로 모아 목록 항목으로 옮길 뿐이다.
+async function overlappingCallsByRoom(
+  tx: RoomStatusPrismaClient,
+  input: { calls: ServiceCallRecord[]; overlaps: Map<string, RoomOverlapDto>; displayEnds: Map<string, Date>; monthKey: string }
+) {
+  const callsById = new Map(input.calls.map((call) => [call.id, call]));
+  const items = await Promise.all(
+    [...input.overlaps.values()].map(async (overlap) => {
+      const call = callsById.get(overlap.callId);
+      if (!call) return null;
+      const policy = await findCoursePolicy(tx, call, input.monthKey);
+      const therapists = [assignmentByRole(call, "THERAPIST_1"), assignmentByRole(call, "THERAPIST_2")].filter(
+        (employee): employee is EmployeeRecord => Boolean(employee)
+      );
+      const item: RoomOverlapCallDto = {
+        callId: call.id,
+        startTime: call.startTime,
+        course: policy ? toCourseDto(call, policy) : null,
+        therapists: therapists.map(toAssigneeDto),
+        status: call.status,
+        displayEndAt: input.displayEnds.get(call.id)?.toISOString() ?? null
+      };
+      return { roomId: overlap.roomId, item };
+    })
+  );
+  const grouped = new Map<string, RoomOverlapCallDto[]>();
+  for (const entry of items) {
+    if (!entry) continue;
+    grouped.set(entry.roomId, [...(grouped.get(entry.roomId) ?? []), entry.item]);
+  }
+  return grouped;
+}
+
 function emptyRoomStatus(room: RoomRecord, serviceDate: string, now: Date): RoomStatusDto {
   return {
     roomId: room.id,
@@ -294,7 +331,8 @@ function emptyRoomStatus(room: RoomRecord, serviceDate: string, now: Date): Room
     therapist2: null,
     earcare: null,
     guidanceText: ROOM_STATUS_GUIDANCE_TEXT["빈방"],
-    updatedAt: now.toISOString()
+    updatedAt: now.toISOString(),
+    overlappingCalls: []
   };
 }
 
@@ -346,12 +384,14 @@ export async function listRoomStatuses(input: ListRoomStatusesInput): Promise<Ro
     where: { isActive: true },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
   });
+  // 대표 콜은 활성 상태에서만 고른다. 겹친 콜 목록에는 방문완료도 들어가므로, 겹침을 켜면 콜 서비스가
+  // 겹침에서 빼는 노쇼·취소만 거른다.
   const calls = await client.serviceCall.findMany({
     where: {
       operatingMonthId: input.operatingMonthId,
       serviceDate: toDateOnly(input.serviceDate),
       roomId: { not: null },
-      status: { in: [...ACTIVE_ROOM_OCCUPANCY_STATUSES] }
+      status: input.includeOverlaps ? { notIn: [...NON_OCCUPYING_RESERVATION_STATUSES] } : { in: [...ACTIVE_ROOM_OCCUPANCY_STATUSES] }
     },
     include: {
       operatingMonth: true,
@@ -361,26 +401,28 @@ export async function listRoomStatuses(input: ListRoomStatusesInput): Promise<Ro
     }
   });
   const latestByRoom = latestActiveCallByRoom(calls);
-  const displayEnds = await displayEndInstantsForDate({
+  const { displayEnds, roomOverlaps } = await roomFloorFactsForDate({
     operatingMonthId: input.operatingMonthId,
     serviceDate: input.serviceDate,
     prismaClient: client
   });
+  const overlapsByRoom = input.includeOverlaps
+    ? await overlappingCallsByRoom(client, { calls, overlaps: roomOverlaps, displayEnds, monthKey: operatingMonth.monthKey })
+    : new Map<string, RoomOverlapCallDto[]>();
 
   return Promise.all(
-    rooms.map((room) => {
+    rooms.map(async (room) => {
       const activeCall = latestByRoom.get(room.id);
-      if (!activeCall) {
-        return emptyRoomStatus(room, input.serviceDate, now);
-      }
-
-      return activeRoomStatus(client, {
-        room,
-        call: activeCall,
-        monthKey: operatingMonth.monthKey,
-        now,
-        displayEndAt: displayEnds.get(activeCall.id) ?? null
-      });
+      const status = activeCall
+        ? await activeRoomStatus(client, {
+            room,
+            call: activeCall,
+            monthKey: operatingMonth.monthKey,
+            now,
+            displayEndAt: displayEnds.get(activeCall.id) ?? null
+          })
+        : emptyRoomStatus(room, input.serviceDate, now);
+      return { ...status, overlappingCalls: overlapsByRoom.get(room.id) ?? [] };
     })
   );
 }

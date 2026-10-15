@@ -33,7 +33,15 @@ export function ledgerCallAnchorId(serviceCallId: string) {
   return `call-${serviceCallId}`;
 }
 
-/** 그 날짜 원장 탭의 그 콜. 콜 상세 패널은 티켓 13에서 주소의 콜 id로 연다. */
+/** 열린 콜 상세 패널의 콜 id를 담는 주소 매개변수. 이 주소로 바로 패널이 열린다. */
+export const CALL_PARAM = "call";
+
+/** 그 날짜 원장 탭에서 그 콜의 상세 패널이 열린 주소. */
 export function ledgerCallHref(target: LedgerDate & { serviceCallId: string }) {
-  return `${ledgerHref(target)}#${ledgerCallAnchorId(target.serviceCallId)}`;
+  const params = new URLSearchParams({
+    operatingMonthId: target.operatingMonthId,
+    serviceDate: target.serviceDate,
+    [CALL_PARAM]: target.serviceCallId
+  });
+  return `/calls?${params.toString()}`;
 }

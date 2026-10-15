@@ -290,7 +290,8 @@ test.describe("Client revision browser verification", () => {
 
     const counterRow = rowByText(page, "WO Verify completed settlement redaction");
     await selectRowCombobox(counterRow, "결제수단", "카드");
-    await expect(counterRow.getByText("저장됨")).toBeVisible();
+    // 처음 불러온 행도 "저장됨"으로 보이므로 이 화면의 저장이 끝났는지는 data-save-state로 본다.
+    await expect(counterRow.locator('[data-save-state="saved"]')).toBeVisible();
 
     await login(page, seededData.accounts.administrator.accountId, seededData.accounts.administrator.password);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${assignedDate}`);

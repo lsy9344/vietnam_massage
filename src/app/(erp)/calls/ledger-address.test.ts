@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  CALL_PARAM,
   ledgerCallAnchorId,
   ledgerCallHref,
   ledgerHref,
@@ -29,11 +30,19 @@ describe("call ledger address", () => {
     assert.equal(ledgerHref(october14, "cashbook"), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-14&tab=cashbook");
   });
 
+  it("keeps the opened call in the address so the same address opens the detail panel", () => {
+    assert.equal(CALL_PARAM, "call");
+    assert.equal(
+      ledgerCallHref({ operatingMonthId: "m-2026-10", serviceDate: "2026-10-14", serviceCallId: "c9" }),
+      "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-14&call=c9"
+    );
+  });
+
   it("links to one call on the ledger tab of its own date", () => {
     assert.equal(ledgerCallAnchorId("call-9"), "call-call-9");
     assert.equal(
       ledgerCallHref({ operatingMonthId: "m-2026-09", serviceDate: "2026-09-30", serviceCallId: "c1" }),
-      "/calls?operatingMonthId=m-2026-09&serviceDate=2026-09-30#call-c1"
+      "/calls?operatingMonthId=m-2026-09&serviceDate=2026-09-30&call=c1"
     );
   });
 });

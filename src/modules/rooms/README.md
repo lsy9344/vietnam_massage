@@ -45,6 +45,13 @@ Owns room-status views for waiters and TV display.
 - TV typography keeps `text-[40px]`, `text-[28px]`, and `text-[22px]` ramp; status cannot collapse to a swatch 단독.
 - Route UI must not create local status color maps or recalculate `종료확인`; UI 계산 재구현 금지.
 
+## Ticket 14 Contract (객실 겹침)
+
+- 객실 겹침은 콜 서비스의 `roomFloorFactsForDate()`가 판정한다(원장 행의 `room_overlap` 경고와 같은 판정). `listRoomStatuses()`는 그 결과를 받아 객실마다 `overlappingCalls`에 옮길 뿐 다시 판정하거나 다시 정렬하지 않는다. UI 계산 재구현 금지.
+- `overlappingCalls`는 `includeOverlaps: true`일 때만 채운다(객실 화면). 실시간과 TV는 끄고, 그때 읽는 콜도 예전처럼 활성 상태뿐이다.
+- 항목에는 예약시각, 코스, Therapist, 상태, 표시 종료만 있다. 고객/메모, 연락처, 금액, 수당은 담지 않는다.
+- 객실 카드는 겹침이 있으면 "겹친 콜 N건"과 펼침 목록을 보인다. 원장의 콜 상세 링크는 `/calls`에 들어갈 수 있는 역할(관리자·카운터)에게만 있다. 실시간 카드에는 목록 대신 대표 콜의 원장 상세 링크가 있다. TV에는 둘 다 없다.
+
 ## Includes
 
 - room status view

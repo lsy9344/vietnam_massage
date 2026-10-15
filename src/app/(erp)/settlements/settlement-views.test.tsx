@@ -93,7 +93,7 @@ describe("earcare settlement view", () => {
     assert.match(html, /<select aria-label="Hoa 근무상태"[^>]*class="h-11 /);
     assert.match(html, /풀 분배 근거/);
     assert.match(html, /풀 산출 근거/);
-    assert.match(html, /href="\/calls\?operatingMonthId=m-2026-10&amp;serviceDate=2026-10-14#call-call-9"/);
+    assert.match(html, /href="\/calls\?operatingMonthId=m-2026-10&amp;serviceDate=2026-10-14&amp;call=call-9"/);
   });
 
   it("gives a settlement manager the pool call summary without a ledger link", () => {

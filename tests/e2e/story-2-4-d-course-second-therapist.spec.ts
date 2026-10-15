@@ -257,7 +257,8 @@ test.describe("Story 2.4 D코스 마사지사2 필수 검증", () => {
     await expect(error).toBeVisible();
     await expect(error).toContainText("D코스는 마사지사2 필수입니다. 마사지사2를 배정해야 저장됩니다.");
     await expect(error).toHaveAttribute("role", "alert");
-    await expect(row.getByText("저장 보류", { exact: true })).toBeVisible();
+    // 저장 상태 칩은 기호와 글자가 한 요소라 정확히 일치시키지 않는다.
+    await expect(row.getByText("저장 실패")).toBeVisible();
     await expect(row.getByRole("button", { name: "재시도" })).toBeVisible();
     await expect(therapist2).toHaveAttribute("aria-invalid", "true");
     await expect(therapist2).toHaveAttribute("aria-describedby", /therapist2-error/);

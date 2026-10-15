@@ -39,6 +39,7 @@ const discountedCallRow: ServiceCallRowDto = {
   actualEntryTime: null,
   displayEnd: "13:00",
   warningTime: null,
+  warnings: [],
   roomId: "room-101",
   roomLabel: "101 호실",
   courseId: "course-a",

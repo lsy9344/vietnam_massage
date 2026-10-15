@@ -13,12 +13,14 @@ import {
   createCustomer,
   createDailyExpense,
   deactivateDailyExpense,
+  getServiceCallRow,
   updateCustomer,
   updateDailyExpense,
   redactServiceCallSettlementAmounts,
   listTherapistAvailability,
   saveBasicServiceCallRow,
   ServiceCallDomainError,
+  StaleServiceCallError,
   type CustomerDto,
   type DailyExpenseDto,
   type ServiceCallRowDto
@@ -35,6 +37,10 @@ import {
 } from "@/modules/calls/service-call-schema";
 
 export type ServiceCallActionState = ActionResult<ServiceCallRowDto> | null;
+/** 오래된 저장(STALE_CALL)이면 저장은 거절되고, 화면이 다시 불러올 수 있게 지금의 행을 함께 받는다. */
+export type ServiceCallAutosaveResult =
+  | ActionResult<ServiceCallRowDto>
+  | { ok: false; formError: string; domainErrorCode: "STALE_CALL"; currentRow: ServiceCallRowDto };
 export type DailyExpenseActionState = ActionResult<DailyExpenseDto> | null;
 export type CustomerActionState = ActionResult<CustomerDto> | null;
 
@@ -146,6 +152,7 @@ export async function saveBasicServiceCallRowAction(
   const locale = await getLocale();
   const parsed = serviceCallInputSchema.safeParse({
     serviceCallId: formValue(formData, "serviceCallId"),
+    expectedUpdatedAt: formValue(formData, "expectedUpdatedAt"),
     operatingMonthId: formValue(formData, "operatingMonthId"),
     serviceDate: formValue(formData, "serviceDate"),
     startTime: formValue(formData, "startTime"),
@@ -182,7 +189,7 @@ export async function saveBasicServiceCallRowAction(
   }
 }
 
-export async function autosaveServiceCallRowAction(input: ServiceCallAutosaveInput): Promise<ActionResult<ServiceCallRowDto>> {
+export async function autosaveServiceCallRowAction(input: ServiceCallAutosaveInput): Promise<ServiceCallAutosaveResult> {
   const locale = await getLocale();
   const parsed = serviceCallAutosaveInputSchema.safeParse(input);
 
@@ -194,13 +201,39 @@ export async function autosaveServiceCallRowAction(input: ServiceCallAutosaveInp
     };
   }
 
+  let role: string | null = null;
   try {
     const account = await requirePermission("call:write");
+    role = account.role;
     const data = await autosaveServiceCallRow({
       ...parsed.data,
       actorId: account.id
     });
     revalidatePath("/calls");
+    return { ok: true, data: visibleServiceCallRowForRole(data, account.role) };
+  } catch (error) {
+    if (error instanceof StaleServiceCallError && role) {
+      return {
+        ok: false,
+        formError: resolveDomainErrorMessage(locale, error.code, error.message),
+        domainErrorCode: "STALE_CALL",
+        currentRow: visibleServiceCallRowForRole(error.currentRow, role)
+      };
+    }
+    return mapActionError<ServiceCallRowDto>(error, locale);
+  }
+}
+
+/** 저장이 거절된 행이 "최신 내용으로 다시 불러오기"를 누르면 그 콜을 지금 저장된 그대로 읽는다. */
+export async function reloadServiceCallRowAction(serviceCallId: string): Promise<ActionResult<ServiceCallRowDto>> {
+  const locale = await getLocale();
+  if (typeof serviceCallId !== "string" || serviceCallId.trim() === "") {
+    return { ok: false, formError: t(locale, "action.error.invalidInput") };
+  }
+
+  try {
+    const account = await requirePermission("call:write");
+    const data = await getServiceCallRow({ serviceCallId: serviceCallId.trim() });
     return { ok: true, data: visibleServiceCallRowForRole(data, account.role) };
   } catch (error) {
     return mapActionError<ServiceCallRowDto>(error, locale);

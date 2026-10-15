@@ -16,6 +16,7 @@ import {
   dailyExpenseDeactivateSchema,
   dailyExpenseInputSchema,
   dailyExpenseUpdateSchema,
+  savedVersionMessage,
   serviceCallAutosaveInputSchema,
   serviceCallInputSchema,
   type CustomerInput,
@@ -262,6 +263,25 @@ export type ServiceCallCalculationStatus =
   | "therapist_rate_missing"
   | "second_therapist_required";
 
+/**
+ * 원장 행 경고 코드. 배열 순서가 곧 우선순위다(스펙 B02): 앞 시술 미완료 → 객실 겹침 → 양보 → 계산 오류.
+ */
+export const CALL_ROW_WARNING_ORDER = [
+  "previous_service_unfinished",
+  "room_overlap",
+  "yield_to_reservation",
+  "calculation_error"
+] as const;
+
+export type CallRowWarningCode = (typeof CALL_ROW_WARNING_ORDER)[number];
+
+export type CallRowWarningDto = {
+  code: CallRowWarningCode;
+  /** 경고가 말하는 시각(HH:mm). 앞 시술 미완료는 앞 콜의 표시 종료, 객실 겹침은 가장 이른 상대의 예약시각, 양보는 다음 예약시각. */
+  relatedTime: string | null;
+  relatedCallIds: string[];
+};
+
 export type ServiceCallRowDto = {
   id: string;
   operatingMonthId: string;
@@ -270,6 +290,8 @@ export type ServiceCallRowDto = {
   actualEntryTime: string | null;
   displayEnd: string;
   warningTime: string | null;
+  /** 우선순위 순서의 경고 목록. 비어 있으면 경고가 없다. */
+  warnings: CallRowWarningDto[];
   roomId: string | null;
   roomLabel: string;
   courseId: string;
@@ -443,6 +465,17 @@ export class ServiceCallDomainError extends Error {
   constructor(message: string, public readonly code: string) {
     super(message);
     this.name = "ServiceCallDomainError";
+  }
+}
+
+/**
+ * 오래된 저장(STALE_CALL). 화면이 읽은 뒤에 다른 저장이 먼저 들어왔다. 아무것도 쓰지 않았고,
+ * 화면이 다시 불러올 수 있게 지금의 행(currentRow)을 함께 돌려준다.
+ */
+export class StaleServiceCallError extends ServiceCallDomainError {
+  constructor(public readonly currentRow: ServiceCallRowDto) {
+    super("다른 화면에서 이 콜이 바뀌었습니다. 다시 불러온 뒤에 저장하세요.", "STALE_CALL");
+    this.name = "StaleServiceCallError";
   }
 }
 
@@ -828,7 +861,8 @@ async function toRowDto(
   tx: ServiceCallPrismaClient,
   record: ServiceCallRecord,
   sources?: ServiceCallCalculationSources,
-  displayContext?: DisplayEndContext
+  displayContext?: DisplayEndContext,
+  now: Date = new Date()
 ): Promise<ServiceCallRowDto> {
   const operatingMonth = record.operatingMonth;
   const course = record.course;
@@ -837,7 +871,8 @@ async function toRowDto(
   const therapist2 = assignmentByRole(record, "THERAPIST_2")?.employee ?? null;
   const earcare = assignmentByRole(record, "EARCARE")?.employee ?? null;
   const calculation = await calculateServiceCallCompletion(tx, record, sources);
-  const display = deriveDisplayEnd(record, displayContext ?? (await displayEndContextFor(tx, record)));
+  const context = displayContext ?? (await displayEndContextFor(tx, record));
+  const display = deriveDisplayEnd(record, context);
 
   return {
     id: record.id,
@@ -847,6 +882,7 @@ async function toRowDto(
     actualEntryTime: display.actualEntryTime,
     displayEnd: display.displayEnd,
     warningTime: display.warningTime,
+    warnings: deriveRowWarnings(record, context, display, calculation.calculationStatus, now),
     roomId: record.roomId,
     roomLabel: record.room?.displayName ?? "미배정",
     courseId: record.courseId,
@@ -1053,6 +1089,30 @@ async function findServiceCallWithRelations(tx: ServiceCallPrismaClient, id: str
   return record;
 }
 
+/**
+ * 기존 행을 화면이 읽은 버전(expectedUpdatedAt)일 때만 고친다. 버전 확인과 쓰기가 한 번의 조건부 갱신이라
+ * 그 사이에 다른 저장이 끼어들 수 없다. 고친 행이 없으면 행이 없는지, 다른 저장이 먼저 들어왔는지 가린다.
+ */
+async function updateServiceCallAtVersion(
+  tx: ServiceCallPrismaClient,
+  target: { serviceCallId: string; operatingMonthId: string; expectedUpdatedAt: string },
+  data: Record<string, unknown>
+) {
+  const updateResult = await tx.serviceCall.updateMany({
+    where: { id: target.serviceCallId, operatingMonthId: target.operatingMonthId, updatedAt: new Date(target.expectedUpdatedAt) },
+    data
+  });
+  if (updateResult.count === 1) {
+    return;
+  }
+
+  const current = await findServiceCallWithRelations(tx, target.serviceCallId);
+  if (current.operatingMonthId !== target.operatingMonthId) {
+    throw new ServiceCallDomainError("콜 원장 행을 찾을 수 없습니다.", "SERVICE_CALL_NOT_FOUND");
+  }
+  throw new StaleServiceCallError(await toRowDto(tx, current));
+}
+
 function assignmentEmployeeId(record: ServiceCallRecord, role: ServiceCallAssignmentRole) {
   return assignmentByRole(record, role)?.employeeId ?? null;
 }
@@ -1184,6 +1244,8 @@ async function resolveLinkedCustomerId(
 export async function listServiceCallsForDate(input: {
   operatingMonthId: string;
   serviceDate: string;
+  /** 앞 시술 미완료를 판정하는 지금 시각. 없으면 서버 시각이다. */
+  now?: Date;
   prismaClient?: ServiceCallPrismaClient;
 }) {
   const parsed = serviceCallInputSchema.pick({ operatingMonthId: true, serviceDate: true }).safeParse(input);
@@ -1219,7 +1281,7 @@ export async function listServiceCallsForDate(input: {
         const rightOrder = sortOrderByTime.get(b.startTime) ?? 9999;
         return leftOrder - rightOrder || a.createdAt.getTime() - b.createdAt.getTime();
       })
-      .map((record) => toRowDto(client, record, sources, displayContext))
+      .map((record) => toRowDto(client, record, sources, displayContext, input.now))
   );
 }
 
@@ -1300,6 +1362,7 @@ function displayEndChoice(record: ServiceCallRecord, context: DisplayEndContext)
     ? businessMinute(record.startTime, context.dayStart)
     : null;
   let next: number | null = null;
+  let nextIds: string[] = [];
   if (reservationStart !== null && therapists.size > 0) {
     for (const other of context.dayCalls) {
       if (other.id === record.id) continue;
@@ -1308,13 +1371,121 @@ function displayEndChoice(record: ServiceCallRecord, context: DisplayEndContext)
       if (!assignedTherapistIds(other).some((id) => therapists.has(id))) continue;
       const start = businessMinute(other.startTime, context.dayStart);
       if (start <= reservationStart) continue;
-      if (next === null || start < next) next = start;
+      if (next === null || start < next) {
+        next = start;
+        nextIds = [other.id];
+      } else if (start === next) {
+        nextIds.push(other.id);
+      }
     }
   }
   if (next !== null && next < proposed) {
-    return { actualEntryTime, minute: next, yielded: true };
+    return { actualEntryTime, minute: next, yielded: true, yieldedToIds: nextIds };
   }
-  return { actualEntryTime, minute: proposed, yielded: false };
+  return { actualEntryTime, minute: proposed, yielded: false, yieldedToIds: [] as string[] };
+}
+
+const CLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+// 같은 날 같은 Therapist(두 배정 역할 모두)의 사용중 콜이 이 콜의 예약시각까지 끝났어야 하는데
+// 지금이 그 표시 종료를 넘겼으면 앞 시술 미완료다. 이 콜의 표시 종료와 예약시각은 바꾸지 않는다.
+function previousServiceUnfinished(record: ServiceCallRecord, context: DisplayEndContext, now: Date): CallRowWarningDto | null {
+  if (isNoShowStatus(record.status) || isCanceledStatus(record.status)) return null;
+  if (!CLOCK_TIME.test(record.startTime)) return null;
+  const therapists = new Set(assignedTherapistIds(record));
+  if (therapists.size === 0) return null;
+  const reservationStart = businessMinute(record.startTime, context.dayStart);
+  const serviceDate = toIsoDateOnly(record.serviceDate);
+  const unfinished: Array<{ id: string; endMinute: number }> = [];
+  for (const other of context.dayCalls) {
+    if (other.id === record.id) continue;
+    if (!isInUseStatus(other.status)) continue;
+    if (!CLOCK_TIME.test(other.startTime)) continue;
+    if (!assignedTherapistIds(other).some((id) => therapists.has(id))) continue;
+    const endMinute = displayEndChoice(other, context).minute;
+    if (endMinute > reservationStart) continue;
+    if (now.getTime() <= instantFromBusinessMinute(serviceDate, endMinute).getTime()) continue;
+    unfinished.push({ id: other.id, endMinute });
+  }
+  if (unfinished.length === 0) return null;
+  const latestEnd = Math.max(...unfinished.map((item) => item.endMinute));
+  return {
+    code: "previous_service_unfinished",
+    relatedTime: formatBusinessMinute(latestEnd),
+    relatedCallIds: unfinished.map((item) => item.id)
+  };
+}
+
+/** 객실 겹침 판정 결과. 원장 행 경고와 객실 상태 서비스가 같은 값을 쓴다(스펙 B06). */
+export type RoomOverlapDto = {
+  callId: string;
+  roomId: string;
+  /** 가장 이른 상대의 예약시각(HH:mm). */
+  relatedTime: string;
+  /** 겹치는 상대 콜 id 전체. 예약시각이 이른 순서다. */
+  relatedCallIds: string[];
+};
+
+// 예약 점유 구간 [예약시각, 예약시각 + 코스 길이). 실제입장과 표시 종료는 쓰지 않는다.
+// 노쇼, 취소, 객실이 없는 콜은 점유하지 않는다. 운영월에 유효한 코스 정책이 없으면 길이를 몰라
+// 판정하지 않는다(가능 코스의 점유도 정책이 없는 콜을 세지 않는다).
+function roomReservationInterval(record: ServiceCallRecord, context: DisplayEndContext) {
+  if (!record.roomId) return null;
+  if (isNoShowStatus(record.status) || isCanceledStatus(record.status)) return null;
+  if (!CLOCK_TIME.test(record.startTime)) return null;
+  const duration = courseDurationMinutes(record);
+  if (duration <= 0) return null;
+  const start = businessMinute(record.startTime, context.dayStart);
+  return { roomId: record.roomId, start, end: start + duration };
+}
+
+// 같은 날 같은 객실의 반열린 구간이 겹치면 양쪽에 붙는다. 맞닿으면 겹치지 않는다. 어느 예약시각도 밀지 않는다.
+function roomOverlapFor(record: ServiceCallRecord, context: DisplayEndContext): RoomOverlapDto | null {
+  const own = roomReservationInterval(record, context);
+  if (!own) return null;
+  const partners: Array<{ id: string; start: number }> = [];
+  for (const other of context.dayCalls) {
+    if (other.id === record.id) continue;
+    const interval = roomReservationInterval(other, context);
+    if (!interval || interval.roomId !== own.roomId) continue;
+    if (interval.start < own.end && own.start < interval.end) partners.push({ id: other.id, start: interval.start });
+  }
+  if (partners.length === 0) return null;
+  partners.sort((left, right) => left.start - right.start || left.id.localeCompare(right.id));
+  return {
+    callId: record.id,
+    roomId: own.roomId,
+    relatedTime: formatBusinessMinute(partners[0].start),
+    relatedCallIds: partners.map((partner) => partner.id)
+  };
+}
+
+function deriveRowWarnings(
+  record: ServiceCallRecord,
+  context: DisplayEndContext,
+  display: { warningTime: string | null },
+  calculationStatus: ServiceCallCalculationStatus,
+  now: Date
+): CallRowWarningDto[] {
+  const byCode = new Map<CallRowWarningCode, CallRowWarningDto>();
+  const unfinished = previousServiceUnfinished(record, context, now);
+  if (unfinished) byCode.set(unfinished.code, unfinished);
+  const overlap = roomOverlapFor(record, context);
+  if (overlap) {
+    byCode.set("room_overlap", { code: "room_overlap", relatedTime: overlap.relatedTime, relatedCallIds: overlap.relatedCallIds });
+  }
+  const choice = displayEndChoice(record, context);
+  if (choice.yielded && display.warningTime) {
+    byCode.set("yield_to_reservation", {
+      code: "yield_to_reservation",
+      relatedTime: display.warningTime,
+      relatedCallIds: choice.yieldedToIds
+    });
+  }
+  if (isCalculationWarningStatus(calculationStatus)) {
+    byCode.set("calculation_error", { code: "calculation_error", relatedTime: null, relatedCallIds: [] });
+  }
+  return CALL_ROW_WARNING_ORDER.flatMap((code) => byCode.get(code) ?? []);
 }
 
 function deriveDisplayEnd(record: ServiceCallRecord, context: DisplayEndContext) {
@@ -1365,21 +1536,39 @@ async function loadDisplayEndContext(
   return { dayCalls, dayStart: dayStartFromSlots(slots) };
 }
 
-export async function displayEndInstantsForDate(input: {
+type DayFactsInput = {
   operatingMonthId: string;
   serviceDate: string;
   prismaClient?: DisplayEndReadClient;
-}): Promise<Map<string, Date>> {
+};
+
+/**
+ * 객실 상태 서비스가 쓰는 그 날짜의 표시 종료와 객실 겹침. 콜을 한 번 읽어 둘 다 판정한다.
+ * 겹침은 원장 행의 room_overlap 경고와 같은 판정이며, 겹침이 없는 콜은 roomOverlaps에서 빠진다.
+ * roomOverlaps는 영업일 예약시각 순서다(첫 슬롯보다 이른 시각은 그날의 뒤). 소비자는 이 순서를 그대로 쓴다.
+ */
+export async function roomFloorFactsForDate(
+  input: DayFactsInput
+): Promise<{ displayEnds: Map<string, Date>; roomOverlaps: Map<string, RoomOverlapDto> }> {
   const client = input.prismaClient ?? getClient();
   const context = await loadDisplayEndContext(client, {
     operatingMonthId: input.operatingMonthId,
     serviceDate: toDateOnly(input.serviceDate)
   });
-  const instants = new Map<string, Date>();
+  const displayEnds = new Map<string, Date>();
+  const roomOverlaps = new Map<string, RoomOverlapDto>();
   for (const record of context.dayCalls) {
-    instants.set(record.id, instantFromBusinessMinute(input.serviceDate, displayEndChoice(record, context).minute));
+    displayEnds.set(record.id, instantFromBusinessMinute(input.serviceDate, displayEndChoice(record, context).minute));
   }
-  return instants;
+  const byReservation = context.dayCalls
+    .map((record) => ({ record, interval: roomReservationInterval(record, context) }))
+    .filter((entry): entry is { record: ServiceCallRecord; interval: NonNullable<typeof entry.interval> } => entry.interval !== null)
+    .sort((left, right) => left.interval.start - right.interval.start || left.record.id.localeCompare(right.record.id));
+  for (const { record } of byReservation) {
+    const overlap = roomOverlapFor(record, context);
+    if (overlap) roomOverlaps.set(record.id, overlap);
+  }
+  return { displayEnds, roomOverlaps };
 }
 
 async function displayEndContextFor(tx: ServiceCallPrismaClient, record: ServiceCallRecord): Promise<DisplayEndContext> {
@@ -1673,10 +1862,20 @@ export async function listServiceCallsForOperatingMonth(input: {
   });
 }
 
+/** 콜 한 줄을 지금 저장된 그대로 읽는다. 저장이 거절된 화면이 "최신 내용으로 다시 불러오기"에 쓴다. */
+export async function getServiceCallRow(input: { serviceCallId: string; prismaClient?: ServiceCallPrismaClient }) {
+  const client = getClient(input.prismaClient);
+  return toRowDto(client, await findServiceCallWithRelations(client, input.serviceCallId));
+}
+
 export async function saveBasicServiceCallRow(input: ServiceCallInput & { actorId?: string; prismaClient?: ServiceCallPrismaClient }) {
   const parsed = serviceCallInputSchema.safeParse(input);
   if (!parsed.success) {
     throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "콜 원장 입력값이 올바르지 않습니다.", "INVALID_SERVICE_CALL_INPUT");
+  }
+  // 기존 행을 고치는 저장은 화면이 읽은 버전을 함께 보내야 한다. 없으면 다른 저장을 덮을 수 있다.
+  if (parsed.data.serviceCallId && !parsed.data.expectedUpdatedAt) {
+    throw new ServiceCallDomainError(savedVersionMessage, "INVALID_SERVICE_CALL_INPUT");
   }
   assertRoomRequiredForStatus({ roomId: parsed.data.roomId, status: parsed.data.status });
 
@@ -1727,14 +1926,16 @@ export async function saveBasicServiceCallRow(input: ServiceCallInput & { actorI
     };
 
     let serviceCall: ServiceCallRecord;
-    if (parsed.data.serviceCallId) {
-      const updateResult = await tx.serviceCall.updateMany({
-        where: { id: parsed.data.serviceCallId, operatingMonthId: parsed.data.operatingMonthId },
+    if (parsed.data.serviceCallId && parsed.data.expectedUpdatedAt) {
+      await updateServiceCallAtVersion(
+        tx,
+        {
+          serviceCallId: parsed.data.serviceCallId,
+          operatingMonthId: parsed.data.operatingMonthId,
+          expectedUpdatedAt: parsed.data.expectedUpdatedAt
+        },
         data
-      });
-      if (updateResult.count !== 1) {
-        throw new ServiceCallDomainError("콜 원장 행을 찾을 수 없습니다.", "SERVICE_CALL_NOT_FOUND");
-      }
+      );
       serviceCall = await findServiceCallWithRelations(tx, parsed.data.serviceCallId);
     } else {
       serviceCall = await tx.serviceCall.create({ data });
@@ -1831,13 +2032,7 @@ export async function autosaveServiceCallRow(
       confirmationCode: parsed.data.confirmationCode ?? null
     };
 
-    const updateResult = await tx.serviceCall.updateMany({
-      where: { id: parsed.data.serviceCallId, operatingMonthId: parsed.data.operatingMonthId },
-      data
-    });
-    if (updateResult.count !== 1) {
-      throw new ServiceCallDomainError("콜 원장 행을 찾을 수 없습니다.", "SERVICE_CALL_NOT_FOUND");
-    }
+    await updateServiceCallAtVersion(tx, parsed.data, data);
 
     await Promise.all([
       writeAssignment(tx, {

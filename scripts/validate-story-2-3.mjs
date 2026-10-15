@@ -68,7 +68,8 @@ for (const required of [
   "bg-readonly",
   "[font-variant-numeric:tabular-nums]",
   "formatVnd",
-  "saveStatus === \"error\"",
+  // 티켓 15: 저장 실패나 충돌로 남은 초안이면 계산값 대신 대기 표시를 한다.
+  "isSaveHeld(saveStatus)",
   "calculationStatus",
   // i18n 전환: 계산/컬럼 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
   "calls.calc.errorPending",
