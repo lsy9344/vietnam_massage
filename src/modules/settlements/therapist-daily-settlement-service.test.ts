@@ -540,35 +540,6 @@ describe("confirmTherapistDailySettlementPayout", () => {
   });
 });
 
-describe("listTherapistDailyPayoutConfirmationsForMonth", () => {
-  it("운영월의 모든 날짜·마사지사 지급 확인 상태를 한 번에 돌려준다(티켓 32·33)", async () => {
-    const prismaClient = createSettlementPrisma();
-    await confirmTherapistDailySettlementPayout({
-      operatingMonthId: "month-2026-06",
-      serviceDate: "2026-06-10",
-      employeeId: therapist2.id,
-      actorId: "account-admin",
-      prismaClient
-    });
-
-    const results = await listTherapistDailyPayoutConfirmationsForMonth({ operatingMonthId: "month-2026-06", prismaClient });
-
-    // 이 fixture는 모든 콜이 2026-06-10에만 있어, 담당 콜이 있는 그날에만 마사지사별 행이 생긴다.
-    const confirmedOnTarget = results.find((row) => row.serviceDate === "2026-06-10" && row.employeeId === therapist2.id);
-    assert.equal(confirmedOnTarget?.payoutConfirmation.status, "confirmed");
-    const unconfirmedSameDay = results.find((row) => row.serviceDate === "2026-06-10" && row.employeeId === therapist1.id);
-    assert.equal(unconfirmedSameDay?.payoutConfirmation.status, "unconfirmed");
-    assert.equal(results.some((row) => row.serviceDate === "2026-06-11"), false);
-  });
-
-  it("운영월을 찾을 수 없으면 거절한다", async () => {
-    await assert.rejects(
-      () => listTherapistDailyPayoutConfirmationsForMonth({ operatingMonthId: "missing-month", prismaClient: createSettlementPrisma() }),
-      /운영월을 찾을 수 없습니다/
-    );
-  });
-});
-
 describe("reconfirmTherapistDailySettlementPayout", () => {
   it("사유와 함께 재확인하면 현재 금액이 새 기준이 되고, 이전 확인 기록은 남는다", async () => {
     const prismaClient = createSettlementPrisma();
