@@ -29,6 +29,7 @@ export const vi: Messages = {
   "shell.tab.rooms": "Phòng",
   "shell.tab.live": "Thời gian thực",
   "shell.tab.tv": "Màn hình TV",
+  "shell.tab.schedule": "Lịch làm việc",
   "shell.tab.therapist": "KTV",
   "shell.tab.earcare": "Chăm sóc tai",
   "shell.tab.opsDaily": "Vận hành ngày",
@@ -163,6 +164,11 @@ export const vi: Messages = {
   "operatingMonthStatus.검토중": "Đang xem xét",
   "operatingMonthStatus.마감확정": "Đã chốt",
   "operatingMonthStatus.잠금": "Đã khóa",
+
+  // 근무표 칸 상태
+  "scheduleStatus.근무 예정": "Dự kiến làm việc",
+  "scheduleStatus.휴무": "Nghỉ",
+  "scheduleStatus.미입력": "Chưa nhập",
 
   // /live /rooms /tv 화면
   // 첫화면(실시간 현황)
@@ -409,6 +415,11 @@ export const vi: Messages = {
   "customers.detail.memoOnly": "Đây là ghi chú khách trên cuộc gọi, chưa có hồ sơ khách. Chỉ hiện các cuộc gọi ghi đúng ghi chú này.",
   "customers.history.empty": "Chưa có lịch sử ghé.",
   "customers.create.action": "Đăng ký khách",
+  "customers.visitCounts.aria": "Số ca hoàn tất, không đến, đã hủy",
+  "customers.duplicatePhone.chip": "Trùng số liên lạc",
+  "customers.duplicatePhone.title": "Có nhiều khách hàng dùng cùng một số liên lạc.",
+  "customers.compare.column.latestVisit": "Ngày ghé gần nhất",
+  "customers.compare.column.completedVisits": "Số lần hoàn tất",
 
   // /settlements 화면
   // 공통 정산 탭/포맷
@@ -436,6 +447,34 @@ export const vi: Messages = {
   "settlements.earcare.panel.basis": "Căn cứ chia quỹ",
   "settlements.ops.panel.basis": "Căn cứ thưởng ngày",
   "settlements.opsMonthly.panel.basis": "Căn cứ thưởng tháng",
+
+  // /settlements/schedule 근무표(티켓 27)
+  "settlements.schedule.title": "Lịch làm việc",
+  "settlements.schedule.error.title": "Không tải được lịch làm việc",
+  "settlements.schedule.error.fallback": "Không tra cứu được lịch làm việc.",
+  "settlements.schedule.empty.title": "Không có nhân viên áp dụng lịch làm việc",
+  "settlements.schedule.empty.description": "Không có nhân viên đang hoạt động trong ba nhóm (vận hành, chăm sóc tai, KTV massage).",
+  "settlements.schedule.weekRangeAria": "Tuần đang xem",
+  "settlements.schedule.nav.previousWeek": "Tuần trước",
+  "settlements.schedule.nav.nextWeek": "Tuần sau",
+  "settlements.schedule.nav.today": "Hôm nay",
+  "settlements.schedule.summary.aria": "Tóm tắt lịch làm việc",
+  "settlements.schedule.summary.planned": "Dự kiến làm việc",
+  "settlements.schedule.summary.dayOff": "Nghỉ",
+  "settlements.schedule.summary.unset": "Chưa nhập",
+  "settlements.schedule.legend.aria": "Chú thích trạng thái lịch làm việc",
+  "settlements.schedule.table.title": "Lịch làm việc theo nhóm",
+  "settlements.schedule.column.employee": "Nhân viên",
+  "settlements.schedule.weekday.mon": "T2",
+  "settlements.schedule.weekday.tue": "T3",
+  "settlements.schedule.weekday.wed": "T4",
+  "settlements.schedule.weekday.thu": "T5",
+  "settlements.schedule.weekday.fri": "T6",
+  "settlements.schedule.weekday.sat": "T7",
+  "settlements.schedule.weekday.sun": "CN",
+  "settlements.schedule.panel.note": "Dự kiến làm việc không đảm bảo có mặt đến một giờ cụ thể. Giờ vào – ra thực tế được chỉnh trong bảng điều khiển nhân viên của từng màn hình thanh toán.",
+  "settlements.schedule.cell.statusLabel": "Trạng thái làm việc",
+  "settlements.schedule.cell.statusAria": "Trạng thái làm việc của {name} ngày {date}",
 
   // 마사지사 일일정산
   "settlements.payment.saveFailed": "Đã xảy ra lỗi khi lưu trạng thái đã thanh toán.",
