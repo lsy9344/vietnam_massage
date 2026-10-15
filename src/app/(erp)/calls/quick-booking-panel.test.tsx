@@ -374,6 +374,7 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
       nextReservationTime: null,
       freeMinutes: 60,
       priorServiceEndCheck: false,
+      plannedWorkingDayStatus: "미입력",
       courses: [{ courseId: "course-a", courseCode: "A", courseName: "A 60분", durationMinutes: 60, verdict: "possible", requiresSecondTherapist: false }]
     };
 
@@ -449,6 +450,7 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
         nextReservationTime: null,
         freeMinutes: 90,
         priorServiceEndCheck: false,
+        plannedWorkingDayStatus: "미입력",
         courses: [{ courseId: "course-d", courseCode: "D", courseName: "D 2:1 90", durationMinutes: 90, verdict: "possible", requiresSecondTherapist: true }]
       },
       {
@@ -463,6 +465,7 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
         nextReservationTime: null,
         freeMinutes: 90,
         priorServiceEndCheck: false,
+        plannedWorkingDayStatus: "근무 예정",
         courses: [{ courseId: "course-d", courseCode: "D", courseName: "D 2:1 90", durationMinutes: 90, verdict: "time_short", requiresSecondTherapist: true }]
       },
       {
@@ -477,6 +480,7 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
         nextReservationTime: null,
         freeMinutes: null,
         priorServiceEndCheck: false,
+        plannedWorkingDayStatus: "휴무",
         courses: [{ courseId: "course-d", courseCode: "D", courseName: "D 2:1 90", durationMinutes: 90, verdict: "rate_missing", requiresSecondTherapist: true }]
       }
     ];
@@ -512,6 +516,9 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
     assert.match(secondCandidateList, /마사지사2[\s\S]*?D 90분 · 시간 부족 · 경고 확인 후 배정/);
     assert.match(secondCandidateList, /마사지사3[\s\S]*?D 90분 · 이 코스 불가 · 경고 확인 후 배정/);
     assert.doesNotMatch(secondCandidateList, /마사지사2[\s\S]*?D 90분 가능/);
+    // 두 번째 Therapist 후보도 근무표(27)의 근무 예정을 함께 보여 준다(티켓 29). 휴무라도 후보에서 빠지지 않는다.
+    assert.match(secondCandidateList, /마사지사2[\s\S]*?근무 예정/);
+    assert.match(secondCandidateList, /마사지사3[\s\S]*?휴무/);
 
     const secondChosen = render(
       "ko",

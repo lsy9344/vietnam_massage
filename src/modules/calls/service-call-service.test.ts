@@ -348,6 +348,7 @@ function createMemoryPrisma() {
   const assignments = new Map<string, any>();
   const customers = new Map<string, any>();
   const therapistAttendances = new Map<string, any>();
+  const plannedWorkingDays = new Map<string, any>();
   const statusHistories: any[] = [];
   const auditEvents: any[] = [];
   // 실제 DB의 @updatedAt처럼 콜을 고칠 때마다 updatedAt이 앞으로 간다. 같은 값이 다시 나오면 오래된 저장을 가려낼 수 없다.
@@ -654,6 +655,16 @@ function createMemoryPrisma() {
         });
       }
     },
+    // 근무표(27)의 그날 근무 예정 조회(listPlannedWorkingDayStatusesForDate, 티켓 29가 listTherapistAvailability에서 재사용).
+    plannedWorkingDay: {
+      async findMany({ where }: any = {}) {
+        return [...plannedWorkingDays.values()].filter((record) => {
+          if (where?.employeeId?.in && !where.employeeId.in.includes(record.employeeId)) return false;
+          if (where?.workDate !== undefined && !sameDate(record.workDate, where.workDate)) return false;
+          return true;
+        });
+      }
+    },
     async $transaction(callback: (tx: any) => Promise<unknown>) {
       return callback(client);
     },
@@ -667,7 +678,8 @@ function createMemoryPrisma() {
     therapistCourseRates,
     employees,
     timeSlots,
-    therapistAttendances
+    therapistAttendances,
+    plannedWorkingDays
   };
 
   return client;
@@ -4092,6 +4104,83 @@ function addAvailabilityAttendance(
     isActive: input.isActive ?? true
   });
 }
+
+// 근무표(27)의 그날 근무 예정(listPlannedWorkingDayStatusesForDate가 읽는 모양)을 심는다. 출근 기록(therapistAttendance)과는
+// 별개의 테이블이라, 근무 예정·휴무와 실제 출근이 서로 다른 값으로 함께 나올 수 있다(티켓 29).
+function addPlannedWorkingDay(
+  prismaClient: ReturnType<typeof createMemoryPrisma>,
+  input: { employeeId: string; status: "근무 예정" | "휴무"; date?: string }
+) {
+  const date = input.date ?? availabilityDate;
+  prismaClient.plannedWorkingDays.set(`${input.employeeId}::${date}`, {
+    employeeId: input.employeeId,
+    workDate: dbDate(date),
+    planStatus: input.status
+  });
+}
+
+describe("therapist availability planned working day", () => {
+  it("reads 미입력 when the schedule has no row for that therapist and date", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const rows = await availabilityAt(prismaClient, "15:00");
+
+    assert.deepEqual(
+      rows.map((row) => ({ therapistId: row.therapistId, plannedWorkingDayStatus: row.plannedWorkingDayStatus })),
+      [
+        { therapistId: "therapist-1", plannedWorkingDayStatus: "미입력" },
+        { therapistId: "therapist-2", plannedWorkingDayStatus: "미입력" }
+      ]
+    );
+  });
+
+  it("reads each therapist's own 근무 예정/휴무 for that date, separate from attendance", async () => {
+    const prismaClient = createMemoryPrisma();
+    addPlannedWorkingDay(prismaClient, { employeeId: "therapist-1", status: "근무 예정" });
+    addPlannedWorkingDay(prismaClient, { employeeId: "therapist-2", status: "휴무" });
+    // 다른 날짜의 기록은 섞이지 않는다.
+    addPlannedWorkingDay(prismaClient, { employeeId: "therapist-1", status: "휴무", date: "2026-06-11" });
+
+    const rows = await availabilityAt(prismaClient, "15:00");
+
+    assert.deepEqual(
+      rows.map((row) => ({ therapistId: row.therapistId, plannedWorkingDayStatus: row.plannedWorkingDayStatus })),
+      [
+        { therapistId: "therapist-1", plannedWorkingDayStatus: "근무 예정" },
+        { therapistId: "therapist-2", plannedWorkingDayStatus: "휴무" }
+      ]
+    );
+  });
+
+  it("does not turn off a 휴무 therapist's course button or availability — the schedule is a read-only note", async () => {
+    const prismaClient = createMemoryPrisma();
+    addPlannedWorkingDay(prismaClient, { employeeId: "therapist-1", status: "휴무" });
+
+    const rows = await availabilityAt(prismaClient, "15:00");
+    const therapist1 = rows.find((row) => row.therapistId === "therapist-1");
+
+    assert.equal(therapist1?.plannedWorkingDayStatus, "휴무");
+    assert.equal(therapist1?.available, true);
+    assert.equal(courseVerdict(rows, "therapist-1", "course-a"), "possible");
+
+    // 휴무라도 예약 저장 자체가 막히지 않는다: 근무표를 읽기만 할 뿐, 저장 경로(createQuickBookingServiceCall)는
+    // 근무표를 전혀 조회하지 않으므로 그대로 저장된다.
+    const saved = await createQuickBookingServiceCall({
+      requestId: "request-schedule-day-off",
+      operatingMonthId: "month-2026-06",
+      serviceDate: availabilityDate,
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      customerMemo: "근무표 휴무 저장 확인",
+      therapist1Id: "therapist-1",
+      status: "예약",
+      actorId: "counter-account",
+      prismaClient
+    });
+    assert.equal(saved.row.status, "예약");
+  });
+});
 
 describe("therapist availability attendance and shift check", () => {
   it("tells before check-in, checked in, and checked out apart from the day's attendance, and keeps every row and course button", async () => {

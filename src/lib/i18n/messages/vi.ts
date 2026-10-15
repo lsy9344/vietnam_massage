@@ -298,6 +298,7 @@ export const vi: Messages = {
   "calls.availability.expand": "Mở",
   "calls.availability.collapse": "Thu gọn",
   "calls.availability.column.therapist": "Therapist",
+  "calls.availability.column.schedule": "Lịch làm việc",
   "calls.availability.column.attendance": "Có mặt",
   "calls.availability.column.thisTime": "Giờ này",
   "calls.availability.column.next": "Lịch tiếp theo",
@@ -319,6 +320,7 @@ export const vi: Messages = {
   "calls.availability.emptyNext": "Hãy kiểm tra Therapist đang hoạt động trong danh mục nhân viên.",
   "calls.availability.loading": "Đang tải",
   "calls.availability.loadError": "Không tải được gói có thể. Hãy chọn lại giờ.",
+  "calls.availability.scheduleNote": "Dự kiến làm việc trong lịch không đảm bảo có mặt đến giờ đó. Hãy xem cột Có mặt để biết tình trạng thực tế.",
 
   // 콜 그리드 본문/상태
   "calls.grid.title": "Lưới sổ cuộc gọi",

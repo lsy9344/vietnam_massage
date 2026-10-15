@@ -19,6 +19,7 @@ function row(overrides: Partial<TherapistAvailabilityRowDto> = {}): TherapistAva
     nextReservationTime: "16:00",
     freeMinutes: 60,
     priorServiceEndCheck: false,
+    plannedWorkingDayStatus: "미입력",
     courses: [
       { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "possible", requiresSecondTherapist: false },
       { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, verdict: "time_short", requiresSecondTherapist: false }
@@ -181,6 +182,32 @@ describe("therapist availability panel", () => {
     const vietnamese = renderView({ locale: "vi", open: true, rows: [row({ attendance: "checked_out", shiftCheck: true })] });
     assert.match(vietnamese, /Đã về \(hiện đã về\)/);
     assert.match(vietnamese, /Cần xác nhận ca làm/);
+  });
+
+  // 근무표(27)의 근무 예정은 출근(attendance)과 다른 칸에 보이고, 특정 시각까지 근무한다는 보장이 아니라는
+  // 안내가 함께 있다(스토리 12–13, 60, 104, V07, 티켓 29). 휴무라도 코스 버튼은 그대로다.
+  it("shows the planned schedule in its own column, separate from attendance, with a note that it is not a guarantee", () => {
+    const html = renderView({
+      open: true,
+      rows: [
+        row({ therapistId: "t-planned", therapistName: "예정", attendance: "checked_in", plannedWorkingDayStatus: "근무 예정" }),
+        row({ therapistId: "t-off", therapistName: "휴무자", attendance: "before_check_in", plannedWorkingDayStatus: "휴무" }),
+        row({ therapistId: "t-unset", therapistName: "미입력자", attendance: "before_check_in", plannedWorkingDayStatus: "미입력" })
+      ]
+    });
+    const rowOf = (therapistId: string) => html.split("<tr").find((part) => part.includes(`data-therapist-id="${therapistId}"`)) ?? "";
+    assert.match(html, /근무표/);
+    assert.match(rowOf("t-planned"), /근무 예정[\s\S]*출근/);
+    assert.match(rowOf("t-off"), /휴무[\s\S]*출근 전/);
+    assert.match(rowOf("t-unset"), /미입력[\s\S]*출근 전/);
+    // 휴무라도 가능 코스 버튼은 그대로 보인다(저장을 막지 않는다).
+    assert.match(rowOf("t-off"), /<button[^>]*>A 60분 가능<\/button>/);
+    assert.match(html, /근무표의 근무 예정은 그 시각까지 근무한다는 보장이 아닙니다\./);
+
+    const vietnamese = renderView({ locale: "vi", open: true, rows: [row({ plannedWorkingDayStatus: "휴무" })] });
+    assert.match(vietnamese, /Lịch làm việc/);
+    assert.match(vietnamese, /Nghỉ/);
+    assert.match(vietnamese, /Dự kiến làm việc trong lịch không đảm bảo có mặt đến giờ đó\./);
   });
 
   it("draws each course verdict from the service: possible as a button, short time, and no rate without a free time", () => {
