@@ -36,6 +36,7 @@ export type CallRowSaveEvent =
   | { type: "failed"; message: string | null; fieldErrors?: Record<string, string[]> }
   | { type: "stale"; row: ServiceCallRowDto; message: string | null }
   | { type: "reload"; row: ServiceCallRowDto }
+  | { type: "reapply"; row: ServiceCallRowDto; changes: Partial<CallRowDraft> }
   | { type: "cancel" };
 
 export function draftFromRow(row: ServiceCallRowDto): CallRowDraft {
@@ -141,6 +142,14 @@ export function callRowSaveReducer(state: CallRowSave, event: CallRowSaveEvent):
       // "최신 내용으로 다시 불러오기": 초안을 지금 저장된 행으로 바꾸고, 다음 저장은 그 행의 updatedAt으로 검사받는다.
       if (state.status !== "conflict") return state;
       return initialCallRowSave(event.row);
+    case "reapply": {
+      // 비교 화면의 "다시 반영하고 저장": 최신 행을 기준으로 고른 필드만 내 값으로 얹어 바로 다시 보낸다.
+      // 다시 버전 검사를 받으므로(expectedUpdatedAt은 이 최신 행의 updatedAt), 비교하는 동안 또 바뀌었으면
+      // 다시 충돌로 알려 준다. 강제 덮어쓰기는 없다 — changes에 없는 필드는 최신 값 그대로 저장된다.
+      if (state.status !== "conflict") return state;
+      const base = initialCallRowSave(event.row);
+      return send(base, { ...base.draft, ...event.changes });
+    }
     case "cancel": {
       // Escape: 보내고 있는 저장이 있으면 그 값으로, 없으면 마지막으로 저장된 값으로 되돌린다.
       // 충돌이면 초안을 남긴다. 마지막으로 저장된 값은 이미 옛 값이고, 최신 값은 다시 불러오기로 받는다.
