@@ -804,7 +804,7 @@ export const ko = {
   "closing.reopen.label": "재오픈 사유",
   "closing.reopen.placeholder": "재오픈 사유를 입력하세요.",
   "closing.reopen.adminOnly": "관리자만 재오픈할 수 있습니다.",
-  "closing.reopen.help": "재오픈은 잠금 상태에서만 가능하며 사유는 감사 로그에 기록된다.",
+  "closing.reopen.help": "재오픈은 마감확정과 잠금 상태에서 가능하며 사유는 감사 로그에 기록된다.",
 
   // /dashboard 화면
   // 공통 (대시보드 3개 화면 공유)

@@ -178,6 +178,11 @@ function isUniqueConstraintError(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "P2002";
 }
 
+// 재오픈은 마감확정과 잠금 두 상태 모두에서 할 수 있다(F07/V11). 둘 다 검토중으로 되돌아간다.
+function isReopenableOperatingMonthStatus(status: string): status is "마감확정" | "잠금" {
+  return status === "마감확정" || status === "잠금";
+}
+
 async function findLatestMonthlyClosing(client: MonthlyClosingPrismaClient, operatingMonthId: string) {
   return client.monthlyClosing.findFirst({
     where: { operatingMonthId },
@@ -542,7 +547,7 @@ export async function reopenMonthlyClose(input: ReopenMonthlyCloseInput): Promis
     if (!current) {
       throw new MonthlyClosingDomainError("운영월을 찾을 수 없습니다.", "OPERATING_MONTH_NOT_FOUND");
     }
-    if (current.status !== "잠금") {
+    if (!isReopenableOperatingMonthStatus(current.status)) {
       throw new MonthlyClosingDomainError("현재 상태에서는 재오픈할 수 없습니다.", "INVALID_MONTHLY_CLOSE_REOPEN_TRANSITION");
     }
 
@@ -551,8 +556,10 @@ export async function reopenMonthlyClose(input: ReopenMonthlyCloseInput): Promis
       throw new MonthlyClosingDomainError("확정 스냅샷을 찾을 수 없습니다.", "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND");
     }
 
+    // 마감확정과 잠금 둘 다에서 재오픈할 수 있으므로, 방금 읽은 상태 그대로 조건부 갱신해
+    // 그 사이 상태가 바뀌었으면 거절한다(낙관적 동시성).
     const updateResult = await tx.operatingMonth.updateMany({
-      where: { id: current.id, status: "잠금" },
+      where: { id: current.id, status: current.status },
       data: { status: "검토중" }
     });
     if (updateResult.count !== 1) {
