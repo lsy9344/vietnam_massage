@@ -5,6 +5,7 @@ import {
   calculationWarningCallsFromRows,
   createCustomer,
   createDailyExpense,
+  createServiceCallRow,
   deactivateDailyExpense,
   getDailyCallLedgerSummary,
   getServiceCallRow,
@@ -462,6 +463,10 @@ function createMemoryPrisma() {
     },
     serviceCall: {
       async create({ data }: any) {
+        // 요청 id는 비어 있을 수 있고, 값이 있으면 실제 DB의 유일 인덱스처럼 같은 값을 두 번 받지 않는다.
+        if (data.requestId != null && [...serviceCalls.values()].some((call) => call.requestId === data.requestId)) {
+          throw Object.assign(new Error("Unique constraint failed on the fields: (`request_id`)"), { code: "P2002", meta: { target: ["request_id"] } });
+        }
         const record = {
           id: `call-${serviceCalls.size + 1}`,
           ...data,
@@ -481,7 +486,8 @@ function createMemoryPrisma() {
           .map(withRelations);
       },
       async findUnique({ where }: any) {
-        const record = serviceCalls.get(where.id);
+        const record =
+          where.requestId === undefined ? serviceCalls.get(where.id) : [...serviceCalls.values()].find((call) => call.requestId === where.requestId);
         return record ? withRelations(record) : null;
       },
       async updateMany({ where, data }: any) {
@@ -4335,5 +4341,64 @@ describe("stale save rejection", () => {
       (error: unknown) => isStale(error) && error.currentRow.updatedAt === first.updatedAt
     );
     assert.equal(prismaClient.serviceCalls.get(read.id).customerMemo, "원장에서 저장");
+  });
+});
+
+describe("new row request id", () => {
+  /** 원장의 새 행 초안 하나. 화면은 초안마다 요청 id를 하나 만들고, 다시 보낼 때도 같은 id를 쓴다. */
+  function newRow(prismaClient: ReturnType<typeof createMemoryPrisma>, requestId: string, changes: Partial<Parameters<typeof createServiceCallRow>[0]> = {}) {
+    return createServiceCallRow({
+      requestId,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      customerMemo: "새 손님",
+      therapist1Id: "therapist-1",
+      status: "예약",
+      actorId: "counter-account",
+      prismaClient,
+      ...changes
+    });
+  }
+
+  function callsOnDate(prismaClient: ReturnType<typeof createMemoryPrisma>) {
+    return listServiceCallsForDate({ operatingMonthId: "month-2026-06", serviceDate: "2026-06-10", prismaClient });
+  }
+
+  it("returns the call already made from the same request id instead of making a second one, and audits only the first", async () => {
+    const prismaClient = createMemoryPrisma();
+    const customer = await createCustomer({ name: "민아", actorId: "counter-account", prismaClient });
+    const auditsBefore = prismaClient.auditEvents.length;
+
+    const first = await newRow(prismaClient, "request-1", { customerId: customer.id });
+    const auditsAfterFirst = prismaClient.auditEvents.length;
+    const again = await newRow(prismaClient, "request-1", { customerId: customer.id });
+
+    assert.equal(first.alreadySaved, false);
+    assert.equal(again.alreadySaved, true);
+    assert.deepEqual(again.row, first.row);
+    assert.deepEqual((await callsOnDate(prismaClient)).map((row) => row.id), [first.row.id]);
+    // 고객을 붙여 만든 콜은 생성 때 감사 기록이 하나 남는다. 다시 보낸 요청은 아무것도 쓰지 않는다.
+    assert.equal(auditsAfterFirst - auditsBefore, 1);
+    assert.equal(prismaClient.auditEvents.length, auditsAfterFirst);
+  });
+
+  it("gives both of two simultaneous creations with the same request id the one call made, with one creation audit", async () => {
+    const prismaClient = createMemoryPrisma();
+    const customer = await createCustomer({ name: "민아", actorId: "counter-account", prismaClient });
+    const auditsBefore = prismaClient.auditEvents.length;
+
+    // 둘 다 아직 콜이 없다고 읽은 뒤 만들러 간다. 늦은 쪽은 요청 id의 유일성 위반으로 실패하고, 먼저 만든 콜을 받는다.
+    const results = await Promise.all([
+      newRow(prismaClient, "request-1", { customerId: customer.id }),
+      newRow(prismaClient, "request-1", { customerId: customer.id })
+    ]);
+
+    assert.deepEqual(results.map((result) => result.alreadySaved).sort(), [false, true]);
+    assert.deepEqual(results[0].row, results[1].row);
+    assert.deepEqual((await callsOnDate(prismaClient)).map((row) => row.id), [results[0].row.id]);
+    assert.equal(prismaClient.auditEvents.length - auditsBefore, 1);
   });
 });

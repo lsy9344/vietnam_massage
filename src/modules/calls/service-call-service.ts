@@ -18,6 +18,7 @@ import {
   dailyExpenseUpdateSchema,
   savedVersionMessage,
   serviceCallAutosaveInputSchema,
+  serviceCallCreateInputSchema,
   serviceCallInputSchema,
   type CustomerInput,
   type CustomerUpdateInput,
@@ -26,6 +27,7 @@ import {
   type DailyExpenseUpdateInput,
   type ServiceCallAssignmentRole,
   type ServiceCallAutosaveInput,
+  type ServiceCallCreateInput,
   type ServiceCallInput
 } from "@/modules/calls/service-call-schema";
 
@@ -1791,105 +1793,163 @@ export async function saveBasicServiceCallRow(input: ServiceCallInput & { actorI
   if (parsed.data.serviceCallId && !parsed.data.expectedUpdatedAt) {
     throw new ServiceCallDomainError(savedVersionMessage, "INVALID_SERVICE_CALL_INPUT");
   }
-  assertRoomRequiredForStatus({ roomId: parsed.data.roomId, status: parsed.data.status });
 
   const client = getClient(input.prismaClient);
+  return runInTransaction(client, (tx) => writeServiceCallRow(tx, parsed.data, { actorId: input.actorId }));
+}
 
-  return runInTransaction(client, async (tx) => {
-    const { month, serviceDate } = await assertWritableDate(tx, {
-      operatingMonthId: parsed.data.operatingMonthId,
-      serviceDate: parsed.data.serviceDate
+export type ServiceCallCreateResult = {
+  row: ServiceCallRowDto;
+  /** 같은 요청 id로 이미 만든 콜을 돌려줬다. 이번 요청은 아무것도 쓰지 않았다. */
+  alreadySaved: boolean;
+};
+
+/**
+ * 원장 새 행을 만든다(스펙 B07). 같은 요청 id로 이미 만든 콜이 있으면 새로 만들지 않고 그 콜을 돌려준다.
+ * 같은 요청 id의 생성이 동시에 들어와 유일성 위반으로 실패한 쪽도 먼저 만든 콜을 같은 응답으로 받는다.
+ * 그래서 응답을 받지 못한 화면이 다시 보내도 콜과 생성 감사 기록은 하나다.
+ */
+export async function createServiceCallRow(
+  input: ServiceCallCreateInput & { actorId?: string; prismaClient?: ServiceCallPrismaClient }
+): Promise<ServiceCallCreateResult> {
+  const parsed = serviceCallCreateInputSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "콜 원장 입력값이 올바르지 않습니다.", "INVALID_SERVICE_CALL_INPUT");
+  }
+  const { requestId, ...row } = parsed.data;
+  const client = getClient(input.prismaClient);
+
+  try {
+    return await runInTransaction(client, async (tx) => {
+      // 이미 만든 콜을 돌려주는 것은 쓰기가 아니다. 그 사이 운영월이 잠겼어도 같은 답을 준다.
+      const existing = await findServiceCallRowByRequestId(tx, requestId);
+      if (existing) {
+        return { row: existing, alreadySaved: true };
+      }
+      return { row: await writeServiceCallRow(tx, row, { actorId: input.actorId, requestId }), alreadySaved: false };
     });
-
-    const [, , coursePolicy] = await Promise.all([
-      assertActiveTimeSlot(tx, parsed.data.startTime),
-      assertActiveRoom(tx, parsed.data.roomId),
-      assertActiveCourse(tx, { courseId: parsed.data.courseId, monthKey: month.monthKey }),
-      assertActiveCode(tx, { codeType: "SERVICE_STATUS", code: parsed.data.status, required: true }),
-      assertActiveCode(tx, { codeType: "DISCOUNT_TYPE", code: parsed.data.discountTypeCode }),
-      assertActiveCode(tx, { codeType: "PAYMENT_METHOD", code: parsed.data.paymentMethodCode }),
-      assertActiveCode(tx, { codeType: "CONFIRMATION", code: parsed.data.confirmationCode }),
-      assertActiveEmployee(tx, { role: "THERAPIST_1", employeeId: parsed.data.therapist1Id }),
-      assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: parsed.data.therapist2Id }),
-      assertActiveEmployee(tx, { role: "EARCARE", employeeId: parsed.data.earcareEmployeeId })
-    ]);
-    assertSecondTherapistRequirement({ policy: coursePolicy, therapist2Id: parsed.data.therapist2Id });
-
-    const beforeRecord = parsed.data.serviceCallId
-      ? await tx.serviceCall.findUnique({ where: { id: parsed.data.serviceCallId } })
-      : null;
-    const beforeLinked = beforeRecord ? await findServiceCallWithRelations(tx, beforeRecord.id) : null;
-    const customerId = await resolveLinkedCustomerId(tx, parsed.data.customerId, beforeLinked?.customerId);
-    const linkChanged = linkedCustomerId(beforeLinked ?? {}) !== customerId;
-    // A link change is a sensitive call edit. Reject it before the write when no actor can be audited.
-    const actorId = linkChanged ? requireActor(input.actorId) : input.actorId?.trim() || "";
-    const data = {
-      operatingMonthId: parsed.data.operatingMonthId,
-      serviceDate,
-      startTime: parsed.data.startTime,
-      actualEntryTime: actualEntryForWrite(parsed.data.actualEntryTime, beforeLinked?.actualEntryTime),
-      roomId: parsed.data.roomId ?? null,
-      courseId: parsed.data.courseId,
-      customerId,
-      customerMemo: parsed.data.customerMemo ?? null,
-      status: parsed.data.status,
-      discountTypeCode: parsed.data.discountTypeCode ?? null,
-      paymentMethodCode: parsed.data.paymentMethodCode ?? null,
-      note: parsed.data.note ?? null,
-      confirmationCode: parsed.data.confirmationCode ?? null
-    };
-
-    let serviceCall: ServiceCallRecord;
-    if (parsed.data.serviceCallId && parsed.data.expectedUpdatedAt) {
-      await updateServiceCallAtVersion(
-        tx,
-        {
-          serviceCallId: parsed.data.serviceCallId,
-          operatingMonthId: parsed.data.operatingMonthId,
-          expectedUpdatedAt: parsed.data.expectedUpdatedAt
-        },
-        data
-      );
-      serviceCall = await findServiceCallWithRelations(tx, parsed.data.serviceCallId);
-    } else {
-      serviceCall = await tx.serviceCall.create({ data });
+  } catch (error) {
+    // 같은 요청 id의 생성이 동시에 들어와 이쪽이 유일성 위반으로 실패했다. 먼저 만든 콜을 같은 응답으로 돌려준다.
+    const existing = isUniqueConstraintError(error) ? await findServiceCallRowByRequestId(client, requestId) : null;
+    if (!existing) {
+      throw error;
     }
+    return { row: existing, alreadySaved: true };
+  }
+}
 
-    await Promise.all([
-      writeAssignment(tx, {
-        serviceCallId: serviceCall.id,
-        assignmentRole: "THERAPIST_1",
-        employeeId: parsed.data.therapist1Id
-      }),
-      writeAssignment(tx, {
-        serviceCallId: serviceCall.id,
-        assignmentRole: "THERAPIST_2",
-        employeeId: parsed.data.therapist2Id
-      }),
-      writeAssignment(tx, {
-        serviceCallId: serviceCall.id,
-        assignmentRole: "EARCARE",
-        employeeId: parsed.data.earcareEmployeeId
-      })
-    ]);
+async function findServiceCallRowByRequestId(client: ServiceCallPrismaClient, requestId: string) {
+  const record = await client.serviceCall.findUnique({ where: { requestId } });
+  return record ? toRowDto(client, await findServiceCallWithRelations(client, record.id)) : null;
+}
 
-    const after = await findServiceCallWithRelations(tx, serviceCall.id);
-    if (linkChanged) {
-      await recordAuditEvent(
-        {
-          actorId,
-          action: "service_call.row_changed",
-          targetType: "service_call",
-          targetId: after.id,
-          beforeValue: beforeLinked ? toAuditSnapshot(beforeLinked) : null,
-          afterValue: toAuditSnapshot(after)
-        },
-        { prismaClient: tx as any }
-      );
-    }
+function isUniqueConstraintError(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "P2002";
+}
 
-    return toRowDto(tx, after);
+/**
+ * 콜 한 줄을 검사하고 쓴다. serviceCallId가 있으면 화면이 읽은 버전일 때만 고치고, 없으면 새로 만든다.
+ * 새로 만들 때 요청 id가 있으면 함께 적는다.
+ */
+async function writeServiceCallRow(
+  tx: ServiceCallPrismaClient,
+  input: ServiceCallInput,
+  options: { actorId?: string; requestId?: string }
+) {
+  assertRoomRequiredForStatus({ roomId: input.roomId, status: input.status });
+  const { month, serviceDate } = await assertWritableDate(tx, {
+    operatingMonthId: input.operatingMonthId,
+    serviceDate: input.serviceDate
   });
+
+  const [, , coursePolicy] = await Promise.all([
+    assertActiveTimeSlot(tx, input.startTime),
+    assertActiveRoom(tx, input.roomId),
+    assertActiveCourse(tx, { courseId: input.courseId, monthKey: month.monthKey }),
+    assertActiveCode(tx, { codeType: "SERVICE_STATUS", code: input.status, required: true }),
+    assertActiveCode(tx, { codeType: "DISCOUNT_TYPE", code: input.discountTypeCode }),
+    assertActiveCode(tx, { codeType: "PAYMENT_METHOD", code: input.paymentMethodCode }),
+    assertActiveCode(tx, { codeType: "CONFIRMATION", code: input.confirmationCode }),
+    assertActiveEmployee(tx, { role: "THERAPIST_1", employeeId: input.therapist1Id }),
+    assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: input.therapist2Id }),
+    assertActiveEmployee(tx, { role: "EARCARE", employeeId: input.earcareEmployeeId })
+  ]);
+  assertSecondTherapistRequirement({ policy: coursePolicy, therapist2Id: input.therapist2Id });
+
+  const beforeRecord = input.serviceCallId
+    ? await tx.serviceCall.findUnique({ where: { id: input.serviceCallId } })
+    : null;
+  const beforeLinked = beforeRecord ? await findServiceCallWithRelations(tx, beforeRecord.id) : null;
+  const customerId = await resolveLinkedCustomerId(tx, input.customerId, beforeLinked?.customerId);
+  const linkChanged = linkedCustomerId(beforeLinked ?? {}) !== customerId;
+  // A link change is a sensitive call edit. Reject it before the write when no actor can be audited.
+  const actorId = linkChanged ? requireActor(options.actorId) : options.actorId?.trim() || "";
+  const data = {
+    operatingMonthId: input.operatingMonthId,
+    serviceDate,
+    startTime: input.startTime,
+    actualEntryTime: actualEntryForWrite(input.actualEntryTime, beforeLinked?.actualEntryTime),
+    roomId: input.roomId ?? null,
+    courseId: input.courseId,
+    customerId,
+    customerMemo: input.customerMemo ?? null,
+    status: input.status,
+    discountTypeCode: input.discountTypeCode ?? null,
+    paymentMethodCode: input.paymentMethodCode ?? null,
+    note: input.note ?? null,
+    confirmationCode: input.confirmationCode ?? null
+  };
+
+  let serviceCall: ServiceCallRecord;
+  if (input.serviceCallId && input.expectedUpdatedAt) {
+    await updateServiceCallAtVersion(
+      tx,
+      {
+        serviceCallId: input.serviceCallId,
+        operatingMonthId: input.operatingMonthId,
+        expectedUpdatedAt: input.expectedUpdatedAt
+      },
+      data
+    );
+    serviceCall = await findServiceCallWithRelations(tx, input.serviceCallId);
+  } else {
+    serviceCall = await tx.serviceCall.create({ data: { ...data, requestId: options.requestId ?? null } });
+  }
+
+  await Promise.all([
+    writeAssignment(tx, {
+      serviceCallId: serviceCall.id,
+      assignmentRole: "THERAPIST_1",
+      employeeId: input.therapist1Id
+    }),
+    writeAssignment(tx, {
+      serviceCallId: serviceCall.id,
+      assignmentRole: "THERAPIST_2",
+      employeeId: input.therapist2Id
+    }),
+    writeAssignment(tx, {
+      serviceCallId: serviceCall.id,
+      assignmentRole: "EARCARE",
+      employeeId: input.earcareEmployeeId
+    })
+  ]);
+
+  const after = await findServiceCallWithRelations(tx, serviceCall.id);
+  if (linkChanged) {
+    await recordAuditEvent(
+      {
+        actorId,
+        action: "service_call.row_changed",
+        targetType: "service_call",
+        targetId: after.id,
+        beforeValue: beforeLinked ? toAuditSnapshot(beforeLinked) : null,
+        afterValue: toAuditSnapshot(after)
+      },
+      { prismaClient: tx as any }
+    );
+  }
+
+  return toRowDto(tx, after);
 }
 
 export async function autosaveServiceCallRow(

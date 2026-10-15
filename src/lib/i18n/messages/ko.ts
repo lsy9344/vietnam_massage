@@ -304,6 +304,8 @@ export const ko = {
   "calls.save.retry": "재시도",
   "calls.save.reloadLatest": "최신 내용으로 다시 불러오기",
   "calls.save.autosaveFailed": "콜 행 자동저장에 실패했습니다.",
+  "calls.save.alreadySaved": "이미 저장된 콜입니다.",
+  "calls.save.checkingHint": "응답을 받지 못했습니다. 재시도해도 같은 요청으로 보내므로 콜이 두 번 생기지 않습니다.",
 
   // 콜 계산 상태
   "calls.calc.errorPending": "저장 보류 계산 대기",

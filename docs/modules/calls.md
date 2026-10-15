@@ -61,6 +61,7 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 - Status transitions write `service_call.status_changed`; sensitive row changes such as payment method, discount type, assignments, and confirmation write `service_call.row_changed`.
 - Failed autosave keeps the draft on screen and exposes inline retry using the same draft payload.
 - Locked operating months and users without `call:write` are blocked by the Server Action/domain boundary and shown safe Korean errors.
+- New rows carry a per-draft `requestId` (Ticket 16). A repeat with the same request id returns the call already made with "이미 저장된 콜입니다." instead of a second call. When the new-row response is lost, the row shows `저장 여부 확인 중`, keeps its input, and retries with the same request id.
 
 ## Story 2.3 Completed-Call Calculation Contract
 
