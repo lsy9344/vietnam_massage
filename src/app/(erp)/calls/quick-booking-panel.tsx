@@ -55,7 +55,8 @@ function focusCreatedRow(serviceCallId: string, attemptsLeft = 20) {
   const row = firstVisible<HTMLElement>(`[data-service-call-id="${CSS.escape(serviceCallId)}"]`);
   if (row) {
     row.scrollIntoView({ block: "center" });
-    (row.querySelector<HTMLElement>("input, select, button, a, [tabindex]") ?? row).focus();
+    // date 칸의 serviceCallId 숨은 입력(EditableCallRow)은 포커스를 받을 수 없어 건너뛴다.
+    (row.querySelector<HTMLElement>('input:not([type="hidden"]), select, button, a, [tabindex]') ?? row).focus();
     return;
   }
   if (attemptsLeft <= 0) return;
