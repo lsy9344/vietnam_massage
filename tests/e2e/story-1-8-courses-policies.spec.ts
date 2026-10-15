@@ -180,8 +180,8 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
 
     await gotoStable(page, "/audit?targetType=course_policy");
     // 티켓 08: 변경 전·후 전체 값은 기록을 골라 여는 변경 상세 패널에 있다.
-    const panel = await openAuditEntry(page, { action: /course\.policy_changed/, contains: newTvLabel });
-    await expect(auditAfterValue(panel, "courseId")).toHaveText(beforeCourseA.id);
+    const auditPanel = await openAuditEntry(page, { action: /course\.policy_changed/, contains: newTvLabel });
+    await expect(auditAfterValue(auditPanel, "courseId")).toHaveText(beforeCourseA.id);
   });
 
   test("administrator는 정책 입력 오류를 한국어 메시지로 확인하고 기존 정책을 보존한다", async ({ page }) => {

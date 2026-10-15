@@ -123,11 +123,27 @@ describe("auditSourcePath", () => {
     assert.equal(auditSourcePath(entry("customer", { name: "Lan" }, null, "c-9")), "/customers?visitCustomer=c-9");
   });
 
-  it("opens attendance on the settlement screen of its group and day", () => {
-    const attendance = { operatingMonthId: "m-2026-10", attendanceDate: "2026-10-12" };
-    assert.equal(auditSourcePath(entry("therapist_attendance", attendance)), "/settlements?operatingMonthId=m-2026-10&serviceDate=2026-10-12");
-    assert.equal(auditSourcePath(entry("earcare_attendance", attendance)), "/settlements/earcare?operatingMonthId=m-2026-10&attendanceDate=2026-10-12");
-    assert.equal(auditSourcePath(entry("ops_attendance", attendance)), "/settlements/operations?operatingMonthId=m-2026-10&attendanceDate=2026-10-12");
+  it("opens attendance on the settlement screen of its group and day, with that employee's panel", () => {
+    const attendance = { operatingMonthId: "m-2026-10", attendanceDate: "2026-10-12", employeeId: "e-7" };
+    assert.equal(
+      auditSourcePath(entry("therapist_attendance", attendance)),
+      "/settlements?operatingMonthId=m-2026-10&serviceDate=2026-10-12&employee=e-7"
+    );
+    assert.equal(
+      auditSourcePath(entry("earcare_attendance", attendance)),
+      "/settlements/earcare?operatingMonthId=m-2026-10&attendanceDate=2026-10-12&employee=e-7"
+    );
+    assert.equal(
+      auditSourcePath(entry("ops_attendance", attendance)),
+      "/settlements/operations?operatingMonthId=m-2026-10&attendanceDate=2026-10-12&employee=e-7"
+    );
+  });
+
+  it("opens attendance on its day without a panel when the snapshot has no employee", () => {
+    assert.equal(
+      auditSourcePath(entry("therapist_attendance", { operatingMonthId: "m-2026-10", attendanceDate: "2026-10-12" })),
+      "/settlements?operatingMonthId=m-2026-10&serviceDate=2026-10-12"
+    );
   });
 
   it("reads the before-value when the after-value is missing", () => {
@@ -138,16 +154,27 @@ describe("auditSourcePath", () => {
     assert.equal(auditSourcePath(entry("monthly_close", { operatingMonthId: "m-2026-09", status: "잠금" })), "/closing?operatingMonthId=m-2026-09");
   });
 
-  it("opens master data on its settings tab", () => {
-    assert.equal(auditSourcePath(entry("operating_month", {})), "/masters/operating-months");
-    assert.equal(auditSourcePath(entry("room", {})), "/masters/rooms");
-    assert.equal(auditSourcePath(entry("code_item", {})), "/masters/codes");
-    assert.equal(auditSourcePath(entry("time_slot", {})), "/masters/codes");
-    assert.equal(auditSourcePath(entry("employee", {})), "/masters/employees");
-    assert.equal(auditSourcePath(entry("user_account", {})), "/masters/employees");
-    for (const targetType of ["course", "course_policy", "therapist_course_rate", "ops_daily_incentive_rule", "ops_monthly_incentive_rule"]) {
-      assert.equal(auditSourcePath(entry(targetType, {})), "/masters/courses");
-    }
+  it("opens master data on its settings tab with that item's panel", () => {
+    assert.equal(auditSourcePath(entry("operating_month", {})), "/masters/operating-months?item=t-1");
+    assert.equal(auditSourcePath(entry("room", {})), "/masters/rooms?item=t-1");
+    assert.equal(auditSourcePath(entry("code_item", {})), "/masters/codes?item=t-1");
+    assert.equal(auditSourcePath(entry("time_slot", {})), "/masters/codes?item=t-1");
+    assert.equal(auditSourcePath(entry("employee", {})), "/masters/employees?item=t-1");
+    assert.equal(auditSourcePath(entry("user_account", { employeeId: "e-3" })), "/masters/employees?item=e-3");
+    assert.equal(auditSourcePath(entry("course", {})), "/masters/courses?item=course%3At-1");
+    assert.equal(auditSourcePath(entry("course_policy", { courseId: "c-2" })), "/masters/courses?item=course%3Ac-2");
+    assert.equal(
+      auditSourcePath(entry("therapist_course_rate", { therapistId: "e-4", courseId: "c-2" })),
+      "/masters/courses?item=rate%3Ae-4%3Ac-2"
+    );
+    assert.equal(auditSourcePath(entry("ops_daily_incentive_rule", {})), "/masters/courses?item=daily%3At-1");
+    assert.equal(auditSourcePath(entry("ops_monthly_incentive_rule", {})), "/masters/courses?item=monthly%3At-1");
+  });
+
+  it("opens the tab alone when the snapshot cannot name the item", () => {
+    assert.equal(auditSourcePath(entry("user_account", { employeeId: null })), "/masters/employees");
+    assert.equal(auditSourcePath(entry("course_policy", {})), "/masters/courses");
+    assert.equal(auditSourcePath(entry("therapist_course_rate", { courseId: "c-2" })), "/masters/courses");
   });
 
   it("falls back to the bare screen when the snapshot has no day", () => {

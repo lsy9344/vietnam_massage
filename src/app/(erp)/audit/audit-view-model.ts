@@ -1,3 +1,6 @@
+import { courseItemKey } from "@/app/(erp)/masters/courses/course-item";
+import { MASTER_ITEM_PARAM } from "@/app/(erp)/masters/master-view-model";
+import { EMPLOYEE_PARAM } from "@/app/(erp)/settlements/settlement-view-model";
 import type { Role } from "@/lib/authorization";
 import { t, type MessageKey } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
@@ -99,31 +102,47 @@ function snapshotText(entry: AuditEntry, field: string) {
   return null;
 }
 
-function withQuery(path: string, params: Array<[string, string | null]>) {
-  if (params.some(([, value]) => value === null)) return path;
-  return `${path}?${new URLSearchParams(params as Array<[string, string]>).toString()}`;
+/** 필수 값이 하나라도 없으면 화면만 연다. 선택 값은 있을 때만 붙인다. */
+function withQuery(path: string, required: Array<[string, string | null]>, optional: Array<[string, string | null]> = []) {
+  if (required.some(([, value]) => value === null)) return path;
+  const params = [...required, ...optional].filter((param): param is [string, string] => param[1] !== null);
+  return params.length > 0 ? `${path}?${new URLSearchParams(params).toString()}` : path;
 }
 
-const masterPaths: Record<string, string> = {
-  operating_month: "/masters/operating-months",
-  room: "/masters/rooms",
-  code_item: "/masters/codes",
-  time_slot: "/masters/codes",
-  employee: "/masters/employees",
-  user_account: "/masters/employees",
-  course: "/masters/courses",
-  course_policy: "/masters/courses",
-  therapist_course_rate: "/masters/courses",
-  ops_daily_incentive_rule: "/masters/courses",
-  ops_monthly_incentive_rule: "/masters/courses"
+function courseItem(courseId: string | null) {
+  return courseId ? courseItemKey({ kind: "course", courseId }) : null;
+}
+
+/** 기준정보 대상의 화면과, 그 화면 패널을 여는 item 값(티켓 07). item을 알 수 없으면 null이다. */
+const masterSources: Record<string, { path: string; item: (entry: AuditEntry) => string | null }> = {
+  operating_month: { path: "/masters/operating-months", item: (entry) => entry.targetId },
+  room: { path: "/masters/rooms", item: (entry) => entry.targetId },
+  code_item: { path: "/masters/codes", item: (entry) => entry.targetId },
+  time_slot: { path: "/masters/codes", item: (entry) => entry.targetId },
+  employee: { path: "/masters/employees", item: (entry) => entry.targetId },
+  // 계정은 연결된 직원의 패널에서 다룬다.
+  user_account: { path: "/masters/employees", item: (entry) => snapshotText(entry, "employeeId") },
+  course: { path: "/masters/courses", item: (entry) => courseItem(entry.targetId) },
+  course_policy: { path: "/masters/courses", item: (entry) => courseItem(snapshotText(entry, "courseId")) },
+  therapist_course_rate: {
+    path: "/masters/courses",
+    item: (entry) => {
+      const therapistId = snapshotText(entry, "therapistId");
+      const courseId = snapshotText(entry, "courseId");
+      return therapistId && courseId ? courseItemKey({ kind: "rate", therapistId, courseId }) : null;
+    }
+  },
+  ops_daily_incentive_rule: { path: "/masters/courses", item: (entry) => courseItemKey({ kind: "daily", ruleId: entry.targetId }) },
+  ops_monthly_incentive_rule: { path: "/masters/courses", item: (entry) => courseItemKey({ kind: "monthly", ruleId: entry.targetId }) }
 };
 
 /**
- * 기록이 가리키는 원본 화면. 날짜가 있는 기록은 그 운영월·날짜로 연다.
- * 스냅샷에 날짜가 없으면 화면만 열고, 원본 화면이 없는 대상이면 null이다.
+ * 기록이 가리키는 원본 화면. 날짜가 있는 기록은 그 운영월·날짜로, 출근 기록은 그 직원 패널(티켓 05)까지,
+ * 기준정보는 그 항목 패널까지 연다. 스냅샷에 날짜나 항목이 없으면 화면만 열고, 원본 화면이 없는 대상이면 null이다.
  */
 export function auditSourcePath(entry: AuditEntry): string | null {
   const month = snapshotText(entry, "operatingMonthId");
+  const employee: [string, string | null] = [EMPLOYEE_PARAM, snapshotText(entry, "employeeId")];
   switch (entry.targetType) {
     case "service_call":
       return withQuery("/calls", [["operatingMonthId", month], ["serviceDate", snapshotText(entry, "serviceDate")]]);
@@ -132,15 +151,17 @@ export function auditSourcePath(entry: AuditEntry): string | null {
     case "customer":
       return withQuery("/customers", [["visitCustomer", entry.targetId]]);
     case "therapist_attendance":
-      return withQuery("/settlements", [["operatingMonthId", month], ["serviceDate", snapshotText(entry, "attendanceDate")]]);
+      return withQuery("/settlements", [["operatingMonthId", month], ["serviceDate", snapshotText(entry, "attendanceDate")]], [employee]);
     case "earcare_attendance":
-      return withQuery("/settlements/earcare", [["operatingMonthId", month], ["attendanceDate", snapshotText(entry, "attendanceDate")]]);
+      return withQuery("/settlements/earcare", [["operatingMonthId", month], ["attendanceDate", snapshotText(entry, "attendanceDate")]], [employee]);
     case "ops_attendance":
-      return withQuery("/settlements/operations", [["operatingMonthId", month], ["attendanceDate", snapshotText(entry, "attendanceDate")]]);
+      return withQuery("/settlements/operations", [["operatingMonthId", month], ["attendanceDate", snapshotText(entry, "attendanceDate")]], [employee]);
     case "monthly_close":
       return withQuery("/closing", [["operatingMonthId", month]]);
-    default:
-      return masterPaths[entry.targetType] ?? null;
+    default: {
+      const source = masterSources[entry.targetType];
+      return source ? withQuery(source.path, [[MASTER_ITEM_PARAM, source.item(entry)]]) : null;
+    }
   }
 }
 
