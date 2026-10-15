@@ -15,25 +15,7 @@ import {
   type ServiceCallCustomerLinkCorrectionActionState
 } from "@/app/(erp)/calls/actions";
 import { CUSTOMER_SEARCH_DEBOUNCE_MS, customerScreenHref } from "@/app/(erp)/customers/customer-search";
-
-/** editable-call-grid.tsx·call-ledger-workspace.tsx의 휴대폰 경계(min-[600px], 티켓 26)와 같은 값. */
-const PHONE_WIDTH_QUERY = "(min-width: 600px)";
-
-/**
- * 휴대폰 폭(600px 미만)인지 실시간으로 안다. CSS(`min-[600px]:hidden`)만으로는 안 된다 — 이 컴포넌트가
- * 그리는 입력 칸은 숨겨도 DOM에 남아, "읽기 전용"을 입력 칸 개수로 보는 검사(티켓 26 E2E)에 걸린다.
- */
-function usePhoneWidth() {
-  const [isPhone, setIsPhone] = useState(() => typeof window !== "undefined" && !window.matchMedia(PHONE_WIDTH_QUERY).matches);
-  useEffect(() => {
-    const query = window.matchMedia(PHONE_WIDTH_QUERY);
-    const update = () => setIsPhone(!query.matches);
-    update();
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
-  return isPhone;
-}
+import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
 
 /**
  * 콜 상세 패널의 고객 연결 정정(F06, ADR 0003, 스토리 81-83). 원장 행 저장과는 별개의 전용 작업이라

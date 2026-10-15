@@ -20,11 +20,14 @@ const cardClassName =
  * 누르면 그 콜의 상세 패널(이미 읽기 전용, 티켓 13)이 열린다.
  */
 export function CallPhoneCardList({
+  isPhoneWidth,
   onOpenDetail,
   options,
   rows,
   selectedCallId = null
 }: {
+  /** editable-call-grid.tsx가 usePhoneWidth()로 재는 실제 폭(티켓 26 회귀, story-2-1). */
+  isPhoneWidth: boolean;
   onOpenDetail: (callId: string) => void;
   options: ServiceCallFormOptions;
   rows: ServiceCallRowDto[];
@@ -33,6 +36,12 @@ export function CallPhoneCardList({
   const t = useT();
 
   if (rows.length === 0) {
+    // 태블릿 이상 폭에서는 editable-call-grid.tsx의 표 쪽이 이미 같은 빈 상태 문구를 보여 준다. 이 블록은
+    // CSS(min-[600px]:hidden)로만 숨겨지고 DOM에는 남으므로, 그리지 않고 아예 빼서 "이 날짜의 콜이
+    // 없습니다"를 찾는 검사가 두 군데에 걸리지 않게 한다.
+    if (!isPhoneWidth) {
+      return null;
+    }
     return (
       <div className="grid gap-3 px-4 py-8">
         <p className="text-sm font-medium text-foreground">{t("calls.grid.empty.title")}</p>

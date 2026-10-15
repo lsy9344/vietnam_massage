@@ -41,6 +41,7 @@ import {
 import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
 import { CallRowSaveStatus, NewCallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
 import { CallPhoneCardList } from "@/app/(erp)/calls/call-phone-card-list";
+import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
 import { ledgerCallAnchorId, type LedgerView } from "@/app/(erp)/calls/ledger-address";
 import { CallWarningCell } from "@/app/(erp)/calls/call-warning-cell";
 import { spokenClock } from "@/app/(erp)/calls/call-warning-label";
@@ -1739,6 +1740,8 @@ export function EditableCallGrid({
   view?: LedgerView;
 }) {
   const t = useT();
+  // 콜이 없을 때 빈 상태 문구를 표·카드 양쪽에 두지 않으려면 실제 폭을 알아야 한다(회귀, story-2-1).
+  const isPhoneWidth = usePhoneWidth();
   // TanStack column defs back the row model only; visible header text is rendered
   // by <CallGridHead> from the localized CALL_GRID_COLUMNS catalog, so these
   // `header` values are never shown — accessorKey stays the stable field name.
@@ -1783,18 +1786,23 @@ export function EditableCallGrid({
 
       {/* 휴대폰 폭(600px 미만): 넓은 표를 축소하지 않고 짧은 카드 목록을 대신 보여 준다(명세 F08, 티켓 26). */}
       <div className="min-[600px]:hidden">
-        <CallPhoneCardList onOpenDetail={onOpenDetail} options={options} rows={rows} selectedCallId={selectedCallId} />
+        <CallPhoneCardList isPhoneWidth={isPhoneWidth} onOpenDetail={onOpenDetail} options={options} rows={rows} selectedCallId={selectedCallId} />
       </div>
 
       {/* 태블릿 폭 이상: 넓은 표와 새 행 직접 입력(표 편집). 휴대폰에서는 이 블록 전체가 카드 목록으로 대체된다. */}
       <div className="hidden min-[600px]:block">
         {rows.length === 0 ? (
-          <div className="grid gap-3 px-4 py-8">
-            <div>
-              <p className="text-sm font-medium text-foreground">{t("calls.grid.empty.title")}</p>
-              <p className="mt-1 text-xs text-muted">{t("calls.grid.empty.description")}</p>
+          // 휴대폰 폭에서는 위 CallPhoneCardList가 같은 빈 상태 문구를 이미 그린다. 이 블록은
+          // CSS(hidden min-[600px]:block)로만 숨겨지고 DOM에는 남으므로, 휴대폰 폭에서는 그리지 않아
+          // "이 날짜의 콜이 없습니다"가 두 군데에 남지 않게 한다(회귀, story-2-1).
+          isPhoneWidth ? null : (
+            <div className="grid gap-3 px-4 py-8">
+              <div>
+                <p className="text-sm font-medium text-foreground">{t("calls.grid.empty.title")}</p>
+                <p className="mt-1 text-xs text-muted">{t("calls.grid.empty.description")}</p>
+              </div>
             </div>
-          </div>
+          )
         ) : (
           <div className="relative overflow-x-auto">
             <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(view, showSettlementColumns) }}>
