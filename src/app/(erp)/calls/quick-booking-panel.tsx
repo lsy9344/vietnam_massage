@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DetailRow } from "@/components/ui/detail-row";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import { ModalPanel } from "@/components/ui/panel";
+import { ScreenState } from "@/components/ui/screen-state";
 import { CustomerCandidateCompare } from "@/components/domain/customer-candidate-compare";
 import { CustomerVisitCounts } from "@/components/domain/customer-visit-counts";
 import {
@@ -203,8 +204,11 @@ type CustomerStepProps = StepProps & {
   onQueryChange: (value: string) => void;
   onSelectCandidate: (candidate: CustomerVisitCandidateDto) => void;
   query: string;
-  /** 고른 고객의 방문완료·노쇼·취소 건수와 가장 최근 방문(B09, 스토리 71-73). 고른 고객이 없으면 null이다. */
-  visitSummary: { counts: CustomerVisitCountsDto; recentVisit: CustomerVisitHistoryRowDto | null } | null;
+  /**
+   * 고른 고객의 방문완료·노쇼·취소 건수와 가장 최근 방문(B09, 스토리 71-73), 같은 연락처 경고(S5).
+   * 고른 고객이 없으면 null이다.
+   */
+  visitSummary: { counts: CustomerVisitCountsDto; recentVisit: CustomerVisitHistoryRowDto | null; sharedPhone: boolean } | null;
 };
 
 /**
@@ -331,6 +335,10 @@ export function CustomerStep({
               </Button>
             </div>
           </Field>
+          {/* S5: 검색 목록이 아니라 고른 고객 칸에서도 같은 연락처 경고를 보인다(스펙 F01 단계 1). */}
+          {visitSummary?.sharedPhone ? (
+            <ScreenState kind="warning" label={t("customers.duplicatePhone.chip")} title={t("customers.duplicatePhone.title")} />
+          ) : null}
           {visitSummary ? (
             <div className="grid gap-3 rounded-md border border-border bg-surface p-3">
               <CustomerVisitCounts counts={visitSummary.counts} locale={locale} />
@@ -896,9 +904,13 @@ export function QuickBookingPanel({
     setCustomerQuery("");
   }
 
-  // 고른 고객의 방문완료·노쇼·취소 건수와 가장 최근 방문(B09, 스토리 71-73, 티켓 24). 고른 고객이 바뀔
-  // 때마다 다시 불러온다. 고객을 고르지 않았으면(해제 포함) null이다.
-  const [visitSummary, setVisitSummary] = useState<{ counts: CustomerVisitCountsDto; recentVisit: CustomerVisitHistoryRowDto | null } | null>(null);
+  // 고른 고객의 방문완료·노쇼·취소 건수와 가장 최근 방문(B09, 스토리 71-73, 티켓 24), 같은 연락처
+  // 경고(S5). 고른 고객이 바뀔 때마다 다시 불러온다. 고객을 고르지 않았으면(해제 포함) null이다.
+  const [visitSummary, setVisitSummary] = useState<{
+    counts: CustomerVisitCountsDto;
+    recentVisit: CustomerVisitHistoryRowDto | null;
+    sharedPhone: boolean;
+  } | null>(null);
   useEffect(() => {
     const customerId = draft.customerId;
     if (!customerId) {

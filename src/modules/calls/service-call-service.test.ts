@@ -8,6 +8,7 @@ import {
   createDailyExpense,
   createQuickBookingServiceCall,
   createServiceCallRow,
+  customerSharedPhone,
   customerVisitCountsFromRows,
   deactivateDailyExpense,
   getDailyCallLedgerSummary,
@@ -3267,6 +3268,21 @@ describe("service call service", () => {
     assert.equal(sharedByLabel.get("국가번호 전화"), false);
     // 연락처가 빈 고객은 비교 대상이 아니다.
     assert.equal(sharedByLabel.get("전화 없음"), false);
+  });
+
+  it("S5: finds a shared phone for an already-chosen customer even without a search query", async () => {
+    const prismaClient = createMemoryPrisma();
+    const mina = await createCustomer({ name: "민아", phone: "090111", memo: null, actorId: "counter-account", prismaClient });
+    const sua = await createCustomer({ name: "수아", phone: "090111", memo: null, actorId: "counter-account", prismaClient });
+    const lan = await createCustomer({ name: "Lan", phone: "091000", memo: null, actorId: "counter-account", prismaClient });
+
+    // 검색 결과 밖(쿼리 없음)에서도 고객 화면 직접 진입(visitCustomer=)·빠른 예약 고객 선택 후와 같은
+    // 모양으로 확인한다. searchCustomerVisitCandidates의 query가 ""면 빈 배열이라 이 경고를 줄 수 없다.
+    assert.deepEqual(await searchCustomerVisitCandidates({ query: "", prismaClient }), []);
+
+    assert.equal(await customerSharedPhone({ customerId: mina.id, prismaClient }), true);
+    assert.equal(await customerSharedPhone({ customerId: sua.id, prismaClient }), true);
+    assert.equal(await customerSharedPhone({ customerId: lan.id, prismaClient }), false);
   });
 });
 

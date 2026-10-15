@@ -58,6 +58,7 @@ function renderView(overrides: Partial<Parameters<typeof CustomerScreenView>[0]>
         onSelect={() => undefined}
         query=""
         selectedMemo={null}
+        selectedSharedPhone={false}
         settledQuery=""
         visitCounts={null}
         {...overrides}
@@ -274,5 +275,16 @@ describe("customer screen view", () => {
 
   it("does not show visit counts when no customer or call memo is chosen", () => {
     assert.doesNotMatch(renderView(), /방문완료·노쇼·취소 건수/);
+  });
+
+  // S5: 검색 없이 바로 연 고객(visitCustomer= 직접 진입)에게도 같은 연락처 경고를 보인다(스펙 F08).
+  // 검색 후보가 비어 있어도(candidates=[]) page.tsx가 미리 계산해 준 selectedSharedPhone으로 띄운다.
+  it("shows the same-phone warning for a directly opened customer even with no active search", () => {
+    const html = renderView({ customer: minah, history: [row()], selectedSharedPhone: true });
+    const panel = html.match(/<aside[^>]*aria-label="민아"[\s\S]*<\/aside>/)?.[0] ?? "";
+    assert.match(panel, /같은 연락처의 고객이 여러 명입니다/);
+
+    const withoutWarning = renderView({ customer: minah, history: [row()], selectedSharedPhone: false });
+    assert.doesNotMatch(withoutWarning.match(/<aside[\s\S]*<\/aside>/)?.[0] ?? "", /같은 연락처의 고객이 여러 명입니다/);
   });
 });

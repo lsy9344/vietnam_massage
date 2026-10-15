@@ -65,7 +65,7 @@ function customerStepExtras(locale: Locale, overrides: Partial<Pick<Parameters<t
     onQueryChange: () => undefined,
     onSelectCandidate: () => undefined,
     query: "",
-    visitSummary: null as { counts: CustomerVisitCountsDto; recentVisit: CustomerVisitHistoryRowDto | null } | null,
+    visitSummary: null as { counts: CustomerVisitCountsDto; recentVisit: CustomerVisitHistoryRowDto | null; sharedPhone: boolean } | null,
     ...overrides
   };
 }
@@ -282,7 +282,7 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
       "ko",
       <CustomerStep
         {...customerStepExtras("ko", {
-          visitSummary: { counts: { completedCount: 1, noShowCount: 0, canceledCount: 0 }, recentVisit }
+          visitSummary: { counts: { completedCount: 1, noShowCount: 0, canceledCount: 0 }, recentVisit, sharedPhone: false }
         })}
         customers={customers}
         disabled={false}
@@ -306,6 +306,45 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
     // 방문별 요청은 아직 체크 전이라(지금 값은 null) 체크돼 있지 않다.
     const visitRequestRow = labelRowContaining(html, "방문별 요청 가져오기: 조명을 어둡게");
     assert.doesNotMatch(visitRequestRow, /checked=""/);
+  });
+
+  // S5: 고객을 고른 뒤에도(검색 목록이 아니라 고른 고객 칸) 같은 연락처 경고를 보인다(스펙 F01 단계 1).
+  it("고객 단계: 고른 고객이 같은 연락처를 쓰는 다른 고객과 겹치면 경고를 보인다", () => {
+    const html = render(
+      "ko",
+      <CustomerStep
+        {...customerStepExtras("ko", {
+          visitSummary: { counts: { completedCount: 0, noShowCount: 0, canceledCount: 0 }, recentVisit: null, sharedPhone: true }
+        })}
+        customers={customers}
+        disabled={false}
+        draft={draft({ customerId: "customer-1" })}
+        fieldErrors={{}}
+        monthEndDate="2026-06-30"
+        monthStartDate="2026-06-01"
+        onEdit={() => undefined}
+        options={options}
+      />
+    );
+    assert.match(html, /같은 연락처의 고객이 여러 명입니다/);
+
+    const withoutSharedPhone = render(
+      "ko",
+      <CustomerStep
+        {...customerStepExtras("ko", {
+          visitSummary: { counts: { completedCount: 0, noShowCount: 0, canceledCount: 0 }, recentVisit: null, sharedPhone: false }
+        })}
+        customers={customers}
+        disabled={false}
+        draft={draft({ customerId: "customer-1" })}
+        fieldErrors={{}}
+        monthEndDate="2026-06-30"
+        monthStartDate="2026-06-01"
+        onEdit={() => undefined}
+        options={options}
+      />
+    );
+    assert.doesNotMatch(withoutSharedPhone, /같은 연락처의 고객이 여러 명입니다/);
   });
 
   it("고객 단계: 필드 오류는 그 칸 옆에 보인다", () => {

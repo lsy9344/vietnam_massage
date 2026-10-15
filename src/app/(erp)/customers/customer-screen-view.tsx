@@ -2,6 +2,7 @@ import type { KeyboardEvent } from "react";
 import { SidePanel } from "@/components/ui/panel";
 import { CustomerCandidateCompare, isCustomerCandidateChosen } from "@/components/domain/customer-candidate-compare";
 import { CustomerVisitCounts } from "@/components/domain/customer-visit-counts";
+import { ScreenState } from "@/components/ui/screen-state";
 import { serviceStatusLabel } from "@/lib/i18n/codes";
 import { t } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
@@ -28,6 +29,7 @@ export function CustomerScreenView({
   activeIndex,
   customer,
   selectedMemo,
+  selectedSharedPhone,
   visitCounts,
   history,
   onQueryChange,
@@ -45,6 +47,8 @@ export function CustomerScreenView({
   /** 고른 고객. 고객 기록이 없는 콜의 고객/메모를 골랐으면 null이고 selectedMemo가 있다. */
   customer: CustomerDto | null;
   selectedMemo: string | null;
+  /** S5: 검색 결과 밖(쿼리 없이 바로 연 고객)에서도 보일 같은 연락처 경고. */
+  selectedSharedPhone: boolean;
   /** 열린 방문 이력의 건수(B09). 고른 고객·메모가 없으면 null이다. */
   visitCounts: CustomerVisitCountsDto | null;
   history: CustomerVisitHistoryRowDto[];
@@ -140,6 +144,9 @@ export function CustomerScreenView({
             {customer ? (
               <section aria-label={t(locale, "customers.detail.info")} className="grid gap-3">
                 <h3 className="text-[0.9375rem] font-semibold text-foreground">{t(locale, "customers.detail.info")}</h3>
+                {selectedSharedPhone ? (
+                  <ScreenState kind="warning" label={t(locale, "customers.duplicatePhone.chip")} title={t(locale, "customers.duplicatePhone.title")} />
+                ) : null}
                 <CustomerEditForm customer={customer} key={customer.id} />
               </section>
             ) : (

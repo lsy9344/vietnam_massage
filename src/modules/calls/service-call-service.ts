@@ -2689,6 +2689,21 @@ export async function searchCustomerVisitCandidates(input: {
   return candidates;
 }
 
+/**
+ * 고객을 이미 고른 상태(고객 화면 visitCustomer= 직접 진입, 빠른 예약 고객 선택 후)에서도 같은 연락처
+ * 경고를 보이기 위한 질의다(S5, 스펙 F08·F01 단계 1). searchCustomerVisitCandidates의 sharedPhone은
+ * 그 검색 결과 안에서만 비교해, 쿼리 없이 바로 연 고객에게는 경고를 줄 수 없었다 — 여기서는 전체 고객을
+ * 대상으로 숫자만 비교한다(phoneDigits와 같은 기준).
+ */
+export async function customerSharedPhone(input: { customerId: string; prismaClient?: ServiceCallPrismaClient }): Promise<boolean> {
+  const client = getClient(input.prismaClient);
+  const customers = await client.customer.findMany();
+  const target = customers.find((customer) => customer.id === input.customerId);
+  const digits = phoneDigits(target?.phone ?? null);
+  if (!digits) return false;
+  return customers.some((customer) => customer.id !== input.customerId && phoneDigits(customer.phone) === digits);
+}
+
 export async function createDailyExpense(input: DailyExpenseInput & { actorId: string; prismaClient?: ServiceCallPrismaClient }) {
   const parsed = dailyExpenseInputSchema.safeParse(input);
   if (!parsed.success) {
