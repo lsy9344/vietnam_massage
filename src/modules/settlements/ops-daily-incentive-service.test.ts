@@ -4,6 +4,7 @@ import {
   confirmOpsDailyIncentivePayout,
   OpsDailyIncentiveDomainError,
   listOpsDailyIncentives,
+  listOpsDailyPayoutConfirmationsForMonth,
   reconfirmOpsDailyIncentivePayout,
   releaseOpsDailyIncentivePayout
 } from "@/modules/settlements/ops-daily-incentive-service";
@@ -568,6 +569,35 @@ describe("releaseOpsDailyIncentivePayout", () => {
         prismaClient
       }),
       /해제 사유를 입력하세요\./
+    );
+  });
+});
+
+describe("listOpsDailyPayoutConfirmationsForMonth", () => {
+  it("운영월의 모든 날짜·운영팀 직원 지급 확인 상태를 한 번에 돌려준다(티켓 32·33)", async () => {
+    const prismaClient = createMemoryPrisma();
+    await confirmOpsDailyIncentivePayout({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: "ops-lead",
+      actorId: "account-admin",
+      prismaClient
+    });
+
+    const results = await listOpsDailyPayoutConfirmationsForMonth({ operatingMonthId: "month-2026-06", prismaClient });
+
+    // 2026-06(30일) × 활성 운영팀 직원 5명.
+    assert.equal(results.length, 150);
+    const confirmedOnTarget = results.find((row) => row.serviceDate === "2026-06-10" && row.employeeId === "ops-lead");
+    assert.equal(confirmedOnTarget?.payoutConfirmation.status, "confirmed");
+    const unconfirmedOtherDay = results.find((row) => row.serviceDate === "2026-06-11" && row.employeeId === "ops-lead");
+    assert.equal(unconfirmedOtherDay?.payoutConfirmation.status, "unconfirmed");
+  });
+
+  it("운영월을 찾을 수 없으면 거절한다", async () => {
+    await assert.rejects(
+      listOpsDailyPayoutConfirmationsForMonth({ operatingMonthId: "missing-month", prismaClient: createMemoryPrisma() }),
+      (error) => error instanceof OpsDailyIncentiveDomainError && error.code === "OPERATING_MONTH_NOT_FOUND"
     );
   });
 });

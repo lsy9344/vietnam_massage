@@ -358,6 +358,44 @@ export async function listEarcareDailySettlements(input: {
   };
 }
 
+/** 운영월의 날짜 하나와 그 날짜의 귀케어사별 지급 확인 상태(월 전체 집계용, 티켓 32·33). */
+export type EarcareDailyPayoutConfirmationDto = {
+  serviceDate: string;
+  employeeId: string;
+  payoutConfirmation: PayoutConfirmationDto;
+};
+
+/**
+ * 이 운영월의 모든 날짜·귀케어사 지급 확인 상태를 한 번에 돌려준다. 월 명세서(티켓 32)와 마감 점검의
+ * "지급 재확인 미처리" 집계(티켓 33)가 쓴다. 날짜마다 listEarcareDailySettlements를 다시 계산해 현재 지급액과
+ * 비교하므로(지급 재확인 필요 판정에 필요) 운영월 전체를 도는 비용이 있다.
+ */
+export async function listEarcareDailyPayoutConfirmationsForMonth(input: {
+  operatingMonthId: string;
+  prismaClient?: EarcareDailySettlementPrismaClient;
+}): Promise<EarcareDailyPayoutConfirmationDto[]> {
+  const parsed = z.object({ operatingMonthId: z.string().trim().min(1, "운영월을 선택하세요.") }).safeParse(input);
+  if (!parsed.success) {
+    throw new EarcareDailySettlementDomainError(parsed.error.issues[0]?.message ?? "운영월을 선택하세요.", "INVALID_EARCARE_DAILY_SETTLEMENT_INPUT");
+  }
+
+  const client = getClient(input.prismaClient);
+  const operatingMonth = await client.operatingMonth.findUnique({ where: { id: parsed.data.operatingMonthId } });
+  if (!operatingMonth) {
+    throw new EarcareDailySettlementDomainError("운영월을 찾을 수 없습니다.", "OPERATING_MONTH_NOT_FOUND");
+  }
+
+  const results: EarcareDailyPayoutConfirmationDto[] = [];
+  for (let cursor = operatingMonth.startDate; cursor <= operatingMonth.endDate; cursor = new Date(cursor.getTime() + 86400000)) {
+    const serviceDate = toIsoDate(cursor);
+    const dayResult = await listEarcareDailySettlements({ operatingMonthId: parsed.data.operatingMonthId, serviceDate, prismaClient: client });
+    for (const row of dayResult.rows) {
+      results.push({ serviceDate, employeeId: row.employeeId, payoutConfirmation: row.payoutConfirmation });
+    }
+  }
+  return results;
+}
+
 /** 확인: 그날 계산된 지급액을 지급 확인 사건으로 남긴다. 아직 확인된 사건이 없는 단위에만 쓸 수 있다. */
 export async function confirmEarcareDailySettlementPayout(input: {
   operatingMonthId: string;

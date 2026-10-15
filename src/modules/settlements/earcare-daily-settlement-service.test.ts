@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   confirmEarcareDailySettlementPayout,
   EarcareDailySettlementDomainError,
+  listEarcareDailyPayoutConfirmationsForMonth,
   listEarcareDailySettlements,
   reconfirmEarcareDailySettlementPayout,
   releaseEarcareDailySettlementPayout
@@ -613,6 +614,35 @@ describe("releaseEarcareDailySettlementPayout", () => {
         prismaClient
       }),
       /해제 사유를 입력하세요\./
+    );
+  });
+});
+
+describe("listEarcareDailyPayoutConfirmationsForMonth", () => {
+  it("운영월의 모든 날짜·귀케어사 지급 확인 상태를 한 번에 돌려준다(티켓 32·33)", async () => {
+    const prismaClient = createMemoryPrisma();
+    await confirmEarcareDailySettlementPayout({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: "ear-2",
+      actorId: "account-admin",
+      prismaClient
+    });
+
+    const results = await listEarcareDailyPayoutConfirmationsForMonth({ operatingMonthId: "month-2026-06", prismaClient });
+
+    // 2026-06(30일) × 활성 귀케어사 3명.
+    assert.equal(results.length, 90);
+    const confirmedOnTarget = results.find((row) => row.serviceDate === "2026-06-10" && row.employeeId === "ear-2");
+    assert.equal(confirmedOnTarget?.payoutConfirmation.status, "confirmed");
+    const unconfirmedOtherDay = results.find((row) => row.serviceDate === "2026-06-11" && row.employeeId === "ear-2");
+    assert.equal(unconfirmedOtherDay?.payoutConfirmation.status, "unconfirmed");
+  });
+
+  it("운영월을 찾을 수 없으면 거절한다", async () => {
+    await assert.rejects(
+      listEarcareDailyPayoutConfirmationsForMonth({ operatingMonthId: "missing-month", prismaClient: createMemoryPrisma() }),
+      (error) => error instanceof EarcareDailySettlementDomainError && error.code === "OPERATING_MONTH_NOT_FOUND"
     );
   });
 });
