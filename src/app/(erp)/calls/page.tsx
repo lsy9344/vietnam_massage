@@ -19,6 +19,7 @@ import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { CallLedgerWorkspace } from "@/app/(erp)/calls/call-ledger-workspace";
 import { LedgerStatusCounts } from "@/app/(erp)/calls/ledger-status-counts";
 import {
+  LEAVE_GUARD_SKIP_ATTRIBUTE,
   LEDGER_VIEWS,
   ledgerHref,
   ledgerTabParams,
@@ -173,6 +174,8 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
             className="screen-tab"
             href={ledgerHref(ledgerDate, "ledger", item)}
             key={item}
+            // 보기 전환은 같은 화면의 표시 방식만 바꾸므로 떠나기 전 안내를 받지 않는다(티켓 18).
+            {...{ [LEAVE_GUARD_SKIP_ATTRIBUTE]: "" }}
           >
             {t(ledgerViewLabelKeys[item])}
           </Link>
