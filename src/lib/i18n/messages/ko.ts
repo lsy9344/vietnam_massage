@@ -919,6 +919,12 @@ export const ko = {
   "closing.confirmDialog.operations": "운영팀",
   "closing.confirmDialog.opsDetail": "{count}명 / 일일 {daily} / 월 {monthly}",
   "closing.confirmDialog.earcare": "귀케어",
+  "closing.confirmDialog.pendingCloseCalls.title": "마감 확인 대상 콜",
+  "closing.confirmDialog.pendingCloseCalls.description": "예약·사용중·청소중 콜입니다. 콜 상태는 바뀌지 않으며, 확인 후 사유를 적어야 예외로 마감할 수 있습니다.",
+  "closing.confirmDialog.pendingCloseCalls.ackLabel": "위 {count}건을 확인했습니다",
+  "closing.confirmDialog.pendingCloseCalls.reasonLabel": "예외 마감 사유",
+  "closing.confirmDialog.pendingCloseCalls.reasonPlaceholder": "예외로 마감하는 사유를 입력하세요.",
+  "closing.confirmDialog.pendingCloseCalls.reasonHelp": "확인한 콜과 사유, 처리자는 이번 마감 버전에 저장됩니다.",
   "closing.reopen.label": "재오픈 사유",
   "closing.reopen.placeholder": "재오픈 사유를 입력하세요.",
   "closing.reopen.adminOnly": "관리자만 재오픈할 수 있습니다.",
@@ -940,9 +946,11 @@ export const ko = {
   "closing.checklist.pendingCloseCalls.title": "마감 확인 대상 콜",
   "closing.checklist.pendingCloseCalls.count": "{count}건",
   "closing.checklist.pendingCloseCalls.empty": "마감 확인 대상 콜 없음",
-  "closing.checklist.pendingCloseCalls.description": "예약·사용중·청소중 상태인 콜입니다. 콜 상태는 바뀌지 않으며, 이 목록은 마감 확정을 막지 않습니다.",
+  "closing.checklist.pendingCloseCalls.description": "예약·사용중·청소중 상태인 콜입니다. 확인하고 사유를 적으면 콜 상태를 바꾸지 않고 예외로 마감할 수 있습니다.",
   "closing.checklist.financials.title": "금액 확인",
   "closing.checklist.blockedNotice": "계산 오류와 지급 재확인을 먼저 해결하세요.",
+  "closing.snapshot.pendingCloseException.title": "예외 마감 콜",
+  "closing.snapshot.pendingCloseException.reason": "사유: {reason}",
 
   // /dashboard 화면
   // 공통 (대시보드 3개 화면 공유)
