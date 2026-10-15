@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { CallDetailPanel } from "@/app/(erp)/calls/call-detail-panel";
+import { CallConflictProvider } from "@/app/(erp)/calls/call-conflict-compare";
 import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
 import { CALL_PARAM, type LedgerView } from "@/app/(erp)/calls/ledger-address";
 import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto } from "@/modules/calls/service-call-service";
@@ -101,7 +102,9 @@ export function CallLedgerWorkspace({
     // page.tsx가 CallLeaveGuard 안에서 그려야 한다 — 빠른 예약 패널(20)은 원장 탭 머리의 주요 버튼이라
     // 이 컴포넌트 밖(같은 탭의 형제)에 있으므로, 안내는 여기 말고 그 공통 조상에서 건다.
     // 가능 코스 영역은 티켓 20에서 빠른 예약 패널 안으로 옮겼다(명세 F08) — 여기에는 더 없다.
-    <>
+    // 원장 행의 저장 충돌(conflict) 데이터는 그리드에서 콜 상세 패널로 전해야 해서(스펙 B07, 티켓 17)
+    // 이 둘을 함께 감싸는 여기에 Provider를 둔다.
+    <CallConflictProvider>
       {/* 표는 패널이 열려도 같은 자리에 둔다(초안 유지). 1200px 미만에서는 패널이 표 위에 쌓인다. */}
       <div className={selected ? "grid grid-cols-1 items-start gap-6 min-[1200px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "grid grid-cols-1"}>
         <div className="min-w-0">
@@ -132,6 +135,6 @@ export function CallLedgerWorkspace({
           </div>
         ) : null}
       </div>
-    </>
+    </CallConflictProvider>
   );
 }

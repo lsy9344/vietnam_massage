@@ -46,6 +46,7 @@ const row: ServiceCallRowDto = {
   discountTypeCode: null,
   paymentMethodCode: null,
   note: null,
+  visitRequest: null,
   confirmationCode: null,
   basePrice: 0,
   paymentAmount: 0,
@@ -86,6 +87,26 @@ function tabletUpBlock(html: string) {
   return html.slice(openTagStart);
 }
 
+// call-row-warnings.test.tsx의 같은 이름 헬퍼와 같은 방식. usePhoneWidth()의 초기 useState는 렌더 중에
+// window.matchMedia를 읽는다(effect 없이도 SSR에서 바로 반영된다), 그래서 전역 window를 흉내 내면 실제
+// 폭을 바꾼 것과 같은 결과를 renderToStaticMarkup로 볼 수 있다.
+function withWindowWidth(minWidth600Matches: boolean, run: () => string) {
+  const original = (globalThis as { window?: unknown }).window;
+  (globalThis as { window?: unknown }).window = {
+    matchMedia: () => ({
+      matches: minWidth600Matches,
+      addEventListener: () => {},
+      removeEventListener: () => {}
+    })
+  };
+  try {
+    return run();
+  } finally {
+    if (original === undefined) delete (globalThis as { window?: unknown }).window;
+    else (globalThis as { window?: unknown }).window = original;
+  }
+}
+
 describe("phone card list vs. wide table (ticket 26)", () => {
   it("넓은 표와 새 행 직접 입력(표 편집)은 태블릿 이상에서만 보이는 블록 안에 있다", () => {
     const html = render([row]);
@@ -105,9 +126,25 @@ describe("phone card list vs. wide table (ticket 26)", () => {
     assert.ok(cardIndex < tableIndex, "카드 목록이 표보다 뒤에 있다");
   });
 
-  it("콜이 없는 날짜에도 카드 목록과 표 양쪽에 빈 상태 문구가 있다", () => {
-    const html = render([]);
-    const matches = html.match(/이 날짜의 콜이 없습니다/g) ?? [];
-    assert.equal(matches.length, 2, "카드 목록과 표 양쪽에 빈 상태 문구가 있어야 한다");
+  // 회귀(story-2-1): 카드 목록과 표가 둘 다 같은 빈 상태 문구를 그리고 CSS로만 서로 숨기면, 콜이 없는
+  // 날짜에는 "이 날짜의 콜이 없습니다"가 DOM에 두 번 남아 그 문구를 찾는 Playwright strict-mode 검사가
+  // 깨진다. usePhoneWidth()로 실제 폭에 맞는 한쪽만 그리도록 고쳐, 폭마다 문구가 정확히 하나여야 한다.
+  it("콜이 없는 날짜에는 폭에 맞는 빈 상태 문구가 정확히 하나만 있다", () => {
+    const countEmptyMatches = (html: string) => (html.match(/이 날짜의 콜이 없습니다/g) ?? []).length;
+
+    // window가 없는 SSR 그대로(이 파일의 다른 테스트처럼 stub 없음)는 "휴대폰 아님"으로 본다.
+    assert.equal(countEmptyMatches(render([])), 1, "window가 없으면 표 쪽 문구만 하나 있어야 한다");
+
+    assert.equal(
+      countEmptyMatches(withWindowWidth(false, () => render([]))),
+      1,
+      "휴대폰 폭에서는 카드 쪽 문구만 하나 있어야 한다"
+    );
+
+    assert.equal(
+      countEmptyMatches(withWindowWidth(true, () => render([]))),
+      1,
+      "태블릿 이상 폭에서는 표 쪽 문구만 하나 있어야 한다"
+    );
   });
 });

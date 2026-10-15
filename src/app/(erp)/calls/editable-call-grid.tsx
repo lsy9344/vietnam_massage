@@ -39,8 +39,10 @@ import {
   type NewCallRowDraft
 } from "@/app/(erp)/calls/call-new-row-save";
 import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
+import { useRegisterCallConflict, type CallConflictCompareData } from "@/app/(erp)/calls/call-conflict-compare";
 import { CallRowSaveStatus, NewCallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
 import { CallPhoneCardList } from "@/app/(erp)/calls/call-phone-card-list";
+import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
 import { ledgerCallAnchorId, type LedgerView } from "@/app/(erp)/calls/ledger-address";
 import { CallWarningCell } from "@/app/(erp)/calls/call-warning-cell";
 import { spokenClock } from "@/app/(erp)/calls/call-warning-label";
@@ -74,6 +76,7 @@ const CALL_GRID_COLUMNS = [
   { id: "discountType", labelKey: "calls.column.discountType", width: "9rem" },
   { id: "paymentMethod", labelKey: "calls.column.paymentMethod", width: "9rem" },
   { id: "note", labelKey: "calls.column.note", width: "11rem" },
+  { id: "visitRequest", labelKey: "calls.column.visitRequest", width: "11rem" },
   { id: "confirmation", labelKey: "calls.column.confirmation", width: "9rem" },
   { id: "paymentAmount", labelKey: "calls.column.paymentAmount", width: "8rem" },
   { id: "discount", labelKey: "calls.column.discount", width: "6rem" },
@@ -113,6 +116,7 @@ const LEDGER_VIEW_COLUMN_IDS = {
     "paymentAmount",
     "confirmation",
     "note",
+    "visitRequest",
     "therapist1Commission",
     "therapist2Commission",
     "earcarePool",
@@ -139,6 +143,7 @@ const CALL_GRID_COLUMN_FIELD: Record<(typeof CALL_GRID_COLUMNS)[number]["id"], s
   discountType: "discountTypeCode",
   paymentMethod: "paymentMethodCode",
   note: "note",
+  visitRequest: "visitRequest",
   confirmation: "confirmationCode",
   paymentAmount: "paymentAmount",
   discount: "discountAmount",
@@ -1051,6 +1056,21 @@ function AddRowForm({
         />
       </td>
     ),
+    visitRequest: (
+      <td className="border-b border-border px-2 py-2" key="visitRequest">
+        <TextCell
+          columnId="visitRequest"
+          disabled={disabled}
+          label={t("calls.column.visitRequest")}
+          name="visitRequest"
+          onChange={(value) => update("visitRequest", nullableValue(value))}
+          onKeyDown={(event) => handleAddRowKeyDown("visitRequest", event)}
+          placeholder={t("calls.column.visitRequest")}
+          rowIndex={rowIndex}
+          value={draft.visitRequest ?? ""}
+        />
+      </td>
+    ),
     confirmation: (
       <td className="border-b border-border px-2 py-2" key="confirmation">
         <SelectCell
@@ -1243,6 +1263,24 @@ function EditableCallRow({
   const saveHeld = isSaveHeld(saveStatus);
   // 저장 실패나 충돌 확인 필요는 떠나기 전 안내 대상이다(스펙 B07, 티켓 18).
   useUnsavedGuard(saveHeld);
+  // 충돌(STALE_CALL)이면 콜 상세 패널의 비교 화면에 이 비교 데이터를 등록한다(스펙 B07, 티켓 17).
+  // useMemo로 참조를 고정한다 — 매 렌더 새 객체를 넘기면 등록 effect가 매 렌더 다시 돌아 Provider의
+  // setState를 계속 불러(등록 → 리렌더 → 등록 → ...) 무한 렌더 루프가 난다.
+  const latestRow = save.latestRow;
+  const message = save.message;
+  const conflictCompare = useMemo<CallConflictCompareData | null>(() => {
+    if (saveStatus !== "conflict" || !latestRow) return null;
+    return {
+      rowId: row.id,
+      draft,
+      latestRow,
+      message,
+      onReapply: (changes) => dispatch({ type: "reapply", row: latestRow, changes }),
+      onReloadLatest: () => void reloadLatest()
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saveStatus, latestRow, draft, message, row.id]);
+  useRegisterCallConflict(conflictCompare);
   const [, startTransition] = useTransition();
   const request = save.inFlight;
   // 키보드 이동 순서는 보이는 열의 순서를 따른다(명세 F02 기준, 티켓 19). 보기가 바뀌면 다시 계산한다.
@@ -1262,6 +1300,8 @@ function EditableCallRow({
             dispatch({ type: "saved", row: result.data });
           } else if ("currentRow" in result) {
             dispatch({ type: "stale", row: result.currentRow, message: result.formError });
+            // 충돌 확인 필요가 되면 콜 상세 패널에 비교 화면이 열린다(스펙 B07, 티켓 17).
+            onOpenDetail(row.id);
           } else {
             dispatch({ type: "failed", message: result.formError ?? null, fieldErrors: result.fieldErrors });
           }
@@ -1574,6 +1614,22 @@ function EditableCallRow({
         />
       </td>
     ),
+    visitRequest: (
+      <td className="border-b border-border px-2 py-2" key="visitRequest">
+        <TextCell
+          columnId="visitRequest"
+          disabled={isLocked}
+          label={t("calls.column.visitRequest")}
+          name="visitRequest"
+          onBlur={() => commit()}
+          onChange={(value) => updateDraft("visitRequest", nullableValue(value))}
+          onKeyDown={(event) => handleGridKeyDown("visitRequest", event)}
+          placeholder={t("calls.column.visitRequest")}
+          rowIndex={rowIndex}
+          value={draft.visitRequest ?? ""}
+        />
+      </td>
+    ),
     confirmation: (
       <td className="border-b border-border px-2 py-2" key="confirmation">
         <SelectCell
@@ -1739,6 +1795,8 @@ export function EditableCallGrid({
   view?: LedgerView;
 }) {
   const t = useT();
+  // 콜이 없을 때 빈 상태 문구를 표·카드 양쪽에 두지 않으려면 실제 폭을 알아야 한다(회귀, story-2-1).
+  const isPhoneWidth = usePhoneWidth();
   // TanStack column defs back the row model only; visible header text is rendered
   // by <CallGridHead> from the localized CALL_GRID_COLUMNS catalog, so these
   // `header` values are never shown — accessorKey stays the stable field name.
@@ -1783,18 +1841,23 @@ export function EditableCallGrid({
 
       {/* 휴대폰 폭(600px 미만): 넓은 표를 축소하지 않고 짧은 카드 목록을 대신 보여 준다(명세 F08, 티켓 26). */}
       <div className="min-[600px]:hidden">
-        <CallPhoneCardList onOpenDetail={onOpenDetail} options={options} rows={rows} selectedCallId={selectedCallId} />
+        <CallPhoneCardList isPhoneWidth={isPhoneWidth} onOpenDetail={onOpenDetail} options={options} rows={rows} selectedCallId={selectedCallId} />
       </div>
 
       {/* 태블릿 폭 이상: 넓은 표와 새 행 직접 입력(표 편집). 휴대폰에서는 이 블록 전체가 카드 목록으로 대체된다. */}
       <div className="hidden min-[600px]:block">
         {rows.length === 0 ? (
-          <div className="grid gap-3 px-4 py-8">
-            <div>
-              <p className="text-sm font-medium text-foreground">{t("calls.grid.empty.title")}</p>
-              <p className="mt-1 text-xs text-muted">{t("calls.grid.empty.description")}</p>
+          // 휴대폰 폭에서는 위 CallPhoneCardList가 같은 빈 상태 문구를 이미 그린다. 이 블록은
+          // CSS(hidden min-[600px]:block)로만 숨겨지고 DOM에는 남으므로, 휴대폰 폭에서는 그리지 않아
+          // "이 날짜의 콜이 없습니다"가 두 군데에 남지 않게 한다(회귀, story-2-1).
+          isPhoneWidth ? null : (
+            <div className="grid gap-3 px-4 py-8">
+              <div>
+                <p className="text-sm font-medium text-foreground">{t("calls.grid.empty.title")}</p>
+                <p className="mt-1 text-xs text-muted">{t("calls.grid.empty.description")}</p>
+              </div>
             </div>
-          </div>
+          )
         ) : (
           <div className="relative overflow-x-auto">
             <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(view, showSettlementColumns) }}>

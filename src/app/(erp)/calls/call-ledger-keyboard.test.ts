@@ -79,6 +79,7 @@ test("Esc cancel restores the last server draft without changing object identity
     discountTypeCode: null,
     paymentMethodCode: null,
     note: "서버 값",
+    visitRequest: null,
     confirmationCode: null
   };
   const editedDraft: Record<EditableCallField, string | null> = {

@@ -53,6 +53,7 @@ function row(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDto {
     discountTypeCode: null,
     paymentMethodCode: "CASH",
     note: null,
+    visitRequest: null,
     confirmationCode: null,
     basePrice: 1500000,
     paymentAmount: 1500000,

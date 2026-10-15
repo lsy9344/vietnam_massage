@@ -33,6 +33,7 @@ function CustomerField({
   defaultValue,
   label,
   maxLength,
+  multiline,
   name,
   required,
   state
@@ -40,7 +41,8 @@ function CustomerField({
   defaultValue?: string | null;
   label: string;
   maxLength: number;
-  name: "name" | "phone" | "memo";
+  multiline?: boolean;
+  name: "name" | "phone" | "memo" | "preferenceNote";
   required?: boolean;
   state: CustomerActionState;
 }) {
@@ -49,15 +51,27 @@ function CustomerField({
   return (
     <label className="grid gap-1.5">
       <span className="text-sm font-semibold text-foreground">{label}</span>
-      <input
-        aria-describedby={error ? errorId : undefined}
-        aria-invalid={error ? true : undefined}
-        className={inputFieldClassName({ invalid: Boolean(error), className: "w-full" })}
-        defaultValue={defaultValue ?? ""}
-        maxLength={maxLength}
-        name={name}
-        required={required}
-      />
+      {multiline ? (
+        <textarea
+          aria-describedby={error ? errorId : undefined}
+          aria-invalid={error ? true : undefined}
+          className={inputFieldClassName({ invalid: Boolean(error), className: "h-24 w-full py-2" })}
+          defaultValue={defaultValue ?? ""}
+          maxLength={maxLength}
+          name={name}
+          required={required}
+        />
+      ) : (
+        <input
+          aria-describedby={error ? errorId : undefined}
+          aria-invalid={error ? true : undefined}
+          className={inputFieldClassName({ invalid: Boolean(error), className: "w-full" })}
+          defaultValue={defaultValue ?? ""}
+          maxLength={maxLength}
+          name={name}
+          required={required}
+        />
+      )}
       {error ? (
         <span className="text-sm text-danger" id={errorId} role="alert">
           {error}
@@ -74,6 +88,15 @@ function CustomerFields({ customer, state }: { customer?: CustomerDto; state: Cu
       <CustomerField defaultValue={customer?.name} label={t("calls.customer.field.name")} maxLength={200} name="name" required state={state} />
       <CustomerField defaultValue={customer?.phone} label={t("calls.customer.field.phone")} maxLength={500} name="phone" state={state} />
       <CustomerField defaultValue={customer?.memo} label={t("calls.customer.field.memo")} maxLength={500} name="memo" state={state} />
+      {/* 고객 공통 선호·주의사항(F06, 티켓 23). 위 메모(memo)와는 다른 칸이라 나란히 두되 하나로 합치지 않는다. */}
+      <CustomerField
+        defaultValue={customer?.preferenceNote}
+        label={t("calls.customer.field.preferenceNote")}
+        maxLength={500}
+        multiline
+        name="preferenceNote"
+        state={state}
+      />
     </>
   );
 }

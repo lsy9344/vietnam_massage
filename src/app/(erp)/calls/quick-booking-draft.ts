@@ -24,7 +24,8 @@ export const QUICK_BOOKING_STEP_OF_FIELD: Record<string, QuickBookingStep> = {
   therapist1Id: "therapist",
   therapist2Id: "therapist",
   roomId: "room",
-  note: "room"
+  note: "room",
+  visitRequest: "room"
 };
 
 export type QuickBookingState = {

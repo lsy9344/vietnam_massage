@@ -27,6 +27,7 @@ function row(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDto {
     discountTypeCode: null,
     paymentMethodCode: "CASH",
     note: "메모",
+    visitRequest: null,
     confirmationCode: null,
     basePrice: 1500000,
     paymentAmount: 1500000,

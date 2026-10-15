@@ -221,13 +221,15 @@ model Course {
 }
 
 model Customer {
-  id           String        @id @default(cuid())
-  name         String
-  phone        String?
-  memo         String?
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
-  serviceCalls ServiceCall[]
+  id             String        @id @default(cuid())
+  name           String
+  phone          String?
+  memo           String?
+  // 고객 공통 선호·주의사항(F06, 티켓 23). 기존 memo(고객 메모)와는 다른 칸이고, 콜의 비고(note)와도 다르다.
+  preferenceNote String?       @map("preference_note")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  serviceCalls   ServiceCall[]
 
   @@map("customers")
 }
@@ -250,6 +252,8 @@ model ServiceCall {
   discountTypeCode  String?                    @map("discount_type_code")
   paymentMethodCode String?                    @map("payment_method_code")
   note              String?
+  // 이번 콜의 방문별 요청(F06, 티켓 23). note(비고)와는 다른 칸이다.
+  visitRequest      String?                    @map("visit_request")
   confirmationCode  String?                    @map("confirmation_code")
   requestId         String?                    @unique @map("request_id")
   createdAt         DateTime                   @default(now()) @map("created_at")

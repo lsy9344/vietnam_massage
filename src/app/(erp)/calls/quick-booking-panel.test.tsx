@@ -37,8 +37,8 @@ const options: ServiceCallFormOptions = {
 };
 
 const customers: CustomerDto[] = [
-  { id: "customer-1", name: "지윤", phone: "010-6655-1100", memo: null },
-  { id: "customer-2", name: "하나", phone: null, memo: null }
+  { id: "customer-1", name: "지윤", phone: "010-6655-1100", memo: null, preferenceNote: null },
+  { id: "customer-2", name: "하나", phone: null, memo: null, preferenceNote: null }
 ];
 
 function draft(overrides: Partial<NewCallRowDraft> = {}): NewCallRowDraft {
@@ -430,6 +430,26 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
     assert.match(html, /maxLength="500"/);
     assert.match(html, />조용한 방 부탁</);
     assert.match(html, /role="alert">객실이 올바르지 않습니다\.</);
+  });
+
+  it("객실·메모 단계: 방문별 요청은 비고와 나란히 있고 서로 다른 값을 담는다(F06, 티켓 23)", () => {
+    const html = render(
+      "ko",
+      <RoomStep
+        customers={customers}
+        disabled={false}
+        draft={draft({ note: "카운터 전달용 비고", visitRequest: "조명을 어둡게 해 주세요" })}
+        fieldErrors={{ visitRequest: ["500자 이하로 입력하세요."] }}
+        monthEndDate="2026-06-30"
+        monthStartDate="2026-06-01"
+        onEdit={() => undefined}
+        options={options}
+      />
+    );
+    assert.match(html, />방문별 요청</);
+    assert.match(html, />카운터 전달용 비고</);
+    assert.match(html, />조명을 어둡게 해 주세요</);
+    assert.match(html, /role="alert">500자 이하로 입력하세요\.</);
   });
 
   it("확인 단계: 고른 값을 요약으로 보여 주고 저장·취소 버튼이 있다", () => {

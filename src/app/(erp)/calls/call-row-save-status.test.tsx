@@ -43,6 +43,7 @@ const row: ServiceCallRowDto = {
   discountTypeCode: null,
   paymentMethodCode: null,
   note: null,
+  visitRequest: null,
   confirmationCode: null,
   basePrice: 0,
   paymentAmount: 0,

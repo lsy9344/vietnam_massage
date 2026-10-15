@@ -46,6 +46,7 @@ const baseRow: ServiceCallRowDto = {
   discountTypeCode: null,
   paymentMethodCode: null,
   note: null,
+  visitRequest: null,
   confirmationCode: null,
   basePrice: 500_000,
   paymentAmount: 500_000,
@@ -62,12 +63,18 @@ const baseRow: ServiceCallRowDto = {
   savedAt: "2026-06-10T07:28:00.000Z"
 };
 
-function render(rows: ServiceCallRowDto[], selectedCallId: string | null = null, locale: "ko" | "vi" = "ko") {
+function render(
+  rows: ServiceCallRowDto[],
+  selectedCallId: string | null = null,
+  locale: "ko" | "vi" = "ko",
+  isPhoneWidth = true
+) {
   return renderToStaticMarkup(
     createElement(LocaleProvider, {
       locale,
       // eslint-disable-next-line react/no-children-prop
       children: createElement(CallPhoneCardList, {
+        isPhoneWidth,
         onOpenDetail: () => {},
         options,
         rows,
@@ -115,6 +122,14 @@ describe("CallPhoneCardList (ticket 26)", () => {
   it("콜이 없으면 빈 상태 문구를 보여 준다", () => {
     const html = render([]);
     assert.match(html, /이 날짜의 콜이 없습니다/);
+  });
+
+  // 회귀(story-2-1): 태블릿 이상 폭에서는 editable-call-grid.tsx의 표 쪽이 이미 같은 빈 상태 문구를
+  // 보여 준다. CSS(min-[600px]:hidden)로만 숨기면 두 문구가 함께 DOM에 남아 "이 날짜의 콜이 없습니다"를
+  // 찾는 검사가 strict-mode 위반으로 깨진다. 태블릿 이상에서는 이 컴포넌트가 아예 아무것도 그리지 않는다.
+  it("태블릿 이상 폭에서는 콜이 없어도 아무것도 그리지 않는다(표 쪽 문구와 중복 방지)", () => {
+    const html = render([], null, "ko", false);
+    assert.equal(html, "");
   });
 
   it("베트남어로도 아리아 라벨과 빈 상태 문구가 있다", () => {

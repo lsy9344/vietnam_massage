@@ -225,6 +225,7 @@ export const vi: Messages = {
   "calls.column.discountType": "Loại giảm giá",
   "calls.column.paymentMethod": "Phương thức thanh toán",
   "calls.column.note": "Ghi chú",
+  "calls.column.visitRequest": "Yêu cầu riêng lần ghé",
   "calls.column.confirmation": "Giá trị xác nhận",
   "calls.column.paymentAmount": "Số tiền thanh toán",
   "calls.column.discount": "Giảm giá",
@@ -279,6 +280,7 @@ export const vi: Messages = {
   "calls.customer.field.name": "Tên",
   "calls.customer.field.phone": "Số liên lạc",
   "calls.customer.field.memo": "Ghi chú",
+  "calls.customer.field.preferenceNote": "Sở thích·lưu ý chung",
   "calls.customer.action.update": "Sửa",
   "calls.customer.unlinked": "Chưa gắn",
   "calls.search.label": "Tìm khách",
@@ -375,6 +377,17 @@ export const vi: Messages = {
   "calls.leaveGuard.title": "Bạn có nội dung chưa lưu",
   "calls.leaveGuard.description": "Nếu rời đi ngay bây giờ, nội dung chưa lưu sẽ bị mất. Bạn có muốn tiếp tục không?",
   "calls.leaveGuard.confirm": "Rời đi",
+
+  // 저장 충돌 비교와 다시 반영(스펙 B07, 티켓 17)
+  "calls.conflict.title": "So sánh xung đột lưu",
+  "calls.conflict.description": "Màn hình khác đã lưu trước. Hãy so sánh giá trị của bạn với giá trị mới nhất theo đúng thứ tự sổ, rồi chỉ áp lại giá trị cần thiết và lưu.",
+  "calls.conflict.columnField": "Trường",
+  "calls.conflict.columnMine": "Giá trị của tôi",
+  "calls.conflict.columnLatest": "Giá trị mới nhất",
+  "calls.conflict.useMine": "Dùng giá trị của tôi",
+  "calls.conflict.useMineAria": "Dùng giá trị của tôi cho {field}",
+  "calls.conflict.reapply": "Áp lại và lưu",
+  "calls.conflict.closeConfirmDescription": "Đóng so sánh thì bản nháp vẫn còn ở dòng sổ, bạn có thể mở lại để so sánh. Bạn có muốn đóng không?",
 
   // 콜 계산 상태
   "calls.calc.errorPending": "Tạm hoãn lưu, chờ tính toán",
