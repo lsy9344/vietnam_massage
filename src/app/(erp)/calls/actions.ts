@@ -14,6 +14,7 @@ import {
   createCustomer,
   createDailyExpense,
   deactivateDailyExpense,
+  createQuickBookingServiceCall,
   createServiceCallRow,
   getServiceCallRow,
   searchCustomerVisitCandidates,
@@ -71,7 +72,7 @@ function mapActionError<T>(
   if (error instanceof ServiceCallDomainError) {
     const message = resolveDomainErrorMessage(locale, error.code, error.message);
 
-    if (error.code === "D_COURSE_SECOND_THERAPIST_REQUIRED") {
+    if (error.code === "D_COURSE_SECOND_THERAPIST_REQUIRED" || error.code === "D_QUICK_BOOKING_DUPLICATE_THERAPIST") {
       return {
         ok: false,
         fieldErrors: { therapist2Id: [message] },
@@ -176,6 +177,34 @@ export async function createServiceCallRowAction(input: ServiceCallCreateInput):
   try {
     const account = await requirePermission("call:write");
     const { row, alreadySaved } = await createServiceCallRow({ ...parsed.data, actorId: account.id });
+    revalidatePath("/calls");
+    const data = visibleServiceCallRowForRole(row, account.role);
+    return alreadySaved ? { ok: true, data, notice: t(locale, "calls.save.alreadySaved") } : { ok: true, data };
+  } catch (error) {
+    return mapActionError<ServiceCallRowDto>(error, locale);
+  }
+}
+
+/**
+ * 빠른 예약 저장(F01, 티켓 21). createServiceCallRowAction과 같은 요청 id 계약을 쓰지만, 같은 사람을
+ * Therapist 1·2로 두 번 고르는 것을 저장 오류로 더 막는다. 이 검사는 빠른 예약에만 적용하고, 원장
+ * 표의 새 행 직접 입력(createServiceCallRowAction)에는 소급하지 않는다.
+ */
+export async function createQuickBookingServiceCallAction(input: ServiceCallCreateInput): Promise<ActionResult<ServiceCallRowDto>> {
+  const locale = await getLocale();
+  const parsed = serviceCallCreateInputSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return {
+      ok: false,
+      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors, locale),
+      formError: t(locale, "action.error.invalidInput")
+    };
+  }
+
+  try {
+    const account = await requirePermission("call:write");
+    const { row, alreadySaved } = await createQuickBookingServiceCall({ ...parsed.data, actorId: account.id });
     revalidatePath("/calls");
     const data = visibleServiceCallRowForRole(row, account.role);
     return alreadySaved ? { ok: true, data, notice: t(locale, "calls.save.alreadySaved") } : { ok: true, data };

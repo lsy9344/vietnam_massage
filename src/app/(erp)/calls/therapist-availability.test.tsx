@@ -20,8 +20,8 @@ function row(overrides: Partial<TherapistAvailabilityRowDto> = {}): TherapistAva
     freeMinutes: 60,
     priorServiceEndCheck: false,
     courses: [
-      { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "possible" },
-      { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, verdict: "time_short" }
+      { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "possible", requiresSecondTherapist: false },
+      { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, verdict: "time_short", requiresSecondTherapist: false }
     ],
     ...overrides
   };
@@ -72,8 +72,8 @@ describe("therapist availability panel", () => {
           nextReservationTime: null,
           freeMinutes: null,
           courses: [
-            { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "time_short" },
-            { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, verdict: "time_short" }
+            { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "time_short", requiresSecondTherapist: false },
+            { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, verdict: "time_short", requiresSecondTherapist: false }
           ]
         })
       ]
@@ -128,7 +128,7 @@ describe("therapist availability panel", () => {
           nextReservationTime: null,
           freeMinutes: null,
           priorServiceEndCheck: true,
-          courses: [{ courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "time_short" }]
+          courses: [{ courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "time_short", requiresSecondTherapist: false }]
         })
       ]
     });
@@ -185,9 +185,9 @@ describe("therapist availability panel", () => {
 
   it("draws each course verdict from the service: possible as a button, short time, and no rate without a free time", () => {
     const courses: TherapistAvailabilityRowDto["courses"] = [
-      { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "possible" },
-      { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, verdict: "time_short" },
-      { courseId: "course-c", courseCode: "C", courseName: "C 120", durationMinutes: 120, verdict: "rate_missing" }
+      { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "possible", requiresSecondTherapist: false },
+      { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, verdict: "time_short", requiresSecondTherapist: false },
+      { courseId: "course-c", courseCode: "C", courseName: "C 120", durationMinutes: 120, verdict: "rate_missing", requiresSecondTherapist: false }
     ];
     const html = renderView({ open: true, rows: [row({ courses })] });
     assert.match(html, /<button[^>]*>A 60분 가능<\/button>/);
@@ -199,7 +199,7 @@ describe("therapist availability panel", () => {
     // 판정만 바뀌면 같은 코스도 다르게 그린다. 화면은 수당을 다시 보지 않는다.
     const flipped = renderView({
       open: true,
-      rows: [row({ courses: [{ courseId: "course-c", courseCode: "C", courseName: "C 120", durationMinutes: 120, verdict: "possible" }] })]
+      rows: [row({ courses: [{ courseId: "course-c", courseCode: "C", courseName: "C 120", durationMinutes: 120, verdict: "possible", requiresSecondTherapist: false }] })]
     });
     assert.match(flipped, /<button[^>]*data-course-id="course-c"[^>]*>C 120분 가능<\/button>/);
 
@@ -223,4 +223,27 @@ describe("therapist availability panel", () => {
   // 가능 코스에서 고르면 원장 새 행이 아니라 빠른 예약 패널의 Therapist·코스를 채운다(티켓 20).
   // 그 연결은 quick-booking-panel.test.tsx가 확인하고, 콜 원장 위에 항상 펼쳐 두던 이 패널의 자리는
   // 없어졌으므로(명세 F08) 여기서는 TherapistAvailabilityView 자체의 렌더만 다룬다.
+
+  // 시간 부족·수당 없음 코스의 "경고 확인 후 배정" 경로(스펙 F01, 티켓 21).
+  it("offers an override button for an impossible course only when onOverride is given, distinct from the possible button", () => {
+    const courses: TherapistAvailabilityRowDto["courses"] = [
+      { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "possible", requiresSecondTherapist: false },
+      { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, verdict: "time_short", requiresSecondTherapist: false },
+      { courseId: "course-c", courseCode: "C", courseName: "C 120", durationMinutes: 120, verdict: "rate_missing", requiresSecondTherapist: true }
+    ];
+
+    // onOverride가 없으면(기존 호출) 흐린 글자만 그대로 보이고 버튼이 없다.
+    const withoutOverride = renderView({ open: true, rows: [row({ courses })] });
+    assert.doesNotMatch(withoutOverride, /경고 확인 후 배정/);
+    assert.match(withoutOverride, /<span[^>]*>B 90분 · 시간 부족<\/span>/);
+
+    // onOverride가 있으면 "가능"과는 다른 문구·모양의 버튼이 불가 코스마다 보인다.
+    const withOverride = renderView({ open: true, onOverride: () => undefined, rows: [row({ courses })] });
+    assert.match(withOverride, /<button[^>]*data-override-course-id="course-b"[^>]*>B 90분 · 시간 부족 · 경고 확인 후 배정<\/button>/);
+    assert.match(withOverride, /<button[^>]*data-override-course-id="course-c"[^>]*>C 120분 · 이 코스 불가 · 경고 확인 후 배정<\/button>/);
+    assert.match(withOverride, /border-warning text-warning/);
+    // 가능 코스는 그대로 "가능" 버튼이다. 경고 확인 버튼과 섞이지 않는다.
+    assert.match(withOverride, /<button[^>]*>A 60분 가능<\/button>/);
+    assert.doesNotMatch(withOverride, /data-override-course-id="course-a"/);
+  });
 });
