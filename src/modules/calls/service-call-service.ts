@@ -2221,6 +2221,10 @@ export type CustomerVisitCandidateDto = {
   label: string;
   phone: string | null;
   latestVisitDate: string | null;
+  /** 이 후보의 방문완료 건수(0건 포함). 후보 비교 표(B09)가 이름·연락처·최근 방문일과 나란히 보인다. */
+  completedVisitCount: number;
+  /** 다른 후보와 연락처를 숫자만 비교했을 때 같으면 true다(국가번호는 해석하지 않는다). 연락처가 없으면 항상 false다. */
+  sharedPhone: boolean;
 };
 
 // 방문완료가 먼저다. 같은 상태 안에서는 늦은 날짜, 그다음 늦은 예약시각이 먼저다.
@@ -2303,8 +2307,33 @@ export async function listCustomerVisitHistory(
     .map(toVisitHistoryRow);
 }
 
+export type CustomerVisitCountsDto = {
+  completedCount: number;
+  noShowCount: number;
+  canceledCount: number;
+};
+
+// 고객 화면의 열린 방문 이력 위 건수(B09, 스토리 76-77). 예약·사용중·청소중은 이 건수에 넣지 않지만 이력 표에는 그대로 남는다.
+export function customerVisitCountsFromRows(rows: CustomerVisitHistoryRowDto[]): CustomerVisitCountsDto {
+  const count = (matches: (status: string) => boolean) => rows.filter((row) => matches(row.status)).length;
+  return {
+    completedCount: count(isCompletedServiceCallStatus),
+    noShowCount: count(isNoShowStatus),
+    canceledCount: count(isCanceledStatus)
+  };
+}
+
 function textIncludes(value: string | null | undefined, query: string) {
   return (value ?? "").toLowerCase().includes(query.toLowerCase());
+}
+
+function completedVisitCount(records: ServiceCallRecord[]) {
+  return records.filter((record) => isCompletedServiceCallStatus(record.status)).length;
+}
+
+// 연락처를 숫자만 남겨 비교한다(공백·하이픈 등 서식은 무시, 국가번호는 해석하지 않는다). 숫자가 없으면 비교 대상이 아니다.
+function phoneDigits(phone: string | null) {
+  return (phone ?? "").replace(/\D/g, "");
 }
 
 function latestVisitDate(records: ServiceCallRecord[]) {
@@ -2391,17 +2420,36 @@ export async function searchCustomerVisitCandidates(input: {
       customerId: customer.id,
       label: memo || customer.name,
       phone: customer.phone,
-      latestVisitDate: latestVisitDate(calls)
+      latestVisitDate: latestVisitDate(calls),
+      completedVisitCount: completedVisitCount(calls),
+      sharedPhone: false
     });
   }
   for (const key of memoKeys) {
+    const calls = unlinkedByMemo.get(key) ?? [];
     candidates.push({
       kind: "memo",
       customerId: null,
       label: key,
       phone: null,
-      latestVisitDate: latestVisitDate(unlinkedByMemo.get(key) ?? [])
+      latestVisitDate: latestVisitDate(calls),
+      completedVisitCount: completedVisitCount(calls),
+      sharedPhone: false
     });
+  }
+
+  // 숫자만 비교한 연락처가 둘 이상의 후보에서 같으면 모두 표시한다(B09, 스토리 78-80). 빈 연락처는 비교하지 않는다.
+  const candidatesByPhoneDigits = new Map<string, CustomerVisitCandidateDto[]>();
+  for (const candidate of candidates) {
+    const digits = phoneDigits(candidate.phone);
+    if (!digits) continue;
+    const group = candidatesByPhoneDigits.get(digits) ?? [];
+    group.push(candidate);
+    candidatesByPhoneDigits.set(digits, group);
+  }
+  for (const group of candidatesByPhoneDigits.values()) {
+    if (group.length < 2) continue;
+    for (const candidate of group) candidate.sharedPhone = true;
   }
 
   candidates.sort((left, right) => {

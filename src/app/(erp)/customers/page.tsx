@@ -2,6 +2,7 @@ import { requireRouteAccess } from "@/lib/authorization";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 import {
+  customerVisitCountsFromRows,
   listCustomerVisitHistory,
   listCustomers,
   searchCustomerVisitCandidates,
@@ -42,6 +43,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const customer = visitCustomer ? (customers.find((item) => item.id === visitCustomer) ?? null) : null;
   // 없는 고객 id는 고르지 않은 것으로 본다.
   const openSelection = visitCustomer ? customer !== null : visitMemo !== null;
+  const visibleHistory = openSelection ? history : [];
 
   return (
     <div className="screen">
@@ -49,8 +51,9 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       <CustomerScreen
         candidates={candidates}
         customer={customer}
-        history={openSelection ? history : []}
+        history={visibleHistory}
         query={customerQuery}
+        visitCounts={openSelection ? customerVisitCountsFromRows(visibleHistory) : null}
         visitMemo={visitCustomer ? null : visitMemo}
       />
     </div>

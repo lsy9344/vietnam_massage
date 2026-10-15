@@ -410,6 +410,11 @@ export const ko = {
   "customers.detail.memoOnly": "고객 기록이 없는 콜 표기입니다. 이 표기로 적힌 콜만 보여 줍니다.",
   "customers.history.empty": "방문 이력이 없습니다.",
   "customers.create.action": "고객 등록",
+  "customers.visitCounts.aria": "방문완료·노쇼·취소 건수",
+  "customers.duplicatePhone.chip": "중복 연락처",
+  "customers.duplicatePhone.title": "같은 연락처의 고객이 여러 명입니다",
+  "customers.compare.column.latestVisit": "최근 방문일",
+  "customers.compare.column.completedVisits": "방문완료 건수",
 
   // /settlements 화면
   // 공통 정산 탭/포맷
