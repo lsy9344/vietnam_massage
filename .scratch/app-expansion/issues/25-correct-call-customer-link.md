@@ -41,4 +41,4 @@
   - `for f in scripts/validate-story-*.mjs; do node "$f" >/dev/null 2>&1 || echo "FAIL $f"; done`: `validate-story-4-6`만 기존 실패(메모·브랜치 선례와 일치, 이번 변경과 무관). `pnpm lint`의 `&&` 사슬 함정 때문에 이 방식으로 돌렸다.
   - `pnpm build` 통과.
   - E2E는 운영 빌드로 컨테이너 `vietnam-shell-02-e2e`에 전용 DB `vietnam_aesthetic_t25`·포트 3125를 올려 확인했다. 새 스펙(`story-ticket-25-correct-call-customer-link.spec.ts`, 3건: 사유와 함께 정정+감사 내용 확인, 사유 없음 거절+고객 화면 이동 링크, 마감확정 월은 폼 대신 안내) 모두 통과. 콜 상세 패널·후보 비교를 같이 건드리는 기존 스펙 `story-ticket-13-row-warnings-detail-panel.spec.ts`(10건, 390px 포함)·`story-ticket-22-visit-counts-and-candidate-compare.spec.ts`(2건) 회귀 없이 통과. 서버 PID만 종료했고 main·다른 워크트리는 건드리지 않았다.
-  - `git merge integration/app-expansion`은 마지막에 fast-forward였다(이미 그 끝 위에서 시작했다) — 충돌 없음, tsc·단위 테스트 재실행 불필요.
+  - 보고 직전 `git merge integration/app-expansion`으로 티켓 19(원장 보기 전환, editable-call-grid.tsx 큰 개편)·30(지급 확인)·35(재오픈)가 들어왔다. 충돌 없이 자동 병합됐고, 이 티켓이 고친 `call-ledger-workspace.tsx`·`errors.ts`도 양쪽 변경이 섞여 깨끗이 합쳐졌다(`call-detail-panel.tsx`·`call-customer-link-correction.tsx`는 다른 쪽이 손대지 않아 그대로). 병합 뒤 `npx tsc --noEmit`과 `pnpm test:unit`(700개, 티켓 30의 새 테스트 포함)을 다시 돌려 통과를 확인했다.
