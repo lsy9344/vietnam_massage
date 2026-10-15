@@ -9,6 +9,7 @@ import { useT } from "@/lib/i18n/client";
 import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 import { callWarningLabel } from "@/app/(erp)/calls/call-warning-label";
 import { CallCustomerLinkCorrection } from "@/app/(erp)/calls/call-customer-link-correction";
+import { CallConflictCompare, useCallConflict } from "@/app/(erp)/calls/call-conflict-compare";
 
 function relatedCallIds(row: ServiceCallRowDto) {
   const ids: string[] = [];
@@ -50,6 +51,9 @@ export function CallDetailPanel({
     setOverride(null);
   }, [row?.id]);
   const current = override ?? row;
+  // 이 콜이 저장 충돌(STALE_CALL) 상태면 원장 행(editable-call-grid.tsx)이 등록한 비교 데이터를 받는다
+  // (스펙 B07, 티켓 17). 등록이 없으면(충돌이 아니면) null이라 비교 화면을 그리지 않는다.
+  const conflict = useCallConflict(current?.id ?? null);
 
   if (!current) {
     return (
@@ -72,6 +76,10 @@ export function CallDetailPanel({
   return (
     <SidePanel onClose={onClose} title={title}>
       <div className="grid gap-6">
+        {conflict ? (
+          <CallConflictCompare compare={conflict} customers={customers} key={conflict.latestRow.updatedAt} onRequestClose={onClose} options={options} />
+        ) : null}
+
         <PanelSection title={t("calls.detail.warnings")}>
           {current.warnings.length === 0 ? (
             <p className="text-sm text-muted">{t("calls.detail.noWarnings")}</p>

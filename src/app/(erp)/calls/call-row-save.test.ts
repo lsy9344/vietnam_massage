@@ -164,6 +164,34 @@ describe("call row save order", () => {
     assert.equal(superseded.inFlight?.therapist2Id, "therapist-2");
   });
 
+  it("reapplies only the chosen fields on top of the latest row, and sends them for another version check", () => {
+    const latest = savedRow({ customerMemo: "다른 화면", paymentMethodCode: "계좌", updatedAt: "2026-06-10T07:05:00.000Z", savedAt: "2026-06-10T07:05:00.000Z" });
+    const conflict = play([
+      { type: "commit", changes: { customerMemo: "내 초안", note: "내 비고" } },
+      { type: "stale", row: latest, message: staleMessage }
+    ]);
+
+    // customerMemo만 내 값 쓰기로 고르고, note(내가 더 고친 값)는 고르지 않았다.
+    const reapplied = callRowSaveReducer(conflict, { type: "reapply", row: latest, changes: { customerMemo: "내 초안" } });
+    assert.equal(reapplied.status, "saving");
+    assert.equal(reapplied.inFlight?.customerMemo, "내 초안");
+    assert.equal(reapplied.inFlight?.note, null); // 최신 행 그대로, 강제 덮어쓰기 없음
+    assert.equal(reapplied.inFlight?.paymentMethodCode, "계좌"); // 최신 행의 값을 그대로 둔다
+    assert.equal(reapplied.inFlight?.expectedUpdatedAt, latest.updatedAt);
+
+    // 다시 저장해도 또 충돌이면(비교하는 동안 또 바뀌었다면) 다시 "충돌 확인 필요"가 된다.
+    const againStale = savedRow({ customerMemo: "세 번째 화면", updatedAt: "2026-06-10T07:06:00.000Z", savedAt: "2026-06-10T07:06:00.000Z" });
+    const reconflicted = callRowSaveReducer(reapplied, { type: "stale", row: againStale, message: staleMessage });
+    assert.equal(reconflicted.status, "conflict");
+    assert.equal(reconflicted.latestRow?.customerMemo, "세 번째 화면");
+  });
+
+  it("ignores reapply outside a conflict", () => {
+    const idle = play([]);
+    const unchanged = callRowSaveReducer(idle, { type: "reapply", row: v1, changes: { customerMemo: "무시된다" } });
+    assert.equal(unchanged, idle);
+  });
+
   it("restores the last saved values on Escape, or the values being sent while a save is waiting", () => {
     const restored = play([
       { type: "edit", changes: { customerMemo: "취소할 입력" } },

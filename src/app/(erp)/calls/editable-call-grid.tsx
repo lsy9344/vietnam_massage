@@ -39,6 +39,7 @@ import {
   type NewCallRowDraft
 } from "@/app/(erp)/calls/call-new-row-save";
 import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
+import { useRegisterCallConflict, type CallConflictCompareData } from "@/app/(erp)/calls/call-conflict-compare";
 import { CallRowSaveStatus, NewCallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
 import { CallPhoneCardList } from "@/app/(erp)/calls/call-phone-card-list";
 import { ledgerCallAnchorId, type LedgerView } from "@/app/(erp)/calls/ledger-address";
@@ -1263,6 +1264,24 @@ function EditableCallRow({
   const saveHeld = isSaveHeld(saveStatus);
   // 저장 실패나 충돌 확인 필요는 떠나기 전 안내 대상이다(스펙 B07, 티켓 18).
   useUnsavedGuard(saveHeld);
+  // 충돌(STALE_CALL)이면 콜 상세 패널의 비교 화면에 이 비교 데이터를 등록한다(스펙 B07, 티켓 17).
+  // useMemo로 참조를 고정한다 — 매 렌더 새 객체를 넘기면 등록 effect가 매 렌더 다시 돌아 Provider의
+  // setState를 계속 불러(등록 → 리렌더 → 등록 → ...) 무한 렌더 루프가 난다.
+  const latestRow = save.latestRow;
+  const message = save.message;
+  const conflictCompare = useMemo<CallConflictCompareData | null>(() => {
+    if (saveStatus !== "conflict" || !latestRow) return null;
+    return {
+      rowId: row.id,
+      draft,
+      latestRow,
+      message,
+      onReapply: (changes) => dispatch({ type: "reapply", row: latestRow, changes }),
+      onReloadLatest: () => void reloadLatest()
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saveStatus, latestRow, draft, message, row.id]);
+  useRegisterCallConflict(conflictCompare);
   const [, startTransition] = useTransition();
   const request = save.inFlight;
   // 키보드 이동 순서는 보이는 열의 순서를 따른다(명세 F02 기준, 티켓 19). 보기가 바뀌면 다시 계산한다.
@@ -1282,6 +1301,8 @@ function EditableCallRow({
             dispatch({ type: "saved", row: result.data });
           } else if ("currentRow" in result) {
             dispatch({ type: "stale", row: result.currentRow, message: result.formError });
+            // 충돌 확인 필요가 되면 콜 상세 패널에 비교 화면이 열린다(스펙 B07, 티켓 17).
+            onOpenDetail(row.id);
           } else {
             dispatch({ type: "failed", message: result.formError ?? null, fieldErrors: result.fieldErrors });
           }

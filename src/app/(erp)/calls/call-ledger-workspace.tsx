@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CallDetailPanel } from "@/app/(erp)/calls/call-detail-panel";
+import { CallConflictProvider } from "@/app/(erp)/calls/call-conflict-compare";
 import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
 import { CALL_PARAM, type LedgerView } from "@/app/(erp)/calls/ledger-address";
 import { TherapistAvailabilityPanel } from "@/app/(erp)/calls/therapist-availability-panel";
@@ -107,49 +108,52 @@ export function CallLedgerWorkspace({
     // 원장 화면을 감싸 저장하지 않은 입력이 있는 동안 떠나기 전 안내를 건다(스펙 B07, 티켓 18).
     // 콜 상세 패널(17)과 빠른 예약 패널(20)도 이 안에서 useUnsavedGuard로 등록하면 같은 안내를 받는다.
     <CallLeaveGuard>
-      {/* 가능 코스는 티켓 20에서 빠른 예약 패널로 옮길 때까지의 자리다. 빠른 예약과 표 편집은 태블릿 폭
-          이상에서만 보인다(명세 F08, 티켓 26) — 휴대폰에서는 아예 띄우지 않는다. */}
-      <div className="hidden min-[600px]:block">
-        <TherapistAvailabilityPanel
-          initialRows={availabilityRows}
-          initialTime={availabilityTime}
-          onChoose={(next) => setChoice((current) => ({ ...next, id: (current?.id ?? 0) + 1 }))}
-          operatingMonthId={operatingMonthId}
-          serviceDate={serviceDate}
-          timeSlots={options.timeSlots}
-        />
-      </div>
-      {/* 표는 패널이 열려도 같은 자리에 둔다(초안 유지). 1200px 미만에서는 패널이 표 위에 쌓인다. */}
-      <div className={selected ? "grid grid-cols-1 items-start gap-6 min-[1200px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "grid grid-cols-1"}>
-        <div className="min-w-0">
-          <EditableCallGrid
-            courseChoice={choice}
-            customers={customers}
-            isLocked={isLocked}
-            onOpenDetail={(id) => select(id)}
+      {/* 원장 행의 저장 충돌(conflict) 데이터를 그리드에서 콜 상세 패널로 전한다(스펙 B07, 티켓 17). */}
+      <CallConflictProvider>
+        {/* 가능 코스는 티켓 20에서 빠른 예약 패널로 옮길 때까지의 자리다. 빠른 예약과 표 편집은 태블릿 폭
+            이상에서만 보인다(명세 F08, 티켓 26) — 휴대폰에서는 아예 띄우지 않는다. */}
+        <div className="hidden min-[600px]:block">
+          <TherapistAvailabilityPanel
+            initialRows={availabilityRows}
+            initialTime={availabilityTime}
+            onChoose={(next) => setChoice((current) => ({ ...next, id: (current?.id ?? 0) + 1 }))}
             operatingMonthId={operatingMonthId}
-            options={options}
-            rows={rows}
-            selectedCallId={selected}
             serviceDate={serviceDate}
-            showSettlementColumns={showSettlementColumns}
-            view={view}
+            timeSlots={options.timeSlots}
           />
         </div>
-        {selected ? (
-          <div className="order-first min-w-0 min-[1200px]:sticky min-[1200px]:top-4 min-[1200px]:order-none">
-            <CallDetailPanel
-              customers={customers ?? []}
+        {/* 표는 패널이 열려도 같은 자리에 둔다(초안 유지). 1200px 미만에서는 패널이 표 위에 쌓인다. */}
+        <div className={selected ? "grid grid-cols-1 items-start gap-6 min-[1200px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "grid grid-cols-1"}>
+          <div className="min-w-0">
+            <EditableCallGrid
+              courseChoice={choice}
+              customers={customers}
               isLocked={isLocked}
-              onClose={() => select(null)}
-              onSelectCall={(id) => select(id, { scrollToRow: true })}
+              onOpenDetail={(id) => select(id)}
+              operatingMonthId={operatingMonthId}
               options={options}
-              row={selectedRow}
               rows={rows}
+              selectedCallId={selected}
+              serviceDate={serviceDate}
+              showSettlementColumns={showSettlementColumns}
+              view={view}
             />
           </div>
-        ) : null}
-      </div>
+          {selected ? (
+            <div className="order-first min-w-0 min-[1200px]:sticky min-[1200px]:top-4 min-[1200px]:order-none">
+              <CallDetailPanel
+                customers={customers ?? []}
+                isLocked={isLocked}
+                onClose={() => select(null)}
+                onSelectCall={(id) => select(id, { scrollToRow: true })}
+                options={options}
+                row={selectedRow}
+                rows={rows}
+              />
+            </div>
+          ) : null}
+        </div>
+      </CallConflictProvider>
     </CallLeaveGuard>
   );
 }
