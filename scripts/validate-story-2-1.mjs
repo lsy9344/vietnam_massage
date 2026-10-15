@@ -109,7 +109,8 @@ for (const required of [
   "requirePermission(\"call:write\")",
   "ActionResult",
   "safeParse",
-  "saveBasicServiceCallRow",
+  // 티켓 16: 원장 새 행은 요청 id를 함께 보내는 createServiceCallRow로 만든다(같은 요청은 콜 하나).
+  "createServiceCallRow",
   "revalidatePath(\"/calls\")",
   "AuthorizationError",
   "ServiceCallDomainError",

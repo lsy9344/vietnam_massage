@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { requireRouteAccess } from "@/lib/authorization";
 import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
@@ -17,7 +18,16 @@ import { AddExpensePanel, DailyExpensePanel } from "@/app/(erp)/calls/daily-expe
 import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { CallLedgerWorkspace } from "@/app/(erp)/calls/call-ledger-workspace";
 import { LedgerStatusCounts } from "@/app/(erp)/calls/ledger-status-counts";
-import { ledgerHref, ledgerTabParams, parseLedgerTab, type LedgerTab } from "@/app/(erp)/calls/ledger-address";
+import {
+  LEDGER_VIEWS,
+  ledgerHref,
+  ledgerTabParams,
+  ledgerViewParams,
+  parseLedgerTab,
+  parseLedgerView,
+  type LedgerTab,
+  type LedgerView
+} from "@/app/(erp)/calls/ledger-address";
 import { DateContextControls } from "@/components/shell/date-context-controls";
 import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-notice";
 import { ScreenToolbar } from "@/components/shell/screen-toolbar";
@@ -29,12 +39,20 @@ type CallsPageSearchParams = {
   operatingMonthId?: string;
   serviceDate?: string;
   tab?: string;
+  view?: string;
 };
 
 const ledgerTabs: Array<{ tab: LedgerTab; labelKey: "calls.tab.ledger" | "calls.tab.cashbook" }> = [
   { tab: "ledger", labelKey: "calls.tab.ledger" },
   { tab: "cashbook", labelKey: "calls.tab.cashbook" }
 ];
+
+// 원장 탭 안의 보기 전환(명세 F02, 티켓 19). 순서는 LEDGER_VIEWS(예약·현장 → 수납·정산 → 전체)를 따른다.
+const ledgerViewLabelKeys = {
+  booking: "calls.view.booking",
+  settlement: "calls.view.settlement",
+  all: "calls.view.all"
+} as const satisfies Record<LedgerView, "calls.view.booking" | "calls.view.settlement" | "calls.view.all">;
 
 export default async function CallsPage({ searchParams }: { searchParams: Promise<CallsPageSearchParams> }) {
   const account = await requireRouteAccess("/calls");
@@ -55,6 +73,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
 
   const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
   const tab = parseLedgerTab(params.tab);
+  const view = parseLedgerView(params.view);
   const ledgerDate = { operatingMonthId: selectedMonth.id, serviceDate };
   const isLocked = isOperatingMonthPayoutLocked(selectedMonth.status);
   const canViewSettlementAmounts = account.role === "administrator" || account.role === "settlement_manager";
@@ -68,7 +87,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
       dateControls={
         <DateContextControls
           date={serviceDate}
-          keepParams={ledgerTabParams(tab)}
+          keepParams={{ ...ledgerTabParams(tab), ...(tab === "ledger" ? ledgerViewParams(view) : {}) }}
           locale={locale}
           months={operatingMonths}
           path="/calls"
@@ -79,7 +98,11 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
       path="/calls"
       screenTabs={{
         label: t("calls.tabs.aria"),
-        items: ledgerTabs.map((item) => ({ href: ledgerHref(ledgerDate, item.tab), label: t(item.labelKey), current: item.tab === tab }))
+        items: ledgerTabs.map((item) => ({
+          href: ledgerHref(ledgerDate, item.tab, view),
+          label: t(item.labelKey),
+          current: item.tab === tab
+        }))
       }}
       sticky
       title={t("calls.title")}
@@ -142,6 +165,19 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
         customerHref={linkToScreen(account.role, "/customers", { operatingMonthId: selectedMonth.id, date: serviceDate })}
         locale={locale}
       />
+      {/* 원장 보기 전환(명세 F02, 티켓 19): 같은 표를 다른 열 묶음으로 보여 준다. 역할·저장 규칙·데이터는 그대로다. */}
+      <nav aria-label={t("calls.view.aria")} className="mb-4 flex flex-wrap gap-2">
+        {LEDGER_VIEWS.map((item) => (
+          <Link
+            aria-current={item === view ? "page" : undefined}
+            className="screen-tab"
+            href={ledgerHref(ledgerDate, "ledger", item)}
+            key={item}
+          >
+            {t(ledgerViewLabelKeys[item])}
+          </Link>
+        ))}
+      </nav>
       {/* 가능 코스 영역은 티켓 20에서 빠른 예약 패널로 옮길 때까지 원장 위에 둔다. */}
       <CallLedgerWorkspace
         key={`${selectedMonth.id}:${serviceDate}`}
@@ -154,6 +190,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
         rows={visibleRows}
         serviceDate={serviceDate}
         showSettlementColumns={canViewSettlementAmounts}
+        view={view}
       />
     </div>
   );

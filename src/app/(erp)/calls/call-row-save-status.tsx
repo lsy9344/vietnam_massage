@@ -5,6 +5,7 @@ import { SaveStatus, type SaveState } from "@/components/ui/save-status";
 import { useLocale, useT } from "@/lib/i18n/client";
 import { formatDateTime } from "@/lib/i18n/format";
 import type { RowSaveStatus } from "@/app/(erp)/calls/call-row-save";
+import type { NewRowSaveStatus } from "@/app/(erp)/calls/call-new-row-save";
 
 const chipState: Record<RowSaveStatus, SaveState> = {
   // 이 화면에서 아직 고치지 않은 행도 저장된 행이다.
@@ -69,6 +70,47 @@ export function CallRowSaveStatus({
           ) : null}
           <Button className={actionClass} onClick={onReload} variant="secondary">
             {t("calls.save.reloadLatest")}
+          </Button>
+        </>
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * 원장 새 행의 저장 상태. 응답을 받지 못하면 "저장 여부 확인 중"과 다시 시도를 보인다. 다시 시도는 같은 요청 id로
+ * 보내므로 콜이 두 번 생기지 않는다. 같은 요청으로 이미 만든 콜이 돌아오면 그 안내(notice)를 보인다.
+ */
+export function NewCallRowSaveStatus({
+  state,
+  notice,
+  message,
+  onRetry
+}: {
+  state: NewRowSaveStatus;
+  notice: string | null;
+  message: string | null;
+  onRetry: () => void;
+}) {
+  const t = useT();
+  const locale = useLocale();
+
+  return (
+    <span className="grid gap-1" data-save-state={state}>
+      {state === "idle" ? null : <SaveStatus locale={locale} state={state} />}
+      {state === "saved" && notice ? <span className="text-xs text-muted">{notice}</span> : null}
+      {state === "failed" && message ? (
+        <span className="text-xs text-danger" role="alert">
+          {message}
+        </span>
+      ) : null}
+      {state === "checking" ? (
+        <>
+          <span className="text-xs text-muted" role="alert">
+            {t("calls.save.checkingHint")}
+          </span>
+          <Button className={actionClass} onClick={onRetry} variant="secondary">
+            {t("calls.save.retry")}
           </Button>
         </>
       ) : null}

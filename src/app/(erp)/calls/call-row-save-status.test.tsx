@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
+import { CallRowSaveStatus, NewCallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
 import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
 import { LocaleProvider } from "@/lib/i18n/client";
 import type { ServiceCallFormOptions, ServiceCallRowDto } from "@/modules/calls/service-call-service";
@@ -144,5 +144,37 @@ describe("call row save status", () => {
 
     assert.match(conflict, /Cần kiểm tra xung đột/);
     assert.deepEqual(buttons(conflict), ["Tải lại nội dung mới nhất"]);
+  });
+});
+
+describe("new call row save status", () => {
+  function newRowStatus(locale: "ko" | "vi", props: Partial<Parameters<typeof NewCallRowSaveStatus>[0]>) {
+    return render(locale, createElement(NewCallRowSaveStatus, { state: "idle", notice: null, message: null, onRetry: () => {}, ...props }));
+  }
+
+  it("shows a new row whose response was lost as not yet known to be saved, with a retry, in both languages", () => {
+    const ko = newRowStatus("ko", { state: "checking" });
+    assert.match(ko, /저장 여부 확인 중/);
+    assert.match(ko, /응답을 받지 못했습니다/);
+    assert.deepEqual(buttons(ko), ["재시도"]);
+
+    const vi = newRowStatus("vi", { state: "checking" });
+    assert.match(vi, /Đang kiểm tra đã lưu chưa/);
+    assert.match(vi, /Không nhận được phản hồi/);
+    assert.deepEqual(buttons(vi), ["Thử lại"]);
+  });
+
+  it("says when the new row came back as a call saved before, and why a new row was turned down", () => {
+    const already = newRowStatus("ko", { state: "saved", notice: "이미 저장된 콜입니다." });
+    assert.match(already, /저장됨/);
+    assert.match(already, /이미 저장된 콜입니다\./);
+    assert.deepEqual(buttons(already), []);
+
+    const failed = newRowStatus("ko", { state: "failed", message: "코스를 선택하세요." });
+    assert.match(failed, /저장 실패/);
+    assert.match(failed, /코스를 선택하세요\./);
+    assert.deepEqual(buttons(failed), []);
+
+    assert.doesNotMatch(newRowStatus("ko", { state: "idle" }), /저장/);
   });
 });

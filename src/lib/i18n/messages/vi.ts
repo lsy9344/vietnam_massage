@@ -259,6 +259,7 @@ export const vi: Messages = {
   "calls.placeholder.roomUnassigned": "Chưa phân phòng",
   "calls.placeholder.searchEmpty": "Không có kết quả tìm kiếm",
   "calls.addRow.submit": "Thêm dòng cuộc gọi mới",
+  "calls.addRow.settlementViewHint": "Vui lòng thêm cuộc gọi mới ở chế độ xem Đặt trước · Vận hành hoặc Tất cả.",
   "calls.customer.description": "Ghi tên, số liên lạc và ghi chú. Cùng một số liên lạc cũng không gắn vào cuộc gọi cho đến khi được chọn.",
   "calls.customer.field.name": "Tên",
   "calls.customer.field.phone": "Số liên lạc",
@@ -315,6 +316,8 @@ export const vi: Messages = {
   "calls.save.retry": "Thử lại",
   "calls.save.reloadLatest": "Tải lại nội dung mới nhất",
   "calls.save.autosaveFailed": "Tự động lưu dòng cuộc gọi thất bại.",
+  "calls.save.alreadySaved": "Cuộc gọi này đã được lưu trước đó.",
+  "calls.save.checkingHint": "Không nhận được phản hồi. Thử lại sẽ gửi cùng một yêu cầu nên cuộc gọi không bị tạo hai lần.",
 
   // 콜 계산 상태
   "calls.calc.errorPending": "Tạm hoãn lưu, chờ tính toán",
@@ -383,6 +386,10 @@ export const vi: Messages = {
   "calls.tabs.aria": "Chế độ xem sổ gọi",
   "calls.tab.ledger": "Sổ gọi",
   "calls.tab.cashbook": "Thu chi trong ngày",
+  "calls.view.aria": "Chế độ xem bảng sổ gọi",
+  "calls.view.booking": "Đặt trước · Vận hành",
+  "calls.view.settlement": "Thu · Đối soát",
+  "calls.view.all": "Tất cả",
   "calls.statusCounts.aria": "Số ca theo trạng thái",
   "calls.statusCounts.total": "Tất cả",
   "calls.statusCounts.reserved": "Đặt trước",
@@ -802,7 +809,7 @@ export const vi: Messages = {
   "closing.reopen.label": "Lý do mở lại",
   "closing.reopen.placeholder": "Hãy nhập lý do mở lại.",
   "closing.reopen.adminOnly": "Chỉ quản trị viên mới có thể mở lại.",
-  "closing.reopen.help": "Mở lại chỉ khả dụng ở trạng thái đã khóa và lý do được ghi vào nhật ký kiểm tra.",
+  "closing.reopen.help": "Mở lại khả dụng ở trạng thái đã chốt hoặc đã khóa và lý do được ghi vào nhật ký kiểm tra.",
 
   // /dashboard 화면
   // 공통 (대시보드 3개 화면 공유)

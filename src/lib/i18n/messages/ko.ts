@@ -259,6 +259,7 @@ export const ko = {
   "calls.placeholder.roomUnassigned": "미배정",
   "calls.placeholder.searchEmpty": "검색 결과 없음",
   "calls.addRow.submit": "새 콜 행 추가",
+  "calls.addRow.settlementViewHint": "새 콜은 예약·현장이나 전체 보기에서 추가하세요.",
   "calls.customer.description": "이름, 연락처, 메모를 적는다. 같은 연락처가 있어도 콜에서 고르기 전에는 붙지 않는다.",
   "calls.customer.field.name": "이름",
   "calls.customer.field.phone": "연락처",
@@ -315,6 +316,8 @@ export const ko = {
   "calls.save.retry": "재시도",
   "calls.save.reloadLatest": "최신 내용으로 다시 불러오기",
   "calls.save.autosaveFailed": "콜 행 자동저장에 실패했습니다.",
+  "calls.save.alreadySaved": "이미 저장된 콜입니다.",
+  "calls.save.checkingHint": "응답을 받지 못했습니다. 재시도해도 같은 요청으로 보내므로 콜이 두 번 생기지 않습니다.",
 
   // 콜 계산 상태
   "calls.calc.errorPending": "저장 보류 계산 대기",
@@ -383,6 +386,11 @@ export const ko = {
   "calls.tabs.aria": "콜 원장 보기",
   "calls.tab.ledger": "원장",
   "calls.tab.cashbook": "하루 수납·지출",
+  // 원장 탭 안의 보기 전환(티켓 19): 예약·현장 / 수납·정산 / 전체. 같은 데이터를 다른 열 묶음으로 보여 준다.
+  "calls.view.aria": "원장 표 보기",
+  "calls.view.booking": "예약·현장",
+  "calls.view.settlement": "수납·정산",
+  "calls.view.all": "전체",
   "calls.statusCounts.aria": "상태별 건수",
   "calls.statusCounts.total": "전체",
   "calls.statusCounts.reserved": "예약",
@@ -802,7 +810,7 @@ export const ko = {
   "closing.reopen.label": "재오픈 사유",
   "closing.reopen.placeholder": "재오픈 사유를 입력하세요.",
   "closing.reopen.adminOnly": "관리자만 재오픈할 수 있습니다.",
-  "closing.reopen.help": "재오픈은 잠금 상태에서만 가능하며 사유는 감사 로그에 기록된다.",
+  "closing.reopen.help": "재오픈은 마감확정과 잠금 상태에서 가능하며 사유는 감사 로그에 기록된다.",
 
   // /dashboard 화면
   // 공통 (대시보드 3개 화면 공유)

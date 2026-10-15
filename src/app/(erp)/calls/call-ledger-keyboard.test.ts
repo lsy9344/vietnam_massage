@@ -27,6 +27,15 @@ test("Tab and Shift+Tab move across editable cells and wrap between rows", () =>
   assert.deepEqual(moveTabCell(cell(0, "startTime"), rows.length, true), cell(0, "startTime"));
 });
 
+test("Tab uses the view's own editable field order when one is given (ticket 19)", () => {
+  const bookingFields = ["startTime", "customerMemo", "status", "roomId", "courseId"];
+
+  assert.deepEqual(moveTabCell(cell(0, "startTime"), rows.length, false, bookingFields), cell(0, "customerMemo"));
+  assert.deepEqual(moveTabCell(cell(0, "customerMemo"), rows.length, false, bookingFields), cell(0, "status"));
+  assert.deepEqual(moveTabCell(cell(0, "courseId"), rows.length, false, bookingFields), cell(1, "startTime"));
+  assert.deepEqual(moveTabCell(cell(1, "startTime"), rows.length, true, bookingFields), cell(0, "courseId"));
+});
+
 test("Enter commits current editable cell and moves to the same field on the next row", () => {
   assert.deepEqual(moveEnterCell(cell(0, "courseId"), rows.length), cell(1, "courseId"));
   assert.deepEqual(moveEnterCell(cell(2, "courseId"), rows.length), cell(2, "courseId"));

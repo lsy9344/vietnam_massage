@@ -70,6 +70,7 @@ for (const forbidden of [
   "DailyExpensePanel",
   "autosaveServiceCallRow",
   "saveBasicServiceCallRow",
+  "createServiceCallRow",
   "createDailyExpense",
   "updateDailyExpense",
   "deactivateDailyExpense"

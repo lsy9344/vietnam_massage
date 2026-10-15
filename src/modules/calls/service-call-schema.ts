@@ -67,6 +67,11 @@ export const serviceCallAutosaveInputSchema = serviceCallInputSchema.extend({
   expectedUpdatedAt: savedVersion
 });
 
+// 원장 새 행은 초안마다 화면이 요청 id를 하나 만든다. 응답을 받지 못해 다시 보낼 때도 같은 id를 보낸다.
+export const serviceCallCreateInputSchema = serviceCallInputSchema.omit({ serviceCallId: true, expectedUpdatedAt: true }).extend({
+  requestId: z.string().trim().min(1, "새 행 요청 id가 올바르지 않습니다.").max(100, "새 행 요청 id가 올바르지 않습니다.")
+});
+
 export const dailyExpenseInputSchema = z.object({
   operatingMonthId: z.string().trim().min(1, "운영월을 선택하세요."),
   expenseDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, isoDateMessage),
@@ -97,6 +102,7 @@ export const customerUpdateSchema = customerInputSchema.extend({
 
 export type ServiceCallInput = z.infer<typeof serviceCallInputSchema>;
 export type ServiceCallAutosaveInput = z.infer<typeof serviceCallAutosaveInputSchema>;
+export type ServiceCallCreateInput = z.infer<typeof serviceCallCreateInputSchema>;
 export type DailyExpenseInput = Omit<z.infer<typeof dailyExpenseInputSchema>, "method"> & {
   method?: "cash" | "bank" | "" | null;
 };

@@ -72,6 +72,14 @@ Owns the reservation and service-call ledger.
 - Row save states now use the shared `SaveStatus` chip in the 저장상태 cell, apart from the warnings cell: `저장 중`, `저장됨` (also for a row not yet edited on this screen), `저장 실패`, `충돌 확인 필요`. The Story 2.2 labels `저장중` and `저장 보류` are no longer shown for the save state (`저장 보류 계산 대기` remains in the calculation cell).
 - Daily expense and customer saves are unchanged and have no version check.
 
+## Ticket 16 Scope (새 행 요청 id)
+
+- `ServiceCall.requestId` (`request_id`) is nullable and unique. Calls made before Ticket 16 keep it empty.
+- The ledger's new row uses `createServiceCallRow()` with the draft's `requestId`, which returns `{ row, alreadySaved }`. When a call already exists for that request id, it returns that call with `alreadySaved: true` and writes nothing, not even an audit entry. The lookup runs before the write checks, so a repeat still gets the call it made even if the month was locked since.
+- When two creations with the same request id run at once, the later insert fails on the unique index (`P2002`), and that request reads the call the first one made and returns it the same way. One call and one creation audit remain. `saveBasicServiceCallRow()` keeps creating without a request id.
+- The Server Action `createServiceCallRowAction()` replaces the add-row form action and returns the notice "이미 저장된 콜입니다." for a repeat.
+- The new row keeps a controlled draft (`call-new-row-save.ts`). Each draft gets one request id, kept until the call is saved. When the response is lost (network error, or no answer within 15 seconds) the row shows `저장 여부 확인 중`, keeps its input locked as sent, and "재시도" sends the same request id. A late answer is still taken. After a save the row starts a blank draft with a new request id.
+
 ## Includes
 
 - service calls

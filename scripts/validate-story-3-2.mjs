@@ -73,7 +73,7 @@ for (const required of [
 for (const label of ["운영월 관리로 이동", "오늘 상태 요약", "결제합계", "순매출"]) {
   if (!koMessagesLive.includes(label)) errors.push(`messages/ko.ts missing live label: ${label}`);
 }
-for (const forbidden of ["ErpEmptyState", "EditableCallGrid", "DailyExpensePanel", "autosaveServiceCallRow", "saveBasicServiceCallRow"]) {
+for (const forbidden of ["ErpEmptyState", "EditableCallGrid", "DailyExpensePanel", "autosaveServiceCallRow", "saveBasicServiceCallRow", "createServiceCallRow"]) {
   if (livePage.includes(forbidden)) errors.push(`live/page.tsx must stay read-only and not include ${forbidden}`);
 }
 

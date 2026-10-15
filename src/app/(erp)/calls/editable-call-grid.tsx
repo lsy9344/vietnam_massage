@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useActionState,
   useCallback,
   useEffect,
   useId,
@@ -11,7 +10,8 @@ import {
   useRef,
   useState,
   useTransition,
-  type KeyboardEvent
+  type KeyboardEvent,
+  type ReactNode
 } from "react";
 import { createPortal } from "react-dom";
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
@@ -21,12 +21,7 @@ import { formatNumber } from "@/lib/i18n/format";
 import type { Locale } from "@/lib/i18n/config";
 import type { MessageKey } from "@/lib/i18n/types";
 import type { CustomerDto, ServiceCallCalculationStatus, ServiceCallFormOptions, ServiceCallOption, ServiceCallRowDto } from "@/modules/calls/service-call-service";
-import {
-  autosaveServiceCallRowAction,
-  reloadServiceCallRowAction,
-  saveBasicServiceCallRowAction,
-  type ServiceCallActionState
-} from "@/app/(erp)/calls/actions";
+import { autosaveServiceCallRowAction, createServiceCallRowAction, reloadServiceCallRowAction } from "@/app/(erp)/calls/actions";
 import type { AvailabilityCourseChoice } from "@/app/(erp)/calls/therapist-availability-view";
 import { calculationErrorMessageKey } from "@/app/(erp)/calls/calculation-status-message";
 import {
@@ -36,8 +31,14 @@ import {
   type CallRowDraft,
   type RowSaveStatus
 } from "@/app/(erp)/calls/call-row-save";
-import { CallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
-import { ledgerCallAnchorId } from "@/app/(erp)/calls/ledger-address";
+import {
+  initialNewCallRowSave,
+  isNewRowSaveLocked,
+  newCallRowSaveReducer,
+  type NewCallRowDraft
+} from "@/app/(erp)/calls/call-new-row-save";
+import { CallRowSaveStatus, NewCallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
+import { ledgerCallAnchorId, type LedgerView } from "@/app/(erp)/calls/ledger-address";
 import { CallWarningCell } from "@/app/(erp)/calls/call-warning-cell";
 import { spokenClock } from "@/app/(erp)/calls/call-warning-label";
 import {
@@ -81,30 +82,112 @@ const CALL_GRID_COLUMNS = [
   { id: "saveStatus", labelKey: "calls.column.saveStatus", width: "10rem" }
 ] as const satisfies ReadonlyArray<{ id: string; labelKey: MessageKey; width: string; settlement?: boolean }>;
 
-function visibleCallGridColumns(showSettlementColumns: boolean) {
-  return CALL_GRID_COLUMNS.filter((column) => showSettlementColumns || !("settlement" in column && column.settlement));
+// 원장 보기 세 가지(명세 F02, 티켓 19)의 열 묶음. date·saveStatus는 보기와 무관하게 항상 있고,
+// time·customerMemo·reservationStatus는 모든 보기에서 이 자리(앞쪽)에 고정된다. all은 보기가 없던
+// 때의 순서 그대로 둔다(기존 E2E의 키보드 이동 순서를 그대로 지키기 위해 다시 묶지 않는다).
+const LEDGER_VIEW_COLUMN_IDS = {
+  booking: [
+    "date",
+    "time",
+    "customerMemo",
+    "reservationStatus",
+    "actualEntry",
+    "room",
+    "course",
+    "therapist1",
+    "therapist2",
+    "earcare",
+    "warnings",
+    "saveStatus"
+  ],
+  settlement: [
+    "date",
+    "time",
+    "customerMemo",
+    "reservationStatus",
+    "discountType",
+    "paymentMethod",
+    "paymentAmount",
+    "confirmation",
+    "note",
+    "therapist1Commission",
+    "therapist2Commission",
+    "earcarePool",
+    "opsCallCredit",
+    "saveStatus"
+  ],
+  all: CALL_GRID_COLUMNS.map((column) => column.id)
+} as const satisfies Record<LedgerView, readonly (typeof CALL_GRID_COLUMNS)[number]["id"][]>;
+
+// 각 열 머리 id가 쓰는 실제 필드 이름(EditableCallField나 읽기전용 계산 필드). date·warnings는 이
+// 커스텀 키보드 이동 체계 밖(날짜는 글자뿐, 경고는 CallWarningCell의 네이티브 버튼)이라 null이다.
+const CALL_GRID_COLUMN_FIELD: Record<(typeof CALL_GRID_COLUMNS)[number]["id"], string | null> = {
+  date: null,
+  time: "startTime",
+  actualEntry: "actualEntryTime",
+  room: "roomId",
+  course: "courseId",
+  customerMemo: "customerMemo",
+  customer: "customerId",
+  therapist1: "therapist1Id",
+  therapist2: "therapist2Id",
+  earcare: "earcareEmployeeId",
+  reservationStatus: "status",
+  discountType: "discountTypeCode",
+  paymentMethod: "paymentMethodCode",
+  note: "note",
+  confirmation: "confirmationCode",
+  paymentAmount: "paymentAmount",
+  discount: "discountAmount",
+  therapist1Commission: "therapist1Commission",
+  therapist2Commission: "therapist2Commission",
+  earcarePool: "earcarePoolAmount",
+  opsCallCredit: "opsCallCredit",
+  warnings: null,
+  saveStatus: "calculationStatus"
+};
+
+function visibleCallGridColumns(view: LedgerView, showSettlementColumns: boolean) {
+  const columnById = new Map(CALL_GRID_COLUMNS.map((column) => [column.id, column] as const));
+  return LEDGER_VIEW_COLUMN_IDS[view]
+    .map((id) => columnById.get(id))
+    .filter((column): column is (typeof CALL_GRID_COLUMNS)[number] => column !== undefined)
+    .filter((column) => showSettlementColumns || !("settlement" in column && column.settlement));
 }
 
-function callGridMinWidth(showSettlementColumns: boolean) {
-  return showSettlementColumns ? "208rem" : "181rem";
+/** 보이는 열의 너비 합. 보기마다 열 수가 달라 더 이상 고정값 하나로 둘 수 없다. */
+function callGridMinWidth(view: LedgerView, showSettlementColumns: boolean) {
+  const total = visibleCallGridColumns(view, showSettlementColumns).reduce((sum, column) => sum + Number.parseFloat(column.width), 0);
+  return `${total}rem`;
 }
 
-function CallGridColgroup({ showSettlementColumns }: { showSettlementColumns: boolean }) {
+/** 키보드 이동 순서(편집 칸 + 읽기전용 계산 칸)는 보이는 열의 순서를 따른다(명세 F02 기준). */
+function navigableFieldsForView(view: LedgerView, showSettlementColumns: boolean): string[] {
+  return visibleCallGridColumns(view, showSettlementColumns)
+    .map((column) => CALL_GRID_COLUMN_FIELD[column.id])
+    .filter((field): field is string => field !== null);
+}
+
+function editableFieldsForView(view: LedgerView, showSettlementColumns: boolean): EditableCallField[] {
+  return navigableFieldsForView(view, showSettlementColumns).filter(isEditableCallField);
+}
+
+function CallGridColgroup({ showSettlementColumns, view }: { showSettlementColumns: boolean; view: LedgerView }) {
   return (
     <colgroup>
-      {visibleCallGridColumns(showSettlementColumns).map((column) => (
+      {visibleCallGridColumns(view, showSettlementColumns).map((column) => (
         <col key={column.id} style={{ width: column.width }} />
       ))}
     </colgroup>
   );
 }
 
-function CallGridHead({ showSettlementColumns }: { showSettlementColumns: boolean }) {
+function CallGridHead({ showSettlementColumns, view }: { showSettlementColumns: boolean; view: LedgerView }) {
   const t = useT();
   return (
     <thead className="bg-readonly text-xs font-semibold text-foreground">
       <tr>
-        {visibleCallGridColumns(showSettlementColumns).map((column) => (
+        {visibleCallGridColumns(view, showSettlementColumns).map((column) => (
           <th className="whitespace-nowrap border-b border-border px-2 py-2 align-middle" key={column.id}>
             {t(column.labelKey)}
           </th>
@@ -114,19 +197,7 @@ function CallGridHead({ showSettlementColumns }: { showSettlementColumns: boolea
   );
 }
 
-function fieldError(state: ServiceCallActionState, field: string) {
-  if (!state || state.ok) {
-    return null;
-  }
-  return state.fieldErrors?.[field]?.[0] ?? null;
-}
-
-function InlineError({ state, field }: { state: ServiceCallActionState; field?: string }) {
-  if (!state || state.ok) {
-    return null;
-  }
-
-  const message = field ? fieldError(state, field) : state.formError;
+function InlineError({ message }: { message: string | null }) {
   if (!message) {
     return null;
   }
@@ -658,6 +729,14 @@ function ActualEntryCell({
   );
 }
 
+/** 새 행 저장 응답을 이만큼 기다려도 오지 않으면 "저장 여부 확인 중"이 된다. 그 뒤에 온 응답도 받아들인다. */
+const NEW_ROW_SAVE_TIMEOUT_MS = 15_000;
+
+/** 새 행 초안의 요청 id. randomUUID는 보안 문맥(https)에서만 있어, 어디서나 있는 getRandomValues로 만든다. */
+function newRequestId() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 function AddRowForm({
   courseChoice,
   customers,
@@ -666,7 +745,8 @@ function AddRowForm({
   operatingMonthId,
   options,
   serviceDate,
-  showSettlementColumns
+  showSettlementColumns,
+  view
 }: {
   courseChoice: (AvailabilityCourseChoice & { id: number }) | null;
   customers: CustomerDto[];
@@ -676,21 +756,61 @@ function AddRowForm({
   options: ServiceCallFormOptions;
   serviceDate: string;
   showSettlementColumns: boolean;
+  view: LedgerView;
 }) {
   const t = useT();
-  const [state, formAction, pending] = useActionState<ServiceCallActionState, FormData>(saveBasicServiceCallRowAction, null);
+  // 운영월·날짜는 처음 그릴 때의 값을 쓴다. 날짜를 바꾸면 원장 화면이 key로 새로 그려져 이 초안도 새로 시작한다(page.tsx).
+  const [save, dispatch] = useReducer(newCallRowSaveReducer, { operatingMonthId, serviceDate }, (ledger) =>
+    initialNewCallRowSave(ledger, newRequestId())
+  );
+  const { draft, fieldErrors } = save;
+  const [, startTransition] = useTransition();
+  const request = save.inFlight;
   const choiceId = courseChoice?.id ?? 0;
-  const [seenChoiceId, setSeenChoiceId] = useState(choiceId);
-  const [hiddenState, setHiddenState] = useState<ServiceCallActionState>(null);
-  // A course choice fills three fields. It is not a save, so the previous result stays off the row.
-  if (seenChoiceId !== choiceId) {
+  // 가능 코스에서 고르면 시각·코스·Therapist를 채운다. 처음 그릴 때 이미 고른 것이 있어도 채운다.
+  // 보내는 중이거나 저장 여부를 모르는 동안 고른 것은 초안이 풀린 뒤에 채운다.
+  const [seenChoiceId, setSeenChoiceId] = useState(0);
+  if (seenChoiceId !== choiceId && !isNewRowSaveLocked(save.status)) {
     setSeenChoiceId(choiceId);
-    setHiddenState(state);
+    if (courseChoice) {
+      dispatch({
+        type: "choose",
+        changes: { startTime: courseChoice.startTime, courseId: courseChoice.courseId, therapist1Id: courseChoice.therapistId }
+      });
+    }
   }
-  const rowState = state === hiddenState ? null : state;
-  const disabled = isLocked || pending;
+  const disabled = isLocked || isNewRowSaveLocked(save.status);
   const rowIndex = existingRowCount;
   const rowCount = existingRowCount + 1;
+  const rowEditableFields = useMemo(() => editableFieldsForView(view, showSettlementColumns), [view, showSettlementColumns]);
+
+  // 응답을 받지 못하면(네트워크 오류, 시간 초과) 초안과 요청 id를 둔 채 "저장 여부 확인 중"이 된다(newCallRowSaveReducer).
+  useEffect(() => {
+    if (!request) {
+      return;
+    }
+    startTransition(() => {
+      void (async () => {
+        const giveUp = window.setTimeout(() => dispatch({ type: "lost", request }), NEW_ROW_SAVE_TIMEOUT_MS);
+        try {
+          const result = await createServiceCallRowAction(request);
+          if (result.ok) {
+            dispatch({ type: "saved", request, notice: result.notice ?? null, nextRequestId: newRequestId() });
+          } else {
+            dispatch({ type: "failed", request, message: result.formError ?? null, fieldErrors: result.fieldErrors });
+          }
+        } catch {
+          dispatch({ type: "lost", request });
+        } finally {
+          window.clearTimeout(giveUp);
+        }
+      })();
+    });
+  }, [request]);
+
+  function update<Key extends keyof NewCallRowDraft>(key: Key, value: NewCallRowDraft[Key]) {
+    dispatch({ type: "edit", changes: { [key]: value } });
+  }
 
   function handleAddRowKeyDown(columnId: EditableCallField, event: KeyboardEvent<HTMLElement>) {
     if (disabled) {
@@ -699,205 +819,301 @@ function AddRowForm({
 
     if (event.key === "Tab") {
       event.preventDefault();
-      const nextCell = moveTabCell({ rowIndex, columnId }, rowCount, event.shiftKey);
+      const nextCell = moveTabCell({ rowIndex, columnId }, rowCount, event.shiftKey, rowEditableFields);
       focusLedgerCell(nextCell.rowIndex, nextCell.columnId);
       return;
     }
 
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
       event.preventDefault();
-      const nextCell = moveAdjacentCell({ rowIndex, columnId }, rowCount, event.key as ArrowNavigationKey, EDITABLE_CALL_FIELDS);
+      const nextCell = moveAdjacentCell({ rowIndex, columnId }, rowCount, event.key as ArrowNavigationKey, rowEditableFields);
       if (isEditableCallField(nextCell.columnId)) {
         focusLedgerCell(nextCell.rowIndex, nextCell.columnId);
       }
     }
   }
 
+  const visibleColumns = visibleCallGridColumns(view, showSettlementColumns);
+
+  // 수납·정산 보기에는 코스 열이 없고 코스는 필수 입력이라, 그 보기에서는 새 행을 만들 수 없다.
+  // 예약·현장이나 전체 보기로 바꿔서 추가하라는 안내만 둔다(가정: 새 콜 만들기는 예약 때 하는 일이다).
+  if (view === "settlement") {
+    return (
+      <div className="border-t border-border bg-surface">
+        <div className="relative overflow-x-auto">
+          <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(view, showSettlementColumns) }}>
+            <CallGridColgroup showSettlementColumns={showSettlementColumns} view={view} />
+            <CallGridHead showSettlementColumns={showSettlementColumns} view={view} />
+            <tbody>
+              <tr>
+                <td className="px-2 py-3 text-xs text-muted" colSpan={visibleColumns.length}>
+                  {t("calls.addRow.settlementViewHint")}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  // 보이는 열 순서대로 그릴 칸들. date부터 편집 칸까지는 보기마다 자리가 달라 순서대로 꺼내 쓰고,
+  // 그 뒤(계산 칸·경고·저장상태 자리)는 아직 저장되지 않은 행이라 쓸 내용이 없어 제출 버튼 한 칸으로 묶는다.
+  const cells: Record<string, ReactNode> = {
+    date: (
+      <td className="border-b border-border px-2 py-2 text-xs text-muted" key="date">
+        {serviceDate}
+      </td>
+    ),
+    time: (
+      <td className="border-b border-border px-2 py-2" key="time">
+        <SelectCell
+          columnId="startTime"
+          disabled={disabled}
+          label={t("calls.column.time")}
+          name="startTime"
+          onChange={(value) => update("startTime", value)}
+          onGridKeyDown={(event) => handleAddRowKeyDown("startTime", event)}
+          options={options.timeSlots}
+          required
+          rowIndex={rowIndex}
+          value={draft.startTime}
+        />
+        <InlineError message={firstFieldError(fieldErrors, "startTime")} />
+      </td>
+    ),
+    actualEntry: (
+      <td className="border-b border-border px-2 py-2" key="actualEntry">
+        <ActualEntryCell
+          disabled={disabled}
+          onChange={(value) => update("actualEntryTime", nullableValue(value))}
+          onGridKeyDown={(event) => handleAddRowKeyDown("actualEntryTime", event)}
+          rowIndex={rowIndex}
+          value={draft.actualEntryTime ?? ""}
+        />
+        <InlineError message={firstFieldError(fieldErrors, "actualEntryTime")} />
+      </td>
+    ),
+    room: (
+      <td className="border-b border-border px-2 py-2" key="room">
+        <SelectCell
+          columnId="roomId"
+          disabled={disabled}
+          emptyLabel={t("calls.placeholder.roomUnassigned")}
+          label={t("calls.column.room")}
+          name="roomId"
+          onChange={(value) => update("roomId", nullableValue(value))}
+          onGridKeyDown={(event) => handleAddRowKeyDown("roomId", event)}
+          options={options.rooms}
+          rowIndex={rowIndex}
+          value={draft.roomId ?? ""}
+        />
+        <InlineError message={firstFieldError(fieldErrors, "roomId")} />
+      </td>
+    ),
+    course: (
+      <td className="border-b border-border px-2 py-2" key="course">
+        <SelectCell
+          columnId="courseId"
+          disabled={disabled}
+          label={t("calls.column.course")}
+          name="courseId"
+          onChange={(value) => update("courseId", value)}
+          onGridKeyDown={(event) => handleAddRowKeyDown("courseId", event)}
+          options={options.courses}
+          required
+          rowIndex={rowIndex}
+          value={draft.courseId}
+        />
+        <InlineError message={firstFieldError(fieldErrors, "courseId")} />
+      </td>
+    ),
+    customerMemo: (
+      <td className="border-b border-border px-2 py-2" key="customerMemo">
+        <TextCell
+          columnId="customerMemo"
+          disabled={disabled}
+          label={t("calls.column.customerMemo")}
+          name="customerMemo"
+          onChange={(value) => update("customerMemo", nullableValue(value))}
+          onKeyDown={(event) => handleAddRowKeyDown("customerMemo", event)}
+          placeholder={t("calls.column.customerMemo")}
+          rowIndex={rowIndex}
+          value={draft.customerMemo ?? ""}
+        />
+      </td>
+    ),
+    customer: (
+      <td className="border-b border-border px-2 py-2" key="customer">
+        <CustomerLinkSelect
+          columnId="customerId"
+          customers={customers}
+          disabled={disabled}
+          name="customerId"
+          onChange={(value) => update("customerId", nullableValue(value))}
+          onKeyDown={(event) => handleAddRowKeyDown("customerId", event)}
+          rowIndex={rowIndex}
+          value={draft.customerId ?? ""}
+        />
+      </td>
+    ),
+    therapist1: (
+      <td className="border-b border-border px-2 py-2" key="therapist1">
+        <SelectCell
+          columnId="therapist1Id"
+          disabled={disabled}
+          label={t("calls.column.therapist1")}
+          name="therapist1Id"
+          onChange={(value) => update("therapist1Id", nullableValue(value))}
+          onGridKeyDown={(event) => handleAddRowKeyDown("therapist1Id", event)}
+          options={options.therapists}
+          rowIndex={rowIndex}
+          value={draft.therapist1Id ?? ""}
+        />
+      </td>
+    ),
+    therapist2: (
+      <td className="border-b border-border px-2 py-2" key="therapist2">
+        <SelectCell
+          disabled={disabled}
+          errorId="add-call-therapist2-error"
+          errorMessage={firstFieldError(fieldErrors, "therapist2Id")}
+          columnId="therapist2Id"
+          label={t("calls.column.therapist2")}
+          name="therapist2Id"
+          onChange={(value) => update("therapist2Id", nullableValue(value))}
+          onGridKeyDown={(event) => handleAddRowKeyDown("therapist2Id", event)}
+          options={options.therapists}
+          rowIndex={rowIndex}
+          value={draft.therapist2Id ?? ""}
+        />
+      </td>
+    ),
+    earcare: (
+      <td className="border-b border-border px-2 py-2" key="earcare">
+        <SelectCell
+          columnId="earcareEmployeeId"
+          disabled={disabled}
+          label={t("calls.column.earcare")}
+          name="earcareEmployeeId"
+          onChange={(value) => update("earcareEmployeeId", nullableValue(value))}
+          onGridKeyDown={(event) => handleAddRowKeyDown("earcareEmployeeId", event)}
+          options={options.earcareEmployees}
+          rowIndex={rowIndex}
+          value={draft.earcareEmployeeId ?? ""}
+        />
+      </td>
+    ),
+    reservationStatus: (
+      <td className="border-b border-border px-2 py-2" key="reservationStatus">
+        <SelectCell
+          columnId="status"
+          disabled={disabled}
+          label={t("calls.column.status")}
+          name="status"
+          onChange={(value) => update("status", value)}
+          onGridKeyDown={(event) => handleAddRowKeyDown("status", event)}
+          options={options.statuses}
+          required
+          rowIndex={rowIndex}
+          value={draft.status}
+        />
+        <InlineError message={firstFieldError(fieldErrors, "status")} />
+      </td>
+    ),
+    discountType: (
+      <td className="border-b border-border px-2 py-2" key="discountType">
+        <SelectCell
+          columnId="discountTypeCode"
+          disabled={disabled}
+          label={t("calls.column.discountType")}
+          name="discountTypeCode"
+          onChange={(value) => update("discountTypeCode", nullableValue(value))}
+          onGridKeyDown={(event) => handleAddRowKeyDown("discountTypeCode", event)}
+          options={options.discountTypes}
+          rowIndex={rowIndex}
+          value={draft.discountTypeCode ?? ""}
+        />
+      </td>
+    ),
+    paymentMethod: (
+      <td className="border-b border-border px-2 py-2" key="paymentMethod">
+        <SelectCell
+          columnId="paymentMethodCode"
+          disabled={disabled}
+          label={t("calls.column.paymentMethod")}
+          name="paymentMethodCode"
+          onChange={(value) => update("paymentMethodCode", nullableValue(value))}
+          onGridKeyDown={(event) => handleAddRowKeyDown("paymentMethodCode", event)}
+          options={options.paymentMethods}
+          rowIndex={rowIndex}
+          value={draft.paymentMethodCode ?? ""}
+        />
+      </td>
+    ),
+    note: (
+      <td className="border-b border-border px-2 py-2" key="note">
+        <TextCell
+          columnId="note"
+          disabled={disabled}
+          label={t("calls.column.note")}
+          name="note"
+          onChange={(value) => update("note", nullableValue(value))}
+          onKeyDown={(event) => handleAddRowKeyDown("note", event)}
+          placeholder={t("calls.column.note")}
+          rowIndex={rowIndex}
+          value={draft.note ?? ""}
+        />
+      </td>
+    ),
+    confirmation: (
+      <td className="border-b border-border px-2 py-2" key="confirmation">
+        <SelectCell
+          columnId="confirmationCode"
+          disabled={disabled}
+          label={t("calls.column.confirmation")}
+          name="confirmationCode"
+          onChange={(value) => update("confirmationCode", nullableValue(value))}
+          onGridKeyDown={(event) => handleAddRowKeyDown("confirmationCode", event)}
+          options={options.confirmationCodes}
+          rowIndex={rowIndex}
+          value={draft.confirmationCode ?? ""}
+        />
+      </td>
+    )
+  };
+
+  // 보이는 열 중 date와 그 보기의 편집 칸들은 앞쪽에 그대로 있다(all·booking 모두 그렇다. settlement는
+  // 위에서 이미 안내 행으로 갈렸다). 그 뒤 계산·경고·저장상태 자리는 제출 버튼 한 칸으로 묶는다.
+  const leadingColumns = visibleColumns.slice(0, 1 + rowEditableFields.length);
+  const trailingCount = visibleColumns.length - leadingColumns.length;
+
   return (
-    <form action={formAction} className="border-t border-border bg-surface">
-      <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
-      <input name="serviceDate" type="hidden" value={serviceDate} />
+    <form
+      className="border-t border-border bg-surface"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!disabled) dispatch({ type: "submit" });
+      }}
+    >
       <div className="relative overflow-x-auto">
-        <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(showSettlementColumns) }}>
-          <CallGridColgroup showSettlementColumns={showSettlementColumns} />
-          <CallGridHead showSettlementColumns={showSettlementColumns} />
+        <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(view, showSettlementColumns) }}>
+          <CallGridColgroup showSettlementColumns={showSettlementColumns} view={view} />
+          <CallGridHead showSettlementColumns={showSettlementColumns} view={view} />
           <tbody>
             <tr className="align-top">
-              <td className="border-b border-border px-2 py-2 text-xs text-muted">{serviceDate}</td>
-              <td className="border-b border-border px-2 py-2">
-                <SelectCell
-                  columnId="startTime"
-                  defaultValue={courseChoice?.startTime}
-                  disabled={disabled}
-                  key={courseChoice ? `choice-${courseChoice.id}` : "blank"}
-                  label={t("calls.column.time")}
-                  name="startTime"
-                  onGridKeyDown={(event) => handleAddRowKeyDown("startTime", event)}
-                  options={options.timeSlots}
-                  required
-                  rowIndex={rowIndex}
-                />
-                <InlineError field="startTime" state={rowState} />
-              </td>
-              <td className="border-b border-border px-2 py-2">
-                <ActualEntryCell
-                  disabled={disabled}
-                  onGridKeyDown={(event) => handleAddRowKeyDown("actualEntryTime", event)}
-                  rowIndex={rowIndex}
-                />
-                <InlineError field="actualEntryTime" state={rowState} />
-              </td>
-              <td className="border-b border-border px-2 py-2">
-                <SelectCell
-                  columnId="roomId"
-                  disabled={disabled}
-                  emptyLabel={t("calls.placeholder.roomUnassigned")}
-                  label={t("calls.column.room")}
-                  name="roomId"
-                  onGridKeyDown={(event) => handleAddRowKeyDown("roomId", event)}
-                  options={options.rooms}
-                  rowIndex={rowIndex}
-                />
-                <InlineError field="roomId" state={rowState} />
-              </td>
-              <td className="border-b border-border px-2 py-2">
-                <SelectCell
-                  columnId="courseId"
-                  defaultValue={courseChoice?.courseId}
-                  disabled={disabled}
-                  key={courseChoice ? `choice-${courseChoice.id}` : "blank"}
-                  label={t("calls.column.course")}
-                  name="courseId"
-                  onGridKeyDown={(event) => handleAddRowKeyDown("courseId", event)}
-                  options={options.courses}
-                  required
-                  rowIndex={rowIndex}
-                />
-                <InlineError field="courseId" state={rowState} />
-              </td>
-              <td className="border-b border-border px-2 py-2">
-                <TextCell
-                  columnId="customerMemo"
-                  disabled={disabled}
-                  label={t("calls.column.customerMemo")}
-                  name="customerMemo"
-                  onKeyDown={(event) => handleAddRowKeyDown("customerMemo", event)}
-                  placeholder={t("calls.column.customerMemo")}
-                  rowIndex={rowIndex}
-                />
-              </td>
-              <td className="border-b border-border px-2 py-2">
-                <CustomerLinkSelect
-                  columnId="customerId"
-                  customers={customers}
-                  disabled={disabled}
-                  name="customerId"
-                  onKeyDown={(event) => handleAddRowKeyDown("customerId", event)}
-                  rowIndex={rowIndex}
-                />
-              </td>
-              <td className="border-b border-border px-2 py-2">
-                <SelectCell
-                  columnId="therapist1Id"
-                  defaultValue={courseChoice?.therapistId}
-                  disabled={disabled}
-                  key={courseChoice ? `choice-${courseChoice.id}` : "blank"}
-                  label={t("calls.column.therapist1")}
-                  name="therapist1Id"
-                  onGridKeyDown={(event) => handleAddRowKeyDown("therapist1Id", event)}
-                  options={options.therapists}
-                  rowIndex={rowIndex}
-                />
-              </td>
-              <td className="border-b border-border px-2 py-2">
-                <SelectCell
-                  disabled={disabled}
-                  errorId="add-call-therapist2-error"
-                  errorMessage={fieldError(rowState, "therapist2Id")}
-                  columnId="therapist2Id"
-                  label={t("calls.column.therapist2")}
-                  name="therapist2Id"
-                  onGridKeyDown={(event) => handleAddRowKeyDown("therapist2Id", event)}
-                  options={options.therapists}
-                  rowIndex={rowIndex}
-                />
-              </td>
-              <td className="border-b border-border px-2 py-2">
-                <SelectCell
-                  columnId="earcareEmployeeId"
-                  disabled={disabled}
-                  label={t("calls.column.earcare")}
-                  name="earcareEmployeeId"
-                  onGridKeyDown={(event) => handleAddRowKeyDown("earcareEmployeeId", event)}
-                  options={options.earcareEmployees}
-                  rowIndex={rowIndex}
-                />
-              </td>
-              <td className="border-b border-border px-2 py-2">
-                <SelectCell
-                  columnId="status"
-                  defaultValue="RESERVED"
-                  disabled={disabled}
-                  label={t("calls.column.status")}
-                  name="status"
-                  onGridKeyDown={(event) => handleAddRowKeyDown("status", event)}
-                  options={options.statuses}
-                  required
-                  rowIndex={rowIndex}
-                />
-                <InlineError field="status" state={rowState} />
-              </td>
-              <td className="border-b border-border px-2 py-2">
-                <SelectCell
-                  columnId="discountTypeCode"
-                  disabled={disabled}
-                  label={t("calls.column.discountType")}
-                  name="discountTypeCode"
-                  onGridKeyDown={(event) => handleAddRowKeyDown("discountTypeCode", event)}
-                  options={options.discountTypes}
-                  rowIndex={rowIndex}
-                />
-              </td>
-              <td className="border-b border-border px-2 py-2">
-                <SelectCell
-                  columnId="paymentMethodCode"
-                  disabled={disabled}
-                  label={t("calls.column.paymentMethod")}
-                  name="paymentMethodCode"
-                  onGridKeyDown={(event) => handleAddRowKeyDown("paymentMethodCode", event)}
-                  options={options.paymentMethods}
-                  rowIndex={rowIndex}
-                />
-              </td>
-              <td className="border-b border-border px-2 py-2">
-                <TextCell
-                  columnId="note"
-                  disabled={disabled}
-                  label={t("calls.column.note")}
-                  name="note"
-                  onKeyDown={(event) => handleAddRowKeyDown("note", event)}
-                  placeholder={t("calls.column.note")}
-                  rowIndex={rowIndex}
-                />
-              </td>
-              <td className="border-b border-border px-2 py-2">
-                <SelectCell
-                  columnId="confirmationCode"
-                  disabled={disabled}
-                  label={t("calls.column.confirmation")}
-                  name="confirmationCode"
-                  onGridKeyDown={(event) => handleAddRowKeyDown("confirmationCode", event)}
-                  options={options.confirmationCodes}
-                  rowIndex={rowIndex}
-                />
-              </td>
-              <td className="border-b border-border bg-readonly px-2 py-2" colSpan={showSettlementColumns ? 8 : 4}>
+              {leadingColumns.map((column) => cells[column.id])}
+              <td className="border-b border-border bg-readonly px-2 py-2" colSpan={trailingCount} key="submit">
                 <div className="flex flex-wrap items-center gap-2">
                   <Button className="h-8 whitespace-nowrap px-3 text-xs" disabled={disabled} type="submit">
                     {t("calls.addRow.submit")}
                   </Button>
-                  <InlineError state={rowState} />
-                  {rowState?.ok ? <span className="text-xs text-muted">{t("calls.save.saved")}</span> : null}
+                  <NewCallRowSaveStatus
+                    message={save.message}
+                    notice={save.notice}
+                    onRetry={() => dispatch({ type: "submit" })}
+                    state={save.status}
+                  />
                 </div>
               </td>
             </tr>
@@ -1020,7 +1236,8 @@ function EditableCallRow({
   rowCount,
   rowIndex,
   selected,
-  showSettlementColumns
+  showSettlementColumns,
+  view
 }: {
   customers: CustomerDto[];
   isLocked: boolean;
@@ -1031,6 +1248,7 @@ function EditableCallRow({
   rowIndex: number;
   selected: boolean;
   showSettlementColumns: boolean;
+  view: LedgerView;
 }) {
   const t = useT();
   const [save, dispatch] = useReducer(callRowSaveReducer, row, initialCallRowSave);
@@ -1040,16 +1258,9 @@ function EditableCallRow({
   const saveHeld = isSaveHeld(saveStatus);
   const [, startTransition] = useTransition();
   const request = save.inFlight;
-  const navigableFields = useMemo(
-    () => [
-      ...EDITABLE_CALL_FIELDS,
-      "paymentAmount",
-      "discountAmount",
-      ...(showSettlementColumns ? ["therapist1Commission", "therapist2Commission", "earcarePoolAmount", "opsCallCredit"] : []),
-      "calculationStatus"
-    ],
-    [showSettlementColumns]
-  );
+  // 키보드 이동 순서는 보이는 열의 순서를 따른다(명세 F02 기준, 티켓 19). 보기가 바뀌면 다시 계산한다.
+  const navigableFields = useMemo(() => navigableFieldsForView(view, showSettlementColumns), [view, showSettlementColumns]);
+  const editableNavigableFields = useMemo(() => navigableFields.filter(isEditableCallField), [navigableFields]);
 
   // 저장은 행마다 하나씩 보낸다. 응답을 받으면 모아 둔 수정이 다음 저장으로 inFlight에 들어온다(callRowSaveReducer).
   useEffect(() => {
@@ -1110,7 +1321,7 @@ function EditableCallRow({
 
     if (event.key === "Tab") {
       event.preventDefault();
-      const nextCell = moveTabCell({ rowIndex, columnId }, rowCount, event.shiftKey);
+      const nextCell = moveTabCell({ rowIndex, columnId }, rowCount, event.shiftKey, editableNavigableFields);
       focusLedgerCell(nextCell.rowIndex, nextCell.columnId);
       return;
     }
@@ -1146,23 +1357,17 @@ function EditableCallRow({
     focusLedgerCell(nextCell.rowIndex, nextCell.columnId);
   }
 
-  return (
-    // 콜 상세 패널이 열린 행은 선택된 행 모양이 된다(design.md 6.6). 입력칸·버튼이 아닌 자리를 누르면 패널이 열린다.
-    <tr
-      className="align-top data-[selected=true]:bg-readonly [&[data-selected=true]>td:first-child]:[box-shadow:inset_3px_0_0_var(--brand)]"
-      data-selected={selected}
-      data-service-call-id={row.id}
-      id={ledgerCallAnchorId(row.id)}
-      onClick={(event) => {
-        if ((event.target as HTMLElement).closest("input, select, textarea, button, a, [role='option'], [role='combobox']")) return;
-        onOpenDetail(row.id);
-      }}
-    >
-      <td className="border-b border-border px-2 py-2 text-xs">
+  // 보기마다 보이는 열과 그 순서가 다르므로(명세 F02, 티켓 19), 칸은 열 머리 id로 모아 두고
+  // 보이는 열 목록을 따라 그 순서로 늘어놓는다. 각 칸의 내용·핸들러는 보기와 상관없이 그대로다.
+  const cells: Record<string, ReactNode> = {
+    date: (
+      <td className="border-b border-border px-2 py-2 text-xs" key="date">
         {draft.serviceDate}
         <input name="serviceCallId" type="hidden" value={draft.serviceCallId} />
       </td>
-      <td className="border-b border-border px-2 py-2">
+    ),
+    time: (
+      <td className="border-b border-border px-2 py-2" key="time">
         <SelectCell
           columnId="startTime"
           disabled={isLocked}
@@ -1178,7 +1383,9 @@ function EditableCallRow({
           value={draft.startTime}
         />
       </td>
-      <td className="border-b border-border px-2 py-2">
+    ),
+    actualEntry: (
+      <td className="border-b border-border px-2 py-2" key="actualEntry">
         <ActualEntryCell
           disabled={isLocked}
           displayEnd={serverRow.displayEnd}
@@ -1192,7 +1399,9 @@ function EditableCallRow({
           warningTime={serverRow.warningTime}
         />
       </td>
-      <td className="border-b border-border px-2 py-2">
+    ),
+    room: (
+      <td className="border-b border-border px-2 py-2" key="room">
         <SelectCell
           columnId="roomId"
           disabled={isLocked}
@@ -1208,7 +1417,9 @@ function EditableCallRow({
           value={draft.roomId ?? ""}
         />
       </td>
-      <td className="border-b border-border px-2 py-2">
+    ),
+    course: (
+      <td className="border-b border-border px-2 py-2" key="course">
         <SelectCell
           columnId="courseId"
           disabled={isLocked}
@@ -1224,7 +1435,9 @@ function EditableCallRow({
           value={draft.courseId}
         />
       </td>
-      <td className="border-b border-border px-2 py-2">
+    ),
+    customerMemo: (
+      <td className="border-b border-border px-2 py-2" key="customerMemo">
         <TextCell
           columnId="customerMemo"
           disabled={isLocked}
@@ -1239,7 +1452,9 @@ function EditableCallRow({
         />
         <span className="sr-only">{draft.customerMemo ?? ""}</span>
       </td>
-      <td className="border-b border-border px-2 py-2">
+    ),
+    customer: (
+      <td className="border-b border-border px-2 py-2" key="customer">
         <CustomerLinkSelect
           columnId="customerId"
           customers={customers}
@@ -1250,7 +1465,9 @@ function EditableCallRow({
           value={draft.customerId ?? ""}
         />
       </td>
-      <td className="border-b border-border px-2 py-2">
+    ),
+    therapist1: (
+      <td className="border-b border-border px-2 py-2" key="therapist1">
         <SelectCell
           columnId="therapist1Id"
           disabled={isLocked}
@@ -1265,7 +1482,9 @@ function EditableCallRow({
           value={draft.therapist1Id ?? ""}
         />
       </td>
-      <td className="border-b border-border px-2 py-2">
+    ),
+    therapist2: (
+      <td className="border-b border-border px-2 py-2" key="therapist2">
         <SelectCell
           columnId="therapist2Id"
           disabled={isLocked}
@@ -1282,7 +1501,9 @@ function EditableCallRow({
           value={draft.therapist2Id ?? ""}
         />
       </td>
-      <td className="border-b border-border px-2 py-2">
+    ),
+    earcare: (
+      <td className="border-b border-border px-2 py-2" key="earcare">
         <SelectCell
           columnId="earcareEmployeeId"
           disabled={isLocked}
@@ -1297,7 +1518,9 @@ function EditableCallRow({
           value={draft.earcareEmployeeId ?? ""}
         />
       </td>
-      <td className="border-b border-border px-2 py-2">
+    ),
+    reservationStatus: (
+      <td className="border-b border-border px-2 py-2" key="reservationStatus">
         <SelectCell
           columnId="status"
           disabled={isLocked}
@@ -1313,7 +1536,9 @@ function EditableCallRow({
           value={draft.status}
         />
       </td>
-      <td className="border-b border-border px-2 py-2">
+    ),
+    discountType: (
+      <td className="border-b border-border px-2 py-2" key="discountType">
         <SelectCell
           columnId="discountTypeCode"
           disabled={isLocked}
@@ -1328,7 +1553,9 @@ function EditableCallRow({
           value={draft.discountTypeCode ?? ""}
         />
       </td>
-      <td className="border-b border-border px-2 py-2">
+    ),
+    paymentMethod: (
+      <td className="border-b border-border px-2 py-2" key="paymentMethod">
         <SelectCell
           columnId="paymentMethodCode"
           disabled={isLocked}
@@ -1343,7 +1570,9 @@ function EditableCallRow({
           value={draft.paymentMethodCode ?? ""}
         />
       </td>
-      <td className="border-b border-border px-2 py-2">
+    ),
+    note: (
+      <td className="border-b border-border px-2 py-2" key="note">
         <TextCell
           columnId="note"
           disabled={isLocked}
@@ -1357,7 +1586,9 @@ function EditableCallRow({
           value={draft.note ?? ""}
         />
       </td>
-      <td className="border-b border-border px-2 py-2">
+    ),
+    confirmation: (
+      <td className="border-b border-border px-2 py-2" key="confirmation">
         <SelectCell
           columnId="confirmationCode"
           disabled={isLocked}
@@ -1372,14 +1603,20 @@ function EditableCallRow({
           value={draft.confirmationCode ?? ""}
         />
       </td>
+    ),
+    paymentAmount: (
       <PaymentAmountCell
+        key="paymentAmount"
         onKeyDown={(event) => handleReadonlyKeyDown("paymentAmount", event)}
         row={serverRow}
         rowIndex={rowIndex}
         saveStatus={saveStatus}
       />
+    ),
+    discount: (
       <ComputedCell
         columnId="discountAmount"
+        key="discount"
         label={t("calls.column.discount")}
         onKeyDown={(event) => handleReadonlyKeyDown("discountAmount", event)}
         row={serverRow}
@@ -1387,53 +1624,66 @@ function EditableCallRow({
         saveStatus={saveStatus}
         value={serverRow.discountAmount}
       />
-      {showSettlementColumns ? (
-        <>
-          <ComputedCell
-            columnId="therapist1Commission"
-            label={t("calls.column.therapist1Commission")}
-            onKeyDown={(event) => handleReadonlyKeyDown("therapist1Commission", event)}
-            row={serverRow}
-            rowIndex={rowIndex}
-            saveStatus={saveStatus}
-            value={serverRow.therapist1Commission}
-          />
-          <ComputedCell
-            columnId="therapist2Commission"
-            label={t("calls.column.therapist2Commission")}
-            onKeyDown={(event) => handleReadonlyKeyDown("therapist2Commission", event)}
-            row={serverRow}
-            rowIndex={rowIndex}
-            saveStatus={saveStatus}
-            value={serverRow.therapist2Commission}
-          />
-          <ComputedCell
-            columnId="earcarePoolAmount"
-            label={t("calls.column.earcarePool")}
-            onKeyDown={(event) => handleReadonlyKeyDown("earcarePoolAmount", event)}
-            row={serverRow}
-            rowIndex={rowIndex}
-            saveStatus={saveStatus}
-            value={serverRow.earcarePoolAmount}
-          />
-          <ComputedCell
-            columnId="opsCallCredit"
-            label={t("calls.column.opsCallCredit")}
-            onKeyDown={(event) => handleReadonlyKeyDown("opsCallCredit", event)}
-            row={serverRow}
-            rowIndex={rowIndex}
-            saveStatus={saveStatus}
-            value={serverRow.opsCallCredit}
-          />
-        </>
-      ) : null}
-      <td className="border-b border-border px-2 py-2" data-call-cell-column="warnings">
+    ),
+    therapist1Commission: (
+      <ComputedCell
+        columnId="therapist1Commission"
+        key="therapist1Commission"
+        label={t("calls.column.therapist1Commission")}
+        onKeyDown={(event) => handleReadonlyKeyDown("therapist1Commission", event)}
+        row={serverRow}
+        rowIndex={rowIndex}
+        saveStatus={saveStatus}
+        value={serverRow.therapist1Commission}
+      />
+    ),
+    therapist2Commission: (
+      <ComputedCell
+        columnId="therapist2Commission"
+        key="therapist2Commission"
+        label={t("calls.column.therapist2Commission")}
+        onKeyDown={(event) => handleReadonlyKeyDown("therapist2Commission", event)}
+        row={serverRow}
+        rowIndex={rowIndex}
+        saveStatus={saveStatus}
+        value={serverRow.therapist2Commission}
+      />
+    ),
+    earcarePool: (
+      <ComputedCell
+        columnId="earcarePoolAmount"
+        key="earcarePool"
+        label={t("calls.column.earcarePool")}
+        onKeyDown={(event) => handleReadonlyKeyDown("earcarePoolAmount", event)}
+        row={serverRow}
+        rowIndex={rowIndex}
+        saveStatus={saveStatus}
+        value={serverRow.earcarePoolAmount}
+      />
+    ),
+    opsCallCredit: (
+      <ComputedCell
+        columnId="opsCallCredit"
+        key="opsCallCredit"
+        label={t("calls.column.opsCallCredit")}
+        onKeyDown={(event) => handleReadonlyKeyDown("opsCallCredit", event)}
+        row={serverRow}
+        rowIndex={rowIndex}
+        saveStatus={saveStatus}
+        value={serverRow.opsCallCredit}
+      />
+    ),
+    warnings: (
+      <td className="border-b border-border px-2 py-2" data-call-cell-column="warnings" key="warnings">
         <CallWarningCell callId={row.id} onOpen={onOpenDetail} startTime={serverRow.startTime} warnings={freshestRow.warnings} />
       </td>
+    ),
+    saveStatus: (
       <td
         className="border-b border-border bg-readonly px-2 py-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-brand"
         data-call-cell-column="calculationStatus"
         data-call-cell-row={rowIndex}
+        key="saveStatus"
         onKeyDown={(event) => handleReadonlyKeyDown("calculationStatus", event)}
         tabIndex={-1}
       >
@@ -1456,6 +1706,22 @@ function EditableCallRow({
           />
         </div>
       </td>
+    )
+  };
+
+  return (
+    // 콜 상세 패널이 열린 행은 선택된 행 모양이 된다(design.md 6.6). 입력칸·버튼이 아닌 자리를 누르면 패널이 열린다.
+    <tr
+      className="align-top data-[selected=true]:bg-readonly [&[data-selected=true]>td:first-child]:[box-shadow:inset_3px_0_0_var(--brand)]"
+      data-selected={selected}
+      data-service-call-id={row.id}
+      id={ledgerCallAnchorId(row.id)}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("input, select, textarea, button, a, [role='option'], [role='combobox']")) return;
+        onOpenDetail(row.id);
+      }}
+    >
+      {visibleCallGridColumns(view, showSettlementColumns).map((column) => cells[column.id])}
     </tr>
   );
 }
@@ -1470,7 +1736,8 @@ export function EditableCallGrid({
   rows,
   selectedCallId = null,
   serviceDate,
-  showSettlementColumns
+  showSettlementColumns,
+  view = "all"
 }: {
   courseChoice?: (AvailabilityCourseChoice & { id: number }) | null;
   customers?: CustomerDto[];
@@ -1483,6 +1750,8 @@ export function EditableCallGrid({
   selectedCallId?: string | null;
   serviceDate: string;
   showSettlementColumns: boolean;
+  /** 원장 보기(명세 F02, 티켓 19): 예약·현장/수납·정산/전체가 다른 열 묶음을 보여 준다. 기본은 전체(기존 동작). */
+  view?: LedgerView;
 }) {
   const t = useT();
   // TanStack column defs back the row model only; visible header text is rendered
@@ -1536,9 +1805,9 @@ export function EditableCallGrid({
         </div>
       ) : (
         <div className="relative overflow-x-auto">
-          <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(showSettlementColumns) }}>
-            <CallGridColgroup showSettlementColumns={showSettlementColumns} />
-            <CallGridHead showSettlementColumns={showSettlementColumns} />
+          <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(view, showSettlementColumns) }}>
+            <CallGridColgroup showSettlementColumns={showSettlementColumns} view={view} />
+            <CallGridHead showSettlementColumns={showSettlementColumns} view={view} />
             <tbody>
               {table.getRowModel().rows.map((tableRow, index) => (
                 <EditableCallRow
@@ -1552,6 +1821,7 @@ export function EditableCallGrid({
                   rowIndex={index}
                   selected={tableRow.original.id === selectedCallId}
                   showSettlementColumns={showSettlementColumns}
+                  view={view}
                 />
               ))}
             </tbody>
@@ -1568,6 +1838,7 @@ export function EditableCallGrid({
         options={options}
         serviceDate={serviceDate}
         showSettlementColumns={showSettlementColumns}
+        view={view}
       />
     </section>
   );
