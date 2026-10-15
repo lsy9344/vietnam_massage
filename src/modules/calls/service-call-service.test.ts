@@ -10,6 +10,7 @@ import {
   deactivateDailyExpense,
   getDailyCallLedgerSummary,
   getServiceCallRow,
+  listAssignedServiceCallsForEmployeeOnDate,
   listCustomerVisitHistory,
   listCustomers,
   ledgerStatusCountsFromRows,
@@ -4814,6 +4815,122 @@ describe("room overlap", () => {
         relatedCallIds: overlap.relatedCallIds
       });
     }
+  });
+});
+
+describe("assigned service calls for day off impact (ticket 28)", () => {
+  it("returns a call where the employee holds any assignment role, excluding no-show and canceled", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "as-therapist-1",
+      startTime: "14:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "as-therapist-2",
+      startTime: "15:00",
+      courseId: "course-d",
+      status: "사용중",
+      assignments: [{ role: "THERAPIST_2", employeeId: "other-therapist" }, { role: "EARCARE", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "other-employee",
+      startTime: "13:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "other-therapist" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "no-show",
+      startTime: "16:00",
+      courseId: "course-a",
+      status: "노쇼",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "canceled",
+      startTime: "17:00",
+      courseId: "course-a",
+      status: "취소",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const calls = await listAssignedServiceCallsForEmployeeOnDate({
+      employeeId: "therapist-1",
+      date: availabilityDate,
+      prismaClient
+    });
+
+    assert.deepEqual(calls.map((call) => call.serviceCallId), ["as-therapist-1", "as-therapist-2"]);
+    assert.deepEqual(calls[0], {
+      serviceCallId: "as-therapist-1",
+      operatingMonthId: "month-2026-06",
+      serviceDate: availabilityDate,
+      startTime: "14:00",
+      courseCode: "A",
+      status: "예약"
+    });
+    assert.equal(calls[1].courseCode, "D");
+  });
+
+  it("leaves out a call assigned on a different date", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "other-day",
+      startTime: "14:00",
+      courseId: "course-a",
+      status: "예약",
+      serviceDate: "2026-06-11",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const calls = await listAssignedServiceCallsForEmployeeOnDate({
+      employeeId: "therapist-1",
+      date: availabilityDate,
+      prismaClient
+    });
+
+    assert.deepEqual(calls, []);
+  });
+
+  it("sorts by reservation time", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "later",
+      startTime: "18:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "earlier",
+      startTime: "09:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const calls = await listAssignedServiceCallsForEmployeeOnDate({
+      employeeId: "therapist-1",
+      date: availabilityDate,
+      prismaClient
+    });
+
+    assert.deepEqual(calls.map((call) => call.serviceCallId), ["earlier", "later"]);
+  });
+
+  it("rejects an empty employee id or an invalid date", async () => {
+    const prismaClient = createMemoryPrisma();
+    await assert.rejects(
+      () => listAssignedServiceCallsForEmployeeOnDate({ employeeId: "  ", date: availabilityDate, prismaClient }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "INVALID_SERVICE_CALL_QUERY"
+    );
+    await assert.rejects(
+      () => listAssignedServiceCallsForEmployeeOnDate({ employeeId: "therapist-1", date: "2026/06/10", prismaClient }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "INVALID_SERVICE_CALL_QUERY"
+    );
   });
 });
 
