@@ -263,7 +263,7 @@ test.describe("Ticket 33 closing checklist and confirm blocking", () => {
     await expect(page.getByRole("button", { name: "마감 확정" })).toBeDisabled();
   });
 
-  test("a reservation call only appears as a non-blocking pending-close item and confirmation still succeeds", async ({ page }) => {
+  test("a reservation call appears as a pending-close item and confirmation needs the checklist confirmed with a reason (F07/ADR 0005, ticket 34)", async ({ page }) => {
     await login(page, seededData.accounts.settlement, "Ticket33!settlement");
     await page.goto(`/closing?operatingMonthId=${seededData.pendingMonthId}`);
 
@@ -275,8 +275,17 @@ test.describe("Ticket 33 closing checklist and confirm blocking", () => {
     const confirmButton = page.getByRole("button", { name: "마감 확정" });
     await expect(confirmButton).toBeEnabled();
     await confirmButton.click();
-    await expect(page.getByRole("alertdialog")).toBeVisible();
-    await page.getByRole("alertdialog").getByRole("button", { name: "지급 스냅샷 확정" }).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toBeVisible();
+
+    // 티켓 34: 마감 확인 대상 콜이 있으면 확인 체크와 사유 없이는 "지급 스냅샷 확정"이 막힌다.
+    const submitButton = dialog.getByRole("button", { name: "지급 스냅샷 확정" });
+    await expect(submitButton).toBeDisabled();
+    await dialog.getByRole("checkbox", { name: /위 1건을 확인했습니다/ }).check();
+    await expect(submitButton).toBeDisabled();
+    await dialog.getByLabel("예외 마감 사유").fill("다음달 초 방문이 확정된 예약이라 예외로 마감합니다");
+    await expect(submitButton).toBeEnabled();
+    await submitButton.click();
     // 운영 빌드에서는 서버 액션이 200으로 끝나도 화면 반영(revalidatePath)이 가끔 늦거나 멈춘 것처럼
     // 보인다(e2e-prod-known-failures 메모의 5-3/5-5/5-6과 같은 증상, 개발 서버에서는 재현되지 않는다).
     // 그래서 결과는 화면 문구가 아니라 DB 상태로 직접 확인한다.
@@ -284,8 +293,18 @@ test.describe("Ticket 33 closing checklist and confirm blocking", () => {
       const month = await (prisma as any).operatingMonth.findUnique({ where: { id: seededData.pendingMonthId }, select: { status: true } });
       expect(month?.status).toBe("마감확정");
     }).toPass({ timeout: 20000 });
-    // 예외 마감 대상 콜이었어도 콜 상태는 그대로다(34 전까지는 상태 변경이 없다).
+    // 예외 마감 대상 콜이었어도 콜 상태는 그대로다(자동 방문완료 처리하지 않는다).
     const call = await (prisma as any).serviceCall.findFirst({ where: { operatingMonthId: seededData.pendingMonthId }, select: { status: true } });
     expect(call?.status).toBe("예약");
+    // 사유, 확인한 콜과 그 당시 상태, 처리자가 이번 마감 버전에 남는다.
+    const closing = await (prisma as any).monthlyClosing.findFirst({
+      where: { operatingMonthId: seededData.pendingMonthId },
+      orderBy: { closeVersion: "desc" },
+      select: { snapshotJson: true }
+    });
+    const pendingCloseException = (closing?.snapshotJson as any)?.pendingCloseException;
+    expect(pendingCloseException?.reason).toBe("다음달 초 방문이 확정된 예약이라 예외로 마감합니다");
+    expect(pendingCloseException?.calls).toHaveLength(1);
+    expect(pendingCloseException?.calls[0]?.status).toBe("예약");
   });
 });

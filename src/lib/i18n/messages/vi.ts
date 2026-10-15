@@ -837,6 +837,12 @@ export const vi: Messages = {
   "closing.confirmDialog.operations": "Nhóm vận hành",
   "closing.confirmDialog.opsDetail": "{count} người / Ngày {daily} / Tháng {monthly}",
   "closing.confirmDialog.earcare": "Chăm sóc tai",
+  "closing.confirmDialog.pendingCloseCalls.title": "Cuộc gọi cần xác nhận khi chốt",
+  "closing.confirmDialog.pendingCloseCalls.description": "Đây là cuộc gọi ở trạng thái đặt trước, đang sử dụng hoặc đang dọn. Trạng thái cuộc gọi không đổi; hãy xác nhận và nhập lý do để chốt theo ngoại lệ.",
+  "closing.confirmDialog.pendingCloseCalls.ackLabel": "Tôi đã xác nhận {count} cuộc gọi trên",
+  "closing.confirmDialog.pendingCloseCalls.reasonLabel": "Lý do chốt ngoại lệ",
+  "closing.confirmDialog.pendingCloseCalls.reasonPlaceholder": "Hãy nhập lý do chốt theo ngoại lệ.",
+  "closing.confirmDialog.pendingCloseCalls.reasonHelp": "Cuộc gọi đã xác nhận, lý do và người xử lý được lưu vào phiên bản chốt tháng này.",
   "closing.reopen.label": "Lý do mở lại",
   "closing.reopen.placeholder": "Hãy nhập lý do mở lại.",
   "closing.reopen.adminOnly": "Chỉ quản trị viên mới có thể mở lại.",
@@ -858,9 +864,11 @@ export const vi: Messages = {
   "closing.checklist.pendingCloseCalls.title": "Cuộc gọi cần xác nhận khi chốt",
   "closing.checklist.pendingCloseCalls.count": "{count} cuộc gọi",
   "closing.checklist.pendingCloseCalls.empty": "Không có cuộc gọi cần xác nhận khi chốt",
-  "closing.checklist.pendingCloseCalls.description": "Đây là các cuộc gọi ở trạng thái đặt trước, đang sử dụng hoặc đang dọn. Trạng thái cuộc gọi không đổi, và danh sách này không chặn việc chốt tháng.",
+  "closing.checklist.pendingCloseCalls.description": "Đây là các cuộc gọi ở trạng thái đặt trước, đang sử dụng hoặc đang dọn. Xác nhận và nhập lý do để chốt theo ngoại lệ mà không đổi trạng thái cuộc gọi.",
   "closing.checklist.financials.title": "Kiểm tra số tiền",
   "closing.checklist.blockedNotice": "Hãy xử lý lỗi tính toán và xác nhận chi trả trước.",
+  "closing.snapshot.pendingCloseException.title": "Cuộc gọi chốt ngoại lệ",
+  "closing.snapshot.pendingCloseException.reason": "Lý do: {reason}",
 
   // /dashboard 화면
   // 공통 (대시보드 3개 화면 공유)
