@@ -72,7 +72,7 @@ function earcareResult(overrides: Partial<EarcareDailySettlementResultDto> = {})
 
 describe("earcare settlement view", () => {
   it("shows no basis for an eligible worker when no completed call made a pool, but 0 for a worker excluded by status", () => {
-    const html = render(<EarcareSettlementView attendance={earcareAttendance} canOpenLedger={false} initialEmployeeId={null} result={earcareResult()} />);
+    const html = render(<EarcareSettlementView attendance={earcareAttendance} canOpenLedger={false} canOpenStatement={false} initialEmployeeId={null} result={earcareResult()} />);
 
     assert.match(html, /Hoa[\s\S]*?근거 없음[\s\S]*Lan/);
     assert.match(html, /Lan[\s\S]*제외: 휴무[\s\S]*0 VND/);
@@ -83,6 +83,7 @@ describe("earcare settlement view", () => {
       <EarcareSettlementView
         attendance={earcareAttendance}
         canOpenLedger
+        canOpenStatement={false}
         initialEmployeeId="ear-1"
         result={earcareResult({
           earcarePoolTotal: 300000,
@@ -107,6 +108,7 @@ describe("earcare settlement view", () => {
       <EarcareSettlementView
         attendance={earcareAttendance}
         canOpenLedger={false}
+        canOpenStatement={false}
         initialEmployeeId="ear-1"
         result={earcareResult({ sourceCallCount: 1, poolEvidence: [{ serviceCallId: "call-9", serviceDate: "2026-10-14", earcarePoolAmount: 300000, call: poolCall }] })}
       />
@@ -151,7 +153,7 @@ function opsDaily(overrides: Partial<OpsDailyIncentiveResultDto> = {}): OpsDaily
 
 describe("ops daily view", () => {
   it("shows no basis instead of 0 when the daily incentive policy is missing", () => {
-    const html = render(<OpsDailyView attendance={opsAttendance} canOpenLedger={false} initialEmployeeId="ops-1" result={opsDaily()} />);
+    const html = render(<OpsDailyView attendance={opsAttendance} canOpenLedger={false} canOpenStatement={false} initialEmployeeId="ops-1" result={opsDaily()} />);
 
     assert.match(html, /정책 없음/);
     assert.match(html, /근거 없음/);
@@ -163,7 +165,7 @@ describe("ops daily view", () => {
 
   it("keeps a below-threshold day at a real 0", () => {
     const html = render(
-      <OpsDailyView attendance={opsAttendance} canOpenLedger={false} initialEmployeeId={null} result={opsDaily({ ruleStatus: "below_threshold", dailyOpsCallCredit: 20 })} />
+      <OpsDailyView attendance={opsAttendance} canOpenLedger={false} canOpenStatement={false} initialEmployeeId={null} result={opsDaily({ ruleStatus: "below_threshold", dailyOpsCallCredit: 20 })} />
     );
 
     assert.match(html, /30콜 미만/);
@@ -208,7 +210,7 @@ function opsMonthly(overrides: Partial<OpsMonthlyIncentiveResultDto> = {}): OpsM
 
 describe("ops monthly view", () => {
   it("draws each employee's expected payout and opens the rule basis panel", () => {
-    const html = render(<OpsMonthlyView initialEmployeeId="ops-1" result={opsMonthly()} />);
+    const html = render(<OpsMonthlyView canOpenStatement={false} initialEmployeeId="ops-1" result={opsMonthly()} />);
 
     assert.match(html, /30% \/ 1,500,000 VND/);
     assert.match(html, /1,500,000 VND/);
@@ -217,7 +219,7 @@ describe("ops monthly view", () => {
 
   it("shows no basis for team portions and payouts when the monthly policy is missing", () => {
     const html = render(
-      <OpsMonthlyView initialEmployeeId={null} result={opsMonthly({ ruleStatus: "missing_policy", totalMonthlyIncentiveAmount: 0, rows: [{ ...opsMonthly().rows[0], payoutAmount: 0 }] })} />
+      <OpsMonthlyView canOpenStatement={false} initialEmployeeId={null} result={opsMonthly({ ruleStatus: "missing_policy", totalMonthlyIncentiveAmount: 0, rows: [{ ...opsMonthly().rows[0], payoutAmount: 0 }] })} />
     );
 
     assert.match(html, /근거 없음/);
@@ -227,7 +229,7 @@ describe("ops monthly view", () => {
   it("keeps an employee without a team at '-' and 0 even when the policy is missing, since they have no team share either way", () => {
     const unassigned = { ...opsMonthly().rows[0], employeeId: "ops-9", staffCode: "OPS-009", displayName: "Tuan", teamRole: "unassigned" as const, payoutAmount: 0 };
     const html = render(
-      <OpsMonthlyView initialEmployeeId={null} result={opsMonthly({ ruleStatus: "missing_policy", totalMonthlyIncentiveAmount: 0, rows: [unassigned] })} />
+      <OpsMonthlyView canOpenStatement={false} initialEmployeeId={null} result={opsMonthly({ ruleStatus: "missing_policy", totalMonthlyIncentiveAmount: 0, rows: [unassigned] })} />
     );
 
     assert.match(html, /Tuan[\s\S]*<td[^>]*>-<\/td>[\s\S]*0 VND/);

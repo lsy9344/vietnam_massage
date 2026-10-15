@@ -5,6 +5,8 @@ import {
   MonthlyClosingDomainError,
   confirmMonthlyClose,
   getMonthlyClosingSnapshot,
+  getMonthlyClosingSnapshotByVersion,
+  listMonthlyClosingVersions,
   lockMonthlyClose,
   reopenMonthlyClose,
   startMonthlyCloseReview,
@@ -286,10 +288,18 @@ function createPrisma(options: { status?: string; existingClosing?: any; failAud
         return { ...closing };
       },
       async findFirst({ where }: any) {
-        const matches = state.closings.filter((closing) => !where?.operatingMonthId || closing.operatingMonthId === where.operatingMonthId);
+        const matches = state.closings.filter(
+          (closing) =>
+            (!where?.operatingMonthId || closing.operatingMonthId === where.operatingMonthId) &&
+            (where?.closeVersion === undefined || closing.closeVersion === where.closeVersion)
+        );
         const latest = matches.sort((a, b) => b.closeVersion - a.closeVersion)[0];
         if (latest) return { ...latest };
         return null;
+      },
+      async findMany({ where }: any = {}) {
+        const matches = state.closings.filter((closing) => !where?.operatingMonthId || closing.operatingMonthId === where.operatingMonthId);
+        return matches.map((closing) => ({ ...closing })).sort((a, b) => b.closeVersion - a.closeVersion);
       },
       async update({ where, data }: any) {
         const index = state.closings.findIndex((closing) => closing.id === where.id);
@@ -1075,6 +1085,64 @@ describe("monthly closing service", () => {
 
     await assert.rejects(
       () => getMonthlyClosingSnapshot({ operatingMonthId: "month-1", prismaClient }),
+      (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND"
+    );
+  });
+
+  it("lists every close version newest-first, including versions with a reopen stamp (티켓 32)", async () => {
+    const prismaClient = createPrisma({ status: "마감확정", existingClosing: existingClosing() });
+    prismaClient.state.closings.push(
+      existingClosing({
+        id: "closing-2",
+        closeVersion: 2,
+        confirmedAt: new Date("2026-06-11T04:00:00.000Z"),
+        reopenedAt: new Date("2026-06-11T05:00:00.000Z"),
+        reopenedByAccountId: "account-admin",
+        reopenReason: "금액 정정"
+      })
+    );
+
+    const versions = await listMonthlyClosingVersions({ operatingMonthId: "month-1", prismaClient });
+
+    assert.deepEqual(versions.map((version) => version.closeVersion), [2, 1]);
+    assert.equal(versions[0].reopenedByAccountId, "account-admin");
+    assert.equal(versions[0].reopenReason, "금액 정정");
+    assert.equal(versions[1].reopenedAt, null);
+  });
+
+  it("returns an empty version list when the operating month has never been closed", async () => {
+    const prismaClient = createPrisma({ status: "작성중" });
+
+    const versions = await listMonthlyClosingVersions({ operatingMonthId: "month-1", prismaClient });
+
+    assert.deepEqual(versions, []);
+  });
+
+  it("fetches a specific (non-latest) close version's frozen snapshot by version number", async () => {
+    const prismaClient = createPrisma({ status: "마감확정", existingClosing: existingClosing() });
+    prismaClient.state.closings.push(
+      existingClosing({
+        id: "closing-2",
+        closeVersion: 2,
+        snapshotJson: { ...storedClosingSnapshot(), id: "closing-2", totals: { ...storedClosingSnapshot().totals, grandPayoutAmount: 20 } },
+        confirmedAt: new Date("2026-06-11T04:00:00.000Z")
+      })
+    );
+
+    const first = await getMonthlyClosingSnapshotByVersion({ operatingMonthId: "month-1", closeVersion: 1, prismaClient });
+    const second = await getMonthlyClosingSnapshotByVersion({ operatingMonthId: "month-1", closeVersion: 2, prismaClient });
+
+    assert.equal(first.closeVersion, 1);
+    assert.equal(first.snapshot.totals.grandPayoutAmount, 10);
+    assert.equal(second.closeVersion, 2);
+    assert.equal(second.snapshot.totals.grandPayoutAmount, 20);
+  });
+
+  it("raises MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND for a close version that does not exist", async () => {
+    const prismaClient = createPrisma({ status: "마감확정", existingClosing: existingClosing() });
+
+    await assert.rejects(
+      () => getMonthlyClosingSnapshotByVersion({ operatingMonthId: "month-1", closeVersion: 9, prismaClient }),
       (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND"
     );
   });

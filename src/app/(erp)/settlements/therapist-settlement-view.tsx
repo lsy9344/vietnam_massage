@@ -9,8 +9,9 @@ import {
 } from "@/app/(erp)/settlements/actions";
 import { EmployeeWorkspace, type ComparisonColumn } from "@/app/(erp)/settlements/employee-workspace";
 import { ConfirmPayoutButton, ReasonPayoutForm } from "@/app/(erp)/settlements/payout-confirmation-form";
-import { AmountText, EvidenceCallItem, EvidenceCallList, PanelSection, vnd } from "@/app/(erp)/settlements/settlement-parts";
+import { AmountText, EvidenceCallItem, EvidenceCallList, PanelSection, StatementLink, vnd } from "@/app/(erp)/settlements/settlement-parts";
 import {
+  monthlyStatementHref,
   therapistCourseAmount,
   therapistEvidenceAmount,
   therapistSettlementAmount,
@@ -98,6 +99,7 @@ export function TherapistSettlementView({
   attendanceDisabled,
   paymentLocked,
   canOpenLedger,
+  canOpenStatement,
   initialEmployeeId
 }: {
   operatingMonthId: string;
@@ -110,6 +112,8 @@ export function TherapistSettlementView({
   paymentLocked: boolean;
   /** 원장에 들어갈 수 있는 역할(관리자)이면 근거 콜이 원장 링크다. */
   canOpenLedger: boolean;
+  /** 월 명세서 화면에 들어갈 수 있는 역할(관리자·정산 담당)이면 패널에 그 링크를 둔다(티켓 32). */
+  canOpenStatement: boolean;
   initialEmployeeId: string | null;
 }) {
   const t = useT();
@@ -163,6 +167,8 @@ export function TherapistSettlementView({
       minTableWidth="min-w-[56rem]"
       renderPanel={(row) => (
         <div className="grid gap-6">
+          <StatementLink href={canOpenStatement ? monthlyStatementHref(operatingMonthId, row.employeeId) : null} locale={locale} />
+
           <PanelSection title={t("settlements.therapist.attendance.title")}>
             <p className="text-sm text-muted">{t("settlements.therapist.attendance.description")}</p>
             {row.attendance ? (

@@ -510,8 +510,9 @@ export type TherapistDailyPayoutConfirmationDto = {
 
 /**
  * 이 운영월의 모든 날짜·마사지사 지급 확인 상태를 한 번에 돌려준다. 월 명세서(티켓 32)와 마감 점검의
- * "지급 재확인 미처리" 집계(티켓 33)가 쓴다. 날짜마다 listTherapistDailySettlements를 다시 계산해 현재 지급액과
- * 비교하므로(지급 재확인 필요 판정에 필요) 운영월 전체를 도는 비용이 있다.
+ * "지급 재확인 미처리" 집계(티켓 33)가 쓴다. 날짜마다 listTherapistDailySettlements를 다시 계산해 현재
+ * 지급액과 비교하므로(지급 재확인 필요 판정에 필요) 운영월 전체를 도는 비용이 있다(귀케어·운영팀의
+ * listEarcareDailyPayoutConfirmationsForMonth·listOpsDailyPayoutConfirmationsForMonth와 같은 패턴, 티켓 31).
  */
 export async function listTherapistDailyPayoutConfirmationsForMonth(input: {
   operatingMonthId: string;
@@ -532,8 +533,8 @@ export async function listTherapistDailyPayoutConfirmationsForMonth(input: {
   for (let cursor = operatingMonth.startDate; cursor <= operatingMonth.endDate; cursor = new Date(cursor.getTime() + 86400000)) {
     const serviceDate = toIsoDate(cursor);
     const dayResult = await listTherapistDailySettlements({ operatingMonthId: parsed.data.operatingMonthId, serviceDate, prismaClient: client });
-    for (const row of dayResult.settlements) {
-      results.push({ serviceDate, employeeId: row.employeeId, payoutConfirmation: row.payoutConfirmation });
+    for (const settlement of dayResult.settlements) {
+      results.push({ serviceDate, employeeId: settlement.employeeId, payoutConfirmation: settlement.payoutConfirmation });
     }
   }
   return results;

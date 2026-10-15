@@ -225,6 +225,7 @@ export default async function OperationsMonthlyIncentivePage({
 
   const context = { operatingMonthId: selectedMonth.id, date: null };
   const canOpenLedger = linkToScreen(account.role, "/calls", context) !== null;
+  const canOpenStatement = linkToScreen(account.role, "/settlements/statement", context) !== null;
   const hasBasis = result ? incentiveRuleHasBasis(result.ruleStatus) : false;
   const visibleEvidence = result ? result.callEvidence.slice(0, 50) : [];
 
@@ -301,7 +302,7 @@ export default async function OperationsMonthlyIncentivePage({
           </div>
           <ShareSummary locale={locale} result={result} t={t} />
           {result.rows.length > 0 ? (
-            <OpsMonthlyView initialEmployeeId={params[EMPLOYEE_PARAM] ?? null} key={selectedMonth.id} result={result} />
+            <OpsMonthlyView canOpenStatement={canOpenStatement} initialEmployeeId={params[EMPLOYEE_PARAM] ?? null} key={selectedMonth.id} result={result} />
           ) : (
             <SettlementEmptyNotice
               description={t("settlements.opsMonthly.employeeTable.empty.description")}

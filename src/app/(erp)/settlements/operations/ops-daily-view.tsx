@@ -11,8 +11,8 @@ import {
 import { OpsAttendanceForm, OpsEligibility } from "@/app/(erp)/settlements/operations/ops-attendance-form";
 import { opsThresholdLabel } from "@/app/(erp)/settlements/operations/ops-threshold";
 import { PayoutConfirmationPanel, PayoutStatusIndicator } from "@/app/(erp)/settlements/payout-confirmation-panel";
-import { AmountText, EvidenceCallItem, EvidenceCallList, PanelSection } from "@/app/(erp)/settlements/settlement-parts";
-import { incentiveRuleHasBasis, payoutAmount, settlementAmount } from "@/app/(erp)/settlements/settlement-view-model";
+import { AmountText, EvidenceCallItem, EvidenceCallList, PanelSection, StatementLink } from "@/app/(erp)/settlements/settlement-parts";
+import { incentiveRuleHasBasis, monthlyStatementHref, payoutAmount, settlementAmount } from "@/app/(erp)/settlements/settlement-view-model";
 import { useLocale, useT } from "@/lib/i18n/client";
 import { codeLabel } from "@/lib/i18n/codes";
 import { settlementBasisText } from "@/lib/i18n/settlement-basis";
@@ -27,11 +27,14 @@ export function OpsDailyView({
   result,
   attendance,
   canOpenLedger,
+  canOpenStatement,
   initialEmployeeId
 }: {
   result: OpsDailyIncentiveResultDto;
   attendance: OpsAttendanceForDateDto;
   canOpenLedger: boolean;
+  /** 월 명세서 화면에 들어갈 수 있는 역할(관리자·정산 담당)이면 패널에 그 링크를 둔다(티켓 32). */
+  canOpenStatement: boolean;
   initialEmployeeId: string | null;
 }) {
   const t = useT();
@@ -79,6 +82,8 @@ export function OpsDailyView({
         const attendanceRow = attendanceById.get(row.employeeId);
         return (
           <div className="grid gap-6">
+            <StatementLink href={canOpenStatement ? monthlyStatementHref(attendance.operatingMonthId, row.employeeId) : null} locale={locale} />
+
             <PanelSection title={t("settlements.panel.attendance")}>
               {attendanceRow ? (
                 <OpsAttendanceForm

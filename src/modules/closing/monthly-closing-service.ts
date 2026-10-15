@@ -43,6 +43,7 @@ type MonthlyClosingPrismaClient = {
   monthlyClosing: {
     create(args: unknown): Promise<MonthlyClosingRecord>;
     findFirst(args: unknown): Promise<MonthlyClosingRecord | null>;
+    findMany(args: unknown): Promise<MonthlyClosingRecord[]>;
     update(args: unknown): Promise<MonthlyClosingRecord>;
   };
   auditLog: {
@@ -156,6 +157,28 @@ export type GetMonthlyClosingSnapshotInput = {
   prismaClient?: MonthlyClosingPrismaClient;
 };
 
+/** 마감 버전 하나의 메타(스냅샷 본문은 빼고, 버전 고르는 화면·명세서 버전 목록용, 티켓 32). */
+export type MonthlyClosingVersionSummaryDto = {
+  id: string;
+  closeVersion: number;
+  confirmedByAccountId: string;
+  confirmedAt: string;
+  reopenedAt: string | null;
+  reopenedByAccountId: string | null;
+  reopenReason: string | null;
+};
+
+export type ListMonthlyClosingVersionsInput = {
+  operatingMonthId: string;
+  prismaClient?: MonthlyClosingPrismaClient;
+};
+
+export type GetMonthlyClosingSnapshotByVersionInput = {
+  operatingMonthId: string;
+  closeVersion: number;
+  prismaClient?: MonthlyClosingPrismaClient;
+};
+
 export class MonthlyClosingDomainError extends Error {
   constructor(message: string, public readonly code: string) {
     super(message);
@@ -196,6 +219,10 @@ const confirmMonthlyClosingInputSchema = monthlyClosingInputSchema.extend({
 
 const snapshotQuerySchema = z.object({
   operatingMonthId: z.string().trim().min(1, "운영월을 선택하세요.")
+});
+
+const versionSnapshotQuerySchema = snapshotQuerySchema.extend({
+  closeVersion: z.number().int().min(1, "마감 버전을 선택하세요.")
 });
 
 const defaultDependencies: MonthlyClosingDependencies = {
@@ -707,6 +734,57 @@ export async function getMonthlyClosingSnapshot(input: GetMonthlyClosingSnapshot
   }
 
   const record = await findLatestMonthlyClosing(getClient(input.prismaClient), parsed.data.operatingMonthId);
+
+  if (!record) {
+    throw new MonthlyClosingDomainError("확정 스냅샷을 찾을 수 없습니다.", "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND");
+  }
+
+  assertSnapshotJson(record.snapshotJson);
+  return toDto(record, record.snapshotJson);
+}
+
+function toVersionSummaryDto(record: MonthlyClosingRecord): MonthlyClosingVersionSummaryDto {
+  return {
+    id: record.id,
+    closeVersion: record.closeVersion,
+    confirmedByAccountId: record.confirmedByAccountId,
+    confirmedAt: record.confirmedAt.toISOString(),
+    reopenedAt: record.reopenedAt ? record.reopenedAt.toISOString() : null,
+    reopenedByAccountId: record.reopenedByAccountId ?? null,
+    reopenReason: record.reopenReason ?? null
+  };
+}
+
+/**
+ * 이 운영월의 모든 마감 버전을 최신순으로 돌려준다(스냅샷 본문은 빼고 메타만, 티켓 32 월 명세서의 버전 고르기용).
+ * 재오픈과 재확정을 거쳐도 지난 버전은 이 목록에 그대로 남는다(스냅샷은 지우거나 고치지 않는다).
+ */
+export async function listMonthlyClosingVersions(input: ListMonthlyClosingVersionsInput): Promise<MonthlyClosingVersionSummaryDto[]> {
+  const parsed = snapshotQuerySchema.safeParse(input);
+  if (!parsed.success) {
+    throw normalizeParseError(parsed.error.issues[0]?.message ?? "월마감 버전 조회 조건이 올바르지 않습니다.");
+  }
+
+  const records = await getClient(input.prismaClient).monthlyClosing.findMany({
+    where: { operatingMonthId: parsed.data.operatingMonthId },
+    orderBy: { closeVersion: "desc" }
+  });
+  return records.map(toVersionSummaryDto);
+}
+
+/**
+ * 고른 마감 버전 하나의 스냅샷을 그대로 돌려준다(최신이 아니어도 된다). 월 명세서(티켓 32)가 "이전 마감 버전도
+ * 골라서 본다"를 구현하는 자리다. 스냅샷은 확정 당시 그대로이며 다시 계산하지 않는다.
+ */
+export async function getMonthlyClosingSnapshotByVersion(input: GetMonthlyClosingSnapshotByVersionInput): Promise<MonthlyClosingDto> {
+  const parsed = versionSnapshotQuerySchema.safeParse(input);
+  if (!parsed.success) {
+    throw normalizeParseError(parsed.error.issues[0]?.message ?? "월마감 스냅샷 조회 조건이 올바르지 않습니다.");
+  }
+
+  const record = await getClient(input.prismaClient).monthlyClosing.findFirst({
+    where: { operatingMonthId: parsed.data.operatingMonthId, closeVersion: parsed.data.closeVersion }
+  });
 
   if (!record) {
     throw new MonthlyClosingDomainError("확정 스냅샷을 찾을 수 없습니다.", "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND");
