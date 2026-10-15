@@ -54,6 +54,14 @@ export function ledgerCallAnchorId(serviceCallId: string) {
 /** 열린 콜 상세 패널의 콜 id를 담는 주소 매개변수. 이 주소로 바로 패널이 열린다. */
 export const CALL_PARAM = "call";
 
+/**
+ * 이 속성이 있는 링크는 떠나기 전 안내(CallLeaveGuard, 티켓 18)를 가로채지 않는다. 원장 보기 전환처럼
+ * 같은 화면의 표시 방식만 바꾸는 이동이 여기 해당한다. page.tsx(서버 컴포넌트)와 CallLeaveGuard
+ * ("use client")가 함께 쓰므로 "use client" 없는 이 모듈에 둔다(서버가 클라이언트 모듈의 상수를
+ * 읽으면 참조 프록시가 되는 문제를 피한다).
+ */
+export const LEAVE_GUARD_SKIP_ATTRIBUTE = "data-leave-guard-skip";
+
 /** 그 날짜 원장 탭에서 그 콜의 상세 패널이 열린 주소. */
 export function ledgerCallHref(target: LedgerDate & { serviceCallId: string }) {
   const params = new URLSearchParams({

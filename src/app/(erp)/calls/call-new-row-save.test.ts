@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   initialNewCallRowSave,
+  isNewRowSaveHeld,
   newCallRowSaveReducer,
   type NewCallRowSave,
   type NewCallRowSaveEvent
@@ -126,5 +127,18 @@ describe("new call row save", () => {
 
     // 보내는 중에는 고른 코스도 초안을 바꾸지 않는다.
     assert.equal(run(sending, { type: "choose", changes: choice }).draft.courseId, "course-a");
+  });
+});
+
+describe("isNewRowSaveHeld", () => {
+  it("아직 고치지 않거나 보내는 중이거나 저장을 마친 상태는 떠나기 안내 대상이 아니다(티켓 18)", () => {
+    assert.equal(isNewRowSaveHeld("idle"), false);
+    assert.equal(isNewRowSaveHeld("saving"), false);
+    assert.equal(isNewRowSaveHeld("saved"), false);
+  });
+
+  it("저장 실패나 저장 여부 확인 중은 떠나기 전 안내 대상이다(스펙 B07)", () => {
+    assert.equal(isNewRowSaveHeld("failed"), true);
+    assert.equal(isNewRowSaveHeld("checking"), true);
   });
 });

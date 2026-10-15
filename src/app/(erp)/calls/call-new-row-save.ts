@@ -112,3 +112,8 @@ function answersCurrentAttempt(state: NewCallRowSave, request: NewCallRowRequest
 export function isNewRowSaveLocked(status: NewRowSaveStatus) {
   return status === "saving" || status === "checking";
 }
+
+/** 저장이 거절되었거나 저장 여부를 모르는 새 행. 떠나기 전 안내 대상이다(스펙 B07, 티켓 18). */
+export function isNewRowSaveHeld(status: NewRowSaveStatus) {
+  return status === "failed" || status === "checking";
+}

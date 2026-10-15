@@ -8,6 +8,7 @@ import { CALL_PARAM, type LedgerView } from "@/app/(erp)/calls/ledger-address";
 import { TherapistAvailabilityPanel } from "@/app/(erp)/calls/therapist-availability-panel";
 import type { AvailabilityCourseChoice } from "@/app/(erp)/calls/therapist-availability-view";
 import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
+import { CallLeaveGuard } from "@/app/(erp)/calls/unsaved-guard";
 
 /**
  * 같은 콜 id의 속성을 가진 여러 노드 중 실제로 보이는 것 하나를 고른다. 휴대폰 폭의 카드 목록과
@@ -103,7 +104,9 @@ export function CallLedgerWorkspace({
   const selectedRow = selected ? (rows.find((row) => row.id === selected) ?? null) : null;
 
   return (
-    <>
+    // 원장 화면을 감싸 저장하지 않은 입력이 있는 동안 떠나기 전 안내를 건다(스펙 B07, 티켓 18).
+    // 콜 상세 패널(17)과 빠른 예약 패널(20)도 이 안에서 useUnsavedGuard로 등록하면 같은 안내를 받는다.
+    <CallLeaveGuard>
       {/* 가능 코스는 티켓 20에서 빠른 예약 패널로 옮길 때까지의 자리다. 빠른 예약과 표 편집은 태블릿 폭
           이상에서만 보인다(명세 F08, 티켓 26) — 휴대폰에서는 아예 띄우지 않는다. */}
       <div className="hidden min-[600px]:block">
@@ -147,6 +150,6 @@ export function CallLedgerWorkspace({
           </div>
         ) : null}
       </div>
-    </>
+    </CallLeaveGuard>
   );
 }

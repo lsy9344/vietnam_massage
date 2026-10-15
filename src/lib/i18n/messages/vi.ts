@@ -336,6 +336,11 @@ export const vi: Messages = {
   "calls.save.alreadySaved": "Cuộc gọi này đã được lưu trước đó.",
   "calls.save.checkingHint": "Không nhận được phản hồi. Thử lại sẽ gửi cùng một yêu cầu nên cuộc gọi không bị tạo hai lần.",
 
+  // 떠나기 전 안내(스펙 B07, 티켓 18)
+  "calls.leaveGuard.title": "Bạn có nội dung chưa lưu",
+  "calls.leaveGuard.description": "Nếu rời đi ngay bây giờ, nội dung chưa lưu sẽ bị mất. Bạn có muốn tiếp tục không?",
+  "calls.leaveGuard.confirm": "Rời đi",
+
   // 콜 계산 상태
   "calls.calc.errorPending": "Tạm hoãn lưu, chờ tính toán",
   "calls.calc.calculated": "Đã tính toán",
