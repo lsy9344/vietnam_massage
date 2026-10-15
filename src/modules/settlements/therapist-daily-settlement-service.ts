@@ -9,6 +9,7 @@ import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/module
 import {
   confirmPayoutConfirmation,
   derivePayoutConfirmationStatus,
+  listActivelyConfirmedUnitEmployeeIds,
   listPayoutConfirmations,
   reconfirmPayoutConfirmation,
   releasePayoutConfirmation,
@@ -213,6 +214,18 @@ function employeeFallback(assignee: ServiceCallAssigneeDto): EmployeeRecord {
     employeeGroup: "THERAPIST",
     sortOrder: 9999,
     isActive: true
+  };
+}
+
+/** S7: 확인 사건은 있는데 직원 조회(findUnique)조차 없는(그 double이 흉내 내지 않는) 드문 자리에서 id만으로 행을 만든다. */
+function fallbackEmployeeForId(employeeId: string): EmployeeRecord {
+  return {
+    id: employeeId,
+    displayName: employeeId,
+    staffCode: employeeId,
+    employeeGroup: "THERAPIST",
+    sortOrder: 9999,
+    isActive: false
   };
 }
 
@@ -481,6 +494,23 @@ export async function listTherapistDailySettlements(input: {
         settlement.courseBreakdown[evidence.courseCode].callCount += 1;
         settlement.courseBreakdown[evidence.courseCode].commissionAmount += evidence.commissionAmount;
       }
+    }
+  }
+
+  // S7(ADR 0004): 확인 사건이 있는 단위는 그날 완료 콜이 없어도(콜이 취소·노쇼로 정정되거나 마사지사가
+  // 비활성되어도) 금액 0인 행으로 남긴다. 그래야 attachPayoutConfirmations가 "지급 재확인 필요"로
+  // 가리고, 마감 점검도 이 차이를 막을 수 있다.
+  if (client.payoutConfirmationEvent) {
+    const confirmedEmployeeIds = await listActivelyConfirmedUnitEmployeeIds({
+      unitType: "THERAPIST_DAILY",
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate: parsed.data.serviceDate,
+      prismaClient: toPayoutConfirmationPrismaClient(client)
+    });
+    for (const employeeId of confirmedEmployeeIds) {
+      if (settlementsByEmployeeId.has(employeeId)) continue;
+      const employee = employeesById.get(employeeId) ?? (await client.employee.findUnique?.({ where: { id: employeeId } })) ?? null;
+      settlementsByEmployeeId.set(employeeId, createSettlement(employee ?? fallbackEmployeeForId(employeeId)));
     }
   }
 

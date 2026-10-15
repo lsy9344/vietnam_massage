@@ -23,6 +23,7 @@ function createMemoryPrisma(
     malformedDateRange?: boolean;
     highThreshold?: boolean;
     seedPayoutConfirmationEvents?: any[];
+    extraEmployees?: any[];
   } = {}
 ) {
   const createdAt = new Date("2026-06-10T00:00:00.000Z");
@@ -70,6 +71,9 @@ function createMemoryPrisma(
   if (options.noCounterMembers) {
     employees.set("ops-counter-day", { ...employees.get("ops-counter-day"), position: "지원", staffCode: "OPS-SUPPORT-001" });
     employees.set("ops-counter-night", { ...employees.get("ops-counter-night"), position: "지원", staffCode: "OPS-SUPPORT-002" });
+  }
+  for (const extra of options.extraEmployees ?? []) {
+    employees.set(extra.id, extra);
   }
   const serviceCalls = [
     call("call-a", "course-a", "VISIT_COMPLETE", "2026-06-01", [assignment("call-a", "THERAPIST_1", "thr-1")]),
@@ -482,6 +486,48 @@ describe("listOpsMonthlyIncentivePreview", () => {
     const opsLead = result.rows.find((row) => row.employeeId === "ops-lead");
     assert.equal(opsLead?.payoutConfirmation.status, "unconfirmed");
     assert.equal(opsLead?.payoutConfirmation.currentAmount, opsLead?.payoutAmount);
+  });
+
+  it("S7(ADR 0004): 확인된 단위가 비활성된 운영팀 직원이어도 금액 0인 행으로 남아 지급 재확인 필요로 보인다", async () => {
+    const vanished = {
+      id: "ops-vanished",
+      staffCode: "OPS-009",
+      displayName: "그만둔 운영팀",
+      employeeGroup: "OPERATIONS",
+      position: "카운터",
+      sortOrder: 90,
+      isActive: false,
+      createdAt: new Date("2026-06-10T00:00:00.000Z"),
+      updatedAt: new Date("2026-06-10T00:00:00.000Z")
+    };
+    const seeded = [
+      {
+        id: "vanished-confirm",
+        unitType: "OPS_MONTHLY",
+        operatingMonthId: "month-2026-06",
+        serviceDate: null,
+        employeeId: vanished.id,
+        eventType: "confirm",
+        amount: 70000,
+        reason: null,
+        actorAccountId: "account-admin",
+        occurredAt: new Date("2026-06-10T13:00:00.000Z"),
+        createdAt: new Date("2026-06-10T13:00:00.000Z")
+      }
+    ];
+
+    const result = await listOpsMonthlyIncentivePreview({
+      operatingMonthId: "month-2026-06",
+      prismaClient: createMemoryPrisma({ extraEmployees: [vanished], seedPayoutConfirmationEvents: seeded })
+    });
+
+    const row = result.rows.find((item) => item.employeeId === vanished.id);
+    assert.ok(row, "확인된 단위는 비활성돼도 사라지면 안 된다");
+    assert.equal(row?.displayName, "그만둔 운영팀");
+    assert.equal(row?.payoutAmount, 0);
+    assert.equal(row?.payoutConfirmation.status, "needs_reconfirmation");
+    assert.equal(row?.payoutConfirmation.lastConfirmedAmount, 70000);
+    assert.equal(row?.payoutConfirmation.currentAmount, 0);
   });
 });
 

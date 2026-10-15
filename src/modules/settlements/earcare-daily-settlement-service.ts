@@ -13,6 +13,7 @@ import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/module
 import {
   confirmPayoutConfirmation,
   derivePayoutConfirmationStatus,
+  listActivelyConfirmedUnitEmployeeIds,
   listPayoutConfirmations,
   reconfirmPayoutConfirmation,
   releasePayoutConfirmation,
@@ -31,6 +32,9 @@ type EmployeeRecord = {
   id: string;
   employeeGroup: string;
   isActive: boolean;
+  /** S7: 비활성된 직원도 자리표시 지급 확인 행에 이름을 보일 수 있게 한다. */
+  staffCode?: string;
+  displayName?: string;
 };
 
 type EarcareDailySettlementPrismaClient = {
@@ -301,7 +305,7 @@ export async function listEarcareDailySettlements(input: {
       .map((row) => row.employeeId)
   );
 
-  const rows = attendance.rows.map((row): Omit<EarcareDailySettlementRowDto, "payoutConfirmation"> => {
+  const rows: Array<Omit<EarcareDailySettlementRowDto, "payoutConfirmation">> = attendance.rows.map((row) => {
     const remainderShareAmount = row.isPayoutEligible && remainderEmployeeIds.has(row.employeeId) ? 1 : 0;
     const payoutAmount = row.isPayoutEligible ? baseShareAmount + remainderShareAmount : 0;
     return {
@@ -324,6 +328,37 @@ export async function listEarcareDailySettlements(input: {
       })
     };
   });
+
+  // S7(ADR 0004): 확인 사건이 있는 단위는 그날 출근 행이 없어도(직원이 비활성되어도) 금액 0인 행으로
+  // 남긴다. 그래야 attachPayoutConfirmations가 "지급 재확인 필요"로 가리고, 마감 점검도 이 차이를 막을
+  // 수 있다. 출근 집계(eligibleCount·분배)는 이미 끝났으므로 자리표시 행은 그 계산에 끼지 않는다.
+  if (client.payoutConfirmationEvent) {
+    const confirmedEmployeeIds = await listActivelyConfirmedUnitEmployeeIds({
+      unitType: "EARCARE_DAILY",
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate: parsed.data.serviceDate,
+      prismaClient: toPayoutConfirmationPrismaClient(client)
+    });
+    const presentIds = new Set(rows.map((row) => row.employeeId));
+    for (const employeeId of confirmedEmployeeIds) {
+      if (presentIds.has(employeeId)) continue;
+      const employee = await client.employee?.findUnique?.({ where: { id: employeeId } });
+      rows.push({
+        employeeId,
+        staffCode: employee?.staffCode ?? employeeId,
+        displayName: employee?.displayName ?? employeeId,
+        statusCode: "",
+        statusDisplayName: "그 날짜 출근 기록 없음",
+        isPayoutEligible: false,
+        exclusionReason: "그 날짜 출근 기록 없음",
+        baseShareAmount: 0,
+        remainderShareAmount: 0,
+        payoutAmount: 0,
+        calculationBasis: "확인 사건은 있지만 그 날짜 계산 대상이 아닙니다."
+      });
+    }
+  }
+
   const distributedAmount = rows.reduce((sum, row) => sum + row.payoutAmount, 0);
   const rowsWithPayoutConfirmation = await attachPayoutConfirmations({
     client,

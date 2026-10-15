@@ -10,6 +10,7 @@ import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/module
 import {
   confirmPayoutConfirmation,
   derivePayoutConfirmationStatus,
+  listActivelyConfirmedUnitEmployeeIds,
   listPayoutConfirmations,
   reconfirmPayoutConfirmation,
   releasePayoutConfirmation,
@@ -28,6 +29,10 @@ type EmployeeRecord = {
   id: string;
   employeeGroup: string;
   isActive: boolean;
+  /** S7: 비활성된 직원도 자리표시 지급 확인 행에 이름을 보일 수 있게 한다. */
+  staffCode?: string;
+  displayName?: string;
+  position?: string;
 };
 
 type OpsDailyIncentiveRuleRecord = {
@@ -342,7 +347,7 @@ export async function listOpsDailyIncentives(input: {
   const dailyOpsCallCredit = completedCalculations.reduce((sum, calculation) => sum + calculation.opsCallCredit, 0);
   const callRowsById = new Map(callRows.map((row) => [row.id, row]));
   const ruleSelection = selectRule({ rules, monthKey: operatingMonth.monthKey, dailyOpsCallCredit });
-  const rows = attendance.rows.map((row): Omit<OpsDailyIncentiveRowDto, "payoutConfirmation"> => {
+  const rows: Array<Omit<OpsDailyIncentiveRowDto, "payoutConfirmation">> = attendance.rows.map((row) => {
     const payoutAmount = row.isPayoutEligible && ruleSelection.ruleStatus === "applied" ? ruleSelection.personalIncentiveAmount : 0;
     return {
       employeeId: row.employeeId,
@@ -361,6 +366,35 @@ export async function listOpsDailyIncentives(input: {
       })
     };
   });
+
+  // S7(ADR 0004): 확인 사건이 있는 단위는 그날 출근 행이 없어도(직원이 비활성되어도) 금액 0인 행으로
+  // 남긴다. 그래야 attachPayoutConfirmations가 "지급 재확인 필요"로 가리고, 마감 점검도 이 차이를 막을
+  // 수 있다.
+  if (client.payoutConfirmationEvent) {
+    const confirmedEmployeeIds = await listActivelyConfirmedUnitEmployeeIds({
+      unitType: "OPS_DAILY",
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate: parsed.data.serviceDate,
+      prismaClient: toPayoutConfirmationPrismaClient(client)
+    });
+    const presentIds = new Set(rows.map((row) => row.employeeId));
+    for (const employeeId of confirmedEmployeeIds) {
+      if (presentIds.has(employeeId)) continue;
+      const employee = await client.employee?.findUnique?.({ where: { id: employeeId } });
+      rows.push({
+        employeeId,
+        staffCode: employee?.staffCode ?? employeeId,
+        displayName: employee?.displayName ?? employeeId,
+        position: employee?.position ?? "",
+        statusCode: "",
+        statusDisplayName: "그 날짜 출근 기록 없음",
+        isPayoutEligible: false,
+        exclusionReason: "그 날짜 출근 기록 없음",
+        payoutAmount: 0,
+        calculationBasis: "확인 사건은 있지만 그 날짜 계산 대상이 아닙니다."
+      });
+    }
+  }
 
   const rowsWithPayoutConfirmation = await attachPayoutConfirmations({
     client,

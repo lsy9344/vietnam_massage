@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   confirmPayoutConfirmation,
   derivePayoutConfirmationStatus,
+  listActivelyConfirmedUnitEmployeeIds,
   listPayoutConfirmations,
   reconfirmPayoutConfirmation,
   releasePayoutConfirmation,
@@ -46,13 +47,16 @@ function createConfirmationPrisma(options: { operatingMonthStatus?: string } = {
     payoutConfirmationEvent: {
       async findMany({ where }: any = {}) {
         return events
-          .filter(
-            (record) =>
-              record.unitType === where.unitType &&
-              record.operatingMonthId === where.operatingMonthId &&
-              sameDateValue(record.serviceDate, where.serviceDate) &&
-              (where.employeeId?.in ? where.employeeId.in.includes(record.employeeId) : record.employeeId === where.employeeId)
-          )
+          .filter((record) => {
+            if (record.unitType !== where.unitType) return false;
+            if (record.operatingMonthId !== where.operatingMonthId) return false;
+            if (!sameDateValue(record.serviceDate, where.serviceDate)) return false;
+            // 실제 Prisma처럼 where.employeeId를 안 주면(S7의 listActivelyConfirmedUnitEmployeeIds처럼
+            // 모든 직원을 본다) 직원으로 거르지 않는다.
+            if (where.employeeId === undefined) return true;
+            if (where.employeeId?.in) return where.employeeId.in.includes(record.employeeId);
+            return record.employeeId === where.employeeId;
+          })
           .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime() || b.createdAt.getTime() - a.createdAt.getTime());
       },
       async create({ data }: any) {
@@ -463,5 +467,71 @@ describe("listPayoutConfirmations", () => {
 
     assert.equal(result.get("therapist-1")?.status, "confirmed");
     assert.equal(result.get("therapist-2")?.status, "unconfirmed");
+  });
+});
+
+// S7(ADR 0004): 확인 사건이 있는 단위를 그날 계산 행 집합과 무관하게 찾기 위함이다. 직군별 계산
+// 서비스가 그날 완료 콜·출근이 있는 직원만 행으로 만들어, 확인 뒤 콜이 취소·노쇼로 정정되거나 직원이
+// 비활성되면 계산 행이 사라져 그 단위가 통째로 보이지 않았다(지급 재확인 필요도 못 본다).
+describe("listActivelyConfirmedUnitEmployeeIds", () => {
+  it("finds employee ids with an active (non-released) confirmation for the unit, ignoring other dates and released units", async () => {
+    const prismaClient = createConfirmationPrisma();
+    await confirmPayoutConfirmation({
+      unitType: "THERAPIST_DAILY",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: "therapist-vanished",
+      amount: 300000,
+      actorId: "account-admin",
+      prismaClient
+    });
+    await confirmPayoutConfirmation({
+      unitType: "THERAPIST_DAILY",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: "therapist-released",
+      amount: 200000,
+      actorId: "account-admin",
+      prismaClient
+    });
+    await releasePayoutConfirmation({
+      unitType: "THERAPIST_DAILY",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      employeeId: "therapist-released",
+      reason: "실수로 확인함",
+      actorId: "account-admin",
+      currentAmount: 0,
+      prismaClient
+    });
+    await confirmPayoutConfirmation({
+      unitType: "THERAPIST_DAILY",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-11",
+      employeeId: "therapist-other-day",
+      amount: 100000,
+      actorId: "account-admin",
+      prismaClient
+    });
+
+    const ids = await listActivelyConfirmedUnitEmployeeIds({
+      unitType: "THERAPIST_DAILY",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient
+    });
+
+    assert.deepEqual(ids, ["therapist-vanished"]);
+  });
+
+  it("returns an empty list when nothing has been confirmed for the unit", async () => {
+    const prismaClient = createConfirmationPrisma();
+    const ids = await listActivelyConfirmedUnitEmployeeIds({
+      unitType: "THERAPIST_DAILY",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient
+    });
+    assert.deepEqual(ids, []);
   });
 });

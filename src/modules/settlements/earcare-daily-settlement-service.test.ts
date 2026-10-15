@@ -20,6 +20,7 @@ function createMemoryPrisma(
     outsideMonth?: boolean;
     employeeIdTieBreaker?: boolean;
     seedPayoutConfirmationEvents?: any[];
+    extraEmployees?: any[];
   } = {}
 ) {
   const createdAt = new Date("2026-06-10T00:00:00.000Z");
@@ -58,7 +59,8 @@ function createMemoryPrisma(
     [secondEarcareId, employee(secondEarcareId, secondEarcareStaffCode, "귀케어1", secondEarcareSortOrder, "EARCARE")],
     ["ear-3", employee("ear-3", "EAR-003", "귀케어3", 30, "EARCARE")],
     ["thr-1", employee("thr-1", "THR-001", "마사지사1", 1, "THERAPIST")],
-    ["thr-2", employee("thr-2", "THR-002", "마사지사2", 2, "THERAPIST")]
+    ["thr-2", employee("thr-2", "THR-002", "마사지사2", 2, "THERAPIST")],
+    ...(options.extraEmployees ?? []).map((item) => [item.id, item] as const)
   ]);
   const codeItems = [
     status("NORMAL", "정상", 10),
@@ -433,6 +435,49 @@ describe("listEarcareDailySettlements", () => {
     const earcare2 = result.rows.find((row) => row.employeeId === "ear-2");
     assert.equal(earcare2?.payoutConfirmation.status, "unconfirmed");
     assert.equal(earcare2?.payoutConfirmation.currentAmount, earcare2?.payoutAmount);
+  });
+
+  it("S7(ADR 0004): 확인된 단위가 비활성된 귀케어 직원이어도 금액 0인 행으로 남아 지급 재확인 필요로 보인다", async () => {
+    const vanished = {
+      id: "ear-vanished",
+      staffCode: "EAR-009",
+      displayName: "그만둔 귀케어",
+      employeeGroup: "EARCARE",
+      position: "EARCARE",
+      sortOrder: 90,
+      isActive: false,
+      createdAt: new Date("2026-06-10T00:00:00.000Z"),
+      updatedAt: new Date("2026-06-10T00:00:00.000Z")
+    };
+    const seeded = [
+      {
+        id: "vanished-confirm",
+        unitType: "EARCARE_DAILY",
+        operatingMonthId: "month-2026-06",
+        serviceDate: dbDate("2026-06-10"),
+        employeeId: vanished.id,
+        eventType: "confirm",
+        amount: 150000,
+        reason: null,
+        actorAccountId: "account-admin",
+        occurredAt: new Date("2026-06-10T13:00:00.000Z"),
+        createdAt: new Date("2026-06-10T13:00:00.000Z")
+      }
+    ];
+
+    const result = await listEarcareDailySettlements({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      prismaClient: createMemoryPrisma({ extraEmployees: [vanished], seedPayoutConfirmationEvents: seeded })
+    });
+
+    const row = result.rows.find((item) => item.employeeId === vanished.id);
+    assert.ok(row, "확인된 단위는 비활성돼도 사라지면 안 된다");
+    assert.equal(row?.displayName, "그만둔 귀케어");
+    assert.equal(row?.payoutAmount, 0);
+    assert.equal(row?.payoutConfirmation.status, "needs_reconfirmation");
+    assert.equal(row?.payoutConfirmation.lastConfirmedAmount, 150000);
+    assert.equal(row?.payoutConfirmation.currentAmount, 0);
   });
 });
 

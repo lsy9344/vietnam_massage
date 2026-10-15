@@ -473,3 +473,38 @@ export async function listPayoutConfirmations(input: {
 
   return result;
 }
+
+/**
+ * (unitType, operatingMonthId, serviceDate) 단위 중 지금 유효하게 확인된(마지막 사건이 해제가 아닌)
+ * 직원 id 목록이다(ADR 0004, S7). 직군별 계산 서비스는 그날 계산 행(완료 콜, 출근 등)이 있는 직원만
+ * 행을 만들어, 확인 뒤 그 행이 사라지면(콜이 취소·노쇼로 정정되거나 직원이 비활성) 단위 전체가 보이지
+ * 않게 된다. 호출하는 쪽이 이 목록과 자기 계산 행 집합의 차집합을 금액 0인 자리표시 행으로 보충하면,
+ * attachPayoutConfirmations가 "지급 재확인 필요"로 올바르게 가린다.
+ */
+export async function listActivelyConfirmedUnitEmployeeIds(input: {
+  unitType: PayoutConfirmationUnitType;
+  operatingMonthId: string;
+  serviceDate: string | null;
+  prismaClient?: PayoutConfirmationPrismaClient;
+}): Promise<string[]> {
+  const client = getClient(input.prismaClient);
+  const serviceDateValue = input.serviceDate ? toDateOnly(input.serviceDate) : null;
+
+  const records = await client.payoutConfirmationEvent.findMany({
+    where: {
+      unitType: input.unitType,
+      operatingMonthId: input.operatingMonthId,
+      serviceDate: serviceDateValue
+    },
+    orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }]
+  });
+
+  const latestByEmployeeId = new Map<string, PayoutConfirmationEventRecord>();
+  for (const record of records) {
+    if (!latestByEmployeeId.has(record.employeeId)) {
+      latestByEmployeeId.set(record.employeeId, record);
+    }
+  }
+
+  return [...latestByEmployeeId.entries()].filter(([, record]) => record.eventType !== "release").map(([employeeId]) => employeeId);
+}

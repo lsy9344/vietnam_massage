@@ -8,6 +8,7 @@ import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/module
 import {
   confirmPayoutConfirmation,
   derivePayoutConfirmationStatus,
+  listActivelyConfirmedUnitEmployeeIds,
   listPayoutConfirmations,
   reconfirmPayoutConfirmation,
   releasePayoutConfirmation,
@@ -493,6 +494,34 @@ export async function listOpsMonthlyIncentivePreview(input: {
     appliedRule: ruleSelection.appliedRule
   });
   const isClosedOrLocked = operatingMonth.status === "마감확정" || operatingMonth.status === "잠금";
+
+  // S7(ADR 0004): 확인 사건이 있는 단위는 이 운영월에 활성 운영팀 직원이 아니게 되어도(비활성) 금액
+  // 0인 행으로 남긴다. 그래야 attachPayoutConfirmations가 "지급 재확인 필요"로 가리고, 마감 점검도
+  // 이 차이를 막을 수 있다.
+  if (client.payoutConfirmationEvent) {
+    const confirmedEmployeeIds = await listActivelyConfirmedUnitEmployeeIds({
+      unitType: "OPS_MONTHLY",
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate: null,
+      prismaClient: toPayoutConfirmationPrismaClient(client)
+    });
+    const presentIds = new Set(distribution.rows.map((row) => row.employeeId));
+    for (const employeeId of confirmedEmployeeIds) {
+      if (presentIds.has(employeeId)) continue;
+      const employee = await client.employee.findUnique?.({ where: { id: employeeId } });
+      const fallback: EmployeeRecord = employee ?? {
+        id: employeeId,
+        staffCode: employeeId,
+        displayName: employeeId,
+        employeeGroup: "OPERATIONS",
+        position: "",
+        sortOrder: 9999,
+        isActive: false
+      };
+      distribution.rows.push(rowForEmployee(fallback, teamRole(fallback), 0, "확인 사건은 있지만 이 운영월 계산 대상이 아닙니다."));
+    }
+  }
+
   const rowsWithPayoutConfirmation = await attachPayoutConfirmations({
     client,
     operatingMonthId: parsed.data.operatingMonthId,
