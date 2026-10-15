@@ -32,7 +32,7 @@ const options: ServiceCallFormOptions = {
   expenseHandlers: []
 };
 
-const customers: CustomerDto[] = [{ id: "customer-1", name: "지윤", phone: "0901112222", memo: null }];
+const customers: CustomerDto[] = [{ id: "customer-1", name: "지윤", phone: "0901112222", memo: null, preferenceNote: null }];
 
 function savedRow(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDto {
   return {
@@ -58,6 +58,7 @@ function savedRow(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDto
     discountTypeCode: null,
     paymentMethodCode: null,
     note: null,
+    visitRequest: null,
     confirmationCode: null,
     basePrice: 0,
     paymentAmount: 0,
@@ -84,7 +85,23 @@ describe("callConflictFieldRows", () => {
 
     assert.deepEqual(
       rows.map((row) => row.field),
-      ["startTime", "actualEntryTime", "roomId", "courseId", "customerMemo", "customerId", "therapist1Id", "therapist2Id", "earcareEmployeeId", "status", "discountTypeCode", "paymentMethodCode", "note", "confirmationCode"]
+      [
+        "startTime",
+        "actualEntryTime",
+        "roomId",
+        "courseId",
+        "customerMemo",
+        "customerId",
+        "therapist1Id",
+        "therapist2Id",
+        "earcareEmployeeId",
+        "status",
+        "discountTypeCode",
+        "paymentMethodCode",
+        "note",
+        "visitRequest",
+        "confirmationCode"
+      ]
     );
 
     const byField = new Map(rows.map((row) => [row.field, row]));

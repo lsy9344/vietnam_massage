@@ -27,6 +27,7 @@ function savedRow(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDto
     discountTypeCode: null,
     paymentMethodCode: null,
     note: null,
+    visitRequest: null,
     confirmationCode: null,
     basePrice: 0,
     paymentAmount: 0,

@@ -45,6 +45,7 @@ const row: ServiceCallRowDto = {
   discountTypeCode: null,
   paymentMethodCode: null,
   note: null,
+  visitRequest: null,
   confirmationCode: null,
   basePrice: 0,
   paymentAmount: 0,
@@ -109,7 +110,7 @@ describe("ledger view column grouping (ticket 19)", () => {
     for (const label of ["시간", "실제입장", "객실", "고객/메모", "코스", "마사지사1", "마사지사2", "귀케어 담당", "저장상태"]) {
       assert.match(head, new RegExp(label), `${label}이 예약·현장 보기에 없다`);
     }
-    for (const field of ["discountTypeCode", "paymentMethodCode", "note", "confirmationCode", "customerId"]) {
+    for (const field of ["discountTypeCode", "paymentMethodCode", "note", "visitRequest", "confirmationCode", "customerId"]) {
       assert.doesNotMatch(row, new RegExp(`data-call-cell-column="${field}"`), `${field}은 예약·현장 보기에 없어야 한다`);
     }
 
@@ -123,7 +124,7 @@ describe("ledger view column grouping (ticket 19)", () => {
     const head = tableHead(html);
     const row = dataRow(html);
 
-    for (const label of ["시간", "고객/메모", "결제수단", "결제금액", "확인값", "비고"]) {
+    for (const label of ["시간", "고객/메모", "결제수단", "결제금액", "확인값", "비고", "방문별 요청"]) {
       assert.match(head, new RegExp(label), `${label}이 수납·정산 보기에 없다`);
     }
     for (const field of ["actualEntryTime", "roomId", "courseId", "therapist1Id", "therapist2Id", "earcareEmployeeId", "customerId"]) {
@@ -131,7 +132,16 @@ describe("ledger view column grouping (ticket 19)", () => {
     }
     assert.doesNotMatch(row, /data-call-cell-column="warnings"/, "경고 열은 수납·정산 보기에 없어야 한다");
 
-    const order = columnOrder(row, ["startTime", "customerMemo", "status", "discountTypeCode", "paymentMethodCode", "confirmationCode", "note"]);
+    const order = columnOrder(row, [
+      "startTime",
+      "customerMemo",
+      "status",
+      "discountTypeCode",
+      "paymentMethodCode",
+      "confirmationCode",
+      "note",
+      "visitRequest"
+    ]);
     assert.deepEqual(order, [...order].sort((a, b) => a - b), "열 순서가 고정열 다음 보기 열 순서를 따르지 않는다");
   });
 
@@ -153,6 +163,7 @@ describe("ledger view column grouping (ticket 19)", () => {
       "discountTypeCode",
       "paymentMethodCode",
       "note",
+      "visitRequest",
       "confirmationCode"
     ]) {
       assert.match(row, new RegExp(`data-call-cell-column="${field}"`), `${field}은 전체 보기에 있어야 한다`);

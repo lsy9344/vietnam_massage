@@ -52,6 +52,7 @@ function blankDraft(ledger: { operatingMonthId: string; serviceDate: string }): 
     discountTypeCode: null,
     paymentMethodCode: null,
     note: null,
+    visitRequest: null,
     confirmationCode: null
   };
 }

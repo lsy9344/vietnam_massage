@@ -54,6 +54,7 @@ const discountedCallRow: ServiceCallRowDto = {
   discountTypeCode: "BIRTHDAY",
   paymentMethodCode: "CASH",
   note: null,
+  visitRequest: null,
   confirmationCode: "Y",
   basePrice: 1500000,
   paymentAmount: 1400000,
@@ -122,7 +123,7 @@ describe("client revision visual regression guards", () => {
   });
 
   it("renders the customer record form and the register action in Korean and Vietnamese", () => {
-    const customer = { id: "customer-1", name: "민아", phone: "090111", memo: "단골" };
+    const customer = { id: "customer-1", name: "민아", phone: "090111", memo: "단골", preferenceNote: null };
     const render = (locale: "ko" | "vi") =>
       renderToStaticMarkup(
         renderInShell(

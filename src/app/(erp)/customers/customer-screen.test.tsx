@@ -37,7 +37,7 @@ function row(overrides: Partial<CustomerVisitHistoryRowDto> = {}): CustomerVisit
   };
 }
 
-const minah = { id: "customer-1", name: "민아", phone: "090111", memo: "단골" };
+const minah = { id: "customer-1", name: "민아", phone: "090111", memo: "단골", preferenceNote: "조용한 방 선호" };
 
 function renderView(overrides: Partial<Parameters<typeof CustomerScreenView>[0]> = {}, locale: "ko" | "vi" = "ko") {
   return renderToStaticMarkup(
@@ -207,6 +207,8 @@ describe("customer screen view", () => {
     assert.match(panel, /value="민아"/);
     assert.match(panel, /value="090111"/);
     assert.match(panel, /value="단골"/);
+    assert.match(panel, />공통 선호·주의사항</);
+    assert.match(panel, />조용한 방 선호<\/textarea>/);
     assert.match(panel, />고치기</);
     assert.match(panel, /방문 이력/);
     for (const header of ["날짜", "예약시각", "코스", "Therapist", "상태", "고객/메모"]) {
@@ -221,6 +223,7 @@ describe("customer screen view", () => {
 
     const vietnamese = renderView({ customer: minah, history: [row()] }, "vi");
     assert.match(vietnamese, /Thông tin khách/);
+    assert.match(vietnamese, /Sở thích·lưu ý chung/);
     assert.match(vietnamese, /Lịch sử ghé/);
     assert.match(vietnamese, /Giờ đặt/);
     assert.match(vietnamese, /Khách\/Ghi chú/);

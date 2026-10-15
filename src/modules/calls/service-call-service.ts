@@ -144,6 +144,7 @@ type CustomerRecord = {
   name: string;
   phone: string | null;
   memo: string | null;
+  preferenceNote: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -165,6 +166,7 @@ type ServiceCallRecord = {
   discountTypeCode: string | null;
   paymentMethodCode: string | null;
   note: string | null;
+  visitRequest: string | null;
   confirmationCode: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -252,6 +254,8 @@ export type CustomerDto = {
   name: string;
   phone: string | null;
   memo: string | null;
+  /** 고객 공통 선호·주의사항(F06, 티켓 23). memo(고객 메모)와는 다른 칸이다. */
+  preferenceNote: string | null;
 };
 
 export type ServiceCallAssigneeDto = {
@@ -310,6 +314,8 @@ export type ServiceCallRowDto = {
   discountTypeCode: string | null;
   paymentMethodCode: string | null;
   note: string | null;
+  /** 이번 콜의 방문별 요청(F06, 티켓 23). note(비고)와는 다른 칸이다. */
+  visitRequest: string | null;
   confirmationCode: string | null;
   basePrice: number;
   paymentAmount: number;
@@ -903,6 +909,7 @@ async function toRowDto(
     discountTypeCode: record.discountTypeCode,
     paymentMethodCode: record.paymentMethodCode,
     note: record.note,
+    visitRequest: record.visitRequest,
     confirmationCode: record.confirmationCode,
     ...calculation,
     createdAt: record.createdAt.toISOString(),
@@ -1138,6 +1145,7 @@ function toAuditSnapshot(record: ServiceCallRecord): AuditJsonSnapshot {
     discountTypeCode: record.discountTypeCode,
     paymentMethodCode: record.paymentMethodCode,
     note: record.note,
+    visitRequest: record.visitRequest,
     confirmationCode: record.confirmationCode,
     assignments: {
       therapist1Id: assignmentEmployeeId(record, "THERAPIST_1"),
@@ -1210,7 +1218,8 @@ function toCustomerDto(record: CustomerRecord): CustomerDto {
     id: record.id,
     name: record.name,
     phone: record.phone,
-    memo: record.memo
+    memo: record.memo,
+    preferenceNote: record.preferenceNote
   };
 }
 
@@ -1219,7 +1228,8 @@ function toCustomerAuditSnapshot(record: CustomerRecord): AuditJsonSnapshot {
     id: record.id,
     name: record.name,
     phone: record.phone,
-    memo: record.memo
+    memo: record.memo,
+    preferenceNote: record.preferenceNote
   };
 }
 
@@ -2014,6 +2024,7 @@ async function writeServiceCallRow(
     discountTypeCode: input.discountTypeCode ?? null,
     paymentMethodCode: input.paymentMethodCode ?? null,
     note: input.note ?? null,
+    visitRequest: input.visitRequest ?? null,
     confirmationCode: input.confirmationCode ?? null
   };
 
@@ -2293,7 +2304,8 @@ export async function createCustomer(input: CustomerInput & { actorId: string; p
       data: {
         name: parsed.data.name,
         phone: parsed.data.phone ?? null,
-        memo: parsed.data.memo ?? null
+        memo: parsed.data.memo ?? null,
+        preferenceNote: parsed.data.preferenceNote ?? null
       }
     });
     await recordAuditEvent(
@@ -2325,7 +2337,8 @@ export async function updateCustomer(input: CustomerUpdateInput & { actorId: str
     const data = {
       name: parsed.data.name,
       phone: parsed.data.phone ?? null,
-      memo: parsed.data.memo ?? null
+      memo: parsed.data.memo ?? null,
+      preferenceNote: parsed.data.preferenceNote ?? null
     };
     const updated = await tx.customer.updateMany({ where: { id: before.id }, data });
     if (updated.count !== 1) {

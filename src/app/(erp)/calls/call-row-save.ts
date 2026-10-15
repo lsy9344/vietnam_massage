@@ -57,6 +57,7 @@ export function draftFromRow(row: ServiceCallRowDto): CallRowDraft {
     discountTypeCode: row.discountTypeCode ?? null,
     paymentMethodCode: row.paymentMethodCode ?? null,
     note: row.note ?? null,
+    visitRequest: row.visitRequest ?? null,
     confirmationCode: row.confirmationCode ?? null
   };
 }

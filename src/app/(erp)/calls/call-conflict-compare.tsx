@@ -27,6 +27,7 @@ const FIELD_LABEL_KEY: Record<EditableCallField, MessageKey> = {
   discountTypeCode: "calls.column.discountType",
   paymentMethodCode: "calls.column.paymentMethod",
   note: "calls.column.note",
+  visitRequest: "calls.column.visitRequest",
   confirmationCode: "calls.column.confirmation"
 };
 
@@ -76,6 +77,8 @@ function fieldValue(
       return optionLabel(options.paymentMethods, draft.paymentMethodCode) ?? "-";
     case "note":
       return draft.note ?? "-";
+    case "visitRequest":
+      return draft.visitRequest ?? "-";
     case "confirmationCode":
       return optionLabel(options.confirmationCodes, draft.confirmationCode) ?? "-";
   }
