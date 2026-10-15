@@ -131,6 +131,11 @@ export const ko = {
   "roomCard.field.expectedEnd": "종료예정",
   "roomCard.field.assignee": "담당자",
   "roomCard.minutes": "{value}분",
+  "roomCard.overlap.count": "겹친 콜 {count}건",
+  "roomCard.overlap.listAria": "{room} 겹친 콜 목록",
+  "roomCard.overlap.displayEnd": "표시 종료 {time}",
+  "roomCard.openInLedger": "원장에서 콜 상세 열기",
+  "roomCard.openInLedgerAria": "{room} {time} 콜을 원장에서 열기",
 
   // 실시간 갱신 컨트롤러
   "roomRefresh.aria": "실시간 갱신 상태",
@@ -226,6 +231,7 @@ export const ko = {
   // 콜 행 경고와 콜 상세 패널
   "calls.warning.previousServiceUnfinished": "앞 시술이 아직 끝나지 않았습니다",
   "calls.warning.roomOverlap": "이 객실에 {time} 콜이 있습니다",
+  "calls.warning.roomOverlapMore": "이 객실에 {time} 콜이 있습니다 외 {count}건",
   "calls.warning.calculationError": "계산 오류",
   "calls.warning.openDetail": "콜 상세 열기",
   "calls.detail.title": "콜 상세 · {time}",

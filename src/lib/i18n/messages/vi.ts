@@ -131,6 +131,11 @@ export const vi: Messages = {
   "roomCard.field.expectedEnd": "Dự kiến kết thúc",
   "roomCard.field.assignee": "Người phụ trách",
   "roomCard.minutes": "{value} phút",
+  "roomCard.overlap.count": "{count} cuộc gọi trùng phòng",
+  "roomCard.overlap.listAria": "Danh sách cuộc gọi trùng phòng {room}",
+  "roomCard.overlap.displayEnd": "Kết thúc hiển thị {time}",
+  "roomCard.openInLedger": "Mở chi tiết cuộc gọi trong Sổ gọi",
+  "roomCard.openInLedgerAria": "Mở cuộc gọi {time} của {room} trong Sổ gọi",
 
   // 실시간 갱신 컨트롤러
   "roomRefresh.aria": "Trạng thái cập nhật thời gian thực",
@@ -226,6 +231,7 @@ export const vi: Messages = {
   // 콜 행 경고와 콜 상세 패널
   "calls.warning.previousServiceUnfinished": "Dịch vụ trước vẫn chưa kết thúc",
   "calls.warning.roomOverlap": "Phòng này có cuộc gọi lúc {time}",
+  "calls.warning.roomOverlapMore": "Phòng này có cuộc gọi lúc {time} và {count} cuộc gọi khác",
   "calls.warning.calculationError": "Lỗi tính toán",
   "calls.warning.openDetail": "Mở chi tiết cuộc gọi",
   "calls.detail.title": "Chi tiết cuộc gọi · {time}",

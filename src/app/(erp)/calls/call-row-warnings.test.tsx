@@ -126,6 +126,22 @@ describe("ledger row warnings", () => {
     assert.match(html, /<tr[^>]*data-selected="true"[^>]*data-service-call-id="back"/);
   });
 
+  it("names the other call's reservation time as written in the ledger for a room overlap", () => {
+    const overlap: CallRowWarningDto = { code: "room_overlap", relatedTime: "14:00", relatedCallIds: ["other"] };
+    const cell = warningCell(renderGrid("ko", [ledgerRow({ warnings: [overlap, yielded] })]), "back");
+    assert.match(cell, /이 객실에 14:00 콜이 있습니다/);
+    assert.doesNotMatch(cell, /외 \d+건/);
+    assert.match(cell, />\+1</);
+  });
+
+  it("shows the earliest overlapping call and how many more there are when three calls overlap", () => {
+    const overlap: CallRowWarningDto = { code: "room_overlap", relatedTime: "14:00", relatedCallIds: ["early", "middle"] };
+    const ko = warningCell(renderGrid("ko", [ledgerRow({ warnings: [overlap] })]), "back");
+    const vi = warningCell(renderGrid("vi", [ledgerRow({ warnings: [overlap] })]), "back");
+    assert.match(ko, /이 객실에 14:00 콜이 있습니다 외 1건/);
+    assert.match(vi, /Phòng này có cuộc gọi lúc 14:00 và 1 cuộc gọi khác/);
+  });
+
   it("speaks the warnings in Vietnamese", () => {
     const cell = warningCell(renderGrid("vi", [ledgerRow({ warnings: [unfinished, calculation] })]), "back");
     assert.match(cell, /Dịch vụ trước vẫn chưa kết thúc/);

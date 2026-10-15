@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { listServiceCallsForDate } from "@/modules/calls/service-call-service";
 import { BUSINESS_TIME_ZONE_OFFSET_MINUTES } from "@/lib/business-time";
-import { listRoomStatuses, RoomStatusDomainError } from "@/modules/rooms/room-status-service";
+import { ACTIVE_ROOM_OCCUPANCY_STATUSES, listRoomStatuses, RoomStatusDomainError } from "@/modules/rooms/room-status-service";
 import type { RoomStatusDto } from "@/modules/rooms/dtos";
 
 const defaultRoomFixtures = [
@@ -120,6 +120,7 @@ function createMemoryPrisma() {
   ]);
   const serviceCalls = new Map<string, any>();
   const assignments = new Map<string, any>();
+  const timeSlots: any[] = [];
   const writeOperations: string[] = [];
 
   function sameDate(a: Date, b: Date) {
@@ -164,7 +165,7 @@ function createMemoryPrisma() {
     },
     timeSlot: {
       async findMany() {
-        return [];
+        return timeSlots;
       }
     },
     serviceCall: {
@@ -174,7 +175,8 @@ function createMemoryPrisma() {
             (call) =>
               (where?.operatingMonthId === undefined || call.operatingMonthId === where.operatingMonthId) &&
               (where?.serviceDate === undefined || sameDate(call.serviceDate, where.serviceDate)) &&
-              (where?.status?.in === undefined || where.status.in.includes(call.status))
+              (where?.status?.in === undefined || where.status.in.includes(call.status)) &&
+              (where?.status?.notIn === undefined || !where.status.notIn.includes(call.status))
           )
           .map(withRelations);
       },
@@ -228,7 +230,7 @@ function createMemoryPrisma() {
 
   function addCall(input: {
     id: string;
-    roomId: string;
+    roomId: string | null;
     status: string;
     startTime: string;
     courseId?: string;
@@ -268,7 +270,7 @@ function createMemoryPrisma() {
     });
   }
 
-  return { client, addCall, addAssignment };
+  return { client, addCall, addAssignment, timeSlots };
 }
 
 describe("room status service", () => {
@@ -489,6 +491,102 @@ describe("room status service", () => {
     assert.equal(room101.expectedEndAt, expectedEndAt.toISOString());
     assert.equal(room101.remainingMinutes, remainingMinutes);
     assert.equal(room101.displayStatus, remainingMinutes <= 0 ? "종료확인" : remainingMinutes <= 10 ? "종료임박" : "사용중");
+  });
+
+  it("lists, per room, exactly the overlapping calls the call service flags, without re-judging them", async () => {
+    const { client, addCall, addAssignment } = createMemoryPrisma();
+    addCall({ id: "early", roomId: "room-101", status: "예약", startTime: "14:00", courseId: "course-b" });
+    addCall({ id: "completed", roomId: "room-101", status: "방문완료", startTime: "15:00" });
+    addCall({ id: "middle", roomId: "room-101", status: "사용중", startTime: "14:30", actualEntryTime: "14:50" });
+    addCall({ id: "canceled", roomId: "room-101", status: "취소", startTime: "14:10" });
+    addCall({ id: "roomless", roomId: null, status: "예약", startTime: "14:20" });
+    addCall({ id: "evening", roomId: "room-101", status: "예약", startTime: "18:00" });
+    addCall({ id: "alone", roomId: "room-102", status: "예약", startTime: "14:00" });
+    addAssignment("middle", "THERAPIST_1", "therapist-1");
+    addAssignment("middle", "THERAPIST_2", "therapist-2");
+    addAssignment("middle", "EARCARE", "earcare-1");
+    const now = new Date("2034-06-05T15:10:00.000+07:00");
+    const ledger = await listServiceCallsForDate({ operatingMonthId: "month-2034-06", serviceDate: "2034-06-05", prismaClient: client, now });
+    const flagged = (roomId: string) =>
+      ledger.filter((row) => row.roomId === roomId && row.warnings.some((warning) => warning.code === "room_overlap")).map((row) => row.id);
+
+    const statuses = await listRoomStatuses({ operatingMonthId: "month-2034-06", serviceDate: "2034-06-05", now, prismaClient: client, includeOverlaps: true });
+    const room101 = statusByRoom(statuses, "room-101");
+
+    assert.deepEqual(flagged("room-101").sort(), ["completed", "early", "middle"]);
+    assert.deepEqual(room101.overlappingCalls.map((call) => call.callId), ["early", "middle", "completed"]);
+    assert.deepEqual(statusByRoom(statuses, "room-102").overlappingCalls, []);
+    assert.deepEqual(flagged("room-102"), []);
+    // 대표 콜은 지금처럼 가장 늦은 활성 콜이다.
+    assert.equal(room101.activeCallId, "evening");
+
+    const middle = room101.overlappingCalls[1];
+    const middleRow = ledger.find((row) => row.id === "middle");
+    assert.ok(middleRow);
+    assert.deepEqual(middle, {
+      callId: "middle",
+      startTime: "14:30",
+      course: { id: "course-a", code: "A", name: "A 누루60", tvDisplayName: "A60", durationMinutes: 60 },
+      therapists: [
+        { id: "therapist-1", displayName: "마사지사1", staffCode: "THR-001" },
+        { id: "therapist-2", displayName: "마사지사2", staffCode: "THR-002" }
+      ],
+      status: "사용중",
+      displayEndAt: operatingInstant("2034-06-05", middleRow.displayEnd).toISOString()
+    });
+    // 고객/메모, 연락처, 금액, 수당은 담지 않는다.
+    assert.deepEqual(Object.keys(middle).sort(), ["callId", "course", "displayEndAt", "startTime", "status", "therapists"]);
+  });
+
+  it("returns no overlapping calls for an empty room or a room whose calls only touch", async () => {
+    const { client, addCall } = createMemoryPrisma();
+    addCall({ id: "first", roomId: "room-101", status: "방문완료", startTime: "14:00" });
+    addCall({ id: "second", roomId: "room-101", status: "예약", startTime: "15:00" });
+
+    const statuses = await listRoomStatuses({ operatingMonthId: "month-2034-06", serviceDate: "2034-06-05", prismaClient: client, includeOverlaps: true });
+
+    assert.deepEqual(statusByRoom(statuses, "room-101").overlappingCalls, []);
+    assert.deepEqual(statusByRoom(statuses, "room-201").overlappingCalls, []);
+  });
+
+  it("keeps the overlap list on a room whose overlapping calls are all 방문완료, which shows as 빈방", async () => {
+    const { client, addCall } = createMemoryPrisma();
+    addCall({ id: "first", roomId: "room-101", status: "방문완료", startTime: "14:00", courseId: "course-b" });
+    addCall({ id: "second", roomId: "room-101", status: "방문완료", startTime: "15:00" });
+
+    const statuses = await listRoomStatuses({ operatingMonthId: "month-2034-06", serviceDate: "2034-06-05", prismaClient: client, includeOverlaps: true });
+    const room101 = statusByRoom(statuses, "room-101");
+
+    assert.equal(room101.displayStatus, "빈방");
+    assert.deepEqual(room101.overlappingCalls.map((call) => call.callId), ["first", "second"]);
+  });
+
+  it("orders the list as the call service does when the business day starts before 11:00", async () => {
+    const { client, addCall, timeSlots } = createMemoryPrisma();
+    timeSlots.push({ id: "slot-1000", value: "10:00", sortOrder: 1, isActive: true });
+    addCall({ id: "later", roomId: "room-101", status: "예약", startTime: "11:00" });
+    addCall({ id: "earlier", roomId: "room-101", status: "예약", startTime: "10:30" });
+
+    const statuses = await listRoomStatuses({ operatingMonthId: "month-2034-06", serviceDate: "2034-06-05", prismaClient: client, includeOverlaps: true });
+
+    assert.deepEqual(statusByRoom(statuses, "room-101").overlappingCalls.map((call) => call.callId), ["earlier", "later"]);
+  });
+
+  it("leaves the list empty and reads only active calls unless overlaps are asked for", async () => {
+    const { client, addCall } = createMemoryPrisma();
+    addCall({ id: "early", roomId: "room-101", status: "예약", startTime: "14:00", courseId: "course-b" });
+    addCall({ id: "late", roomId: "room-101", status: "예약", startTime: "15:00" });
+    const reads: any[] = [];
+    const findMany = client.serviceCall.findMany;
+    client.serviceCall.findMany = async (args: any) => {
+      reads.push(args?.where?.status);
+      return findMany(args);
+    };
+
+    const statuses = await listRoomStatuses({ operatingMonthId: "month-2034-06", serviceDate: "2034-06-05", prismaClient: client });
+
+    assert.deepEqual(statusByRoom(statuses, "room-101").overlappingCalls, []);
+    assert.deepEqual(reads[0], { in: [...ACTIVE_ROOM_OCCUPANCY_STATUSES] });
   });
 
   it("uses the call service display end when the course policy is missing", async () => {

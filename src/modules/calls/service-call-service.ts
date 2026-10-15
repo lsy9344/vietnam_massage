@@ -263,7 +263,6 @@ export type ServiceCallCalculationStatus =
 
 /**
  * 원장 행 경고 코드. 배열 순서가 곧 우선순위다(스펙 B02): 앞 시술 미완료 → 객실 겹침 → 양보 → 계산 오류.
- * 객실 겹침은 티켓 14가 판정을 더한다.
  */
 export const CALL_ROW_WARNING_ORDER = [
   "previous_service_unfinished",
@@ -276,7 +275,7 @@ export type CallRowWarningCode = (typeof CALL_ROW_WARNING_ORDER)[number];
 
 export type CallRowWarningDto = {
   code: CallRowWarningCode;
-  /** 경고가 말하는 시각(HH:mm). 앞 시술 미완료는 앞 콜의 표시 종료, 양보는 다음 예약시각. */
+  /** 경고가 말하는 시각(HH:mm). 앞 시술 미완료는 앞 콜의 표시 종료, 객실 겹침은 가장 이른 상대의 예약시각, 양보는 다음 예약시각. */
   relatedTime: string | null;
   relatedCallIds: string[];
 };
@@ -1361,6 +1360,50 @@ function previousServiceUnfinished(record: ServiceCallRecord, context: DisplayEn
   };
 }
 
+/** 객실 겹침 판정 결과. 원장 행 경고와 객실 상태 서비스가 같은 값을 쓴다(스펙 B06). */
+export type RoomOverlapDto = {
+  callId: string;
+  roomId: string;
+  /** 가장 이른 상대의 예약시각(HH:mm). */
+  relatedTime: string;
+  /** 겹치는 상대 콜 id 전체. 예약시각이 이른 순서다. */
+  relatedCallIds: string[];
+};
+
+// 예약 점유 구간 [예약시각, 예약시각 + 코스 길이). 실제입장과 표시 종료는 쓰지 않는다.
+// 노쇼, 취소, 객실이 없는 콜은 점유하지 않는다. 운영월에 유효한 코스 정책이 없으면 길이를 몰라
+// 판정하지 않는다(가능 코스의 점유도 정책이 없는 콜을 세지 않는다).
+function roomReservationInterval(record: ServiceCallRecord, context: DisplayEndContext) {
+  if (!record.roomId) return null;
+  if (isNoShowStatus(record.status) || isCanceledStatus(record.status)) return null;
+  if (!CLOCK_TIME.test(record.startTime)) return null;
+  const duration = courseDurationMinutes(record);
+  if (duration <= 0) return null;
+  const start = businessMinute(record.startTime, context.dayStart);
+  return { roomId: record.roomId, start, end: start + duration };
+}
+
+// 같은 날 같은 객실의 반열린 구간이 겹치면 양쪽에 붙는다. 맞닿으면 겹치지 않는다. 어느 예약시각도 밀지 않는다.
+function roomOverlapFor(record: ServiceCallRecord, context: DisplayEndContext): RoomOverlapDto | null {
+  const own = roomReservationInterval(record, context);
+  if (!own) return null;
+  const partners: Array<{ id: string; start: number }> = [];
+  for (const other of context.dayCalls) {
+    if (other.id === record.id) continue;
+    const interval = roomReservationInterval(other, context);
+    if (!interval || interval.roomId !== own.roomId) continue;
+    if (interval.start < own.end && own.start < interval.end) partners.push({ id: other.id, start: interval.start });
+  }
+  if (partners.length === 0) return null;
+  partners.sort((left, right) => left.start - right.start || left.id.localeCompare(right.id));
+  return {
+    callId: record.id,
+    roomId: own.roomId,
+    relatedTime: formatBusinessMinute(partners[0].start),
+    relatedCallIds: partners.map((partner) => partner.id)
+  };
+}
+
 function deriveRowWarnings(
   record: ServiceCallRecord,
   context: DisplayEndContext,
@@ -1371,6 +1414,10 @@ function deriveRowWarnings(
   const byCode = new Map<CallRowWarningCode, CallRowWarningDto>();
   const unfinished = previousServiceUnfinished(record, context, now);
   if (unfinished) byCode.set(unfinished.code, unfinished);
+  const overlap = roomOverlapFor(record, context);
+  if (overlap) {
+    byCode.set("room_overlap", { code: "room_overlap", relatedTime: overlap.relatedTime, relatedCallIds: overlap.relatedCallIds });
+  }
   const choice = displayEndChoice(record, context);
   if (choice.yielded && display.warningTime) {
     byCode.set("yield_to_reservation", {
@@ -1433,21 +1480,43 @@ async function loadDisplayEndContext(
   return { dayCalls, dayStart: dayStartFromSlots(slots) };
 }
 
-export async function displayEndInstantsForDate(input: {
+type DayFactsInput = {
   operatingMonthId: string;
   serviceDate: string;
   prismaClient?: DisplayEndReadClient;
-}): Promise<Map<string, Date>> {
+};
+
+/**
+ * 객실 상태 서비스가 쓰는 그 날짜의 표시 종료와 객실 겹침. 콜을 한 번 읽어 둘 다 판정한다.
+ * 겹침은 원장 행의 room_overlap 경고와 같은 판정이며, 겹침이 없는 콜은 roomOverlaps에서 빠진다.
+ * roomOverlaps는 영업일 예약시각 순서다(첫 슬롯보다 이른 시각은 그날의 뒤). 소비자는 이 순서를 그대로 쓴다.
+ */
+export async function roomFloorFactsForDate(
+  input: DayFactsInput
+): Promise<{ displayEnds: Map<string, Date>; roomOverlaps: Map<string, RoomOverlapDto> }> {
   const client = input.prismaClient ?? getClient();
   const context = await loadDisplayEndContext(client, {
     operatingMonthId: input.operatingMonthId,
     serviceDate: toDateOnly(input.serviceDate)
   });
-  const instants = new Map<string, Date>();
+  const displayEnds = new Map<string, Date>();
+  const roomOverlaps = new Map<string, RoomOverlapDto>();
   for (const record of context.dayCalls) {
-    instants.set(record.id, instantFromBusinessMinute(input.serviceDate, displayEndChoice(record, context).minute));
+    displayEnds.set(record.id, instantFromBusinessMinute(input.serviceDate, displayEndChoice(record, context).minute));
   }
-  return instants;
+  const byReservation = context.dayCalls
+    .map((record) => ({ record, interval: roomReservationInterval(record, context) }))
+    .filter((entry): entry is { record: ServiceCallRecord; interval: NonNullable<typeof entry.interval> } => entry.interval !== null)
+    .sort((left, right) => left.interval.start - right.interval.start || left.record.id.localeCompare(right.record.id));
+  for (const { record } of byReservation) {
+    const overlap = roomOverlapFor(record, context);
+    if (overlap) roomOverlaps.set(record.id, overlap);
+  }
+  return { displayEnds, roomOverlaps };
+}
+
+export async function displayEndInstantsForDate(input: DayFactsInput): Promise<Map<string, Date>> {
+  return (await roomFloorFactsForDate(input)).displayEnds;
 }
 
 async function displayEndContextFor(tx: ServiceCallPrismaClient, record: ServiceCallRecord): Promise<DisplayEndContext> {

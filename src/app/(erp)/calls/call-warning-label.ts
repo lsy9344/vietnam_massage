@@ -18,8 +18,14 @@ export function callWarningLabel(t: Translate, warning: CallRowWarningDto) {
   switch (warning.code) {
     case "previous_service_unfinished":
       return t("calls.warning.previousServiceUnfinished");
-    case "room_overlap":
-      return t("calls.warning.roomOverlap", { time });
+    case "room_overlap": {
+      // 객실 겹침은 원장의 예약시각 그대로 말한다. 상대가 여럿이면 가장 이른 상대와 나머지 건수다.
+      const reservation = warning.relatedTime ?? "";
+      const more = warning.relatedCallIds.length - 1;
+      return more > 0
+        ? t("calls.warning.roomOverlapMore", { time: reservation, count: more })
+        : t("calls.warning.roomOverlap", { time: reservation });
+    }
     case "yield_to_reservation":
       return t("calls.actualEntry.warning", { time });
     case "calculation_error":

@@ -17,6 +17,7 @@ import {
   listServiceCallsForDate,
   listTherapistAvailability,
   redactServiceCallSettlementAmounts,
+  roomFloorFactsForDate,
   saveBasicServiceCallRow,
   searchCustomerVisitCandidates,
   ServiceCallDomainError,
@@ -2980,6 +2981,7 @@ function addAvailabilityCall(
     serviceDate?: string;
     actualEntryTime?: string | null;
     paymentMethodCode?: string | null;
+    roomId?: string | null;
     createdAt?: Date;
     assignments: Array<{ role: "THERAPIST_1" | "THERAPIST_2" | "EARCARE"; employeeId: string }>;
   }
@@ -2991,7 +2993,7 @@ function addAvailabilityCall(
     serviceDate: dbDate(input.serviceDate ?? availabilityDate),
     startTime: input.startTime,
     actualEntryTime: input.actualEntryTime ?? null,
-    roomId: "room-101",
+    roomId: input.roomId === undefined ? "room-101" : input.roomId,
     courseId: input.courseId,
     customerId: null,
     customerMemo: null,
@@ -3803,6 +3805,7 @@ describe("row warnings", () => {
     const prismaClient = createMemoryPrisma();
     addAvailabilityCall(prismaClient, {
       id: "assistant-front",
+      roomId: "room-a",
       startTime: "14:00",
       courseId: "course-a",
       status: "사용중",
@@ -3813,6 +3816,7 @@ describe("row warnings", () => {
     });
     addAvailabilityCall(prismaClient, {
       id: "cleaning-front",
+      roomId: "room-b",
       startTime: "14:00",
       courseId: "course-a",
       status: "청소중",
@@ -3820,6 +3824,7 @@ describe("row warnings", () => {
     });
     addAvailabilityCall(prismaClient, {
       id: "mine",
+      roomId: "room-c",
       startTime: "15:00",
       courseId: "course-a",
       status: "예약",
@@ -3827,6 +3832,7 @@ describe("row warnings", () => {
     });
     addAvailabilityCall(prismaClient, {
       id: "cleaning-back",
+      roomId: "room-d",
       startTime: "15:00",
       courseId: "course-a",
       status: "예약",
@@ -3834,6 +3840,7 @@ describe("row warnings", () => {
     });
     addAvailabilityCall(prismaClient, {
       id: "elsewhere",
+      roomId: "room-e",
       startTime: "15:00",
       courseId: "course-a",
       status: "예약",
@@ -3884,6 +3891,7 @@ describe("row warnings", () => {
     const prismaClient = createMemoryPrisma();
     addAvailabilityCall(prismaClient, {
       id: "in-use",
+      roomId: "room-a",
       startTime: "14:00",
       courseId: "course-a",
       status: "사용중",
@@ -3891,6 +3899,7 @@ describe("row warnings", () => {
     });
     addAvailabilityCall(prismaClient, {
       id: "earlier",
+      roomId: "room-b",
       startTime: "13:00",
       courseId: "course-a",
       status: "예약",
@@ -3898,6 +3907,7 @@ describe("row warnings", () => {
     });
     addAvailabilityCall(prismaClient, {
       id: "same-start",
+      roomId: "room-c",
       startTime: "14:00",
       courseId: "course-a",
       status: "예약",
@@ -3910,7 +3920,7 @@ describe("row warnings", () => {
     assert.deepEqual(rows.find((row) => row.id === "same-start")?.warnings, []);
   });
 
-  it("orders unfinished, yield, then calculation error", async () => {
+  it("orders unfinished, room overlap, yield, then calculation error", async () => {
     const prismaClient = createMemoryPrisma();
     addAvailabilityCall(prismaClient, {
       id: "front",
@@ -3939,9 +3949,9 @@ describe("row warnings", () => {
 
     assert.deepEqual(
       subject?.warnings.map((warning) => warning.code),
-      ["previous_service_unfinished", "yield_to_reservation", "calculation_error"]
+      ["previous_service_unfinished", "room_overlap", "yield_to_reservation", "calculation_error"]
     );
-    assert.deepEqual(subject?.warnings[2], { code: "calculation_error", relatedTime: null, relatedCallIds: [] });
+    assert.deepEqual(subject?.warnings[3], { code: "calculation_error", relatedTime: null, relatedCallIds: [] });
   });
 });
 
@@ -3971,5 +3981,153 @@ describe("row warnings with an unreadable earlier start time", () => {
     });
 
     assert.deepEqual(rows.find((row) => row.id === "later")?.warnings, []);
+  });
+});
+
+describe("room overlap", () => {
+  const therapist = (id: string) => [{ role: "THERAPIST_1" as const, employeeId: id }];
+
+  async function rowsOf(prismaClient: ReturnType<typeof createMemoryPrisma>) {
+    return listServiceCallsForDate({
+      operatingMonthId: "month-2026-06",
+      serviceDate: availabilityDate,
+      prismaClient,
+      now: new Date("2026-06-10T00:00:00.000Z")
+    });
+  }
+
+  function overlapOf(rows: Awaited<ReturnType<typeof rowsOf>>, id: string) {
+    return rows.find((row) => row.id === id)?.warnings.find((warning) => warning.code === "room_overlap");
+  }
+
+  it("marks both calls with the other call's reservation time when 14:00–15:30 meets 15:00–16:00", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, { id: "first", startTime: "14:00", courseId: "course-d", status: "예약", assignments: therapist("therapist-1") });
+    addAvailabilityCall(prismaClient, { id: "second", startTime: "15:00", courseId: "course-a", status: "방문완료", assignments: therapist("therapist-2") });
+
+    const rows = await rowsOf(prismaClient);
+
+    assert.deepEqual(overlapOf(rows, "first"), { code: "room_overlap", relatedTime: "15:00", relatedCallIds: ["second"] });
+    assert.deepEqual(overlapOf(rows, "second"), { code: "room_overlap", relatedTime: "14:00", relatedCallIds: ["first"] });
+  });
+
+  it("does not overlap a call that ends at the minute another starts", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, { id: "first", startTime: "14:00", courseId: "course-a", status: "예약", assignments: therapist("therapist-1") });
+    addAvailabilityCall(prismaClient, { id: "second", startTime: "15:00", courseId: "course-a", status: "예약", assignments: therapist("therapist-2") });
+
+    const rows = await rowsOf(prismaClient);
+
+    assert.equal(overlapOf(rows, "first"), undefined);
+    assert.equal(overlapOf(rows, "second"), undefined);
+  });
+
+  it("names the earliest partner in the row and returns every partner id when three calls overlap", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, { id: "late", startTime: "15:00", courseId: "course-a", status: "예약", assignments: therapist("therapist-3") });
+    addAvailabilityCall(prismaClient, { id: "early", startTime: "14:00", courseId: "course-d", status: "예약", assignments: therapist("therapist-1") });
+    addAvailabilityCall(prismaClient, { id: "middle", startTime: "14:30", courseId: "course-a", status: "예약", assignments: therapist("therapist-2") });
+
+    const rows = await rowsOf(prismaClient);
+
+    assert.deepEqual(overlapOf(rows, "late"), { code: "room_overlap", relatedTime: "14:00", relatedCallIds: ["early", "middle"] });
+    assert.deepEqual(overlapOf(rows, "early"), { code: "room_overlap", relatedTime: "14:30", relatedCallIds: ["middle", "late"] });
+    assert.deepEqual(overlapOf(rows, "middle"), { code: "room_overlap", relatedTime: "14:00", relatedCallIds: ["early", "late"] });
+  });
+
+  it("leaves out no-show, canceled, roomless, and other-room or other-day calls on both sides", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, { id: "subject", startTime: "14:00", courseId: "course-d", status: "예약", assignments: therapist("therapist-1") });
+    addAvailabilityCall(prismaClient, { id: "no-show", startTime: "14:10", courseId: "course-a", status: "노쇼", assignments: therapist("therapist-2") });
+    addAvailabilityCall(prismaClient, { id: "canceled", startTime: "14:20", courseId: "course-a", status: "취소", assignments: therapist("therapist-3") });
+    addAvailabilityCall(prismaClient, { id: "roomless", startTime: "14:30", courseId: "course-a", status: "예약", roomId: null, assignments: therapist("therapist-4") });
+    addAvailabilityCall(prismaClient, { id: "other-room", startTime: "14:40", courseId: "course-a", status: "예약", roomId: "room-102", assignments: therapist("therapist-5") });
+    addAvailabilityCall(prismaClient, {
+      id: "other-day",
+      startTime: "14:50",
+      courseId: "course-a",
+      status: "예약",
+      serviceDate: "2026-06-11",
+      assignments: therapist("therapist-6")
+    });
+
+    const rows = await rowsOf(prismaClient);
+
+    for (const id of ["subject", "no-show", "canceled", "roomless", "other-room"]) {
+      assert.equal(overlapOf(rows, id), undefined, id);
+    }
+  });
+
+  it("ignores the actual entry and the display end, and moves neither reservation time nor display end", async () => {
+    const prismaClient = createMemoryPrisma();
+    // 예약 구간은 14:00–15:00이다. 실제입장이 14:50이라 표시 종료는 15:50이지만 겹침에는 쓰지 않는다.
+    addAvailabilityCall(prismaClient, {
+      id: "late-guest",
+      startTime: "14:00",
+      actualEntryTime: "14:50",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: therapist("therapist-1")
+    });
+    addAvailabilityCall(prismaClient, { id: "next", startTime: "15:00", courseId: "course-a", status: "예약", assignments: therapist("therapist-2") });
+    const before = await rowsOf(prismaClient);
+
+    assert.equal(overlapOf(before, "late-guest"), undefined);
+    assert.equal(overlapOf(before, "next"), undefined);
+
+    addAvailabilityCall(prismaClient, { id: "overlapping", startTime: "14:30", courseId: "course-a", status: "예약", assignments: therapist("therapist-3") });
+    const after = await rowsOf(prismaClient);
+    const lateGuest = (rows: typeof after) => rows.find((row) => row.id === "late-guest");
+
+    assert.equal(lateGuest(after)?.startTime, lateGuest(before)?.startTime);
+    assert.equal(lateGuest(after)?.displayEnd, lateGuest(before)?.displayEnd);
+    assert.equal(after.find((row) => row.id === "next")?.startTime, "15:00");
+    assert.equal(overlapOf(after, "late-guest")?.relatedTime, "14:30");
+  });
+
+  it("saves a row that overlaps another call in the same room and moves neither reservation time", async () => {
+    const prismaClient = createMemoryPrisma();
+    prismaClient.timeSlots.set("14:30", { id: "slot-1430", value: "14:30", sortOrder: 80, isActive: true, createdAt: new Date(), updatedAt: new Date() });
+    addAvailabilityCall(prismaClient, { id: "existing", startTime: "14:00", courseId: "course-a", status: "예약", assignments: therapist("therapist-2") });
+
+    const saved = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: availabilityDate,
+      startTime: "14:30",
+      roomId: "room-101",
+      courseId: "course-a",
+      customerMemo: null,
+      therapist1Id: "therapist-1",
+      status: "예약",
+      prismaClient
+    });
+
+    assert.equal(saved.startTime, "14:30");
+    assert.deepEqual(saved.warnings.find((warning) => warning.code === "room_overlap"), {
+      code: "room_overlap",
+      relatedTime: "14:00",
+      relatedCallIds: ["existing"]
+    });
+    assert.equal(prismaClient.serviceCalls.get("existing")?.startTime, "14:00");
+  });
+
+  it("returns the same result to consumers other than the ledger", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, { id: "early", startTime: "14:00", courseId: "course-d", status: "예약", assignments: therapist("therapist-1") });
+    addAvailabilityCall(prismaClient, { id: "late", startTime: "15:00", courseId: "course-a", status: "예약", assignments: therapist("therapist-2") });
+    addAvailabilityCall(prismaClient, { id: "alone", startTime: "18:00", courseId: "course-a", status: "예약", assignments: therapist("therapist-3") });
+
+    const { roomOverlaps: overlaps } = await roomFloorFactsForDate({ operatingMonthId: "month-2026-06", serviceDate: availabilityDate, prismaClient });
+    const rows = await rowsOf(prismaClient);
+
+    assert.deepEqual([...overlaps.keys()].sort(), ["early", "late"]);
+    assert.deepEqual(overlaps.get("early"), { callId: "early", roomId: "room-101", relatedTime: "15:00", relatedCallIds: ["late"] });
+    for (const [id, overlap] of overlaps) {
+      const warning = overlapOf(rows, id);
+      assert.deepEqual({ relatedTime: warning?.relatedTime, relatedCallIds: warning?.relatedCallIds }, {
+        relatedTime: overlap.relatedTime,
+        relatedCallIds: overlap.relatedCallIds
+      });
+    }
   });
 });
