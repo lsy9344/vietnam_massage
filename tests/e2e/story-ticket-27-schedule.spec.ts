@@ -92,7 +92,10 @@ test.describe("티켓 27 근무표", () => {
     await page.goto("/settlements/schedule?date=" + targetDate);
     await expect(page.getByRole("heading", { name: "근무표" })).toBeVisible();
 
-    const row = page.locator("tr", { hasText: "THR-001" });
+    // 다른 스펙(예: story-4-4)이 뒷정리하지 않고 남긴 직원 staffCode(예: "E2E44-THR-001")도 "THR-001"을
+    // 부분 문자열로 담고 있어 hasText 부분 일치로는 두 행이 걸릴 수 있다(티켓 36에서 발견). staffCode
+    // 칸은 정확히 그 글자만 담으므로 exact 일치로 가린다.
+    const row = page.getByRole("row").filter({ has: page.getByText("THR-001", { exact: true }) });
     await row.getByRole("button", { name: /마사지사1/ }).click();
 
     const panel = page.getByRole("complementary");
@@ -125,7 +128,10 @@ test.describe("티켓 27 근무표", () => {
     await login(page, settlementManager.accountId, settlementManager.password);
     await page.goto("/settlements/schedule?date=" + targetDate);
 
-    const row = page.locator("tr", { hasText: "THR-001" });
+    // 다른 스펙(예: story-4-4)이 뒷정리하지 않고 남긴 직원 staffCode(예: "E2E44-THR-001")도 "THR-001"을
+    // 부분 문자열로 담고 있어 hasText 부분 일치로는 두 행이 걸릴 수 있다(티켓 36에서 발견). staffCode
+    // 칸은 정확히 그 글자만 담으므로 exact 일치로 가린다.
+    const row = page.getByRole("row").filter({ has: page.getByText("THR-001", { exact: true }) });
     await row.getByRole("button", { name: /마사지사1/ }).click();
     const panel = page.getByRole("complementary");
     const dayForm = panel.locator("form").filter({ hasText: targetDate.slice(5) });
@@ -155,7 +161,10 @@ test.describe("티켓 27 근무표", () => {
   test("편집 서버 액션은 호출 시점의 역할을 다시 검사해 권한 없는 역할을 거절한다", async ({ page }) => {
     await login(page, settlementManager.accountId, settlementManager.password);
     await page.goto("/settlements/schedule?date=" + targetDate);
-    const row = page.locator("tr", { hasText: "THR-001" });
+    // 다른 스펙(예: story-4-4)이 뒷정리하지 않고 남긴 직원 staffCode(예: "E2E44-THR-001")도 "THR-001"을
+    // 부분 문자열로 담고 있어 hasText 부분 일치로는 두 행이 걸릴 수 있다(티켓 36에서 발견). staffCode
+    // 칸은 정확히 그 글자만 담으므로 exact 일치로 가린다.
+    const row = page.getByRole("row").filter({ has: page.getByText("THR-001", { exact: true }) });
     await row.getByRole("button", { name: /마사지사1/ }).click();
     const panel = page.getByRole("complementary");
     const dayForm = panel.locator("form").filter({ hasText: targetDate.slice(5) });
@@ -180,7 +189,10 @@ test.describe("티켓 27 근무표", () => {
     await page.goto("/settlements/schedule?date=" + targetDate);
 
     await expect(page.getByRole("heading", { name: "Lịch làm việc" })).toBeVisible();
-    const row = page.locator("tr", { hasText: "THR-001" });
+    // 다른 스펙(예: story-4-4)이 뒷정리하지 않고 남긴 직원 staffCode(예: "E2E44-THR-001")도 "THR-001"을
+    // 부분 문자열로 담고 있어 hasText 부분 일치로는 두 행이 걸릴 수 있다(티켓 36에서 발견). staffCode
+    // 칸은 정확히 그 글자만 담으므로 exact 일치로 가린다.
+    const row = page.getByRole("row").filter({ has: page.getByText("THR-001", { exact: true }) });
     await expect(row.getByText("Nghỉ")).toBeVisible();
   });
 });

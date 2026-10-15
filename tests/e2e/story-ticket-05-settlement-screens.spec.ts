@@ -196,8 +196,10 @@ test.describe("Ticket 05 settlement screens", () => {
 
     await expect(employeeRow(page, "T05 Mai")).toContainText("800,000 VND");
     const panel = await openEmployeePanel(page, "T05 Mai");
-    await expect(panel.getByRole("link")).toHaveCount(2);
-    const firstCallLink = panel.getByRole("link").filter({ hasText: `${serviceDate} 14:00` });
+    // 패널에는 근거 콜 링크(원장에서 보기) 둘 외에, 티켓 32가 더한 월 명세서 링크("월 명세서 보기")도 있다.
+    // 이 테스트는 근거 콜 링크만 센다.
+    await expect(panel.getByRole("link", { name: "원장에서 보기" })).toHaveCount(2);
+    const firstCallLink = panel.getByRole("link", { name: "원장에서 보기" }).filter({ hasText: `${serviceDate} 14:00` });
     await expect(firstCallLink).toContainText("원장에서 보기");
 
     await firstCallLink.click();
