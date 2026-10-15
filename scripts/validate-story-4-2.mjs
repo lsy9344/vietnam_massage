@@ -23,7 +23,7 @@ function readJson(path) {
   "src/modules/settlements/therapist-daily-settlement-service.test.ts",
   "src/app/(erp)/settlements/page.tsx",
   "src/app/(erp)/settlements/actions.ts",
-  "src/app/(erp)/settlements/therapist-daily-settlement-payment-form.tsx",
+  "src/app/(erp)/settlements/payout-confirmation-form.tsx",
   "prisma/migrations/20260615130000_add_therapist_daily_settlement_payment_histories/migration.sql",
   "tests/e2e/story-4-2-therapist-daily-settlement.spec.ts",
   "src/modules/settlements/README.md",
@@ -114,26 +114,28 @@ for (const forbidden of ["use server", "revalidatePath", "requirePermission(\"pa
 
 const actions = read("src/app/(erp)/settlements/actions.ts");
 for (const required of [
-  "export type TherapistDailySettlementPaymentActionState",
-  "function mapPaymentActionError",
-  "setTherapistDailySettlementPaymentAction",
-  "_previousState: TherapistDailySettlementPaymentActionState",
-  "Promise<TherapistDailySettlementPaymentActionState>",
-  "return mapPaymentActionError(error, locale)"
+  "export type TherapistDailySettlementPayoutActionState",
+  "mapPayoutConfirmationActionError",
+  "confirmTherapistDailySettlementPayoutAction",
+  "reconfirmTherapistDailySettlementPayoutAction",
+  "releaseTherapistDailySettlementPayoutAction",
+  "_previousState: TherapistDailySettlementPayoutActionState",
+  "Promise<TherapistDailySettlementPayoutActionState>",
+  "return mapPayoutConfirmationActionError(error, locale)"
 ]) {
   if (!actions.includes(required)) errors.push(`settlements/actions.ts missing ${required}`);
 }
 
-const paymentForm = read("src/app/(erp)/settlements/therapist-daily-settlement-payment-form.tsx");
+const payoutForm = read("src/app/(erp)/settlements/payout-confirmation-form.tsx");
 for (const required of [
   "\"use client\"",
   "useActionState",
-  "setTherapistDailySettlementPaymentAction",
-  "TherapistDailySettlementPaymentActionState",
+  "ConfirmPayoutButton",
+  "ReasonPayoutForm",
   "role=\"alert\"",
   "formError"
 ]) {
-  if (!paymentForm.includes(required)) errors.push(`therapist-daily-settlement-payment-form.tsx missing ${required}`);
+  if (!payoutForm.includes(required)) errors.push(`payout-confirmation-form.tsx missing ${required}`);
 }
 
 const paymentHistoryMigration = read("prisma/migrations/20260615130000_add_therapist_daily_settlement_payment_histories/migration.sql");
@@ -159,7 +161,12 @@ for (const required of [
   "missing_policy",
   "call-invalid-d",
   "call-reserved",
-  "YYYY-MM-DD"
+  "YYYY-MM-DD",
+  // 티켓 30: 지급완료를 지급 확인(ADR 0004) 사건으로 대체했다.
+  "confirmTherapistDailySettlementPayout",
+  "reconfirmTherapistDailySettlementPayout",
+  "releaseTherapistDailySettlementPayout",
+  "확인 금액 미기록"
 ]) {
   if (!unitTest.includes(required)) errors.push(`therapist-daily-settlement-service.test.ts missing ${required}`);
 }
@@ -182,7 +189,12 @@ for (const required of [
   "E2E42 마사지사3",
   "정책 없음",
   "이 날짜의 방문완료 콜이 없습니다",
-  "toHaveURL(/\\/calls/)"
+  "toHaveURL(/\\/calls/)",
+  // 티켓 30: 지급완료 버튼을 지급 확인(확인/재확인/해제, ADR 0004)으로 대체했다.
+  "지급 확인",
+  "재확인",
+  "확인 해제",
+  "payoutConfirmationEvent"
 ]) {
   if (!e2e.includes(required)) errors.push(`story-4-2-therapist-daily-settlement.spec.ts missing ${required}`);
 }

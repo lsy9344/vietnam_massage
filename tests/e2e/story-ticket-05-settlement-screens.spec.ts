@@ -78,6 +78,7 @@ async function cleanup() {
     await (prisma as any).serviceCallAssignment.deleteMany({ where: { serviceCallId: { in: callIds } } });
     await (prisma as any).serviceCallStatusHistory.deleteMany({ where: { serviceCallId: { in: callIds } } });
     await (prisma as any).serviceCall.deleteMany({ where: { id: { in: callIds } } });
+    await (prisma as any).payoutConfirmationEvent.deleteMany({ where: { operatingMonthId: month.id } });
     await (prisma as any).therapistDailySettlementPaymentHistory.deleteMany({ where: { operatingMonthId: month.id } });
     await (prisma as any).therapistDailySettlementPayment.deleteMany({ where: { operatingMonthId: month.id } });
     await (prisma as any).therapistAttendance.deleteMany({ where: { operatingMonthId: month.id } });
@@ -255,7 +256,7 @@ test.describe("Ticket 05 settlement screens", () => {
     expect(await height(maiButton)).toBeGreaterThanOrEqual(44);
     expect(await height(panel.getByRole("button", { name: "닫기" }))).toBeGreaterThanOrEqual(44);
     expect(await height(panel.getByRole("button", { name: "저장" }))).toBeGreaterThanOrEqual(44);
-    expect(await height(panel.getByRole("button", { name: "지급완료" }))).toBeGreaterThanOrEqual(44);
+    expect(await height(panel.getByRole("button", { name: "지급 확인" }))).toBeGreaterThanOrEqual(44);
     expect(await height(panel.getByLabel("T05 Mai 출근시간"))).toBeGreaterThanOrEqual(44);
 
     await page.reload();

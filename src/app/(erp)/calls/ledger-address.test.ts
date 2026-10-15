@@ -6,7 +6,9 @@ import {
   ledgerCallHref,
   ledgerHref,
   ledgerTabParams,
-  parseLedgerTab
+  ledgerViewParams,
+  parseLedgerTab,
+  parseLedgerView
 } from "@/app/(erp)/calls/ledger-address";
 
 const october14 = { operatingMonthId: "m-2026-10", serviceDate: "2026-10-14" };
@@ -28,6 +30,28 @@ describe("call ledger address", () => {
   it("shares the operating month and date between the two tabs", () => {
     assert.equal(ledgerHref(october14, "ledger"), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
     assert.equal(ledgerHref(october14, "cashbook"), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-14&tab=cashbook");
+  });
+
+  it("reads the booking/settlement view from the address and treats anything else as the all view", () => {
+    assert.equal(parseLedgerView("booking"), "booking");
+    assert.equal(parseLedgerView("settlement"), "settlement");
+    assert.equal(parseLedgerView("all"), "all");
+    assert.equal(parseLedgerView(undefined), "all");
+    assert.equal(parseLedgerView("ALL"), "all");
+  });
+
+  it("keeps the all view address bare and adds view=<name> for the other two", () => {
+    assert.deepEqual(ledgerViewParams("all"), {});
+    assert.deepEqual(ledgerViewParams("booking"), { view: "booking" });
+    assert.deepEqual(ledgerViewParams("settlement"), { view: "settlement" });
+  });
+
+  it("carries the view only on the ledger tab, not the cashbook tab", () => {
+    assert.equal(
+      ledgerHref(october14, "ledger", "booking"),
+      "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-14&view=booking"
+    );
+    assert.equal(ledgerHref(october14, "cashbook", "booking"), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-14&tab=cashbook");
   });
 
   it("keeps the opened call in the address so the same address opens the detail panel", () => {

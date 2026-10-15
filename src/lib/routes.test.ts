@@ -149,7 +149,8 @@ describe("zone tabs", () => {
       "/settlements",
       "/settlements/earcare",
       "/settlements/operations",
-      "/settlements/operations/monthly"
+      "/settlements/operations/monthly",
+      "/settlements/schedule"
     ]);
     assert.deepEqual(tabPaths("administrator", "settings"), [
       "/masters/operating-months",

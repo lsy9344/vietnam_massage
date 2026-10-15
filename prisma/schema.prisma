@@ -25,6 +25,7 @@ model UserAccount {
   changedMigrationVerificationIssueHistories MigrationVerificationIssueHistory[]
   therapistDailySettlementPayments TherapistDailySettlementPayment[]
   changedTherapistDailySettlementPaymentHistories TherapistDailySettlementPaymentHistory[]
+  payoutConfirmationEvents PayoutConfirmationEvent[]
 
   @@map("user_accounts")
 }
@@ -53,6 +54,8 @@ model Employee {
   opsAttendances         OpsAttendance[]
   therapistAttendances   TherapistAttendance[]
   therapistDailySettlementPayments TherapistDailySettlementPayment[]
+  plannedWorkingDays     PlannedWorkingDay[]
+  payoutConfirmationEvents PayoutConfirmationEvent[]
 
   @@unique([employeeGroup, sortOrder], map: "uq_employees_employee_group_sort_order")
   @@map("employees")
@@ -137,6 +140,7 @@ model OperatingMonth {
   therapistAttendances TherapistAttendance[]
   therapistDailySettlementPayments TherapistDailySettlementPayment[]
   monthlyClosings MonthlyClosing[]
+  payoutConfirmationEvents PayoutConfirmationEvent[]
 
   @@map("operating_months")
 }
@@ -371,6 +375,22 @@ model TherapistAttendance {
   @@map("therapist_attendances")
 }
 
+// 근무표: (직원, 날짜) 한 칸의 근무 예정/휴무 계획. 행이 없으면 미입력이다. 운영월과
+// 무관하며(F04), 실제 출퇴근 기록(TherapistAttendance 등)을 만들거나 바꾸지 않는다.
+model PlannedWorkingDay {
+  id         String   @id @default(cuid())
+  employeeId String   @map("employee_id")
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  workDate   DateTime @map("work_date") @db.Date
+  planStatus String   @map("plan_status")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([employeeId, workDate], map: "uq_planned_working_days_employee_date")
+  @@index([workDate], map: "idx_planned_working_days_work_date")
+  @@map("planned_working_days")
+}
+
 model TherapistDailySettlementPayment {
   id                 String         @id @default(cuid())
   operatingMonthId   String         @map("operating_month_id")
@@ -411,6 +431,31 @@ model TherapistDailySettlementPaymentHistory {
   @@index([operatingMonthId, serviceDate, employeeId], map: "idx_tdsp_histories_month_date_emp")
   @@index([changedByAccountId, changedAt], map: "idx_tdsp_histories_actor_changed")
   @@map("therapist_daily_settlement_payment_histories")
+}
+
+// 지급 확인(ADR 0004, 티켓 30): 세 직군(Therapist·귀케어·운영팀)의 정산 행 지급 확인을 사건으로 쌓는 공통 저장소.
+// 단위는 (unitType, operatingMonthId, serviceDate?, employeeId)이고, serviceDate는 월 단위(운영팀 월 인센)에서 null이다.
+// 기존 TherapistDailySettlementPayment(History)의 데이터는 금액 없는 confirm/release 사건으로 이 표에 옮겼다
+// (티켓 30 마이그레이션). 옛 표는 과거 기록 보존을 위해 그대로 둔다.
+model PayoutConfirmationEvent {
+  id               String         @id @default(cuid())
+  unitType         String         @map("unit_type")
+  operatingMonthId String         @map("operating_month_id")
+  operatingMonth   OperatingMonth @relation(fields: [operatingMonthId], references: [id])
+  serviceDate      DateTime?      @map("service_date") @db.Date
+  employeeId       String         @map("employee_id")
+  employee         Employee       @relation(fields: [employeeId], references: [id])
+  eventType        String         @map("event_type")
+  amount           Int?
+  reason           String?
+  actorAccountId   String         @map("actor_account_id")
+  actorAccount     UserAccount    @relation(fields: [actorAccountId], references: [id])
+  occurredAt       DateTime       @map("occurred_at")
+  createdAt        DateTime       @default(now()) @map("created_at")
+
+  @@index([unitType, operatingMonthId, serviceDate, employeeId, occurredAt], map: "idx_payout_confirmation_events_unit_occurred")
+  @@index([actorAccountId, occurredAt], map: "idx_payout_confirmation_events_actor_occurred")
+  @@map("payout_confirmation_events")
 }
 
 model CoursePolicy {
