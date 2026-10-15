@@ -251,6 +251,13 @@ export async function listPlannedWorkingDaysForWeek(input: {
   return { weekStartDate, weekEndDate, dates, groups };
 }
 
+// listTherapistAvailability(calls/service-call-service.ts, 티켓 29)가 가능 코스 행에 근무 예정을 붙일 때
+// 재사용할 수 있도록 plannedWorkingDay.findMany만 요구하는 좁은 타입이다. calls 쪽의
+// AssignedCallReadClient(listAssignedServiceCallsForEmployeeOnDate)와 같은 방식.
+type PlannedWorkingDayReadClient = {
+  plannedWorkingDay: { findMany(args?: unknown): Promise<Array<Pick<PlannedWorkingDayRecord, "employeeId" | "planStatus">>> };
+};
+
 /**
  * 직원 목록과 날짜 하나의 근무표 상태를 돌려준다. 가능 코스(29)와 휴무 영향 콜(28)이
  * 재사용하는 직원별·날짜별 조회다. 행이 없는 직원은 미입력으로 채운다.
@@ -258,7 +265,7 @@ export async function listPlannedWorkingDaysForWeek(input: {
 export async function listPlannedWorkingDayStatusesForDate(input: {
   employeeIds: string[];
   date: string;
-  prismaClient?: ScheduleServicePrismaClient;
+  prismaClient?: PlannedWorkingDayReadClient;
 }): Promise<PlannedWorkingDayStatusDto[]> {
   const parsed = statusQuerySchema.safeParse(input);
   if (!parsed.success) throw toFieldError(parsed.error);
@@ -267,7 +274,7 @@ export async function listPlannedWorkingDayStatusesForDate(input: {
   const uniqueEmployeeIds = [...new Set(parsed.data.employeeIds)];
   if (uniqueEmployeeIds.length === 0) return [];
 
-  const client = getClient(input.prismaClient);
+  const client = input.prismaClient ?? getClient();
   const rows = await client.plannedWorkingDay.findMany({
     where: { employeeId: { in: uniqueEmployeeIds }, workDate: toDate(parsed.data.date) }
   });

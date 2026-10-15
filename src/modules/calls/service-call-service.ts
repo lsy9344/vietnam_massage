@@ -9,6 +9,7 @@ import { listActiveCodeItems, listActiveTimeSlots } from "@/modules/masters/code
 import { listActiveCourses } from "@/modules/masters/course-service";
 import { listActiveEmployees } from "@/modules/masters/employee-service";
 import { listActiveRooms } from "@/modules/masters/room-service";
+import { listPlannedWorkingDayStatusesForDate, type PlannedWorkingDayCellStatus } from "@/modules/settlements/schedule-service";
 import {
   assignmentRoles,
   customerInputSchema,
@@ -237,6 +238,11 @@ type ServiceCallPrismaClient = {
   };
   therapistAttendance: {
     findMany(args?: unknown): Promise<TherapistAttendanceRecord[]>;
+  };
+  // listPlannedWorkingDayStatusesForDate(settlements/schedule-service.ts)가 요구하는 좁은 모양만 둔다. 실제로는
+  // 같은 prisma 클라이언트라 근무표 서비스가 이 콜 테이블 조회와 함께 근무표 테이블을 읽을 수 있다(티켓 29).
+  plannedWorkingDay: {
+    findMany(args?: unknown): Promise<Array<{ employeeId: string; planStatus: string }>>;
   };
   $transaction?<T>(callback: (tx: ServiceCallPrismaClient) => Promise<T>): Promise<T>;
 };
@@ -470,6 +476,9 @@ export type TherapistAvailabilityRowDto = {
   freeMinutes: number | null;
   // 오늘 표시 종료를 넘긴 사용중 콜이 있다: 가능 후보는 시간표상 가능일 뿐 앞 시술 종료 확인이 필요하다.
   priorServiceEndCheck: boolean;
+  // 근무표(27)에 적힌 그날의 근무 예정. 실제 출근(attendance)과는 다른 테이블이라 서로 다른 값일 수 있고,
+  // 가능 판정·코스 버튼을 바꾸지 않는 안내일 뿐이다(스토리 12–13, 60, 104, V07).
+  plannedWorkingDayStatus: PlannedWorkingDayCellStatus;
   courses: TherapistAvailabilityCourseDto[];
 };
 
@@ -1749,6 +1758,16 @@ export async function listTherapistAvailability(input: {
     .filter((therapist) => therapist.isActive && therapist.employeeGroup === "THERAPIST")
     .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0) || left.displayName.localeCompare(right.displayName));
 
+  // 근무표(27)의 그날 근무 예정. 읽기만 하고, 가능 판정·코스 버튼에는 쓰지 않는다(티켓 29).
+  const plannedWorkingDayStatuses = await listPlannedWorkingDayStatusesForDate({
+    employeeIds: activeTherapists.map((therapist) => therapist.id),
+    date: parsed.data.serviceDate,
+    prismaClient: client
+  });
+  const plannedWorkingDayStatusByTherapist = new Map(
+    plannedWorkingDayStatuses.map((status) => [status.employeeId, status.status])
+  );
+
   // 방문완료 금액 계산과 같은 firstCurrentRate로 고른다. 0 VND도 수당이다.
   const ratesByTherapistCourse = groupRatesByTherapistCourse(rates);
   const hasRate = (therapistId: string, courseId: string) =>
@@ -1785,6 +1804,7 @@ export async function listTherapistAvailability(input: {
       nextReservationTime: nextReservation === null ? null : formatBusinessMinute(nextReservation),
       freeMinutes,
       priorServiceEndCheck: overruns.length > 0,
+      plannedWorkingDayStatus: plannedWorkingDayStatusByTherapist.get(therapist.id) ?? "미입력",
       courses: offeredCourses.map((course) => {
         const fits = available && freeMinutes !== null && course.durationMinutes <= freeMinutes;
         const rateHolders = rateHoldersByCourse.get(course.courseId) ?? [];

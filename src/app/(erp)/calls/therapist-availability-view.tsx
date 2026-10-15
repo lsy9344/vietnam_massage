@@ -4,6 +4,7 @@ import { inputFieldClassName } from "@/components/ui/input-field";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { WarningSummary } from "@/components/ui/warning-summary";
 import { t } from "@/lib/i18n";
+import { scheduleStatusLabel } from "@/lib/i18n/codes";
 import type { Locale } from "@/lib/i18n/config";
 
 const cellClassName = "border-b border-border px-3 py-2";
@@ -28,6 +29,12 @@ export const attendanceKey = {
   checked_in: "calls.availability.attendance.checkedIn",
   checked_out: "calls.availability.attendance.checkedOut"
 } as const;
+
+// 근무표(27)의 그날 근무 예정. 출근(Attendance)과는 다른 테이블·칸이라 서로 다른 값일 수 있고, 가능
+// 판정·코스 버튼을 바꾸지 않는 안내일 뿐이다(스토리 12–13, 60, 104, V07, 티켓 29).
+function Schedule({ locale, row }: { locale: Locale; row: TherapistAvailabilityRowDto }) {
+  return scheduleStatusLabel(locale, row.plannedWorkingDayStatus);
+}
 
 // 출근 표시와 근무 확인 필요는 서비스가 정한다. 코스 버튼은 이 칸과 상관없이 그대로 둔다.
 function Attendance({ locale, row }: { locale: Locale; row: TherapistAvailabilityRowDto }) {
@@ -130,6 +137,7 @@ export function TherapistAvailabilityView({
       </div>
       {open ? (
         <div className="border-t border-border p-4" id="therapist-availability-panel">
+          <p className="mb-3 text-xs text-muted">{t(locale, "calls.availability.scheduleNote")}</p>
           {pending ? <p className="text-sm text-muted">{t(locale, "calls.availability.loading")}</p> : null}
           {failed ? <p className="text-sm text-danger">{t(locale, "calls.availability.loadError")}</p> : null}
           {!pending && !failed && rows.length === 0 ? (
@@ -144,6 +152,7 @@ export function TherapistAvailabilityView({
                 <thead>
                   <tr className="bg-readonly text-xs font-semibold text-muted">
                     <th className={cellClassName} scope="col">{t(locale, "calls.availability.column.therapist")}</th>
+                    <th className={cellClassName} scope="col">{t(locale, "calls.availability.column.schedule")}</th>
                     <th className={cellClassName} scope="col">{t(locale, "calls.availability.column.attendance")}</th>
                     <th className={cellClassName} scope="col">{t(locale, "calls.availability.column.thisTime")}</th>
                     <th className={cellClassName} scope="col">{t(locale, "calls.availability.column.next")}</th>
@@ -157,6 +166,9 @@ export function TherapistAvailabilityView({
                     return (
                       <tr className="align-top hover:bg-readonly" key={row.therapistId}>
                         <th className={`${cellClassName} font-semibold text-foreground`} scope="row">{row.therapistName}</th>
+                        <td className={cellClassName}>
+                          <Schedule locale={locale} row={row} />
+                        </td>
                         <td className={cellClassName}>
                           <Attendance locale={locale} row={row} />
                         </td>
