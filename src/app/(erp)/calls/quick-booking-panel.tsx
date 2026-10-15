@@ -998,13 +998,6 @@ export function QuickBookingPanel({
 
   return (
     <>
-      {/* 빠른 예약은 원장 탭 머리의 주요 버튼이다(명세 F08). 휴대폰 폭에서는 제공하지 않는다(티켓 20). */}
-      <div className="hidden min-[600px]:block">
-        <Button aria-haspopup="dialog" disabled={isLocked} onClick={() => setOpen(true)} type="button">
-          {t("calls.quickBooking.open")}
-        </Button>
-      </div>
-
       <ModalPanel
         description={t("calls.quickBooking.description")}
         onOpenChange={(next) => {
@@ -1016,6 +1009,15 @@ export function QuickBookingPanel({
         }}
         open={open}
         title={t("calls.quickBooking.title")}
+        trigger={
+          // 빠른 예약은 원장 탭 머리의 주요 버튼이다(명세 F08). 휴대폰 폭에서는 제공하지 않는다(티켓 20).
+          // ModalPanel의 trigger로 등록해야 Radix가 이 버튼을 패널의 Dialog.Trigger로 알아, 패널을
+          // 닫을 때 포커스를 여기로 돌려준다(S3, 스토리 70) — 트리거 없이 따로 둔 버튼은 그 연결이 없어
+          // 닫은 뒤 포커스가 body로 빠졌다.
+          <Button aria-haspopup="dialog" className="hidden min-[600px]:inline-flex" disabled={isLocked} type="button">
+            {t("calls.quickBooking.open")}
+          </Button>
+        }
       >
         <StepperNav disabled={locked} errorSteps={errorSteps} onSelect={(next) => dispatch({ type: "step", step: next })} step={step} />
         <ErrorSummary fieldErrors={fieldErrors} message={message} onJump={(next) => dispatch({ type: "step", step: next })} />

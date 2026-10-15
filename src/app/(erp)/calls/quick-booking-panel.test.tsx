@@ -108,8 +108,8 @@ describe("빠른 예약 패널 — 원장 탭 머리의 주요 버튼(명세 F08
         serviceDate="2026-06-10"
       />
     );
-    assert.match(html, /<div class="hidden min-\[600px\]:block">/);
-    assert.match(html, /<button[^>]*>빠른 예약<\/button>/);
+    // 버튼 자신이 ModalPanel의 trigger라 Radix가 패널을 닫을 때 포커스를 돌려줄 수 있다(S3, 스토리 70).
+    assert.match(html, /<button[^>]*class="[^"]*hidden min-\[600px\]:inline-flex[^"]*"[^>]*>빠른 예약<\/button>/);
     // 닫힌 모달의 내용(단계 화면)은 서버에서 그리지 않는다.
     assert.doesNotMatch(html, /날짜·예약시각/);
 

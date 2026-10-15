@@ -303,4 +303,63 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
     await expect(dialog).toBeHidden();
     expect(await (prisma as any).serviceCall.count({ where: { customerMemo: memo } })).toBe(0);
   });
+
+  // S2(코드 리뷰)·스토리 70: 카운터가 키보드만으로 패널을 끝까지 쓸 수 있고, 패널을 닫으면 포커스가
+  // 원장의 원래 자리(패널을 연 "빠른 예약" 버튼)로 돌아와야 한다. 특히 ConfirmDialog "나가기" 확인 →
+  // 패널 닫힘(quick-booking-panel.tsx의 requestClose/setOpen(false)) 경로를 본다 — ModalPanel과
+  // ConfirmDialog가 같은 타이밍에 함께 닫혀 포커스 복귀가 꼬일 수 있는 자리다.
+  test("키보드만으로 패널 전체를 쓸 수 있고, 닫으면 포커스가 빠른 예약 버튼으로 돌아온다 (S3, 스토리 70)", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const memo = `T20 키보드 ${Date.now().toString(36)}`;
+    await login(page, account.accountId, account.password);
+    await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${today}`);
+
+    const openButton = page.getByRole("button", { name: "빠른 예약" });
+    await openButton.focus();
+    await page.keyboard.press("Enter");
+    const dialog = panel(page);
+    await expect(dialog).toBeVisible();
+
+    // 1단계: 고객. 마우스 없이 포커스를 옮기고 입력한다.
+    await dialog.getByLabel("고객/메모").focus();
+    await page.keyboard.type(memo);
+    await dialog.getByRole("button", { name: "다음" }).focus();
+    await page.keyboard.press("Enter");
+
+    // 2단계: 날짜·예약시각. 앞선 테스트들이 "지금" 시각 슬롯을 이미 채워 뒀을 수 있어, 네이티브 select를
+    // 키보드로 다뤄 비어 있는 다른 시간을 고른다("지금" 버튼 자체는 PC 폭 테스트가 이미 본다, B05).
+    await dialog.getByLabel("시간").focus();
+    await dialog.getByLabel("시간").selectOption("15:00");
+    await dialog.getByRole("button", { name: "다음" }).focus();
+    await page.keyboard.press("Enter");
+
+    // 3단계: Therapist·코스. 어느 Therapist든 상관없다(가능 코스 둘 중 비어 있는 쪽을 쓴다, 태블릿 테스트와 같은 방식).
+    const courseButton = dialog.getByRole("button", { name: /A 60분 가능/ }).first();
+    await expect(courseButton).toBeVisible({ timeout: 10_000 });
+    await courseButton.focus();
+    await page.keyboard.press("Enter");
+    await dialog.getByRole("button", { name: "다음" }).focus();
+    await page.keyboard.press("Enter");
+
+    // 4단계: 객실·메모. 네이티브 select·textarea는 항상 키보드로 다룰 수 있다.
+    await dialog.getByLabel("객실").selectOption({ label: "T20 호실" });
+    await dialog.getByLabel("비고").focus();
+    await page.keyboard.type("키보드로만 적은 비고");
+    await dialog.getByRole("button", { name: "다음" }).focus();
+    await page.keyboard.press("Enter");
+
+    // 5단계: 확인. 고른 값이 요약에 보인다. 여기서는 저장하지 않고 Esc로 닫는 경로를 본다.
+    await expect(dialog.getByText(memo)).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    const confirmDialog = page.getByRole("alertdialog", { name: "저장하지 않은 입력이 있습니다" });
+    await expect(confirmDialog).toBeVisible();
+    await confirmDialog.getByRole("button", { name: "나가기" }).focus();
+    await page.keyboard.press("Enter");
+
+    // 패널이 닫히면 포커스가 원장의 원래 자리로 돌아온다(스토리 70).
+    await expect(dialog).toBeHidden();
+    await expect(openButton).toBeFocused();
+    expect(await (prisma as any).serviceCall.count({ where: { customerMemo: memo } })).toBe(0);
+  });
 });
