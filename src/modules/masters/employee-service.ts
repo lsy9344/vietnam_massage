@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { businessTodayIsoDate } from "@/lib/operating-date";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
 import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
 import {
@@ -49,6 +50,12 @@ type EmployeePrismaClient = {
     findUnique(args: unknown): Promise<EmployeeRecord | null>;
     findFirst(args: unknown): Promise<EmployeeRecord | null>;
     updateMany(args: unknown): Promise<{ count: number }>;
+  };
+  serviceCall: {
+    findMany(args: unknown): Promise<{ id: string; serviceDate: Date; startTime: string }[]>;
+  };
+  timeSlot: {
+    findMany(args?: unknown): Promise<{ value: string; sortOrder: number }[]>;
   };
   auditLog: {
     create(args: unknown): Promise<unknown>;
@@ -114,11 +121,63 @@ export type EmployeeMutationInput = EmployeeMutationBase & {
   employeeId: string;
 };
 
+export type DeactivateEmployeeInput = EmployeeMutationInput & {
+  /** 오늘(Asia/Ho_Chi_Minh 달력날)을 정하는 지금 시각. 없으면 서버 시각을 쓴다. */
+  now?: Date;
+};
+
+/** 비활성을 막은 콜 하나: 날짜와 예약시각. */
+export type FutureCallSummary = {
+  serviceCallId: string;
+  serviceDate: string;
+  startTime: string;
+};
+
 export class EmployeeDomainError extends Error {
   constructor(message: string, public readonly code: string) {
     super(message);
     this.name = "EmployeeDomainError";
   }
+}
+
+/** 오늘 이후의 콜에 배정된 직원은 비활성으로 바꿀 수 없다(B08). futureCalls.length가 건수다. */
+export class EmployeeHasFutureCallsError extends EmployeeDomainError {
+  constructor(public readonly futureCalls: FutureCallSummary[]) {
+    super("앞으로 잡힌 콜에 배정된 직원은 비활성으로 바꿀 수 없습니다.", "HAS_FUTURE_CALLS");
+    this.name = "EmployeeHasFutureCallsError";
+  }
+}
+
+// 노쇼와 취소는 점유하지 않으므로 비활성을 막지 않는다(콜 서비스의 isNoShowStatus·isCanceledStatus와 같은 값).
+const NON_BLOCKING_CALL_STATUSES = ["노쇼", "NO_SHOW", "취소", "CANCELED"];
+
+async function findFutureCalls(tx: EmployeePrismaClient, employeeId: string, now: Date): Promise<FutureCallSummary[]> {
+  const records = await tx.serviceCall.findMany({
+    where: {
+      serviceDate: { gte: toDbDate(businessTodayIsoDate(now)) },
+      status: { notIn: NON_BLOCKING_CALL_STATUSES },
+      assignments: { some: { employeeId, isActive: true } }
+    },
+    select: { id: true, serviceDate: true, startTime: true }
+  });
+  if (records.length === 0) {
+    return [];
+  }
+  const timeSlots = await tx.timeSlot.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
+  // 원장처럼 같은 날 안에서는 시간 슬롯 순서로 놓는다(01:00 슬롯은 그 서비스 날짜의 끝이다).
+  const sortOrderByTime = new Map(timeSlots.map((slot) => [slot.value, slot.sortOrder]));
+  const slotOrder = (startTime: string) => sortOrderByTime.get(startTime) ?? Number.MAX_SAFE_INTEGER;
+  records.sort(
+    (a, b) =>
+      a.serviceDate.getTime() - b.serviceDate.getTime() ||
+      slotOrder(a.startTime) - slotOrder(b.startTime) ||
+      a.startTime.localeCompare(b.startTime)
+  );
+  return records.map((record) => ({
+    serviceCallId: record.id,
+    serviceDate: record.serviceDate.toISOString().slice(0, 10),
+    startTime: record.startTime
+  }));
 }
 
 function getClient(client?: EmployeePrismaClient) {
@@ -533,7 +592,7 @@ export async function updateEmployeeSortOrder(input: UpdateEmployeeSortOrderInpu
   });
 }
 
-export async function deactivateEmployee(input: EmployeeMutationInput) {
+export async function deactivateEmployee(input: DeactivateEmployeeInput) {
   const parsed = deactivateEmployeeSchema.safeParse(input);
   if (!parsed.success) {
     throw normalizeParseError(parsed.error.issues[0]?.message ?? "직원 비활성 입력값이 올바르지 않습니다.");
@@ -546,6 +605,11 @@ export async function deactivateEmployee(input: EmployeeMutationInput) {
     const before = toDto(currentRecord, { tolerateInvalidEnums: true });
     if (!before.isActive) {
       return before;
+    }
+
+    const futureCalls = await findFutureCalls(tx, parsed.data.employeeId, input.now ?? new Date());
+    if (futureCalls.length > 0) {
+      throw new EmployeeHasFutureCallsError(futureCalls);
     }
 
     const updateResult = await tx.employee.updateMany({

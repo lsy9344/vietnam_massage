@@ -1066,7 +1066,10 @@ export const vi: Messages = {
   "masters.employees.impact.name": "Phân công cuộc gọi liên kết bằng ID duy nhất của nhân viên. Khi đổi tên, tên mới cũng hiện ở phân công của các cuộc gọi trước.",
   "masters.employees.impact.inactive": "Nhân viên vô hiệu không còn trong lựa chọn phân công của sổ gọi và danh sách chấm công, đối soát. Phân công ở các cuộc gọi trước vẫn giữ nguyên.",
   "masters.employees.impact.account": "Vô hiệu nhân viên không khóa tài khoản đã liên kết. Trạng thái làm việc và trạng thái tài khoản được quản lý riêng.",
-  "masters.employees.deactivateNote": "Nhân viên sẽ không còn trong lựa chọn phân công và danh sách chấm công, đối soát. Tài khoản đã liên kết vẫn đăng nhập được. Màn hình này không có chức năng kích hoạt lại.",
+  "masters.employees.deactivateNote": "Nhân viên sẽ không còn trong lựa chọn phân công và danh sách chấm công, đối soát. Tài khoản đã liên kết vẫn đăng nhập được. Màn hình này không có chức năng kích hoạt lại. Nếu nhân viên còn được phân công ở cuộc gọi từ hôm nay trở đi thì không thể vô hiệu hóa.",
+  "masters.employees.futureCalls.reason": "Không thể vô hiệu hóa vì nhân viên được phân công ở {count} cuộc gọi từ hôm nay trở đi.",
+  "masters.employees.futureCalls.hint": "Đây là các cuộc gọi không phải Không đến hay Đã hủy. Hãy đổi phân công sang nhân viên khác hoặc chuyển sang Không đến/Đã hủy trong sổ gọi, rồi vô hiệu hóa lại.",
+  "masters.employees.futureCalls.listLabel": "Cuộc gọi đang chặn vô hiệu hóa",
 
   // 코스/수당/인센 (1-8)
   "masters.courses.title": "Gói dịch vụ/Phụ cấp/Thưởng",

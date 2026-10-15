@@ -1066,7 +1066,10 @@ export const ko = {
   "masters.employees.impact.name": "콜 배정은 직원 고유 ID로 연결됩니다. 이름을 바꾸면 지난 콜의 배정에도 새 이름이 보입니다.",
   "masters.employees.impact.inactive": "비활성 직원은 원장의 배정 선택지와 출근·정산 명단에서 빠집니다. 지난 콜의 배정은 그대로 남습니다.",
   "masters.employees.impact.account": "직원을 비활성으로 바꿔도 연결된 계정은 막히지 않습니다. 재직상태와 계정 상태는 따로 관리합니다.",
-  "masters.employees.deactivateNote": "원장 배정 선택지와 출근·정산 명단에서 빠집니다. 연결된 계정은 그대로 로그인할 수 있습니다. 이 화면에는 다시 활성으로 바꾸는 기능이 없습니다.",
+  "masters.employees.deactivateNote": "원장 배정 선택지와 출근·정산 명단에서 빠집니다. 연결된 계정은 그대로 로그인할 수 있습니다. 이 화면에는 다시 활성으로 바꾸는 기능이 없습니다. 오늘 이후 콜에 배정돼 있으면 비활성으로 바꿀 수 없습니다.",
+  "masters.employees.futureCalls.reason": "오늘 이후 콜 {count}건에 배정돼 있어 비활성으로 바꿀 수 없습니다.",
+  "masters.employees.futureCalls.hint": "노쇼·취소가 아닌 콜입니다. 원장에서 배정을 다른 직원으로 바꾸거나 노쇼·취소로 정리한 뒤 다시 비활성 처리하세요.",
+  "masters.employees.futureCalls.listLabel": "비활성을 막은 콜",
 
   // 코스/수당/인센 (1-8)
   "masters.courses.title": "코스/수당/인센",

@@ -16,6 +16,14 @@ function createMemoryPrisma() {
   const employees = new Map<string, any>();
   const accounts = new Map<string, any>();
   const auditEvents: any[] = [];
+  const serviceCalls: any[] = [];
+  // 영업일은 12:00에 시작해 다음 날 01:00 슬롯까지 이어진다.
+  const timeSlots = [
+    { value: "12:00", sortOrder: 1 },
+    { value: "14:00", sortOrder: 2 },
+    { value: "23:00", sortOrder: 3 },
+    { value: "01:00", sortOrder: 4 }
+  ];
   let employeeSeq = 1;
   let accountSeq = 1;
 
@@ -139,12 +147,40 @@ function createMemoryPrisma() {
         return record;
       }
     },
+    serviceCall: {
+      async findMany({ where, select }: any) {
+        return serviceCalls
+          .filter((call) => {
+            if (where.serviceDate?.gte && call.serviceDate.getTime() < where.serviceDate.gte.getTime()) return false;
+            if (where.status?.notIn?.includes(call.status)) return false;
+            const some = where.assignments?.some;
+            if (
+              some &&
+              !call.assignments.some(
+                (assignment: any) =>
+                  assignment.employeeId === some.employeeId &&
+                  (typeof some.isActive !== "boolean" || (assignment.isActive ?? true) === some.isActive)
+              )
+            ) {
+              return false;
+            }
+            return true;
+          })
+          .map((call) => (select ? Object.fromEntries(Object.keys(select).map((key) => [key, call[key]])) : call));
+      }
+    },
+    timeSlot: {
+      async findMany() {
+        return [...timeSlots].sort((a, b) => a.sortOrder - b.sortOrder);
+      }
+    },
     async $transaction(callback: (tx: any) => Promise<unknown>) {
       return callback(client);
     },
     employees,
     accounts,
-    auditEvents
+    auditEvents,
+    serviceCalls
   };
 
   return client;
@@ -497,6 +533,118 @@ describe("employee service", () => {
           prismaClient
         }),
       /계정 ID와 이메일이 서로 다른 계정에 속합니다./
+    );
+  });
+});
+
+describe("employee deactivation with future calls", () => {
+  // 2026-10-15 00:30 Asia/Ho_Chi_Minh = 2026-10-14 17:30 UTC. 호찌민 날짜와 UTC 날짜가 다른 시각이다.
+  const now = new Date("2026-10-14T17:30:00.000Z");
+
+  function addCall(
+    prismaClient: any,
+    call: { id: string; serviceDate: string; startTime: string; status: string; assignments: { employeeId: string; assignmentRole: string; isActive?: boolean }[] }
+  ) {
+    prismaClient.serviceCalls.push({ ...call, serviceDate: new Date(`${call.serviceDate}T00:00:00.000Z`) });
+  }
+
+  async function seededTherapist() {
+    const prismaClient = createMemoryPrisma();
+    await ensureDefaultEmployees({ actorId: "admin-1", prismaClient });
+    const target = (await listEmployees({ prismaClient })).find((employee) => employee.staffCode === "THR-001");
+    assert.ok(target);
+    return { prismaClient, target };
+  }
+
+  it("rejects with HAS_FUTURE_CALLS when the employee is Therapist 2 on a call after today", async () => {
+    const { prismaClient, target } = await seededTherapist();
+    addCall(prismaClient, {
+      id: "call-1",
+      serviceDate: "2026-10-16",
+      startTime: "14:00",
+      status: "예약",
+      assignments: [
+        { employeeId: "someone-else", assignmentRole: "THERAPIST_1" },
+        { employeeId: target.id, assignmentRole: "THERAPIST_2" }
+      ]
+    });
+    const auditCount = prismaClient.auditEvents.length;
+
+    await assert.rejects(
+      () => deactivateEmployee({ actorId: "admin-1", employeeId: target.id, now, prismaClient }),
+      (error: any) => {
+        assert.equal(error.code, "HAS_FUTURE_CALLS");
+        assert.deepEqual(error.futureCalls, [{ serviceCallId: "call-1", serviceDate: "2026-10-16", startTime: "14:00" }]);
+        return true;
+      }
+    );
+    assert.equal(prismaClient.employees.get(target.id).isActive, true);
+    assert.equal(prismaClient.auditEvents.length, auditCount);
+  });
+
+  it("counts today's completed call and any assignment role, using the Ho Chi Minh calendar day as today", async () => {
+    const { prismaClient, target } = await seededTherapist();
+    // UTC로는 오늘(10-14)이지만 호찌민으로는 어제다.
+    addCall(prismaClient, { id: "yesterday", serviceDate: "2026-10-14", startTime: "23:00", status: "예약", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+    addCall(prismaClient, { id: "today-done", serviceDate: "2026-10-15", startTime: "12:00", status: "방문완료", assignments: [{ employeeId: target.id, assignmentRole: "EARCARE" }] });
+    addCall(prismaClient, { id: "later", serviceDate: "2026-10-17", startTime: "15:00", status: "예약", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+
+    await assert.rejects(
+      () => deactivateEmployee({ actorId: "admin-1", employeeId: target.id, now, prismaClient }),
+      (error: any) => {
+        assert.equal(error.code, "HAS_FUTURE_CALLS");
+        assert.deepEqual(error.futureCalls, [
+          { serviceCallId: "today-done", serviceDate: "2026-10-15", startTime: "12:00" },
+          { serviceCallId: "later", serviceDate: "2026-10-17", startTime: "15:00" }
+        ]);
+        return true;
+      }
+    );
+  });
+
+  it("deactivates when only no-show, canceled, released, past or other staff's calls remain, and keeps the past assignment", async () => {
+    const { prismaClient, target } = await seededTherapist();
+    addCall(prismaClient, { id: "no-show", serviceDate: "2026-10-16", startTime: "14:00", status: "노쇼", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+    addCall(prismaClient, { id: "canceled", serviceDate: "2026-10-16", startTime: "15:00", status: "취소", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_2" }] });
+    addCall(prismaClient, { id: "released", serviceDate: "2026-10-16", startTime: "16:00", status: "예약", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1", isActive: false }] });
+    addCall(prismaClient, { id: "past", serviceDate: "2026-10-14", startTime: "14:00", status: "방문완료", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+    addCall(prismaClient, { id: "other-staff", serviceDate: "2026-10-16", startTime: "17:00", status: "예약", assignments: [{ employeeId: "someone-else", assignmentRole: "THERAPIST_1" }] });
+
+    const after = await deactivateEmployee({ actorId: "admin-1", employeeId: target.id, now, prismaClient });
+
+    assert.equal(after.isActive, false);
+    assert.equal(prismaClient.auditEvents.at(-1).action, "employee.deactivated");
+    const past = prismaClient.serviceCalls.find((call: any) => call.id === "past");
+    assert.deepEqual(past.assignments, [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }]);
+  });
+
+  it("returns an already inactive employee as is, even with future calls", async () => {
+    const { prismaClient, target } = await seededTherapist();
+    await deactivateEmployee({ actorId: "admin-1", employeeId: target.id, now, prismaClient });
+    addCall(prismaClient, { id: "future", serviceDate: "2026-10-16", startTime: "14:00", status: "예약", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+    const auditCount = prismaClient.auditEvents.length;
+
+    const again = await deactivateEmployee({ actorId: "admin-1", employeeId: target.id, now, prismaClient });
+
+    assert.equal(again.isActive, false);
+    assert.equal(prismaClient.auditEvents.length, auditCount);
+  });
+
+  it("lists the blocking calls by date and then by the time slot order, so 01:00 comes last in its service date", async () => {
+    const { prismaClient, target } = await seededTherapist();
+    addCall(prismaClient, { id: "late", serviceDate: "2026-10-16", startTime: "01:00", status: "예약", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+    addCall(prismaClient, { id: "next-day", serviceDate: "2026-10-17", startTime: "12:00", status: "예약", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+    addCall(prismaClient, { id: "early", serviceDate: "2026-10-16", startTime: "14:00", status: "사용중", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+
+    await assert.rejects(
+      () => deactivateEmployee({ actorId: "admin-1", employeeId: target.id, now, prismaClient }),
+      (error: any) => {
+        assert.deepEqual(
+          error.futureCalls.map((call: any) => call.serviceCallId),
+          ["early", "late", "next-day"]
+        );
+        return true;
+      }
     );
   });
 });

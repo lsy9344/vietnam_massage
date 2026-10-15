@@ -5,7 +5,7 @@ import { renderInShell } from "@/components/shell/test-harness";
 import { RoomManager } from "@/app/(erp)/masters/rooms/room-forms";
 import { CodeManager } from "@/app/(erp)/masters/codes/code-forms";
 import { OperatingMonthManager } from "@/app/(erp)/masters/operating-months/operating-month-forms";
-import { EmployeeManager } from "@/app/(erp)/masters/employees/employee-forms";
+import { EmployeeManager, FutureCallsRejection } from "@/app/(erp)/masters/employees/employee-forms";
 import { CoursePolicyManager } from "@/app/(erp)/masters/courses/course-forms";
 import { courseItemKey } from "@/app/(erp)/masters/courses/course-item";
 import { OpenIssueWorkspace, type OpenIssueView } from "@/app/(erp)/masters/sheet-mapping/open-issue-workspace";
@@ -164,6 +164,24 @@ describe("직원", () => {
     const html = render(<EmployeeManager employees={[employee]} initialItem="emp-1" />);
     assert.ok(html.includes(t("ko", "masters.employees.impact.account")));
     assert.ok(rowOf(html, "Mai").includes(t("ko", "masters.employees.accountNotLinked")));
+  });
+
+  it("비활성 거절은 사유와 건수, 막은 콜의 날짜·예약시각을 두 언어로 보인다", () => {
+    const calls = [
+      { serviceCallId: "call-1", serviceDate: "2026-10-15", startTime: "14:00" },
+      { serviceCallId: "call-2", serviceDate: "2026-10-16", startTime: "01:00" }
+    ];
+    for (const locale of ["ko", "vi"] as const) {
+      const html = render(<FutureCallsRejection calls={calls} />, locale);
+      assert.ok(html.includes(t(locale, "masters.employees.futureCalls.reason", { count: "2" })), locale);
+      assert.ok(html.includes(t(locale, "masters.employees.futureCalls.hint")), locale);
+      assert.ok(html.includes('role="alert"'));
+      const first = html.indexOf(">2026-10-15<");
+      assert.ok(first > 0 && html.indexOf(">14:00<") > first);
+      const second = html.indexOf(">2026-10-16<");
+      assert.ok(second > first && html.indexOf(">01:00<") > second);
+    }
+    assert.notEqual(t("ko", "masters.employees.futureCalls.reason", { count: "2" }), t("vi", "masters.employees.futureCalls.reason", { count: "2" }));
   });
 });
 

@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DateCapsule } from "@/components/ui/date-capsule";
 import { DetailRow } from "@/components/ui/detail-row";
 import { ModalPanel, SidePanel } from "@/components/ui/panel";
 import {
@@ -13,7 +14,7 @@ import {
   type EmploymentStatus,
   type ShiftType
 } from "@/modules/masters/employee-schema";
-import type { EmployeeDto } from "@/modules/masters/employee-service";
+import type { EmployeeDto, FutureCallSummary } from "@/modules/masters/employee-service";
 import {
   createEmployeeAction,
   deactivateEmployeeAction,
@@ -21,6 +22,7 @@ import {
   updateEmployeeProfileAction,
   updateEmployeeSortOrderAction,
   type AccountLinkActionState,
+  type DeactivateEmployeeActionState,
   type EmployeeActionState
 } from "@/app/(erp)/masters/employees/actions";
 import { SaveRow, SelectField, TextField } from "@/app/(erp)/masters/master-fields";
@@ -186,9 +188,33 @@ function AccountLinkForm({ employee }: { employee: EmployeeDto }) {
   );
 }
 
+/** 비활성 거절(HAS_FUTURE_CALLS): 사유와, 서비스가 돌려준 콜의 날짜·예약시각을 그대로 보인다. */
+export function FutureCallsRejection({ calls }: { calls: FutureCallSummary[] }) {
+  const t = useT();
+  const locale = useLocale();
+  return (
+    <div className="grid gap-3 rounded-md bg-danger-soft px-4 py-3" role="alert">
+      <p className="text-sm font-semibold text-danger">
+        <span aria-hidden="true">{"■︎ "}</span>
+        {t("masters.employees.futureCalls.reason", { count: formatNumber(locale, calls.length) })}
+      </p>
+      <p className="text-sm text-foreground">{t("masters.employees.futureCalls.hint")}</p>
+      <ul aria-label={t("masters.employees.futureCalls.listLabel")} className="grid gap-2">
+        {calls.map((call) => (
+          <li className="flex min-h-14 flex-wrap items-center gap-1.5 rounded-md border border-border bg-surface px-4" key={call.serviceCallId}>
+            <DateCapsule>{call.serviceDate}</DateCapsule>
+            <DateCapsule>{call.startTime}</DateCapsule>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function DeactivateForm({ employee }: { employee: EmployeeDto }) {
   const t = useT();
-  const [state, formAction, pending] = useActionState<EmployeeActionState, FormData>(deactivateEmployeeAction, null);
+  const [state, formAction, pending] = useActionState<DeactivateEmployeeActionState, FormData>(deactivateEmployeeAction, null);
+  const futureCalls = state && "futureCalls" in state ? state.futureCalls : undefined;
 
   if (!employee.isActive) {
     return <p className="text-sm text-muted">{t("masters.common.alreadyInactive")}</p>;
@@ -198,7 +224,8 @@ function DeactivateForm({ employee }: { employee: EmployeeDto }) {
     <form action={formAction} className="grid gap-3">
       <input name="employeeId" type="hidden" value={employee.id} />
       <p className="text-sm text-muted">{t("masters.employees.deactivateNote")}</p>
-      <SaveRow label={t("masters.common.deactivate")} pending={pending} state={state} />
+      <SaveRow label={t("masters.common.deactivate")} pending={pending} state={futureCalls ? null : state} />
+      {futureCalls ? <FutureCallsRejection calls={futureCalls} /> : null}
     </form>
   );
 }

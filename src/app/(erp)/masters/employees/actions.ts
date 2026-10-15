@@ -10,11 +10,13 @@ import { resolveDomainErrorMessage } from "@/lib/i18n/errors";
 import { AccountDomainError, linkUserAccountToEmployee } from "@/modules/masters/account-service";
 import {
   EmployeeDomainError,
+  EmployeeHasFutureCallsError,
   createEmployee,
   deactivateEmployee,
   updateEmployeeProfile,
   updateEmployeeSortOrder,
-  type EmployeeDto
+  type EmployeeDto,
+  type FutureCallSummary
 } from "@/modules/masters/employee-service";
 import {
   createEmployeeSchema,
@@ -25,6 +27,11 @@ import {
 } from "@/modules/masters/employee-schema";
 
 export type EmployeeActionState = ActionResult<EmployeeDto> | null;
+/** 비활성 거절(HAS_FUTURE_CALLS)이면 막은 콜의 날짜·예약시각이 futureCalls에 온다. 거절 문장은 화면이 메시지 키로 만든다. */
+export type DeactivateEmployeeActionState =
+  | ActionResult<EmployeeDto>
+  | { ok: false; domainErrorCode: "HAS_FUTURE_CALLS"; futureCalls: FutureCallSummary[] }
+  | null;
 export type AccountLinkActionState = ActionResult<{ id: string; accountId: string; email: string; role: string; employeeId: string | null }> | null;
 
 function toFieldErrors(fieldErrors: Partial<Record<string, string[]>>) {
@@ -156,7 +163,10 @@ export async function updateEmployeeSortOrderAction(
   }
 }
 
-export async function deactivateEmployeeAction(_previousState: EmployeeActionState, formData: FormData): Promise<EmployeeActionState> {
+export async function deactivateEmployeeAction(
+  _previousState: DeactivateEmployeeActionState,
+  formData: FormData
+): Promise<DeactivateEmployeeActionState> {
   const locale = await getLocale();
   const parsed = deactivateEmployeeSchema.safeParse({
     employeeId: formData.get("employeeId")
@@ -175,6 +185,9 @@ export async function deactivateEmployeeAction(_previousState: EmployeeActionSta
     revalidatePath("/masters/employees");
     return { ok: true, data };
   } catch (error) {
+    if (error instanceof EmployeeHasFutureCallsError) {
+      return { ok: false, domainErrorCode: "HAS_FUTURE_CALLS", futureCalls: error.futureCalls };
+    }
     return mapEmployeeActionError(error, locale);
   }
 }
