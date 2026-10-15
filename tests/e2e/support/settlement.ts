@@ -11,7 +11,7 @@ export function employeeRow(page: Page, displayName: string): Locator {
 
 /**
  * 직원 비교 표에서 직원을 고르고 그 직원 패널을 돌려준다(티켓 05). 출퇴근·근무상태 정정, 근거 콜, 적용 정책,
- * 지급완료는 이 패널 안에 있다. 패널 이름은 "표시 이름 (사번)"이다.
+ * 지급 확인(ADR 0004, 티켓 30)은 이 패널 안에 있다. 패널 이름은 "표시 이름 (사번)"이다.
  */
 export async function openEmployeePanel(page: Page, displayName: string): Promise<Locator> {
   await employeeRow(page, displayName).getByRole("button").first().click();

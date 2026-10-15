@@ -51,7 +51,7 @@ function settlement(overrides: Partial<TherapistDailySettlementDto> = {}): Thera
     courseBreakdown: { A: { courseCode: "A", callCount: 1, commissionAmount: 700000 }, B: emptyCourse("B"), C: emptyCourse("C"), D: emptyCourse("D"), E: emptyCourse("E") },
     assignmentEvidence: [evidence()],
     warningCounts: { zeroPolicy: 0, missingPolicy: 0 },
-    paymentStatus: { isPaid: false, paidAt: null, paidByAccountId: null, paidBy: null, history: [] },
+    payoutConfirmation: { status: "unconfirmed", currentAmount: 700000, lastConfirmedAmount: null, difference: null, requiresReconfirmation: false, history: [] },
     ...overrides
   };
 }

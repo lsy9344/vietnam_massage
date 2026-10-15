@@ -136,8 +136,8 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
               />
               <SummaryCard
                 accent="mint"
-                label={t("settlements.therapist.summary.paid")}
-                value={`${result.settlements.filter((row) => row.paymentStatus.isPaid).length} / ${result.settlements.length}${peopleSuffix}`}
+                label={t("settlements.therapist.summary.confirmed")}
+                value={`${result.settlements.filter((row) => row.payoutConfirmation.status === "confirmed").length} / ${result.settlements.length}${peopleSuffix}`}
               />
             </SummaryCards>
             {warningSummary(result) > 0 || result.excludedCallCount > 0 ? (
