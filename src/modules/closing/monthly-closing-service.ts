@@ -7,6 +7,7 @@ import {
   listMonthlyClosingPreview,
   type MonthlyClosingPreviewDto
 } from "@/modules/closing/monthly-closing-preview-service";
+import { listMonthlyClosingChecklist } from "@/modules/closing/monthly-closing-checklist-service";
 
 type OperatingMonthRecord = {
   id: string;
@@ -101,6 +102,7 @@ export type MonthlyCloseReviewDto = {
 
 export type MonthlyClosingDependencies = {
   listMonthlyClosingPreview: typeof listMonthlyClosingPreview;
+  listMonthlyClosingChecklist: typeof listMonthlyClosingChecklist;
 };
 
 export type StartMonthlyCloseReviewInput = {
@@ -159,7 +161,8 @@ const snapshotQuerySchema = z.object({
 });
 
 const defaultDependencies: MonthlyClosingDependencies = {
-  listMonthlyClosingPreview
+  listMonthlyClosingPreview,
+  listMonthlyClosingChecklist
 };
 
 function getClient(client?: MonthlyClosingPrismaClient) {
@@ -365,7 +368,7 @@ export async function confirmMonthlyClose(input: ConfirmMonthlyCloseInput): Prom
   }
 
   const client = getClient(input.prismaClient);
-  const dependencies = input.dependencies ?? defaultDependencies;
+  const dependencies = { ...defaultDependencies, ...input.dependencies };
   const now = input.clock?.() ?? new Date();
   const confirmedAt = now.toISOString();
   const snapshotId = input.idFactory?.() ?? `closing_${randomUUID()}`;
@@ -388,6 +391,25 @@ export async function confirmMonthlyClose(input: ConfirmMonthlyCloseInput): Prom
       });
       if (preview.status !== "검토중") {
         throw new MonthlyClosingDomainError("현재 상태에서는 마감 확정할 수 없습니다.", "INVALID_MONTHLY_CLOSE_TRANSITION");
+      }
+
+      // 마감 전 점검(F07, 티켓 33)을 확정 트랜잭션 안에서 다시 계산한다. 계산 오류나 지급 재확인 미처리가
+      // 남아 있으면 확정을 거절한다. 마감 확인 대상 콜은 이 티켓에서는 목록만이라 확정을 막지 않는다(34에서 더한다).
+      const checklist = await dependencies.listMonthlyClosingChecklist({
+        operatingMonthId: parsed.data.operatingMonthId,
+        prismaClient: tx as any
+      });
+      if (checklist.calculationErrorCalls.length > 0) {
+        throw new MonthlyClosingDomainError(
+          "계산 오류가 있는 콜이 남아 있어 마감 확정할 수 없습니다.",
+          "MONTHLY_CLOSE_CALCULATION_ERRORS_PENDING"
+        );
+      }
+      if (checklist.payoutReconfirmationUnits.length > 0) {
+        throw new MonthlyClosingDomainError(
+          "지급 재확인이 필요한 항목이 남아 있어 마감 확정할 수 없습니다.",
+          "MONTHLY_CLOSE_PAYOUT_RECONFIRMATION_PENDING"
+        );
       }
 
       const latestClosing = await findLatestMonthlyClosing(tx, current.id);
