@@ -258,6 +258,8 @@ export const vi: Messages = {
   "calls.availability.attendance.notEntered": "Chưa nhập",
   "calls.availability.available": "Có thể",
   "calls.availability.unavailableFrom": "Không thể · từ {time}",
+  "calls.availability.inServiceEndCheck": "Đang làm · kiểm tra kết thúc {time}",
+  "calls.availability.priorServiceEndCheck": "Có thể theo lịch · cần xác nhận ca trước đã xong",
   "calls.availability.nextNone": "Không có",
   "calls.availability.freeMinutes": "{minutes} phút",
   "calls.availability.coursePossible": "{code} {minutes} phút, có thể",

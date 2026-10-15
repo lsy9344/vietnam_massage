@@ -32,9 +32,12 @@ function row(overrides: Partial<TherapistAvailabilityRowDto> = {}): TherapistAva
     therapistName: "마사지사1",
     attendance: "not_entered",
     available: true,
+    unavailableReason: null,
+    inServiceDisplayEnd: null,
     freeFrom: null,
     nextReservationTime: "16:00",
     freeMinutes: 60,
+    priorServiceEndCheck: false,
     courses: [
       { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, possible: true },
       { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, possible: false }
@@ -74,7 +77,8 @@ describe("therapist availability panel", () => {
     assert.match(html, /펼치기/);
     assert.doesNotMatch(html, /<table/);
     assert.doesNotMatch(html, /60분 가능/);
-    assert.match(html, /min-h-11/);
+    assert.match(html, /<select[^>]*class="[^"]*h-11[^"]*border-border-strong/);
+    assert.match(html, /<button[^>]*class="[^"]*h-11[^"]*rounded-full[^"]*"[^>]*id="therapist-availability-expand"/);
   });
 
   it("shows the service words, wraps course buttons, and puts the time, expand, and possible course before the ledger", () => {
@@ -87,6 +91,7 @@ describe("therapist availability panel", () => {
           therapistName: "마사지사2",
           attendance: "checked_in",
           available: false,
+          unavailableReason: "booked",
           freeFrom: "15:30",
           nextReservationTime: null,
           freeMinutes: null,
@@ -116,8 +121,7 @@ describe("therapist availability panel", () => {
     assert.match(html, /<span[^>]*>B 90분 불가<\/span>/);
     assert.doesNotMatch(html, /<button[^>]*>B 90분 불가<\/button>/);
     assert.match(html, /flex flex-wrap/);
-    assert.match(html, /motion-safe:duration-200/);
-    assert.match(html, /motion-reduce:transition-none/);
+    assert.match(html, /<button[^>]*class="[^"]*rounded-full[^"]*transition-colors[^"]*"[^>]*>A 60분 가능<\/button>/);
 
     const timeAt = html.indexOf('id="therapist-availability-time"');
     const expandAt = html.indexOf('id="therapist-availability-expand"');
@@ -127,12 +131,57 @@ describe("therapist availability panel", () => {
     const vietnamese = renderView({
       locale: "vi",
       open: true,
-      rows: [row({ available: false, freeFrom: "15:30", nextReservationTime: null, freeMinutes: null, courses: [] })]
+      rows: [row({ available: false, unavailableReason: "booked", freeFrom: "15:30", nextReservationTime: null, freeMinutes: null, courses: [] })]
     });
     assert.match(vietnamese, /Gói có thể/);
     assert.match(vietnamese, /Không thể · từ 15:30/);
     assert.match(vietnamese, /Chưa nhập/);
     assert.match(vietnamese, /Therapist/);
+  });
+
+  it("says the therapist is still in service, when to check, and when they free up, without recomputing the hold", () => {
+    const html = renderView({
+      open: true,
+      time: "15:00",
+      rows: [
+        row({
+          available: false,
+          unavailableReason: "in_service_past_display_end",
+          inServiceDisplayEnd: "15:00",
+          freeFrom: "15:20",
+          nextReservationTime: null,
+          freeMinutes: null,
+          priorServiceEndCheck: true,
+          courses: [{ courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, possible: false }]
+        })
+      ]
+    });
+    assert.match(html, /불가 · 15:20부터/);
+    assert.match(html, /시술 중 · 15:00 종료 확인/);
+    assert.doesNotMatch(html, /앞 시술 종료 확인 필요/);
+
+    const vietnamese = renderView({
+      locale: "vi",
+      open: true,
+      rows: [row({ available: false, unavailableReason: "in_service_past_display_end", inServiceDisplayEnd: "15:00", freeFrom: "15:20", priorServiceEndCheck: true, courses: [] })]
+    });
+    assert.match(vietnamese, /Không thể · từ 15:20/);
+    assert.match(vietnamese, /Đang làm · kiểm tra kết thúc 15:00/);
+  });
+
+  it("marks a possible course as possible by the schedule only when an earlier service still needs its end checked", () => {
+    const html = renderView({ open: true, time: "15:30", rows: [row({ priorServiceEndCheck: true })] });
+    assert.match(html, /시간표상 가능 · 앞 시술 종료 확인 필요/);
+    const noteId = html.match(/id="([^"]+)"(?:(?!id=")[\s\S])*?시간표상 가능 · 앞 시술 종료 확인 필요/)?.[1];
+    assert.ok(noteId);
+    assert.match(html, new RegExp(`<button[^>]*aria-describedby="${noteId}"[^>]*>A 60분 가능</button>`));
+    assert.doesNotMatch(html, /시술 중 ·/);
+
+    const plain = renderView({ open: true, time: "15:30", rows: [row()] });
+    assert.doesNotMatch(plain, /앞 시술 종료 확인 필요/);
+
+    const vietnamese = renderView({ locale: "vi", open: true, rows: [row({ priorServiceEndCheck: true })] });
+    assert.match(vietnamese, /Có thể theo lịch · cần xác nhận ca trước đã xong/);
   });
 
   it("says there is nobody to show and what to look at next", () => {

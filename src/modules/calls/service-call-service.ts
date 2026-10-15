@@ -420,9 +420,14 @@ export type TherapistAvailabilityRowDto = {
   therapistName: string;
   attendance: "checked_in" | "not_entered";
   available: boolean;
+  // 불가 사유. in_service_past_display_end는 예약 점유가 아니라 추가 점유만으로 불가가 된 경우다.
+  unavailableReason: "booked" | "in_service_past_display_end" | null;
+  inServiceDisplayEnd: string | null;
   freeFrom: string | null;
   nextReservationTime: string | null;
   freeMinutes: number | null;
+  // 오늘 표시 종료를 넘긴 사용중 콜이 있다: 가능 후보는 시간표상 가능일 뿐 앞 시술 종료 확인이 필요하다.
+  priorServiceEndCheck: boolean;
   courses: TherapistAvailabilityCourseDto[];
 };
 
@@ -1408,6 +1413,7 @@ export async function listTherapistAvailability(input: {
   operatingMonthId: string;
   serviceDate: string;
   time: string;
+  now?: Date;
   prismaClient?: ServiceCallPrismaClient;
 }): Promise<TherapistAvailabilityRowDto[]> {
   const parsed = serviceCallInputSchema.pick({ operatingMonthId: true, serviceDate: true, startTime: true }).safeParse({
@@ -1441,7 +1447,7 @@ export async function listTherapistAvailability(input: {
         operatingMonthId: month.id,
         serviceDate: toDateOnly(parsed.data.serviceDate)
       },
-      include: { assignments: true }
+      include: { operatingMonth: true, course: { include: { policies: true } }, assignments: true }
     })
   ]);
 
@@ -1481,14 +1487,47 @@ export async function listTherapistAvailability(input: {
     }
   }
 
+  // 지금이 고른 날짜의 영업일(첫 슬롯부터 다음 날 첫 슬롯 전까지, Asia/Ho_Chi_Minh) 안이고 사용중인 콜이 표시 종료를 넘겼으면
+  // [표시 종료, 지금)이 그 Therapist의 추가 점유다. 표시 종료, 뒤 콜, 코스, 금액은 그대로 두고 가능 판정에만 쓴다.
+  const now = input.now ?? new Date();
+  const nowMinute = Math.floor((now.getTime() - instantFromBusinessMinute(parsed.data.serviceDate, 0).getTime()) / 60_000);
+  const overrunsByTherapist = new Map<string, Array<AvailabilityInterval & { displayEnd: string }>>();
+  if (nowMinute >= dayStart && nowMinute < dayStart + AVAILABILITY_DAY_MINUTES) {
+    const displayContext = { dayCalls: calls, dayStart };
+    for (const call of calls) {
+      if (!isInUseStatus(call.status) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(call.startTime)) continue;
+      const displayEnd = displayEndChoice(call, displayContext).minute;
+      if (nowMinute <= displayEnd) continue;
+      const overrun = { start: displayEnd, end: nowMinute, displayEnd: formatBusinessMinute(displayEnd) };
+      for (const therapistId of assignedTherapistIds(call)) {
+        const current = overrunsByTherapist.get(therapistId) ?? [];
+        current.push(overrun);
+        overrunsByTherapist.set(therapistId, current);
+      }
+    }
+  }
+  const occupancyOf = (therapistId: string) => [
+    ...(intervalsByTherapist.get(therapistId) ?? []),
+    ...(overrunsByTherapist.get(therapistId) ?? [])
+  ];
+
   const activeTherapists = [...therapists]
     .filter((therapist) => therapist.isActive && therapist.employeeGroup === "THERAPIST")
     .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0) || left.displayName.localeCompare(right.displayName));
 
   return activeTherapists.map((therapist) => {
-    const intervals = intervalsByTherapist.get(therapist.id) ?? [];
+    const booked = intervalsByTherapist.get(therapist.id) ?? [];
+    const overruns = overrunsByTherapist.get(therapist.id) ?? [];
+    const intervals = [...booked, ...overruns];
     const occupiedUntil = coveringEnd(intervals, at);
     const available = occupiedUntil === null;
+    // 예약 점유가 덮지 않는데 불가라면 추가 점유가 덮은 것이다. 겹치면 가장 이른 표시 종료를 말한다.
+    const overrunAt = !available && coveringEnd(booked, at) === null
+      ? overruns
+          .filter((overrun) => overrun.start <= at && at < overrun.end)
+          .sort((left, right) => left.start - right.start)[0] ?? null
+      : null;
+    const nextReservation = nextIntervalStart(booked, at);
     const nextStart = nextIntervalStart(intervals, at);
     const freeMinutes = available ? Math.max((nextStart ?? dayEnd ?? at) - at, 0) : null;
     return {
@@ -1496,14 +1535,17 @@ export async function listTherapistAvailability(input: {
       therapistName: therapist.displayName,
       attendance: checkedIn.has(therapist.id) ? "checked_in" as const : "not_entered" as const,
       available,
+      unavailableReason: available ? null : overrunAt ? "in_service_past_display_end" as const : "booked" as const,
+      inServiceDisplayEnd: overrunAt?.displayEnd ?? null,
       freeFrom: occupiedUntil === null ? null : formatBusinessMinute(occupiedUntil),
-      nextReservationTime: nextStart === null ? null : formatBusinessMinute(nextStart),
+      nextReservationTime: nextReservation === null ? null : formatBusinessMinute(nextReservation),
       freeMinutes,
+      priorServiceEndCheck: overruns.length > 0,
       courses: offeredCourses.map((course) => {
         const fits = available && freeMinutes !== null && course.durationMinutes <= freeMinutes;
         const partnerFree = activeTherapists.some((other) => {
           if (other.id === therapist.id) return false;
-          return !intervalOverlaps(intervalsByTherapist.get(other.id) ?? [], at, at + course.durationMinutes);
+          return !intervalOverlaps(occupancyOf(other.id), at, at + course.durationMinutes);
         });
         return {
           courseId: course.courseId,

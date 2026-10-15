@@ -3311,6 +3311,289 @@ describe("therapist availability", () => {
   });
 });
 
+// 2026-06-10 15:20 (Asia/Ho_Chi_Minh)
+const overrunNow = new Date("2026-06-10T08:20:00.000Z");
+
+function overrunAvailabilityAt(prismaClient: ReturnType<typeof createMemoryPrisma>, time: string, now = overrunNow) {
+  return listTherapistAvailability({
+    operatingMonthId: "month-2026-06",
+    serviceDate: availabilityDate,
+    time,
+    now,
+    prismaClient
+  });
+}
+
+describe("therapist availability with an in-use call past its display end", () => {
+  it("holds the therapist from the 15:00 display end until now and flags the later candidates", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "call-1400-in-use",
+      startTime: "14:00",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const at1500 = (await overrunAvailabilityAt(prismaClient, "15:00")).find((row) => row.therapistId === "therapist-1");
+    assert.equal(at1500?.available, false);
+    assert.equal(at1500?.unavailableReason, "in_service_past_display_end");
+    assert.equal(at1500?.inServiceDisplayEnd, "15:00");
+    assert.equal(at1500?.freeFrom, "15:20");
+    assert.equal(at1500?.courses.find((course) => course.courseId === "course-a")?.possible, false);
+
+    const at1530 = (await overrunAvailabilityAt(prismaClient, "15:30")).find((row) => row.therapistId === "therapist-1");
+    assert.equal(at1530?.available, true);
+    assert.equal(at1530?.unavailableReason, null);
+    assert.equal(at1530?.freeFrom, null);
+    assert.equal(at1530?.priorServiceEndCheck, true);
+    assert.equal(at1530?.courses.find((course) => course.courseId === "course-a")?.possible, true);
+
+    const atNow = (await overrunAvailabilityAt(prismaClient, "15:20")).find((row) => row.therapistId === "therapist-1");
+    assert.equal(atNow?.available, true);
+  });
+
+  it("keeps holding after midnight, because the business day of the chosen date runs past it", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "call-2300-in-use",
+      startTime: "23:00",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    // 2026-06-11 00:30 (Asia/Ho_Chi_Minh): 달력날은 다음 날이지만 06-10 영업일 안이다.
+    const afterMidnight = new Date("2026-06-10T17:30:00.000Z");
+
+    const atMidnight = (await overrunAvailabilityAt(prismaClient, "00:00", afterMidnight)).find((row) => row.therapistId === "therapist-1");
+    assert.equal(atMidnight?.available, false);
+    assert.equal(atMidnight?.unavailableReason, "in_service_past_display_end");
+    assert.equal(atMidnight?.inServiceDisplayEnd, "00:00");
+    assert.equal(atMidnight?.freeFrom, "00:30");
+
+    const at0030 = (await overrunAvailabilityAt(prismaClient, "00:30", afterMidnight)).find((row) => row.therapistId === "therapist-1");
+    assert.equal(at0030?.available, true);
+    assert.equal(at0030?.priorServiceEndCheck, true);
+  });
+
+  it("names the earliest display end when two in-use calls of one therapist have both run over", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "call-1400-in-use",
+      startTime: "14:00",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "call-1300-in-use",
+      startTime: "13:00",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const row = (await overrunAvailabilityAt(prismaClient, "15:10")).find((item) => item.therapistId === "therapist-1");
+    assert.equal(row?.unavailableReason, "in_service_past_display_end");
+    assert.equal(row?.inServiceDisplayEnd, "14:00");
+    assert.equal(row?.freeFrom, "15:20");
+  });
+
+  it("frees at the end of a booking that starts right when the hold ends, and keeps the in-service reason", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "call-1400-in-use",
+      startTime: "14:00",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "call-1520",
+      startTime: "15:20",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const row = (await overrunAvailabilityAt(prismaClient, "15:00")).find((item) => item.therapistId === "therapist-1");
+    assert.equal(row?.unavailableReason, "in_service_past_display_end");
+    assert.equal(row?.inServiceDisplayEnd, "15:00");
+    assert.equal(row?.freeFrom, "16:20");
+  });
+
+  it("counts free minutes only up to a hold that starts later than the chosen time", async () => {
+    // 14:00 예약, 15:00 실제입장, 60분: 표시 종료 16:00. 지금 16:40이면 추가 점유는 16:00–16:40이다.
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "call-1400-late",
+      startTime: "14:00",
+      actualEntryTime: "15:00",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const row = (await overrunAvailabilityAt(prismaClient, "15:30", new Date("2026-06-10T09:40:00.000Z"))).find((item) => item.therapistId === "therapist-1");
+    assert.equal(row?.available, true);
+    assert.equal(row?.nextReservationTime, null);
+    assert.equal(row?.freeMinutes, 30);
+    assert.equal(courseFlag([row!], "therapist-1", "course-a"), false);
+  });
+
+  it("adds no hold for a reserved call, for yesterday, or for cleaning, completed, no-show, and canceled calls", async () => {
+    const cases: Array<{ status: string; now?: Date }> = [
+      { status: "예약" },
+      { status: "RESERVED" },
+      // 고른 날짜(06-10)가 어제가 된다.
+      { status: "사용중", now: new Date("2026-06-11T08:20:00.000Z") },
+      { status: "청소중" },
+      { status: "방문완료" },
+      { status: "노쇼" },
+      { status: "취소" }
+    ];
+    for (const { status, now } of cases) {
+      const prismaClient = createMemoryPrisma();
+      addAvailabilityCall(prismaClient, {
+        id: "call-1400",
+        startTime: "14:00",
+        courseId: "course-a",
+        status,
+        assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+      });
+      const row = (await overrunAvailabilityAt(prismaClient, "15:00", now)).find((item) => item.therapistId === "therapist-1");
+      const label = `${status} ${now?.toISOString() ?? "today"}`;
+      assert.equal(row?.available, true, label);
+      assert.equal(row?.unavailableReason, null, label);
+      assert.equal(row?.inServiceDisplayEnd, null, label);
+      assert.equal(row?.priorServiceEndCheck, false, label);
+    }
+  });
+
+  it("adds no hold while now is at or before the display end", async () => {
+    for (const now of [new Date("2026-06-10T08:00:00.000Z"), new Date("2026-06-10T07:50:00.000Z")]) {
+      const prismaClient = createMemoryPrisma();
+      addAvailabilityCall(prismaClient, {
+        id: "call-1400-in-use",
+        startTime: "14:00",
+        courseId: "course-a",
+        status: "사용중",
+        assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+      });
+      const row = (await overrunAvailabilityAt(prismaClient, "15:00", now)).find((item) => item.therapistId === "therapist-1");
+      assert.equal(row?.available, true, now.toISOString());
+      assert.equal(row?.priorServiceEndCheck, false, now.toISOString());
+    }
+  });
+
+  it("is unavailable when either the booking or the hold covers the time, and frees at the later end", async () => {
+    // 14:30 예약에 양보해 표시 종료가 14:30이 된다. 추가 점유는 14:30–15:20, 예약 점유는 14:30–15:00이다.
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCourse(prismaClient, { id: "course-30", code: "S", name: "S 30", durationMinutes: 30 });
+    addAvailabilityCall(prismaClient, {
+      id: "call-1400-in-use",
+      startTime: "14:00",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "call-1430",
+      startTime: "14:30",
+      courseId: "course-30",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const at1440 = (await overrunAvailabilityAt(prismaClient, "14:40")).find((row) => row.therapistId === "therapist-1");
+    assert.equal(at1440?.available, false);
+    assert.equal(at1440?.unavailableReason, "booked");
+    assert.equal(at1440?.inServiceDisplayEnd, null);
+    assert.equal(at1440?.freeFrom, "15:20");
+
+    const at1510 = (await overrunAvailabilityAt(prismaClient, "15:10")).find((row) => row.therapistId === "therapist-1");
+    assert.equal(at1510?.available, false);
+    assert.equal(at1510?.unavailableReason, "in_service_past_display_end");
+    assert.equal(at1510?.inServiceDisplayEnd, "14:30");
+    assert.equal(at1510?.freeFrom, "15:20");
+  });
+
+  it("holds both the therapist 1 and therapist 2 assignments, and keeps a two-therapist course from using the held partner", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "call-1400-pair",
+      startTime: "14:00",
+      courseId: "course-a",
+      status: "IN_USE",
+      assignments: [
+        { role: "THERAPIST_1", employeeId: "therapist-1" },
+        { role: "THERAPIST_2", employeeId: "therapist-2" }
+      ]
+    });
+
+    const rows = await overrunAvailabilityAt(prismaClient, "15:00");
+    for (const therapistId of ["therapist-1", "therapist-2"]) {
+      const row = rows.find((item) => item.therapistId === therapistId);
+      assert.equal(row?.available, false, therapistId);
+      assert.equal(row?.unavailableReason, "in_service_past_display_end", therapistId);
+      assert.equal(row?.inServiceDisplayEnd, "15:00", therapistId);
+      assert.equal(row?.freeFrom, "15:20", therapistId);
+    }
+
+    // therapist-2만 THERAPIST_2로 붙잡혀 있으면 therapist-1은 혼자 할 코스만 가능하다.
+    const heldPartner = createMemoryPrisma();
+    addAvailabilityCall(heldPartner, {
+      id: "call-1400-partner",
+      startTime: "14:00",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [
+        { role: "THERAPIST_1", employeeId: "therapist-3" },
+        { role: "THERAPIST_2", employeeId: "therapist-2" }
+      ]
+    });
+    const partnerRows = await overrunAvailabilityAt(heldPartner, "15:10");
+    assert.equal(partnerRows.find((row) => row.therapistId === "therapist-2")?.unavailableReason, "in_service_past_display_end");
+    assert.equal(partnerRows.find((row) => row.therapistId === "therapist-1")?.priorServiceEndCheck, false);
+    assert.equal(courseFlag(partnerRows, "therapist-1", "course-a"), true);
+    assert.equal(courseFlag(partnerRows, "therapist-1", "course-d"), false);
+  });
+
+  it("leaves the display end, the next call's reservation time, the course, and the amount as they were", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "call-1400-in-use",
+      startTime: "14:00",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "call-1500",
+      startTime: "15:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    const listRows = () => listServiceCallsForDate({ operatingMonthId: "month-2026-06", serviceDate: availabilityDate, prismaClient });
+    const before = await listRows();
+
+    const row = (await overrunAvailabilityAt(prismaClient, "15:00")).find((item) => item.therapistId === "therapist-1");
+    assert.equal(row?.unavailableReason, "booked");
+    assert.equal(row?.freeFrom, "16:00");
+
+    const after = await listRows();
+    assert.deepEqual(after, before);
+    const inUse = after.find((call) => call.id === "call-1400-in-use");
+    const next = after.find((call) => call.id === "call-1500");
+    assert.equal(inUse?.displayEnd, "15:00");
+    assert.equal(inUse?.warningTime, null);
+    assert.equal(next?.startTime, "15:00");
+    assert.equal(next?.courseId, "course-a");
+    assert.equal(next?.basePrice, before.find((call) => call.id === "call-1500")?.basePrice);
+  });
+});
+
 describe("actual entry and display end", () => {
   it("yields a 15:20 arrival of 60 minutes to the 16:00 reservation and keeps that booking", async () => {
     const prismaClient = createMemoryPrisma();

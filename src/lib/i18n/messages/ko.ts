@@ -258,6 +258,8 @@ export const ko = {
   "calls.availability.attendance.notEntered": "미입력",
   "calls.availability.available": "가능",
   "calls.availability.unavailableFrom": "불가 · {time}부터",
+  "calls.availability.inServiceEndCheck": "시술 중 · {time} 종료 확인",
+  "calls.availability.priorServiceEndCheck": "시간표상 가능 · 앞 시술 종료 확인 필요",
   "calls.availability.nextNone": "없음",
   "calls.availability.freeMinutes": "{minutes}분",
   "calls.availability.coursePossible": "{code} {minutes}분 가능",
