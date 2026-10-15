@@ -336,6 +336,11 @@ export const ko = {
   "calls.save.alreadySaved": "이미 저장된 콜입니다.",
   "calls.save.checkingHint": "응답을 받지 못했습니다. 재시도해도 같은 요청으로 보내므로 콜이 두 번 생기지 않습니다.",
 
+  // 떠나기 전 안내(스펙 B07, 티켓 18)
+  "calls.leaveGuard.title": "저장하지 않은 입력이 있습니다",
+  "calls.leaveGuard.description": "지금 떠나면 저장하지 않은 입력이 사라집니다. 계속하시겠습니까?",
+  "calls.leaveGuard.confirm": "나가기",
+
   // 콜 계산 상태
   "calls.calc.errorPending": "저장 보류 계산 대기",
   "calls.calc.calculated": "계산됨",

@@ -16,10 +16,32 @@ import {
 } from "@/app/(erp)/calls/actions";
 import { CUSTOMER_SEARCH_DEBOUNCE_MS, customerScreenHref } from "@/app/(erp)/customers/customer-search";
 
+/** editable-call-grid.tsx·call-ledger-workspace.tsx의 휴대폰 경계(min-[600px], 티켓 26)와 같은 값. */
+const PHONE_WIDTH_QUERY = "(min-width: 600px)";
+
+/**
+ * 휴대폰 폭(600px 미만)인지 실시간으로 안다. CSS(`min-[600px]:hidden`)만으로는 안 된다 — 이 컴포넌트가
+ * 그리는 입력 칸은 숨겨도 DOM에 남아, "읽기 전용"을 입력 칸 개수로 보는 검사(티켓 26 E2E)에 걸린다.
+ */
+function usePhoneWidth() {
+  const [isPhone, setIsPhone] = useState(() => typeof window !== "undefined" && !window.matchMedia(PHONE_WIDTH_QUERY).matches);
+  useEffect(() => {
+    const query = window.matchMedia(PHONE_WIDTH_QUERY);
+    const update = () => setIsPhone(!query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  return isPhone;
+}
+
 /**
  * 콜 상세 패널의 고객 연결 정정(F06, ADR 0003, 스토리 81-83). 원장 행 저장과는 별개의 전용 작업이라
  * 콜의 고객/메모(customerMemo)는 바꾸지 않고 customerId 연결만 바꾼다. 새 고객 후보는 22의 비교
  * 정보(CustomerCandidateCompare/같은 연락처 경고/방문완료 건수)로 고르며 자동 연결은 없다.
+ *
+ * 휴대폰 폭(티켓 26)에서는 "지금 연결"·"고객 화면으로 이동"만 보이고, 잠금 안내와 정정 폼은 그리지
+ * 않는다(명세 F08 — 카드 목록에서 연 패널은 읽기 형태로 남는다).
  *
  * 부르는 쪽은 `key={row.id}`로 이 컴포넌트를 둬야 콜을 바꿀 때 초안이 깨끗이 다시 시작된다. 같은 콜에서
  * 정정이 성공하면(또는 "다시 불러오기"로 최신 행을 받으면) 컴포넌트는 그대로 두고 아래 effect로 바뀐
@@ -38,6 +60,7 @@ export function CallCustomerLinkCorrection({
 }) {
   const t = useT();
   const locale = useLocale();
+  const isPhoneWidth = usePhoneWidth();
   const linkedCustomer = row.customerId ? customers.find((customer) => customer.id === row.customerId) ?? null : null;
   const customerScreenTarget = linkedCustomer
     ? customerScreenHref({ customerQuery: "", visitCustomer: linkedCustomer.id })
@@ -141,7 +164,7 @@ export function CallCustomerLinkCorrection({
         {t("calls.detail.customerLink.goToCustomerScreen")}
       </a>
 
-      {isLocked ? (
+      {isPhoneWidth ? null : isLocked ? (
         <ScreenState kind="locked" label={t("common.screenState.locked")} title={t("calls.detail.customerLink.locked")} />
       ) : (
         <form action={formAction} className="grid gap-3" noValidate>

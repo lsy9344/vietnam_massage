@@ -190,4 +190,38 @@ describe("call detail panel", () => {
     assert.match(html, /Cuộc gọi liên quan/);
     assert.match(html, /Đi đến cuộc gọi này/);
   });
+
+  // 티켓 26 회귀: 티켓 25가 고객 연결 정정 폼(call-customer-link-correction.tsx)을 이 패널에 끼워 넣어,
+  // 휴대폰 폭(카드 목록에서 연 패널)도 입력 칸을 갖게 됐다. 휴대폰 폭에서는 패널이 읽기 형태로 남아야
+  // 한다(명세 F08, 스토리 98) — min-[600px] 기준(ticket-26-phone-ledger-card-list.spec.ts:192 참고).
+  function withWindowWidth(minWidth600Matches: boolean, run: () => string) {
+    const original = (globalThis as { window?: unknown }).window;
+    (globalThis as { window?: unknown }).window = {
+      matchMedia: () => ({
+        matches: minWidth600Matches,
+        addEventListener: () => {},
+        removeEventListener: () => {}
+      })
+    };
+    try {
+      return run();
+    } finally {
+      if (original === undefined) delete (globalThis as { window?: unknown }).window;
+      else (globalThis as { window?: unknown }).window = original;
+    }
+  }
+
+  it("휴대폰 폭에서는 고객 연결 정정 폼을 그리지 않는다(입력 칸이 없다)", () => {
+    const row = ledgerRow();
+    const html = withWindowWidth(false, () => renderPanel("ko", row, [row]));
+    assert.doesNotMatch(html, /<input|<select|<textarea/);
+    // 읽기 전용 정보(지금 연결, 고객 화면으로 이동)는 휴대폰에서도 그대로 보인다.
+    assert.match(html, /고객 화면으로 이동/);
+  });
+
+  it("태블릿 이상 폭에서는 고객 연결 정정 폼이 그대로 있다(티켓 25)", () => {
+    const row = ledgerRow();
+    const html = withWindowWidth(true, () => renderPanel("ko", row, [row]));
+    assert.match(html, /<textarea/);
+  });
 });
