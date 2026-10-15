@@ -1,15 +1,19 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  MonthlyClosePendingCallsChangedError,
   MonthlyClosingDomainError,
   confirmMonthlyClose,
   getMonthlyClosingSnapshot,
+  getMonthlyClosingSnapshotByVersion,
+  listMonthlyClosingVersions,
   lockMonthlyClose,
   reopenMonthlyClose,
   startMonthlyCloseReview,
   type MonthlyClosingSnapshotDto
 } from "@/modules/closing/monthly-closing-service";
 import type { MonthlyClosingPreviewDto } from "@/modules/closing/monthly-closing-preview-service";
+import type { MonthlyClosingChecklistCallDto, MonthlyClosingChecklistDto } from "@/modules/closing/monthly-closing-checklist-service";
 
 function dbDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
@@ -191,6 +195,42 @@ function preview(overrides: Partial<MonthlyClosingPreviewDto> = {}): MonthlyClos
   };
 }
 
+function checklist(overrides: Partial<MonthlyClosingChecklistDto> = {}): MonthlyClosingChecklistDto {
+  return {
+    operatingMonthId: "month-1",
+    monthKey: "2026-06",
+    startDate: "2026-06-01",
+    endDate: "2026-06-30",
+    status: "검토중",
+    calculationErrorCalls: [],
+    payoutReconfirmationUnits: [],
+    pendingCloseCalls: [],
+    financials: {
+      paymentMethodTotals: { cash: 0, card: 0, bank: 0, other: 0 },
+      expenseTotal: 0,
+      cashBalance: 0,
+      bankBalance: 0,
+      netSales: 0
+    },
+    isConfirmBlocked: false,
+    ...overrides
+  };
+}
+
+function pendingCloseCall(overrides: Partial<MonthlyClosingChecklistCallDto> = {}): MonthlyClosingChecklistCallDto {
+  return {
+    serviceCallId: "call-reserved",
+    operatingMonthId: "month-1",
+    serviceDate: "2026-06-10",
+    startTime: "16:00",
+    courseCode: "A",
+    therapistNames: [],
+    status: "예약",
+    calculationStatus: "not_completed",
+    ...overrides
+  };
+}
+
 function createPrisma(options: { status?: string; existingClosing?: any; failAudit?: boolean; uniqueCreate?: boolean } = {}) {
   const state = {
     operatingMonth: {
@@ -248,10 +288,18 @@ function createPrisma(options: { status?: string; existingClosing?: any; failAud
         return { ...closing };
       },
       async findFirst({ where }: any) {
-        const matches = state.closings.filter((closing) => !where?.operatingMonthId || closing.operatingMonthId === where.operatingMonthId);
+        const matches = state.closings.filter(
+          (closing) =>
+            (!where?.operatingMonthId || closing.operatingMonthId === where.operatingMonthId) &&
+            (where?.closeVersion === undefined || closing.closeVersion === where.closeVersion)
+        );
         const latest = matches.sort((a, b) => b.closeVersion - a.closeVersion)[0];
         if (latest) return { ...latest };
         return null;
+      },
+      async findMany({ where }: any = {}) {
+        const matches = state.closings.filter((closing) => !where?.operatingMonthId || closing.operatingMonthId === where.operatingMonthId);
+        return matches.map((closing) => ({ ...closing })).sort((a, b) => b.closeVersion - a.closeVersion);
       },
       async update({ where, data }: any) {
         const index = state.closings.findIndex((closing) => closing.id === where.id);
@@ -392,7 +440,8 @@ describe("monthly closing service", () => {
       clock: () => new Date("2026-06-10T04:00:00.000Z"),
       idFactory: () => "closing-1",
       dependencies: {
-        listMonthlyClosingPreview: async () => preview()
+        listMonthlyClosingPreview: async () => preview(),
+        listMonthlyClosingChecklist: async () => checklist()
       }
     });
 
@@ -407,6 +456,8 @@ describe("monthly closing service", () => {
     assert.equal(result.snapshot.operations.rows[0].staffCode, "OPS-001");
     assert.equal(result.snapshot.earcare.rows[0].payoutAmount, 200000);
     assert.equal(result.snapshot.totals.grandPayoutAmount, 1450000);
+    // F07/ADR 0005(티켓 34): 마감 확인 대상 콜이 없으면 예외 기록도 없다.
+    assert.equal(result.snapshot.pendingCloseException, null);
     assert.equal(prismaClient.state.auditLogs[0].action, "monthly_close.confirmed");
     assert.equal(prismaClient.state.auditLogs[0].targetType, "monthly_close");
     assert.equal(prismaClient.state.auditLogs[0].afterValue.snapshotId, "closing-1");
@@ -470,7 +521,8 @@ describe("monthly closing service", () => {
       clock: () => new Date("2026-06-10T04:00:00.000Z"),
       idFactory: () => "closing-1",
       dependencies: {
-        listMonthlyClosingPreview: async () => closingPreview
+        listMonthlyClosingPreview: async () => closingPreview,
+        listMonthlyClosingChecklist: async () => checklist()
       }
     });
 
@@ -488,13 +540,176 @@ describe("monthly closing service", () => {
           operatingMonthId: "month-1",
           actorId: "account-1",
           prismaClient,
-          dependencies: { listMonthlyClosingPreview: async () => preview({ status: "마감확정", previewStatus: "closed_current" }) }
+          dependencies: {
+            listMonthlyClosingPreview: async () => preview({ status: "마감확정", previewStatus: "closed_current" }),
+            listMonthlyClosingChecklist: async () => checklist()
+          }
         }),
       (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "INVALID_MONTHLY_CLOSE_TRANSITION"
     );
 
     assert.equal(prismaClient.state.closing, null);
     assert.equal(prismaClient.state.auditLogs.length, 0);
+  });
+
+  it("blocks confirmation when the re-checked closing checklist still has calculation error calls, without status/snapshot/audit changes (F07)", async () => {
+    const prismaClient = createPrisma({ status: "검토중" });
+
+    await assert.rejects(
+      () =>
+        confirmMonthlyClose({
+          operatingMonthId: "month-1",
+          actorId: "account-1",
+          prismaClient,
+          dependencies: {
+            listMonthlyClosingPreview: async () => preview(),
+            listMonthlyClosingChecklist: async () =>
+              checklist({
+                calculationErrorCalls: [
+                  {
+                    serviceCallId: "call-error",
+                    operatingMonthId: "month-1",
+                    serviceDate: "2026-06-10",
+                    startTime: "14:00",
+                    courseCode: "A",
+                    therapistNames: ["마사지사 원"],
+                    status: "방문완료",
+                    calculationStatus: "course_policy_missing"
+                  }
+                ],
+                isConfirmBlocked: true
+              })
+          }
+        }),
+      (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_CALCULATION_ERRORS_PENDING"
+    );
+
+    assert.equal(prismaClient.state.operatingMonth.status, "검토중");
+    assert.equal(prismaClient.state.closing, null);
+    assert.equal(prismaClient.state.auditLogs.length, 0);
+  });
+
+  it("blocks confirmation when a payout unit still needs reconfirmation, without status/snapshot/audit changes (F07)", async () => {
+    const prismaClient = createPrisma({ status: "검토중" });
+
+    await assert.rejects(
+      () =>
+        confirmMonthlyClose({
+          operatingMonthId: "month-1",
+          actorId: "account-1",
+          prismaClient,
+          dependencies: {
+            listMonthlyClosingPreview: async () => preview(),
+            listMonthlyClosingChecklist: async () =>
+              checklist({
+                payoutReconfirmationUnits: [
+                  {
+                    unitType: "THERAPIST_DAILY",
+                    operatingMonthId: "month-1",
+                    serviceDate: "2026-06-10",
+                    employeeId: "emp-therapist-1",
+                    payoutConfirmation: {
+                      status: "needs_reconfirmation",
+                      currentAmount: 800000,
+                      lastConfirmedAmount: 700000,
+                      difference: 100000,
+                      requiresReconfirmation: true,
+                      history: []
+                    }
+                  }
+                ],
+                isConfirmBlocked: true
+              })
+          }
+        }),
+      (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_PAYOUT_RECONFIRMATION_PENDING"
+    );
+
+    assert.equal(prismaClient.state.operatingMonth.status, "검토중");
+    assert.equal(prismaClient.state.closing, null);
+    assert.equal(prismaClient.state.auditLogs.length, 0);
+  });
+
+  it("blocks confirmation when pending-close calls remain without an exception reason (F07/ADR 0005, ticket 34)", async () => {
+    const prismaClient = createPrisma({ status: "검토중" });
+
+    await assert.rejects(
+      () =>
+        confirmMonthlyClose({
+          operatingMonthId: "month-1",
+          actorId: "account-1",
+          prismaClient,
+          confirmedPendingCloseCallIds: ["call-reserved"],
+          dependencies: {
+            listMonthlyClosingPreview: async () => preview(),
+            listMonthlyClosingChecklist: async () => checklist({ pendingCloseCalls: [pendingCloseCall()] })
+          }
+        }),
+      (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_PENDING_CLOSE_REASON_REQUIRED"
+    );
+
+    assert.equal(prismaClient.state.operatingMonth.status, "검토중");
+    assert.equal(prismaClient.state.closing, null);
+    assert.equal(prismaClient.state.auditLogs.length, 0);
+  });
+
+  it("blocks confirmation and returns the fresh list when a pending-close call is missing from the confirmed id list (F07/ADR 0005, ticket 34)", async () => {
+    const prismaClient = createPrisma({ status: "검토중" });
+    const recomputedPendingCloseCalls = [pendingCloseCall(), pendingCloseCall({ serviceCallId: "call-new", startTime: "18:00" })];
+
+    await assert.rejects(
+      () =>
+        confirmMonthlyClose({
+          operatingMonthId: "month-1",
+          actorId: "account-1",
+          prismaClient,
+          // 이전에 확인한 목록에는 "call-new"가 없다 — 그 사이 새로 생긴 마감 확인 대상.
+          confirmedPendingCloseCallIds: ["call-reserved"],
+          exceptionReason: "예약 콜은 다음달 초 방문 확정",
+          dependencies: {
+            listMonthlyClosingPreview: async () => preview(),
+            listMonthlyClosingChecklist: async () => checklist({ pendingCloseCalls: recomputedPendingCloseCalls })
+          }
+        }),
+      (error: unknown) => {
+        if (!(error instanceof MonthlyClosePendingCallsChangedError)) return false;
+        assert.deepEqual(error.currentPendingCloseCalls, recomputedPendingCloseCalls);
+        return error.code === "MONTHLY_CLOSE_PENDING_CALLS_CHANGED";
+      }
+    );
+
+    assert.equal(prismaClient.state.operatingMonth.status, "검토중");
+    assert.equal(prismaClient.state.closing, null);
+    assert.equal(prismaClient.state.auditLogs.length, 0);
+  });
+
+  it("confirms with a recorded exception when the confirmed id list covers every pending-close call (F07/ADR 0005, ticket 34)", async () => {
+    const prismaClient = createPrisma({ status: "검토중" });
+    const call = pendingCloseCall();
+
+    const result = await confirmMonthlyClose({
+      operatingMonthId: "month-1",
+      actorId: "account-1",
+      prismaClient,
+      confirmedPendingCloseCallIds: [call.serviceCallId],
+      exceptionReason: "  예약 콜은 다음달 초 방문 확정이라 예외로 마감  ",
+      clock: () => new Date("2026-06-10T04:00:00.000Z"),
+      idFactory: () => "closing-1",
+      dependencies: {
+        listMonthlyClosingPreview: async () => preview(),
+        listMonthlyClosingChecklist: async () => checklist({ pendingCloseCalls: [call] })
+      }
+    });
+
+    assert.equal(result.status, "마감확정");
+    // 사유는 trim되어 저장되고, 확인한 콜과 그 당시 상태, 처리자가 이번 마감 버전에 함께 남는다.
+    assert.equal(result.snapshot.pendingCloseException?.reason, "예약 콜은 다음달 초 방문 확정이라 예외로 마감");
+    assert.equal(result.snapshot.pendingCloseException?.confirmedByAccountId, "account-1");
+    assert.equal(result.snapshot.pendingCloseException?.confirmedAt, "2026-06-10T04:00:00.000Z");
+    assert.deepEqual(result.snapshot.pendingCloseException?.calls, [call]);
+    // 예외 마감은 콜 상태를 바꾸지 않는다 — 저장된 콜의 status는 다시 계산한 "그 당시" 값 그대로다.
+    assert.equal(result.snapshot.pendingCloseException?.calls[0].status, "예약");
+    assert.equal(prismaClient.state.auditLogs[0].afterValue.pendingCloseExceptionCallCount, 1);
   });
 
   it("rolls back status and snapshot when audit fails inside confirmation transaction", async () => {
@@ -505,7 +720,10 @@ describe("monthly closing service", () => {
         operatingMonthId: "month-1",
         actorId: "account-1",
         prismaClient,
-        dependencies: { listMonthlyClosingPreview: async () => preview() }
+        dependencies: {
+          listMonthlyClosingPreview: async () => preview(),
+          listMonthlyClosingChecklist: async () => checklist()
+        }
       })
     );
 
@@ -523,7 +741,10 @@ describe("monthly closing service", () => {
           operatingMonthId: "month-1",
           actorId: "account-1",
           prismaClient,
-          dependencies: { listMonthlyClosingPreview: async () => preview() }
+          dependencies: {
+            listMonthlyClosingPreview: async () => preview(),
+            listMonthlyClosingChecklist: async () => checklist()
+          }
         }),
       (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_VERSION_CONFLICT"
     );
@@ -549,7 +770,8 @@ describe("monthly closing service", () => {
                 ...preview().totals,
                 grandPayoutAmount: Number.NaN
               }
-            })
+            }),
+            listMonthlyClosingChecklist: async () => checklist()
           }
         }),
       (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "INVALID_MONTHLY_CLOSE_INPUT"
@@ -707,7 +929,8 @@ describe("monthly closing service", () => {
       clock: () => new Date("2026-06-11T04:00:00.000Z"),
       idFactory: () => "closing-2",
       dependencies: {
-        listMonthlyClosingPreview: async () => preview({ therapists: { ...preview().therapists, payoutAmount: 2200000 } })
+        listMonthlyClosingPreview: async () => preview({ therapists: { ...preview().therapists, payoutAmount: 2200000 } }),
+        listMonthlyClosingChecklist: async () => checklist()
       }
     });
 
@@ -718,6 +941,61 @@ describe("monthly closing service", () => {
     assert.equal(prismaClient.state.closings[0].snapshotJson.totals.grandPayoutAmount, 10);
     assert.equal(prismaClient.state.closings[1].id, "closing-2");
     assert.equal(prismaClient.state.auditLogs[0].afterValue.closeVersion, 2);
+  });
+
+  it("preserves a confirmed pending-close exception across reopen and keeps it untouched after the next confirmation's new closeVersion (F07/ADR 0005, ticket 34)", async () => {
+    const call = pendingCloseCall();
+    const previousClosing = existingClosing({
+      snapshotJson: {
+        ...storedClosingSnapshot(),
+        pendingCloseException: {
+          reason: "예약 콜은 다음달 초 방문 확정이라 예외로 마감",
+          confirmedByAccountId: "account-1",
+          confirmedAt: "2026-06-10T04:00:00.000Z",
+          calls: [call]
+        }
+      }
+    });
+    const prismaClient = createPrisma({ status: "마감확정", existingClosing: previousClosing });
+
+    await reopenMonthlyClose({
+      operatingMonthId: "month-1",
+      actorId: "account-admin",
+      reason: "재확인 필요",
+      prismaClient,
+      clock: () => new Date("2026-06-10T06:00:00.000Z")
+    });
+
+    // 재오픈은 이전 버전의 snapshotJson을 고치지 않는다 — 예외 기록이 그대로 남는다.
+    assert.deepEqual(prismaClient.state.closings[0].snapshotJson.pendingCloseException, {
+      reason: "예약 콜은 다음달 초 방문 확정이라 예외로 마감",
+      confirmedByAccountId: "account-1",
+      confirmedAt: "2026-06-10T04:00:00.000Z",
+      calls: [call]
+    });
+
+    // 재확정하면 새 버전이 생기고, 이번에는 마감 확인 대상 콜이 없어 예외 없이 확정된다.
+    const result = await confirmMonthlyClose({
+      operatingMonthId: "month-1",
+      actorId: "account-2",
+      prismaClient,
+      clock: () => new Date("2026-06-11T04:00:00.000Z"),
+      idFactory: () => "closing-2",
+      dependencies: {
+        listMonthlyClosingPreview: async () => preview(),
+        listMonthlyClosingChecklist: async () => checklist()
+      }
+    });
+
+    assert.equal(result.closeVersion, 2);
+    assert.equal(result.snapshot.pendingCloseException, null);
+    // 과거 버전(closing-1)의 예외 기록은 소급 변경되지 않는다.
+    assert.deepEqual(prismaClient.state.closings[0].snapshotJson.pendingCloseException, {
+      reason: "예약 콜은 다음달 초 방문 확정이라 예외로 마감",
+      confirmedByAccountId: "account-1",
+      confirmedAt: "2026-06-10T04:00:00.000Z",
+      calls: [call]
+    });
   });
 
   it("blocks lock before confirmation without status or audit changes", async () => {
@@ -807,6 +1085,64 @@ describe("monthly closing service", () => {
 
     await assert.rejects(
       () => getMonthlyClosingSnapshot({ operatingMonthId: "month-1", prismaClient }),
+      (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND"
+    );
+  });
+
+  it("lists every close version newest-first, including versions with a reopen stamp (티켓 32)", async () => {
+    const prismaClient = createPrisma({ status: "마감확정", existingClosing: existingClosing() });
+    prismaClient.state.closings.push(
+      existingClosing({
+        id: "closing-2",
+        closeVersion: 2,
+        confirmedAt: new Date("2026-06-11T04:00:00.000Z"),
+        reopenedAt: new Date("2026-06-11T05:00:00.000Z"),
+        reopenedByAccountId: "account-admin",
+        reopenReason: "금액 정정"
+      })
+    );
+
+    const versions = await listMonthlyClosingVersions({ operatingMonthId: "month-1", prismaClient });
+
+    assert.deepEqual(versions.map((version) => version.closeVersion), [2, 1]);
+    assert.equal(versions[0].reopenedByAccountId, "account-admin");
+    assert.equal(versions[0].reopenReason, "금액 정정");
+    assert.equal(versions[1].reopenedAt, null);
+  });
+
+  it("returns an empty version list when the operating month has never been closed", async () => {
+    const prismaClient = createPrisma({ status: "작성중" });
+
+    const versions = await listMonthlyClosingVersions({ operatingMonthId: "month-1", prismaClient });
+
+    assert.deepEqual(versions, []);
+  });
+
+  it("fetches a specific (non-latest) close version's frozen snapshot by version number", async () => {
+    const prismaClient = createPrisma({ status: "마감확정", existingClosing: existingClosing() });
+    prismaClient.state.closings.push(
+      existingClosing({
+        id: "closing-2",
+        closeVersion: 2,
+        snapshotJson: { ...storedClosingSnapshot(), id: "closing-2", totals: { ...storedClosingSnapshot().totals, grandPayoutAmount: 20 } },
+        confirmedAt: new Date("2026-06-11T04:00:00.000Z")
+      })
+    );
+
+    const first = await getMonthlyClosingSnapshotByVersion({ operatingMonthId: "month-1", closeVersion: 1, prismaClient });
+    const second = await getMonthlyClosingSnapshotByVersion({ operatingMonthId: "month-1", closeVersion: 2, prismaClient });
+
+    assert.equal(first.closeVersion, 1);
+    assert.equal(first.snapshot.totals.grandPayoutAmount, 10);
+    assert.equal(second.closeVersion, 2);
+    assert.equal(second.snapshot.totals.grandPayoutAmount, 20);
+  });
+
+  it("raises MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND for a close version that does not exist", async () => {
+    const prismaClient = createPrisma({ status: "마감확정", existingClosing: existingClosing() });
+
+    await assert.rejects(
+      () => getMonthlyClosingSnapshotByVersion({ operatingMonthId: "month-1", closeVersion: 9, prismaClient }),
       (error: unknown) => error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND"
     );
   });

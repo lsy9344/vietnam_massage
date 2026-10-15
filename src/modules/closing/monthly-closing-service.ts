@@ -7,6 +7,7 @@ import {
   listMonthlyClosingPreview,
   type MonthlyClosingPreviewDto
 } from "@/modules/closing/monthly-closing-preview-service";
+import { listMonthlyClosingChecklist, type MonthlyClosingChecklistCallDto } from "@/modules/closing/monthly-closing-checklist-service";
 
 type OperatingMonthRecord = {
   id: string;
@@ -42,12 +43,24 @@ type MonthlyClosingPrismaClient = {
   monthlyClosing: {
     create(args: unknown): Promise<MonthlyClosingRecord>;
     findFirst(args: unknown): Promise<MonthlyClosingRecord | null>;
+    findMany(args: unknown): Promise<MonthlyClosingRecord[]>;
     update(args: unknown): Promise<MonthlyClosingRecord>;
   };
   auditLog: {
     create(args: unknown): Promise<unknown>;
   };
   $transaction?<T>(callback: (tx: MonthlyClosingPrismaClient) => Promise<T>, options?: unknown): Promise<T>;
+};
+
+// F07/ADR 0005(티켓 34): 예약·사용중·청소중 콜이 남아 있을 때 확인한 목록·사유·처리자를 이 마감 버전에
+// 함께 저장한다. 콜이 없으면 null. dashboardFinancials/graphReport와 같은 이유로 optional로 둔다 —
+// 이 필드가 생기기 전에 만들어진 과거 스냅샷에는 이 키가 없다.
+export type MonthlyClosingPendingCloseExceptionDto = {
+  reason: string;
+  confirmedByAccountId: string;
+  confirmedAt: string;
+  /** 다시 계산해 확인을 통과한 마감 확인 대상 콜과 "그 당시" 상태. */
+  calls: MonthlyClosingChecklistCallDto[];
 };
 
 export type MonthlyClosingSnapshotDto = {
@@ -71,6 +84,7 @@ export type MonthlyClosingSnapshotDto = {
   totals: MonthlyClosingPreviewDto["totals"];
   warningCounts: MonthlyClosingPreviewDto["warningCounts"];
   evidence: MonthlyClosingPreviewDto["evidence"];
+  pendingCloseException?: MonthlyClosingPendingCloseExceptionDto | null;
   source: {
     serviceVersion: "monthly-closing-service:5.3";
     previewBasis: "listMonthlyClosingPreview";
@@ -101,6 +115,7 @@ export type MonthlyCloseReviewDto = {
 
 export type MonthlyClosingDependencies = {
   listMonthlyClosingPreview: typeof listMonthlyClosingPreview;
+  listMonthlyClosingChecklist: typeof listMonthlyClosingChecklist;
 };
 
 export type StartMonthlyCloseReviewInput = {
@@ -112,6 +127,10 @@ export type StartMonthlyCloseReviewInput = {
 export type ConfirmMonthlyCloseInput = {
   operatingMonthId: string;
   actorId: string;
+  /** F07/ADR 0005(티켓 34): 확인한 마감 확인 대상 콜(예약·사용중·청소중) id 목록. 생략하면 빈 목록. */
+  confirmedPendingCloseCallIds?: string[];
+  /** 목록이 비어 있지 않을 때만 필수. 빈 문자열이면 트랜잭션 안에서 거절한다. */
+  exceptionReason?: string;
   prismaClient?: MonthlyClosingPrismaClient;
   dependencies?: MonthlyClosingDependencies;
   clock?: () => Date;
@@ -138,10 +157,47 @@ export type GetMonthlyClosingSnapshotInput = {
   prismaClient?: MonthlyClosingPrismaClient;
 };
 
+/** 마감 버전 하나의 메타(스냅샷 본문은 빼고, 버전 고르는 화면·명세서 버전 목록용, 티켓 32). */
+export type MonthlyClosingVersionSummaryDto = {
+  id: string;
+  closeVersion: number;
+  confirmedByAccountId: string;
+  confirmedAt: string;
+  reopenedAt: string | null;
+  reopenedByAccountId: string | null;
+  reopenReason: string | null;
+};
+
+export type ListMonthlyClosingVersionsInput = {
+  operatingMonthId: string;
+  prismaClient?: MonthlyClosingPrismaClient;
+};
+
+export type GetMonthlyClosingSnapshotByVersionInput = {
+  operatingMonthId: string;
+  closeVersion: number;
+  prismaClient?: MonthlyClosingPrismaClient;
+};
+
 export class MonthlyClosingDomainError extends Error {
   constructor(message: string, public readonly code: string) {
     super(message);
     this.name = "MonthlyClosingDomainError";
+  }
+}
+
+/**
+ * F07/ADR 0005(티켓 34): 확인한 목록을 받은 뒤 트랜잭션 안에서 마감 확인 대상 콜을 다시 계산했더니
+ * 목록에 없던 콜이 새로 있으면 확정을 거절한다. 액션 경계가 지금의 목록을 그대로 화면에 보여 줄 수
+ * 있도록 그 목록을 들고 있는다(StaleServiceCallError의 currentRow와 같은 모양).
+ */
+export class MonthlyClosePendingCallsChangedError extends MonthlyClosingDomainError {
+  constructor(public readonly currentPendingCloseCalls: MonthlyClosingChecklistCallDto[]) {
+    super(
+      "확인한 목록 이후 새로운 마감 확인 대상 콜이 생겨 마감 확정할 수 없습니다. 새로 보이는 목록을 다시 확인하세요.",
+      "MONTHLY_CLOSE_PENDING_CALLS_CHANGED"
+    );
+    this.name = "MonthlyClosePendingCallsChangedError";
   }
 }
 
@@ -154,12 +210,24 @@ const reopenMonthlyClosingInputSchema = monthlyClosingInputSchema.extend({
   reason: z.string().trim().min(5, "재오픈 사유를 5자 이상 입력하세요.")
 });
 
+// F07/ADR 0005(티켓 34): 사유 유무는 트랜잭션 안에서 다시 계산한 마감 확인 대상 콜이 있는지에 따라
+// 달라지므로(목록이 비어 있으면 사유 불필요), 여기서는 모양만 확인하고 필수 여부는 confirmMonthlyClose가 검사한다.
+const confirmMonthlyClosingInputSchema = monthlyClosingInputSchema.extend({
+  confirmedPendingCloseCallIds: z.array(z.string().trim().min(1)).default([]),
+  exceptionReason: z.string().trim().max(500, "사유는 500자 이하로 입력하세요.").default("")
+});
+
 const snapshotQuerySchema = z.object({
   operatingMonthId: z.string().trim().min(1, "운영월을 선택하세요.")
 });
 
+const versionSnapshotQuerySchema = snapshotQuerySchema.extend({
+  closeVersion: z.number().int().min(1, "마감 버전을 선택하세요.")
+});
+
 const defaultDependencies: MonthlyClosingDependencies = {
-  listMonthlyClosingPreview
+  listMonthlyClosingPreview,
+  listMonthlyClosingChecklist
 };
 
 function getClient(client?: MonthlyClosingPrismaClient) {
@@ -258,6 +326,7 @@ function createSnapshot(input: {
   snapshotId: string;
   confirmedAt: string;
   confirmedByAccountId: string;
+  pendingCloseException: MonthlyClosingPendingCloseExceptionDto | null;
 }): MonthlyClosingSnapshotDto {
   return {
     id: input.snapshotId,
@@ -275,6 +344,7 @@ function createSnapshot(input: {
     operations: input.preview.operations,
     earcare: input.preview.earcare,
     financials: input.preview.financials,
+    pendingCloseException: input.pendingCloseException,
     dashboardFinancials: input.preview.dashboardFinancials,
     graphReport: input.preview.graphReport,
     totals: input.preview.totals,
@@ -359,13 +429,13 @@ export async function startMonthlyCloseReview(input: StartMonthlyCloseReviewInpu
 }
 
 export async function confirmMonthlyClose(input: ConfirmMonthlyCloseInput): Promise<MonthlyClosingDto> {
-  const parsed = monthlyClosingInputSchema.safeParse(input);
+  const parsed = confirmMonthlyClosingInputSchema.safeParse(input);
   if (!parsed.success) {
     throw normalizeParseError(parsed.error.issues[0]?.message ?? "월마감 확정 입력값이 올바르지 않습니다.");
   }
 
   const client = getClient(input.prismaClient);
-  const dependencies = input.dependencies ?? defaultDependencies;
+  const dependencies = { ...defaultDependencies, ...input.dependencies };
   const now = input.clock?.() ?? new Date();
   const confirmedAt = now.toISOString();
   const snapshotId = input.idFactory?.() ?? `closing_${randomUUID()}`;
@@ -390,6 +460,48 @@ export async function confirmMonthlyClose(input: ConfirmMonthlyCloseInput): Prom
         throw new MonthlyClosingDomainError("현재 상태에서는 마감 확정할 수 없습니다.", "INVALID_MONTHLY_CLOSE_TRANSITION");
       }
 
+      // 마감 전 점검(F07, 티켓 33)을 확정 트랜잭션 안에서 다시 계산한다. 계산 오류나 지급 재확인 미처리가
+      // 남아 있으면 확정을 거절한다.
+      const checklist = await dependencies.listMonthlyClosingChecklist({
+        operatingMonthId: parsed.data.operatingMonthId,
+        prismaClient: tx as any
+      });
+      if (checklist.calculationErrorCalls.length > 0) {
+        throw new MonthlyClosingDomainError(
+          "계산 오류가 있는 콜이 남아 있어 마감 확정할 수 없습니다.",
+          "MONTHLY_CLOSE_CALCULATION_ERRORS_PENDING"
+        );
+      }
+      if (checklist.payoutReconfirmationUnits.length > 0) {
+        throw new MonthlyClosingDomainError(
+          "지급 재확인이 필요한 항목이 남아 있어 마감 확정할 수 없습니다.",
+          "MONTHLY_CLOSE_PAYOUT_RECONFIRMATION_PENDING"
+        );
+      }
+
+      // F07/ADR 0005(티켓 34): 예약·사용중·청소중 콜(마감 확인 대상)이 남아 있으면 사유 없이는 확정할 수
+      // 없고, 확인한 목록이 지금 다시 계산한 목록을 모두 덮어야 한다. 콜 상태는 바꾸지 않는다.
+      let pendingCloseException: MonthlyClosingPendingCloseExceptionDto | null = null;
+      if (checklist.pendingCloseCalls.length > 0) {
+        const exceptionReason = parsed.data.exceptionReason.trim();
+        if (exceptionReason === "") {
+          throw new MonthlyClosingDomainError("예외 사유를 입력하세요.", "MONTHLY_CLOSE_PENDING_CLOSE_REASON_REQUIRED");
+        }
+
+        const confirmedIds = new Set(parsed.data.confirmedPendingCloseCallIds);
+        const hasUnconfirmedCall = checklist.pendingCloseCalls.some((call) => !confirmedIds.has(call.serviceCallId));
+        if (hasUnconfirmedCall) {
+          throw new MonthlyClosePendingCallsChangedError(checklist.pendingCloseCalls);
+        }
+
+        pendingCloseException = {
+          reason: exceptionReason,
+          confirmedByAccountId: parsed.data.actorId,
+          confirmedAt,
+          calls: checklist.pendingCloseCalls
+        };
+      }
+
       const latestClosing = await findLatestMonthlyClosing(tx, current.id);
       const closeVersion = (latestClosing?.closeVersion ?? 0) + 1;
 
@@ -406,7 +518,8 @@ export async function confirmMonthlyClose(input: ConfirmMonthlyCloseInput): Prom
           preview,
           snapshotId,
           confirmedAt,
-          confirmedByAccountId: parsed.data.actorId
+          confirmedByAccountId: parsed.data.actorId,
+          pendingCloseException
         })
       );
       const closing = await tx.monthlyClosing.create({
@@ -437,7 +550,8 @@ export async function confirmMonthlyClose(input: ConfirmMonthlyCloseInput): Prom
             status: "마감확정",
             snapshotId: closing.id,
             closeVersion,
-            confirmedAt
+            confirmedAt,
+            pendingCloseExceptionCallCount: pendingCloseException?.calls.length ?? 0
           }
         },
         { prismaClient: tx as any }
@@ -620,6 +734,57 @@ export async function getMonthlyClosingSnapshot(input: GetMonthlyClosingSnapshot
   }
 
   const record = await findLatestMonthlyClosing(getClient(input.prismaClient), parsed.data.operatingMonthId);
+
+  if (!record) {
+    throw new MonthlyClosingDomainError("확정 스냅샷을 찾을 수 없습니다.", "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND");
+  }
+
+  assertSnapshotJson(record.snapshotJson);
+  return toDto(record, record.snapshotJson);
+}
+
+function toVersionSummaryDto(record: MonthlyClosingRecord): MonthlyClosingVersionSummaryDto {
+  return {
+    id: record.id,
+    closeVersion: record.closeVersion,
+    confirmedByAccountId: record.confirmedByAccountId,
+    confirmedAt: record.confirmedAt.toISOString(),
+    reopenedAt: record.reopenedAt ? record.reopenedAt.toISOString() : null,
+    reopenedByAccountId: record.reopenedByAccountId ?? null,
+    reopenReason: record.reopenReason ?? null
+  };
+}
+
+/**
+ * 이 운영월의 모든 마감 버전을 최신순으로 돌려준다(스냅샷 본문은 빼고 메타만, 티켓 32 월 명세서의 버전 고르기용).
+ * 재오픈과 재확정을 거쳐도 지난 버전은 이 목록에 그대로 남는다(스냅샷은 지우거나 고치지 않는다).
+ */
+export async function listMonthlyClosingVersions(input: ListMonthlyClosingVersionsInput): Promise<MonthlyClosingVersionSummaryDto[]> {
+  const parsed = snapshotQuerySchema.safeParse(input);
+  if (!parsed.success) {
+    throw normalizeParseError(parsed.error.issues[0]?.message ?? "월마감 버전 조회 조건이 올바르지 않습니다.");
+  }
+
+  const records = await getClient(input.prismaClient).monthlyClosing.findMany({
+    where: { operatingMonthId: parsed.data.operatingMonthId },
+    orderBy: { closeVersion: "desc" }
+  });
+  return records.map(toVersionSummaryDto);
+}
+
+/**
+ * 고른 마감 버전 하나의 스냅샷을 그대로 돌려준다(최신이 아니어도 된다). 월 명세서(티켓 32)가 "이전 마감 버전도
+ * 골라서 본다"를 구현하는 자리다. 스냅샷은 확정 당시 그대로이며 다시 계산하지 않는다.
+ */
+export async function getMonthlyClosingSnapshotByVersion(input: GetMonthlyClosingSnapshotByVersionInput): Promise<MonthlyClosingDto> {
+  const parsed = versionSnapshotQuerySchema.safeParse(input);
+  if (!parsed.success) {
+    throw normalizeParseError(parsed.error.issues[0]?.message ?? "월마감 스냅샷 조회 조건이 올바르지 않습니다.");
+  }
+
+  const record = await getClient(input.prismaClient).monthlyClosing.findFirst({
+    where: { operatingMonthId: parsed.data.operatingMonthId, closeVersion: parsed.data.closeVersion }
+  });
 
   if (!record) {
     throw new MonthlyClosingDomainError("확정 스냅샷을 찾을 수 없습니다.", "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND");

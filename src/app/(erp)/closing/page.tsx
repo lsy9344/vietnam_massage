@@ -8,6 +8,7 @@ import { resolveDomainErrorMessage, resolveKoreanMessage } from "@/lib/i18n/erro
 import { settlementBasisText } from "@/lib/i18n/settlement-basis";
 import type { Locale } from "@/lib/i18n/config";
 import type { Translator } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n/types";
 import {
   getMonthlyClosingSnapshot,
   MonthlyClosingDomainError,
@@ -18,10 +19,21 @@ import {
   type MonthlyClosingPreviewDto,
   type MonthlyClosingTherapistRowDto
 } from "@/modules/closing/monthly-closing-preview-service";
+import {
+  listMonthlyClosingChecklist,
+  type MonthlyClosingChecklistCallDto,
+  type MonthlyClosingChecklistDto,
+  type MonthlyClosingPayoutReconfirmationUnitDto
+} from "@/modules/closing/monthly-closing-checklist-service";
+import { payoutConfirmationUnitTypes, type PayoutConfirmationUnitType } from "@/modules/settlements/payout-confirmation-service";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import { DateContextControls } from "@/components/shell/date-context-controls";
 import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-notice";
 import { ScreenToolbar } from "@/components/shell/screen-toolbar";
+import { StatusIndicator } from "@/components/ui/status-indicator";
+import { EvidenceCallItem, EvidenceCallList, PanelSection } from "@/app/(erp)/settlements/settlement-parts";
+import { calculationErrorMessageKey } from "@/app/(erp)/calls/calculation-status-message";
+import { findScreenRoute, screenHref, type ScreenContext } from "@/lib/routes";
 
 type ClosingPageSearchParams = {
   operatingMonthId?: string;
@@ -153,7 +165,19 @@ function ClosingStepper({ locale, t, status }: { locale: Locale; t: Translator; 
   );
 }
 
-function SnapshotSummary({ locale, t, closing, currentStatus }: { locale: Locale; t: Translator; closing: MonthlyClosingDto; currentStatus: string }) {
+function SnapshotSummary({
+  locale,
+  t,
+  closing,
+  currentStatus,
+  canOpenLedger
+}: {
+  locale: Locale;
+  t: Translator;
+  closing: MonthlyClosingDto;
+  currentStatus: string;
+  canOpenLedger: boolean;
+}) {
   const isHistoricalAfterReopen = currentStatus === "검토중" && closing.reopenedAt !== null;
   const label = isHistoricalAfterReopen ? t("closing.snapshot.previous") : t("closing.snapshot.confirmed");
   const heading = isHistoricalAfterReopen
@@ -203,6 +227,28 @@ function SnapshotSummary({ locale, t, closing, currentStatus }: { locale: Locale
           <div className="font-semibold tabular-nums">{closing.snapshot.warningCounts.total}{t("settlements.countSuffix")}</div>
         </div>
       </div>
+      {closing.snapshot.pendingCloseException ? (
+        <div className="mt-3 border border-border bg-background px-3 py-2">
+          <div className="text-sm font-semibold text-foreground">
+            {t("closing.snapshot.pendingCloseException.title")} {t("closing.checklist.pendingCloseCalls.count", { count: closing.snapshot.pendingCloseException.calls.length })}
+          </div>
+          <p className="mt-1 text-sm text-muted">
+            {t("closing.snapshot.pendingCloseException.reason", { reason: closing.snapshot.pendingCloseException.reason })}
+          </p>
+          <EvidenceCallList label={t("closing.snapshot.pendingCloseException.title")}>
+            {closing.snapshot.pendingCloseException.calls.map((call) => (
+              <EvidenceCallItem
+                amount={null}
+                call={call}
+                canOpenLedger={canOpenLedger}
+                key={call.serviceCallId}
+                locale={locale}
+                serviceDate={call.serviceDate}
+              />
+            ))}
+          </EvidenceCallList>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -464,6 +510,214 @@ function EvidenceSection({ locale, t, result }: { locale: Locale; t: Translator;
   );
 }
 
+// 마감 점검 항목에서 원본으로 가는 동작의 역할 분기(F07): 지급 항목은 두 역할 모두 정산 화면으로 간다.
+const PAYOUT_UNIT_ROUTE_PATH: Record<PayoutConfirmationUnitType, string> = {
+  THERAPIST_DAILY: "/settlements",
+  EARCARE_DAILY: "/settlements/earcare",
+  OPS_DAILY: "/settlements/operations",
+  OPS_MONTHLY: "/settlements/operations/monthly"
+};
+
+const PAYOUT_UNIT_LABEL_KEY: Record<PayoutConfirmationUnitType, MessageKey> = {
+  THERAPIST_DAILY: "closing.checklist.unitLabel.therapistDaily",
+  EARCARE_DAILY: "closing.checklist.unitLabel.earcareDaily",
+  OPS_DAILY: "closing.checklist.unitLabel.opsDaily",
+  OPS_MONTHLY: "closing.checklist.unitLabel.opsMonthly"
+};
+
+function payoutUnitTypeHref(unitType: PayoutConfirmationUnitType, context: ScreenContext) {
+  const route = findScreenRoute(PAYOUT_UNIT_ROUTE_PATH[unitType]);
+  return route ? screenHref(route, context) : null;
+}
+
+function groupPayoutReconfirmationUnits(units: MonthlyClosingPayoutReconfirmationUnitDto[]) {
+  return payoutConfirmationUnitTypes
+    .map((unitType) => ({ unitType, count: units.filter((unit) => unit.unitType === unitType).length }))
+    .filter((group) => group.count > 0);
+}
+
+function ChecklistCallErrorDetail({ t, call }: { t: Translator; call: MonthlyClosingChecklistCallDto }) {
+  if (call.calculationStatus === "calculated" || call.calculationStatus === "not_completed") return null;
+  return <span className="font-medium text-danger">{t(calculationErrorMessageKey(call.calculationStatus))}</span>;
+}
+
+function CalculationErrorSection({
+  locale,
+  t,
+  calls,
+  canOpenLedger
+}: {
+  locale: Locale;
+  t: Translator;
+  calls: MonthlyClosingChecklistCallDto[];
+  canOpenLedger: boolean;
+}) {
+  return (
+    <PanelSection title={t("closing.checklist.calculationErrors.title")}>
+      {calls.length === 0 ? (
+        <StatusIndicator tone="success" label={t("closing.checklist.calculationErrors.empty")} />
+      ) : (
+        <>
+          <StatusIndicator tone="danger" label={t("closing.checklist.calculationErrors.blocked", { count: calls.length })} />
+          <EvidenceCallList label={t("closing.checklist.calculationErrors.title")}>
+            {calls.map((call) => (
+              <EvidenceCallItem
+                amount={null}
+                call={call}
+                canOpenLedger={canOpenLedger}
+                detail={<ChecklistCallErrorDetail call={call} t={t} />}
+                key={call.serviceCallId}
+                locale={locale}
+                serviceDate={call.serviceDate}
+              />
+            ))}
+          </EvidenceCallList>
+        </>
+      )}
+    </PanelSection>
+  );
+}
+
+function PendingCloseCallsSection({
+  locale,
+  t,
+  calls,
+  canOpenLedger
+}: {
+  locale: Locale;
+  t: Translator;
+  calls: MonthlyClosingChecklistCallDto[];
+  canOpenLedger: boolean;
+}) {
+  return (
+    <PanelSection title={t("closing.checklist.pendingCloseCalls.title")}>
+      <p className="text-sm text-muted">{t("closing.checklist.pendingCloseCalls.description")}</p>
+      {calls.length === 0 ? (
+        <StatusIndicator tone="neutral" label={t("closing.checklist.pendingCloseCalls.empty")} />
+      ) : (
+        <>
+          <StatusIndicator tone="warning" label={t("closing.checklist.pendingCloseCalls.count", { count: calls.length })} />
+          <EvidenceCallList label={t("closing.checklist.pendingCloseCalls.title")}>
+            {calls.map((call) => (
+              <EvidenceCallItem
+                amount={null}
+                call={call}
+                canOpenLedger={canOpenLedger}
+                key={call.serviceCallId}
+                locale={locale}
+                serviceDate={call.serviceDate}
+              />
+            ))}
+          </EvidenceCallList>
+        </>
+      )}
+    </PanelSection>
+  );
+}
+
+function PayoutReconfirmationSection({
+  t,
+  units,
+  context
+}: {
+  t: Translator;
+  units: MonthlyClosingPayoutReconfirmationUnitDto[];
+  context: ScreenContext;
+}) {
+  const groups = groupPayoutReconfirmationUnits(units);
+  return (
+    <PanelSection title={t("closing.checklist.payoutReconfirmations.title")}>
+      {groups.length === 0 ? (
+        <StatusIndicator tone="success" label={t("closing.checklist.payoutReconfirmations.empty")} />
+      ) : (
+        <ul className="grid gap-2">
+          {groups.map((group) => {
+            const href = payoutUnitTypeHref(group.unitType, context);
+            return (
+              <li className="flex flex-wrap items-center justify-between gap-2 border border-border bg-background px-3 py-2" key={group.unitType}>
+                <span className="flex flex-wrap items-center gap-2">
+                  <StatusIndicator label={t("closing.checklist.payoutReconfirmations.blocked", { count: group.count })} tone="warning" />
+                  <span className="text-sm font-semibold text-foreground">{t(PAYOUT_UNIT_LABEL_KEY[group.unitType])}</span>
+                </span>
+                {href ? (
+                  <a className="text-sm font-semibold text-foreground underline underline-offset-4" href={href}>
+                    {t("closing.checklist.payoutReconfirmations.openSettlement")}
+                  </a>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </PanelSection>
+  );
+}
+
+function ChecklistFinancialsSection({ locale, t, financials }: { locale: Locale; t: Translator; financials: MonthlyClosingChecklistDto["financials"] }) {
+  return (
+    <PanelSection title={t("closing.checklist.financials.title")}>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="border border-border bg-background px-3 py-2 sm:col-span-2 lg:col-span-3">
+          <div className="text-xs text-muted">{t("calls.cashbook.paymentMethods")}</div>
+          <div className="mt-1 text-sm text-foreground">
+            {t("calls.summary.cash")} {formatVnd(locale, t, financials.paymentMethodTotals.cash)} / {t("calls.summary.card")}{" "}
+            {formatVnd(locale, t, financials.paymentMethodTotals.card)} / {t("calls.summary.bank")} {formatVnd(locale, t, financials.paymentMethodTotals.bank)} /{" "}
+            {t("calls.summary.other")} {formatVnd(locale, t, financials.paymentMethodTotals.other)}
+          </div>
+        </div>
+        <div className="border border-border bg-background px-3 py-2">
+          <div className="text-xs text-muted">{t("calls.summary.expenseTotal")}</div>
+          <div className="mt-1 text-sm font-semibold tabular-nums text-foreground">{formatVnd(locale, t, financials.expenseTotal)}</div>
+        </div>
+        <div className="border border-border bg-background px-3 py-2">
+          <div className="text-xs text-muted">{t("calls.summary.cashBalance")}</div>
+          <div className="mt-1 text-sm font-semibold tabular-nums text-foreground">{formatVnd(locale, t, financials.cashBalance)}</div>
+        </div>
+        <div className="border border-border bg-background px-3 py-2">
+          <div className="text-xs text-muted">{t("calls.summary.bankBalance")}</div>
+          <div className="mt-1 text-sm font-semibold tabular-nums text-foreground">{formatVnd(locale, t, financials.bankBalance)}</div>
+        </div>
+        <div className="border border-border bg-background px-3 py-2 sm:col-span-2 lg:col-span-3">
+          <div className="text-xs text-muted">{t("calls.summary.netSales")}</div>
+          <div className="mt-1 text-sm font-semibold tabular-nums text-foreground">{formatVnd(locale, t, financials.netSales)}</div>
+        </div>
+      </div>
+    </PanelSection>
+  );
+}
+
+function ClosingChecklistSection({
+  locale,
+  t,
+  checklist,
+  canOpenLedger,
+  context
+}: {
+  locale: Locale;
+  t: Translator;
+  checklist: MonthlyClosingChecklistDto;
+  canOpenLedger: boolean;
+  context: ScreenContext;
+}) {
+  return (
+    <section aria-label={t("closing.checklist.aria")} className="mb-4 border border-border bg-surface px-4 py-3">
+      <h2 className="text-base font-semibold text-foreground">{t("closing.checklist.title")}</h2>
+      <p className="mt-1 text-sm text-muted">{t("closing.checklist.description")}</p>
+      <div className="mt-3 grid gap-3">
+        <CalculationErrorSection calls={checklist.calculationErrorCalls} canOpenLedger={canOpenLedger} locale={locale} t={t} />
+        <PayoutReconfirmationSection context={context} t={t} units={checklist.payoutReconfirmationUnits} />
+        <PendingCloseCallsSection calls={checklist.pendingCloseCalls} canOpenLedger={canOpenLedger} locale={locale} t={t} />
+        <ChecklistFinancialsSection financials={checklist.financials} locale={locale} t={t} />
+      </div>
+      {checklist.isConfirmBlocked ? (
+        <p className="mt-3 text-sm font-semibold text-danger" role="alert">
+          {t("closing.checklist.blockedNotice")}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 export default async function ClosingPage({ searchParams }: { searchParams: Promise<ClosingPageSearchParams> }) {
   const account = await requireRouteAccess("/closing");
   const { locale, t } = await getServerTranslator();
@@ -481,11 +735,15 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
   }
 
   let result: MonthlyClosingPreviewDto | null = null;
+  let checklist: MonthlyClosingChecklistDto | null = null;
   let closingSnapshot: MonthlyClosingDto | null = null;
   let errorMessage: string | null = null;
 
   try {
     result = await listMonthlyClosingPreview({
+      operatingMonthId: selectedMonth.id
+    });
+    checklist = await listMonthlyClosingChecklist({
       operatingMonthId: selectedMonth.id
     });
     closingSnapshot = await getMonthlyClosingSnapshot({
@@ -504,6 +762,9 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
   }
   const canWriteClosing = canPerform(account.role, "closing:write");
   const canReopenClosing = canPerform(account.role, "closing:reopen");
+  // F07: 점검 항목에서 원본으로 가는 동작은 역할을 따른다. 관리자는 원장 콜 상세로, 정산 담당은 그 자리 요약으로 본다.
+  const canOpenLedger = account.role === "administrator";
+  const screenContext = { operatingMonthId: selectedMonth.id, date: null };
 
   return (
     <div className="screen">
@@ -520,12 +781,19 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
 
       <ClosingStepper locale={locale} t={t} status={selectedMonth.status} />
       <ClosingActionPanel
+        canOpenLedger={canOpenLedger}
         canReopen={canReopenClosing}
         canWrite={canWriteClosing}
+        checklistBlocked={checklist?.isConfirmBlocked ?? false}
         confirmSummary={result ? confirmSummaryFor(result) : null}
         operatingMonthId={selectedMonth.id}
+        pendingCloseCalls={checklist?.pendingCloseCalls ?? []}
         status={selectedMonth.status}
       />
+
+      {checklist ? (
+        <ClosingChecklistSection canOpenLedger={canOpenLedger} checklist={checklist} context={screenContext} locale={locale} t={t} />
+      ) : null}
 
       {errorMessage ? (
         <section className="border border-danger bg-surface px-4 py-5" role="alert">
@@ -540,7 +808,9 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
         </section>
       ) : result ? (
         <>
-          {closingSnapshot ? <SnapshotSummary locale={locale} t={t} closing={closingSnapshot} currentStatus={selectedMonth.status} /> : null}
+          {closingSnapshot ? (
+            <SnapshotSummary canOpenLedger={canOpenLedger} closing={closingSnapshot} currentStatus={selectedMonth.status} locale={locale} t={t} />
+          ) : null}
           <PreviewNotice locale={locale} t={t} result={result} />
           <SummaryBand locale={locale} t={t} result={result} />
           <TherapistTable locale={locale} t={t} result={result} />

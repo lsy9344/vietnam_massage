@@ -163,10 +163,10 @@ test.describe("티켓 26 휴대폰 원장 카드 목록", () => {
     await login(page, accounts.counter.accountId, accounts.counter.password);
     await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
 
-    // 넓은 표의 축소판이 아니라 아예 다른 렌더다: 표 행과 "새 콜 행 추가", "가능 코스"는 숨는다.
+    // 넓은 표의 축소판이 아니라 아예 다른 렌더다: 표 행과 "새 콜 행 추가", "빠른 예약"은 숨는다.
     await expect(page.locator(`tr[data-service-call-id="${noWarningCallId}"]`)).toBeHidden();
     await expect(page.getByRole("button", { name: "새 콜 행 추가" })).toBeHidden();
-    await expect(page.getByRole("heading", { name: "가능 코스" })).toBeHidden();
+    await expect(page.getByRole("button", { name: "빠른 예약" })).toBeHidden();
 
     const list = page.getByRole("list", { name: "원장 카드 목록" });
     await expect(list).toBeVisible();
@@ -217,6 +217,8 @@ test.describe("티켓 26 휴대폰 원장 카드 목록", () => {
     await expect(page.getByRole("list", { name: "원장 카드 목록" })).toBeHidden();
     await expect(page.locator(`tr[data-service-call-id="${noWarningCallId}"]`)).toBeVisible();
     await expect(page.getByRole("button", { name: "새 콜 행 추가" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "가능 코스" })).toBeVisible();
+    // 가능 코스(빠른 예약의 Therapist·코스 단계)는 티켓 20부터 패널 안으로 옮겨, 태블릿 폭에서도
+    // 머리의 "빠른 예약" 버튼으로만 보인다(명세 F08).
+    await expect(page.getByRole("button", { name: "빠른 예약" })).toBeVisible();
   });
 });
