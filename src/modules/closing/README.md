@@ -73,9 +73,9 @@ Owns monthly close and payout snapshots.
 
 ## Story 5.5 Administrator Reopen
 
-`reopenMonthlyClose()` owns the `잠금 -> 검토중` transition. It requires an administrator-only `closing:reopen` permission at the Server Action boundary and a non-empty trimmed reason of at least five characters. `settlement_manager` keeps `closing:write` for review/confirm/lock but cannot reopen.
+`reopenMonthlyClose()` owns the `마감확정 -> 검토중` and `잠금 -> 검토중` transitions (ticket 35). It requires an administrator-only `closing:reopen` permission at the Server Action boundary and a non-empty trimmed reason of at least five characters. `settlement_manager` keeps `closing:write` for review/confirm/lock but cannot reopen.
 
-- Reopen is allowed only from `잠금`. `작성중`, `검토중`, and `마감확정` return `INVALID_MONTHLY_CLOSE_REOPEN_TRANSITION` without changing the operating month, snapshot metadata, or audit logs.
+- Reopen is allowed from `마감확정` or `잠금`. `작성중` and `검토중` return `INVALID_MONTHLY_CLOSE_REOPEN_TRANSITION` without changing the operating month, snapshot metadata, or audit logs.
 - The latest `MonthlyClosing` row is found by `operatingMonthId` ordered by `closeVersion desc`. The snapshot JSON is never overwritten. Optional reopen metadata (`reopenedAt`, `reopenedByAccountId`, `reopenReason`) is written to the latest row so the prior snapshot is distinguishable as historical.
 - `monthly_close.reopened` uses `targetType: "monthly_close"` and `targetId` equal to the latest snapshot id. The audit `afterValue` includes operating month id/monthKey, status `검토중`, reason, reopenedAt, reopenedByAccountId, snapshot id, and closeVersion as plain JSON.
 - After reopen, `검토중` is not a payout lock state. Payout-impacting writes are allowed or blocked only by each domain service boundary and must record their own domain audit events.

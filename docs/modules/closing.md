@@ -38,7 +38,7 @@ The closing module owns monthly close workflow and payout snapshots:
 - The confirm dialog uses the monthly closing preview DTO as display input. It does not recalculate payout totals in UI code.
 - The confirm dialog accessibility contract is part of the closing boundary: `role="alertdialog"`, connected title/description, safe initial focus on cancel/title, `Esc` cancel with no side effects, focus trap while open, and focus return to the trigger.
 - `마감확정` and `잠금` months should block normal mutations to source records that affect payout.
-- Reopen is administrator-only and requires a reason. The domain transition is `잠금 -> 검토중`.
+- Reopen is administrator-only and requires a reason. The domain transitions are `마감확정 -> 검토중` and `잠금 -> 검토중` (ticket 35).
 - Monthly close snapshots are versioned by operating month and close version. Reconfirmation after reopen creates a new snapshot row and preserves prior snapshots for audit/history.
 - `monthly_close.reopened` audit events record the reason, actor, timestamp, operating month before/after state, and snapshot version.
 
