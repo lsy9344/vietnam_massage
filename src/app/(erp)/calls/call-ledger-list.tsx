@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useReducer, useRef, useState, useTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { inputFieldClassName } from "@/components/ui/input-field";
+import { ScreenState } from "@/components/ui/screen-state";
 import { SaveStatus } from "@/components/ui/save-status";
 import { StatusIndicator, type StatusTone } from "@/components/ui/status-indicator";
 import { useLocale, useT } from "@/lib/i18n/client";
@@ -10,7 +13,7 @@ import type { MessageKey } from "@/lib/i18n/types";
 import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 import { autosaveServiceCallRowAction, reloadServiceCallRowAction } from "@/app/(erp)/calls/actions";
 import { ledgerCallAnchorId } from "@/lib/ledger-address";
-import { callRowSaveReducer, initialCallRowSave, isSaveHeld, type CallRowDraft } from "@/app/(erp)/calls/call-row-save";
+import { callRowSaveReducer, initialCallRowSave, isSaveHeld, type CallRowDraft, type RowSaveStatus } from "@/app/(erp)/calls/call-row-save";
 import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
 import type { CallConflictCompareData } from "@/app/(erp)/calls/call-conflict-compare";
 import { CallEditPanel, type CallPanelFocusRequest } from "@/app/(erp)/calls/call-edit-panel";
@@ -18,18 +21,30 @@ import { CallPhoneCardList } from "@/app/(erp)/calls/call-phone-card-list";
 import { optionLabel } from "@/app/(erp)/calls/call-ledger-fields";
 import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
 import { nowClockString } from "@/app/(erp)/calls/quick-booking-now-slot";
+import { requestQuickBookingJoinParty } from "@/app/(erp)/calls/quick-booking-party-join";
 import { callWarningLabel } from "@/app/(erp)/calls/call-warning-label";
 import {
   entryClock,
   freeRoomOptions,
+  ledgerFlowItems,
   ledgerFlowOf,
   ledgerFlowSections,
   nextLedgerAction,
+  partyEntryTargets,
   statusCodeFor,
   type LedgerFlow
 } from "@/app/(erp)/calls/ledger-flow";
 
 export type OpenCall = (callId: string, focus?: CallPanelFocusRequest["target"]) => void;
+
+/**
+ * 일행 머리 줄이 일행 콜 줄들에 보내는 일(스펙 D14, 티켓 04). 줄마다 자기 저장 상태로 저장하므로(낡은 저장 거절,
+ * 충돌 비교 그대로) 머리 줄은 저장하지 않고 할 일만 알린다. token이 바뀌면 한 번 한다.
+ */
+type PartyAction = { kind: "enter"; callIds: string[]; rooms: Record<string, string> } | { kind: "cancel"; callIds: string[] };
+type PartyCommand = PartyAction & { token: number };
+/** 일행 동작 하나(token)를 받은 손님 줄의 저장 결과. 그 뒤 사람별로 고친 저장은 알리지 않는다. */
+type PartyCommandOutcome = { token: number; status: RowSaveStatus; message: string | null };
 
 const FLOW_TITLE_KEY: Record<LedgerFlow, MessageKey> = {
   active: "calls.flow.active",
@@ -88,10 +103,13 @@ function CallLedgerLine({
   hidden,
   isLocked,
   onOpen,
+  onPartyOutcome,
   onSelectRelated,
   options,
   panelFocus,
   panelHost,
+  party,
+  partyCommand,
   readOnly,
   row,
   rows,
@@ -102,10 +120,15 @@ function CallLedgerLine({
   hidden: boolean;
   isLocked: boolean;
   onOpen: OpenCall;
+  /** 일행 동작을 받아 저장한 결과를 머리 줄에 알린다(실패한 손님과 이유를 머리 줄이 보인다). */
+  onPartyOutcome: (callId: string, outcome: PartyCommandOutcome) => void;
   onSelectRelated: (callId: string) => void;
   options: ServiceCallFormOptions;
   panelFocus: CallPanelFocusRequest | null;
   panelHost: HTMLElement | null;
+  /** 일행 콜이면 하루 전체에서 본 순번과 인원("일행 2/3"). */
+  party: { position: number; size: number } | null;
+  partyCommand: PartyCommand | null;
   readOnly: boolean;
   row: ServiceCallRowDto;
   rows: ServiceCallRowDto[];
@@ -190,7 +213,26 @@ function CallLedgerLine({
   }, [saveStatus, latestRow, draft, message, row.id]);
 
   const inUse = statusCodeFor(options.statuses, "inUse");
+  const canceled = statusCodeFor(options.statuses, "canceled");
   const action = nextLedgerAction(draft.status);
+
+  // 일행 전체 입장·취소(티켓 04). 그 사이 이 줄이 이미 입장했거나 끝났으면(초안 기준) 건드리지 않는다.
+  const [appliedCommand, setAppliedCommand] = useState<number | null>(null);
+  useEffect(() => {
+    if (!partyCommand?.callIds.includes(row.id) || ledgerFlowOf(draft.status) !== "reserved") return;
+    if (partyCommand.kind === "enter") enter(draft.roomId ? undefined : partyCommand.rooms[row.id]);
+    else if (canceled) commit({ status: canceled });
+    setAppliedCommand(partyCommand.token);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyCommand?.token]);
+
+  // 받은 일행 동작의 저장이 끝나면(저장됨·실패·충돌) 한 번 알린다.
+  useEffect(() => {
+    if (appliedCommand === null || saveStatus === "saving") return;
+    onPartyOutcome(row.id, { token: appliedCommand, status: saveStatus, message });
+    setAppliedCommand(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appliedCommand, saveStatus, message]);
 
   function enter(roomId?: string) {
     if (isLocked || !inUse) return;
@@ -245,7 +287,12 @@ function CallLedgerLine({
             {time}
           </button>
         </td>
-        <td className={`${cellClass} truncate text-sm text-foreground`}>{draft.customerMemo ?? <span className="text-muted">-</span>}</td>
+        <td className={`${cellClass} text-sm text-foreground`}>
+          <span className="grid">
+            <span className="truncate">{draft.customerMemo ?? <span className="text-muted">-</span>}</span>
+            {party ? <span className="truncate text-xs text-muted">{t("calls.party.position", party)}</span> : null}
+          </span>
+        </td>
         <td className={`${cellClass} truncate text-sm text-foreground`}>{courseLabel}</td>
         <td className={`${cellClass} truncate text-sm text-foreground`}>{therapists || <span className="text-muted">-</span>}</td>
         <td className={`${cellClass} truncate text-sm text-foreground`}>
@@ -361,6 +408,220 @@ function CallLedgerLine({
 }
 
 /**
+ * 일행 머리 줄(스펙 D14, 티켓 04): "정 대표 일행 3명"과 일행 동작. 일행 콜이 여러 흐름 묶음에 흩어지면 묶음마다
+ * 머리 줄이 있다. 전체 입장·취소는 예약인 손님이 있는 머리 줄에, 1명 추가와 실패한 손님 안내는 일행의 첫 머리
+ * 줄에 한 번만 둔다. 입장·취소 저장은 각 손님 줄이 자기 저장 상태로 한다.
+ */
+function CallPartyHead({
+  failures,
+  first,
+  flow,
+  hidden,
+  isLocked,
+  lead,
+  onAdd,
+  onCancel,
+  onEnter,
+  options,
+  readOnly,
+  rows,
+  sectionRows,
+  size
+}: {
+  failures: Array<{ position: number; message: string | null }>;
+  first: boolean;
+  flow: LedgerFlow;
+  hidden: boolean;
+  isLocked: boolean;
+  lead: ServiceCallRowDto;
+  onAdd: () => void;
+  onCancel: (callIds: string[]) => void;
+  onEnter: (callIds: string[], rooms: Record<string, string>) => void;
+  options: ServiceCallFormOptions;
+  readOnly: boolean;
+  rows: ServiceCallRowDto[];
+  sectionRows: ServiceCallRowDto[];
+  size: number;
+}) {
+  const t = useT();
+  const [picking, setPicking] = useState(false);
+  const [rooms, setRooms] = useState<Record<string, string>>({});
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const label = lead.customerMemo ? t("calls.party.headWithMemo", { memo: lead.customerMemo, size }) : t("calls.party.head", { size });
+  const targets = partyEntryTargets(sectionRows);
+  const roomless = targets.filter((target) => target.needsRoom);
+  const disabled = isLocked || readOnly;
+  const canEnter = Boolean(statusCodeFor(options.statuses, "inUse"));
+  const canCancel = Boolean(statusCodeFor(options.statuses, "canceled"));
+
+  useEffect(() => {
+    if (picking) pickerRef.current?.querySelector<HTMLElement>("select")?.focus();
+  }, [picking]);
+
+  function enterAll() {
+    if (roomless.length > 0) {
+      setRooms({});
+      setPicking(true);
+      return;
+    }
+    onEnter(targets.map((target) => target.callId), {});
+  }
+
+  /** 빈 객실 중 일행의 다른 손님이 이미 쓰거나 이 자리에서 고른 객실은 뺀다. */
+  function roomChoices(callId: string) {
+    const taken = new Set([
+      ...sectionRows.filter((member) => member.id !== callId && member.roomId).map((member) => member.roomId),
+      ...Object.entries(rooms).filter(([id]) => id !== callId).map(([, roomId]) => roomId)
+    ]);
+    return freeRoomOptions(options.rooms, rows, callId).filter((room) => !taken.has(room.value));
+  }
+
+  const positionOf = (callId: string) => sectionRows.find((member) => member.id === callId)?.partyPosition ?? 0;
+
+  return (
+    <>
+      <tr data-ledger-party={lead.partyId ?? ""} data-ledger-party-flow={flow} hidden={hidden}>
+        <td className={`${cellClass} bg-readonly`} colSpan={COLUMNS.length}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm font-semibold text-foreground">{label}</span>
+            <span className="flex flex-wrap gap-2">
+              {targets.length > 0 ? (
+                <>
+                  <Button
+                    aria-label={t("calls.party.enterAria", { party: label })}
+                    className="h-11 px-4"
+                    disabled={disabled || !canEnter}
+                    onClick={enterAll}
+                    type="button"
+                    variant="secondary"
+                  >
+                    {t("calls.party.enter")}
+                  </Button>
+                  <Button
+                    aria-label={t("calls.party.cancelAria", { party: label })}
+                    className="h-11 px-4"
+                    disabled={disabled || !canCancel}
+                    onClick={() => setConfirmCancel(true)}
+                    type="button"
+                    variant="ghost"
+                  >
+                    {t("calls.party.cancel")}
+                  </Button>
+                </>
+              ) : null}
+              {first ? (
+                <Button
+                  aria-label={t("calls.party.addAria", { party: label })}
+                  className="h-11 px-4"
+                  disabled={disabled}
+                  onClick={onAdd}
+                  type="button"
+                  variant="ghost"
+                >
+                  {t("calls.party.add")}
+                </Button>
+              ) : null}
+            </span>
+          </div>
+          {failures.length > 0 ? (
+            <ScreenState
+              className="mt-2 px-3 py-3"
+              description={
+                <ul className="grid gap-0.5">
+                  {failures.map((failure) => (
+                    <li key={failure.position}>
+                      {t("calls.party.failedGuest", { position: failure.position, message: failure.message ?? t("calls.party.failedFallback") })}
+                    </li>
+                  ))}
+                </ul>
+              }
+              kind="error"
+              label={t("common.saveState.failed")}
+              title={t("calls.party.failedTitle")}
+            />
+          ) : null}
+        </td>
+      </tr>
+      {picking ? (
+        <tr hidden={hidden}>
+          <td className={`${cellClass} bg-readonly`} colSpan={COLUMNS.length}>
+            <div
+              aria-label={t("calls.party.pickRoomsAria", { party: label })}
+              className="flex flex-wrap items-end gap-3"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setPicking(false);
+                }
+              }}
+              ref={pickerRef}
+              role="group"
+            >
+              <span className="w-full text-sm font-semibold text-foreground">{t("calls.party.pickRooms")}</span>
+              {roomless.map((target) => {
+                const choices = roomChoices(target.callId);
+                return (
+                  <label className="grid gap-1 text-xs font-semibold text-muted" key={target.callId}>
+                    {t("calls.party.guestRoom", { position: positionOf(target.callId) })}
+                    <select
+                      className={inputFieldClassName({ className: "w-40" })}
+                      data-party-entry-room={target.callId}
+                      onChange={(event) =>
+                        setRooms((current) => {
+                          const next = { ...current };
+                          if (event.target.value) next[target.callId] = event.target.value;
+                          else delete next[target.callId];
+                          return next;
+                        })
+                      }
+                      value={rooms[target.callId] ?? ""}
+                    >
+                      <option value="">{choices.length === 0 ? t("calls.list.noFreeRoom") : t("calls.party.roomPlaceholder")}</option>
+                      {choices.map((room) => (
+                        <option key={room.value} value={room.value}>
+                          {room.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                );
+              })}
+              <Button
+                className="h-11 px-4"
+                disabled={roomless.some((target) => !rooms[target.callId])}
+                onClick={() => {
+                  setPicking(false);
+                  onEnter(targets.map((target) => target.callId), rooms);
+                }}
+                type="button"
+              >
+                {t("calls.party.enterConfirm")}
+              </Button>
+              <Button className="h-11 px-4" onClick={() => setPicking(false)} type="button" variant="ghost">
+                {t("common.confirm.cancel")}
+              </Button>
+            </div>
+          </td>
+        </tr>
+      ) : null}
+      <ConfirmDialog
+        cancelLabel={t("common.confirm.cancel")}
+        confirmLabel={t("calls.party.cancelConfirm")}
+        description={t("calls.party.cancelDescription", { party: label, count: targets.length })}
+        onConfirm={() => {
+          setConfirmCancel(false);
+          onCancel(targets.map((target) => target.callId));
+        }}
+        onOpenChange={setConfirmCancel}
+        open={confirmCancel}
+        title={t("calls.party.cancelTitle")}
+      />
+    </>
+  );
+}
+
+/**
  * 흐름별 원장 목록(스펙 D15–D17, 티켓 03): 지금 이용 중 → 예약 → 완료·취소·노쇼. 모든 줄은 한 tbody의 형제라
  * 상태가 바뀌어 다른 묶음으로 옮겨도 그 줄의 저장 상태가 새로 시작하지 않는다. 접힌 완료 묶음의 줄도 숨김(hidden)일
  * 뿐 그대로 있어, 골라 둔 줄의 패널과 저장 중인 요청이 남는다.
@@ -399,6 +660,17 @@ export function CallLedgerList({
     setDoneExpanded(readDoneExpanded());
   }, []);
   const sections = ledgerFlowSections(rows);
+  // 일행 동작(티켓 04): 일행마다 마지막으로 보낸 일과, 일행 콜 줄들이 알려 온 저장 상태.
+  const [partyCommands, setPartyCommands] = useState<Record<string, PartyCommand>>({});
+  const [partyOutcomes, setPartyOutcomes] = useState<Record<string, PartyCommandOutcome>>({});
+  const commandToken = useRef(0);
+  function sendPartyCommand(partyId: string, action: PartyAction) {
+    commandToken.current += 1;
+    setPartyCommands((current) => ({ ...current, [partyId]: { ...action, token: commandToken.current } }));
+  }
+  const reportPartyOutcome = (callId: string, outcome: PartyCommandOutcome) => setPartyOutcomes((current) => ({ ...current, [callId]: outcome }));
+  // 실패 안내는 일행 입장·취소 버튼이 있는 예약 묶음의 머리 줄에 둔다. 예약이 남지 않았으면 일행의 첫 머리 줄에 둔다.
+  const reservedParties = new Set(rows.filter((row) => row.partyId && ledgerFlowOf(row.status) === "reserved").map((row) => row.partyId));
   // 주소나 관련 콜로 접힌 완료 묶음의 콜을 고르면 그 묶음을 펼친다(기기에 남기지는 않는다).
   const selectedIsDone = rows.some((row) => row.id === selectedCallId && ledgerFlowOf(row.status) === "done");
   const revealSelected = selectedIsDone && foldedFor !== selectedCallId;
@@ -411,6 +683,7 @@ export function CallLedgerList({
   }
 
   const body: ReactNode[] = [];
+  const headedParties = new Set<string>();
   for (const section of sections) {
     const collapsed = section.flow === "done" && !showDone;
     body.push(
@@ -434,25 +707,67 @@ export function CallLedgerList({
         </th>
       </tr>
     );
-    for (const row of section.rows) {
+    const line = (row: ServiceCallRowDto, party: { position: number; size: number } | null) => (
+      <CallLedgerLine
+        customers={customers}
+        hidden={collapsed}
+        isLocked={isLocked}
+        key={row.id}
+        onOpen={onOpen}
+        onPartyOutcome={reportPartyOutcome}
+        onSelectRelated={onSelectRelated}
+        options={options}
+        panelFocus={row.id === selectedCallId ? panelFocus : null}
+        panelHost={panelHost}
+        party={party}
+        partyCommand={row.partyId ? (partyCommands[row.partyId] ?? null) : null}
+        readOnly={isPhoneWidth}
+        row={row}
+        rows={rows}
+        selected={row.id === selectedCallId}
+        showSettlementAmounts={showSettlementAmounts}
+      />
+    );
+    for (const item of ledgerFlowItems(section.rows, rows)) {
+      if (item.kind === "call") {
+        body.push(line(item.row, null));
+        continue;
+      }
+      const { partyId, size, lead } = item;
+      const first = !headedParties.has(partyId);
+      headedParties.add(partyId);
+      const command = partyCommands[partyId];
+      const showsFailures = section.flow === "reserved" || (first && !reservedParties.has(partyId));
+      const failures =
+        showsFailures && command
+          ? command.callIds.flatMap((callId) => {
+              const outcome = partyOutcomes[callId];
+              if (outcome?.token !== command.token || !isSaveHeld(outcome.status)) return [];
+              return [{ position: rows.find((row) => row.id === callId)?.partyPosition ?? 0, message: outcome.message }];
+            })
+          : [];
       body.push(
-        <CallLedgerLine
-          customers={customers}
+        <CallPartyHead
+          failures={failures}
+          first={first}
+          flow={section.flow}
           hidden={collapsed}
           isLocked={isLocked}
-          key={row.id}
-          onOpen={onOpen}
-          onSelectRelated={onSelectRelated}
+          key={`party-${section.flow}-${partyId}`}
+          lead={lead}
+          onAdd={() =>
+            requestQuickBookingJoinParty({ partyId, serviceDate: lead.serviceDate, startTime: lead.startTime, customerMemo: lead.customerMemo, size })
+          }
+          onCancel={(callIds) => sendPartyCommand(partyId, { kind: "cancel", callIds })}
+          onEnter={(callIds, rooms) => sendPartyCommand(partyId, { kind: "enter", callIds, rooms })}
           options={options}
-          panelFocus={row.id === selectedCallId ? panelFocus : null}
-          panelHost={panelHost}
           readOnly={isPhoneWidth}
-          row={row}
           rows={rows}
-          selected={row.id === selectedCallId}
-          showSettlementAmounts={showSettlementAmounts}
+          sectionRows={item.rows}
+          size={size}
         />
       );
+      for (const row of item.rows) body.push(line(row, { position: row.partyPosition ?? 0, size }));
     }
   }
 

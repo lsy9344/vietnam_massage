@@ -28,6 +28,8 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   D_COURSE_SECOND_THERAPIST_REQUIRED: "Gói D cần kỹ thuật viên thứ hai.",
   D_QUICK_BOOKING_DUPLICATE_THERAPIST: "Kỹ thuật viên 1 và 2 phải là người khác nhau.",
   D_QUICK_BOOKING_PARTY_DUPLICATE_THERAPIST: "Không thể chọn cùng một Therapist cho hai khách trong nhóm.",
+  SERVICE_CALL_PARTY_NOT_FOUND: "Không tìm thấy nhóm để thêm khách. Hãy tải lại sổ rồi thử lại.",
+  SERVICE_CALL_PARTY_CUSTOMER_LINK: "Khách thêm vào nhóm không liên kết với khách hàng. Chỉ cuộc gọi đại diện mới liên kết khách hàng.",
   SERVICE_CALL_NOT_FOUND: "Không tìm thấy dòng sổ cuộc gọi.",
   STALE_CALL: "Cuộc gọi này đã được thay đổi ở màn hình khác. Hãy tải lại rồi mới lưu.",
   CUSTOMER_NOT_FOUND: "Không tìm thấy khách.",

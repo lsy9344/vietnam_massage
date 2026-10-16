@@ -79,6 +79,9 @@ export function guestFieldErrors(fieldErrors: Record<string, string[]>, position
   return result;
 }
 
+/** 원장의 "1명 추가"(스펙 D14, 티켓 04)가 빠른 예약에 넘기는 일행. size는 지금 일행 인원이다. */
+export type QuickBookingJoinParty = { partyId: string; serviceDate: string; startTime: string; customerMemo: string | null; size: number };
+
 export type QuickBookingState = {
   step: QuickBookingStep;
   /** 저장되지 않은 값이 있는지. 패널을 닫으려 할 때 안내 여부로 쓴다. 저장을 마치면 다시 false다. */
@@ -86,6 +89,8 @@ export type QuickBookingState = {
   save: NewCallRowSave;
   /** 일행의 손님 2…N(티켓 02). 비어 있으면 한 명 예약이고 지금 흐름과 같다. */
   partyGuests: QuickBookingGuest[];
+  /** 이미 있는 일행에 1명을 더하는 중이면 그 일행. 이때는 한 명 저장이고 고객을 잇지 않는다(스펙 D12). */
+  joinParty: QuickBookingJoinParty | null;
 };
 
 export type QuickBookingEvent =
@@ -96,13 +101,15 @@ export type QuickBookingEvent =
   | { type: "partySize"; size: number }
   /** 손님 2…N 중 한 명의 코스·Therapist·객실. 손님 1은 저장 초안을 고치는 edit·choose를 그대로 쓴다. */
   | { type: "guest"; position: number; changes: Partial<QuickBookingGuest> }
+  /** 원장의 "1명 추가": 새 요청 id로 처음부터, 일행의 시각·고객/메모·일행 id를 채워 Therapist 단계에서 시작한다. */
+  | { type: "joinParty"; join: QuickBookingJoinParty; nextRequestId: string }
   | NewCallRowSaveEvent;
 
 export function initialQuickBookingState(
   ledger: { operatingMonthId: string; serviceDate: string },
   requestId: string
 ): QuickBookingState {
-  return { step: "customer", touched: false, save: initialNewCallRowSave(ledger, requestId), partyGuests: [] };
+  return { step: "customer", touched: false, save: initialNewCallRowSave(ledger, requestId), partyGuests: [], joinParty: null };
 }
 
 function blankGuest(): QuickBookingGuest {
@@ -118,7 +125,22 @@ export function quickBookingReducer(state: QuickBookingState, event: QuickBookin
   if (event.type === "step") {
     return { ...state, step: event.step };
   }
+  if (event.type === "joinParty") {
+    const fresh = initialQuickBookingState(
+      { operatingMonthId: state.save.draft.operatingMonthId, serviceDate: event.join.serviceDate },
+      event.nextRequestId
+    );
+    const { partyId, startTime, customerMemo } = event.join;
+    return {
+      ...fresh,
+      step: "therapist",
+      joinParty: event.join,
+      save: { ...fresh.save, draft: { ...fresh.save.draft, partyId, startTime, customerMemo } }
+    };
+  }
   if (event.type === "partySize" || event.type === "guest") {
+    // 일행에 1명을 더할 때는 그 한 명만 고른다.
+    if (state.joinParty) return state;
     // 보내는 중이거나 저장 여부를 모르는 동안에는 일행도 초안처럼 바꾸지 않는다. 다시 시도는 같은 일행을 보낸다.
     if (isQuickBookingLocked(state)) return state;
     // 일행을 바꾸는 것도 고르기다. 앞 저장 결과와 오류를 내린다.
@@ -142,7 +164,7 @@ export function quickBookingReducer(state: QuickBookingState, event: QuickBookin
 
   const save = newCallRowSaveReducer(state.save, event);
   if (event.type === "saved") {
-    return { step: "customer", touched: false, save, partyGuests: [] };
+    return { step: "customer", touched: false, save, partyGuests: [], joinParty: null };
   }
   return { ...state, save, touched: true };
 }

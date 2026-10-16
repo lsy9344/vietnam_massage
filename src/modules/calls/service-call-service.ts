@@ -330,6 +330,9 @@ export type ServiceCallRowDto = {
   /** 이번 콜의 방문별 요청(F06, 티켓 23). note(비고)와는 다른 칸이다. */
   visitRequest: string | null;
   confirmationCode: string | null;
+  /** 일행(스펙 D13, 티켓 02·04). 일행이 아닌 콜은 둘 다 null이다. */
+  partyId: string | null;
+  partyPosition: number | null;
   basePrice: number;
   paymentAmount: number;
   discountAmount: number;
@@ -906,6 +909,8 @@ async function toRowDto(
     note: record.note,
     visitRequest: record.visitRequest,
     confirmationCode: record.confirmationCode,
+    partyId: record.partyId ?? null,
+    partyPosition: record.partyId ? (record.partyPosition ?? null) : null,
     ...calculation,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
@@ -1922,7 +1927,7 @@ export async function createServiceCallRow(
   if (!parsed.success) {
     throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "콜 원장 입력값이 올바르지 않습니다.", "INVALID_SERVICE_CALL_INPUT");
   }
-  const { requestId, newCustomer, ...row } = parsed.data;
+  const { requestId, newCustomer, partyId, ...row } = parsed.data;
   const client = getClient(input.prismaClient);
 
   try {
@@ -1933,12 +1938,13 @@ export async function createServiceCallRow(
       if (existing) {
         return { row: existing, alreadySaved: true };
       }
+      const party = partyId ? await nextPartyPlace(tx, { partyId, row, newCustomer }) : undefined;
       // 빠른 예약의 새 고객(F01, 티켓 24): 콜과 같은 트랜잭션에서 만든다. 뒤의 콜 생성이 실패하면(동시
       // 요청의 유일성 위반 등) 트랜잭션 전체가 롤백되어 고객만 남는 부분 성공이 생기지 않는다.
       const customerId = newCustomer
         ? (await createCustomerRecord(tx, newCustomer, requireActor(input.actorId))).id
         : row.customerId;
-      return { row: await writeServiceCallRow(tx, { ...row, customerId }, { actorId: input.actorId, requestId }), alreadySaved: false };
+      return { row: await writeServiceCallRow(tx, { ...row, customerId }, { actorId: input.actorId, requestId, party }), alreadySaved: false };
     });
   } catch (error) {
     // 같은 요청 id의 생성이 동시에 들어와 이쪽이 유일성 위반으로 실패했다. 먼저 만든 콜을 같은 응답으로 돌려준다.
@@ -1948,6 +1954,27 @@ export async function createServiceCallRow(
     }
     return { row: existing, alreadySaved: true };
   }
+}
+
+/**
+ * 일행에 1명 추가(스펙 D14, 티켓 04)의 자리: 그 일행의 마지막 순번 다음이다. 일행은 같은 운영월·같은 날의 콜이어야
+ * 하고, 고객 연결은 대표 콜(1번)에만 하므로(스펙 D12) 더하는 손님에게는 고객을 잇거나 새로 만들지 않는다.
+ * 같은 일행에 두 화면이 동시에 더하면 같은 순번이 나올 수 있다 — 순번은 표시 순서일 뿐이라 막지 않는다.
+ */
+async function nextPartyPlace(
+  tx: ServiceCallPrismaClient,
+  input: { partyId: string; row: { operatingMonthId: string; serviceDate: string; customerId?: string | null }; newCustomer?: unknown }
+) {
+  if (input.row.customerId || input.newCustomer) {
+    throw new ServiceCallDomainError("일행에 더하는 손님에게는 고객을 연결하지 않습니다. 고객은 대표 콜에만 연결합니다.", "SERVICE_CALL_PARTY_CUSTOMER_LINK");
+  }
+  const members = (await tx.serviceCall.findMany({ where: { partyId: input.partyId } })).filter(
+    (member) => member.operatingMonthId === input.row.operatingMonthId && toIsoDateOnly(member.serviceDate) === input.row.serviceDate
+  );
+  if (members.length === 0) {
+    throw new ServiceCallDomainError("더할 일행을 찾을 수 없습니다. 원장을 다시 불러온 뒤에 하세요.", "SERVICE_CALL_PARTY_NOT_FOUND");
+  }
+  return { partyId: input.partyId, partyPosition: Math.max(...members.map((member) => member.partyPosition ?? 0)) + 1 };
 }
 
 // 같은 사람을 Therapist 1·2에 두 번 고르는 것은 빠른 예약에서만 저장 오류다(스펙 F01, 티켓 21).

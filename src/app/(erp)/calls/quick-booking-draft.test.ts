@@ -189,3 +189,42 @@ describe("quick booking party draft (스펙 D10–D12, 티켓 02)", () => {
     assert.equal(quickBookingPartyIssueField(["newCustomer", "name"]), "newCustomer");
   });
 });
+
+describe("quick booking: one more guest for a party (스펙 D14, 티켓 04)", () => {
+  const join = { partyId: "party-jung", serviceDate: "2026-06-10", startTime: "11:00", customerMemo: "정 대표 일행", size: 3 };
+
+  it("starts fresh on the therapist step with the party's time, memo and party id, untouched, with a new request id", () => {
+    const state = run(
+      initialQuickBookingState(ledger, "request-1"),
+      { type: "edit", changes: { customerMemo: "다른 손님", note: "창가" } },
+      { type: "partySize", size: 3 },
+      { type: "joinParty", join, nextRequestId: "request-2" }
+    );
+
+    assert.equal(state.step, "therapist");
+    assert.equal(state.touched, false);
+    assert.equal(state.save.requestId, "request-2");
+    assert.deepEqual(state.partyGuests, []);
+    assert.deepEqual(state.joinParty, join);
+    const { serviceDate, startTime, customerMemo, partyId, note, customerId } = state.save.draft;
+    assert.deepEqual({ serviceDate, startTime, customerMemo, partyId, note, customerId }, {
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      customerMemo: "정 대표 일행",
+      partyId: "party-jung",
+      note: null,
+      customerId: null
+    });
+  });
+
+  it("keeps the one guest a party of one, and forgets the party once saved or discarded", () => {
+    const joined = run(initialQuickBookingState(ledger, "request-1"), { type: "joinParty", join, nextRequestId: "request-2" });
+    assert.deepEqual(run(joined, { type: "partySize", size: 2 }).partyGuests, []);
+
+    const submitted = run(joined, { type: "choose", changes: { courseId: "course-a" } }, { type: "submit" });
+    const saved = run(submitted, { type: "saved", request: submitted.save.inFlight!, notice: null, nextRequestId: "request-3" });
+    assert.equal(saved.joinParty, null);
+    assert.equal(saved.save.draft.partyId ?? null, null);
+    assert.equal(run(joined, { type: "discard", nextRequestId: "request-4" }).joinParty, null);
+  });
+});

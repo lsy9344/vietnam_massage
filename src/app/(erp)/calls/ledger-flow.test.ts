@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { entryClock, freeRoomOptions, ledgerFlowSections, ledgerListKey, nextLedgerAction, statusCodeFor } from "@/app/(erp)/calls/ledger-flow";
+import {
+  entryClock,
+  freeRoomOptions,
+  ledgerFlowItems,
+  ledgerFlowSections,
+  ledgerListKey,
+  nextLedgerAction,
+  partyEntryTargets,
+  statusCodeFor
+} from "@/app/(erp)/calls/ledger-flow";
 
 function call(id: string, startTime: string, status: string) {
   return { id, startTime, status };
@@ -24,6 +33,40 @@ describe("ledger flow sections", () => {
         ["active", ["in-use-13", "cleaning-14"]],
         ["reserved", ["reserved-12", "reserved-16"]],
         ["done", ["done-11", "canceled-15", "no-show-17"]]
+      ]
+    );
+  });
+});
+
+describe("parties inside a flow section", () => {
+  function member(id: string, status: string, partyPosition: number, roomId: string | null = null) {
+    return { id, status, partyId: "party-jung", partyPosition, roomId };
+  }
+
+  it("keeps a party together at its first member's place, in party order, and splits it where the flow differs", () => {
+    const rows = [
+      { id: "solo-10", status: "RESERVED", partyId: null, partyPosition: null },
+      member("jung-2", "RESERVED", 2),
+      member("jung-1", "RESERVED", 1),
+      { id: "solo-11", status: "RESERVED", partyId: null, partyPosition: null },
+      member("jung-3", "NO_SHOW", 3)
+    ];
+    const [, reserved, done] = ledgerFlowSections(rows);
+
+    const summary = (section: typeof reserved) =>
+      ledgerFlowItems(section.rows, rows).map((item) =>
+        item.kind === "call" ? item.row.id : [item.partyId, item.size, item.lead.id, item.rows.map((row) => row.id)]
+      );
+    assert.deepEqual(summary(reserved), ["solo-10", ["party-jung", 3, "jung-1", ["jung-1", "jung-2"]], "solo-11"]);
+    assert.deepEqual(summary(done), [["party-jung", 3, "jung-1", ["jung-3"]]]);
+  });
+
+  it("enters only the party's reservations, and asks for a room only for those without one", () => {
+    assert.deepEqual(
+      partyEntryTargets([member("jung-1", "RESERVED", 1, "room-101"), member("jung-2", "예약", 2), member("jung-3", "IN_USE", 3, "room-102"), member("jung-4", "CANCELED", 4)]),
+      [
+        { callId: "jung-1", needsRoom: false },
+        { callId: "jung-2", needsRoom: true }
       ]
     );
   });
@@ -81,6 +124,11 @@ describe("status codes the entry and payment buttons save", () => {
     assert.equal(statusCodeFor(codes, "visitComplete"), "VISIT_COMPLETE");
     assert.equal(statusCodeFor([{ value: "사용중", label: "사용중" }], "inUse"), "사용중");
     assert.equal(statusCodeFor([{ value: "RESERVED", label: "예약" }], "visitComplete"), null);
+  });
+
+  it("finds the cancel code the party cancel saves", () => {
+    assert.equal(statusCodeFor([{ value: "RESERVED", label: "예약" }, { value: "CANCELED", label: "취소" }], "canceled"), "CANCELED");
+    assert.equal(statusCodeFor([{ value: "취소", label: "취소" }], "canceled"), "취소");
   });
 });
 

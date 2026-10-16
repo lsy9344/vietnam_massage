@@ -4625,6 +4625,8 @@ function ledgerRow(overrides: Partial<ServiceCallRowDto>): ServiceCallRowDto {
     note: null,
     visitRequest: null,
     confirmationCode: null,
+    partyId: null,
+    partyPosition: null,
     basePrice: 0,
     paymentAmount: 0,
     discountAmount: 0,
@@ -5890,6 +5892,117 @@ describe("quick booking party (스펙 D10–D13, 티켓 02)", () => {
     assert.deepEqual(again.rows.map((row) => row.startTime), ["11:00", "11:00", "11:00"]);
     assert.equal((await callsOnDate(prismaClient)).length, 6);
     assert.equal(prismaClient.auditEvents.length, auditsAfterFirst);
+  });
+
+  it("shows each call's party id and position on the ledger rows, and none on a call outside a party", async () => {
+    const prismaClient = partyClient();
+    await createQuickBookingServiceCall({
+      requestId: "solo-1",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "01:00",
+      courseId: "course-a",
+      status: "예약",
+      prismaClient
+    });
+
+    const { partyId } = await party(prismaClient, "party-rows");
+
+    const rows = await callsOnDate(prismaClient);
+    assert.deepEqual(
+      rows.map((row) => [row.startTime, row.partyId, row.partyPosition]),
+      [
+        ["11:00", partyId, 1],
+        ["11:00", partyId, 2],
+        ["11:00", partyId, 3],
+        ["01:00", null, null]
+      ]
+    );
+  });
+
+  it("adds one more guest to an existing party at the next position, without a customer link, auditing the party", async () => {
+    const prismaClient = partyClient();
+    const customer = await createCustomer({ name: "정 대표", actorId: "counter-account", prismaClient });
+    const { partyId } = await party(prismaClient, "party-join-base", { customerId: customer.id });
+    const auditsBefore = prismaClient.auditEvents.length;
+
+    const joined = await createQuickBookingServiceCall({
+      requestId: "party-join-1",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      customerMemo: "정 대표 일행",
+      courseId: "course-a",
+      therapist1Id: "therapist-4",
+      status: "예약",
+      partyId,
+      actorId: "counter-account",
+      prismaClient
+    });
+
+    assert.equal(joined.alreadySaved, false);
+    assert.deepEqual([joined.row.partyId, joined.row.partyPosition, joined.row.customerId], [partyId, 4, null]);
+    const created = prismaClient.auditEvents.slice(auditsBefore);
+    assert.deepEqual(
+      created.map((event: any) => [event.targetId, event.afterValue.partyId, event.afterValue.partyPosition]),
+      [[joined.row.id, partyId, 4]]
+    );
+
+    const again = await createQuickBookingServiceCall({
+      requestId: "party-join-1",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      courseId: "course-a",
+      status: "예약",
+      partyId,
+      actorId: "counter-account",
+      prismaClient
+    });
+    assert.equal(again.alreadySaved, true);
+    assert.equal(again.row.id, joined.row.id);
+    assert.deepEqual(
+      (await callsOnDate(prismaClient)).map((row) => row.partyPosition),
+      [1, 2, 3, 4]
+    );
+  });
+
+  it("refuses to add a guest to a party that is not on that day, or with a customer link", async () => {
+    const prismaClient = partyClient();
+    const customer = await createCustomer({ name: "정 대표", actorId: "counter-account", prismaClient });
+    const { partyId } = await party(prismaClient, "party-join-refused");
+    const join = (changes: Partial<Parameters<typeof createQuickBookingServiceCall>[0]>) =>
+      createQuickBookingServiceCall({
+        requestId: `party-join-${Object.keys(changes).join("-")}`,
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-06-10",
+        startTime: "11:00",
+        courseId: "course-a",
+        status: "예약",
+        partyId,
+        actorId: "counter-account",
+        prismaClient,
+        ...changes
+      });
+
+    await assert.rejects(
+      () => join({ partyId: "no-such-party" }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "SERVICE_CALL_PARTY_NOT_FOUND"
+    );
+    await assert.rejects(
+      () => join({ serviceDate: "2026-06-11" }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "SERVICE_CALL_PARTY_NOT_FOUND"
+    );
+    await assert.rejects(
+      () => join({ customerId: customer.id }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "SERVICE_CALL_PARTY_CUSTOMER_LINK"
+    );
+    await assert.rejects(
+      () => join({ newCustomer: { name: "새 손님" } }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "SERVICE_CALL_PARTY_CUSTOMER_LINK"
+    );
+    assert.equal((await callsOnDate(prismaClient)).length, 3);
+    assert.deepEqual((await listCustomers({ prismaClient })).map((row) => row.name), ["정 대표"]);
   });
 
   it("allows two guests in the same room; the overlap stays a ledger warning", async () => {

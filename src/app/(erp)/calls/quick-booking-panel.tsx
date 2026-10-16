@@ -33,10 +33,12 @@ import {
   quickBookingReducer,
   quickBookingStepOfField,
   type QuickBookingGuest,
+  type QuickBookingJoinParty,
   type QuickBookingState,
   type QuickBookingStep
 } from "@/app/(erp)/calls/quick-booking-draft";
 import { nowClockString, selectNowSlot } from "@/app/(erp)/calls/quick-booking-now-slot";
+import { onQuickBookingJoinParty } from "@/app/(erp)/calls/quick-booking-party-join";
 import {
   AvailabilityRow,
   availabilityRowWarnings,
@@ -212,6 +214,8 @@ type CustomerStepProps = StepProps & {
   onSelectCandidate: (candidate: CustomerVisitCandidateDto) => void;
   /** 일행 인원 수(스펙 D10, 티켓 02). 1이면 한 명 예약이다. */
   partySize?: number;
+  /** 이미 있는 일행에 1명을 더하는 중(티켓 04). 고객은 대표 콜에만 잇고(스펙 D12) 인원은 1명이라 둘 다 고르지 않는다. */
+  joiningParty?: boolean;
   query: string;
   /**
    * 고른 고객의 방문완료·노쇼·취소 건수와 가장 최근 방문(B09, 스토리 71-73), 같은 연락처 경고(S5).
@@ -311,6 +315,7 @@ export function CustomerStep({
   onQueryChange,
   onSelectCandidate,
   options,
+  joiningParty = false,
   partySize = 1,
   query,
   visitSummary
@@ -334,7 +339,7 @@ export function CustomerStep({
         {t("calls.detail.customerLink.goToCustomerScreen")}
       </a>
 
-      {draft.customerId ? (
+      {joiningParty ? null : draft.customerId ? (
         <div className="grid gap-3">
           <Field label={t("calls.quickBooking.customer.searchLabel")}>
             <div className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2">
@@ -469,20 +474,22 @@ export function CustomerStep({
       </Field>
 
       {/* 일행 인원(스펙 D10, 티켓 02). 고객은 대표 한 명이고, 2명 이상이면 다음 단계에서 손님마다 고른다. */}
-      <Field label={t("calls.quickBooking.customer.partySize")}>
-        <select
-          className={inputFieldClassName({ className: "w-28" })}
-          disabled={disabled}
-          onChange={(event) => onPartySizeChange?.(Number(event.target.value))}
-          value={partySize}
-        >
-          {Array.from({ length: QUICK_BOOKING_PARTY_MAX_GUESTS }, (_, index) => index + 1).map((count) => (
-            <option key={count} value={count}>
-              {t("calls.quickBooking.customer.partySizeOption", { count })}
-            </option>
-          ))}
-        </select>
-      </Field>
+      {joiningParty ? null : (
+        <Field label={t("calls.quickBooking.customer.partySize")}>
+          <select
+            className={inputFieldClassName({ className: "w-28" })}
+            disabled={disabled}
+            onChange={(event) => onPartySizeChange?.(Number(event.target.value))}
+            value={partySize}
+          >
+            {Array.from({ length: QUICK_BOOKING_PARTY_MAX_GUESTS }, (_, index) => index + 1).map((count) => (
+              <option key={count} value={count}>
+                {t("calls.quickBooking.customer.partySizeOption", { count })}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
     </div>
   );
 }
@@ -1023,7 +1030,7 @@ export function QuickBookingPanel({
   const [confirmClose, setConfirmClose] = useState(false);
   const ledger = useMemo(() => ({ operatingMonthId, serviceDate }), [operatingMonthId, serviceDate]);
   const [state, dispatch] = useReducer(quickBookingReducer, ledger, (initial) => initialQuickBookingState(initial, newRequestId()));
-  const { step, save, touched, partyGuests } = state;
+  const { step, save, touched, partyGuests, joinParty } = state;
   // 일행(티켓 02)에서 Therapist·코스 단계가 지금 고르는 손님. 1은 저장 초안의 칸이다.
   const [activeGuest, setActiveGuest] = useState(1);
   const partySize = partyGuests.length + 1;
@@ -1206,6 +1213,29 @@ export function QuickBookingPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request]);
 
+  // 원장의 "일행에 1명 추가"(티켓 04). 쓰던 초안이 있으면 버릴지 먼저 묻는다(패널을 닫을 때와 같은 안내).
+  const [pendingJoin, setPendingJoin] = useState<QuickBookingJoinParty | null>(null);
+  function startJoin(join: QuickBookingJoinParty) {
+    dispatch({ type: "joinParty", join, nextRequestId: newRequestId() });
+    setActiveGuest(1);
+    setSavedNotice(null);
+    setOpen(true);
+    void loadAvailability(join.serviceDate, join.startTime);
+  }
+  const startJoinRef = useRef(startJoin);
+  startJoinRef.current = startJoin;
+  const touchedRef = useRef(touched);
+  touchedRef.current = touched;
+  useEffect(
+    () =>
+      onQuickBookingJoinParty((join) => {
+        if (isLocked) return;
+        if (touchedRef.current) setPendingJoin(join);
+        else startJoinRef.current(join);
+      }),
+    [isLocked]
+  );
+
   function requestClose() {
     if (touched) {
       setConfirmClose(true);
@@ -1279,6 +1309,13 @@ export function QuickBookingPanel({
         }
       >
         <StepperNav disabled={locked} errorSteps={errorSteps} onSelect={(next) => dispatch({ type: "step", step: next })} step={step} />
+        {joinParty ? (
+          <p className="mb-4 rounded-md bg-readonly px-3 py-2 text-sm font-semibold text-foreground" data-quick-booking-join-party={joinParty.partyId}>
+            {joinParty.customerMemo
+              ? t("calls.quickBooking.joinParty.noticeWithMemo", { memo: joinParty.customerMemo, size: joinParty.size })
+              : t("calls.quickBooking.joinParty.notice", { size: joinParty.size })}
+          </p>
+        ) : null}
         <ErrorSummary
           fieldErrors={fieldErrors}
           message={message}
@@ -1296,6 +1333,7 @@ export function QuickBookingPanel({
             onPartySizeChange={changePartySize}
             onQueryChange={setCustomerQuery}
             onSelectCandidate={selectCustomerCandidate}
+            joiningParty={joinParty !== null}
             partySize={partySize}
             query={customerQuery}
             visitSummary={visitSummary}
@@ -1415,6 +1453,21 @@ export function QuickBookingPanel({
         }}
         onOpenChange={setConfirmClose}
         open={confirmClose}
+        title={t("calls.leaveGuard.title")}
+      />
+      <ConfirmDialog
+        cancelLabel={t("common.confirm.cancel")}
+        confirmLabel={t("calls.quickBooking.joinParty.discardConfirm")}
+        description={t("calls.leaveGuard.description")}
+        onConfirm={() => {
+          const join = pendingJoin;
+          setPendingJoin(null);
+          if (join) startJoin(join);
+        }}
+        onOpenChange={(next) => {
+          if (!next) setPendingJoin(null);
+        }}
+        open={pendingJoin !== null}
         title={t("calls.leaveGuard.title")}
       />
     </>

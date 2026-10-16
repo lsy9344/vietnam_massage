@@ -58,6 +58,8 @@ function savedRow(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDto
     note: null,
     visitRequest: null,
     confirmationCode: null,
+    partyId: null,
+    partyPosition: null,
     basePrice: 0,
     paymentAmount: 0,
     discountAmount: 0,

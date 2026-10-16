@@ -24,6 +24,47 @@ export function ledgerFlowSections<Row extends { status: string }>(rows: readonl
   return LEDGER_FLOWS.map((flow) => ({ flow, rows: rows.filter((row) => ledgerFlowOf(row.status) === flow) }));
 }
 
+type PartyMember = { id: string; partyId: string | null; partyPosition: number | null };
+
+export type LedgerFlowItem<Row> =
+  | { kind: "call"; row: Row }
+  /** 이 묶음 안의 일행 콜(일행 순번 순). size·lead는 하루 전체에서 본 일행 인원과 대표(가장 앞 순번) 콜이다. */
+  | { kind: "party"; partyId: string; size: number; lead: Row; rows: Row[] };
+
+const byPartyPosition = (left: PartyMember, right: PartyMember) => (left.partyPosition ?? 0) - (right.partyPosition ?? 0);
+
+/**
+ * 흐름 묶음 하나의 줄 순서(스펙 D14, 티켓 04). 같은 일행은 그 묶음에서 처음 나오는 일행 콜 자리에 일행 순번 순으로
+ * 붙는다. 일행 콜이 다른 흐름에 흩어지면(1명만 완료 등) 묶음마다 따로 붙고, 인원은 하루 전체(allRows)로 센다.
+ */
+export function ledgerFlowItems<Row extends PartyMember>(sectionRows: readonly Row[], allRows: readonly Row[]): LedgerFlowItem<Row>[] {
+  const items: LedgerFlowItem<Row>[] = [];
+  const placed = new Set<string>();
+  for (const row of sectionRows) {
+    const partyId = row.partyId;
+    if (!partyId) {
+      items.push({ kind: "call", row });
+      continue;
+    }
+    if (placed.has(partyId)) continue;
+    placed.add(partyId);
+    const party = allRows.filter((member) => member.partyId === partyId).sort(byPartyPosition);
+    items.push({
+      kind: "party",
+      partyId,
+      size: party.length,
+      lead: party[0] ?? row,
+      rows: sectionRows.filter((member) => member.partyId === partyId).sort(byPartyPosition)
+    });
+  }
+  return items;
+}
+
+/** 일행 전체 입장(스펙 D14)이 입장시킬 콜: 예약인 일행 콜만이다. 객실이 빈 손님만 객실을 고른다. */
+export function partyEntryTargets(members: ReadonlyArray<{ id: string; status: string; roomId: string | null }>) {
+  return members.filter((member) => ledgerFlowOf(member.status) === "reserved").map((member) => ({ callId: member.id, needsRoom: !member.roomId }));
+}
+
 export type LedgerAction = "enter" | "pay";
 
 /** 줄 끝 "다음 할 일" 버튼. 예약은 입장, 이용 중(사용중·청소중)은 결제, 끝난 콜은 없다. */
@@ -62,10 +103,11 @@ export function freeRoomOptions<Room extends { value: string }>(
 
 const STATUS_CODES = {
   inUse: ["IN_USE", "USING", "사용중"],
-  visitComplete: ["VISIT_COMPLETE", "방문완료"]
+  visitComplete: ["VISIT_COMPLETE", "방문완료"],
+  canceled: ["CANCELED", "CANCELLED", "취소"]
 } as const;
 
-/** 입장(사용중)과 결제 완료(방문완료)가 저장할 상태 코드. 활성 상태 코드 목록에서 찾고, 없으면 null이다. */
+/** 입장(사용중)·결제 완료(방문완료)·일행 전체 취소(취소)가 저장할 상태 코드. 활성 상태 코드 목록에서 찾고, 없으면 null이다. */
 export function statusCodeFor<Status extends { value: string }>(statuses: readonly Status[], kind: keyof typeof STATUS_CODES): string | null {
   const codes: readonly string[] = STATUS_CODES[kind];
   return statuses.find((status) => codes.includes(status.value))?.value ?? null;

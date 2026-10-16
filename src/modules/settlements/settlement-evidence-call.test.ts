@@ -28,6 +28,8 @@ function row(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDto {
     note: "메모",
     visitRequest: null,
     confirmationCode: null,
+    partyId: null,
+    partyPosition: null,
     basePrice: 1500000,
     paymentAmount: 1500000,
     discountAmount: 0,

@@ -46,6 +46,8 @@ const baseRow: ServiceCallRowDto = {
   note: null,
   visitRequest: null,
   confirmationCode: null,
+  partyId: null,
+  partyPosition: null,
   basePrice: 500_000,
   paymentAmount: 500_000,
   discountAmount: 0,

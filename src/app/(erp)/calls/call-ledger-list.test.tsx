@@ -56,6 +56,8 @@ function ledgerRow(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDt
     note: null,
     visitRequest: null,
     confirmationCode: null,
+    partyId: null,
+    partyPosition: null,
     basePrice: 1500000,
     paymentAmount: 1500000,
     discountAmount: 0,
@@ -109,6 +111,59 @@ function withWindowWidth(minWidth600Matches: boolean, run: () => string) {
     else (globalThis as { window?: unknown }).window = original;
   }
 }
+
+describe("parties on the flow ledger list (ticket 04)", () => {
+  const party = (id: string, partyPosition: number, status: string, roomId: string | null = null) =>
+    ledgerRow({ id, startTime: "11:00", status, customerMemo: "정 대표", partyId: "party-jung", partyPosition, roomId });
+  const rows = [
+    party("jung-2", 2, "RESERVED"),
+    ledgerRow({ id: "solo-11", startTime: "11:00", status: "RESERVED", customerMemo: "혼자 손님" }),
+    party("jung-1", 1, "RESERVED", "room-101"),
+    party("jung-3", 3, "IN_USE", "room-102")
+  ];
+
+  function head(html: string, flow: string) {
+    const section = html.slice(html.indexOf(`data-ledger-flow="${flow}"`));
+    return section.match(/<tr[^>]*data-ledger-party="party-jung"[\s\S]*?<\/tr>/)?.[0] ?? "";
+  }
+
+  it("puts the party under a head line with its size, members in party order, where its first member stands", () => {
+    const html = renderList(rows);
+    const table = html.slice(html.indexOf("<table"));
+    const reserved = table.slice(table.indexOf('data-ledger-flow="reserved"'));
+    const order = ['data-ledger-party="party-jung"', 'data-service-call-id="jung-1"', 'data-service-call-id="jung-2"', 'data-service-call-id="solo-11"'].map(
+      (marker) => reserved.indexOf(marker)
+    );
+    assert.ok(order.every((index) => index >= 0), String(order));
+    assert.deepEqual([...order].sort((a, b) => a - b), order);
+    assert.match(head(html, "reserved"), /정 대표 일행 3명/);
+    assert.match(line(html, "jung-2"), /일행 2\/3/);
+    // 흩어진 손님도 자기 묶음에서 일행 머리 아래에 있고 "일행 3/3"이 남는다.
+    assert.match(head(html, "active"), /정 대표 일행 3명/);
+    assert.match(line(html, "jung-3"), /일행 3\/3/);
+    assert.doesNotMatch(line(html, "solo-11"), /일행/);
+  });
+
+  it("offers party entry and cancel where the party's reservations are, and adding one guest once", () => {
+    const html = renderList(rows);
+    assert.deepEqual(buttons(head(html, "reserved")), ["일행 입장", "일행 취소"]);
+    assert.deepEqual(buttons(head(html, "active")), ["1명 추가"]);
+  });
+
+  it("locks the party actions in a locked month", () => {
+    const html = renderList(rows, { isLocked: true });
+    for (const flow of ["reserved", "active"]) {
+      for (const button of head(html, flow).match(/<button[^>]*>/g) ?? []) assert.match(button, /disabled=""/);
+    }
+  });
+
+  it("speaks Vietnamese", () => {
+    const html = renderList(rows, { locale: "vi" });
+    assert.match(head(html, "reserved"), /Nhóm 정 대표 3 người/);
+    assert.deepEqual(buttons(head(html, "reserved")), ["Cả nhóm vào phòng", "Hủy nhóm"]);
+    assert.match(line(html, "jung-2"), /Nhóm 2\/3/);
+  });
+});
 
 describe("flow ledger list (ticket 03)", () => {
   const rows = [

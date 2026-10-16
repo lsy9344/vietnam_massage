@@ -85,7 +85,9 @@ export const serviceCallCreateInputSchema = serviceCallInputSchema
     requestId: newRowRequestId,
     // 빠른 예약의 새 고객(F01, 티켓 24): 고객 지정 세 갈래(기존 id/새 고객/고객 없음) 중 하나다. 콜과
     // 같은 트랜잭션에서 만들어, 같은 요청 id로 다시 보내도 고객이 두 번 생기지 않는다.
-    newCustomer: customerInputSchema.nullable().optional()
+    newCustomer: customerInputSchema.nullable().optional(),
+    // 일행에 1명 추가(스펙 D14, 티켓 04): 이미 있는 일행의 id. 비어 있으면 일행이 아닌 콜이다.
+    partyId: optionalId
   })
   .refine((data) => !(data.customerId && data.newCustomer), {
     message: "기존 고객과 새 고객을 동시에 지정할 수 없습니다.",
