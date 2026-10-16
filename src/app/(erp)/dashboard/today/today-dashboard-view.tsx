@@ -171,13 +171,12 @@ export function TodayDashboardView({
       </section>
 
       <section aria-label={t("dashboard.today.detailSummary.aria")} className="grid grid-cols-1 gap-4 min-[840px]:grid-cols-2 min-[1200px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.6fr)]">
-        {/* 일일비용 합계를 이루는 네 금액. */}
+        {/* 일일비용 합계를 이루는 세 금액. */}
         <DashboardCard title={t("dashboard.today.costBreakdown.title")}>
           <AmountRows
             rows={[
               { label: t("dashboard.today.kpi.expenseTotal"), value: vnd(financials.expenseTotal) },
               { label: t("dashboard.today.kpi.therapistPayoutTotal"), value: vnd(financials.therapistPayoutTotal) },
-              { label: t("dashboard.today.kpi.earcarePayoutTotal"), value: vnd(financials.earcarePayoutTotal) },
               { label: t("dashboard.today.kpi.opsDailyIncentiveTotal"), value: vnd(financials.opsDailyIncentiveTotal) }
             ]}
           />

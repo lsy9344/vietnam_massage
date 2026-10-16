@@ -94,8 +94,6 @@ async function seedCoursePolicy(monthKey: string, name: string, basePrice: numbe
     name,
     durationMinutes: 60,
     basePrice,
-    opsCallCredit: 1,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: false,
     tvDisplayName: name,
     effectiveToMonth: monthKey,

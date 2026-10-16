@@ -97,8 +97,6 @@ function createSettlementPrisma(
       name,
       durationMinutes: requiresSecondTherapist ? 90 : 60,
       basePrice,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist,
       tvDisplayName: name,
       effectiveFromMonth: "2026-06",
@@ -725,7 +723,7 @@ describe("listTherapistDailyPayoutConfirmationsForMonth", () => {
 
     const results = await listTherapistDailyPayoutConfirmationsForMonth({ operatingMonthId: "month-2026-06", prismaClient });
 
-    // 콜이 2026-06-10에만 있어, 그날 담당 콜이 있는 마사지사 수만큼만 행이 생긴다(귀케어·운영팀과 달리
+    // 콜이 2026-06-10에만 있어, 그날 담당 콜이 있는 마사지사 수만큼만 행이 생긴다(운영팀과 달리
     // 활성 전원을 매일 미리 채우지 않는다. assertPayoutHasSettlement과 같은 전제).
     assert.equal(results.length, dayResult.settlements.length);
     const confirmedOnTarget = results.find((row) => row.serviceDate === "2026-06-10" && row.employeeId === therapist1.id);

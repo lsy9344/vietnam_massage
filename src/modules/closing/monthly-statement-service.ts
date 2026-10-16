@@ -17,10 +17,6 @@ import {
 } from "@/modules/settlements/therapist-daily-settlement-service";
 import { listTherapistAttendanceForDate } from "@/modules/settlements/therapist-attendance-service";
 import {
-  listEarcareDailyPayoutConfirmationsForMonth,
-  listEarcareDailySettlements
-} from "@/modules/settlements/earcare-daily-settlement-service";
-import {
   listOpsDailyIncentives,
   listOpsDailyPayoutConfirmationsForMonth
 } from "@/modules/settlements/ops-daily-incentive-service";
@@ -29,7 +25,7 @@ import type { PayoutConfirmationDto } from "@/modules/settlements/payout-confirm
 
 /**
  * 월 명세서(스펙 F05, 티켓 32): 직원 한 명과 운영월 하나의 현재 계산 결과 또는 마감 버전 스냅샷을 근거와 함께 보여준다.
- * 세 직군(Therapist·귀케어·운영팀)을 이 서비스 하나가 함께 다룬다.
+ * 두 직군(Therapist·운영팀)을 이 서비스 하나가 함께 다룬다.
  *
  * - 마감 전(이 운영월에 마감 버전이 아직 없거나, 보는 사람이 특정 버전을 고르지 않은 draft 조회): 각 직군 서비스를
  *   다시 불러 "지금" 계산 결과와 날짜별 근거(출근, 콜 목록, 지급 확인)를 그대로 보여준다.
@@ -41,7 +37,7 @@ import type { PayoutConfirmationDto } from "@/modules/settlements/payout-confirm
  *   일부가 아니라 독립된 사건 기록이고, 마감확정·잠금 운영월에서는 쓰기만 막히므로 읽기는 항상 지금 상태를 보인다.
  */
 
-export const monthlyStatementEmployeeGroups = ["THERAPIST", "EARCARE", "OPERATIONS"] as const;
+export const monthlyStatementEmployeeGroups = ["THERAPIST", "OPERATIONS"] as const;
 export type MonthlyStatementEmployeeGroup = (typeof monthlyStatementEmployeeGroups)[number];
 
 function isMonthlyStatementEmployeeGroup(value: string): value is MonthlyStatementEmployeeGroup {
@@ -82,8 +78,8 @@ export class MonthlyStatementDomainError extends Error {
 /**
  * 월 집계 금액 근거. 직군마다 모양이 달라 kind로 가른다. 각 숫자 필드는 월 집계(미리보기 또는 마감 스냅샷,
  * 둘 다 같은 계산 서비스가 만든 값)에서 그대로 옮긴 것이다. 화면은 이 구조화된 값으로 직접 문구를 만들고
- * (예: closing/page.tsx의 fullAttendanceBasisText·countKingBasisText와 같은 방식), earcare·운영팀의
- * calculationBasis/monthlyCalculationBasis 원문은 lib/i18n/settlement-basis.ts의 settlementBasisText로 번역한다.
+ * (예: closing/page.tsx의 fullAttendanceBasisText·countKingBasisText와 같은 방식), 운영팀의
+ * monthlyCalculationBasis 원문은 lib/i18n/settlement-basis.ts의 settlementBasisText로 번역한다.
  * 서비스 쪽에서 한국어 문장으로 미리 조립해 두면 vi 화면에서 그 문장이 그대로 새므로 여기서는 숫자만 둔다.
  */
 export type MonthlyStatementTherapistSummaryDto = {
@@ -105,25 +101,16 @@ export type MonthlyStatementOperationsSummaryDto = {
   dailyEvidenceCount: number;
 };
 
-export type MonthlyStatementEarcareSummaryDto = {
-  kind: "EARCARE";
-  payoutAmount: number;
-  /** 귀케어 풀 분배 근거(한국어 원문, settlementBasisText로 표시 직전 번역). */
-  calculationBasis: string;
-  eligibleDayCount: number;
-};
-
 /** 이 직원의 월 집계 행이 없으면(한 번도 활동이 없었거나, 마감 버전이 그 직원보다 먼저 만들어졌으면) null. */
 export type MonthlyStatementSummaryDto =
   | MonthlyStatementTherapistSummaryDto
   | MonthlyStatementOperationsSummaryDto
-  | MonthlyStatementEarcareSummaryDto
   | null;
 
 /** 그 날의 출근·콜 근거·금액·지급 확인. 마감 버전 스냅샷에는 이 날짜별 항목이 저장돼 있지 않다. */
 export type MonthlyStatementDailyEntryDto = {
   serviceDate: string;
-  /** 출근 요약(Therapist는 출퇴근 시각, 귀케어·운영팀은 근무상태 표시명). 기록이 없으면 null. */
+  /** 출근 요약(Therapist는 출퇴근 시각, 운영팀은 근무상태 표시명). 기록이 없으면 null. */
   attendanceSummary: string | null;
   callCount: number;
   amount: number;
@@ -131,7 +118,7 @@ export type MonthlyStatementDailyEntryDto = {
   /**
    * S9(V08): 적용 정책 근거(코스 수당·0원 정책). Therapist만 콜마다 담당 역할(role)·적용 코스 수당
    * (commissionAmount)·그 코스 수당의 상태(rateStatus: applied/zero_policy/missing_policy)를 둔다.
-   * 귀케어·운영팀은 코스 수당 개념이 없어 항상 빈 배열이다.
+   * 운영팀은 코스 수당 개념이 없어 항상 빈 배열이다.
    */
   appliedPolicies: TherapistAssignmentEvidenceDto[];
   /** 그 날 이 직원 단위의 지급 확인. 그 단위가 없으면(예: 담당 콜 없는 Therapist의 날) null. */
@@ -185,8 +172,6 @@ export type MonthlyStatementDependencies = {
   listTherapistDailySettlements: typeof listTherapistDailySettlements;
   listTherapistAttendanceForDate: typeof listTherapistAttendanceForDate;
   listTherapistDailyPayoutConfirmationsForMonth: typeof listTherapistDailyPayoutConfirmationsForMonth;
-  listEarcareDailySettlements: typeof listEarcareDailySettlements;
-  listEarcareDailyPayoutConfirmationsForMonth: typeof listEarcareDailyPayoutConfirmationsForMonth;
   listOpsDailyIncentives: typeof listOpsDailyIncentives;
   listOpsDailyPayoutConfirmationsForMonth: typeof listOpsDailyPayoutConfirmationsForMonth;
   listOpsMonthlyIncentivePreview: typeof listOpsMonthlyIncentivePreview;
@@ -199,8 +184,6 @@ const defaultDependencies: MonthlyStatementDependencies = {
   listTherapistDailySettlements,
   listTherapistAttendanceForDate,
   listTherapistDailyPayoutConfirmationsForMonth,
-  listEarcareDailySettlements,
-  listEarcareDailyPayoutConfirmationsForMonth,
   listOpsDailyIncentives,
   listOpsDailyPayoutConfirmationsForMonth,
   listOpsMonthlyIncentivePreview
@@ -235,7 +218,7 @@ function castClient<T>(client: MonthlyStatementPrismaClient): T {
 
 const NO_EVIDENCE_NOTICE = "이 마감 버전에는 해당 근거가 저장되지 않았습니다.";
 
-type StatementSections = Pick<MonthlyClosingPreviewDto, "therapists" | "operations" | "earcare">;
+type StatementSections = Pick<MonthlyClosingPreviewDto, "therapists" | "operations">;
 
 type AmountSummaryResult = { finalAmount: number; summary: MonthlyStatementSummaryDto };
 
@@ -262,30 +245,16 @@ function buildAmountSummary(sections: StatementSections, group: MonthlyStatement
     };
   }
 
-  if (group === "OPERATIONS") {
-    const row = sections.operations.rows.find((item) => item.employeeId === employeeId) ?? null;
-    if (!row) return { finalAmount: 0, summary: null };
-    return {
-      finalAmount: row.totalOpsPayoutAmount,
-      summary: {
-        kind: "OPERATIONS",
-        dailyIncentiveAmount: row.dailyIncentiveAmount,
-        monthlyIncentiveAmount: row.monthlyIncentiveAmount,
-        monthlyCalculationBasis: row.monthlyCalculationBasis,
-        dailyEvidenceCount: row.dailyEvidenceCount
-      }
-    };
-  }
-
-  const row = sections.earcare.rows.find((item) => item.employeeId === employeeId) ?? null;
+  const row = sections.operations.rows.find((item) => item.employeeId === employeeId) ?? null;
   if (!row) return { finalAmount: 0, summary: null };
   return {
-    finalAmount: row.payoutAmount,
+    finalAmount: row.totalOpsPayoutAmount,
     summary: {
-      kind: "EARCARE",
-      payoutAmount: row.payoutAmount,
-      calculationBasis: row.calculationBasis,
-      eligibleDayCount: row.eligibleDayCount
+      kind: "OPERATIONS",
+      dailyIncentiveAmount: row.dailyIncentiveAmount,
+      monthlyIncentiveAmount: row.monthlyIncentiveAmount,
+      monthlyCalculationBasis: row.monthlyCalculationBasis,
+      dailyEvidenceCount: row.dailyEvidenceCount
     }
   };
 }
@@ -295,7 +264,7 @@ function therapistAttendanceSummary(row: { checkInTime: string | null; checkOutT
   return `${row.checkInTime}–${row.checkOutTime ?? "퇴근 미기록"}`;
 }
 
-/** 운영월 날짜를 하루씩 돈다(귀케어·운영팀의 ...ForMonth 함수와 같은 패턴, 티켓 31). */
+/** 운영월 날짜를 하루씩 돈다(운영팀의 ...ForMonth 함수와 같은 패턴, 티켓 31). */
 function* eachServiceDate(startDate: Date, endDate: Date) {
   for (let cursor = startDate; cursor <= endDate; cursor = new Date(cursor.getTime() + 86400000)) {
     yield toIsoDate(cursor);
@@ -339,27 +308,6 @@ async function buildDraftDailyEntries(input: {
         // S9(V08): 코스 수당 근거(적용/0원/수당 없음)를 담당 역할·콜별로 그대로 둔다.
         appliedPolicies: settlement ? settlement.assignmentEvidence : [],
         payoutConfirmation: settlement?.payoutConfirmation ?? null
-      });
-      continue;
-    }
-
-    if (input.group === "EARCARE") {
-      const result = await input.deps.listEarcareDailySettlements({
-        operatingMonthId: input.operatingMonthId,
-        serviceDate,
-        prismaClient: castClient(input.client)
-      });
-      const row = result.rows.find((item) => item.employeeId === input.employeeId) ?? null;
-      if (!row) continue;
-      entries.push({
-        serviceDate,
-        attendanceSummary: row.statusDisplayName,
-        callCount: result.poolEvidence.length,
-        amount: row.payoutAmount,
-        calls: result.poolEvidence.flatMap((evidence) => (evidence.call ? [evidence.call] : [])),
-        // 귀케어는 코스 수당이 아니라 풀 분배라 적용 정책(코스 수당) 개념이 없다.
-        appliedPolicies: [],
-        payoutConfirmation: row.payoutConfirmation
       });
       continue;
     }
@@ -423,14 +371,6 @@ async function buildClosedPayoutUnits(input: {
 }): Promise<MonthlyStatementPayoutUnitDto[]> {
   if (input.group === "THERAPIST") {
     const rows = await input.deps.listTherapistDailyPayoutConfirmationsForMonth({
-      operatingMonthId: input.operatingMonthId,
-      prismaClient: castClient(input.client)
-    });
-    return sortPayoutUnits(rows.filter((row) => row.employeeId === input.employeeId));
-  }
-
-  if (input.group === "EARCARE") {
-    const rows = await input.deps.listEarcareDailyPayoutConfirmationsForMonth({
       operatingMonthId: input.operatingMonthId,
       prismaClient: castClient(input.client)
     });

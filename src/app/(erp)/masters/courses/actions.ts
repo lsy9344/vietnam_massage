@@ -53,8 +53,6 @@ function coursePolicyPayload(formData: FormData) {
     name: formData.get("name"),
     durationMinutes: formData.get("durationMinutes"),
     basePrice: formData.get("basePrice"),
-    opsCallCredit: formData.get("opsCallCredit"),
-    earcarePoolAmount: formData.get("earcarePoolAmount"),
     requiresSecondTherapist: formData.get("requiresSecondTherapist"),
     tvDisplayName: formData.get("tvDisplayName"),
     effectiveFromMonth: formData.get("effectiveFromMonth"),

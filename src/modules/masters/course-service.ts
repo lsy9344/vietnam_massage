@@ -33,8 +33,6 @@ type CoursePolicyRecord = {
   name: string;
   durationMinutes: number;
   basePrice: number;
-  opsCallCredit: number;
-  earcarePoolAmount: number;
   requiresSecondTherapist: boolean;
   tvDisplayName: string;
   effectiveFromMonth: string;
@@ -177,8 +175,6 @@ export type CreateCoursePolicyInput = MutationBase & {
   name: string;
   durationMinutes: number;
   basePrice: number;
-  opsCallCredit: number;
-  earcarePoolAmount: number;
   requiresSecondTherapist: boolean;
   tvDisplayName: string;
   effectiveFromMonth: string;
@@ -307,8 +303,6 @@ function policySnapshot(dto: CoursePolicyDto): AuditJsonSnapshot {
     name: dto.name,
     durationMinutes: dto.durationMinutes,
     basePrice: dto.basePrice,
-    opsCallCredit: dto.opsCallCredit,
-    earcarePoolAmount: dto.earcarePoolAmount,
     requiresSecondTherapist: dto.requiresSecondTherapist,
     tvDisplayName: dto.tvDisplayName,
     effectiveFromMonth: dto.effectiveFromMonth,
@@ -501,8 +495,6 @@ function policyValuesEqual(
     policy.name === input.name &&
     policy.durationMinutes === input.durationMinutes &&
     policy.basePrice === input.basePrice &&
-    policy.opsCallCredit === input.opsCallCredit &&
-    policy.earcarePoolAmount === input.earcarePoolAmount &&
     policy.requiresSecondTherapist === input.requiresSecondTherapist &&
     policy.tvDisplayName === input.tvDisplayName &&
     policy.effectiveFromMonth === input.effectiveFromMonth &&
@@ -587,8 +579,6 @@ export async function ensureDefaultCoursesAndPolicies(input: { actorId: string; 
             name: seed.name,
             durationMinutes: seed.durationMinutes,
             basePrice: seed.basePrice,
-            opsCallCredit: seed.opsCallCredit,
-            earcarePoolAmount: seed.earcarePoolAmount,
             requiresSecondTherapist: seed.requiresSecondTherapist,
             tvDisplayName: seed.tvDisplayName,
             effectiveFromMonth,
@@ -618,7 +608,7 @@ export async function ensureDefaultCoursesAndPolicies(input: { actorId: string; 
       const numericCode = Number(staffCode.slice(4));
       if (numericCode >= 1 && numericCode <= 4) {
         if (code === "A") return 700000;
-        if (code === "B" || code === "C") return 900000;
+        if (code === "C") return 900000;
       }
       return 0;
     };
@@ -812,8 +802,6 @@ export async function updateCoursePolicy(input: UpdateCoursePolicyInput) {
         name: parsed.data.name,
         durationMinutes: parsed.data.durationMinutes,
         basePrice: parsed.data.basePrice,
-        opsCallCredit: parsed.data.opsCallCredit,
-        earcarePoolAmount: parsed.data.earcarePoolAmount,
         requiresSecondTherapist: parsed.data.requiresSecondTherapist,
         tvDisplayName: parsed.data.tvDisplayName,
         effectiveFromMonth: parsed.data.effectiveFromMonth,

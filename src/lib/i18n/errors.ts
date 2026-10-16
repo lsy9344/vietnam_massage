@@ -42,9 +42,7 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   DAILY_EXPENSE_NOT_ACTIVE: "Không thể sửa mục chi phí đã vô hiệu hóa.",
 
   // 근태/정산 입력
-  INVALID_EARCARE_ATTENDANCE_INPUT: "Ngày làm việc không hợp lệ.",
   THERAPIST_EMPLOYEE_NOT_FOUND: "Không tìm thấy kỹ thuật viên đang hoạt động.",
-  EARCARE_EMPLOYEE_NOT_FOUND: "Không tìm thấy nhân viên chăm sóc tai đang hoạt động.",
   OPS_EMPLOYEE_NOT_FOUND: "Không tìm thấy nhân viên vận hành đang hoạt động.",
   ATTENDANCE_STATUS_NOT_FOUND: "Vui lòng chọn mã trạng thái làm việc hợp lệ.",
 
@@ -124,11 +122,7 @@ const KOREAN_MESSAGE_VI: Record<string, string> = {
   "마사지사를 찾을 수 없습니다.": "Không tìm thấy kỹ thuật viên.",
   "활성 마사지사만 지급 확인을 변경할 수 있습니다.": "Chỉ kỹ thuật viên đang hoạt động mới có thể thay đổi xác nhận chi trả.",
   "해당 날짜에 정산 대상 콜이 없는 마사지사는 지급 확인을 할 수 없습니다.": "Không thể xác nhận chi trả cho kỹ thuật viên không có cuộc gọi cần đối soát trong ngày.",
-  // 지급 확인(티켓 31: 귀케어·운영팀) action 안전 메시지
-  "귀케어사를 선택하세요.": "Vui lòng chọn nhân viên chăm sóc tai.",
-  "귀케어사를 찾을 수 없습니다.": "Không tìm thấy nhân viên chăm sóc tai.",
-  "활성 귀케어사만 지급 확인을 변경할 수 있습니다.": "Chỉ nhân viên chăm sóc tai đang hoạt động mới có thể thay đổi xác nhận chi trả.",
-  "해당 날짜의 귀케어 정산 대상을 찾을 수 없습니다.": "Không tìm thấy đối tượng đối soát chăm sóc tai cho ngày này.",
+  // 지급 확인(티켓 31: 운영팀) action 안전 메시지
   "운영팀 직원을 선택하세요.": "Vui lòng chọn nhân viên nhóm vận hành.",
   "운영팀 직원을 찾을 수 없습니다.": "Không tìm thấy nhân viên nhóm vận hành.",
   "활성 운영팀 직원만 지급 확인을 변경할 수 있습니다.": "Chỉ nhân viên nhóm vận hành đang hoạt động mới có thể thay đổi xác nhận chi trả.",

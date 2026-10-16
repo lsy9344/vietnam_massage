@@ -80,7 +80,7 @@ export const SHEET_FEATURE_MAPPINGS: SheetFeatureMapping[] = [
     ],
     verificationItems: [
       "A:S 콜 원장 입력/계산 구조와 U:X 지출/요약 구조를 별도로 검증한다.",
-      "방문완료 또는 VISIT_COMPLETE 상태만 결제, 수당, 귀케어 풀, 콜인정 계산에 포함한다.",
+      "방문완료 또는 VISIT_COMPLETE 상태만 결제, 수당 계산에 포함한다.",
       "D코스 마사지사2 필수 오류와 정책/수당 누락 warning은 calculated 완료 콜에서 제외된다."
     ],
     preservedRules: [
@@ -136,10 +136,10 @@ export const SHEET_FEATURE_MAPPINGS: SheetFeatureMapping[] = [
     ],
     verificationItems: [
       "정상 근무자만 일일 30/40/50콜 인센 대상이다.",
-      "월 1000/1100/1200/1300/1400/1500콜 기준 분배율과 방문완료 콜인정 기준을 검증한다."
+      "월 1000/1100/1200/1300/1400/1500콜 기준 분배율과 방문완료 콜 수 기준을 검증한다."
     ],
     preservedRules: [
-      "콜인정은 방문완료 calculated call 기준이며 예약/사용중/청소중/노쇼/취소는 제외한다.",
+      "방문완료 콜 수는 calculated call 기준이며 예약/사용중/청소중/노쇼/취소는 제외한다.",
       "운영팀 인센 정책은 effective month range로 관리하고 확정 월마감 snapshot을 자동 재계산하지 않는다."
     ],
     sourceReferences: ["client_erp_specification.md §8", "_bmad-output/project-context.md Story 4.5-4.6"]
@@ -147,20 +147,15 @@ export const SHEET_FEATURE_MAPPINGS: SheetFeatureMapping[] = [
   {
     sourceSheet: "귀케어일정산",
     visibility: "visible",
-    workbookEvidence: ["B코스 귀케어 pool과 근무상태별 N분의1 일일정산을 계산하는 settlement sheet다."],
-    erpSurfaces: ["/settlements/earcare"],
-    settings: ["ATTENDANCE_STATUS code", "Employee employeeGroup=EARCARE", "CoursePolicy.earcarePoolAmount"],
-    calculationEngines: [
-      "src/modules/settlements/earcare-attendance-service.ts",
-      "src/modules/settlements/earcare-daily-settlement-service.ts"
-    ],
+    workbookEvidence: ["B코스 귀케어 pool과 근무상태별 N분의1 일일정산을 계산하던 settlement sheet였다."],
+    erpSurfaces: [],
+    settings: [],
+    calculationEngines: [],
     verificationItems: [
-      "B코스 귀케어 pool은 방문완료 calculated call 기준으로만 집계한다.",
-      "정상 근무자 N분의1과 정상 근무자 0명 처리 상태를 검증한다."
+      "귀케어 담당·귀케어풀·콜인정 기능은 앱에서 폐기됐으므로 이 시트에 대응하는 ERP 화면·계산 엔진이 없다."
     ],
     preservedRules: [
-      "귀케어 담당자는 Employee.id stable key로 저장하고 표시명 문자열로 정산하지 않는다.",
-      "귀케어 근무상태 입력은 월마감 잠금 guard 대상이다."
+      "과거 귀케어 관련 audit_logs 행은 physical delete하지 않고 감사 화면에서 그대로 조회된다."
     ],
     sourceReferences: ["sheet_erp_design.md hidden rows evidence", "_bmad-output/project-context.md Story 4.3-4.4"]
   },
@@ -251,7 +246,7 @@ export const SHEET_FEATURE_MAPPINGS: SheetFeatureMapping[] = [
     ],
     calculationEngines: ["src/modules/masters/course-service.ts", "src/modules/masters/operating-month-service.ts"],
     verificationItems: [
-      "A~E 코스 가격, 시간, 귀케어 pool, D코스 마사지사2 필수 여부를 검증한다.",
+      "A~E 코스 가격, 시간, D코스 마사지사2 필수 여부를 검증한다.",
       "수당/인센 정책은 effective month range overlap 없이 관리한다."
     ],
     preservedRules: [
@@ -280,7 +275,7 @@ export const SHEET_FEATURE_MAPPINGS: SheetFeatureMapping[] = [
     calculationEngines: ["src/modules/masters/code-service.ts", "src/modules/masters/room-service.ts", "src/modules/masters/course-service.ts"],
     verificationItems: [
       "숨김 목록 omission은 검증 실패다.",
-      "상태, 결제수단, 할인구분, 확인값, 근무상태, 시간 슬롯, 객실, 코스, 마사지사, 귀케어 담당 dropdown mapping을 모두 검증한다.",
+      "상태, 결제수단, 할인구분, 확인값, 근무상태, 시간 슬롯, 객실, 코스, 마사지사 dropdown mapping을 모두 검증한다.",
       "할인구분 선택은 고정 100,000 VND 할인 규칙과 연결한다."
     ],
     preservedRules: [

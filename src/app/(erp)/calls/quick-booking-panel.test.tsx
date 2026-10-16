@@ -48,7 +48,6 @@ const options: ServiceCallFormOptions = {
   paymentMethods: [],
   confirmationCodes: [],
   therapists: [{ value: "therapist-1", label: "마사지사1" }],
-  earcareEmployees: [],
   expenseHandlers: []
 };
 
@@ -82,7 +81,6 @@ function draft(overrides: Partial<NewCallRowDraft> = {}): NewCallRowDraft {
     customerId: null,
     therapist1Id: null,
     therapist2Id: null,
-    earcareEmployeeId: null,
     status: "RESERVED",
     discountTypeCode: null,
     paymentMethodCode: null,

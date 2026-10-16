@@ -110,7 +110,6 @@ for (const required of [
   "status.course.tvDisplayName",
   "status.therapist1",
   "status.therapist2",
-  "status.earcare",
   "roomCard.guidance.completeCheck",
   "roomCard.guidance.empty",
   "status-attention",

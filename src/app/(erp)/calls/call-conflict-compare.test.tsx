@@ -15,7 +15,7 @@ const options: ServiceCallFormOptions = {
   timeSlots: [{ value: "16:00", label: "16:00" }],
   courses: [
     { value: "course-a", label: "A 누루60" },
-    { value: "course-b", label: "B 누루90" }
+    { value: "course-c", label: "C 누루90" }
   ],
   statuses: [
     { value: "예약", label: "예약" },
@@ -28,7 +28,6 @@ const options: ServiceCallFormOptions = {
     { value: "therapist-1", label: "Therapist 1" },
     { value: "therapist-2", label: "Therapist 2" }
   ],
-  earcareEmployees: [],
   expenseHandlers: []
 };
 
@@ -53,7 +52,6 @@ function savedRow(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDto
     customerMemo: "지윤",
     therapist1: { id: "therapist-1", displayName: "Therapist 1", staffCode: "THR-001" },
     therapist2: null,
-    earcare: null,
     status: "예약",
     discountTypeCode: null,
     paymentMethodCode: null,
@@ -65,8 +63,6 @@ function savedRow(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDto
     discountAmount: 0,
     therapist1Commission: 0,
     therapist2Commission: 0,
-    earcarePoolAmount: 0,
-    opsCallCredit: 0,
     calculationStatus: "not_completed",
     calculationErrorCode: null,
     calculationErrorMessage: null,
@@ -80,7 +76,7 @@ function savedRow(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDto
 describe("callConflictFieldRows", () => {
   it("lists every editable field in ledger order and marks only the fields whose raw value differs", () => {
     const mine = draftFromRow(savedRow({ customerMemo: "내 초안", paymentMethodCode: "카드" }));
-    const latest = draftFromRow(savedRow({ customerMemo: "최신 화면", courseId: "course-b" }));
+    const latest = draftFromRow(savedRow({ customerMemo: "최신 화면", courseId: "course-c" }));
     const rows = callConflictFieldRows(mine, latest, options, customers, t);
 
     assert.deepEqual(
@@ -94,7 +90,6 @@ describe("callConflictFieldRows", () => {
         "customerId",
         "therapist1Id",
         "therapist2Id",
-        "earcareEmployeeId",
         "status",
         "discountTypeCode",
         "paymentMethodCode",
@@ -110,7 +105,7 @@ describe("callConflictFieldRows", () => {
     assert.equal(byField.get("customerMemo")?.latest, "최신 화면");
     assert.equal(byField.get("courseId")?.differs, true);
     assert.equal(byField.get("courseId")?.mine, "A 누루60");
-    assert.equal(byField.get("courseId")?.latest, "B 누루90");
+    assert.equal(byField.get("courseId")?.latest, "C 누루90");
     // 내가 카드로 바꿨지만 최신 행은 아직 결제수단이 없다(차이가 있다 — 둘 다 같은 "최신 행 그대로"는 아니다).
     assert.equal(byField.get("paymentMethodCode")?.differs, true);
     assert.equal(byField.get("paymentMethodCode")?.mine, "카드");

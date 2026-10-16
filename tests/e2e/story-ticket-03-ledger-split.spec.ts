@@ -68,8 +68,6 @@ async function upsertPolicy(courseId: string) {
     name: "T03 A",
     durationMinutes: 60,
     basePrice: 1500000,
-    opsCallCredit: 1,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: false,
     tvDisplayName: "T03 A",
     effectiveToMonth: null,

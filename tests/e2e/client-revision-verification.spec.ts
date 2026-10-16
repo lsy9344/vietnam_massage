@@ -17,7 +17,6 @@ type SeededData = {
   courseId: string;
   therapist1Id: string;
   therapist2Id: string;
-  earcareEmployeeId: string;
   accounts: Record<Role, { accountId: string; password: string }>;
 };
 
@@ -113,8 +112,6 @@ async function upsertPolicy(courseId: string) {
     name: "WO 검증60",
     durationMinutes: 60,
     basePrice: 1500000,
-    opsCallCredit: 1,
-    earcarePoolAmount: 100000,
     requiresSecondTherapist: false,
     tvDisplayName: "WO 미배정60",
     effectiveToMonth: null,
@@ -196,7 +193,6 @@ async function seedStoryData(): Promise<SeededData> {
 
   const therapist1 = await seedEmployee("WO-VFY-THR-1", "WO 검증 마사지사1", "THERAPIST", "마사지사", 98710);
   const therapist2 = await seedEmployee("WO-VFY-THR-2", "WO 검증 마사지사2", "THERAPIST", "마사지사", 98711);
-  const earcare = await seedEmployee("WO-VFY-EAR-1", "WO 검증 귀케어", "EARCARE", "귀케어", 98712);
   await upsertRate(therapist1.id, course.id, 700000);
   await upsertRate(therapist2.id, course.id, 300000);
 
@@ -220,7 +216,6 @@ async function seedStoryData(): Promise<SeededData> {
     courseId: course.id,
     therapist1Id: therapist1.id,
     therapist2Id: therapist2.id,
-    earcareEmployeeId: earcare.id,
     accounts
   };
 }
@@ -242,8 +237,7 @@ async function createCompletedCall(memo: string, input?: { serviceDate?: string;
   await (prisma as any).serviceCallAssignment.createMany({
     data: [
       { serviceCallId: call.id, assignmentRole: "THERAPIST_1", employeeId: seededData.therapist1Id },
-      { serviceCallId: call.id, assignmentRole: "THERAPIST_2", employeeId: seededData.therapist2Id },
-      { serviceCallId: call.id, assignmentRole: "EARCARE", employeeId: seededData.earcareEmployeeId }
+      { serviceCallId: call.id, assignmentRole: "THERAPIST_2", employeeId: seededData.therapist2Id }
     ]
   });
   return call;
@@ -282,7 +276,7 @@ test.describe("Client revision browser verification", () => {
     await login(page, seededData.accounts.counter.accountId, seededData.accounts.counter.password);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${assignedDate}`);
 
-    for (const header of ["마사지사1수당", "마사지사2수당", "귀케어풀", "콜인정"]) {
+    for (const header of ["마사지사1수당", "마사지사2수당"]) {
       await expect(page.getByRole("columnheader", { name: header })).toHaveCount(0);
     }
     await expect(page.getByText("마사지사정산")).toHaveCount(0);
@@ -299,8 +293,6 @@ test.describe("Client revision browser verification", () => {
     await expect(page.getByRole("columnheader", { name: "마사지사1수당" }).first()).toBeVisible();
     await expect(page.locator('[data-call-cell-column="therapist1Commission"]').first()).toContainText("700,000");
     await expect(page.locator('[data-call-cell-column="therapist2Commission"]').first()).toContainText("300,000");
-    await expect(page.locator('[data-call-cell-column="earcarePoolAmount"]').first()).toContainText("100,000");
-    await expect(page.locator('[data-call-cell-column="opsCallCredit"]').first()).toContainText("1");
 
     await login(page, seededData.accounts.settlement_manager.accountId, seededData.accounts.settlement_manager.password);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${assignedDate}`);

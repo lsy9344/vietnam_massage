@@ -17,7 +17,6 @@ type SeededData = {
   courseId: string;
   therapist1Id: string;
   therapist2Id: string;
-  earcareEmployeeId: string;
 };
 
 let seededData: SeededData;
@@ -140,8 +139,6 @@ async function seedStoryData(): Promise<SeededData> {
         name: "E2E 기본60",
         durationMinutes: 60,
         basePrice: 1500000,
-        opsCallCredit: 1,
-        earcarePoolAmount: 0,
         requiresSecondTherapist: false,
         tvDisplayName: "E2E 기본60",
         effectiveToMonth: null,
@@ -155,8 +152,6 @@ async function seedStoryData(): Promise<SeededData> {
         name: "E2E 기본60",
         durationMinutes: 60,
         basePrice: 1500000,
-        opsCallCredit: 1,
-        earcarePoolAmount: 0,
         requiresSecondTherapist: false,
         tvDisplayName: "E2E 기본60",
         effectiveFromMonth: "2032-01",
@@ -167,7 +162,6 @@ async function seedStoryData(): Promise<SeededData> {
   }
   const therapist1 = await seedEmployee("E2E21-THR-001", "E2E 마사지사1", "THERAPIST", 92101);
   const therapist2 = await seedEmployee("E2E21-THR-002", "E2E 마사지사2", "THERAPIST", 92102);
-  const earcare = await seedEmployee("E2E21-EAR-001", "E2E 귀케어1", "EARCARE", 92101);
 
   await (prisma as any).timeSlot.upsert({
     where: { value: "11:00" },
@@ -186,8 +180,7 @@ async function seedStoryData(): Promise<SeededData> {
     roomId: room.id,
     courseId: course.id,
     therapist1Id: therapist1.id,
-    therapist2Id: therapist2.id,
-    earcareEmployeeId: earcare.id
+    therapist2Id: therapist2.id
   };
 }
 
@@ -213,7 +206,7 @@ async function seedEmployee(staffCode: string, displayName: string, employeeGrou
     update: {
       displayName,
       employeeGroup,
-      position: employeeGroup === "EARCARE" ? "귀케어" : "마사지사",
+      position: "마사지사",
       shiftType: "전체",
       baseSalary: 0,
       employmentStatus: "재직",
@@ -224,7 +217,7 @@ async function seedEmployee(staffCode: string, displayName: string, employeeGrou
       staffCode,
       displayName,
       employeeGroup,
-      position: employeeGroup === "EARCARE" ? "귀케어" : "마사지사",
+      position: "마사지사",
       shiftType: "전체",
       baseSalary: 0,
       employmentStatus: "재직",
@@ -257,7 +250,6 @@ async function fillBasicCallRow(page: Page, memo: string) {
   await addRowCell(page, "customerMemo").fill(memo);
   await selectCombobox(page, "therapist1Id", seededData.therapist1Id);
   await selectCombobox(page, "therapist2Id", seededData.therapist2Id);
-  await selectCombobox(page, "earcareEmployeeId", seededData.earcareEmployeeId);
   await selectCombobox(page, "status", "예약");
   await selectCombobox(page, "discountTypeCode", "생일자");
   await selectCombobox(page, "paymentMethodCode", "현금");
@@ -304,7 +296,6 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
     const savedRow = page.getByRole("row", { name: new RegExp(memo) });
     await expect(savedRow.getByRole("combobox", { name: "객실" })).toHaveValue("E2E 921 호실");
     await expect(savedRow.getByRole("combobox", { name: "마사지사1" })).toHaveValue(/E2E 마사지사1/);
-    await expect(savedRow.getByRole("combobox", { name: "귀케어 담당" })).toHaveValue(/E2E 귀케어1/);
     // REQ-007: 결제수단을 고른 순간 선결제 매출로 잡히므로 예약 행도 "계산됨"이다.
     await expect(savedRow.getByText("계산됨")).toBeVisible();
 
@@ -322,7 +313,6 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
       confirmationCode: "Y"
     });
     expect(savedCall.assignments.map((assignment: any) => assignment.assignmentRole).sort()).toEqual([
-      "EARCARE",
       "THERAPIST_1",
       "THERAPIST_2"
     ]);

@@ -143,7 +143,7 @@ const coreCalculationDefinitions: CoreCalculationDefinition[] = [
     sourceReference: MIGRATION_SOURCE_REFERENCES.realtimeLedger,
     relatedRequirement: "FR-37",
     relatedStory: "Story 7.2",
-    message: "방문완료 결제금액, 할인, 귀케어 풀, 콜인정 fixture 대조 통과"
+    message: "방문완료 결제금액, 할인 fixture 대조 통과"
   },
   {
     area: "calls.discount",
@@ -155,17 +155,6 @@ const coreCalculationDefinitions: CoreCalculationDefinition[] = [
     relatedRequirement: "FR-37",
     relatedStory: "Story 7.2",
     message: "할인구분 선택 시 100000 VND 할인 대조 통과"
-  },
-  {
-    area: "calls.ops-credit",
-    fixtureId: "call-complete-b-no-discount",
-    expected: { opsCallCredit: 20 },
-    actual: { opsCallCredit: 20 },
-    sourceSheet: "실시간콜입력",
-    sourceReference: MIGRATION_SOURCE_REFERENCES.realtimeLedger,
-    relatedRequirement: "FR-37",
-    relatedStory: "Story 7.2",
-    message: "방문완료 콜인정 fixture 대조 통과"
   },
   {
     area: "calls.d-course",
@@ -210,17 +199,6 @@ const coreCalculationDefinitions: CoreCalculationDefinition[] = [
     relatedRequirement: "FR-37",
     relatedStory: "Story 7.2",
     message: "운영팀 월 인센 1000~1500콜 기준 대조 통과"
-  },
-  {
-    area: "earcare.zero-worker-pool",
-    fixtureId: "earcare-zero-worker",
-    expected: MIGRATION_EXPECTED_RESULTS.earcareDaily.zeroWorkerDay,
-    actual: MIGRATION_EXPECTED_RESULTS.earcareDaily.zeroWorkerDay,
-    sourceSheet: "귀케어일정산",
-    sourceReference: MIGRATION_SOURCE_REFERENCES.earcare,
-    relatedRequirement: "FR-37",
-    relatedStory: "Story 7.2",
-    message: "귀케어 정상 근무자 0명 N분의1 처리 대조 통과"
   },
   {
     area: "therapist.role-settlement",

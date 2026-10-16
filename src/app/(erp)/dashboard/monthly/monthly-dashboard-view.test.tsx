@@ -22,18 +22,16 @@ function metrics(overrides: Partial<MonthlyDashboardMetricsDto> = {}): MonthlyDa
       netSales: 200_000_000,
       discountTotal: 4_000_000,
       expenseTotal: 96_000_000,
-      earcarePoolTotal: 5_000_000,
-      earcarePayoutTotal: 4_500_000,
       opsDailyIncentiveTotal: 3_000_000,
       opsMonthlyIncentiveTotal: 2_000_000,
       fullAttendanceAllowanceTotal: 1_000_000,
       countKingBonusTotal: 500_000,
       therapistCommissionTotal: 100_000_000,
       therapistPayoutTotal: 101_500_000,
-      dailyCostTotal: 203_500_000,
+      dailyCostTotal: 199_000_000,
       monthlyCostTotal: 3_500_000,
-      settlementPayoutTotal: 111_000_000,
-      netProfit: 89_000_000
+      settlementPayoutTotal: 106_500_000,
+      netProfit: 93_500_000
     },
     courseCompletions: [
       { courseCode: "A", completedCount: 20, discountCount: 0, therapistAssignmentCount: 20 },
@@ -53,8 +51,7 @@ function metrics(overrides: Partial<MonthlyDashboardMetricsDto> = {}): MonthlyDa
       opsMonthlyIncentiveAmount: 2_000_000,
       fullAttendanceAllowanceTotal: 1_000_000,
       countKingBonusTotal: 500_000,
-      earcarePayoutAmount: 4_500_000,
-      grandPayoutAmount: 111_000_000,
+      grandPayoutAmount: 106_500_000,
       includedCallCount: 35,
       excludedCallCount: 1,
       warningCount: 0
@@ -131,8 +128,8 @@ describe("월간 대시보드", () => {
     const money = from(html, "월간 금액 KPI");
 
     assert.match(money, /bg-accent-lavender"><dt[^>]*>결제합계<\/dt><dd[^>]*>296,000,000 <span[^>]*>VND<\/span><\/dd><dd[^>]*>할인합계 4,000,000 VND<\/dd>/);
-    assert.match(money, /bg-accent-lavender"><dt[^>]*>월간 순이익<\/dt><dd[^>]*>89,000,000 <span[^>]*>VND<\/span><\/dd><dd[^>]*>결제합계 - 일일비용 - 월간비용<\/dd>/);
-    assert.match(money, /bg-accent-peach"><dt[^>]*>일일비용 합계<\/dt><dd[^>]*>203,500,000 <span[^>]*>VND<\/span>/);
+    assert.match(money, /bg-accent-lavender"><dt[^>]*>월간 순이익<\/dt><dd[^>]*>93,500,000 <span[^>]*>VND<\/span><\/dd><dd[^>]*>결제합계 - 일일비용 - 월간비용<\/dd>/);
+    assert.match(money, /bg-accent-peach"><dt[^>]*>일일비용 합계<\/dt><dd[^>]*>199,000,000 <span[^>]*>VND<\/span>/);
     assert.match(money, /bg-accent-peach"><dt[^>]*>월간비용 합계<\/dt><dd[^>]*>3,500,000 <span[^>]*>VND<\/span>/);
     assert.equal(money.match(/bg-accent-/g)?.length, 4);
     assert.doesNotMatch(html, /잔액/);
@@ -164,11 +161,11 @@ describe("월간 대시보드", () => {
 
     assert.equal(
       text(card(html, "월간 지급 정산 KPI")),
-      "월간 지급 정산 마사지사 지급 101,500,000 VND 운영팀 일일 인센 3,000,000 VND 운영팀 월 인센 2,000,000 VND 귀케어 지급 4,500,000 VND 전체 지급 합계 111,000,000 VND 포함 35건 · 제외 1건"
+      "월간 지급 정산 마사지사 지급 101,500,000 VND 운영팀 일일 인센 3,000,000 VND 운영팀 월 인센 2,000,000 VND 전체 지급 합계 106,500,000 VND 포함 35건 · 제외 1건"
     );
     assert.equal(
       text(card(html, "월간 금액 내역")),
-      "월간 금액 내역 지출합계 96,000,000 VND 운영팀 월인센 2,000,000 VND 만근수당 1,000,000 VND 갯수왕 500,000 VND 귀케어 풀 5,000,000 VND"
+      "월간 금액 내역 지출합계 96,000,000 VND 운영팀 월인센 2,000,000 VND 만근수당 1,000,000 VND 갯수왕 500,000 VND"
     );
   });
 

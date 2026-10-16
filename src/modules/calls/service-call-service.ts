@@ -65,8 +65,6 @@ type CoursePolicyRecord = {
   name: string;
   durationMinutes: number;
   basePrice: number;
-  opsCallCredit: number;
-  earcarePoolAmount: number;
   requiresSecondTherapist: boolean;
   tvDisplayName: string;
   effectiveFromMonth: string;
@@ -319,7 +317,6 @@ export type ServiceCallRowDto = {
   customerMemo: string | null;
   therapist1: ServiceCallAssigneeDto | null;
   therapist2: ServiceCallAssigneeDto | null;
-  earcare: ServiceCallAssigneeDto | null;
   status: string;
   discountTypeCode: string | null;
   paymentMethodCode: string | null;
@@ -332,8 +329,6 @@ export type ServiceCallRowDto = {
   discountAmount: number;
   therapist1Commission: number;
   therapist2Commission: number;
-  earcarePoolAmount: number;
-  opsCallCredit: number;
   calculationStatus: ServiceCallCalculationStatus;
   calculationErrorCode: string | null;
   calculationErrorMessage: string | null;
@@ -383,7 +378,6 @@ export type DailyCallLedgerSummaryDto = {
   canceledCount: number;
   paymentTotal: number;
   therapistCommissionTotal: number;
-  earcarePoolTotal: number;
   discountTotal: number;
   expenseTotal: number;
   netSales: number;
@@ -413,8 +407,6 @@ export type CompletedServiceCallCalculationDto = {
   basePrice: number;
   paymentAmount: number;
   discountAmount: number;
-  earcarePoolAmount: number;
-  opsCallCredit: number;
   therapistAssignments: Array<{
     role: "THERAPIST_1" | "THERAPIST_2";
     employeeId: string;
@@ -446,7 +438,6 @@ export type ServiceCallFormOptions = {
   paymentMethods: ServiceCallOption[];
   confirmationCodes: ServiceCallOption[];
   therapists: ServiceCallOption[];
-  earcareEmployees: ServiceCallOption[];
   expenseHandlers: ServiceCallOption[];
 };
 
@@ -657,8 +648,6 @@ function emptyCalculation(status: ServiceCallCalculationStatus, error?: { code: 
     discountAmount: 0,
     therapist1Commission: 0,
     therapist2Commission: 0,
-    earcarePoolAmount: 0,
-    opsCallCredit: 0,
     calculationStatus: status,
     calculationErrorCode: error?.code ?? null,
     calculationErrorMessage: error?.message ?? null
@@ -797,8 +786,6 @@ async function calculateServiceCallCompletion(
     discountAmount,
     therapist1Commission: 0,
     therapist2Commission: 0,
-    earcarePoolAmount: policy.earcarePoolAmount,
-    opsCallCredit: policy.opsCallCredit,
     calculationStatus: "calculated" as ServiceCallCalculationStatus,
     calculationErrorCode: null,
     calculationErrorMessage: null
@@ -810,9 +797,7 @@ async function calculateServiceCallCompletion(
     return {
       ...baseCalculation,
       therapist1Commission: 0,
-      therapist2Commission: 0,
-      earcarePoolAmount: 0,
-      opsCallCredit: 0
+      therapist2Commission: 0
     };
   }
 
@@ -887,7 +872,6 @@ async function toRowDto(
   const policy = operatingMonth && course ? firstCurrentPolicy(course, operatingMonth.monthKey) : null;
   const therapist1 = assignmentByRole(record, "THERAPIST_1")?.employee ?? null;
   const therapist2 = assignmentByRole(record, "THERAPIST_2")?.employee ?? null;
-  const earcare = assignmentByRole(record, "EARCARE")?.employee ?? null;
   const calculation = await calculateServiceCallCompletion(tx, record, sources);
   const context = displayContext ?? (await displayEndContextFor(tx, record));
   const display = deriveDisplayEnd(record, context);
@@ -910,7 +894,6 @@ async function toRowDto(
     customerMemo: record.customerMemo,
     therapist1: therapist1 ? toAssigneeDto(therapist1) : null,
     therapist2: therapist2 ? toAssigneeDto(therapist2) : null,
-    earcare: earcare ? toAssigneeDto(earcare) : null,
     status: record.status,
     discountTypeCode: record.discountTypeCode,
     paymentMethodCode: record.paymentMethodCode,
@@ -1038,9 +1021,8 @@ async function assertActiveEmployee(tx: ServiceCallPrismaClient, input: { employ
     return;
   }
 
-  const expectedGroup = input.role === "EARCARE" ? "EARCARE" : "THERAPIST";
   const employee = await tx.employee.findUnique({ where: { id: input.employeeId } });
-  if (!employee || !employee.isActive || employee.employeeGroup !== expectedGroup) {
+  if (!employee || !employee.isActive || employee.employeeGroup !== "THERAPIST") {
     throw new ServiceCallDomainError("활성 담당 직원을 선택하세요.", "EMPLOYEE_NOT_ACTIVE_FOR_ROLE");
   }
 }
@@ -1155,8 +1137,7 @@ function toAuditSnapshot(record: ServiceCallRecord): AuditJsonSnapshot {
     confirmationCode: record.confirmationCode,
     assignments: {
       therapist1Id: assignmentEmployeeId(record, "THERAPIST_1"),
-      therapist2Id: assignmentEmployeeId(record, "THERAPIST_2"),
-      earcareEmployeeId: assignmentEmployeeId(record, "EARCARE")
+      therapist2Id: assignmentEmployeeId(record, "THERAPIST_2")
     },
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString()
@@ -1209,7 +1190,6 @@ function hasSensitiveRowChange(before: ServiceCallRecord, after: ServiceCallReco
     before.confirmationCode !== after.confirmationCode ||
     assignmentEmployeeId(before, "THERAPIST_1") !== assignmentEmployeeId(after, "THERAPIST_1") ||
     assignmentEmployeeId(before, "THERAPIST_2") !== assignmentEmployeeId(after, "THERAPIST_2") ||
-    assignmentEmployeeId(before, "EARCARE") !== assignmentEmployeeId(after, "EARCARE") ||
     linkedCustomerId(before) !== linkedCustomerId(after) ||
     storedActualEntryTime(before) !== storedActualEntryTime(after)
   );
@@ -2035,8 +2015,7 @@ async function writeServiceCallRow(
     assertActiveCode(tx, { codeType: "PAYMENT_METHOD", code: input.paymentMethodCode }),
     assertActiveCode(tx, { codeType: "CONFIRMATION", code: input.confirmationCode }),
     assertActiveEmployee(tx, { role: "THERAPIST_1", employeeId: input.therapist1Id }),
-    assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: input.therapist2Id }),
-    assertActiveEmployee(tx, { role: "EARCARE", employeeId: input.earcareEmployeeId })
+    assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: input.therapist2Id })
   ]);
   assertSecondTherapistRequirement({ policy: coursePolicy, therapist2Id: input.therapist2Id });
 
@@ -2092,11 +2071,6 @@ async function writeServiceCallRow(
       serviceCallId: serviceCall.id,
       assignmentRole: "THERAPIST_2",
       employeeId: input.therapist2Id
-    }),
-    writeAssignment(tx, {
-      serviceCallId: serviceCall.id,
-      assignmentRole: "EARCARE",
-      employeeId: input.earcareEmployeeId
     })
   ]);
 
@@ -2149,8 +2123,7 @@ export async function autosaveServiceCallRow(
       assertActiveCode(tx, { codeType: "PAYMENT_METHOD", code: parsed.data.paymentMethodCode }),
       assertActiveCode(tx, { codeType: "CONFIRMATION", code: parsed.data.confirmationCode }),
       assertActiveEmployee(tx, { role: "THERAPIST_1", employeeId: parsed.data.therapist1Id }),
-      assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: parsed.data.therapist2Id }),
-      assertActiveEmployee(tx, { role: "EARCARE", employeeId: parsed.data.earcareEmployeeId })
+      assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: parsed.data.therapist2Id })
     ]);
     assertSecondTherapistRequirement({ policy: coursePolicy, therapist2Id: parsed.data.therapist2Id });
 
@@ -2186,11 +2159,6 @@ export async function autosaveServiceCallRow(
         serviceCallId: parsed.data.serviceCallId,
         assignmentRole: "THERAPIST_2",
         employeeId: parsed.data.therapist2Id
-      }),
-      writeAssignment(tx, {
-        serviceCallId: parsed.data.serviceCallId,
-        assignmentRole: "EARCARE",
-        employeeId: parsed.data.earcareEmployeeId
       })
     ]);
 
@@ -2958,7 +2926,6 @@ export async function getDailyCallLedgerSummary(input: {
 
   let paymentTotal = 0;
   let therapistCommissionTotal = 0;
-  let earcarePoolTotal = 0;
   let discountTotal = 0;
   const warningCounts = {
     coursePolicyMissing: 0,
@@ -2986,7 +2953,6 @@ export async function getDailyCallLedgerSummary(input: {
     }
 
     therapistCommissionTotal += row.therapist1Commission + row.therapist2Commission;
-    earcarePoolTotal += row.earcarePoolAmount;
 
     const courseSummary = courseSummaryByCode.get(row.courseCode as DailyCourseSummaryDto["courseCode"]);
     if (courseSummary) {
@@ -3009,7 +2975,6 @@ export async function getDailyCallLedgerSummary(input: {
     canceledCount: rows.filter((row) => isCanceledStatus(row.status)).length,
     paymentTotal,
     therapistCommissionTotal,
-    earcarePoolTotal,
     discountTotal,
     expenseTotal,
     netSales: paymentTotal - expenseTotal,
@@ -3031,8 +2996,6 @@ export function completedServiceCallCalculationsFromRows(rows: ServiceCallRowDto
       basePrice: row.basePrice,
       paymentAmount: row.paymentAmount,
       discountAmount: row.discountAmount,
-      earcarePoolAmount: row.earcarePoolAmount,
-      opsCallCredit: row.opsCallCredit,
       therapistAssignments: [
         ...(row.therapist1
           ? [
@@ -3120,9 +3083,7 @@ export function redactServiceCallSettlementAmounts(row: ServiceCallRowDto): Serv
   return {
     ...row,
     therapist1Commission: 0,
-    therapist2Commission: 0,
-    earcarePoolAmount: 0,
-    opsCallCredit: 0
+    therapist2Commission: 0
   };
 }
 
@@ -3174,7 +3135,7 @@ export async function listServiceCallFormOptions(
     : operatingMonths[0];
   const monthKey = selectedMonth?.monthKey;
 
-  const [rooms, timeSlots, courses, statuses, discountTypes, paymentMethods, confirmationCodes, therapists, earcareEmployees, expenseHandlers] = await Promise.all([
+  const [rooms, timeSlots, courses, statuses, discountTypes, paymentMethods, confirmationCodes, therapists, expenseHandlers] = await Promise.all([
     listActiveRooms({ prismaClient: client as any }),
     listActiveTimeSlots({ prismaClient: client as any }),
     monthKey ? listActiveCourses({ monthKey, prismaClient: client as any }) : Promise.resolve([]),
@@ -3183,7 +3144,6 @@ export async function listServiceCallFormOptions(
     listActiveCodeItems({ codeType: "PAYMENT_METHOD", prismaClient: client as any }),
     listActiveCodeItems({ codeType: "CONFIRMATION", prismaClient: client as any }),
     listActiveEmployees({ employeeGroup: "THERAPIST", prismaClient: client as any }),
-    listActiveEmployees({ employeeGroup: "EARCARE", prismaClient: client as any }),
     listActiveEmployees({ prismaClient: client as any })
   ]);
 
@@ -3196,7 +3156,6 @@ export async function listServiceCallFormOptions(
     paymentMethods: paymentMethods.map((code) => option(code.code, codeLabel(locale, code.codeType, code.code, code.isSystemDefault, code.displayName))),
     confirmationCodes: confirmationCodes.map((code) => option(code.code, codeLabel(locale, code.codeType, code.code, code.isSystemDefault, code.displayName))),
     therapists: therapists.map((employee) => option(employee.id, `${employee.displayName} (${employee.staffCode})`)),
-    earcareEmployees: earcareEmployees.map((employee) => option(employee.id, `${employee.displayName} (${employee.staffCode})`)),
     expenseHandlers: expenseHandlers.map((employee) => option(employee.id, `${employee.displayName} (${employee.staffCode})`))
   } satisfies ServiceCallFormOptions;
 }

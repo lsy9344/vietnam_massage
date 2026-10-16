@@ -208,7 +208,7 @@ test.describe("Story 7.1 sheet mapping browser access", () => {
     // 것이므로 순서(nth) 대신 시트 이름으로 펼친다.
     await page.getByText("실시간콜입력 원본 근거, ERP 연결, 보존 규칙, 검증 항목 보기").click();
     await expect(page.getByText("A:S 콜 원장 입력/계산 구조와 U:X 지출/요약 구조를 별도로 검증한다.")).toBeVisible();
-    await expect(page.getByText("방문완료 또는 VISIT_COMPLETE 상태만 결제, 수당, 귀케어 풀, 콜인정 계산에 포함한다.")).toBeVisible();
+    await expect(page.getByText("방문완료 또는 VISIT_COMPLETE 상태만 결제, 수당 계산에 포함한다.")).toBeVisible();
   });
 
   test("read_only_viewer has exact access and does not get the broader masters prefix", async ({ page }) => {

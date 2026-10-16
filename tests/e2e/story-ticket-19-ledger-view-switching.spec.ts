@@ -81,8 +81,6 @@ async function seed() {
       name,
       durationMinutes: requiresSecondTherapist ? 90 : 60,
       basePrice: 1500000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist,
       tvDisplayName: name,
       effectiveToMonth: null,

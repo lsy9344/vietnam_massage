@@ -14,7 +14,6 @@ type SeededData = {
   therapist1Id: string;
   therapist2Id: string;
   noRateTherapistId: string;
-  earcareEmployeeId: string;
 };
 
 let seededData: SeededData;
@@ -25,7 +24,7 @@ async function login(page: Page) {
   await loginAccount(page, "story23_counter", "Story23!counter");
 }
 
-// 수당/귀케어풀/콜인정 컬럼은 카운터에게 가려지므로, 계산값 표시를 확인할 때는 관리자로 본다.
+// 수당 컬럼은 카운터에게 가려지므로, 계산값 표시를 확인할 때는 관리자로 본다.
 async function loginAsAdministrator(page: Page) {
   await loginAccount(page, "story23_administrator", "Story23!administrator");
 }
@@ -94,7 +93,7 @@ async function seedEmployee(staffCode: string, displayName: string, employeeGrou
     update: {
       displayName,
       employeeGroup,
-      position: employeeGroup === "EARCARE" ? "귀케어" : "마사지사",
+      position: "마사지사",
       shiftType: "전체",
       baseSalary: 0,
       employmentStatus: "재직",
@@ -105,7 +104,7 @@ async function seedEmployee(staffCode: string, displayName: string, employeeGrou
       staffCode,
       displayName,
       employeeGroup,
-      position: employeeGroup === "EARCARE" ? "귀케어" : "마사지사",
+      position: "마사지사",
       shiftType: "전체",
       baseSalary: 0,
       employmentStatus: "재직",
@@ -120,7 +119,6 @@ async function upsertCoursePolicy(input: {
   effectiveFromMonth: string;
   name: string;
   basePrice: number;
-  earcarePoolAmount: number;
 }) {
   const existing = await (prisma as any).coursePolicy.findFirst({
     where: { courseId: input.courseId, effectiveFromMonth: input.effectiveFromMonth }
@@ -129,8 +127,6 @@ async function upsertCoursePolicy(input: {
     name: input.name,
     durationMinutes: 60,
     basePrice: input.basePrice,
-    opsCallCredit: 1,
-    earcarePoolAmount: input.earcarePoolAmount,
     requiresSecondTherapist: false,
     tvDisplayName: input.name,
     effectiveToMonth: null,
@@ -202,21 +198,18 @@ async function seedStoryData(): Promise<SeededData> {
     courseId: course.id,
     effectiveFromMonth: "2032-05",
     name: "E2E 계산60",
-    basePrice: 1500000,
-    earcarePoolAmount: 100000
+    basePrice: 1500000
   });
   await upsertCoursePolicy({
     courseId: missingRateCourse.id,
     effectiveFromMonth: "2032-05",
     name: "E2E 수당누락60",
-    basePrice: 1800000,
-    earcarePoolAmount: 200000
+    basePrice: 1800000
   });
 
   const therapist1 = await seedEmployee("E2E23-THR-001", "E2E23 마사지사1", "THERAPIST", 92301);
   const therapist2 = await seedEmployee("E2E23-THR-002", "E2E23 마사지사2", "THERAPIST", 92302);
   const noRateTherapist = await seedEmployee("E2E23-THR-NORATE", "E2E23 수당누락", "THERAPIST", 92303);
-  const earcare = await seedEmployee("E2E23-EAR-001", "E2E23 귀케어1", "EARCARE", 92301);
 
   await upsertTherapistCourseRate({ therapistId: therapist1.id, courseId: course.id, amount: 700000 });
   await upsertTherapistCourseRate({ therapistId: therapist2.id, courseId: course.id, amount: 300000 });
@@ -241,8 +234,7 @@ async function seedStoryData(): Promise<SeededData> {
     missingRateCourseId: missingRateCourse.id,
     therapist1Id: therapist1.id,
     therapist2Id: therapist2.id,
-    noRateTherapistId: noRateTherapist.id,
-    earcareEmployeeId: earcare.id
+    noRateTherapistId: noRateTherapist.id
   };
 }
 
@@ -274,9 +266,6 @@ async function createCallRow(input: { serviceDate: string; memo: string; status?
       data: { serviceCallId: call.id, assignmentRole: "THERAPIST_2", employeeId: seededData.therapist2Id }
     });
   }
-  await (prisma as any).serviceCallAssignment.create({
-    data: { serviceCallId: call.id, assignmentRole: "EARCARE", employeeId: seededData.earcareEmployeeId }
-  });
   return call;
 }
 
@@ -309,7 +298,7 @@ test.describe("Story 2.3 방문완료 기준 계산 표시", () => {
     const row = rowByText(page, memo);
     await expect(row).toBeVisible();
     // REQ-007: 결제수단이 있으면 방문완료 전에도 선결제 매출로 결제금액이 잡힌다.
-    // 수당/귀케어풀/콜인정은 방문완료 이후에만 계산한다.
+    // 수당은 방문완료 이후에만 계산한다.
     await expect(row.getByText("계산됨")).toBeVisible();
     await expect(row.getByText("1,500,000")).toBeVisible();
     await expect(row.getByText("700,000")).toHaveCount(0);
@@ -319,12 +308,11 @@ test.describe("Story 2.3 방문완료 기준 계산 표시", () => {
     await expect(row.getByText("1,500,000")).toBeVisible();
     await expect(row.getByText("700,000")).toBeVisible();
     await expect(row.getByText("300,000")).toBeVisible();
-    await expect(row.getByText(/^100,000$/)).toHaveCount(1);
-    await expect(row.getByText(/^1$/)).toHaveCount(1);
+    await expect(row.getByText(/^100,000$/)).toHaveCount(0);
 
     await selectGridOption(page, row, "할인구분", "생일자");
     await expect(row.getByText("1,400,000")).toBeVisible();
-    await expect(row.getByText(/^100,000$/)).toHaveCount(2);
+    await expect(row.getByText(/^100,000$/)).toHaveCount(1);
   });
 
   test("비완료 행은 계산 집계에서 제외된 상태로 표시한다", async ({ page }) => {

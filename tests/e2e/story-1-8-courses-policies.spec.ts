@@ -129,7 +129,7 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     await expect(page.getByRole("heading", { name: "코스/수당/인센", level: 1 })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "설정 화면" }).getByRole("link", { name: "코스·수당" })).toHaveAttribute("aria-current", "page");
     // 코스 목록은 읽기 전용 표다. TV 표시명은 그 표의 칸 글자다.
-    for (const tvLabel of ["A 누루60", "B 귀청소90", "C 때밀이90", "D 2:1 90", "E 풀코스120"]) {
+    for (const tvLabel of ["A 누루60", "C 때밀이90", "D 2:1 90", "E 풀코스120"]) {
       await expect(page.getByRole("cell", { name: tvLabel, exact: true }).first()).toBeVisible();
     }
     // "마사지사2 필요" 열의 D 코스 값.
@@ -188,17 +188,17 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     await login(page, "story18_administrator", "Story18!administrator");
     await gotoStable(page, "/masters/courses");
 
-    const beforeB = await (prisma as any).course.findUnique({ where: { code: "B" }, select: { id: true, code: true } });
-    const bPanel = await openMasterPanel(page, "B");
-    const currentPolicyForm = bPanel.locator("form").filter({ has: page.getByRole("button", { name: "현재 정책 저장" }) });
+    const beforeC = await (prisma as any).course.findUnique({ where: { code: "C" }, select: { id: true, code: true } });
+    const cPanel = await openMasterPanel(page, "C");
+    const currentPolicyForm = cPanel.locator("form").filter({ has: page.getByRole("button", { name: "현재 정책 저장" }) });
     await currentPolicyForm.getByLabel("시작월").fill("2026-07");
     await currentPolicyForm.getByLabel("종료월").fill("2026-06");
     await currentPolicyForm.getByRole("button", { name: "현재 정책 저장" }).click();
     // 검증 메시지는 여러 정책 폼에 중복 렌더되고 일부는 visible 판정이 안 되므로(ARIA 스냅샷엔 present),
     // 메시지가 DOM에 attach되었는지로 확인한다.
     await expect(page.getByText("적용 종료월은 시작월보다 빠를 수 없습니다.").first()).toBeAttached();
-    const afterB = await (prisma as any).course.findUnique({ where: { code: "B" }, select: { id: true, code: true } });
-    expect(afterB).toMatchObject(beforeB);
+    const afterC = await (prisma as any).course.findUnique({ where: { code: "C" }, select: { id: true, code: true } });
+    expect(afterC).toMatchObject(beforeC);
 
     // 월 인센 규칙은 표의 행을 고르면 열리는 패널에서 고친다.
     const monthlySection = page.getByRole("region", { name: "운영팀 월 인센 정책" });

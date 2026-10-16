@@ -61,7 +61,7 @@ function preview(overrides: Partial<MonthlyClosingPreviewDto> = {}): MonthlyClos
       dailyIncentiveAmount: 50000,
       monthlyIncentiveAmount: 0,
       totalOpsPayoutAmount: 50000,
-      monthlyOpsCallCredit: 31,
+      monthlyOpsCallCount: 31,
       appliedThresholdCallCount: null,
       ruleStatus: "missing_policy",
       warningMessages: ["월 인센 정책 없음"],
@@ -79,29 +79,11 @@ function preview(overrides: Partial<MonthlyClosingPreviewDto> = {}): MonthlyClos
         }
       ]
     },
-    earcare: {
-      earcarePoolTotal: 200000,
-      distributedAmount: 200000,
-      undistributedAmount: 0,
-      sourceCallCount: 2,
-      eligibleDayCount: 1,
-      rows: [
-        {
-          employeeId: "emp-earcare-1",
-          staffCode: "EAR-001",
-          displayName: "귀케어 원",
-          eligibleDayCount: 1,
-          payoutAmount: 200000,
-          calculationBasis: "귀케어풀 200000 / 1명"
-        }
-      ]
-    },
     financials: {
       paymentTotal: 1500000,
       netSales: 1400000,
       discountTotal: 0,
       expenseTotal: 100000,
-      earcarePoolTotal: 200000,
       therapistCommissionTotal: 1200000
     },
     dashboardFinancials: {
@@ -109,8 +91,6 @@ function preview(overrides: Partial<MonthlyClosingPreviewDto> = {}): MonthlyClos
       netSales: 1400000,
       discountTotal: 0,
       expenseTotal: 100000,
-      earcarePoolTotal: 200000,
-      earcarePayoutTotal: 200000,
       opsDailyIncentiveTotal: 50000,
       opsMonthlyIncentiveTotal: 0,
       fullAttendanceAllowanceTotal: 0,
@@ -151,8 +131,7 @@ function preview(overrides: Partial<MonthlyClosingPreviewDto> = {}): MonthlyClos
       therapistPayoutAmount: 1200000,
       opsDailyIncentiveAmount: 50000,
       opsMonthlyIncentiveAmount: 0,
-      earcarePayoutAmount: 200000,
-      grandPayoutAmount: 1450000
+      grandPayoutAmount: 1250000
     },
     warningCounts: {
       therapistCoursePolicyMissing: 0,
@@ -167,9 +146,6 @@ function preview(overrides: Partial<MonthlyClosingPreviewDto> = {}): MonthlyClos
       opsDaily: { notCompleted: 0, coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
       opsMonthly: { notCompleted: 0, coursePolicyMissing: 1, therapistRateMissing: 0, secondTherapistRequired: 0 },
       opsWarningMessageCount: 1,
-      earcare: { notCompleted: 0, coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
-      earcareNormalStaffZeroDays: 0,
-      earcareUndistributedDays: 0,
       total: 3
     },
     evidence: {
@@ -187,8 +163,7 @@ function preview(overrides: Partial<MonthlyClosingPreviewDto> = {}): MonthlyClos
       representativeEvidence: {
         therapist: ["call-1"],
         operationsDaily: ["call-1"],
-        operationsMonthly: ["call-1"],
-        earcare: ["call-1"]
+        operationsMonthly: ["call-1"]
       }
     },
     ...overrides
@@ -362,21 +337,19 @@ function storedClosingSnapshot(): MonthlyClosingSnapshotDto {
       dailyIncentiveAmount: 0,
       monthlyIncentiveAmount: 0,
       totalOpsPayoutAmount: 0,
-      monthlyOpsCallCredit: 0,
+      monthlyOpsCallCount: 0,
       appliedThresholdCallCount: null,
       ruleStatus: "missing_policy",
       warningMessages: []
     },
-    earcare: { rows: [], earcarePoolTotal: 0, distributedAmount: 0, undistributedAmount: 0, sourceCallCount: 0, eligibleDayCount: 0 },
     financials: {
       paymentTotal: 1500000,
       netSales: 1400000,
       discountTotal: 0,
       expenseTotal: 100000,
-      earcarePoolTotal: 200000,
       therapistCommissionTotal: 1200000
     },
-    totals: { therapistPayoutAmount: 10, opsDailyIncentiveAmount: 0, opsMonthlyIncentiveAmount: 0, earcarePayoutAmount: 0, grandPayoutAmount: 10 },
+    totals: { therapistPayoutAmount: 10, opsDailyIncentiveAmount: 0, opsMonthlyIncentiveAmount: 0, grandPayoutAmount: 10 },
     warningCounts: preview().warningCounts,
     evidence: preview().evidence,
     source: { serviceVersion: "monthly-closing-service:5.3", previewBasis: "listMonthlyClosingPreview", snapshotCreatedAt: "2026-06-10T04:00:00.000Z" }
@@ -454,8 +427,7 @@ describe("monthly closing service", () => {
     assert.equal(result.snapshot.source.serviceVersion, "monthly-closing-service:5.3");
     assert.equal(result.snapshot.therapists.rows[0].employeeId, "emp-therapist-1");
     assert.equal(result.snapshot.operations.rows[0].staffCode, "OPS-001");
-    assert.equal(result.snapshot.earcare.rows[0].payoutAmount, 200000);
-    assert.equal(result.snapshot.totals.grandPayoutAmount, 1450000);
+    assert.equal(result.snapshot.totals.grandPayoutAmount, 1250000);
     // F07/ADR 0005(티켓 34): 마감 확인 대상 콜이 없으면 예외 기록도 없다.
     assert.equal(result.snapshot.pendingCloseException, null);
     assert.equal(prismaClient.state.auditLogs[0].action, "monthly_close.confirmed");
@@ -474,8 +446,6 @@ describe("monthly closing service", () => {
         netSales: 1400000,
         discountTotal: 0,
         expenseTotal: 100000,
-        earcarePoolTotal: 200000,
-        earcarePayoutTotal: 200000,
         opsDailyIncentiveTotal: 50000,
         opsMonthlyIncentiveTotal: 0,
         fullAttendanceAllowanceTotal: 0,
@@ -1060,6 +1030,42 @@ describe("monthly closing service", () => {
 
     assert.equal(result.snapshot.totals.grandPayoutAmount, 10);
     assert.equal(result.snapshot.month.confirmedStatus, "마감확정");
+  });
+
+  it("reads a legacy snapshot that still carries a removed earcare section without rejecting it (귀케어 제거 이전 스냅샷 호환)", async () => {
+    const legacySnapshotJson = {
+      ...storedClosingSnapshot(),
+      // 귀케어 제거 이전에 마감된 스냅샷은 이 키가 그대로 남아 있다. 화면은 이 키를 더 이상 읽지 않지만,
+      // 스냅샷을 읽는 쪽이 이 키를 몰라도 거절하지 않아야 한다(모르는 키는 무시).
+      earcare: {
+        rows: [
+          {
+            employeeId: "emp-earcare-1",
+            staffCode: "EAR-001",
+            displayName: "귀케어 원",
+            eligibleDayCount: 1,
+            payoutAmount: 200000,
+            calculationBasis: "귀케어풀 200000 / 1명"
+          }
+        ],
+        earcarePoolTotal: 200000,
+        distributedAmount: 200000,
+        undistributedAmount: 0,
+        sourceCallCount: 2,
+        eligibleDayCount: 1
+      }
+    } as any;
+    const prismaClient = createPrisma({
+      status: "마감확정",
+      existingClosing: existingClosing({ snapshotJson: legacySnapshotJson })
+    });
+
+    const result = await getMonthlyClosingSnapshot({ operatingMonthId: "month-1", prismaClient });
+
+    assert.equal(result.snapshot.totals.grandPayoutAmount, 10);
+    assert.equal(result.snapshot.month.confirmedStatus, "마감확정");
+    // 저장된 값 그대로 남아 있을 뿐, 지금의 MonthlyClosingSnapshotDto 타입은 이 키를 더 이상 선언하지 않는다.
+    assert.equal((result.snapshot as any).earcare.distributedAmount, 200000);
   });
 
   it("returns the latest versioned snapshot for existing getMonthlyClosingSnapshot callers", async () => {

@@ -22,7 +22,6 @@ const accessMatrix: Record<string, Record<"administrator" | "counter" | "settlem
   // 티켓 03: 고객 화면은 지금 콜 원장에 들어가는 역할에게만 연다(명세 F08 기준 6).
   "/customers": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: false },
   "/settlements": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
-  "/settlements/earcare": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
   "/settlements/operations": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
   "/settlements/operations/monthly": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
   "/closing": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
@@ -113,9 +112,9 @@ describe("moving between zones with the dock", () => {
     assert.equal(getZoneHref("settlement_manager", "closing", ledgerContext), "/closing?operatingMonthId=m-2026-10");
   });
 
-  it("reads the attendance date of the earcare and operations screens as the date to carry", () => {
-    const earcareContext = readScreenContext(new URLSearchParams("operatingMonthId=m-2026-10&attendanceDate=2026-10-12"));
-    assert.equal(getZoneHref("administrator", "ledger", earcareContext), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-12");
+  it("reads the attendance date of the operations screens as the date to carry", () => {
+    const opsContext = readScreenContext(new URLSearchParams("operatingMonthId=m-2026-10&attendanceDate=2026-10-12"));
+    assert.equal(getZoneHref("administrator", "ledger", opsContext), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-12");
   });
 
   it("always opens the ledger tab of the ledger zone, dropping the ledger's own query state", () => {
@@ -148,7 +147,6 @@ describe("zone tabs", () => {
     assert.deepEqual(tabPaths("administrator", "settlements"), [
       "/settlements/schedule",
       "/settlements",
-      "/settlements/earcare",
       "/settlements/operations",
       "/settlements/operations/monthly"
     ]);
@@ -183,7 +181,7 @@ describe("links between screens", () => {
 
   it("links to a screen with the month and date only when the role can enter it", () => {
     assert.equal(linkToScreen("counter", "/calls", context), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
-    assert.equal(linkToScreen("administrator", "/settlements/earcare", context), "/settlements/earcare?operatingMonthId=m-2026-10&attendanceDate=2026-10-14");
+    assert.equal(linkToScreen("administrator", "/settlements/operations", context), "/settlements/operations?operatingMonthId=m-2026-10&attendanceDate=2026-10-14");
   });
 
   it("gives no link to roles that cannot enter the screen", () => {

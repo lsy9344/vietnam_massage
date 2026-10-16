@@ -61,7 +61,6 @@ test("Arrow movement uses the visible column list when settlement columns are hi
 
 test("computed cells are excluded from the explicit editable field sequence", () => {
   assert.equal((EDITABLE_CALL_FIELDS as readonly string[]).includes("paymentAmount"), false);
-  assert.equal((EDITABLE_CALL_FIELDS as readonly string[]).includes("earcarePoolAmount"), false);
 });
 
 test("Esc cancel restores the last server draft without changing object identity of the baseline", () => {
@@ -74,7 +73,6 @@ test("Esc cancel restores the last server draft without changing object identity
     customerId: null,
     therapist1Id: "employee-0",
     therapist2Id: null,
-    earcareEmployeeId: null,
     status: "예약",
     discountTypeCode: null,
     paymentMethodCode: null,

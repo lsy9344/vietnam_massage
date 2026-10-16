@@ -108,7 +108,7 @@ function createMemoryPrisma() {
   const courses = new Map<string, any>([
     ["course-a", { id: "course-a", code: "A", isActive: true, createdAt, updatedAt }],
     ["course-d", { id: "course-d", code: "D", isActive: true, createdAt, updatedAt }],
-    ["course-missing-rate", { id: "course-missing-rate", code: "B", isActive: true, createdAt, updatedAt }]
+    ["course-missing-rate", { id: "course-missing-rate", code: "C", isActive: true, createdAt, updatedAt }]
   ]);
   const coursePolicies = new Map<string, any>([
     [
@@ -119,8 +119,6 @@ function createMemoryPrisma() {
         name: "A 누루60",
         durationMinutes: 60,
         basePrice: 1500000,
-        opsCallCredit: 1,
-        earcarePoolAmount: 100000,
         requiresSecondTherapist: false,
         tvDisplayName: "A60",
         effectiveFromMonth: "2026-06",
@@ -138,8 +136,6 @@ function createMemoryPrisma() {
         name: "D 2:1 90",
         durationMinutes: 90,
         basePrice: 3200000,
-        opsCallCredit: 1,
-        earcarePoolAmount: 0,
         requiresSecondTherapist: true,
         tvDisplayName: "D90",
         effectiveFromMonth: "2026-06",
@@ -154,13 +150,11 @@ function createMemoryPrisma() {
       {
         id: "policy-missing-rate",
         courseId: "course-missing-rate",
-        name: "B 귀청소90",
+        name: "C 귀청소90",
         durationMinutes: 90,
         basePrice: 1800000,
-        opsCallCredit: 1,
-        earcarePoolAmount: 200000,
         requiresSecondTherapist: false,
-        tvDisplayName: "B90",
+        tvDisplayName: "C90",
         effectiveFromMonth: "2026-06",
         effectiveToMonth: null,
         isActive: true,
@@ -263,26 +257,6 @@ function createMemoryPrisma() {
         hireDate: null,
         employmentStatus: "재직",
         sortOrder: 2,
-        isActive: true,
-        createdAt,
-        updatedAt
-      }
-    ],
-    [
-      "earcare-1",
-      {
-        id: "earcare-1",
-        displayName: "귀케어1",
-        staffCode: "EAR-001",
-        employeeGroup: "EARCARE",
-        position: "귀케어",
-        shiftType: "전체",
-        baseSalary: 0,
-        phone: null,
-        birthday: null,
-        hireDate: null,
-        employmentStatus: "재직",
-        sortOrder: 1,
         isActive: true,
         createdAt,
         updatedAt
@@ -711,7 +685,6 @@ describe("service call service", () => {
       customerMemo: "단골 고객",
       therapist1Id: "therapist-1",
       therapist2Id: "therapist-2",
-      earcareEmployeeId: "earcare-1",
       status: "예약",
       discountTypeCode: "생일자",
       paymentMethodCode: "현금",
@@ -728,15 +701,12 @@ describe("service call service", () => {
     assert.equal(row.discountTypeCode, "생일자");
     assert.equal(row.therapist1?.id, "therapist-1");
     assert.equal(row.therapist2?.staffCode, "THR-002");
-    assert.equal(row.earcare?.id, "earcare-1");
     assert.equal(row.paymentAmount, 1400000);
     assert.equal(row.discountAmount, 100000);
     assert.equal(row.therapist1Commission, 0);
     assert.equal(row.therapist2Commission, 0);
-    assert.equal(row.earcarePoolAmount, 0);
-    assert.equal(row.opsCallCredit, 0);
     assert.equal(row.calculationStatus, "calculated");
-    assert.equal(prismaClient.assignments.size, 3);
+    assert.equal(prismaClient.assignments.size, 2);
 
     const saved = [...prismaClient.serviceCalls.values()][0];
     assert.equal(saved.roomId, "room-101");
@@ -876,7 +846,7 @@ describe("service call service", () => {
     }
   });
 
-  it("calculates completed-call payment, fixed discount, commissions, earcare pool, and ops call credit from policy sources", async () => {
+  it("calculates completed-call payment, fixed discount, and commissions from policy sources", async () => {
     const prismaClient = createMemoryPrisma();
 
     const row = await saveBasicServiceCallRow({
@@ -887,7 +857,6 @@ describe("service call service", () => {
       courseId: "course-a",
       therapist1Id: "therapist-1",
       therapist2Id: "therapist-2",
-      earcareEmployeeId: "earcare-1",
       status: "방문완료",
       discountTypeCode: "생일자",
       paymentMethodCode: "현금",
@@ -899,8 +868,6 @@ describe("service call service", () => {
     assert.equal(row.paymentAmount, 1400000);
     assert.equal(row.therapist1Commission, 700000);
     assert.equal(row.therapist2Commission, 0);
-    assert.equal(row.earcarePoolAmount, 100000);
-    assert.equal(row.opsCallCredit, 1);
   });
 
   it("redacts settlement-only amounts before rows are sent to non-settlement client views", async () => {
@@ -913,7 +880,6 @@ describe("service call service", () => {
       roomId: "room-101",
       courseId: "course-a",
       therapist1Id: "therapist-1",
-      earcareEmployeeId: "earcare-1",
       status: "방문완료",
       prismaClient
     });
@@ -924,8 +890,6 @@ describe("service call service", () => {
     assert.equal(redacted.discountAmount, row.discountAmount);
     assert.equal(redacted.therapist1Commission, 0);
     assert.equal(redacted.therapist2Commission, 0);
-    assert.equal(redacted.earcarePoolAmount, 0);
-    assert.equal(redacted.opsCallCredit, 0);
   });
 
   it("calculates completed calls when status is the stable VISIT_COMPLETE code", async () => {
@@ -970,8 +934,6 @@ describe("service call service", () => {
       assert.equal(row.calculationStatus, "not_completed");
       assert.equal(row.paymentAmount, 0);
       assert.equal(row.therapist1Commission, 0);
-      assert.equal(row.earcarePoolAmount, 0);
-      assert.equal(row.opsCallCredit, 0);
     }
 
     // 결제수단을 선택하면 방문완료 이전(예약·사용중)이라도 선결제 매출로 반영된다.
@@ -991,10 +953,8 @@ describe("service call service", () => {
 
       assert.equal(row.calculationStatus, "calculated");
       assert.equal(row.paymentAmount, 1400000);
-      // 방문완료 이전에는 수당·귀케어·콜인정이 발생하지 않는다.
+      // 방문완료 이전에는 수당이 발생하지 않는다.
       assert.equal(row.therapist1Commission, 0);
-      assert.equal(row.earcarePoolAmount, 0);
-      assert.equal(row.opsCallCredit, 0);
     }
 
     // 취소/노쇼는 결제수단이 선택되어 있어도 매출에서 즉시 제외한다(차감 정책).
@@ -1203,7 +1163,6 @@ describe("service call service", () => {
     assert.ok(options.paymentMethods.some((method) => method.value === "현금"));
     assert.ok(options.paymentMethods.some((method) => method.value === "CASH"));
     assert.deepEqual(options.therapists.map((therapist) => therapist.value), ["therapist-1", "therapist-2"]);
-    assert.deepEqual(options.earcareEmployees.map((employee) => employee.value), ["earcare-1"]);
   });
 
   it("rejects D-course saves without therapist2 before creating a row or assignments", async () => {
@@ -1307,7 +1266,6 @@ describe("service call service", () => {
     assert.equal(completed.paymentAmount, 3200000);
     assert.equal(completed.therapist1Commission, 900000);
     assert.equal(completed.therapist2Commission, 900000);
-    assert.equal(completed.opsCallCredit, 1);
   });
 
   it("keeps existing invalid completed D-course rows out of completed-call aggregates", async () => {
@@ -1462,7 +1420,6 @@ describe("service call service", () => {
     assert.equal(saved.paymentAmount, 1500000);
     assert.equal(saved.therapist1Commission, 700000);
     assert.equal(saved.therapist2Commission, 0);
-    assert.equal(saved.opsCallCredit, 1);
   });
 
   it("completed-call aggregate helper exposes both therapist roles as separate 담당 records", async () => {
@@ -1475,7 +1432,6 @@ describe("service call service", () => {
       courseId: "course-a",
       therapist1Id: "therapist-1",
       therapist2Id: "therapist-1",
-      earcareEmployeeId: "earcare-1",
       status: "방문완료",
       discountTypeCode: "생일자",
       paymentMethodCode: "현금",
@@ -1490,7 +1446,6 @@ describe("service call service", () => {
 
     assert.equal(calculations.length, 1);
     assert.equal(calculations[0].paymentAmount, 1400000);
-    assert.equal(calculations[0].earcarePoolAmount, 100000);
     assert.deepEqual(calculations[0].therapistAssignments, [
       { role: "THERAPIST_1", employeeId: "therapist-1", commissionAmount: 700000 },
       { role: "THERAPIST_2", employeeId: "therapist-1", commissionAmount: 700000 }
@@ -1595,7 +1550,6 @@ describe("service call service", () => {
       courseId: "course-a",
       therapist1Id: "therapist-1",
       therapist2Id: "therapist-2",
-      earcareEmployeeId: "earcare-1",
       status: "예약",
       prismaClient
     });
@@ -1610,16 +1564,14 @@ describe("service call service", () => {
       courseId: "course-a",
       therapist1Id: "therapist-1",
       therapist2Id: null,
-      earcareEmployeeId: null,
       status: "예약",
       actorId: "counter-account",
       prismaClient
     });
 
     assert.equal(saved.therapist2, null);
-    assert.equal(saved.earcare, null);
-    assert.equal(prismaClient.assignments.size, 3);
-    assert.equal([...prismaClient.assignments.values()].filter((assignment: any) => assignment.isActive === false).length, 2);
+    assert.equal(prismaClient.assignments.size, 2);
+    assert.equal([...prismaClient.assignments.values()].filter((assignment: any) => assignment.isActive === false).length, 1);
   });
 
   it("blocks autosave for locked months and inactive employees", async () => {
@@ -1869,7 +1821,6 @@ describe("service call service", () => {
       courseId: "course-a",
       therapist1Id: "therapist-1",
       therapist2Id: "therapist-2",
-      earcareEmployeeId: "earcare-1",
       status: "VISIT_COMPLETE",
       discountTypeCode: "BIRTHDAY",
       paymentMethodCode: "현금",
@@ -1990,7 +1941,6 @@ describe("service call service", () => {
     // 매출은 방문완료 2건(1,400,000 + 3,200,000)만 인정된다.
     assert.equal(summary.paymentTotal, 4600000);
     assert.equal(summary.therapistCommissionTotal, 2500000);
-    assert.equal(summary.earcarePoolTotal, 100000);
     assert.equal(summary.discountTotal, 100000);
     assert.equal(summary.expenseTotal, 250000);
     assert.equal(summary.netSales, 4350000);
@@ -3297,8 +3247,6 @@ function addAvailabilityCourse(
     name: input.name,
     durationMinutes: input.durationMinutes,
     basePrice: 1000000,
-    opsCallCredit: 1,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: input.requiresSecondTherapist ?? false,
     tvDisplayName: input.code,
     effectiveFromMonth: "2026-06",
@@ -3368,7 +3316,9 @@ function addAvailabilityCall(
     paymentMethodCode?: string | null;
     roomId?: string | null;
     createdAt?: Date;
-    assignments: Array<{ role: "THERAPIST_1" | "THERAPIST_2" | "EARCARE"; employeeId: string }>;
+    // assignmentRole은 DB에서 자유 문자열이라, 역할과 무관하게 매칭하는 쿼리(listAssignedServiceCallsForEmployeeOnDate)를
+    // 검증할 때는 THERAPIST_1·THERAPIST_2가 아닌 값도 넣어 본다.
+    assignments: Array<{ role: string; employeeId: string }>;
   }
 ) {
   const createdAt = input.createdAt ?? new Date("2026-06-10T00:00:00.000Z");
@@ -3489,7 +3439,7 @@ describe("therapist availability", () => {
 
   it("offers a 60 minute course at 15:00 when the next reservation is 16:00, and not a 90 or 120", async () => {
     const prismaClient = createMemoryPrisma();
-    addAvailabilityCourse(prismaClient, { id: "course-c", code: "C", name: "C 120", durationMinutes: 120 });
+    addAvailabilityCourse(prismaClient, { id: "course-e", code: "E", name: "E 120", durationMinutes: 120 });
     addAvailabilityCall(prismaClient, {
       id: "call-1600",
       startTime: "16:00",
@@ -3507,8 +3457,8 @@ describe("therapist availability", () => {
       [
         { courseId: "course-a", durationMinutes: 60, verdict: "possible" },
         { courseId: "course-missing-rate", durationMinutes: 90, verdict: "rate_missing" },
-        { courseId: "course-c", durationMinutes: 120, verdict: "rate_missing" },
-        { courseId: "course-d", durationMinutes: 90, verdict: "time_short" }
+        { courseId: "course-d", durationMinutes: 90, verdict: "time_short" },
+        { courseId: "course-e", durationMinutes: 120, verdict: "rate_missing" }
       ]
     );
   });
@@ -3568,35 +3518,31 @@ describe("therapist availability", () => {
     }
   });
 
-  it("occupies both therapist assignments and ignores earcare", async () => {
+  it("occupies the second therapist assignment", async () => {
     const prismaClient = createMemoryPrisma();
     addAvailabilityCall(prismaClient, {
       id: "call-second-assignment",
       startTime: "14:00",
       courseId: "course-missing-rate",
       status: "예약",
-      assignments: [
-        { role: "THERAPIST_2", employeeId: "therapist-2" },
-        { role: "EARCARE", employeeId: "earcare-1" }
-      ]
+      assignments: [{ role: "THERAPIST_2", employeeId: "therapist-2" }]
     });
 
     const rows = await availabilityAt(prismaClient, "15:00");
     assert.equal(rows.find((row) => row.therapistId === "therapist-1")?.available, true);
     assert.equal(rows.find((row) => row.therapistId === "therapist-2")?.available, false);
     assert.equal(rows.find((row) => row.therapistId === "therapist-2")?.freeFrom, "15:30");
-    assert.equal(rows.some((row) => row.therapistId === "earcare-1"), false);
   });
 
   it("offers a second-therapist course only when another active therapist is free for the whole duration", async () => {
     const open = createMemoryPrisma();
-    addAvailabilityCourse(open, { id: "course-c", code: "C", name: "C 120", durationMinutes: 120 });
-    addAvailabilityRate(open, { therapistId: "therapist-1", courseId: "course-c" });
+    addAvailabilityCourse(open, { id: "course-e", code: "E", name: "E 120", durationMinutes: 120 });
+    addAvailabilityRate(open, { therapistId: "therapist-1", courseId: "course-e" });
     const openRows = await availabilityAt(open, "15:00");
     const openTherapist = openRows.find((row) => row.therapistId === "therapist-1");
     assert.equal(openTherapist?.freeMinutes, 600);
     assert.equal(courseVerdict(openRows, "therapist-1", "course-a"), "possible");
-    assert.equal(courseVerdict(openRows, "therapist-1", "course-c"), "possible");
+    assert.equal(courseVerdict(openRows, "therapist-1", "course-e"), "possible");
     assert.equal(courseVerdict(openRows, "therapist-1", "course-d"), "possible");
 
     const blockedPartner = createMemoryPrisma();
@@ -3621,7 +3567,7 @@ describe("therapist availability", () => {
     assert.equal(courseVerdict(aloneRows, "therapist-1", "course-d"), "rate_missing");
   });
 
-  it("lists every active therapist, with attendance as a label, and leaves out earcare, operations, and inactive therapists", async () => {
+  it("lists every active therapist, with attendance as a label, and leaves out operations and inactive therapists", async () => {
     const prismaClient = createMemoryPrisma();
     const createdAt = new Date("2026-06-01T00:00:00.000Z");
     prismaClient.employees.set("therapist-off", {
@@ -4495,7 +4441,6 @@ describe("actual entry and display end", () => {
       customerId: late.customerId,
       therapist1Id: late.therapist1?.id ?? null,
       therapist2Id: null,
-      earcareEmployeeId: null,
       status: late.status,
       discountTypeCode: late.discountTypeCode,
       paymentMethodCode: late.paymentMethodCode,
@@ -4608,7 +4553,6 @@ function ledgerRow(overrides: Partial<ServiceCallRowDto>): ServiceCallRowDto {
     customerMemo: null,
     therapist1: null,
     therapist2: null,
-    earcare: null,
     status: "방문완료",
     discountTypeCode: null,
     paymentMethodCode: null,
@@ -4620,8 +4564,6 @@ function ledgerRow(overrides: Partial<ServiceCallRowDto>): ServiceCallRowDto {
     discountAmount: 0,
     therapist1Commission: 0,
     therapist2Commission: 0,
-    earcarePoolAmount: 0,
-    opsCallCredit: 0,
     calculationStatus: "calculated",
     calculationErrorCode: null,
     calculationErrorMessage: null,
@@ -5186,7 +5128,7 @@ describe("assigned service calls for day off impact (ticket 28)", () => {
       startTime: "15:00",
       courseId: "course-d",
       status: "사용중",
-      assignments: [{ role: "THERAPIST_2", employeeId: "other-therapist" }, { role: "EARCARE", employeeId: "therapist-1" }]
+      assignments: [{ role: "THERAPIST_2", employeeId: "other-therapist" }, { role: "COORDINATOR", employeeId: "therapist-1" }]
     });
     addAvailabilityCall(prismaClient, {
       id: "other-employee",
@@ -5321,7 +5263,6 @@ describe("stale save rejection", () => {
       customerId: read.customerId,
       therapist1Id: read.therapist1?.id ?? null,
       therapist2Id: read.therapist2?.id ?? null,
-      earcareEmployeeId: read.earcare?.id ?? null,
       status: read.status,
       discountTypeCode: read.discountTypeCode,
       paymentMethodCode: read.paymentMethodCode,

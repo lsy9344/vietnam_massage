@@ -35,7 +35,7 @@ The dashboard module owns read-only operational KPI summaries:
 - Dashboard should not own business calculations that belong to `calls`, `settlements`, or `closing`.
 - Story 6.1 today KPI is owned by `src/modules/dashboard/dashboard-query-service.ts`.
 - `/dashboard/today` consumes `getTodayDashboardMetrics()` and must not calculate call counts, completed-call financial totals, therapist evidence, or course completion rules in the route component.
-- `getTodayDashboardMetrics()` reuses `getDailyCallLedgerSummary()` for status counts, payment/net sales/discount/expense/earcare/commission totals, A-E course completions, and warning counts.
+- `getTodayDashboardMetrics()` reuses `getDailyCallLedgerSummary()` for status counts, payment/net sales/discount/expense/commission totals, A-E course completions, and warning counts.
 - `getTodayDashboardMetrics()` reuses `listTherapistDailySettlements()` for `THERAPIST_1`/`THERAPIST_2` assigned-call counts and therapist settlement totals, including same-therapist dual-role evidence.
 - Today dashboard empty state distinguishes dates with no calls from dates where warning rows are excluded from amount/course aggregates.
 - Story 6.2 monthly KPI is owned by `getMonthlyDashboardMetrics({ operatingMonthId })`.

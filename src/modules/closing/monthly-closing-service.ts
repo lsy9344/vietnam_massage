@@ -77,7 +77,6 @@ export type MonthlyClosingSnapshotDto = {
   };
   therapists: MonthlyClosingPreviewDto["therapists"];
   operations: MonthlyClosingPreviewDto["operations"];
-  earcare: MonthlyClosingPreviewDto["earcare"];
   financials: MonthlyClosingPreviewDto["financials"];
   dashboardFinancials?: MonthlyClosingPreviewDto["dashboardFinancials"];
   graphReport?: MonthlyClosingPreviewDto["graphReport"];
@@ -342,7 +341,6 @@ function createSnapshot(input: {
     },
     therapists: input.preview.therapists,
     operations: input.preview.operations,
-    earcare: input.preview.earcare,
     financials: input.preview.financials,
     pendingCloseException: input.pendingCloseException,
     dashboardFinancials: input.preview.dashboardFinancials,

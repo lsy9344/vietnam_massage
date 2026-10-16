@@ -43,7 +43,7 @@ describe("WorkflowDockView", () => {
   });
 
   it("marks the zone of the current screen as current", () => {
-    const html = renderDock("administrator", "/settlements/earcare");
+    const html = renderDock("administrator", "/settlements/operations");
 
     assert.deepEqual(
       dockLinks(html).filter((link) => link.current).map((link) => link.label),

@@ -19,7 +19,6 @@ const options: ServiceCallFormOptions = {
   paymentMethods: [{ value: "card", label: "카드" }],
   confirmationCodes: [{ value: "Y", label: "Y" }],
   therapists: [{ value: "therapist-1", label: "Therapist 1" }],
-  earcareEmployees: [],
   expenseHandlers: []
 };
 
@@ -41,7 +40,6 @@ const baseRow: ServiceCallRowDto = {
   customerMemo: "010-1234-5678 지윤",
   therapist1: { id: "therapist-1", displayName: "Therapist 1", staffCode: "THR-001" },
   therapist2: null,
-  earcare: null,
   status: "예약",
   discountTypeCode: null,
   paymentMethodCode: null,
@@ -53,8 +51,6 @@ const baseRow: ServiceCallRowDto = {
   discountAmount: 0,
   therapist1Commission: 100_000,
   therapist2Commission: 0,
-  earcarePoolAmount: 0,
-  opsCallCredit: 0,
   calculationStatus: "calculated",
   calculationErrorCode: null,
   calculationErrorMessage: null,

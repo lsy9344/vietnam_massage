@@ -22,7 +22,6 @@ import {
   type TherapistDailySettlementDto
 } from "@/modules/settlements/therapist-daily-settlement-service";
 import { listOpsDailyIncentives } from "@/modules/settlements/ops-daily-incentive-service";
-import { listEarcareDailySettlements } from "@/modules/settlements/earcare-daily-settlement-service";
 import { listRoomStatuses } from "@/modules/rooms/room-status-service";
 import type { RoomDisplayStatus } from "@/modules/rooms/dtos";
 
@@ -66,8 +65,6 @@ export type TodayDashboardMetricsDto = {
     netSales: number;
     discountTotal: number;
     expenseTotal: number;
-    earcarePoolTotal: number;
-    earcarePayoutTotal: number;
     opsDailyIncentiveTotal: number;
     opsMonthlyIncentiveTotal: number;
     fullAttendanceAllowanceTotal: number;
@@ -167,7 +164,6 @@ type MonthlyDashboardSettlementSummaryDto = {
   opsMonthlyIncentiveAmount: number;
   fullAttendanceAllowanceTotal: number;
   countKingBonusTotal: number;
-  earcarePayoutAmount: number;
   grandPayoutAmount: number;
   includedCallCount: number;
   excludedCallCount: number;
@@ -194,7 +190,6 @@ export type TodayDashboardDependencies = {
   getDailyCallLedgerSummary: typeof getDailyCallLedgerSummary;
   listTherapistDailySettlements: typeof listTherapistDailySettlements;
   listOpsDailyIncentives: typeof listOpsDailyIncentives;
-  listEarcareDailySettlements: typeof listEarcareDailySettlements;
 };
 
 export type DashboardGraphReportDto = {
@@ -245,7 +240,7 @@ export type DashboardGraphReportDto = {
     status: "available" | "no_ops_incentive_data" | "snapshot_missing";
     label: string;
     segments: Array<{
-      key: "therapist" | "ops_daily" | "ops_monthly" | "earcare";
+      key: "therapist" | "ops_daily" | "ops_monthly";
       label: string;
       amount: number;
     }>;
@@ -290,8 +285,7 @@ const defaultMonthlyDependencies: MonthlyDashboardDependencies = {
 const defaultTodayDependencies: TodayDashboardDependencies = {
   getDailyCallLedgerSummary,
   listTherapistDailySettlements,
-  listOpsDailyIncentives,
-  listEarcareDailySettlements
+  listOpsDailyIncentives
 };
 
 const defaultGraphReportDependencies: DashboardGraphReportDependencies = {
@@ -429,7 +423,6 @@ function netProfit(input: {
   paymentTotal: number;
   expenseTotal: number;
   therapistPayoutTotal: number;
-  earcarePayoutTotal: number;
   opsDailyIncentiveTotal: number;
   opsMonthlyIncentiveTotal: number;
 }) {
@@ -437,7 +430,6 @@ function netProfit(input: {
     input.paymentTotal -
     input.expenseTotal -
     input.therapistPayoutTotal -
-    input.earcarePayoutTotal -
     input.opsDailyIncentiveTotal -
     input.opsMonthlyIncentiveTotal
   );
@@ -454,7 +446,6 @@ function toSettlementSummary(source: Pick<MonthlyClosingPreviewDto, "totals" | "
     opsMonthlyIncentiveAmount: source.totals.opsMonthlyIncentiveAmount,
     fullAttendanceAllowanceTotal,
     countKingBonusTotal,
-    earcarePayoutAmount: source.totals.earcarePayoutAmount,
     grandPayoutAmount: source.totals.grandPayoutAmount,
     includedCallCount: source.evidence.includedCallCount,
     excludedCallCount: source.evidence.excludedCallCount,
@@ -608,8 +599,7 @@ function payoutCompositionFromSource(source: MonthlyClosingPreviewDto | MonthlyC
   const segments = [
     { key: "therapist" as const, label: "마사지사 지급", amount: data.totals.therapistPayoutAmount },
     { key: "ops_daily" as const, label: "운영팀 일일 인센", amount: data.totals.opsDailyIncentiveAmount },
-    { key: "ops_monthly" as const, label: "운영팀 월 인센", amount: data.totals.opsMonthlyIncentiveAmount },
-    { key: "earcare" as const, label: "귀케어 지급", amount: data.totals.earcarePayoutAmount }
+    { key: "ops_monthly" as const, label: "운영팀 월 인센", amount: data.totals.opsMonthlyIncentiveAmount }
   ];
   const hasOpsData = data.operations.rows.length > 0 || data.totals.opsDailyIncentiveAmount > 0 || data.totals.opsMonthlyIncentiveAmount > 0;
   return {
@@ -640,7 +630,6 @@ function hasMonthlyClosingFinancials(value: unknown): value is MonthlyClosingPre
     typeof financials.netSales === "number" &&
     typeof financials.discountTotal === "number" &&
     typeof financials.expenseTotal === "number" &&
-    typeof financials.earcarePoolTotal === "number" &&
     typeof financials.therapistCommissionTotal === "number"
   );
 }
@@ -656,8 +645,6 @@ function hasMonthlyClosingDashboardFinancials(value: unknown): value is TodayDas
     typeof financials.netSales === "number" &&
     typeof financials.discountTotal === "number" &&
     typeof financials.expenseTotal === "number" &&
-    typeof financials.earcarePoolTotal === "number" &&
-    typeof financials.earcarePayoutTotal === "number" &&
     typeof financials.opsDailyIncentiveTotal === "number" &&
     typeof financials.opsMonthlyIncentiveTotal === "number" &&
     typeof financials.fullAttendanceAllowanceTotal === "number" &&
@@ -721,7 +708,7 @@ export async function getTodayDashboardMetrics(input: {
   }
 
   const dependencies = { ...defaultTodayDependencies, ...input.dependencies };
-  const [callSummary, therapistSettlements, opsDailyIncentives, earcareSettlements] = await Promise.all([
+  const [callSummary, therapistSettlements, opsDailyIncentives] = await Promise.all([
     dependencies.getDailyCallLedgerSummary({
       operatingMonthId: parsed.data.operatingMonthId,
       serviceDate: parsed.data.serviceDate,
@@ -737,11 +724,6 @@ export async function getTodayDashboardMetrics(input: {
       operatingMonthId: parsed.data.operatingMonthId,
       serviceDate: parsed.data.serviceDate,
       prismaClient: client as Parameters<typeof listOpsDailyIncentives>[0]["prismaClient"]
-    }),
-    dependencies.listEarcareDailySettlements({
-      operatingMonthId: parsed.data.operatingMonthId,
-      serviceDate: parsed.data.serviceDate,
-      prismaClient: client as Parameters<typeof listEarcareDailySettlements>[0]["prismaClient"]
     })
   ]);
 
@@ -756,8 +738,7 @@ export async function getTodayDashboardMetrics(input: {
   const warningTotal =
     callSummary.warningCounts.coursePolicyMissing + callSummary.warningCounts.therapistRateMissing + callSummary.warningCounts.secondTherapistRequired;
   const opsDailyIncentiveTotal = opsDailyIncentives.distributedAmount;
-  const earcarePayoutTotal = earcareSettlements.distributedAmount;
-  const dailyCostTotal = callSummary.expenseTotal + callSummary.therapistCommissionTotal + earcarePayoutTotal + opsDailyIncentiveTotal;
+  const dailyCostTotal = callSummary.expenseTotal + callSummary.therapistCommissionTotal + opsDailyIncentiveTotal;
 
   return {
     operatingMonth,
@@ -768,8 +749,6 @@ export async function getTodayDashboardMetrics(input: {
       netSales: callSummary.netSales,
       discountTotal: callSummary.discountTotal,
       expenseTotal: callSummary.expenseTotal,
-      earcarePoolTotal: callSummary.earcarePoolTotal,
-      earcarePayoutTotal,
       opsDailyIncentiveTotal,
       opsMonthlyIncentiveTotal: 0,
       fullAttendanceAllowanceTotal: 0,
@@ -778,12 +757,11 @@ export async function getTodayDashboardMetrics(input: {
       therapistPayoutTotal: callSummary.therapistCommissionTotal,
       dailyCostTotal,
       monthlyCostTotal: 0,
-      settlementPayoutTotal: callSummary.therapistCommissionTotal + earcarePayoutTotal + opsDailyIncentiveTotal,
+      settlementPayoutTotal: callSummary.therapistCommissionTotal + opsDailyIncentiveTotal,
       netProfit: netProfit({
         paymentTotal: callSummary.paymentTotal,
         expenseTotal: callSummary.expenseTotal,
         therapistPayoutTotal: callSummary.therapistCommissionTotal,
-        earcarePayoutTotal,
         opsDailyIncentiveTotal,
         opsMonthlyIncentiveTotal: 0
       })
@@ -874,10 +852,9 @@ export async function getMonthlyDashboardMetrics(input: {
       netSales: totals.netSales + summary.netSales,
       discountTotal: totals.discountTotal + summary.discountTotal,
       expenseTotal: totals.expenseTotal + summary.expenseTotal,
-      earcarePoolTotal: totals.earcarePoolTotal + summary.earcarePoolTotal,
       therapistCommissionTotal: totals.therapistCommissionTotal + summary.therapistCommissionTotal
     }),
-    { paymentTotal: 0, netSales: 0, discountTotal: 0, expenseTotal: 0, earcarePoolTotal: 0, therapistCommissionTotal: 0 }
+    { paymentTotal: 0, netSales: 0, discountTotal: 0, expenseTotal: 0, therapistCommissionTotal: 0 }
   );
   const courseCompletions = emptyMonthlyCourseCompletions();
   const courseSummaryByCode = new Map(courseCompletions.map((summary) => [summary.courseCode, summary]));
@@ -996,16 +973,14 @@ export async function getMonthlyDashboardMetrics(input: {
   let enrichedFinancials: MonthlyDashboardMetricsDto["financials"] = dashboardFinancialsBasis;
   if (settlementSummary && financialBasis) {
     const therapistPayoutTotal = settlementSummary.therapistPayoutAmount;
-    const earcarePayoutTotal = settlementSummary.earcarePayoutAmount;
     const opsDailyIncentiveTotal = settlementSummary.opsDailyIncentiveAmount;
     const opsMonthlyIncentiveTotal = settlementSummary.opsMonthlyIncentiveAmount;
     const fullAttendanceAllowanceTotal = settlementSummary.fullAttendanceAllowanceTotal;
     const countKingBonusTotal = settlementSummary.countKingBonusTotal;
-    const dailyCostTotal = financialBasis.expenseTotal + financialBasis.therapistCommissionTotal + earcarePayoutTotal + opsDailyIncentiveTotal;
+    const dailyCostTotal = financialBasis.expenseTotal + financialBasis.therapistCommissionTotal + opsDailyIncentiveTotal;
     const monthlyCostTotal = fullAttendanceAllowanceTotal + countKingBonusTotal + opsMonthlyIncentiveTotal;
     enrichedFinancials = {
       ...financialBasis,
-      earcarePayoutTotal,
       opsDailyIncentiveTotal,
       opsMonthlyIncentiveTotal,
       fullAttendanceAllowanceTotal,
@@ -1013,12 +988,11 @@ export async function getMonthlyDashboardMetrics(input: {
       therapistPayoutTotal,
       dailyCostTotal,
       monthlyCostTotal,
-      settlementPayoutTotal: therapistPayoutTotal + earcarePayoutTotal + opsDailyIncentiveTotal + opsMonthlyIncentiveTotal,
+      settlementPayoutTotal: therapistPayoutTotal + opsDailyIncentiveTotal + opsMonthlyIncentiveTotal,
       netProfit: netProfit({
         paymentTotal: financialBasis.paymentTotal,
         expenseTotal: financialBasis.expenseTotal,
         therapistPayoutTotal,
-        earcarePayoutTotal,
         opsDailyIncentiveTotal,
         opsMonthlyIncentiveTotal
       })

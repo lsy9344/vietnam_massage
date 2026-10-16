@@ -152,8 +152,6 @@ test.describe("티켓 02 업무 흐름 셸", () => {
 
     await dock(page).getByRole("link", { name: "정산", exact: true }).click();
     await expect(page).toHaveURL(`/settlements?operatingMonthId=${monthId}&serviceDate=${chosenDate}`);
-    await page.getByRole("navigation", { name: "정산 화면" }).getByRole("link", { name: "귀케어" }).click();
-    await expect(page).toHaveURL(`/settlements/earcare?operatingMonthId=${monthId}&attendanceDate=${chosenDate}`);
 
     await dock(page).getByRole("link", { name: "원장", exact: true }).click();
     await expect(page).toHaveURL(`/calls?operatingMonthId=${monthId}&serviceDate=${chosenDate}`);

@@ -132,8 +132,6 @@ test.describe("티켓 14 객실 겹침", () => {
       name: "T14 A",
       durationMinutes: 60,
       basePrice: 1500000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: false,
       tvDisplayName: "T14 A",
       effectiveToMonth: null,

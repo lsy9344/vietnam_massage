@@ -20,7 +20,6 @@ function roomStatus(overrides: Partial<RoomStatusDto> = {}): RoomStatusDto {
     course: { id: "course-a", code: "A", name: "아로마 바디 60", tvDisplayName: "A60 아로마", durationMinutes: 60 },
     therapist1: { id: "t1", displayName: "Mai", staffCode: "T1" },
     therapist2: { id: "t2", displayName: "Linh", staffCode: "T2" },
-    earcare: null,
     guidanceText: "서비스가 진행 중입니다.",
     updatedAt: "2026-10-14T12:01:00.000Z",
     overlappingCalls: [],
@@ -154,7 +153,7 @@ describe("객실 카드의 겹친 콜", () => {
       {
         callId: "call-1",
         startTime: "14:00",
-        course: { id: "course-b", code: "B", name: "B 귀청소90", tvDisplayName: "B90", durationMinutes: 90 },
+        course: { id: "course-c", code: "C", name: "C 귀청소90", tvDisplayName: "C90", durationMinutes: 90 },
         therapists: [{ id: "t1", displayName: "Mai", staffCode: "T1" }],
         status: "방문완료",
         // 15:30 (UTC+7)
@@ -181,7 +180,7 @@ describe("객실 카드의 겹친 콜", () => {
 
     assert.match(html, /<details/);
     assert.match(listed, /겹친 콜 2건/);
-    assert.match(listed, /14:00 B90 · Mai · 방문완료 표시 종료 15:30/);
+    assert.match(listed, /14:00 C90 · Mai · 방문완료 표시 종료 15:30/);
     assert.match(listed, /15:00 - · Linh, Hoa · 사용중 표시 종료 16:00/);
     // 웨이터와 조회 전용 사용자: 원장 링크가 없다.
     assert.doesNotMatch(html, /href=/);

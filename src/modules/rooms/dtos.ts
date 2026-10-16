@@ -42,7 +42,6 @@ export type RoomStatusDto = {
   course: RoomStatusCourseDto | null;
   therapist1: RoomStatusAssigneeDto | null;
   therapist2: RoomStatusAssigneeDto | null;
-  earcare: RoomStatusAssigneeDto | null;
   guidanceText: string;
   updatedAt: string;
   /** 그 객실에서 겹친 콜 전체(예약시각 순). 비어 있으면 겹침이 없다. */

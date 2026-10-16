@@ -47,7 +47,6 @@ function blankDraft(ledger: { operatingMonthId: string; serviceDate: string }): 
     customerId: null,
     therapist1Id: null,
     therapist2Id: null,
-    earcareEmployeeId: null,
     status: "RESERVED",
     discountTypeCode: null,
     paymentMethodCode: null,

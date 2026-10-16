@@ -87,7 +87,6 @@ export type OpsDailyIncentiveRowDto = {
 export type OpsDailyCallEvidenceDto = {
   serviceCallId: string;
   serviceDate: string;
-  opsCallCredit: number;
   /** 같은 조회에서 읽은 콜 행이 없으면(그 사이 바뀐 경우) null이다. */
   call: SettlementEvidenceCallDto | null;
 };
@@ -96,7 +95,7 @@ export type OpsDailyIncentiveResultDto = {
   operatingMonthId: string;
   serviceDate: string;
   isLocked: boolean;
-  dailyOpsCallCredit: number;
+  dailyOpsCallCount: number;
   sourceCallCount: number;
   appliedThresholdCallCount: number | null;
   personalIncentiveAmount: number;
@@ -184,7 +183,7 @@ function warningCounts(rows: Awaited<ReturnType<typeof listServiceCallsForDate>>
   };
 }
 
-function selectRule(input: { rules: OpsDailyIncentiveRuleRecord[]; monthKey: string; dailyOpsCallCredit: number }) {
+function selectRule(input: { rules: OpsDailyIncentiveRuleRecord[]; monthKey: string; dailyOpsCallCount: number }) {
   const effectiveRules = input.rules
     .filter((rule) => effectiveForMonth(rule, input.monthKey))
     .sort((a, b) => b.thresholdCallCount - a.thresholdCallCount || b.effectiveFromMonth.localeCompare(a.effectiveFromMonth));
@@ -198,7 +197,7 @@ function selectRule(input: { rules: OpsDailyIncentiveRuleRecord[]; monthKey: str
     };
   }
 
-  const appliedRule = effectiveRules.find((rule) => input.dailyOpsCallCredit >= rule.thresholdCallCount);
+  const appliedRule = effectiveRules.find((rule) => input.dailyOpsCallCount >= rule.thresholdCallCount);
   if (!appliedRule) {
     const minimumThreshold = Math.min(...effectiveRules.map((rule) => rule.thresholdCallCount));
     return {
@@ -219,7 +218,7 @@ function selectRule(input: { rules: OpsDailyIncentiveRuleRecord[]; monthKey: str
 
 function calculationBasis(input: {
   row: OpsAttendanceDto;
-  dailyOpsCallCredit: number;
+  dailyOpsCallCount: number;
   ruleStatus: OpsDailyIncentiveRuleStatus;
   appliedThresholdCallCount: number | null;
   personalIncentiveAmount: number;
@@ -228,7 +227,7 @@ function calculationBasis(input: {
   if (!input.row.isPayoutEligible) return `${input.row.exclusionReason ?? input.row.statusDisplayName} 제외`;
   if (input.ruleStatus === "missing_policy") return input.warningMessage ?? "운영팀 일일 인센 정책 없음";
   if (input.ruleStatus === "below_threshold") return input.warningMessage ?? "30콜 미만";
-  return `일 총콜 ${input.dailyOpsCallCredit}콜 / ${input.appliedThresholdCallCount}콜 이상 개인 ${input.personalIncentiveAmount} VND`;
+  return `일 총콜 ${input.dailyOpsCallCount}콜 / ${input.appliedThresholdCallCount}콜 이상 개인 ${input.personalIncentiveAmount} VND`;
 }
 
 
@@ -311,9 +310,9 @@ export async function listOpsDailyIncentives(input: {
     })
   ]);
 
-  const dailyOpsCallCredit = completedCalculations.reduce((sum, calculation) => sum + calculation.opsCallCredit, 0);
+  const dailyOpsCallCount = completedCalculations.length;
   const callRowsById = new Map(callRows.map((row) => [row.id, row]));
-  const ruleSelection = selectRule({ rules, monthKey: operatingMonth.monthKey, dailyOpsCallCredit });
+  const ruleSelection = selectRule({ rules, monthKey: operatingMonth.monthKey, dailyOpsCallCount });
   const rows: Array<Omit<OpsDailyIncentiveRowDto, "payoutConfirmation">> = attendance.rows.map((row) => {
     const payoutAmount = row.isPayoutEligible && ruleSelection.ruleStatus === "applied" ? ruleSelection.personalIncentiveAmount : 0;
     return {
@@ -328,7 +327,7 @@ export async function listOpsDailyIncentives(input: {
       payoutAmount,
       calculationBasis: calculationBasis({
         row,
-        dailyOpsCallCredit,
+        dailyOpsCallCount,
         ...ruleSelection
       })
     };
@@ -377,7 +376,7 @@ export async function listOpsDailyIncentives(input: {
     operatingMonthId: parsed.data.operatingMonthId,
     serviceDate: parsed.data.serviceDate,
     isLocked: isOperatingMonthPayoutLocked(operatingMonth.status),
-    dailyOpsCallCredit,
+    dailyOpsCallCount,
     sourceCallCount: completedCalculations.length,
     appliedThresholdCallCount: ruleSelection.appliedThresholdCallCount,
     personalIncentiveAmount: ruleSelection.personalIncentiveAmount,
@@ -392,7 +391,6 @@ export async function listOpsDailyIncentives(input: {
       return {
         serviceCallId: calculation.serviceCallId,
         serviceDate: calculation.serviceDate,
-        opsCallCredit: calculation.opsCallCredit,
         call: callRow ? settlementEvidenceCall(callRow) : null
       };
     })

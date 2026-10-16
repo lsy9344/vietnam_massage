@@ -40,18 +40,15 @@ The `/calls` page keeps `operatingMonthId` and `serviceDate` in URL search param
 - customer or operating memo
 - therapist 1
 - therapist 2
-- earcare staff
 - payment amount
 - therapist commissions
-- earcare pool amount
-- recognized call count
 - reservation status
 - discount type
 - payment method
 - confirmation flag
 - notes
 
-Story 2.3 displays payment amount, therapist commissions, earcare pool amount, and recognized call credit as server-derived readonly cells. The UI formats VND values but does not reimplement UI 계산 logic.
+Story 2.3 displays payment amount and therapist commissions as server-derived readonly cells. The UI formats VND values but does not reimplement UI 계산 logic.
 
 ## Story 2.2 Autosave Contract
 
@@ -66,7 +63,7 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 ## Story 2.3 Completed-Call Calculation Contract
 
 - `calculateServiceCallCompletion()` is the calls service calculation boundary.
-- Only completed rows calculate payment, commission, `CoursePolicy.earcarePoolAmount`, and `CoursePolicy.opsCallCredit`; the service recognizes both legacy `방문완료` and stable code `VISIT_COMPLETE`. Other statuses are excluded as `not_completed`.
+- Only completed rows calculate payment and commission; the service recognizes both legacy `방문완료` and stable code `VISIT_COMPLETE`. Other statuses are excluded as `not_completed`.
 - Empty discount is `0`; any selected discount type is fixed `100,000` VND.
 - Payment is `CoursePolicy.basePrice - discountAmount`, clamped at zero.
 - Therapist commissions use `TherapistCourseRate.amount` by therapist ID, course ID, and operating month. Massage therapist 1 and 2 are calculated independently.
@@ -94,7 +91,7 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 - Daily expense deactivation is soft delete via `isActive=false`. Active expenses only contribute to `expenseTotal`.
 - Expense create/update/deactivate are blocked outside the operating month date range and blocked for locked months, reusing the same call-ledger guardrails.
 - Audit events are `daily_expense.created`, `daily_expense.changed`, and `daily_expense.deactivated`. Snapshots are plain JSON with `expenseDate` as `YYYY-MM-DD`, `amount` as number, and handler as employee ID.
-- `getDailyCallLedgerSummary()` calculates reservation, completed, no-show, canceled, payment, therapist commission, earcare pool, discount, expense, net sales, and course summary values from the selected operating month/date.
+- `getDailyCallLedgerSummary()` calculates reservation, completed, no-show, canceled, payment, therapist commission, discount, expense, net sales, and course summary values from the selected operating month/date.
 - `netSales = paymentTotal - expenseTotal`.
 - 완료 콜 monetary totals use only rows where `calculationStatus === "calculated"`. Non-completed rows, missing policy/rate rows, and invalid completed D rows with `second_therapist_required` are excluded from amount and course-code summaries.
 - Course summaries group by stable `Course.code` A-E and report completed count, discount count, and therapist assignment count.
@@ -129,7 +126,7 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 ## Story 2.6 Keyboard and Type-Ahead Contract
 
 - The call ledger uses `@tanstack/react-table` `8.21.3` as the headless table model through `useReactTable` and `getCoreRowModel`; it does not replace the semantic table with a div grid.
-- Editable field order is fixed: `startTime`, `actualEntryTime`, `roomId`, `courseId`, `customerMemo`, `customerId`, `therapist1Id`, `therapist2Id`, `earcareEmployeeId`, `status`, `discountTypeCode`, `paymentMethodCode`, `note`, and `confirmationCode`.
+- Editable field order is fixed: `startTime`, `actualEntryTime`, `roomId`, `courseId`, `customerMemo`, `customerId`, `therapist1Id`, `therapist2Id`, `status`, `discountTypeCode`, `paymentMethodCode`, `note`, and `confirmationCode`.
 - `Tab` and `Shift+Tab` move through editable cells and wrap between rows. Computed readonly cells are skipped in tab order.
 - `Enter` commits the current row draft through the existing autosave action and moves to the same field on the next row.
 - Arrow keys move to adjacent ledger cells. Readonly computed cells can be focus targets for navigation semantics, but they do not open edit mode.
@@ -141,18 +138,18 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 
 ## Rules
 
-- Only `방문완료` calls count toward sales, commissions, earcare pool, and recognized calls.
+- Only `방문완료` calls count toward sales, commissions, and the operations-team call count.
 - Story 2.5 daily summary uses `방문완료` and `VISIT_COMPLETE` for completed counts, and only `calculated` completed rows for payment and course-code summary totals.
 - Any discount type currently means a fixed 100,000 discount.
 - D course requires a second therapist in the ERP even though Excel does not enforce it.
 - D course requirement is enforced from `CoursePolicy.requiresSecondTherapist`, not from mutable display text.
 - Commission values should be derived from effective therapist course rates.
-- Daily expenses reduce net sales only; they do not alter call payment, commission, discount, or earcare pool calculations.
+- Daily expenses reduce net sales only; they do not alter call payment, commission, or discount calculations.
 - Story 2.6 keyboard/type-ahead behavior must not persist display labels as downstream keys.
 - `Esc` in an existing call row is a cancel operation, not a save operation.
 - Status changes should be recorded.
 - Story 2.1 stores room/course/employee references as stable IDs and code selections as stable code values, never mutable display labels.
-- `ServiceCallAssignment.assignmentRole` is limited to `THERAPIST_1`, `THERAPIST_2`, and `EARCARE`.
+- `ServiceCallAssignment.assignmentRole` is limited to `THERAPIST_1` and `THERAPIST_2`.
 - Writes use a transaction so a call row and assignment rows are not partially saved.
 
 ## Handoffs

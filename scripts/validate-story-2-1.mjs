@@ -69,7 +69,6 @@ for (const required of [
   "serviceCallInputSchema",
   "THERAPIST_1",
   "THERAPIST_2",
-  "EARCARE",
   "운영월을 선택하세요.",
   "날짜는 YYYY-MM-DD",
   "시간은 HH:mm"
@@ -93,9 +92,7 @@ for (const required of [
   "$transaction",
   "paymentAmount",
   "therapist1Commission",
-  "therapist2Commission",
-  "earcarePoolAmount",
-  "opsCallCredit"
+  "therapist2Commission"
 ]) {
   if (!service.includes(required)) errors.push(`service-call-service.ts missing ${required}`);
 }

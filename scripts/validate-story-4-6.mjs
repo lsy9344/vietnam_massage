@@ -39,8 +39,7 @@ for (const required of [
   "serviceDate: {",
   "gte:",
   "lte:",
-  "calculationStatus === \"calculated\"",
-  "opsCallCredit"
+  "calculationStatus === \"calculated\""
 ]) {
   if (!callsService.includes(required)) errors.push(`service-call-service.ts missing monthly helper requirement: ${required}`);
 }
@@ -61,8 +60,7 @@ for (const required of [
   "leadShare",
   "counterTeamShare",
   "waiterTeamShare",
-  "monthlyOpsCallCredit",
-  "calculation.opsCallCredit",
+  "monthlyOpsCallCount",
   "missing_policy",
   "below_threshold",
   "appliedThresholdCallCount",
@@ -145,7 +143,6 @@ if (!/\{ path: "\/settlements\/operations\/monthly", labelKey: "shell\.tab\.opsM
 }
 for (const tabPath of [
   "src/app/(erp)/settlements/page.tsx",
-  "src/app/(erp)/settlements/earcare/page.tsx",
   "src/app/(erp)/settlements/operations/page.tsx"
 ]) {
   const contents = read(tabPath);
@@ -157,7 +154,6 @@ if (!koCatalog.includes("운영팀 월인센")) errors.push("ko.ts missing 운�
 
 const unitTest = read("src/modules/settlements/ops-monthly-incentive-service.test.ts");
 for (const required of [
-  "opsCallCredit",
   "highest effective threshold",
   "below_threshold",
   "missing_policy",
@@ -169,8 +165,6 @@ for (const required of [
   "locked",
   "마감확정",
   "OPERATING_MONTH_NOT_FOUND",
-  "1300",
-  "1400",
   "1500",
   "Employee.id",
   "noOpsEmployees",
@@ -208,7 +202,6 @@ for (const required of [
   "Ops Monthly Incentive Preview Service",
   "listOpsMonthlyIncentivePreview",
   "OpsMonthlyIncentiveRule",
-  "opsCallCredit",
   "effective-month",
   "30/35/35",
   "deterministic remainder",

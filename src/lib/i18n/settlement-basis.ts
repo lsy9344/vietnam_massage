@@ -6,7 +6,7 @@ import { codeLabelFromKoreanLabel } from "@/lib/i18n/codes";
 /**
  * 정산/월마감 "산출 근거(calculationBasis/monthlyCalculationBasis)" 표시 경계 번역기.
  *
- * 배경: ops-daily / ops-monthly / earcare 서비스가 산출 근거를 한국어 + 동적 숫자(금액·인원)로
+ * 배경: ops-daily / ops-monthly 서비스가 산출 근거를 한국어 + 동적 숫자(금액·인원)로
  * 조합한 문자열로 만든다(테스트·검증이 이 한국어를 단언하므로 서비스는 ko 유지). 화면에서는
  * 이 문자열이 vi에 그대로 새므로, 표시 직전에 템플릿 패턴으로 파싱해 locale 문자열로 재구성한다.
  *
@@ -15,7 +15,7 @@ import { codeLabelFromKoreanLabel } from "@/lib/i18n/codes";
  *   캡처해 vi 템플릿으로 재구성(숫자는 formatNumber로 locale 그룹 적용).
  * - 어떤 패턴에도 안 맞으면 원문(ko) 반환(빈 화면 방지).
  *
- * opsMonthly(page), closing.operations(monthlyCalculationBasis), closing.earcare, ops/earcare daily가 공유한다.
+ * opsMonthly(page), closing.operations(monthlyCalculationBasis), ops daily가 공유한다.
  */
 
 type DynamicPattern = {
@@ -52,19 +52,6 @@ const DYNAMIC_PATTERNS: DynamicPattern[] = [
     re: /^웨이터팀 몫 ([\d,]+) VND \/ (\d+)명$/,
     vi: (f, g) => `Phần nhóm phục vụ ${f(g[0])} VND / ${f(g[1])} người`
   },
-  // earcare daily
-  {
-    re: /^정상 근무자 0명 \/ 미분배 ([\d,]+) VND$/,
-    vi: (f, g) => `0 nhân viên đi làm bình thường / chưa phân bổ ${f(g[0])} VND`
-  },
-  {
-    re: /^방문완료 풀 ([\d,]+) VND \/ 정상 근무자 (\d+)명 \+ 잔여 ([\d,]+) VND 배분$/,
-    vi: (f, g) => `Quỹ hoàn tất ${f(g[0])} VND / ${f(g[1])} nhân viên bình thường + phân bổ phần dư ${f(g[2])} VND`
-  },
-  {
-    re: /^방문완료 풀 ([\d,]+) VND \/ 정상 근무자 (\d+)명$/,
-    vi: (f, g) => `Quỹ hoàn tất ${f(g[0])} VND / ${f(g[1])} nhân viên bình thường`
-  },
   // ops-daily
   {
     re: /^일 총콜 (\d+)콜 \/ (\d+)콜 이상 개인 ([\d,]+) VND$/,
@@ -80,7 +67,6 @@ const DYNAMIC_PATTERNS: DynamicPattern[] = [
 // 고정(숫자 없는) 산출근거 문구 → resolveKoreanMessage 화이트리스트(errors.ts)에 있음.
 // 추가로 여기서만 쓰이는 고정 문구는 아래 맵으로 보강한다.
 const FIXED_BASIS_VI: Record<string, string> = {
-  "방문완료 귀케어 풀 0 VND": "Quỹ chăm sóc tai hoàn tất 0 VND",
   "운영팀 일일 인센 정책 없음": "Không có chính sách thưởng ngày nhóm vận hành",
   "30콜 미만": "Dưới 30 ca"
 };

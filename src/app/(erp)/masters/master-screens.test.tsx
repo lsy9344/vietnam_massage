@@ -198,8 +198,6 @@ describe("코스·수당", () => {
       name: "누루 60",
       durationMinutes: 60,
       basePrice: 500000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: false,
       tvDisplayName: "A 누루60",
       effectiveFromMonth: "2026-06",

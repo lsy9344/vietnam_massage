@@ -85,8 +85,7 @@ for (const required of [
   "moveEnterCell",
   "moveAdjacentCell",
   "cancelCellDraft",
-  "paymentAmount",
-  "earcarePoolAmount"
+  "paymentAmount"
 ]) {
   if (!helper.includes(required)) errors.push(`call-ledger-keyboard.ts missing ${required}`);
 }

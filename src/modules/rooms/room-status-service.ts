@@ -241,7 +241,7 @@ function toAssigneeDto(record: EmployeeRecord): RoomStatusAssigneeDto {
   };
 }
 
-function assignmentByRole(record: ServiceCallRecord, role: "THERAPIST_1" | "THERAPIST_2" | "EARCARE") {
+function assignmentByRole(record: ServiceCallRecord, role: "THERAPIST_1" | "THERAPIST_2") {
   return (record.assignments ?? []).find((assignment) => assignment.assignmentRole === role && assignment.isActive !== false)?.employee ?? null;
 }
 
@@ -329,7 +329,6 @@ function emptyRoomStatus(room: RoomRecord, serviceDate: string, now: Date): Room
     course: null,
     therapist1: null,
     therapist2: null,
-    earcare: null,
     guidanceText: ROOM_STATUS_GUIDANCE_TEXT["빈방"],
     updatedAt: now.toISOString(),
     overlappingCalls: []
@@ -350,7 +349,6 @@ async function activeRoomStatus(
   const displayStatus = toTimedDisplayStatus(sourceDisplayStatus, remainingMinutes);
   const therapist1 = assignmentByRole(input.call, "THERAPIST_1");
   const therapist2 = assignmentByRole(input.call, "THERAPIST_2");
-  const earcare = assignmentByRole(input.call, "EARCARE");
 
   return {
     roomId: input.room.id,
@@ -366,7 +364,6 @@ async function activeRoomStatus(
     course: policy ? toCourseDto(input.call, policy) : null,
     therapist1: therapist1 ? toAssigneeDto(therapist1) : null,
     therapist2: therapist2 ? toAssigneeDto(therapist2) : null,
-    earcare: earcare ? toAssigneeDto(earcare) : null,
     guidanceText: ROOM_STATUS_GUIDANCE_TEXT[displayStatus],
     updatedAt: input.now.toISOString()
   };

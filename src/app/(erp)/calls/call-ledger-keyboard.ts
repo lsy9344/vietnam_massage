@@ -7,7 +7,6 @@ export const EDITABLE_CALL_FIELDS = [
   "customerId",
   "therapist1Id",
   "therapist2Id",
-  "earcareEmployeeId",
   "status",
   "discountTypeCode",
   "paymentMethodCode",
@@ -21,8 +20,6 @@ export const READONLY_CALL_FIELDS = [
   "discountAmount",
   "therapist1Commission",
   "therapist2Commission",
-  "earcarePoolAmount",
-  "opsCallCredit",
   "calculationStatus"
 ] as const;
 

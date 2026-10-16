@@ -71,7 +71,6 @@ const CALL_GRID_COLUMNS = [
   { id: "customer", labelKey: "calls.column.customer", width: "14rem" },
   { id: "therapist1", labelKey: "calls.column.therapist1", width: "9rem" },
   { id: "therapist2", labelKey: "calls.column.therapist2", width: "9rem" },
-  { id: "earcare", labelKey: "calls.column.earcare", width: "9rem" },
   { id: "reservationStatus", labelKey: "calls.column.reservationStatus", width: "8rem" },
   { id: "discountType", labelKey: "calls.column.discountType", width: "9rem" },
   { id: "paymentMethod", labelKey: "calls.column.paymentMethod", width: "9rem" },
@@ -82,8 +81,6 @@ const CALL_GRID_COLUMNS = [
   { id: "discount", labelKey: "calls.column.discount", width: "6rem" },
   { id: "therapist1Commission", labelKey: "calls.column.therapist1Commission", width: "7rem", settlement: true },
   { id: "therapist2Commission", labelKey: "calls.column.therapist2Commission", width: "7rem", settlement: true },
-  { id: "earcarePool", labelKey: "calls.column.earcarePool", width: "6.5rem", settlement: true },
-  { id: "opsCallCredit", labelKey: "calls.column.opsCallCredit", width: "6rem", settlement: true },
   { id: "warnings", labelKey: "calls.column.warnings", width: "13rem" },
   { id: "saveStatus", labelKey: "calls.column.saveStatus", width: "10rem" }
 ] as const satisfies ReadonlyArray<{ id: string; labelKey: MessageKey; width: string; settlement?: boolean }>;
@@ -105,7 +102,6 @@ const LEDGER_VIEW_COLUMN_IDS = {
     "course",
     "therapist1",
     "therapist2",
-    "earcare",
     "warnings",
     "saveStatus"
   ],
@@ -122,8 +118,6 @@ const LEDGER_VIEW_COLUMN_IDS = {
     "note",
     "therapist1Commission",
     "therapist2Commission",
-    "earcarePool",
-    "opsCallCredit",
     "saveStatus"
   ],
   all: [
@@ -149,7 +143,6 @@ const CALL_GRID_COLUMN_FIELD: Record<(typeof CALL_GRID_COLUMNS)[number]["id"], s
   customer: "customerId",
   therapist1: "therapist1Id",
   therapist2: "therapist2Id",
-  earcare: "earcareEmployeeId",
   reservationStatus: "status",
   discountType: "discountTypeCode",
   paymentMethod: "paymentMethodCode",
@@ -160,8 +153,6 @@ const CALL_GRID_COLUMN_FIELD: Record<(typeof CALL_GRID_COLUMNS)[number]["id"], s
   discount: "discountAmount",
   therapist1Commission: "therapist1Commission",
   therapist2Commission: "therapist2Commission",
-  earcarePool: "earcarePoolAmount",
-  opsCallCredit: "opsCallCredit",
   warnings: null,
   saveStatus: "calculationStatus"
 };
@@ -990,21 +981,6 @@ function AddRowForm({
         />
       </td>
     ),
-    earcare: (
-      <td className="border-b border-border px-2 py-2" key="earcare">
-        <SelectCell
-          columnId="earcareEmployeeId"
-          disabled={disabled}
-          label={t("calls.column.earcare")}
-          name="earcareEmployeeId"
-          onChange={(value) => update("earcareEmployeeId", nullableValue(value))}
-          onGridKeyDown={(event) => handleAddRowKeyDown("earcareEmployeeId", event)}
-          options={options.earcareEmployees}
-          rowIndex={rowIndex}
-          value={draft.earcareEmployeeId ?? ""}
-        />
-      </td>
-    ),
     reservationStatus: (
       <td className="border-b border-border px-2 py-2" key="reservationStatus">
         <SelectCell
@@ -1542,23 +1518,6 @@ function EditableCallRow({
         />
       </td>
     ),
-    earcare: (
-      <td className="border-b border-border px-2 py-2" key="earcare">
-        <SelectCell
-          columnId="earcareEmployeeId"
-          disabled={isLocked}
-          label={t("calls.column.earcare")}
-          name="earcareEmployeeId"
-          onBlur={() => commit()}
-          onChange={(value) => updateDraft("earcareEmployeeId", nullableValue(value))}
-          onCommitValue={(value) => updateDraftAndCommit("earcareEmployeeId", nullableValue(value))}
-          onGridKeyDown={(event) => handleGridKeyDown("earcareEmployeeId", event)}
-          options={options.earcareEmployees}
-          rowIndex={rowIndex}
-          value={draft.earcareEmployeeId ?? ""}
-        />
-      </td>
-    ),
     reservationStatus: (
       <td className="border-b border-border px-2 py-2" key="reservationStatus">
         <SelectCell
@@ -1705,30 +1664,6 @@ function EditableCallRow({
         value={serverRow.therapist2Commission}
       />
     ),
-    earcarePool: (
-      <ComputedCell
-        columnId="earcarePoolAmount"
-        key="earcarePool"
-        label={t("calls.column.earcarePool")}
-        onKeyDown={(event) => handleReadonlyKeyDown("earcarePoolAmount", event)}
-        row={serverRow}
-        rowIndex={rowIndex}
-        saveStatus={saveStatus}
-        value={serverRow.earcarePoolAmount}
-      />
-    ),
-    opsCallCredit: (
-      <ComputedCell
-        columnId="opsCallCredit"
-        key="opsCallCredit"
-        label={t("calls.column.opsCallCredit")}
-        onKeyDown={(event) => handleReadonlyKeyDown("opsCallCredit", event)}
-        row={serverRow}
-        rowIndex={rowIndex}
-        saveStatus={saveStatus}
-        value={serverRow.opsCallCredit}
-      />
-    ),
     warnings: (
       <td className="border-b border-border px-2 py-2" data-call-cell-column="warnings" key="warnings">
         <CallWarningCell callId={row.id} onOpen={onOpenDetail} startTime={serverRow.startTime} warnings={freshestRow.warnings} />
@@ -1822,9 +1757,7 @@ export function EditableCallGrid({
       ...(showSettlementColumns
         ? [
             { accessorKey: "therapist1Commission", header: "therapist1Commission" },
-            { accessorKey: "therapist2Commission", header: "therapist2Commission" },
-            { accessorKey: "earcarePoolAmount", header: "earcarePoolAmount" },
-            { accessorKey: "opsCallCredit", header: "opsCallCredit" }
+            { accessorKey: "therapist2Commission", header: "therapist2Commission" }
           ]
         : []),
       { accessorKey: "calculationStatus", header: "calculationStatus" }

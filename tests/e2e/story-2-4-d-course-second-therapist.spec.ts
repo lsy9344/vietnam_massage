@@ -121,8 +121,6 @@ async function upsertPolicy(input: {
     name: input.name,
     durationMinutes: input.requiresSecondTherapist ? 90 : 60,
     basePrice: input.basePrice,
-    opsCallCredit: 1,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: input.requiresSecondTherapist,
     tvDisplayName: input.name,
     effectiveToMonth: null,
@@ -302,7 +300,7 @@ test.describe("Story 2.4 D코스 마사지사2 필수 검증", () => {
     await selectGridOption(page, row, "마사지사2", "E2E24 마사지사2 (E2E24-THR-002)");
     await expect(row.getByText("계산됨")).toBeVisible();
     await expect(row.getByText("3,200,000")).toBeVisible();
-    // 카운터에게는 수당/귀케어풀/콜인정 컬럼이 가려지므로(마사지사 수당 900,000 포함) 결제금액만 확인한다.
+    // 카운터에게는 수당 컬럼이 가려지므로(마사지사 수당 900,000 포함) 결제금액만 확인한다.
     await expect(row.getByText("900,000")).toHaveCount(0);
     await expect(page.getByRole("columnheader", { name: "마사지사1수당" })).toHaveCount(0);
   });

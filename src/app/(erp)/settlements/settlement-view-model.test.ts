@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  earcareHasBasis,
   incentiveRuleHasBasis,
   payoutAmount,
   settlementAmount,
@@ -90,11 +89,6 @@ describe("settlement amounts", () => {
     assert.deepEqual(payoutAmount(0, { isPayoutEligible: false, hasBasis: false }), { kind: "amount", value: 0 });
     assert.deepEqual(payoutAmount(0, { isPayoutEligible: true, hasBasis: false }), { kind: "noBasis" });
     assert.deepEqual(payoutAmount(250000, { isPayoutEligible: true, hasBasis: true }), { kind: "amount", value: 250000 });
-  });
-
-  it("treats an earcare pool without completed source calls as having no basis", () => {
-    assert.equal(earcareHasBasis({ sourceCallCount: 0 }), false);
-    assert.equal(earcareHasBasis({ sourceCallCount: 2 }), true);
   });
 
   it("treats a missing incentive policy as no basis, while a total below the threshold is a real 0", () => {

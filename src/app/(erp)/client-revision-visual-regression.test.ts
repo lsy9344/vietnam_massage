@@ -27,7 +27,6 @@ const callGridOptions: ServiceCallFormOptions = {
   paymentMethods: singleOption("CASH", "현금"),
   confirmationCodes: singleOption("Y"),
   therapists: singleOption("therapist-1", "마사지사1"),
-  earcareEmployees: singleOption("earcare-1", "귀케어1"),
   expenseHandlers: singleOption("handler-1", "담당자1")
 };
 
@@ -49,7 +48,6 @@ const discountedCallRow: ServiceCallRowDto = {
   customerMemo: "할인 표시 검증",
   therapist1: { id: "therapist-1", displayName: "마사지사1", staffCode: "THR-001" },
   therapist2: null,
-  earcare: null,
   status: "VISIT_COMPLETE",
   discountTypeCode: "BIRTHDAY",
   paymentMethodCode: "CASH",
@@ -61,8 +59,6 @@ const discountedCallRow: ServiceCallRowDto = {
   discountAmount: 100000,
   therapist1Commission: 700000,
   therapist2Commission: 0,
-  earcarePoolAmount: 100000,
-  opsCallCredit: 1,
   calculationStatus: "calculated",
   calculationErrorCode: null,
   calculationErrorMessage: null,
@@ -165,7 +161,6 @@ describe("client revision visual regression guards", () => {
       ["dashboard.today.kpi.opsDailyIncentiveTotal", "일일인센 합계"],
       ["dashboard.today.kpi.expenseTotal", "지출합계"],
       ["dashboard.today.kpi.therapistPayoutTotal", "마사지사 정산"],
-      ["dashboard.today.kpi.earcarePayoutTotal", "귀케어 정산"],
       ["dashboard.today.kpi.dailyCostTotal", "일일비용 합계"]
     ] as const) {
       assert.ok(todayView.includes(`t("${labelKey}")`), `today dashboard must show ${labelKey}`);

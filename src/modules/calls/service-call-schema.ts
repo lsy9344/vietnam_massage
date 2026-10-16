@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const assignmentRoles = ["THERAPIST_1", "THERAPIST_2", "EARCARE"] as const;
+export const assignmentRoles = ["THERAPIST_1", "THERAPIST_2"] as const;
 export type ServiceCallAssignmentRole = (typeof assignmentRoles)[number];
 
 const isoDateMessage = "날짜는 YYYY-MM-DD 형식이어야 합니다.";
@@ -52,7 +52,6 @@ export const serviceCallInputSchema = z.object({
   customerId: optionalId,
   therapist1Id: optionalId,
   therapist2Id: optionalId,
-  earcareEmployeeId: optionalId,
   status: z.string().trim().min(1, "상태를 선택하세요."),
   discountTypeCode: optionalCode,
   paymentMethodCode: optionalCode,

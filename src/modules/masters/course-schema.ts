@@ -8,8 +8,6 @@ export type DefaultCourseSeed = {
   name: string;
   durationMinutes: number;
   basePrice: number;
-  opsCallCredit: number;
-  earcarePoolAmount: number;
   requiresSecondTherapist: boolean;
   tvDisplayName: string;
 };
@@ -20,28 +18,14 @@ export const defaultCourseSeeds: DefaultCourseSeed[] = [
     name: "60분 A코스 누루마사지",
     durationMinutes: 60,
     basePrice: 1500000,
-    opsCallCredit: 1,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: false,
     tvDisplayName: "A 누루60"
-  },
-  {
-    code: "B",
-    name: "90분 B코스 귀청소+마사지",
-    durationMinutes: 90,
-    basePrice: 1800000,
-    opsCallCredit: 1,
-    earcarePoolAmount: 100000,
-    requiresSecondTherapist: false,
-    tvDisplayName: "B 귀청소90"
   },
   {
     code: "C",
     name: "90분 C코스 때밀이+마사지",
     durationMinutes: 90,
     basePrice: 2000000,
-    opsCallCredit: 1,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: false,
     tvDisplayName: "C 때밀이90"
   },
@@ -50,8 +34,6 @@ export const defaultCourseSeeds: DefaultCourseSeed[] = [
     name: "90분 D코스 2:1 코스",
     durationMinutes: 90,
     basePrice: 3200000,
-    opsCallCredit: 1,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: true,
     tvDisplayName: "D 2:1 90"
   },
@@ -60,8 +42,6 @@ export const defaultCourseSeeds: DefaultCourseSeed[] = [
     name: "120분 E코스 풀코스 패키지",
     durationMinutes: 120,
     basePrice: 3000000,
-    opsCallCredit: 1,
-    earcarePoolAmount: 100000,
     requiresSecondTherapist: false,
     tvDisplayName: "E 풀코스120"
   }
@@ -99,10 +79,6 @@ const positiveIntSchema = z.coerce
   .number({ error: "숫자를 입력하세요." })
   .int("정수여야 합니다.")
   .min(1, "1 이상이어야 합니다.");
-const nonNegativeIntSchema = z.coerce
-  .number({ error: "숫자를 입력하세요." })
-  .int("정수여야 합니다.")
-  .min(0, "0 이상이어야 합니다.");
 const shareSchema = z.coerce
   .number({ error: "분배율은 숫자여야 합니다." })
   .min(0, "분배율은 0 이상이어야 합니다.")
@@ -128,8 +104,6 @@ const coursePolicyBaseSchema = z.object({
   name: z.string().trim().min(1, "코스명을 입력하세요.").max(100, "코스명은 100자 이하여야 합니다."),
   durationMinutes: positiveIntSchema,
   basePrice: moneySchema,
-  opsCallCredit: nonNegativeIntSchema,
-  earcarePoolAmount: moneySchema,
   requiresSecondTherapist: booleanSchema,
   tvDisplayName: z.string().trim().min(1, "TV 표시명을 입력하세요.").max(40, "TV 표시명은 40자 이하여야 합니다."),
   effectiveFromMonth: monthSchema,

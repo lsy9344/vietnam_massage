@@ -16,7 +16,6 @@ function summary(overrides: Partial<DailyCallLedgerSummaryDto> = {}): DailyCallL
     canceledCount: 0,
     paymentTotal: 2900000,
     therapistCommissionTotal: 700000,
-    earcarePoolTotal: 100000,
     discountTotal: 100000,
     expenseTotal: 50000,
     netSales: 2850000,
@@ -24,8 +23,8 @@ function summary(overrides: Partial<DailyCallLedgerSummaryDto> = {}): DailyCallL
     till: { day: { ...zeroTill, cashBalance: 1450000 }, month: { ...zeroTill, cashBalance: 8700000 } },
     courseSummaries: [
       { courseCode: "A", completedCount: 1, discountCount: 1, therapistAssignmentCount: 1 },
-      { courseCode: "B", completedCount: 1, discountCount: 0, therapistAssignmentCount: 2 },
-      { courseCode: "C", completedCount: 0, discountCount: 0, therapistAssignmentCount: 0 }
+      { courseCode: "C", completedCount: 0, discountCount: 0, therapistAssignmentCount: 0 },
+      { courseCode: "D", completedCount: 1, discountCount: 0, therapistAssignmentCount: 2 }
     ],
     warningCounts: { coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
     ...overrides
@@ -79,7 +78,7 @@ describe("실시간 요약", () => {
 
     assert.equal(text(region(html, "오늘 상태 요약")), "오늘 상태 요약 예약건수 8건 사용중 3건 청소중 1건 방문완료 2건 노쇼 1건 취소 0건");
     assert.equal(text(region(html, "결제수단별 집계")), "결제수단별 집계 현금 1,500,000 VND 카드 1,000,000 VND 계좌 400,000 VND 기타 0 VND");
-    assert.equal(text(region(html, "코스별 방문완료")), "코스별 방문완료 A 1건 B 1건 C 0건");
+    assert.equal(text(region(html, "코스별 방문완료")), "코스별 방문완료 A 1건 C 0건 D 1건");
     // 상태는 글자와 기호, 색을 함께 쓴다.
     assert.match(region(html, "오늘 상태 요약"), /bg-success-soft[^>]*><span aria-hidden="true">●[^<]*<\/span>방문완료/);
   });

@@ -83,7 +83,6 @@ async function cleanup() {
     await (prisma as any).therapistDailySettlementPaymentHistory.deleteMany({ where: { operatingMonthId: month.id } });
     await (prisma as any).therapistDailySettlementPayment.deleteMany({ where: { operatingMonthId: month.id } });
     await (prisma as any).therapistAttendance.deleteMany({ where: { operatingMonthId: month.id } });
-    await (prisma as any).earcareAttendance.deleteMany({ where: { operatingMonthId: month.id } });
     await (prisma as any).opsAttendance.deleteMany({ where: { operatingMonthId: month.id } });
     await (prisma as any).operatingMonth.delete({ where: { id: month.id } });
   }
@@ -116,8 +115,6 @@ async function seed() {
       name: "Ticket05 A60",
       durationMinutes: 60,
       basePrice: 1000000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 100000,
       requiresSecondTherapist: false,
       tvDisplayName: "T05 A60",
       effectiveFromMonth: monthKey,
@@ -128,7 +125,6 @@ async function seed() {
 
   const mai = await seedEmployee("E2E-T05-THR-1", "T05 Mai", "THERAPIST", "마사지사");
   const linh = await seedEmployee("E2E-T05-THR-2", "T05 Linh", "THERAPIST", "마사지사");
-  await seedEmployee("E2E-T05-EAR-1", "T05 Hoa", "EARCARE", "귀케어");
   await seedEmployee("E2E-T05-OPS-1", "T05 Minh", "OPERATIONS", "카운터");
   seeded.maiId = mai.id;
   for (const therapist of [mai, linh]) {
@@ -165,7 +161,6 @@ async function seed() {
 
 const screens = {
   therapist: () => `/settlements?operatingMonthId=${seeded.monthId}&serviceDate=${serviceDate}`,
-  earcare: () => `/settlements/earcare?operatingMonthId=${seeded.monthId}&attendanceDate=${serviceDate}`,
   opsDaily: () => `/settlements/operations?operatingMonthId=${seeded.monthId}&attendanceDate=${serviceDate}`,
   opsMonthly: () => `/settlements/operations/monthly?operatingMonthId=${seeded.monthId}`
 };
@@ -226,12 +221,6 @@ test.describe("Ticket 05 settlement screens", () => {
     await expect(therapistPanel.getByText("원장에서 보기")).toHaveCount(0);
     // 콜 요약에는 고객/메모와 연락처가 없다.
     await expect(page.getByText(memoPrefix)).toHaveCount(0);
-    await expect(page.locator('a[href^="/calls"]')).toHaveCount(0);
-
-    await page.goto(screens.earcare());
-    const earcarePanel = await openEmployeePanel(page, "T05 Hoa");
-    await expect(earcarePanel.getByRole("heading", { name: "풀 산출 근거" })).toBeVisible();
-    await expect(earcarePanel.getByRole("listitem").filter({ hasText: `${serviceDate} 16:30` })).toContainText("T05 Mai");
     await expect(page.locator('a[href^="/calls"]')).toHaveCount(0);
 
     await page.goto(screens.opsDaily());

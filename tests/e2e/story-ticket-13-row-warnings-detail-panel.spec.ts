@@ -126,8 +126,6 @@ test.describe("티켓 13 원장 행 경고와 콜 상세 패널", () => {
       name: "T13 A",
       durationMinutes: 60,
       basePrice: 1500000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: false,
       tvDisplayName: "T13 A",
       effectiveToMonth: null,

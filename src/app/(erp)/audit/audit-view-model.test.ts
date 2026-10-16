@@ -129,10 +129,8 @@ describe("auditSourcePath", () => {
       auditSourcePath(entry("therapist_attendance", attendance)),
       "/settlements?operatingMonthId=m-2026-10&serviceDate=2026-10-12&employee=e-7"
     );
-    assert.equal(
-      auditSourcePath(entry("earcare_attendance", attendance)),
-      "/settlements/earcare?operatingMonthId=m-2026-10&attendanceDate=2026-10-12&employee=e-7"
-    );
+    // 폐기된 귀케어 출근의 옛 기록은 원본 화면이 없어 링크하지 않는다.
+    assert.equal(auditSourcePath(entry("earcare_attendance", attendance)), null);
     assert.equal(
       auditSourcePath(entry("ops_attendance", attendance)),
       "/settlements/operations?operatingMonthId=m-2026-10&attendanceDate=2026-10-12&employee=e-7"

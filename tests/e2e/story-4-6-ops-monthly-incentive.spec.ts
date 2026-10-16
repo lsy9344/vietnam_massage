@@ -49,14 +49,12 @@ async function seedAuthAccount(input: { accountId: string; password: string; rol
   });
 }
 
-async function upsertCoursePolicy(courseId: string, effectiveFromMonth: string, name: string, opsCallCredit: number) {
+async function upsertCoursePolicy(courseId: string, effectiveFromMonth: string, name: string) {
   const existing = await (prisma as any).coursePolicy.findFirst({ where: { courseId, effectiveFromMonth } });
   const data = {
     name,
     durationMinutes: 60,
     basePrice: 1500000,
-    opsCallCredit,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: false,
     tvDisplayName: name,
     effectiveToMonth: null,
@@ -183,31 +181,35 @@ async function seedStoryData(): Promise<SeededData> {
     create: { value: "17:00", sortOrder: 94601, isActive: true }
   });
   const course = await (prisma as any).course.upsert({ where: { code: "A" }, update: { isActive: true }, create: { code: "A", isActive: true } });
-  await upsertCoursePolicy(course.id, "2036-07", "Story46 A", 1100);
-  await upsertCoursePolicy(course.id, "2036-08", "Story46 A locked", 1100);
-  await upsertCoursePolicy(course.id, "2036-09", "Story46 A below threshold", 900);
-  await upsertCoursePolicy(course.id, "1999-02", "Story46 A missing monthly policy", 1100);
+  await upsertCoursePolicy(course.id, "2036-07", "Story46 A");
+  await upsertCoursePolicy(course.id, "2036-08", "Story46 A locked");
+  await upsertCoursePolicy(course.id, "2036-09", "Story46 A below threshold");
+  await upsertCoursePolicy(course.id, "1999-02", "Story46 A missing monthly policy");
   await upsertRate(therapist.id, course.id, "2036-07", 700000);
   await upsertRate(therapist.id, course.id, "2036-08", 700000);
   await upsertRate(therapist.id, course.id, "2036-09", 700000);
   await upsertRate(therapist.id, course.id, "1999-02", 700000);
-  await upsertMonthlyRule(1000, 3000000, "2036-07");
-  await upsertMonthlyRule(1100, 5000000, "2036-07");
-  await upsertMonthlyRule(1000, 3000000, "2036-08");
-  await upsertMonthlyRule(1100, 5000000, "2036-08");
+  // 운영팀 월 인센은 그달 방문완료 콜 수를 그대로 threshold와 비교한다.
+  await upsertMonthlyRule(2, 3000000, "2036-07");
+  await upsertMonthlyRule(3, 5000000, "2036-07");
+  await upsertMonthlyRule(2, 3000000, "2036-08");
+  await upsertMonthlyRule(3, 5000000, "2036-08");
   // 최저 구간 미달(2036-09) 시나리오도 규칙이 존재해야 "정책 없음"이 아니라 "최저 구간 미달"이 뜬다.
-  await upsertMonthlyRule(1000, 3000000, "2036-09");
-  await upsertMonthlyRule(1100, 5000000, "2036-09");
+  await upsertMonthlyRule(2, 3000000, "2036-09");
+  await upsertMonthlyRule(3, 5000000, "2036-09");
 
-  await createCall({
-    operatingMonthId: writableOperatingMonth.id,
-    serviceDate: new Date("2036-07-10T00:00:00.000Z"),
-    roomId: room.id,
-    courseId: course.id,
-    memo: "Story 4.6 complete writable",
-    status: "VISIT_COMPLETE",
-    therapist1Id: therapist.id
-  });
+  // 최상위 구간(3콜 이상)에 닿으려면 그달 방문완료 콜이 실제로 3건 있어야 한다.
+  for (const [index, serviceDate] of ["2036-07-10", "2036-07-12", "2036-07-13"].entries()) {
+    await createCall({
+      operatingMonthId: writableOperatingMonth.id,
+      serviceDate: new Date(`${serviceDate}T00:00:00.000Z`),
+      roomId: room.id,
+      courseId: course.id,
+      memo: `Story 4.6 complete writable ${index}`,
+      status: "VISIT_COMPLETE",
+      therapist1Id: therapist.id
+    });
+  }
   await createCall({
     operatingMonthId: writableOperatingMonth.id,
     serviceDate: new Date("2036-07-11T00:00:00.000Z"),
@@ -282,7 +284,7 @@ test.describe("Story 4.6 operations monthly incentive", () => {
     // 같은 문구가 요약 카드와 직원 패널 양쪽에 나오므로 요약 카드 목록으로 좁힌다.
     const summary = page.getByLabel("운영팀 월 인센 요약");
     await expect(summary.getByText("월 총콜")).toBeVisible();
-    await expect(summary.getByText("1100콜 이상")).toBeVisible();
+    await expect(summary.getByText("3콜 이상")).toBeVisible();
     await expect(summary.getByText("5,000,000 VND").first()).toBeVisible();
     await expect(page.getByText("분배율 30%").first()).toBeVisible();
     await expect(page.getByText("분배율 35%")).toHaveCount(2);
@@ -327,12 +329,12 @@ test.describe("Story 4.6 operations monthly incentive", () => {
     await page.goto(`/settlements/operations/monthly?operatingMonthId=${seededData.belowThresholdOperatingMonthId}`);
 
     await expect(page.getByText("최저 구간 미달").first()).toBeVisible();
-    await expect(page.getByText("900콜").first()).toBeVisible();
+    await expect(page.getByText("1콜").first()).toBeVisible();
     // 기준 미달의 0은 정책이 정한 결과라 근거 없음이 아니라 0이다. 라벨과 값은 요약 카드의 다른 칸이다.
     await expect(
       page.getByLabel("운영팀 월 인센 요약").locator("div", { has: page.getByText("전체 월인센", { exact: true }) })
     ).toContainText("0 VND");
-    await expect(page.getByText("1000콜 미만으로 운영팀 월 인센이 없습니다.").first()).toBeVisible();
+    await expect(page.getByText("2콜 미만으로 운영팀 월 인센이 없습니다.").first()).toBeVisible();
   });
 
   test("shows missing monthly policy warning without assuming zero silently", async ({ page }) => {

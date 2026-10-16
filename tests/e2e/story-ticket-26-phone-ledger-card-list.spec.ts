@@ -129,8 +129,6 @@ test.describe("티켓 26 휴대폰 원장 카드 목록", () => {
       name: "T26 A",
       durationMinutes: 60,
       basePrice: 1500000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: false,
       tvDisplayName: "T26 A",
       effectiveToMonth: null,

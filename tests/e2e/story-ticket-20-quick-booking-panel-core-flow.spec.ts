@@ -111,8 +111,6 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
       name: "T20 A",
       durationMinutes: 60,
       basePrice: 1500000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: false,
       tvDisplayName: "T20 A",
       effectiveToMonth: monthKey,

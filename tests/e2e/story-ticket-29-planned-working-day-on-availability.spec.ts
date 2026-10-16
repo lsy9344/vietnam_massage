@@ -133,8 +133,6 @@ test.describe("티켓 29 가능 코스의 근무 예정 표시", () => {
       name: "T29 2인",
       durationMinutes: 90,
       basePrice: 3200000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: true,
       tvDisplayName: "T29D",
       effectiveToMonth: monthKey,

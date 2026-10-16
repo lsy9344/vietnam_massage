@@ -205,7 +205,7 @@ function toIsoDate(value: Date | null) {
 }
 
 function assertEmployeeGroup(value: string): asserts value is EmployeeGroup {
-  if (!["OPERATIONS", "EARCARE", "THERAPIST"].includes(value)) {
+  if (!["OPERATIONS", "THERAPIST"].includes(value)) {
     throw new EmployeeDomainError("직원 그룹이 올바르지 않습니다.", "INVALID_EMPLOYEE_GROUP");
   }
 }

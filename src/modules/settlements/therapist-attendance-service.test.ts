@@ -71,7 +71,7 @@ function createMemoryPrisma(
     employees.set(id, employee(id, `THR-${String(index).padStart(3, "0")}`, `마사지사${index}`, index, true));
   }
   employees.set("thr-inactive", employee("thr-inactive", "THR-999", "퇴사 마사지사", 998, false));
-  employees.set("ear-1", employee("ear-1", "EAR-001", "귀케어1", 999, true, "EARCARE"));
+  employees.set("ops-1", employee("ops-1", "OPS-001", "운영팀1", 999, true, "OPERATIONS"));
 
   const attendances = new Map<string, any>();
   for (const seed of options.seedAttendances ?? []) {
@@ -250,9 +250,9 @@ describe("therapist attendance service", () => {
     assert.equal(result.rows[0].isComplete, false);
     assert.equal(result.rows[0].incompleteReason, "출퇴근 미입력");
     assert.equal(result.rows[0].isFullAttendanceRecognized, false);
-    // inactive therapist and earcare employee must be excluded
+    // inactive therapist and non-therapist employee must be excluded
     assert.equal(result.rows.some((row) => row.employeeId === "thr-inactive"), false);
-    assert.equal(result.rows.some((row) => row.employeeId === "ear-1"), false);
+    assert.equal(result.rows.some((row) => row.employeeId === "ops-1"), false);
   });
 
   it("returns stored minute values as HH:mm display strings and recognition flags for complete rows", async () => {

@@ -11,10 +11,6 @@ import {
   type ServiceCallRowDto
 } from "@/modules/calls/service-call-service";
 import {
-  listEarcareDailyPayoutConfirmationsForMonth,
-  type EarcareDailyPayoutConfirmationDto
-} from "@/modules/settlements/earcare-daily-settlement-service";
-import {
   listOpsDailyPayoutConfirmationsForMonth,
   type OpsDailyPayoutConfirmationDto
 } from "@/modules/settlements/ops-daily-incentive-service";
@@ -28,7 +24,7 @@ import { type PayoutConfirmationDto, type PayoutConfirmationUnitType } from "@/m
 /**
  * 월마감 점검(스펙 F07, ADR 0002, 티켓 33). 확정 전에 다시 계산해야 하는 네 가지를 한 번에 묶는다:
  * (1) 계산 오류(방문완료 콜 중 코스 정책 없음·수당 없음·두 번째 Therapist 필요),
- * (2) 지급 재확인 미처리(세 직군 지급 확인 서비스의 "지급 재확인 필요" 단위),
+ * (2) 지급 재확인 미처리(직군별 지급 확인 서비스의 "지급 재확인 필요" 단위),
  * (3) 마감 확인 대상 콜(예약·사용중·청소중 — 이 티켓에서는 목록만, 확인·사유는 34에서),
  * (4) 금액 확인(결제수단별 합계, 지출, 현금/계좌 잔액, 순매출 — 콜 서비스의 기존 계산을 그대로 쓴다).
  * (1)·(2)가 남아 있으면 월마감 확정을 거절한다(monthly-closing-service.confirmMonthlyClose).
@@ -109,7 +105,6 @@ export type MonthlyClosingChecklistDependencies = {
   listServiceCallsForOperatingMonth: typeof listServiceCallsForOperatingMonth;
   getDailyCallLedgerSummary: typeof getDailyCallLedgerSummary;
   listTherapistDailyPayoutConfirmationsForMonth: typeof listTherapistDailyPayoutConfirmationsForMonth;
-  listEarcareDailyPayoutConfirmationsForMonth: typeof listEarcareDailyPayoutConfirmationsForMonth;
   listOpsDailyPayoutConfirmationsForMonth: typeof listOpsDailyPayoutConfirmationsForMonth;
   listOpsMonthlyIncentivePreview: typeof listOpsMonthlyIncentivePreview;
 };
@@ -118,7 +113,6 @@ const defaultDependencies: MonthlyClosingChecklistDependencies = {
   listServiceCallsForOperatingMonth,
   getDailyCallLedgerSummary,
   listTherapistDailyPayoutConfirmationsForMonth,
-  listEarcareDailyPayoutConfirmationsForMonth,
   listOpsDailyPayoutConfirmationsForMonth,
   listOpsMonthlyIncentivePreview
 };
@@ -194,14 +188,10 @@ async function listPayoutReconfirmationUnits(input: {
   client: MonthlyClosingChecklistPrismaClient;
   dependencies: MonthlyClosingChecklistDependencies;
 }): Promise<MonthlyClosingPayoutReconfirmationUnitDto[]> {
-  const [therapistUnits, earcareUnits, opsDailyUnits, opsMonthlyResult] = await Promise.all([
+  const [therapistUnits, opsDailyUnits, opsMonthlyResult] = await Promise.all([
     input.dependencies.listTherapistDailyPayoutConfirmationsForMonth({
       operatingMonthId: input.operatingMonthId,
       prismaClient: input.client as unknown as Parameters<typeof listTherapistDailyPayoutConfirmationsForMonth>[0]["prismaClient"]
-    }),
-    input.dependencies.listEarcareDailyPayoutConfirmationsForMonth({
-      operatingMonthId: input.operatingMonthId,
-      prismaClient: input.client as unknown as Parameters<typeof listEarcareDailyPayoutConfirmationsForMonth>[0]["prismaClient"]
     }),
     input.dependencies.listOpsDailyPayoutConfirmationsForMonth({
       operatingMonthId: input.operatingMonthId,
@@ -216,9 +206,6 @@ async function listPayoutReconfirmationUnits(input: {
   const pendingTherapist = (therapistUnits as TherapistDailyPayoutConfirmationDto[])
     .filter((unit) => unit.payoutConfirmation.requiresReconfirmation)
     .map((unit) => toReconfirmationUnit("THERAPIST_DAILY", input.operatingMonthId, unit));
-  const pendingEarcare = (earcareUnits as EarcareDailyPayoutConfirmationDto[])
-    .filter((unit) => unit.payoutConfirmation.requiresReconfirmation)
-    .map((unit) => toReconfirmationUnit("EARCARE_DAILY", input.operatingMonthId, unit));
   const pendingOpsDaily = (opsDailyUnits as OpsDailyPayoutConfirmationDto[])
     .filter((unit) => unit.payoutConfirmation.requiresReconfirmation)
     .map((unit) => toReconfirmationUnit("OPS_DAILY", input.operatingMonthId, unit));
@@ -226,7 +213,7 @@ async function listPayoutReconfirmationUnits(input: {
     .filter((row) => row.payoutConfirmation.requiresReconfirmation)
     .map((row) => toReconfirmationUnit("OPS_MONTHLY", input.operatingMonthId, { serviceDate: null, employeeId: row.employeeId, payoutConfirmation: row.payoutConfirmation }));
 
-  return [...pendingTherapist, ...pendingEarcare, ...pendingOpsDaily, ...pendingOpsMonthly];
+  return [...pendingTherapist, ...pendingOpsDaily, ...pendingOpsMonthly];
 }
 
 async function aggregateFinancials(input: {

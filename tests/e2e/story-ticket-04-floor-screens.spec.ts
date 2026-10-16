@@ -115,8 +115,6 @@ async function seed() {
     name: "Ticket04 B90",
     durationMinutes: 90,
     basePrice: 0,
-    opsCallCredit: 0,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: false,
     tvDisplayName: "T04 B90 스톤 테라피",
     effectiveToMonth: null,

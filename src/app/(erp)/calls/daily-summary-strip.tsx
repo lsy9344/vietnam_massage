@@ -114,10 +114,7 @@ export function DailySummaryStrip({
             <AmountRow label={t(locale, "calls.summary.discountTotal")} value={formatVnd(summary.discountTotal)} />
             <AmountRow label={t(locale, "calls.summary.expenseTotal")} value={formatVnd(summary.expenseTotal)} />
             {showSettlementAmounts ? (
-              <>
-                <AmountRow label={t(locale, "calls.summary.therapistCommission")} value={formatVnd(summary.therapistCommissionTotal)} />
-                <AmountRow label={t(locale, "calls.summary.earcarePool")} value={formatVnd(summary.earcarePoolTotal)} />
-              </>
+              <AmountRow label={t(locale, "calls.summary.therapistCommission")} value={formatVnd(summary.therapistCommissionTotal)} />
             ) : null}
           </dl>
         </Card>

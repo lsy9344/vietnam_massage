@@ -18,7 +18,6 @@ type SeededData = {
   courseId: string;
   therapist1Id: string;
   therapist2Id: string;
-  earcareEmployeeId: string;
   counterAccountDbId: string;
 };
 
@@ -83,7 +82,7 @@ async function seedEmployee(staffCode: string, displayName: string, employeeGrou
     update: {
       displayName,
       employeeGroup,
-      position: employeeGroup === "EARCARE" ? "귀케어" : "마사지사",
+      position: "마사지사",
       shiftType: "전체",
       baseSalary: 0,
       employmentStatus: "재직",
@@ -94,7 +93,7 @@ async function seedEmployee(staffCode: string, displayName: string, employeeGrou
       staffCode,
       displayName,
       employeeGroup,
-      position: employeeGroup === "EARCARE" ? "귀케어" : "마사지사",
+      position: "마사지사",
       shiftType: "전체",
       baseSalary: 0,
       employmentStatus: "재직",
@@ -162,8 +161,6 @@ async function seedStoryData(): Promise<SeededData> {
         name: "E2E 자동저장60",
         durationMinutes: 60,
         basePrice: 1500000,
-        opsCallCredit: 1,
-        earcarePoolAmount: 0,
         requiresSecondTherapist: false,
         tvDisplayName: "E2E 자동저장60",
         effectiveToMonth: null,
@@ -177,8 +174,6 @@ async function seedStoryData(): Promise<SeededData> {
         name: "E2E 자동저장60",
         durationMinutes: 60,
         basePrice: 1500000,
-        opsCallCredit: 1,
-        earcarePoolAmount: 0,
         requiresSecondTherapist: false,
         tvDisplayName: "E2E 자동저장60",
         effectiveFromMonth: "2032-03",
@@ -190,7 +185,6 @@ async function seedStoryData(): Promise<SeededData> {
 
   const therapist1 = await seedEmployee("E2E22-THR-001", "E2E22 마사지사1", "THERAPIST", 92201);
   const therapist2 = await seedEmployee("E2E22-THR-002", "E2E22 마사지사2", "THERAPIST", 92202);
-  const earcare = await seedEmployee("E2E22-EAR-001", "E2E22 귀케어1", "EARCARE", 92201);
 
   await (prisma as any).timeSlot.upsert({
     where: { value: "12:00" },
@@ -209,7 +203,6 @@ async function seedStoryData(): Promise<SeededData> {
     courseId: course.id,
     therapist1Id: therapist1.id,
     therapist2Id: therapist2.id,
-    earcareEmployeeId: earcare.id,
     counterAccountDbId: counter.id
   };
 }
@@ -233,8 +226,7 @@ async function createCallRow(input: { operatingMonthId: string; serviceDate: str
   await (prisma as any).serviceCallAssignment.createMany({
     data: [
       { serviceCallId: call.id, assignmentRole: "THERAPIST_1", employeeId: seededData.therapist1Id },
-      { serviceCallId: call.id, assignmentRole: "THERAPIST_2", employeeId: seededData.therapist2Id },
-      { serviceCallId: call.id, assignmentRole: "EARCARE", employeeId: seededData.earcareEmployeeId }
+      { serviceCallId: call.id, assignmentRole: "THERAPIST_2", employeeId: seededData.therapist2Id }
     ]
   });
   return call;

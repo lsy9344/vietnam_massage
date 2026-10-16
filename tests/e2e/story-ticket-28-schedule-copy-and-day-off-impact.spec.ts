@@ -133,8 +133,6 @@ test.describe("티켓 28 근무표 지난주 복사·휴무 영향 콜", () => {
       name: "T28 A",
       durationMinutes: 60,
       basePrice: 1500000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: false,
       tvDisplayName: "T28 A",
       effectiveToMonth: null,

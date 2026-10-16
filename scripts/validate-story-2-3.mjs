@@ -47,8 +47,6 @@ for (const required of [
   "hasRevenue && record.discountTypeCode !== null ? 100000 : 0",
   "Math.max(policy.basePrice - discountAmount, 0)",
   "basePrice",
-  "earcarePoolAmount",
-  "opsCallCredit",
   "therapistCourseRate",
   "THERAPIST_RATE_NOT_FOUND",
   "listCompletedServiceCallCalculationsForDate",
@@ -57,7 +55,7 @@ for (const required of [
 ]) {
   if (!service.includes(required)) errors.push(`service-call-service.ts missing ${required}`);
 }
-if (/paymentAmount\s*:\s*null/.test(service) || /opsCallCredit\s*:\s*null/.test(service)) {
+if (/paymentAmount\s*:\s*null/.test(service)) {
   errors.push("service-call-service.ts must not keep Story 2.1 null calculation placeholders");
 }
 
@@ -78,14 +76,12 @@ for (const required of [
   "calls.calc.policyMissing",
   "calls.column.paymentAmount",
   "calls.column.therapist1Commission",
-  "calls.column.therapist2Commission",
-  "calls.column.earcarePool",
-  "calls.column.opsCallCredit"
+  "calls.column.therapist2Commission"
 ]) {
   if (!grid.includes(required)) errors.push(`editable-call-grid.tsx missing ${required}`);
 }
 const koMessages = read("src/lib/i18n/messages/ko.ts");
-for (const label of ["저장 보류 계산 대기", "계산됨", "비완료 제외", "정책 없음", "결제금액", "마사지사1수당", "마사지사2수당", "귀케어풀", "콜인정"]) {
+for (const label of ["저장 보류 계산 대기", "계산됨", "비완료 제외", "정책 없음", "결제금액", "마사지사1수당", "마사지사2수당"]) {
   if (!koMessages.includes(label)) errors.push(`messages/ko.ts missing calls grid label: ${label}`);
 }
 
@@ -112,9 +108,7 @@ for (const required of [
   "computed readonly values",
   "both therapist roles as separate 담당 records",
   "listCompletedServiceCallCalculationsForDate",
-  "therapist2Commission",
-  "earcarePoolAmount",
-  "opsCallCredit"
+  "therapist2Commission"
 ]) {
   if (!unitTest.includes(required)) errors.push(`service-call-service.test.ts missing ${required}`);
 }
@@ -142,8 +136,6 @@ for (const required of [
   "방문완료",
   "100,000",
   "CoursePolicy.basePrice",
-  "CoursePolicy.earcarePoolAmount",
-  "CoursePolicy.opsCallCredit",
   "TherapistCourseRate.amount",
   "listCompletedServiceCallCalculationsForDate",
   "derived amount columns",

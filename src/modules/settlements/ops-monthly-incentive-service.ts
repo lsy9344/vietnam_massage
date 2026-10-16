@@ -101,7 +101,6 @@ export type OpsMonthlyIncentiveRowDto = {
 export type OpsMonthlyCallEvidenceDto = {
   serviceCallId: string;
   serviceDate: string;
-  opsCallCredit: number;
   call: SettlementEvidenceCallDto | null;
 };
 
@@ -112,7 +111,7 @@ export type OpsMonthlyIncentiveResultDto = {
   endDate: string;
   isClosedOrLocked: boolean;
   previewStatus: OpsMonthlyIncentivePreviewStatus;
-  monthlyOpsCallCredit: number;
+  monthlyOpsCallCount: number;
   sourceCallCount: number;
   appliedThresholdCallCount: number | null;
   totalMonthlyIncentiveAmount: number;
@@ -170,7 +169,7 @@ function isCompletedStatus(status: string) {
   return status === "방문완료" || status === "VISIT_COMPLETE";
 }
 
-function selectRule(input: { rules: OpsMonthlyIncentiveRuleRecord[]; monthKey: string; monthlyOpsCallCredit: number }) {
+function selectRule(input: { rules: OpsMonthlyIncentiveRuleRecord[]; monthKey: string; monthlyOpsCallCount: number }) {
   const effectiveRules = input.rules
     .filter((rule) => effectiveForMonth(rule, input.monthKey))
     .sort((a, b) => b.thresholdCallCount - a.thresholdCallCount || b.effectiveFromMonth.localeCompare(a.effectiveFromMonth));
@@ -185,7 +184,7 @@ function selectRule(input: { rules: OpsMonthlyIncentiveRuleRecord[]; monthKey: s
     };
   }
 
-  const appliedRule = effectiveRules.find((rule) => input.monthlyOpsCallCredit >= rule.thresholdCallCount);
+  const appliedRule = effectiveRules.find((rule) => input.monthlyOpsCallCount >= rule.thresholdCallCount);
   if (!appliedRule) {
     const minimumThreshold = Math.min(...effectiveRules.map((rule) => rule.thresholdCallCount));
     return {
@@ -451,8 +450,8 @@ export async function listOpsMonthlyIncentivePreview(input: {
 
   const completedCalculations = completedServiceCallCalculationsFromRows(callRows);
   const callRowsById = new Map(callRows.map((row) => [row.id, row]));
-  const monthlyOpsCallCredit = completedCalculations.reduce((sum, calculation) => sum + calculation.opsCallCredit, 0);
-  const ruleSelection = selectRule({ rules, monthKey: operatingMonth.monthKey, monthlyOpsCallCredit });
+  const monthlyOpsCallCount = completedCalculations.length;
+  const ruleSelection = selectRule({ rules, monthKey: operatingMonth.monthKey, monthlyOpsCallCount });
   const distribution = buildDistribution({
     employees,
     ruleStatus: ruleSelection.ruleStatus,
@@ -503,7 +502,7 @@ export async function listOpsMonthlyIncentivePreview(input: {
     endDate,
     isClosedOrLocked,
     previewStatus: isClosedOrLocked ? "closed_current" : "draft_current",
-    monthlyOpsCallCredit,
+    monthlyOpsCallCount,
     sourceCallCount: completedCalculations.length,
     appliedThresholdCallCount: ruleSelection.appliedThresholdCallCount,
     totalMonthlyIncentiveAmount: ruleSelection.totalMonthlyIncentiveAmount,
@@ -517,7 +516,6 @@ export async function listOpsMonthlyIncentivePreview(input: {
       return {
         serviceCallId: calculation.serviceCallId,
         serviceDate: calculation.serviceDate,
-        opsCallCredit: calculation.opsCallCredit,
         call: callRow ? settlementEvidenceCall(callRow) : null
       };
     })

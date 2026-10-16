@@ -135,7 +135,7 @@ function SnapshotSummary({ locale, t, closing, currentStatus }: { locale: Locale
         <DetailRow label={t("settlements.opsMonthly.snapshot.monthlyIncentive")} value={vnd(locale, operations.monthlyIncentiveAmount)} />
         <DetailRow
           label={t("settlements.opsMonthly.snapshot.monthlyTotalCalls")}
-          value={`${operations.monthlyOpsCallCredit}${t("settlements.callSuffix")}`}
+          value={`${operations.monthlyOpsCallCount}${t("settlements.callSuffix")}`}
         />
       </dl>
     </section>
@@ -262,7 +262,7 @@ export default async function OperationsMonthlyIncentivePage({
                 accent="mint"
                 label={t("settlements.opsMonthly.summary.monthlyTotalCalls")}
                 note={t("settlements.opsMonthly.summary.monthlyTotalCallsBasis", { count: result.sourceCallCount })}
-                value={`${result.monthlyOpsCallCredit}${t("settlements.callSuffix")}`}
+                value={`${result.monthlyOpsCallCount}${t("settlements.callSuffix")}`}
               />
               <SummaryCard
                 accent="peach"
@@ -324,7 +324,7 @@ export default async function OperationsMonthlyIncentivePage({
                 {visibleEvidence.map((evidence) => (
                   <li key={evidence.serviceCallId}>
                     <EvidenceCallItem
-                      amount={`${evidence.opsCallCredit}${t("settlements.callSuffix")}`}
+                      amount={`1${t("settlements.callSuffix")}`}
                       call={evidence.call}
                       canOpenLedger={canOpenLedger}
                       locale={locale}

@@ -45,12 +45,11 @@ function createMemoryPrisma(
     ["course-d", course("course-d", "D")],
     ["course-no-policy", course("course-no-policy", "A")]
   ]);
-  const completedCredit = options.belowThreshold ? 300 : options.highThreshold ? 900 : 500;
   const policies = [
-    policy("policy-a", "course-a", "A 누루60", completedCredit, false),
-    policy("policy-b", "course-b", "B 귀청소90", 350, false),
-    policy("policy-c", "course-c", "C 때밀이90", 251, false),
-    policy("policy-d", "course-d", "D 2:1 90", 10, true)
+    policy("policy-a", "course-a", "A 누루60", false),
+    policy("policy-b", "course-b", "B 귀청소90", false),
+    policy("policy-c", "course-c", "C 때밀이90", false),
+    policy("policy-d", "course-d", "D 2:1 90", true)
   ];
   const employees = new Map<string, any>(
     options.noOpsEmployees
@@ -75,14 +74,23 @@ function createMemoryPrisma(
   for (const extra of options.extraEmployees ?? []) {
     employees.set(extra.id, extra);
   }
+  // 완료 콜 수로 월 임계값을 넘긴다: 기본 4건(a·b·c·extra-1), 상위 구간은 8건까지, 임계값 미달은 c를 완료 전으로 빼 2건.
   const serviceCalls = [
     call("call-a", "course-a", "VISIT_COMPLETE", "2026-06-01", [assignment("call-a", "THERAPIST_1", "thr-1")]),
     call("call-b", "course-b", "방문완료", "2026-06-15", [assignment("call-b", "THERAPIST_1", "thr-1")]),
-    call("call-c", "course-c", "VISIT_COMPLETE", "2026-06-30", [assignment("call-c", "THERAPIST_1", "thr-1")]),
+    call("call-c", "course-c", options.belowThreshold ? "예약" : "VISIT_COMPLETE", "2026-06-30", [assignment("call-c", "THERAPIST_1", "thr-1")]),
     call("call-reserved", "course-a", "예약", "2026-06-10", [assignment("call-reserved", "THERAPIST_1", "thr-1")]),
     call("call-no-policy", "course-no-policy", "방문완료", "2026-06-10", [assignment("call-no-policy", "THERAPIST_1", "thr-1")]),
     call("call-missing-rate", "course-a", "방문완료", "2026-06-10", [assignment("call-missing-rate", "THERAPIST_1", "thr-2")]),
-    call("call-invalid-d", "course-d", "방문완료", "2026-06-10", [assignment("call-invalid-d", "THERAPIST_1", "thr-1")])
+    call("call-invalid-d", "course-d", "방문완료", "2026-06-10", [assignment("call-invalid-d", "THERAPIST_1", "thr-1")]),
+    ...(options.belowThreshold
+      ? []
+      : [call("call-extra-1", "course-a", "방문완료", "2026-06-20", [assignment("call-extra-1", "THERAPIST_1", "thr-1")])]),
+    ...(options.highThreshold
+      ? [2, 3, 4, 5].map((n) =>
+          call(`call-extra-${n}`, "course-a", "방문완료", `2026-06-2${n}`, [assignment(`call-extra-${n}`, "THERAPIST_1", "thr-1")])
+        )
+      : [])
   ];
   const rates = [
     rate("rate-1-a", "thr-1", "course-a", 700000),
@@ -90,17 +98,18 @@ function createMemoryPrisma(
     rate("rate-1-c", "thr-1", "course-c", 900000),
     rate("rate-1-d", "thr-1", "course-d", 900000)
   ];
+  // 완료 콜 수 기준으로 스케일을 낮췄다(기존 1000~1500콜 스펙 대신 3~8콜). 상대적 순서와 선택 로직은 그대로다.
   const monthlyRules = options.missingPolicy
     ? []
     : [
-        monthlyRule("rule-1000-old", 1000, 3000001, "2026-01", 0.3, 0.35, 0.35),
-        monthlyRule("rule-1000", 1000, 3000003, "2026-06", 0.3, 0.35, 0.35),
-        monthlyRule("rule-1100", 1100, 5000000, "2026-06", 0.3, 0.35, 0.35),
-        monthlyRule("rule-1200", 1200, 8000000, "2026-06", 0.3, 0.35, 0.35),
-        monthlyRule("rule-1300", 1300, 12000000, "2026-06", 0.3, 0.35, 0.35),
-        monthlyRule("rule-1400", 1400, 18000000, "2026-06", 0.3, 0.35, 0.35),
-        monthlyRule("rule-1500", 1500, 25000000, "2026-06", 0.3, 0.35, 0.35),
-        { ...monthlyRule("rule-expired", 900, 9999999, "2025-01", 0.3, 0.35, 0.35), effectiveToMonth: "2025-12" }
+        monthlyRule("rule-3-old", 3, 3000001, "2026-01", 0.3, 0.35, 0.35),
+        monthlyRule("rule-3", 3, 3000003, "2026-06", 0.3, 0.35, 0.35),
+        monthlyRule("rule-4", 4, 5000000, "2026-06", 0.3, 0.35, 0.35),
+        monthlyRule("rule-5", 5, 8000000, "2026-06", 0.3, 0.35, 0.35),
+        monthlyRule("rule-6", 6, 12000000, "2026-06", 0.3, 0.35, 0.35),
+        monthlyRule("rule-7", 7, 18000000, "2026-06", 0.3, 0.35, 0.35),
+        monthlyRule("rule-8", 8, 25000000, "2026-06", 0.3, 0.35, 0.35),
+        { ...monthlyRule("rule-expired", 2, 9999999, "2025-01", 0.3, 0.35, 0.35), effectiveToMonth: "2025-12" }
       ];
   const payoutConfirmationEvents: any[] = [...(options.seedPayoutConfirmationEvents ?? [])];
 
@@ -108,15 +117,13 @@ function createMemoryPrisma(
     return { id, code: codeValue, isActive: true, createdAt, updatedAt };
   }
 
-  function policy(id: string, courseId: string, name: string, opsCallCredit: number, requiresSecondTherapist: boolean) {
+  function policy(id: string, courseId: string, name: string, requiresSecondTherapist: boolean) {
     return {
       id,
       courseId,
       name,
       durationMinutes: requiresSecondTherapist ? 90 : 60,
       basePrice: 1500000,
-      opsCallCredit,
-      earcarePoolAmount: 0,
       requiresSecondTherapist,
       tvDisplayName: name,
       effectiveFromMonth: "2026-06",
@@ -316,16 +323,16 @@ function createMemoryPrisma(
 }
 
 describe("listOpsMonthlyIncentivePreview", () => {
-  it("sums monthly calculated opsCallCredit, applies the highest effective threshold, and splits by stable Employee.id row keys", async () => {
+  it("counts monthly calculated completed calls, applies the highest effective threshold, and splits by stable Employee.id row keys", async () => {
     const result = await listOpsMonthlyIncentivePreview({
       operatingMonthId: "month-2026-06",
       prismaClient: createMemoryPrisma()
     });
 
-    assert.equal(result.monthlyOpsCallCredit, 1101);
-    assert.equal(result.sourceCallCount, 3);
+    assert.equal(result.monthlyOpsCallCount, 4);
+    assert.equal(result.sourceCallCount, 4);
     assert.equal(result.ruleStatus, "applied");
-    assert.equal(result.appliedThresholdCallCount, 1100);
+    assert.equal(result.appliedThresholdCallCount, 4);
     assert.equal(result.totalMonthlyIncentiveAmount, 5000000);
     assert.equal(result.previewStatus, "draft_current");
     assert.deepEqual(result.warningCounts, {
@@ -345,11 +352,12 @@ describe("listOpsMonthlyIncentivePreview", () => {
       ]
     );
     assert.deepEqual(
-      result.callEvidence.map((evidence) => [evidence.serviceCallId, evidence.serviceDate, evidence.opsCallCredit]),
+      result.callEvidence.map((evidence) => [evidence.serviceCallId, evidence.serviceDate]),
       [
-        ["call-a", "2026-06-01", 500],
-        ["call-b", "2026-06-15", 350],
-        ["call-c", "2026-06-30", 251]
+        ["call-a", "2026-06-01"],
+        ["call-b", "2026-06-15"],
+        ["call-extra-1", "2026-06-20"],
+        ["call-c", "2026-06-30"]
       ]
     );
   });
@@ -377,8 +385,8 @@ describe("listOpsMonthlyIncentivePreview", () => {
       prismaClient: createMemoryPrisma({ highThreshold: true })
     });
 
-    assert.equal(result.monthlyOpsCallCredit, 1501);
-    assert.equal(result.appliedThresholdCallCount, 1500);
+    assert.equal(result.monthlyOpsCallCount, 8);
+    assert.equal(result.appliedThresholdCallCount, 8);
     assert.equal(result.totalMonthlyIncentiveAmount, 25000000);
   });
 
@@ -395,17 +403,17 @@ describe("listOpsMonthlyIncentivePreview", () => {
     assert.equal(result.rows.reduce((sum, row) => sum + row.payoutAmount, 0), 5000000);
   });
 
-  it("returns below_threshold and zero payout when monthly ops call credit is below the minimum policy threshold", async () => {
+  it("returns below_threshold and zero payout when the monthly call count is below the minimum policy threshold", async () => {
     const result = await listOpsMonthlyIncentivePreview({
       operatingMonthId: "month-2026-06",
       prismaClient: createMemoryPrisma({ belowThreshold: true })
     });
 
-    assert.equal(result.monthlyOpsCallCredit, 901);
+    assert.equal(result.monthlyOpsCallCount, 2);
     assert.equal(result.ruleStatus, "below_threshold");
     assert.equal(result.appliedThresholdCallCount, null);
     assert.equal(result.totalMonthlyIncentiveAmount, 0);
-    assert.ok(result.warningMessage?.includes("1000콜 미만"));
+    assert.ok(result.warningMessage?.includes("3콜 미만"));
     assert.ok(result.rows.every((row) => row.payoutAmount === 0));
   });
 

@@ -81,12 +81,10 @@ for (const required of [
 for (const area of [
   "calls.payment",
   "calls.discount",
-  "calls.ops-credit",
   "calls.d-course",
   "rooms.status",
   "operations.daily-incentive",
   "operations.monthly-incentive",
-  "earcare.zero-worker-pool",
   "therapist.role-settlement",
   "closing.final-payout"
 ]) {

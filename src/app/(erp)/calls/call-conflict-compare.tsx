@@ -21,7 +21,6 @@ const FIELD_LABEL_KEY: Record<EditableCallField, MessageKey> = {
   customerId: "calls.column.customer",
   therapist1Id: "calls.column.therapist1",
   therapist2Id: "calls.column.therapist2",
-  earcareEmployeeId: "calls.column.earcare",
   status: "calls.column.reservationStatus",
   discountTypeCode: "calls.column.discountType",
   paymentMethodCode: "calls.column.paymentMethod",
@@ -66,8 +65,6 @@ function fieldValue(
       return optionLabel(options.therapists, draft.therapist1Id) ?? "-";
     case "therapist2Id":
       return optionLabel(options.therapists, draft.therapist2Id) ?? "-";
-    case "earcareEmployeeId":
-      return optionLabel(options.earcareEmployees, draft.earcareEmployeeId) ?? "-";
     case "status":
       return optionLabel(options.statuses, draft.status) ?? draft.status;
     case "discountTypeCode":

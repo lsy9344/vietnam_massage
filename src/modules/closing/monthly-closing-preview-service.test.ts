@@ -215,7 +215,7 @@ const opsDailyResults = {
   "2026-06-01": {
     operatingMonthId: "month-2026-06",
     serviceDate: "2026-06-01",
-    dailyOpsCallCredit: 31,
+    dailyOpsCallCount: 31,
     sourceCallCount: 2,
     appliedThresholdCallCount: 30,
     personalIncentiveAmount: 50000,
@@ -250,12 +250,12 @@ const opsDailyResults = {
         calculationBasis: "일 총콜 31콜 / 30콜 이상 개인 50000 VND"
       }
     ],
-    callEvidence: [{ serviceCallId: "call-a", serviceDate: "2026-06-01", opsCallCredit: 31 }]
+    callEvidence: [{ serviceCallId: "call-a", serviceDate: "2026-06-01" }]
   },
   "2026-06-02": {
     operatingMonthId: "month-2026-06",
     serviceDate: "2026-06-02",
-    dailyOpsCallCredit: 0,
+    dailyOpsCallCount: 0,
     sourceCallCount: 0,
     appliedThresholdCallCount: null,
     personalIncentiveAmount: 0,
@@ -282,71 +282,11 @@ const opsDailyResults = {
   }
 } as const;
 
-const earcareDayResults = {
-  "2026-06-01": {
-    operatingMonthId: "month-2026-06",
-    serviceDate: "2026-06-01",
-    earcarePoolTotal: 100000,
-    sourceCallCount: 1,
-    eligibleCount: 1,
-    baseShareAmount: 100000,
-    remainderAmount: 0,
-    distributedAmount: 100000,
-    undistributedAmount: 0,
-    warningCounts: { notCompleted: 1, coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
-    rows: [
-      {
-        employeeId: "earcare-1",
-        staffCode: "EAR-001",
-        displayName: "귀케어1",
-        statusCode: "NORMAL",
-        statusDisplayName: "정상",
-        isPayoutEligible: true,
-        exclusionReason: null,
-        baseShareAmount: 100000,
-        remainderShareAmount: 0,
-        payoutAmount: 100000,
-        calculationBasis: "방문완료 풀 100000 VND / 정상 근무자 1명"
-      }
-    ],
-    poolEvidence: [{ serviceCallId: "call-b", serviceDate: "2026-06-01", earcarePoolAmount: 100000 }]
-  },
-  "2026-06-02": {
-    operatingMonthId: "month-2026-06",
-    serviceDate: "2026-06-02",
-    earcarePoolTotal: 50000,
-    sourceCallCount: 1,
-    eligibleCount: 0,
-    baseShareAmount: 0,
-    remainderAmount: 0,
-    distributedAmount: 0,
-    undistributedAmount: 50000,
-    warningCounts: { notCompleted: 0, coursePolicyMissing: 1, therapistRateMissing: 0, secondTherapistRequired: 0 },
-    rows: [
-      {
-        employeeId: "earcare-1",
-        staffCode: "EAR-001",
-        displayName: "귀케어1",
-        statusCode: "OFF",
-        statusDisplayName: "휴무",
-        isPayoutEligible: false,
-        exclusionReason: "휴무",
-        baseShareAmount: 0,
-        remainderShareAmount: 0,
-        payoutAmount: 0,
-        calculationBasis: "휴무 제외"
-      }
-    ],
-    poolEvidence: [{ serviceCallId: "call-c", serviceDate: "2026-06-02", earcarePoolAmount: 50000 }]
-  }
-} as const;
-
 function financialDayResult(overrides: Partial<{
   paymentTotal: number;
   netSales: number;
   discountTotal: number;
   expenseTotal: number;
-  earcarePoolTotal: number;
   therapistCommissionTotal: number;
 }> = {}) {
   return {
@@ -360,7 +300,6 @@ function financialDayResult(overrides: Partial<{
     netSales: 0,
     discountTotal: 0,
     expenseTotal: 0,
-    earcarePoolTotal: 0,
     therapistCommissionTotal: 0,
     paymentMethodTotals: { cash: 0, card: 0, bank: 0, other: 0 },
     till: {
@@ -379,7 +318,6 @@ const financialDayResults = {
     netSales: 2850000,
     discountTotal: 100000,
     expenseTotal: 150000,
-    earcarePoolTotal: 100000,
     therapistCommissionTotal: 1600000
   }),
   "2026-06-02": financialDayResult({
@@ -387,7 +325,6 @@ const financialDayResults = {
     netSales: 950000,
     discountTotal: 0,
     expenseTotal: 50000,
-    earcarePoolTotal: 50000,
     therapistCommissionTotal: 700000
   })
 } as const;
@@ -427,7 +364,7 @@ function createDependencies(options: { fullAttendanceResult?: TherapistFullAtten
           endDate: "2026-06-02",
           isClosedOrLocked: false,
           previewStatus: "draft_current",
-          monthlyOpsCallCredit: 31,
+          monthlyOpsCallCount: 31,
           sourceCallCount: 1,
           appliedThresholdCallCount: 30,
           totalMonthlyIncentiveAmount: 3000000,
@@ -455,12 +392,8 @@ function createDependencies(options: { fullAttendanceResult?: TherapistFullAtten
             }
           ],
           warningCounts: { notCompleted: 1, coursePolicyMissing: 1, therapistRateMissing: 0, secondTherapistRequired: 1 },
-          callEvidence: [{ serviceCallId: "call-a", serviceDate: "2026-06-01", opsCallCredit: 31 }]
+          callEvidence: [{ serviceCallId: "call-a", serviceDate: "2026-06-01" }]
         } as any;
-      },
-      async listEarcareDailySettlements({ serviceDate }: { serviceDate: string }) {
-        calledDates.push(`earcare:${serviceDate}`);
-        return earcareDayResults[serviceDate as keyof typeof earcareDayResults] as any;
       },
       async getDailyCallLedgerSummary({ serviceDate }: { serviceDate: string }) {
         calledDates.push(`financial:${serviceDate}`);
@@ -477,8 +410,6 @@ function createDependencies(options: { fullAttendanceResult?: TherapistFullAtten
             basePrice: 3000000,
             paymentAmount: 3000000,
             discountAmount: 0,
-            earcarePoolAmount: 100000,
-            opsCallCredit: 1,
             therapistAssignments: [{ role: "THERAPIST_1", employeeId: "therapist-1", commissionAmount: 1600000 }]
           },
           {
@@ -489,8 +420,6 @@ function createDependencies(options: { fullAttendanceResult?: TherapistFullAtten
             basePrice: 1000000,
             paymentAmount: 1000000,
             discountAmount: 0,
-            earcarePoolAmount: 50000,
-            opsCallCredit: 1,
             therapistAssignments: [{ role: "THERAPIST_1", employeeId: "therapist-1", commissionAmount: 700000 }]
           }
         ];
@@ -516,8 +445,6 @@ describe("listMonthlyClosingPreview", () => {
       "ops:2026-06-01",
       "ops:2026-06-02",
       "ops-monthly",
-      "earcare:2026-06-01",
-      "earcare:2026-06-02",
       "financial:2026-06-01",
       "financial:2026-06-02",
       "completed-calculations"
@@ -543,45 +470,38 @@ describe("listMonthlyClosingPreview", () => {
     assert.equal(result.operations.dailyIncentiveAmount, 100000);
     assert.equal(result.operations.monthlyIncentiveAmount, 3000000);
     assert.equal(result.operations.rows[0].totalOpsPayoutAmount, 3050000);
-    assert.equal(result.earcare.earcarePoolTotal, 150000);
-    assert.equal(result.earcare.distributedAmount, 100000);
-    assert.equal(result.earcare.undistributedAmount, 50000);
     assert.deepEqual(result.financials, {
       paymentTotal: 4000000,
       netSales: 3800000,
       discountTotal: 100000,
       expenseTotal: 200000,
-      earcarePoolTotal: 150000,
       therapistCommissionTotal: 2300000
     });
     assert.equal(result.totals.therapistPayoutAmount, 2300000);
     assert.equal(result.totals.opsDailyIncentiveAmount, 100000);
     assert.equal(result.totals.opsMonthlyIncentiveAmount, 3000000);
-    assert.equal(result.totals.earcarePayoutAmount, 100000);
-    assert.equal(result.totals.grandPayoutAmount, 5500000);
-    assert.equal((result as any).dashboardFinancials.dailyCostTotal, 2700000);
+    assert.equal(result.totals.grandPayoutAmount, 5400000);
+    assert.equal((result as any).dashboardFinancials.dailyCostTotal, 2600000);
     assert.equal((result as any).dashboardFinancials.monthlyCostTotal, 3000000);
-    assert.equal((result as any).dashboardFinancials.settlementPayoutTotal, 5500000);
-    assert.equal((result as any).dashboardFinancials.netProfit, -1700000);
+    assert.equal((result as any).dashboardFinancials.settlementPayoutTotal, 5400000);
+    assert.equal((result as any).dashboardFinancials.netProfit, -1600000);
     assert.equal((result as any).graphReport.dailyRevenueTrend[0].paymentTotal, 3000000);
     assert.equal((result as any).graphReport.courseMix[0].paymentTotal, 3000000);
     assert.equal((result as any).graphReport.therapistCallRanking[0].employeeId, "therapist-1");
     assert.equal(result.evidence.sourceDayCount, 2);
-    assert.equal(result.evidence.includedCallCount, 8);
+    assert.equal(result.evidence.includedCallCount, 6);
     assert.equal(result.evidence.excludedCallCount, 3);
     assert.equal(result.evidence.fullAttendanceSourceStatus, "missing_story_4_1_source");
     assert.equal(result.evidence.fullAttendanceSourceDayCount, 0);
     assert.equal(result.evidence.countKingEligibleCount, 0);
     assert.equal(result.evidence.countKingExcludedCount, 3);
-    assert.equal(result.warningCounts.earcareNormalStaffZeroDays, 1);
-    assert.equal(result.warningCounts.earcareUndistributedDays, 1);
     assert.equal(result.warningCounts.opsMonthly.coursePolicyMissing, 1);
     assert.equal(result.warningCounts.opsWarningMessageCount, 2);
     assert.equal(result.warningCounts.fullAttendanceSourceMissing, 1);
     assert.equal(result.warningCounts.fullAttendanceSourceDayCount, 0);
     assert.equal(result.warningCounts.countKingEligibleCount, 0);
     assert.equal(result.warningCounts.countKingExcludedCount, 3);
-    assert.equal(result.warningCounts.total, 19);
+    assert.equal(result.warningCounts.total, 15);
     assert.ok(result.operations.warningMessages.some((message) => message.includes("30콜 미만")));
     assert.ok(result.operations.warningMessages.some((message) => message.includes("카운터팀 대상자")));
   });
@@ -716,7 +636,7 @@ describe("listMonthlyClosingPreview", () => {
     assert.equal(rowsById.get("therapist-d")?.finalPayoutAmount, 2000000 + 2000000 + 0);
     assert.equal(result.therapists.payoutAmount, result.therapists.rows.reduce((sum, row) => sum + row.finalPayoutAmount, 0));
     assert.equal(result.totals.therapistPayoutAmount, 30000000);
-    assert.equal(result.totals.grandPayoutAmount, 33200000);
+    assert.equal(result.totals.grandPayoutAmount, 33100000);
     assert.equal(result.evidence.fullAttendanceSourceStatus, "available");
     assert.equal(result.evidence.fullAttendanceSourceDayCount, 22);
     assert.equal(result.evidence.countKingEligibleCount, 3);
@@ -849,7 +769,7 @@ describe("listMonthlyClosingPreview", () => {
         })
       )
     });
-    // Provide empty-but-valid ops/earcare results for every seeded date.
+    // Provide empty-but-valid ops results for every seeded date.
     dependencies.listOpsDailyIncentives = async ({ serviceDate }: { serviceDate: string }) =>
       ({
         operatingMonthId: "month-2026-06",
@@ -861,26 +781,13 @@ describe("listMonthlyClosingPreview", () => {
         rows: [],
         callEvidence: []
       }) as any;
-    dependencies.listEarcareDailySettlements = async ({ serviceDate }: { serviceDate: string }) =>
-      ({
-        operatingMonthId: "month-2026-06",
-        serviceDate,
-        earcarePoolTotal: 0,
-        sourceCallCount: 0,
-        eligibleCount: 0,
-        distributedAmount: 0,
-        undistributedAmount: 0,
-        warningCounts: { notCompleted: 0, coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
-        rows: [],
-        poolEvidence: []
-      }) as any;
     dependencies.listOpsMonthlyIncentivePreview = async () =>
       ({
         operatingMonthId: "month-2026-06",
         monthKey: "2026-06",
         startDate: "2026-06-01",
         endDate: "2026-06-20",
-        monthlyOpsCallCredit: 0,
+        monthlyOpsCallCount: 0,
         appliedThresholdCallCount: null,
         ruleStatus: "below_threshold",
         warningMessage: null,

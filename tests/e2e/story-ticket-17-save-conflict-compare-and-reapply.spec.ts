@@ -127,8 +127,6 @@ test.describe("티켓 17 저장 충돌 비교와 다시 반영", () => {
       name: "T17 A",
       durationMinutes: 60,
       basePrice: 1500000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: false,
       tvDisplayName: "T17 A",
       effectiveToMonth: monthKey,

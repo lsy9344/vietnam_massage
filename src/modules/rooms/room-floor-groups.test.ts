@@ -18,7 +18,6 @@ function roomStatus(roomDisplayName: string): RoomStatusDto {
     course: null,
     therapist1: null,
     therapist2: null,
-    earcare: null,
     guidanceText: "",
     updatedAt: "2026-06-21T00:00:00.000Z",
     overlappingCalls: []

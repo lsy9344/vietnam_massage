@@ -3,14 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { assertOperatingMonthPayoutWritable } from "@/modules/closing/month-lock-guard";
 
 /**
- * 지급 확인(ADR 0004, 티켓 30): 세 직군(Therapist·귀케어·운영팀)의 정산 행 지급 확인을 공통으로 다루는 서비스.
+ * 지급 확인(ADR 0004, 티켓 30): 두 직군(Therapist·운영팀)의 정산 행 지급 확인을 공통으로 다루는 서비스.
  * 단위는 (unitType, operatingMonthId, serviceDate, employeeId)이고, serviceDate는 월 단위(운영팀 월 인센)에서 null이다.
  * 확인·재확인·해제는 금액·처리자·시각·사유를 가진 사건으로 쌓이고, 현재 상태는 사건과 현재 계산 금액에서 도출한다.
  * 현재 계산 금액은 호출하는 쪽(직군별 계산 서비스)이 넘겨주고, 이 서비스는 계산하지 않는다.
- * 티켓 31(귀케어·운영팀)은 unitType만 바꿔 이 서비스를 그대로 쓴다.
+ * 티켓 31(운영팀)은 unitType만 바꿔 이 서비스를 그대로 쓴다.
  */
 
-export const payoutConfirmationUnitTypes = ["THERAPIST_DAILY", "EARCARE_DAILY", "OPS_DAILY", "OPS_MONTHLY"] as const;
+export const payoutConfirmationUnitTypes = ["THERAPIST_DAILY", "OPS_DAILY", "OPS_MONTHLY"] as const;
 export type PayoutConfirmationUnitType = (typeof payoutConfirmationUnitTypes)[number];
 
 /** 월 단위(운영팀 월 인센)는 날짜 없이 운영월 하나가 단위다. */

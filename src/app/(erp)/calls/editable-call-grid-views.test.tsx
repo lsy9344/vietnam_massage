@@ -18,7 +18,6 @@ const options: ServiceCallFormOptions = {
   paymentMethods: [{ value: "card", label: "카드" }],
   confirmationCodes: [{ value: "Y", label: "Y" }],
   therapists: [{ value: "therapist-1", label: "Therapist 1" }],
-  earcareEmployees: [],
   expenseHandlers: []
 };
 
@@ -40,7 +39,6 @@ const row: ServiceCallRowDto = {
   customerMemo: "지윤",
   therapist1: { id: "therapist-1", displayName: "Therapist 1", staffCode: "THR-001" },
   therapist2: null,
-  earcare: null,
   status: "예약",
   discountTypeCode: null,
   paymentMethodCode: null,
@@ -52,8 +50,6 @@ const row: ServiceCallRowDto = {
   discountAmount: 0,
   therapist1Commission: 0,
   therapist2Commission: 0,
-  earcarePoolAmount: 0,
-  opsCallCredit: 0,
   calculationStatus: "not_completed",
   calculationErrorCode: null,
   calculationErrorMessage: null,
@@ -107,7 +103,7 @@ describe("ledger view column grouping (ticket 19)", () => {
     const head = tableHead(html);
     const row = dataRow(html);
 
-    for (const label of ["시간", "실제입장", "객실", "고객/메모", "코스", "마사지사1", "마사지사2", "귀케어 담당", "저장상태"]) {
+    for (const label of ["시간", "실제입장", "객실", "고객/메모", "코스", "마사지사1", "마사지사2", "저장상태"]) {
       assert.match(head, new RegExp(label), `${label}이 예약·현장 보기에 없다`);
     }
     for (const field of ["discountTypeCode", "paymentMethodCode", "note", "visitRequest", "confirmationCode", "customerId"]) {
@@ -135,7 +131,6 @@ describe("ledger view column grouping (ticket 19)", () => {
       "courseId",
       "therapist1Id",
       "therapist2Id",
-      "earcareEmployeeId",
       "customerId",
       // S4: 방문별 요청은 "드물게 쓰는 입력"(스토리 97)이라 상시 열이 아니라 콜 상세 패널에서 펼쳐 본다.
       "visitRequest"
@@ -169,7 +164,6 @@ describe("ledger view column grouping (ticket 19)", () => {
       "customerMemo",
       "therapist1Id",
       "therapist2Id",
-      "earcareEmployeeId",
       "status",
       "discountTypeCode",
       "paymentMethodCode",

@@ -138,22 +138,20 @@ async function seedClosedMonth(monthKey: string, confirmedByAccountId: string, s
           dailyIncentiveAmount: 0,
           monthlyIncentiveAmount: 0,
           totalOpsPayoutAmount: 0,
-          monthlyOpsCallCredit: 0,
+          monthlyOpsCallCount: 0,
           appliedThresholdCallCount: null,
           ruleStatus: "missing_policy",
           warningMessages: [],
           rows: []
         },
-        earcare: { earcarePoolTotal: 0, distributedAmount: 0, undistributedAmount: 0, sourceCallCount: 0, eligibleDayCount: 0, rows: [] },
         financials: {
           paymentTotal: 0,
           netSales: 0,
           discountTotal: 0,
           expenseTotal: 0,
-          earcarePoolTotal: 0,
           therapistCommissionTotal: 0
         },
-        totals: { therapistPayoutAmount: 0, opsDailyIncentiveAmount: 0, opsMonthlyIncentiveAmount: 0, earcarePayoutAmount: 0, grandPayoutAmount: 0 },
+        totals: { therapistPayoutAmount: 0, opsDailyIncentiveAmount: 0, opsMonthlyIncentiveAmount: 0, grandPayoutAmount: 0 },
         warningCounts: { total: 0 },
         evidence: { period: `${monthKey}-01 ~ ${monthKey}-01`, sourceDayCount: 1 },
         source: { serviceVersion: "monthly-closing-service:5.3", previewBasis: "listMonthlyClosingPreview", snapshotCreatedAt: "2026-06-10T05:00:00.000Z" }

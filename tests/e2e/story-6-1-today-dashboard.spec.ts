@@ -140,14 +140,12 @@ async function upsertCodeItem(codeType: string, code: string, displayName: strin
   });
 }
 
-async function upsertCoursePolicy(courseId: string, monthKey: string, code: string, basePrice: number, earcarePoolAmount: number, requiresSecondTherapist = false) {
+async function upsertCoursePolicy(courseId: string, monthKey: string, code: string, basePrice: number, requiresSecondTherapist = false) {
   const existing = await (prisma as any).coursePolicy.findFirst({ where: { courseId, effectiveFromMonth: monthKey } });
   const data = {
     name: `Story 6.1 ${code}`,
     durationMinutes: requiresSecondTherapist ? 90 : 60,
     basePrice,
-    opsCallCredit: 1,
-    earcarePoolAmount,
     requiresSecondTherapist,
     tvDisplayName: `S61 ${code}`,
     effectiveToMonth: null,
@@ -222,11 +220,11 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
   for (const code of ["A", "B", "C", "D", "E"] as const) {
     courses[code] = await (prisma as any).course.upsert({ where: { code }, update: { isActive: true }, create: { code, isActive: true } });
   }
-  await upsertCoursePolicy(courses.A.id, monthKey, "A", 1500000, 100000);
-  await upsertCoursePolicy(courses.B.id, monthKey, "B", 1800000, 200000);
-  await upsertCoursePolicy(courses.C.id, monthKey, "C", 2000000, 0);
-  await upsertCoursePolicy(courses.D.id, monthKey, "D", 3200000, 0, true);
-  await upsertCoursePolicy(courses.E.id, monthKey, "E", 3000000, 0);
+  await upsertCoursePolicy(courses.A.id, monthKey, "A", 1500000);
+  await upsertCoursePolicy(courses.B.id, monthKey, "B", 1800000);
+  await upsertCoursePolicy(courses.C.id, monthKey, "C", 2000000);
+  await upsertCoursePolicy(courses.D.id, monthKey, "D", 3200000, true);
+  await upsertCoursePolicy(courses.E.id, monthKey, "E", 3000000);
   await upsertTherapistRate(therapist1.id, courses.A.id, monthKey, 700000);
   await upsertTherapistRate(therapist1.id, courses.B.id, monthKey, 900000);
   await upsertTherapistRate(therapist1.id, courses.D.id, monthKey, 900000);
@@ -341,7 +339,8 @@ test.describe("Story 6.1 today dashboard", () => {
     await expect(page.getByRole("region", { name: "오늘 상태 건수", exact: true })).toContainText("방문완료");
     await expect(page.getByRole("region", { name: "오늘 상태 건수", exact: true })).toContainText("6건");
     await expect(page.getByRole("region", { name: "오늘 금액 KPI", exact: true })).toContainText("10,900,000 VND");
-    await expect(page.getByRole("region", { name: "오늘 금액 KPI", exact: true })).toContainText("6,000,000 VND");
+    // 순이익 = 결제합계 10,900,000 - 지출합계 300,000 - 마사지사 정산 4,300,000(700,000+1,800,000+1,800,000+0). 운영팀 일일인센 정책이 없어 0.
+    await expect(page.getByRole("region", { name: "오늘 금액 KPI", exact: true })).toContainText("6,300,000 VND");
     const details = page.getByRole("region", { name: "상세 요약", exact: true });
     await expect(details).toContainText("코스별 방문완료");
     await expect(details).toContainText("A");
@@ -365,7 +364,7 @@ test.describe("Story 6.1 today dashboard", () => {
     await expect(summaryCard(money, "순이익")).toHaveClass(/bg-accent-lavender/);
     await expect(summaryCard(money, "일일비용 합계")).toHaveClass(/bg-accent-peach/);
     const costs = page.getByRole("region", { name: "일일비용 내역", exact: true });
-    for (const label of ["일일인센 합계", "지출합계", "마사지사 정산", "귀케어 정산"]) {
+    for (const label of ["일일인센 합계", "지출합계", "마사지사 정산"]) {
       await expect(costs).toContainText(label);
     }
   });

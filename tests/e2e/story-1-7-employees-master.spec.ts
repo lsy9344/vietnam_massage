@@ -125,13 +125,10 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await expect(page.getByRole("heading", { name: "직원", level: 1 })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "설정 화면" }).getByRole("link", { name: "직원" })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("heading", { name: /운영팀/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /귀케어팀/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: /마사지사/ })).toBeVisible();
     await expect(page.getByText("OPS-LEAD-001").first()).toBeVisible();
-    await expect(page.getByText("EAR-001").first()).toBeVisible();
     await expect(page.getByText("THR-050").first()).toBeVisible();
     await expect.poll(async () => (prisma as any).employee.count({ where: { employeeGroup: "OPERATIONS", staffCode: { startsWith: "OPS-" } } })).toBe(5);
-    await expect.poll(async () => (prisma as any).employee.count({ where: { employeeGroup: "EARCARE", staffCode: { startsWith: "EAR-" } } })).toBe(4);
     await expect.poll(async () => (prisma as any).employee.count({ where: { employeeGroup: "THERAPIST", staffCode: { startsWith: "THR-" } } })).toBe(50);
 
     // 티켓 07: 직원 생성은 도구줄의 서랍이다. 범위를 서랍 안으로 좁힌다.

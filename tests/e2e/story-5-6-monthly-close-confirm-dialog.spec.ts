@@ -186,10 +186,8 @@ test.describe("Story 5.6 monthly close double-confirm dialog", () => {
     await expect(dialog).toContainText("운영월");
     await expect(dialog).toContainText("마사지사");
     await expect(dialog).toContainText("운영팀");
-    await expect(dialog).toContainText("귀케어");
     await expect(dialog).toContainText(/마사지사[\s\S]*[\d,]+ VND[\s\S]*\d+명/);
     await expect(dialog).toContainText(/운영팀[\s\S]*[\d,]+ VND[\s\S]*\d+명 \/ 일일 [\d,]+ VND \/ 월 [\d,]+ VND/);
-    await expect(dialog).toContainText(/귀케어[\s\S]*[\d,]+ VND[\s\S]*\d+명/);
     await expect(dialog).toContainText(/warning[\s\S]*\d+건/);
     await expect(dialog).toContainText("확정 시 스냅샷이 고정되어 이후 설정 변경으로 재계산되지 않습니다.");
     expect(await (prisma as any).monthlyClosing.count({ where: { operatingMonthId: seededData.months.success } })).toBe(0);

@@ -49,7 +49,6 @@ function createMemoryPrisma(
   employees.set("thr-1", employee("thr-1", "THR-001", "마사지사1", 10, true, "THERAPIST"));
   employees.set("thr-2", employee("thr-2", "THR-002", "마사지사2", 20, true, "THERAPIST"));
   employees.set("thr-inactive", employee("thr-inactive", "THR-999", "퇴사 마사지사", 998, false, "THERAPIST"));
-  employees.set("ear-1", employee("ear-1", "EAR-001", "귀케어1", 10, true, "EARCARE"));
   employees.set("ops-1", employee("ops-1", "OPS-001", "팀장", 10, true, "OPERATIONS"));
 
   const cells = new Map<string, any>();
@@ -220,7 +219,7 @@ describe("schedule service", () => {
     assert.equal(result.weekEndDate, "2026-02-01");
   });
 
-  it("세 직군의 활성 직원을 직군별로 묶고, 기록이 없는 칸은 미입력이다", async () => {
+  it("두 직군의 활성 직원을 직군별로 묶고, 기록이 없는 칸은 미입력이다", async () => {
     const result = await listPlannedWorkingDaysForWeek({
       date: "2026-10-14",
       prismaClient: createMemoryPrisma()
@@ -228,7 +227,7 @@ describe("schedule service", () => {
 
     assert.deepEqual(
       result.groups.map((group) => group.employeeGroup),
-      ["OPERATIONS", "EARCARE", "THERAPIST"]
+      ["OPERATIONS", "THERAPIST"]
     );
     const therapistGroup = result.groups.find((group) => group.employeeGroup === "THERAPIST");
     assert.equal(therapistGroup?.employees.length, 2); // thr-inactive는 제외

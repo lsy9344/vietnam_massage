@@ -113,8 +113,6 @@ test.describe("티켓 16 새 행 요청 id로 중복 생성 막기", () => {
       name: "T16 A",
       durationMinutes: 60,
       basePrice: 1500000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: false,
       tvDisplayName: "T16 A",
       effectiveToMonth: monthKey,

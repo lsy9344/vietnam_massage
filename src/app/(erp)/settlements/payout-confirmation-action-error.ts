@@ -26,11 +26,7 @@ const safePayoutActionMessages = new Set([
   "마사지사를 찾을 수 없습니다.",
   "활성 마사지사만 지급 확인을 변경할 수 있습니다.",
   "해당 날짜에 정산 대상 콜이 없는 마사지사는 지급 확인을 할 수 없습니다.",
-  // 티켓 31: 귀케어·운영팀 지급 확인 가드(services의 plain Error)
-  "귀케어사를 선택하세요.",
-  "귀케어사를 찾을 수 없습니다.",
-  "활성 귀케어사만 지급 확인을 변경할 수 있습니다.",
-  "해당 날짜의 귀케어 정산 대상을 찾을 수 없습니다.",
+  // 티켓 31: 운영팀 지급 확인 가드(services의 plain Error)
   "운영팀 직원을 선택하세요.",
   "운영팀 직원을 찾을 수 없습니다.",
   "활성 운영팀 직원만 지급 확인을 변경할 수 있습니다.",
@@ -38,7 +34,7 @@ const safePayoutActionMessages = new Set([
   "해당 월의 운영팀 정산 대상을 찾을 수 없습니다."
 ]);
 
-/** 지급 확인(확인/재확인/해제) 서버 액션의 오류를 locale 문구로 매핑한다. 세 직군이 같은 서비스를 쓰므로 공통으로 둔다. */
+/** 지급 확인(확인/재확인/해제) 서버 액션의 오류를 locale 문구로 매핑한다. 두 직군이 같은 서비스를 쓰므로 공통으로 둔다. */
 export function mapPayoutConfirmationActionError<T>(error: unknown, locale: Locale): ActionResult<T> {
   if (error instanceof AuthorizationError) {
     return {

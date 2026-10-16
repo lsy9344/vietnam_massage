@@ -24,8 +24,7 @@ const PAYOUT_LABEL_KEY: Record<Payout["status"], MessageKey> = {
 const PAYOUT_SEGMENT_KEY: Record<Payout["segments"][number]["key"], MessageKey> = {
   therapist: "dashboard.reports.payout.segment.therapist",
   ops_daily: "dashboard.reports.payout.segment.opsDaily",
-  ops_monthly: "dashboard.reports.payout.segment.opsMonthly",
-  earcare: "dashboard.reports.payout.segment.earcare"
+  ops_monthly: "dashboard.reports.payout.segment.opsMonthly"
 };
 
 function formatters(locale: Locale) {

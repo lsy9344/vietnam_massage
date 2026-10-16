@@ -129,8 +129,6 @@ test.describe("티켓 21 빠른 예약: 두 명 코스와 경고 확인 후 배�
       name: "T21 2인",
       durationMinutes: 90,
       basePrice: 3200000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: true,
       tvDisplayName: "T21D",
       effectiveToMonth: monthKey,

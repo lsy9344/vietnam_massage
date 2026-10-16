@@ -51,8 +51,6 @@ function PolicyInputs({ course, policy, monthKey, state }: { course: CourseDto; 
         <TextField defaultValue={policy?.tvDisplayName ?? ""} label={t("masters.courses.field.tvDisplayName")} name="tvDisplayName" required state={state} />
         <TextField defaultValue={policy?.durationMinutes ?? 60} label={t("masters.courses.field.duration")} min={1} name="durationMinutes" state={state} type="number" />
         <TextField defaultValue={policy?.basePrice ?? 0} label={t("masters.courses.field.basePrice")} min={0} name="basePrice" state={state} type="number" />
-        <TextField defaultValue={policy?.opsCallCredit ?? 1} label={t("masters.courses.field.opsCallCredit")} min={0} name="opsCallCredit" state={state} type="number" />
-        <TextField defaultValue={policy?.earcarePoolAmount ?? 0} label={t("masters.courses.field.earcarePoolPerCall")} min={0} name="earcarePoolAmount" state={state} type="number" />
         <TextField defaultValue={policy?.effectiveFromMonth ?? monthKey} label={t("masters.courses.field.fromMonth")} name="effectiveFromMonth" pattern={monthPattern} placeholder="YYYY-MM" required state={state} />
         <TextField defaultValue={policy?.effectiveToMonth ?? ""} hint={t("masters.courses.toMonthHint")} label={t("masters.courses.field.toMonth")} name="effectiveToMonth" pattern={monthPattern} placeholder="YYYY-MM" state={state} />
       </div>
@@ -458,8 +456,6 @@ export function CoursePolicyManager({
               <HeadCell>{t("masters.courses.field.courseName")}</HeadCell>
               <HeadCell numeric>{t("masters.courses.field.duration")}</HeadCell>
               <HeadCell numeric>{t("masters.courses.field.basePrice")}</HeadCell>
-              <HeadCell numeric>{t("masters.courses.field.opsCallCredit")}</HeadCell>
-              <HeadCell numeric>{t("masters.courses.field.earcarePoolPerCall")}</HeadCell>
               <HeadCell>{t("masters.courses.field.tvDisplayName")}</HeadCell>
               <HeadCell>{t("masters.courses.column.period")}</HeadCell>
               <HeadCell>{t("masters.courses.secondTherapistRequired")}</HeadCell>
@@ -485,14 +481,12 @@ export function CoursePolicyManager({
                     <Cell>{policy.name}</Cell>
                     <Cell numeric>{formatNumber(locale, policy.durationMinutes)}</Cell>
                     <Cell numeric>{formatNumber(locale, policy.basePrice)}</Cell>
-                    <Cell numeric>{formatNumber(locale, policy.opsCallCredit)}</Cell>
-                    <Cell numeric>{formatNumber(locale, policy.earcarePoolAmount)}</Cell>
                     <Cell>{policy.tvDisplayName}</Cell>
                     <Cell muted>{periodLabel(policy.effectiveFromMonth, policy.effectiveToMonth, openEnded)}</Cell>
                     <Cell>{policy.requiresSecondTherapist ? t("masters.courses.secondTherapistRequiredYes") : t("masters.courses.secondTherapistRequiredNo")}</Cell>
                   </>
                 ) : (
-                  <td className={cn(masterCellClassName, "text-muted")} colSpan={8}>
+                  <td className={cn(masterCellClassName, "text-muted")} colSpan={6}>
                     {t("masters.courses.noPolicy")}
                   </td>
                 )}

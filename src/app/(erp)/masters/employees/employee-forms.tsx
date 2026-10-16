@@ -35,7 +35,6 @@ import type { MessageKey } from "@/lib/i18n/types";
 
 const groupLabelKeys: Record<EmployeeGroup, MessageKey> = {
   OPERATIONS: "masters.employees.group.OPERATIONS",
-  EARCARE: "masters.employees.group.EARCARE",
   THERAPIST: "masters.employees.group.THERAPIST"
 };
 
@@ -274,7 +273,7 @@ export function EmployeeManager({ employees, initialItem }: { employees: Employe
   const t = useT();
   const locale = useLocale();
   const { selected, select, panelRef } = useMasterSelection(initialItem);
-  const selectedEmployee = employees.find((employee) => employee.id === selected) ?? null;
+  const selectedEmployee = employees.find((employee) => employee.id === selected && employeeGroups.includes(employee.employeeGroup)) ?? null;
 
   return (
     <MasterSplit

@@ -34,7 +34,7 @@ function matchesIn<T>(value: T, filter: T | { in?: T[] } | undefined) {
   return value === filter;
 }
 
-export function createMigrationCalculationPrisma(options: { zeroEarcareWorkersDate?: string; monthlyOpsCredit?: number } = {}) {
+export function createMigrationCalculationPrisma(options: { dailyOpsCallCount?: number; monthlyOpsCallCount?: number } = {}) {
   const fixture = MIGRATION_CALCULATION_FIXTURE as Fixture;
   const createdAt = new Date("2034-06-01T00:00:00.000Z");
   const updatedAt = new Date("2034-06-15T03:00:00.000Z");
@@ -145,16 +145,6 @@ export function createMigrationCalculationPrisma(options: { zeroEarcareWorkersDa
   }));
   const opsAttendances = fixture.attendance.operations.map((attendance, index) => ({
     id: `ops-attendance-${index}`,
-    operatingMonthId: operatingMonth.id,
-    attendanceDate: dbDate(attendance.attendanceDate),
-    employeeId: attendance.employeeId,
-    statusCode: attendance.statusCode,
-    isActive: true,
-    createdAt,
-    updatedAt
-  }));
-  const earcareAttendances = fixture.attendance.earcare.map((attendance, index) => ({
-    id: `earcare-attendance-${index}`,
     operatingMonthId: operatingMonth.id,
     attendanceDate: dbDate(attendance.attendanceDate),
     employeeId: attendance.employeeId,
@@ -281,10 +271,11 @@ export function createMigrationCalculationPrisma(options: { zeroEarcareWorkersDa
     serviceCall: {
       async findMany({ where }: any = {}) {
         const exactServiceDate = where?.serviceDate instanceof Date ? where.serviceDate : undefined;
-        if (where?.serviceDate?.gte !== undefined && where?.serviceDate?.lte !== undefined && options.monthlyOpsCredit !== undefined) {
-          return [
+        // 운영팀 인센 threshold 검증은 완료 콜 행 수로 집계하므로, 목표 콜 수만큼 완료 콜을 직접 만든다.
+        const thresholdCalls = (count: number, label: string) =>
+          Array.from({ length: count }, (_, index) =>
             withRelations({
-              id: "call-monthly-ops-1500",
+              id: `call-${label}-ops-${index}`,
               operatingMonthId: operatingMonth.id,
               serviceDate: dbDate("2034-06-15"),
               startTime: "11:00",
@@ -293,19 +284,18 @@ export function createMigrationCalculationPrisma(options: { zeroEarcareWorkersDa
               status: "방문완료",
               discountTypeCode: null,
               paymentMethodCode: "CASH",
-              customerMemo: "monthly ops threshold fixture",
+              customerMemo: `${label} ops threshold fixture ${index}`,
               note: null,
               confirmationCode: null,
               createdAt,
               updatedAt
             })
-          ].map((call) => ({
-            ...call,
-            course: {
-              ...call.course,
-              policies: call.course.policies.map((policy: any) => ({ ...policy, opsCallCredit: options.monthlyOpsCredit }))
-            }
-          }));
+          );
+        if (where?.serviceDate?.gte !== undefined && where?.serviceDate?.lte !== undefined && options.monthlyOpsCallCount !== undefined) {
+          return thresholdCalls(options.monthlyOpsCallCount, "monthly");
+        }
+        if (exactServiceDate !== undefined && options.dailyOpsCallCount !== undefined) {
+          return thresholdCalls(options.dailyOpsCallCount, "daily");
         }
         return [...serviceCalls.values()]
           .filter(
@@ -380,13 +370,6 @@ export function createMigrationCalculationPrisma(options: { zeroEarcareWorkersDa
         return opsAttendances.filter((attendance) => (where?.operatingMonthId === undefined || attendance.operatingMonthId === where.operatingMonthId) && (where?.attendanceDate === undefined || sameDate(attendance.attendanceDate, where.attendanceDate)) && (where?.isActive === undefined || attendance.isActive === where.isActive));
       }
     },
-    earcareAttendance: {
-      async findMany({ where }: any = {}) {
-        return earcareAttendances
-          .filter((attendance) => options.zeroEarcareWorkersDate === undefined || attendance.attendanceDate.toISOString().slice(0, 10) !== options.zeroEarcareWorkersDate || attendance.statusCode !== "NORMAL")
-          .filter((attendance) => (where?.operatingMonthId === undefined || attendance.operatingMonthId === where.operatingMonthId) && (where?.attendanceDate === undefined || sameDate(attendance.attendanceDate, where.attendanceDate)) && (where?.isActive === undefined || attendance.isActive === where.isActive));
-      }
-    },
     opsDailyIncentiveRule: {
       async findMany({ where }: any = {}) {
         return opsDailyRules.filter((rule) => where?.isActive === undefined || rule.isActive === where.isActive);
@@ -394,9 +377,7 @@ export function createMigrationCalculationPrisma(options: { zeroEarcareWorkersDa
     },
     opsMonthlyIncentiveRule: {
       async findMany({ where }: any = {}) {
-        const monthlyCredit = options.monthlyOpsCredit;
-        const rules = monthlyCredit === undefined ? opsMonthlyRules : opsMonthlyRules.map((rule) => ({ ...rule }));
-        return rules.filter((rule) => where?.isActive === undefined || rule.isActive === where.isActive);
+        return opsMonthlyRules.filter((rule) => where?.isActive === undefined || rule.isActive === where.isActive);
       }
     },
     auditLog: {

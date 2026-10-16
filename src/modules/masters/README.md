@@ -62,7 +62,7 @@ None. This module is the source of reference data for other modules.
 
 직원 마스터는 콜 원장, 정산, 월마감이 공유할 직원 고유 ID와 표시 정보를 소유한다. 로그인 계정은 `UserAccount`가 별도로 소유하고 필요할 때만 직원에 1:1로 연결한다.
 
-- `ensureDefaultEmployees()` prepares the default 59 business employees: 5 operations staff, 4 earcare staff, and 50 therapists. It keys idempotency by stable `staffCode`, not mutable display names.
+- `ensureDefaultEmployees()` prepares the default 55 business employees: 5 operations staff and 50 therapists. It keys idempotency by stable `staffCode`, not mutable display names.
 - `listEmployees()` returns active and inactive rows for administrator management; `listActiveEmployees()` returns active-only employee DTOs for call/settlement selection.
 - `createEmployee()`, `updateEmployeeProfile()`, `updateEmployeeSortOrder()`, and `deactivateEmployee()` mutate employees only by stable `Employee.id`.
 - `deactivateEmployee()` sets `isActive=false`; normal employee master flows do not physically remove employee rows because historical calls and settlements keep the employee reference.
@@ -73,10 +73,10 @@ None. This module is the source of reference data for other modules.
 
 코스/수당/인센 정책은 콜 계산, 정산, 월마감이 공유할 코스 고유 ID와 적용월 정책 이력을 소유한다.
 
-- `Course` owns stable identity: `Course.id`, stable code `A` through `E`, and `isActive`. Display values and prices live in `CoursePolicy`.
-- `ensureDefaultCoursesAndPolicies()` prepares default A/B/C/D/E courses, current course policies, therapist course rates, and operations daily/monthly incentive rules idempotently.
-- Default course policies preserve workbook values: A 60 minutes 1,500,000 VND, B 90 minutes 1,800,000 VND, C 90 minutes 2,000,000 VND, D 90 minutes 3,200,000 VND, E 120 minutes 3,000,000 VND. D has `requiresSecondTherapist=true`; A/B/C/E are false.
-- `TherapistCourseRate` seeds by stable `Employee.staffCode` from `THR-001` through `THR-050`, then stores `Employee.id` and `Course.id`. `THR-001` through `THR-004` get A 700,000, B 900,000, C 900,000, D/E 0; `THR-005` through `THR-050` get explicit 0 values for A through E.
+- `Course` owns stable identity: `Course.id`, stable code `A` through `E`, and `isActive`. Display values and prices live in `CoursePolicy`. `B` exists only as a legacy inactive row (its historical calls still reference `Course.code="B"`); the default seeds no longer include it, and seeding does not revive it.
+- `ensureDefaultCoursesAndPolicies()` prepares default A/C/D/E courses, current course policies, therapist course rates, and operations daily/monthly incentive rules idempotently.
+- Default course policies preserve workbook values: A 60 minutes 1,500,000 VND, C 90 minutes 2,000,000 VND, D 90 minutes 3,200,000 VND, E 120 minutes 3,000,000 VND. D has `requiresSecondTherapist=true`; A/C/E are false.
+- `TherapistCourseRate` seeds by stable `Employee.staffCode` from `THR-001` through `THR-050`, then stores `Employee.id` and `Course.id`. `THR-001` through `THR-004` get A 700,000, C 900,000, D/E 0; `THR-005` through `THR-050` get explicit 0 values for A, C, D, E.
 - Operations daily incentive defaults are 30/40/50 calls with 50,000/100,000/200,000 VND personal amounts.
 - Operations monthly incentive defaults are 1000/1100/1200/1300/1400/1500 calls with 3,000,000/5,000,000/8,000,000/12,000,000/18,000,000/25,000,000 VND total amounts and lead/counter/waiter shares 0.30/0.35/0.35.
 - `getCoursePolicyForMonth()`, `getTherapistCourseRateForMonth()`, `listOpsDailyIncentiveRulesForMonth()`, and `listOpsMonthlyIncentiveRulesForMonth()` return active policies for a `YYYY-MM` month. Missing course or rate policies return domain errors instead of silently assuming 0.
