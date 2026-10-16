@@ -25,7 +25,6 @@ function summary(overrides: Partial<DailyCallLedgerSummaryDto> = {}): DailyCallL
     canceledCount: 1,
     paymentTotal: 2900000,
     therapistCommissionTotal: 700000,
-    earcarePoolTotal: 100000,
     discountTotal: 100000,
     expenseTotal: 50000,
     netSales: 2850000,
@@ -150,12 +149,10 @@ describe("하루 수납·지출 탭 요약", () => {
   it("keeps settlement amounts and the therapist assignment column for settlement viewers only", () => {
     const counter = render();
     assert.doesNotMatch(counter, /마사지사정산/);
-    assert.doesNotMatch(counter, /귀케어풀/);
     assert.doesNotMatch(counter, /마사지사 담당 수/);
 
     const admin = text(render({ showSettlementAmounts: true }));
     assert.match(admin, /마사지사정산 700,000 VND/);
-    assert.match(admin, /귀케어풀 100,000 VND/);
     assert.match(admin, /마사지사 담당 수/);
     assert.match(admin, /B 1 0 2/);
   });

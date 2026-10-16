@@ -5,7 +5,8 @@ import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 
 // 티켓 18: 원장에 저장하지 않은 입력이 있을 때 탭 이동·다른 화면 이동에서 떠나기 전 안내가 나오고,
-// 취소하면 초안이 그대로 남는다. 원장 보기 전환(티켓 19)은 같은 화면의 표시만 바꾸므로 안내하지 않는다.
+// 취소하면 초안이 그대로 남는다. 저장 실패는 콜 원장 흐름 재구성(티켓 03)으로 편집 패널의 칸에서 만든다
+// (보기 전환은 그 작업으로 없어졌다).
 const accountId = "t18_counter";
 const password = "Ticket18!counter";
 const monthKey = "2039-08";
@@ -13,8 +14,13 @@ const serviceDate = "2039-08-18";
 let monthId = "";
 let callId = "";
 
-function grid(page: Page) {
-  return page.locator("section").filter({ has: page.getByRole("heading", { name: "콜 원장 그리드" }) });
+// 콜 원장 흐름 재구성(티켓 03)으로 줄에는 입력칸이 없다. 저장은 편집 패널의 칸에서 한다.
+function line(page: Page, serviceCallId: string) {
+  return page.locator(`tr[data-service-call-id="${serviceCallId}"]`);
+}
+
+function panel(page: Page) {
+  return page.getByRole("complementary", { name: /^콜 상세/ });
 }
 
 function leaveGuardDialog(page: Page) {
@@ -81,8 +87,6 @@ async function seed() {
       name,
       durationMinutes: requiresSecondTherapist ? 90 : 60,
       basePrice: 1500000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist,
       tvDisplayName: name,
       effectiveToMonth: null,
@@ -154,17 +158,22 @@ async function cleanupCalls() {
   await (prisma as any).serviceCall.deleteMany({ where: { id: { in: ids } } });
 }
 
-/** 행을 D코스로 바꿔 마사지사2 누락으로 저장을 거절시킨다(story-2-6과 같은 방식, 티켓 19와 동일). */
+/**
+ * 콜 줄을 열어 편집 패널에서 D코스로 바꿔 마사지사2 누락으로 저장을 거절시킨다(story-2-6과 같은 방식).
+ * 콜 원장 흐름 재구성(티켓 03)으로 이 입력은 줄이 아니라 편집 패널의 "코스" 칸에서 한다.
+ */
 async function makeRowSaveFail(page: Page) {
-  const row = grid(page).locator(`tr[data-service-call-id="${callId}"]`);
-  const courseCombobox = row.getByRole("combobox", { name: "코스" });
+  await line(page, callId).locator("[data-call-open]").click();
+  const edit = panel(page);
+  await expect(edit).toBeVisible();
+  const courseCombobox = edit.getByRole("combobox", { name: "코스" });
   await courseCombobox.focus();
   await courseCombobox.press("ControlOrMeta+a");
   await courseCombobox.pressSequentially("T18 D");
   await expect(page.getByRole("listbox").getByRole("option")).not.toHaveCount(0);
   await courseCombobox.press("Enter");
-  await expect(row.getByText("저장 실패")).toBeVisible();
-  return row;
+  await expect(edit.locator('[data-save-state="failed"]')).toContainText("저장 실패");
+  await expect(line(page, callId).getByText("저장 실패")).toBeVisible();
 }
 
 test.describe("티켓 18 떠나기 전 안내", () => {
@@ -185,16 +194,19 @@ test.describe("티켓 18 떠나기 전 안내", () => {
     const ledgerUrl = `/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`;
     await page.goto(ledgerUrl);
 
-    const row = await makeRowSaveFail(page);
+    await makeRowSaveFail(page);
+    // 콜을 열어 저장을 거절시켰으므로(편집 패널) 주소에 그 콜이 남는다.
+    const panelUrl = `${ledgerUrl}&call=${callId}`;
 
     // 탭 이동(하루 수납·지출): 안내가 나오고, 취소하면 원장 탭에 그대로 남아 초안이 유지된다.
     await page.getByRole("navigation", { name: "콜 원장 보기" }).getByRole("link", { name: "하루 수납·지출" }).click();
     await expect(leaveGuardDialog(page)).toBeVisible();
     await leaveGuardDialog(page).getByRole("button", { name: "취소" }).click();
     await expect(leaveGuardDialog(page)).toBeHidden();
-    await expect(page).toHaveURL(ledgerUrl);
-    await expect(row.getByRole("combobox", { name: "코스" })).toHaveValue(/T18 D/);
-    await expect(row.getByText("저장 실패")).toBeVisible();
+    await expect(page).toHaveURL(panelUrl);
+    await expect(panel(page).getByRole("combobox", { name: "코스" })).toHaveValue(/T18 D/);
+    await expect(panel(page).locator('[data-save-state="failed"]')).toContainText("저장 실패");
+    await expect(line(page, callId).getByText("저장 실패")).toBeVisible();
 
     // 도크의 구역 메뉴에서 화면을 골라도 안내가 나오고, 메뉴는 안내 창 위에 남지 않는다.
     await page.getByRole("navigation", { name: "업무 이동" }).getByRole("button", { name: "현장", exact: true }).click();
@@ -203,8 +215,8 @@ test.describe("티켓 18 떠나기 전 안내", () => {
     await expect(leaveGuardDialog(page)).toBeVisible();
     await expect(floorMenu).toBeHidden();
     await leaveGuardDialog(page).getByRole("button", { name: "취소" }).click();
-    await expect(page).toHaveURL(ledgerUrl);
-    await expect(row.getByText("저장 실패")).toBeVisible();
+    await expect(page).toHaveURL(panelUrl);
+    await expect(line(page, callId).getByText("저장 실패")).toBeVisible();
 
     // 앱의 다른 화면(고객 화면)으로 이동: 안내가 나오고, 이번에는 나가기를 고른다.
     await page.getByRole("link", { name: "고객 화면" }).click();
@@ -213,7 +225,7 @@ test.describe("티켓 18 떠나기 전 안내", () => {
     await expect(page).toHaveURL(/\/customers/);
   });
 
-  test("저장하지 않은 입력이 없으면 안내 없이 바로 이동하고, 원장 보기 전환은 저장 실패가 있어도 안내하지 않는다", async ({ page }) => {
+  test("저장하지 않은 입력이 없으면 안내 없이 바로 이동한다", async ({ page }) => {
     await login(page, accountId, password);
     const ledgerUrl = `/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`;
     await page.goto(ledgerUrl);
@@ -222,15 +234,6 @@ test.describe("티켓 18 떠나기 전 안내", () => {
     await page.getByRole("navigation", { name: "콜 원장 보기" }).getByRole("link", { name: "하루 수납·지출" }).click();
     await expect(leaveGuardDialog(page)).toBeHidden();
     await expect(page).toHaveURL(`${ledgerUrl}&tab=cashbook`);
-
-    await page.goto(ledgerUrl);
-    await makeRowSaveFail(page);
-
-    // 원장 보기 전환(예약·현장)은 같은 화면의 표시만 바꾸므로, 저장 실패가 있어도 안내하지 않는다.
-    await page.getByRole("navigation", { name: "원장 표 보기" }).getByRole("link", { name: "예약·현장" }).click();
-    await expect(leaveGuardDialog(page)).toBeHidden();
-    await expect(page).toHaveURL(`${ledgerUrl}&view=booking`);
-    await expect(grid(page).locator(`tr[data-service-call-id="${callId}"]`).getByText("저장 실패")).toBeVisible();
   });
 
   test("브라우저 닫기·새로고침은 저장하지 않은 입력이 있으면 브라우저 안내가 뜨고, 없으면 바로 된다", async ({ page }) => {
@@ -249,7 +252,7 @@ test.describe("티켓 18 떠나기 전 안내", () => {
     page.off("dialog", noDialogHandler);
     expect(dialogSeen).toBe(false);
 
-    const row = await makeRowSaveFail(page);
+    await makeRowSaveFail(page);
 
     // 저장하지 않은 입력이 있으면 새로고침에서 브라우저 자체의 beforeunload 안내가 뜬다(문구는 커스텀할 수 없다).
     // 취소(dismiss)하면 새로고침이 막히고 초안이 그대로다.
@@ -262,8 +265,9 @@ test.describe("티켓 18 떠나기 전 안내", () => {
     await page.reload({ timeout: 15_000 }).catch(() => undefined);
     page.off("dialog", unsavedDialogHandler);
     expect(dialogType).toBe("beforeunload");
-    await expect(page).toHaveURL(ledgerUrl);
-    await expect(row.getByRole("combobox", { name: "코스" })).toHaveValue(/T18 D/);
-    await expect(row.getByText("저장 실패")).toBeVisible();
+    // 콜을 열어 저장을 거절시켰으므로(편집 패널) 주소에 그 콜이 남는다.
+    await expect(page).toHaveURL(`${ledgerUrl}&call=${callId}`);
+    await expect(panel(page).getByRole("combobox", { name: "코스" })).toHaveValue(/T18 D/);
+    await expect(line(page, callId).getByText("저장 실패")).toBeVisible();
   });
 });

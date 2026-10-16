@@ -5,7 +5,7 @@ import { settlementBasisText } from "@/lib/i18n/settlement-basis";
 describe("settlementBasisText", () => {
   it("ko면 원문을 그대로 반환한다", () => {
     assert.equal(settlementBasisText("ko", "팀장 몫 3,000,000 VND"), "팀장 몫 3,000,000 VND");
-    assert.equal(settlementBasisText("ko", "방문완료 풀 200000 VND / 정상 근무자 2명"), "방문완료 풀 200000 VND / 정상 근무자 2명");
+    assert.equal(settlementBasisText("ko", "카운터팀 몫 5000000 VND / 3명"), "카운터팀 몫 5000000 VND / 3명");
   });
 
   it("null/빈 값은 빈 문자열", () => {
@@ -22,15 +22,6 @@ describe("settlementBasisText", () => {
   it("ops-monthly 고정 문구를 vi로 번역한다(화이트리스트)", () => {
     assert.equal(settlementBasisText("vi", "팀장 대상 아님"), "Không thuộc đối tượng trưởng nhóm");
     assert.equal(settlementBasisText("vi", "미분류 지급"), "Chi chưa phân loại");
-  });
-
-  it("earcare 풀/근무자 문구(잔여 포함)를 vi로 번역한다", () => {
-    assert.equal(settlementBasisText("vi", "방문완료 귀케어 풀 0 VND"), "Quỹ chăm sóc tai hoàn tất 0 VND");
-    assert.match(settlementBasisText("vi", "방문완료 풀 200000 VND / 정상 근무자 2명"), /Quỹ hoàn tất .*VND \/ 2 nhân viên bình thường$/);
-    assert.match(
-      settlementBasisText("vi", "방문완료 풀 200000 VND / 정상 근무자 2명 + 잔여 50000 VND 배분"),
-      /phân bổ phần dư .*VND/
-    );
   });
 
   it("ops-daily 개인 인센 문구를 vi로 번역한다", () => {

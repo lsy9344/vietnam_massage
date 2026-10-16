@@ -30,7 +30,7 @@ function createMemoryPrisma(options: { locked?: boolean; monthStatus?: string; f
     ["ops-waiter-day", employee("ops-waiter-day", "OPS-WAITER-DAY-001", "웨이터1", "웨이터", 4, true)],
     ["ops-waiter-night", employee("ops-waiter-night", "OPS-WAITER-NIGHT-001", "웨이터2", "웨이터", 5, true)],
     ["ops-inactive", employee("ops-inactive", "OPS-INACTIVE", "퇴사 운영", "웨이터", 6, false)],
-    ["ear-1", { ...employee("ear-1", "EAR-001", "귀케어1", "귀케어", 1, true), employeeGroup: "EARCARE" }]
+    ["thr-1", { ...employee("thr-1", "THR-001", "마사지사1", "마사지사", 1, true), employeeGroup: "THERAPIST" }]
   ]);
   const codeItems = [
     code("NORMAL", "정상", 10),
@@ -259,7 +259,7 @@ describe("ops attendance service", () => {
       upsertOpsAttendance({
         operatingMonthId: "month-2026-06",
         attendanceDate: "2026-06-10",
-        employeeId: "ear-1",
+        employeeId: "thr-1",
         statusCode: "NORMAL",
         actorId: "account-1",
         prismaClient: createMemoryPrisma()

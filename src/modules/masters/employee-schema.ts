@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const employeeGroups = ["OPERATIONS", "EARCARE", "THERAPIST"] as const;
+export const employeeGroups = ["OPERATIONS", "THERAPIST"] as const;
 export const shiftTypes = ["전체", "주간", "야간"] as const;
 export const employmentStatuses = ["재직", "퇴사", "휴직"] as const;
 export const accountRoles = ["administrator", "counter", "waiter", "settlement_manager", "read_only_viewer"] as const;
@@ -11,7 +11,6 @@ export type EmploymentStatus = (typeof employmentStatuses)[number];
 
 export const employeeGroupLabels: Record<EmployeeGroup, string> = {
   OPERATIONS: "운영팀",
-  EARCARE: "귀케어팀",
   THERAPIST: "마사지사"
 };
 
@@ -84,17 +83,6 @@ const operationsEmployees: DefaultEmployee[] = [
   }
 ];
 
-const earcareEmployees: DefaultEmployee[] = Array.from({ length: 4 }, (_, index) => ({
-  displayName: `귀케어${index + 1}`,
-  staffCode: `EAR-${String(index + 1).padStart(3, "0")}`,
-  employeeGroup: "EARCARE",
-  position: "귀케어사",
-  shiftType: null,
-  baseSalary: 5000000,
-  employmentStatus: "재직",
-  sortOrder: (index + 1) * 10
-}));
-
 const therapistEmployees: DefaultEmployee[] = Array.from({ length: 50 }, (_, index) => ({
   displayName: `마사지사${index + 1}`,
   staffCode: `THR-${String(index + 1).padStart(3, "0")}`,
@@ -106,9 +94,9 @@ const therapistEmployees: DefaultEmployee[] = Array.from({ length: 50 }, (_, ind
   sortOrder: (index + 1) * 10
 }));
 
-// Static anchors for the generated boundary defaults: EAR-001, THR-050.
+// Static anchor for the generated boundary default: THR-050.
 
-export const defaultEmployees: DefaultEmployee[] = [...operationsEmployees, ...earcareEmployees, ...therapistEmployees];
+export const defaultEmployees: DefaultEmployee[] = [...operationsEmployees, ...therapistEmployees];
 
 const optionalTrimmedTextSchema = z.preprocess(
   (value) => (value === undefined || (typeof value === "string" && value.trim() === "") ? null : value),

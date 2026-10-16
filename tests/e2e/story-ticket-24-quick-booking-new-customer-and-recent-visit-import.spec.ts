@@ -106,8 +106,6 @@ test.describe("티켓 24 빠른 예약 새 고객 함께 저장과 최근 방문
       name: "T24 A",
       durationMinutes: 60,
       basePrice: 1500000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: false,
       tvDisplayName: "T24 A",
       effectiveToMonth: operatingMonthKey,

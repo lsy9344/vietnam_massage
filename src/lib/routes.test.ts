@@ -22,7 +22,6 @@ const accessMatrix: Record<string, Record<"administrator" | "counter" | "settlem
   // 티켓 03: 고객 화면은 지금 콜 원장에 들어가는 역할에게만 연다(명세 F08 기준 6).
   "/customers": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: false },
   "/settlements": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
-  "/settlements/earcare": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
   "/settlements/operations": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
   "/settlements/operations/monthly": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
   "/closing": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
@@ -116,9 +115,9 @@ describe("moving between zones with the dock", () => {
     assert.equal(firstScreenHref("settlement_manager", "closing", ledgerContext), "/closing?operatingMonthId=m-2026-10");
   });
 
-  it("reads the attendance date of the earcare and operations screens as the date to carry", () => {
-    const earcareContext = readScreenContext(new URLSearchParams("operatingMonthId=m-2026-10&attendanceDate=2026-10-12"));
-    assert.equal(firstScreenHref("administrator", "ledger", earcareContext), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-12");
+  it("reads the attendance date of the operations screens as the date to carry", () => {
+    const opsContext = readScreenContext(new URLSearchParams("operatingMonthId=m-2026-10&attendanceDate=2026-10-12"));
+    assert.equal(firstScreenHref("administrator", "ledger", opsContext), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-12");
   });
 
   it("puts the ledger tab first in the ledger zone, dropping the ledger's own query state", () => {
@@ -151,7 +150,6 @@ describe("zone tabs", () => {
     assert.deepEqual(tabPaths("administrator", "settlements"), [
       "/settlements/schedule",
       "/settlements",
-      "/settlements/earcare",
       "/settlements/operations",
       "/settlements/operations/monthly"
     ]);
@@ -186,11 +184,10 @@ describe("zone menu in the dock", () => {
   const at = (path: string, query = "") => ({ path, params: new URLSearchParams(query) });
 
   it("lists the zone's screens the role can enter with the month and date, marking the screen you are on", () => {
-    assert.deepEqual(getZoneMenu("administrator", "settlements", context, at("/settlements/earcare")), [
+    assert.deepEqual(getZoneMenu("administrator", "settlements", context, at("/settlements/operations")), [
       { labelKey: "shell.tab.schedule", href: "/settlements/schedule", current: false },
       { labelKey: "shell.tab.therapist", href: "/settlements?operatingMonthId=m-2026-10&serviceDate=2026-10-14", current: false },
-      { labelKey: "shell.tab.earcare", href: "/settlements/earcare?operatingMonthId=m-2026-10&attendanceDate=2026-10-14", current: true },
-      { labelKey: "shell.tab.opsDaily", href: "/settlements/operations?operatingMonthId=m-2026-10&attendanceDate=2026-10-14", current: false },
+      { labelKey: "shell.tab.opsDaily", href: "/settlements/operations?operatingMonthId=m-2026-10&attendanceDate=2026-10-14", current: true },
       { labelKey: "shell.tab.opsMonthly", href: "/settlements/operations/monthly?operatingMonthId=m-2026-10", current: false }
     ]);
   });
@@ -219,7 +216,7 @@ describe("links between screens", () => {
 
   it("links to a screen with the month and date only when the role can enter it", () => {
     assert.equal(linkToScreen("counter", "/calls", context), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
-    assert.equal(linkToScreen("administrator", "/settlements/earcare", context), "/settlements/earcare?operatingMonthId=m-2026-10&attendanceDate=2026-10-14");
+    assert.equal(linkToScreen("administrator", "/settlements/operations", context), "/settlements/operations?operatingMonthId=m-2026-10&attendanceDate=2026-10-14");
   });
 
   it("gives no link to roles that cannot enter the screen", () => {

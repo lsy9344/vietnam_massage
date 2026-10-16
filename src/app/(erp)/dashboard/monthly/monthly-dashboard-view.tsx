@@ -143,8 +143,7 @@ function SettlementSummaryCard({ summary, locale }: { summary: MonthlyDashboardM
         rows={[
           { label: t("dashboard.monthly.settlement.therapistPayout"), value: vnd(summary.therapistPayoutAmount) },
           { label: t("dashboard.monthly.settlement.opsDailyIncentive"), value: vnd(summary.opsDailyIncentiveAmount) },
-          { label: t("dashboard.monthly.settlement.opsMonthlyIncentive"), value: vnd(summary.opsMonthlyIncentiveAmount) },
-          { label: t("dashboard.monthly.settlement.earcarePayout"), value: vnd(summary.earcarePayoutAmount) }
+          { label: t("dashboard.monthly.settlement.opsMonthlyIncentive"), value: vnd(summary.opsMonthlyIncentiveAmount) }
         ]}
       />
       <dl className="mt-1 border-t border-border pt-2 text-sm">
@@ -174,8 +173,7 @@ function AmountBreakdownCard({ financials, locale }: { financials: NonNullable<M
           { label: t("dashboard.monthly.kpi.expenseTotal"), value: vnd(financials.expenseTotal) },
           { label: t("dashboard.monthly.kpi.opsMonthlyIncentiveTotal"), value: vnd(financials.opsMonthlyIncentiveTotal) },
           { label: t("dashboard.monthly.kpi.fullAttendanceAllowanceTotal"), value: vnd(financials.fullAttendanceAllowanceTotal) },
-          { label: t("dashboard.monthly.kpi.countKingBonusTotal"), value: vnd(financials.countKingBonusTotal) },
-          { label: t("dashboard.monthly.kpi.earcarePoolTotal"), value: vnd(financials.earcarePoolTotal) }
+          { label: t("dashboard.monthly.kpi.countKingBonusTotal"), value: vnd(financials.countKingBonusTotal) }
         ]}
       />
     </DashboardCard>

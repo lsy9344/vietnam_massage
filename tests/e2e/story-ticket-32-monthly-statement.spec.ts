@@ -79,8 +79,6 @@ async function seedStoryData() {
     name: "T32 A",
     durationMinutes: 60,
     basePrice: 1500000,
-    opsCallCredit: 1,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: false,
     tvDisplayName: "T32 A",
     effectiveToMonth: null,
@@ -220,8 +218,7 @@ test.describe("티켓 32 월 명세서", () => {
               }
             ]
           },
-          operations: { rows: [] },
-          earcare: { rows: [] }
+          operations: { rows: [] }
         }
       }
     });

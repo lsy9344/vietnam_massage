@@ -208,7 +208,7 @@ function SnapshotSummary({
           <div className="text-lg font-semibold text-foreground tabular-nums">{formatVnd(locale, t, closing.snapshot.totals.grandPayoutAmount)}</div>
         </div>
       </div>
-      <div className="mt-3 grid gap-2 text-sm md:grid-cols-4">
+      <div className="mt-3 grid gap-2 text-sm md:grid-cols-3">
         <div className="border border-border bg-background px-3 py-2">
           <div className="text-xs text-muted">{t("closing.snapshot.therapist")}</div>
           <div className="font-semibold tabular-nums">{formatVnd(locale, t, closing.snapshot.totals.therapistPayoutAmount)}</div>
@@ -216,10 +216,6 @@ function SnapshotSummary({
         <div className="border border-border bg-background px-3 py-2">
           <div className="text-xs text-muted">{t("closing.snapshot.operations")}</div>
           <div className="font-semibold tabular-nums">{formatVnd(locale, t, closing.snapshot.operations.totalOpsPayoutAmount)}</div>
-        </div>
-        <div className="border border-border bg-background px-3 py-2">
-          <div className="text-xs text-muted">{t("closing.snapshot.earcare")}</div>
-          <div className="font-semibold tabular-nums">{formatVnd(locale, t, closing.snapshot.totals.earcarePayoutAmount)}</div>
         </div>
         <div className="border border-border bg-background px-3 py-2">
           <div className="text-xs text-muted">{t("closing.snapshot.warning")}</div>
@@ -256,13 +252,12 @@ function SummaryBand({ locale, t, result }: { locale: Locale; t: Translator; res
   const rows = [
     [t("closing.summary.therapistPayout"), result.totals.therapistPayoutAmount, t("closing.summary.therapistBasis", { count: result.therapists.totalCallCount })],
     [t("closing.summary.opsDaily"), result.totals.opsDailyIncentiveAmount, t("closing.summary.opsDailyBasis", { count: result.operations.rows.length })],
-    [t("closing.summary.opsMonthly"), result.totals.opsMonthlyIncentiveAmount, t("closing.summary.opsMonthlyBasis", { count: result.operations.monthlyOpsCallCredit })],
-    [t("closing.summary.earcarePayout"), result.totals.earcarePayoutAmount, t("closing.summary.earcareBasis", { count: result.earcare.sourceCallCount })],
+    [t("closing.summary.opsMonthly"), result.totals.opsMonthlyIncentiveAmount, t("closing.summary.opsMonthlyBasis", { count: result.operations.monthlyOpsCallCount })],
     [t("closing.summary.grandPayout"), result.totals.grandPayoutAmount, t("closing.summary.grandBasis", { count: result.warningCounts.total })]
   ] as const;
 
   return (
-    <section aria-label={t("closing.summary.aria")} className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+    <section aria-label={t("closing.summary.aria")} className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       {rows.map(([label, amount, basis]) => (
         <div key={label} className="border border-border bg-surface px-4 py-3">
           <div className="text-xs font-medium text-muted">{label}</div>
@@ -287,8 +282,6 @@ function confirmSummaryFor(result: MonthlyClosingPreviewDto): ConfirmDialogSumma
     operationsCount: result.operations.rows.length,
     opsDailyIncentiveAmount: result.totals.opsDailyIncentiveAmount,
     opsMonthlyIncentiveAmount: result.totals.opsMonthlyIncentiveAmount,
-    earcarePayoutAmount: result.totals.earcarePayoutAmount,
-    earcareCount: result.earcare.rows.length,
     warningCount: result.warningCounts.total
   };
 }
@@ -398,40 +391,6 @@ function OperationsTable({ locale, t, result }: { locale: Locale; t: Translator;
   );
 }
 
-function EarcareTable({ locale, t, result }: { locale: Locale; t: Translator; result: MonthlyClosingPreviewDto }) {
-  return (
-    <section className="mb-4 overflow-x-auto border border-border bg-surface">
-      <div className="border-b border-border px-4 py-3">
-        <h2 className="text-base font-semibold text-foreground">{t("closing.earcare.title")}</h2>
-        <p className="mt-1 text-sm text-muted">{t("closing.earcare.description")}</p>
-      </div>
-      <table className="min-w-[760px] w-full border-collapse text-sm">
-        <thead className="bg-readonly text-left text-xs font-semibold uppercase text-muted">
-          <tr>
-            <th className="border-b border-border px-3 py-2">{t("closing.earcare.column.earcareStaff")}</th>
-            <th className="border-b border-border px-3 py-2 text-right">{t("closing.earcare.column.eligibleDays")}</th>
-            <th className="border-b border-border px-3 py-2 text-right">{t("closing.earcare.column.earcarePayout")}</th>
-            <th className="border-b border-border px-3 py-2">{t("closing.earcare.column.basis")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {result.earcare.rows.map((row) => (
-            <tr key={row.employeeId} className="border-b border-border last:border-b-0">
-              <td className="px-3 py-2">
-                <div className="font-semibold text-foreground">{row.displayName}</div>
-                <div className="text-xs text-muted">{row.staffCode}</div>
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums">{row.eligibleDayCount}{t("settlements.daySuffix")}</td>
-              <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(locale, t, row.payoutAmount)}</td>
-              <td className="px-3 py-2 text-muted">{settlementBasisText(locale, row.calculationBasis)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
-}
-
 function EvidenceSection({ locale, t, result }: { locale: Locale; t: Translator; result: MonthlyClosingPreviewDto }) {
   return (
     <section className="mb-4 border border-border bg-surface">
@@ -477,9 +436,7 @@ function EvidenceSection({ locale, t, result }: { locale: Locale; t: Translator;
                 result.warningCounts.opsMonthly.coursePolicyMissing +
                 result.warningCounts.opsMonthly.therapistRateMissing +
                 result.warningCounts.opsMonthly.secondTherapistRequired,
-              opsMessage: result.warningCounts.opsWarningMessageCount,
-              earcareNormalStaffZeroDays: result.warningCounts.earcareNormalStaffZeroDays,
-              earcareUndistributed: result.warningCounts.earcareUndistributedDays
+              opsMessage: result.warningCounts.opsWarningMessageCount
             })}
           </div>
         </div>
@@ -489,8 +446,7 @@ function EvidenceSection({ locale, t, result }: { locale: Locale; t: Translator;
             {[
               ...result.evidence.representativeEvidence.therapist,
               ...result.evidence.representativeEvidence.operationsDaily,
-              ...result.evidence.representativeEvidence.operationsMonthly,
-              ...result.evidence.representativeEvidence.earcare
+              ...result.evidence.representativeEvidence.operationsMonthly
             ].join(", ") || t("closing.evidence.noEvidence")}
           </div>
         </div>
@@ -512,20 +468,18 @@ function EvidenceSection({ locale, t, result }: { locale: Locale; t: Translator;
 // 마감 점검 항목에서 원본으로 가는 동작의 역할 분기(F07): 지급 항목은 두 역할 모두 정산 화면으로 간다.
 const PAYOUT_UNIT_ROUTE_PATH: Record<PayoutConfirmationUnitType, string> = {
   THERAPIST_DAILY: "/settlements",
-  EARCARE_DAILY: "/settlements/earcare",
   OPS_DAILY: "/settlements/operations",
   OPS_MONTHLY: "/settlements/operations/monthly"
 };
 
 const PAYOUT_UNIT_LABEL_KEY: Record<PayoutConfirmationUnitType, MessageKey> = {
   THERAPIST_DAILY: "closing.checklist.unitLabel.therapistDaily",
-  EARCARE_DAILY: "closing.checklist.unitLabel.earcareDaily",
   OPS_DAILY: "closing.checklist.unitLabel.opsDaily",
   OPS_MONTHLY: "closing.checklist.unitLabel.opsMonthly"
 };
 
 /**
- * S12: 날짜 있는 단위(THERAPIST_DAILY·EARCARE_DAILY·OPS_DAILY)는 그 날짜로 바로 가는 링크를 만든다
+ * S12: 날짜 있는 단위(THERAPIST_DAILY·OPS_DAILY)는 그 날짜로 바로 가는 링크를 만든다
  * (serviceDate가 context의 기준 날짜를 덮는다). 월 단위(OPS_MONTHLY)는 날짜가 없고 그 화면도 날짜
  * 매개변수를 쓰지 않아(routes.ts dateContext="month") context 그대로 쓴다.
  */
@@ -837,7 +791,6 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
           <SummaryBand locale={locale} t={t} result={result} />
           <TherapistTable locale={locale} t={t} result={result} />
           <OperationsTable locale={locale} t={t} result={result} />
-          <EarcareTable locale={locale} t={t} result={result} />
           <EvidenceSection locale={locale} t={t} result={result} />
         </>
       ) : null}

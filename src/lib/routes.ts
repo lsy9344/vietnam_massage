@@ -58,7 +58,6 @@ export const screenRoutes: readonly ScreenRoute[] = [
   // 근무표는 운영월과 무관해 dateContext가 없다. 정산 업무의 주기 순서로 맨 앞에 둔다.
   { path: "/settlements/schedule", labelKey: "shell.tab.schedule", zone: "settlements", roles: ["administrator", "settlement_manager"] },
   { path: "/settlements", labelKey: "shell.tab.therapist", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "serviceDate" },
-  { path: "/settlements/earcare", labelKey: "shell.tab.earcare", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "attendanceDate" },
   { path: "/settlements/operations", labelKey: "shell.tab.opsDaily", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "attendanceDate" },
   { path: "/settlements/operations/monthly", labelKey: "shell.tab.opsMonthly", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "month" },
   // 월 명세서(티켓 32)는 각 정산 화면의 직원 패널에서 직원을 고르고 연다. TV와 같은 이유로 구역 안 탭에는 두지 않는다.

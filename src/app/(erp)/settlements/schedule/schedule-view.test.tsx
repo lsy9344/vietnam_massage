@@ -23,7 +23,6 @@ function week(overrides: Partial<PlannedWorkingDayWeekDto> = {}): PlannedWorking
     dates,
     groups: [
       { employeeGroup: "OPERATIONS", employees: [] },
-      { employeeGroup: "EARCARE", employees: [] },
       {
         employeeGroup: "THERAPIST",
         employees: [
@@ -79,7 +78,6 @@ describe("schedule view", () => {
     const html = render(<ScheduleView canOpenLedger={false} initialEmployeeId={null} week={week()} />);
 
     assert.doesNotMatch(html, /운영팀/);
-    assert.doesNotMatch(html, /귀케어팀/);
     assert.match(html, /마사지사/);
   });
 

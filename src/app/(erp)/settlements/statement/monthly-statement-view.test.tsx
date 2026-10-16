@@ -138,19 +138,7 @@ describe("MonthlyStatementView", () => {
     assert.doesNotMatch(html, /09:00–18:00/);
   });
 
-  it("귀케어·운영팀 직원 요약도 그 직군 금액 구성으로 그린다", () => {
-    const earcare = draftTherapistResult({
-      employeeGroup: "EARCARE",
-      finalAmount: 300000,
-      summary: { kind: "EARCARE", payoutAmount: 300000, calculationBasis: "방문완료 풀 300,000 VND / 정상 근무자 2명", eligibleDayCount: 2 },
-      evidence: { available: true, dailyEntries: [] },
-      payoutUnits: []
-    });
-    const html = renderToStaticMarkup(renderInShell(<MonthlyStatementView canOpenLedger={false} result={earcare} />, "ko"));
-
-    assert.match(html, /귀케어 풀 분배/);
-    assert.match(html, /지급 대상일 2일/);
-
+  it("운영팀 직원 요약도 그 직군 금액 구성으로 그린다", () => {
     const operations = draftTherapistResult({
       employeeGroup: "OPERATIONS",
       finalAmount: 600000,

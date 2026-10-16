@@ -9,12 +9,14 @@ import { getLocale } from "@/lib/i18n/server";
 import { resolveDomainErrorMessage } from "@/lib/i18n/errors";
 import {
   CourseDomainError,
+  createCourse,
   createCoursePolicy,
   createOpsDailyIncentiveRule,
   createOpsMonthlyIncentiveRule,
   createTherapistCourseRate,
   deactivateCourse,
   endTherapistCourseRate,
+  reactivateCourse,
   updateCoursePolicy,
   updateOpsDailyIncentiveRule,
   updateOpsMonthlyIncentiveRule,
@@ -26,7 +28,9 @@ import {
   type TherapistCourseRateDto
 } from "@/modules/masters/course-service";
 import {
+  coursePolicyFieldsSchema,
   createCoursePolicySchema,
+  createCourseSchema,
   createOpsDailyIncentiveRuleSchema,
   createOpsMonthlyIncentiveRuleSchema,
   createTherapistCourseRateSchema,
@@ -53,8 +57,6 @@ function coursePolicyPayload(formData: FormData) {
     name: formData.get("name"),
     durationMinutes: formData.get("durationMinutes"),
     basePrice: formData.get("basePrice"),
-    opsCallCredit: formData.get("opsCallCredit"),
-    earcarePoolAmount: formData.get("earcarePoolAmount"),
     requiresSecondTherapist: formData.get("requiresSecondTherapist"),
     tvDisplayName: formData.get("tvDisplayName"),
     effectiveFromMonth: formData.get("effectiveFromMonth"),
@@ -144,6 +146,34 @@ export async function deactivateCourseAction(_previousState: CourseActionState, 
 
   try {
     return await withPolicyPermission((actorId) => deactivateCourse({ actorId, ...parsed.data }));
+  } catch (error) {
+    return mapCourseActionError(error, locale);
+  }
+}
+
+// 다시 사용(스펙 D9). 패널이 정책 칸을 함께 보낸 경우(그달 정책이 없는 코스)에만 정책을 읽는다.
+export async function reactivateCourseAction(_previousState: CourseActionState, formData: FormData): Promise<CourseActionState> {
+  const locale = await getLocale();
+  const parsed = deactivateCourseSchema.safeParse({ courseId: formData.get("courseId") });
+  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: t(locale, "action.error.invalidInput") };
+  const policy = formData.has("name") ? coursePolicyFieldsSchema.safeParse(coursePolicyPayload(formData)) : null;
+  if (policy && !policy.success) return { ok: false, fieldErrors: toFieldErrors(policy.error.flatten().fieldErrors), formError: t(locale, "action.error.invalidInput") };
+
+  try {
+    return await withPolicyPermission((actorId) => reactivateCourse({ actorId, ...parsed.data, policy: policy?.data }));
+  } catch (error) {
+    return mapCourseActionError(error, locale);
+  }
+}
+
+// 새 코스 추가(스펙 D9): 코드와 첫 정책.
+export async function createCourseAction(_previousState: CourseActionState, formData: FormData): Promise<CourseActionState> {
+  const locale = await getLocale();
+  const parsed = createCourseSchema.safeParse({ code: formData.get("code"), ...coursePolicyPayload(formData) });
+  if (!parsed.success) return { ok: false, fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors), formError: t(locale, "action.error.invalidInput") };
+
+  try {
+    return await withPolicyPermission((actorId) => createCourse({ actorId, ...parsed.data }));
   } catch (error) {
     return mapCourseActionError(error, locale);
   }

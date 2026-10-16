@@ -18,7 +18,7 @@ import { CUSTOMER_SEARCH_DEBOUNCE_MS, customerScreenHref, moveCandidateIndex } f
 import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
 
 /**
- * 콜 상세 패널의 고객 연결 정정(F06, ADR 0003, 스토리 81-83). 원장 행 저장과는 별개의 전용 작업이라
+ * 편집 패널 "더 보기"의 고객 연결 정정(F06, ADR 0003, 스토리 81-83). 원장 행 저장과는 별개의 전용 작업이라
  * 콜의 고객/메모(customerMemo)는 바꾸지 않고 customerId 연결만 바꾼다. 새 고객 후보는 22의 비교
  * 정보(CustomerCandidateCompare/같은 연락처 경고/방문완료 건수)로 고르며 자동 연결은 없다.
  *

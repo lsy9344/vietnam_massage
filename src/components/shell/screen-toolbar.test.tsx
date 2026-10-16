@@ -18,7 +18,7 @@ function renderToolbar(role: Role, path: string, extra: { action?: React.ReactNo
         context={october14}
         locale="ko"
         path={path}
-        title="귀케어 일일정산"
+        title="운영팀 일일 인센"
         {...extra}
       />,
       "ko"
@@ -44,15 +44,14 @@ function links(html: string) {
 
 describe("ScreenToolbar", () => {
   it("puts the screen title first as the page heading", () => {
-    assert.match(renderToolbar("administrator", "/settlements/earcare"), /<h1[^>]*>귀케어 일일정산<\/h1>/);
+    assert.match(renderToolbar("administrator", "/settlements/operations"), /<h1[^>]*>운영팀 일일 인센<\/h1>/);
   });
 
   it("lists the zone's tabs as links that keep the month and date in each screen's own parameter", () => {
-    assert.deepEqual(tabLinks(renderToolbar("administrator", "/settlements/earcare")), [
+    assert.deepEqual(tabLinks(renderToolbar("administrator", "/settlements/operations")), [
       { href: "/settlements/schedule", label: "근무표", current: false },
       { href: "/settlements?operatingMonthId=m-2026-10&serviceDate=2026-10-14", label: "Therapist", current: false },
-      { href: "/settlements/earcare?operatingMonthId=m-2026-10&attendanceDate=2026-10-14", label: "귀케어", current: true },
-      { href: "/settlements/operations?operatingMonthId=m-2026-10&attendanceDate=2026-10-14", label: "운영팀 일일", current: false },
+      { href: "/settlements/operations?operatingMonthId=m-2026-10&attendanceDate=2026-10-14", label: "운영팀 일일", current: true },
       { href: "/settlements/operations/monthly?operatingMonthId=m-2026-10", label: "운영팀 월", current: false }
     ]);
   });
@@ -152,11 +151,11 @@ describe("DateContextControls", () => {
     );
   });
 
-  it("uses the attendance date parameter on the earcare and operations screens", () => {
-    const html = renderControls("/settlements/earcare", "2026-10-14");
+  it("uses the attendance date parameter on the operations screens", () => {
+    const html = renderControls("/settlements/operations", "2026-10-14");
 
     assert.match(html, /name="attendanceDate"/);
-    assert.match(html, /href="\/settlements\/earcare\?operatingMonthId=m-2026-10&amp;attendanceDate=2026-10-13"/);
+    assert.match(html, /href="\/settlements\/operations\?operatingMonthId=m-2026-10&amp;attendanceDate=2026-10-13"/);
   });
 
   it("keeps the screen's own view parameters when the month or date changes", () => {

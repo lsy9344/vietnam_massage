@@ -99,6 +99,11 @@ function roomCard(page: Page) {
   return page.locator('[data-testid="room-status-card"]').filter({ hasText: roomName });
 }
 
+// 티켓 03 이후 원장 행에는 입력칸도 "경고" 칸도 없다. 경고는 버튼 하나(aria-label "경고 N건: 첫 경고")뿐이다.
+function line(page: Page, callId: string) {
+  return page.locator(`tr[data-service-call-id="${callId}"]`);
+}
+
 const dateQuery = () => `operatingMonthId=${monthId}&serviceDate=${serviceDate}`;
 
 test.describe("티켓 14 객실 겹침", () => {
@@ -132,8 +137,6 @@ test.describe("티켓 14 객실 겹침", () => {
       name: "T14 A",
       durationMinutes: 60,
       basePrice: 1500000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: false,
       tvDisplayName: "T14 A",
       effectiveToMonth: null,
@@ -164,10 +167,10 @@ test.describe("티켓 14 객실 겹침", () => {
     await login(page, accounts.counter.accountId, accounts.counter.password);
     await page.goto(`/calls?${dateQuery()}`);
 
-    const warnings = (id: string) => page.locator(`tr[data-service-call-id="${id}"] [data-call-cell-column="warnings"]`);
-    await expect(warnings(earlyCallId)).toContainText("이 객실에 14:30 콜이 있습니다");
-    await expect(warnings(lateCallId)).toContainText("이 객실에 14:00 콜이 있습니다");
-    await expect(warnings(eveningCallId)).not.toContainText("이 객실에");
+    // 경고는 행마다 버튼 하나다(티켓 13). 겹침 하나뿐이라 "외 N건"이 붙지 않는다.
+    await expect(line(page, earlyCallId).getByRole("button", { name: "경고 1건: 이 객실에 14:30 콜이 있습니다" })).toBeVisible();
+    await expect(line(page, lateCallId).getByRole("button", { name: "경고 1건: 이 객실에 14:00 콜이 있습니다" })).toBeVisible();
+    await expect(line(page, eveningCallId)).not.toContainText("이 객실에");
   });
 
   test("카운터는 객실 화면에서 겹친 콜 목록을 펼쳐 원장의 그 콜 상세로 간다", async ({ page }) => {

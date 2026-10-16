@@ -1,12 +1,15 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useState } from "react";
 import type { ServiceCallOption, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
+import { clockMinutes } from "@/app/(erp)/calls/quick-booking-now-slot";
 import { Button } from "@/components/ui/button";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import { StatusIndicator } from "@/components/ui/status-indicator";
-import { WarningSummary } from "@/components/ui/warning-summary";
+import { WarningList } from "@/components/ui/warning-summary";
 import { t } from "@/lib/i18n";
-import { scheduleStatusLabel } from "@/lib/i18n/codes";
 import type { Locale } from "@/lib/i18n/config";
+import { cn } from "@/lib/utils";
 
 export type AvailabilityCourseChoice = {
   startTime: string;
@@ -34,6 +37,24 @@ export function filterByAttendance(rows: TherapistAvailabilityRowDto[], showAll:
   return { rows: showAll ? rows : attended, hiddenCount: rows.length - attended.length, nobodyAttended: false };
 }
 
+/**
+ * 가능한 Therapist → 곧 비는 Therapist(빈 시각이 이른 순) → 퇴근한 Therapist 순서(스펙 D6). 같은 묶음 안에서는
+ * 서비스가 준 순서를 지킨다. 빈 시각은 고른 시각 뒤의 시각이라 고른 시각에서 몇 분 뒤인지로 비교한다(자정을 넘겨도
+ * 같은 영업일 안에서 순서가 맞는다). 빈 시각을 모르면 그 묶음 맨 뒤다.
+ */
+export function sortAvailabilityRows(rows: TherapistAvailabilityRowDto[], time: string) {
+  const at = clockMinutes(time);
+  const rank = (row: TherapistAvailabilityRowDto) => {
+    if (row.attendance === "checked_out") return [2, 0];
+    if (row.available) return [0, 0];
+    return [1, row.freeFrom ? (clockMinutes(row.freeFrom) - at + 1440) % 1440 : Number.POSITIVE_INFINITY];
+  };
+  return rows
+    .map((row, index) => ({ row, index, rank: rank(row) }))
+    .sort((left, right) => left.rank[0] - right.rank[0] || left.rank[1] - right.rank[1] || left.index - right.index)
+    .map((entry) => entry.row);
+}
+
 export type AvailabilityAttendanceFilter = {
   hiddenCount: number;
   nobodyAttended: boolean;
@@ -41,45 +62,7 @@ export type AvailabilityAttendanceFilter = {
   showAll: boolean;
 };
 
-// 두 번째 Therapist 후보 목록(티켓 21)도 같은 출근 표시 문구를 쓴다.
-export const attendanceKey = {
-  before_check_in: "calls.availability.attendance.beforeCheckIn",
-  checked_in: "calls.availability.attendance.checkedIn",
-  checked_out: "calls.availability.attendance.checkedOut"
-} as const;
-
-// 근무표(27)의 그날 근무 예정. 출근(Attendance)과는 다른 테이블·칸이라 서로 다른 값일 수 있고, 가능
-// 판정·코스 버튼을 바꾸지 않는 안내일 뿐이다(스토리 12–13, 60, 104, V07, 티켓 29).
-function Schedule({ locale, row }: { locale: Locale; row: TherapistAvailabilityRowDto }) {
-  return scheduleStatusLabel(locale, row.plannedWorkingDayStatus);
-}
-
-// 출근 표시와 근무 확인 필요는 서비스가 정한다. 코스 버튼은 이 칸과 상관없이 그대로 둔다.
-function Attendance({ locale, row }: { locale: Locale; row: TherapistAvailabilityRowDto }) {
-  const label = t(locale, attendanceKey[row.attendance]);
-  if (!row.shiftCheck) return label;
-  return (
-    <div className="grid justify-items-start gap-1.5">
-      {label}
-      <WarningSummary locale={locale} warnings={[t(locale, "calls.availability.shiftCheck")]} />
-    </div>
-  );
-}
-
-// 판정과 시각은 서비스가 정한다. 화면은 그 값을 문장으로만 바꾼다.
-function ThisTime({ locale, row }: { locale: Locale; row: TherapistAvailabilityRowDto }) {
-  if (row.available) return <StatusIndicator label={t(locale, "calls.availability.available")} tone="success" />;
-  return (
-    <div className="grid justify-items-start gap-1.5">
-      <StatusIndicator label={t(locale, "calls.availability.unavailableFrom", { time: row.freeFrom ?? "" })} tone="neutral" />
-      {row.unavailableReason === "in_service_past_display_end" && row.inServiceDisplayEnd ? (
-        <WarningSummary locale={locale} warnings={[t(locale, "calls.availability.inServiceEndCheck", { time: row.inServiceDisplayEnd })]} />
-      ) : null}
-    </div>
-  );
-}
-
-// 두 번째 Therapist 후보 목록(티켓 21)도 같은 "시간 부족"/"이 코스 불가" 문구를 쓴다.
+// 불가 칩을 눌렀을 때 줄 아래에 보이는 이유. 두 번째 Therapist 후보 목록(티켓 21)도 같은 문구를 쓴다.
 export function impossibleCourseLabel(locale: Locale, course: TherapistAvailabilityRowDto["courses"][number]) {
   const values = { code: course.courseCode, minutes: course.durationMinutes };
   return course.verdict === "rate_missing"
@@ -87,20 +70,179 @@ export function impossibleCourseLabel(locale: Locale, course: TherapistAvailabil
     : t(locale, "calls.availability.courseTimeShort", values);
 }
 
-// 좁은 서랍에서도 가로로 넘치지 않게 칸마다 "이름 값" 한 쌍으로 두고, 모자라면 다음 줄로 넘긴다.
-function Fact({ label, children }: { label: string; children: ReactNode }) {
+/** 한 줄 아래에 펼친 것: 경고 문구, 또는 누른 불가 칩의 이유와 "경고 확인 후 배정". 한 번에 하나만 펼친다. */
+export type AvailabilityRowExpansion = { kind: "warnings" } | { kind: "course"; courseId: string } | null;
+
+// 판정과 시각은 서비스가 정한다. 화면은 그 값을 문장으로만 바꾼다. "이 시각"과 "다음 예약"을 한 칸으로 합친다(D1).
+// 가능하면 다음 예약과 여유 분(다음 예약이 없으면 영업 끝까지의 여유 분)을, 불가면 빈 시각과 다음 예약을 붙인다.
+function RowStatus({ locale, row }: { locale: Locale; row: TherapistAvailabilityRowDto }) {
+  const next = row.nextReservationTime ? t(locale, "calls.availability.nextShort", { time: row.nextReservationTime }) : null;
+  const free = row.available && row.freeMinutes !== null ? t(locale, "calls.availability.freeMinutes", { minutes: row.freeMinutes }) : null;
+  const detail = [next, free].filter(Boolean).join(" · ");
   return (
-    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-      <dt className="text-xs font-semibold text-muted">{label}</dt>
-      <dd>{children}</dd>
-    </div>
+    <span className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+      {row.available ? (
+        <StatusIndicator label={t(locale, "calls.availability.available")} size="sm" tone="success" />
+      ) : (
+        <StatusIndicator label={t(locale, "calls.availability.unavailableFrom", { time: row.freeFrom ?? "" })} size="sm" tone="neutral" />
+      )}
+      {detail ? <span>{detail}</span> : null}
+    </span>
   );
 }
 
-function nextLabel(locale: Locale, row: TherapistAvailabilityRowDto) {
-  const next = row.nextReservationTime ?? t(locale, "calls.availability.nextNone");
-  if (!row.available || row.freeMinutes === null) return next;
-  return `${next} · ${t(locale, "calls.availability.freeMinutes", { minutes: row.freeMinutes })}`;
+// 근무 확인 필요, 시술 중 종료 확인, 앞 시술 종료 확인 필요. 앞 시술 종료 확인은 가능 코스가 있을 때만 붙인다.
+export function availabilityRowWarnings(locale: Locale, row: TherapistAvailabilityRowDto) {
+  const warnings: string[] = [];
+  if (row.shiftCheck) warnings.push(t(locale, "calls.availability.shiftCheck"));
+  if (!row.available && row.unavailableReason === "in_service_past_display_end" && row.inServiceDisplayEnd) {
+    warnings.push(t(locale, "calls.availability.inServiceEndCheck", { time: row.inServiceDisplayEnd }));
+  }
+  if (row.priorServiceEndCheck && row.courses.some((course) => course.verdict === "possible")) {
+    warnings.push(t(locale, "calls.availability.priorServiceEndCheck"));
+  }
+  return warnings;
+}
+
+// Button의 글자는 전역 font: inherit 규칙 때문에 부모 글꼴로 그려진다. 좁은 서랍에 칩 셋이 한 줄로 들어가도록
+// 칩 글자는 안쪽 span에서 14px/600으로 정한다.
+const chipClassName = "h-11 gap-1 whitespace-nowrap px-2.5";
+const chipTextClassName = "text-sm font-semibold";
+
+/**
+ * 가능 코스의 한 줄(스펙 D1–D5): 이름(퇴근이면 흐린 "퇴근") · 상태 · 코스 칩 · 경고 아이콘. 펼친 것은 줄 아래에 연다.
+ * 첫 Therapist 목록과 두 번째 Therapist 후보 목록이 함께 쓴다. 두 번째 목록은 고른 코스의 칩 하나만 넘긴다.
+ */
+export function AvailabilityRow({
+  courses,
+  expansion,
+  locale,
+  reserveWarningSlot = true,
+  row,
+  second = false,
+  time,
+  disabled,
+  onChoose,
+  onExpansionChange,
+  onOverride
+}: {
+  /** 보일 코스 칩. 주지 않으면 서비스가 준 코스 전부다. */
+  courses?: TherapistAvailabilityRowDto["courses"];
+  expansion: AvailabilityRowExpansion;
+  locale: Locale;
+  /** 경고가 없는 줄에도 경고 아이콘 자리를 비워 두어 칩이 줄마다 같은 자리에 오게 한다. 목록에 경고가 하나도 없으면 끈다. */
+  reserveWarningSlot?: boolean;
+  row: TherapistAvailabilityRowDto;
+  /** 두 번째 Therapist 후보 목록의 줄. 첫 목록의 줄과 id·표지 속성이 겹치지 않게 한다. */
+  second?: boolean;
+  time: string;
+  disabled?: boolean;
+  onChoose: (choice: AvailabilityCourseChoice) => void;
+  onExpansionChange: (expansion: AvailabilityRowExpansion) => void;
+  onOverride?: (choice: AvailabilityCourseOverrideChoice) => void;
+}) {
+  const chips = courses ?? row.courses;
+  const idBase = `${second ? "second-therapist" : "therapist-availability"}-${row.therapistId}`;
+  const warningsId = `${idBase}-warnings`;
+  const reasonId = `${idBase}-reason`;
+  const warnings = availabilityRowWarnings(locale, row);
+  const warningsOpen = expansion?.kind === "warnings";
+  const openCourse = expansion?.kind === "course" ? chips.find((course) => course.courseId === expansion.courseId) ?? null : null;
+  const rowAttributes = second ? { "data-second-therapist-row": row.therapistId } : { "data-availability-row": row.therapistId };
+
+  return (
+    <li className="grid gap-1.5 border-b border-border py-1.5 last:border-b-0" {...rowAttributes}>
+      <div className="flex items-center gap-2">
+        <div className="grid min-w-24 flex-1 gap-1">
+          <span className="flex min-w-0 items-baseline gap-1.5 text-sm">
+            <span className="font-semibold text-foreground [overflow-wrap:anywhere]">{row.therapistName}</span>
+            {row.attendance === "checked_out" ? <span className="shrink-0 text-xs text-muted">{t(locale, "calls.availability.checkedOutTag")}</span> : null}
+          </span>
+          <RowStatus locale={locale} row={row} />
+        </div>
+        <div className="flex min-w-0 flex-wrap justify-end gap-1.5">
+          {chips.map((course) => {
+            const chipText = t(locale, "calls.availability.chip", { code: course.courseCode, minutes: course.durationMinutes });
+            if (course.verdict === "possible") {
+              return (
+                <Button
+                  aria-describedby={warnings.length > 0 ? warningsId : undefined}
+                  aria-label={t(locale, "calls.availability.coursePossible", { code: course.courseCode, minutes: course.durationMinutes })}
+                  className={cn(chipClassName, "border-border-strong")}
+                  data-course-id={course.courseId}
+                  data-start-time={time}
+                  data-therapist-id={row.therapistId}
+                  disabled={disabled}
+                  key={course.courseId}
+                  onClick={() => onChoose({ startTime: time, therapistId: row.therapistId, courseId: course.courseId })}
+                  variant="secondary"
+                >
+                  <span className={chipTextClassName}>{chipText}</span>
+                </Button>
+              );
+            }
+            const open = openCourse?.courseId === course.courseId;
+            return (
+              <Button
+                aria-controls={open ? reasonId : undefined}
+                aria-expanded={open}
+                aria-label={impossibleCourseLabel(locale, course)}
+                className={cn(chipClassName, "border-dashed text-muted", open && "bg-readonly")}
+                data-course-id={course.courseId}
+                data-therapist-id={row.therapistId}
+                disabled={disabled}
+                key={course.courseId}
+                onClick={() => onExpansionChange(open ? null : { kind: "course", courseId: course.courseId })}
+                variant="secondary"
+              >
+                <span aria-hidden="true">{"○︎"}</span>
+                <span className={chipTextClassName}>{chipText}</span>
+              </Button>
+            );
+          })}
+        </div>
+        {warnings.length > 0 ? (
+          <Button
+            aria-controls={warningsId}
+            aria-expanded={warningsOpen}
+            aria-label={t(locale, "calls.availability.warningsToggle", { count: warnings.length })}
+            className={cn("w-11 shrink-0 justify-center bg-warning-soft px-0 text-warning hover:bg-warning-soft", warningsOpen && "outline outline-1 outline-warning")}
+            onClick={() => onExpansionChange(warningsOpen ? null : { kind: "warnings" })}
+            variant="ghost"
+          >
+            <span aria-hidden="true">{"▲︎"}</span>
+            {warnings.length > 1 ? <span aria-hidden="true">{warnings.length}</span> : null}
+          </Button>
+        ) : reserveWarningSlot ? (
+          <span aria-hidden="true" className="w-11 shrink-0" />
+        ) : null}
+      </div>
+      {warnings.length > 0 ? (
+        <div className="pb-1.5" hidden={!warningsOpen} id={warningsId}>
+          <WarningList label={t(locale, "calls.availability.warningsToggle", { count: warnings.length })} warnings={warnings} />
+        </div>
+      ) : null}
+      {openCourse && openCourse.verdict !== "possible" ? (
+        <div className="flex flex-wrap items-center gap-2 pb-1.5" id={reasonId}>
+          <p className="text-sm text-foreground">{impossibleCourseLabel(locale, openCourse)}</p>
+          {onOverride ? (
+            <Button
+              className="border-warning text-warning hover:bg-warning-soft"
+              data-override-course-id={openCourse.courseId}
+              data-therapist-id={row.therapistId}
+              disabled={disabled}
+              onClick={() =>
+                onOverride({ startTime: time, therapistId: row.therapistId, courseId: openCourse.courseId, verdict: openCourse.verdict as "time_short" | "rate_missing" })
+              }
+              variant="secondary"
+            >
+              {t(locale, "calls.quickBooking.therapist.overrideAssign")}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+    </li>
+  );
 }
 
 export function TherapistAvailabilityView({
@@ -128,20 +270,22 @@ export function TherapistAvailabilityView({
   timeSlots: ServiceCallOption[];
   onChoose: (choice: AvailabilityCourseChoice) => void;
   /**
-   * 시간 부족·수당 없음 코스를 "경고 확인 후 배정" 경로로 받을 때(티켓 21). 주면 그 코스에 가능 버튼과
-   * 다른 모양·문구의 버튼을 보이고, 주지 않으면(기존 호출) 흐린 글자만 그대로 보인다.
+   * 시간 부족·수당 없음 코스를 "경고 확인 후 배정" 경로로 받을 때(티켓 21). 주면 불가 칩을 눌렀을 때 이유 옆에
+   * 그 버튼을 보이고, 주지 않으면 이유만 보인다.
    */
   onOverride?: (choice: AvailabilityCourseOverrideChoice) => void;
   onTimeChange: (time: string) => void;
   onToggle: () => void;
 }) {
   const title = t(locale, "calls.availability.title");
+  const [expanded, setExpanded] = useState<{ therapistId: string; expansion: AvailabilityRowExpansion } | null>(null);
+  const reserveWarningSlot = rows.some((row) => availabilityRowWarnings(locale, row).length > 0);
 
   return (
     <section aria-label={title} className="mb-4 rounded-lg border border-border bg-surface">
-      <div className="flex flex-wrap items-end gap-4 p-4">
-        <h2 className="pb-3 text-[0.9375rem] font-semibold text-foreground">{title}</h2>
-        <label className="grid gap-1.5 text-xs font-semibold text-muted" htmlFor="therapist-availability-time">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 px-4 py-2">
+        <h2 className="text-[0.9375rem] font-semibold text-foreground">{title}</h2>
+        <label className="flex items-center gap-1.5 text-xs font-semibold text-muted" htmlFor="therapist-availability-time">
           {t(locale, "calls.availability.time")}
           <select
             className={inputFieldClassName({ className: "min-w-28" })}
@@ -167,13 +311,12 @@ export function TherapistAvailabilityView({
         </Button>
       </div>
       {open ? (
-        <div className="border-t border-border p-4" id="therapist-availability-panel">
-          <p className="mb-3 text-xs text-muted">{t(locale, "calls.availability.scheduleNote")}</p>
+        <div className="border-t border-border px-4 py-2" id="therapist-availability-panel">
           {attendanceFilter?.nobodyAttended ? (
-            <p className="mb-3 text-xs text-muted">{t(locale, "calls.availability.attendanceNone")}</p>
+            <p className="mb-2 text-xs text-muted">{t(locale, "calls.availability.attendanceNone")}</p>
           ) : null}
           {attendanceFilter && attendanceFilter.hiddenCount > 0 ? (
-            <label className="mb-3 flex min-h-11 items-center gap-2 text-sm text-foreground">
+            <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
               <input
                 checked={attendanceFilter.showAll}
                 className="h-5 w-5 accent-brand"
@@ -192,81 +335,20 @@ export function TherapistAvailabilityView({
             </div>
           ) : null}
           {!pending && !failed && rows.length > 0 ? (
-            <ul className="grid gap-2">
-              {rows.map((row) => {
-                const priorEndNoteId = `therapist-availability-prior-end-${row.therapistId}`;
-                const showPriorEndNote = row.priorServiceEndCheck && row.courses.some((course) => course.verdict === "possible");
-                return (
-                  <li
-                    className="grid gap-2 rounded-md border border-border bg-surface px-3 py-2.5 hover:bg-readonly"
-                    data-availability-row={row.therapistId}
-                    key={row.therapistId}
-                  >
-                    <span className="font-semibold text-foreground">{row.therapistName}</span>
-                    <dl className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
-                      <Fact label={t(locale, "calls.availability.column.schedule")}>
-                        <Schedule locale={locale} row={row} />
-                      </Fact>
-                      <Fact label={t(locale, "calls.availability.column.attendance")}>
-                        <Attendance locale={locale} row={row} />
-                      </Fact>
-                      <Fact label={t(locale, "calls.availability.column.thisTime")}>
-                        <ThisTime locale={locale} row={row} />
-                      </Fact>
-                      <Fact label={t(locale, "calls.availability.column.next")}>{nextLabel(locale, row)}</Fact>
-                    </dl>
-                    <div className="flex flex-wrap gap-2">
-                      {showPriorEndNote ? (
-                        <span className="basis-full" id={priorEndNoteId}>
-                          <WarningSummary locale={locale} warnings={[t(locale, "calls.availability.priorServiceEndCheck")]} />
-                        </span>
-                      ) : null}
-                      {row.courses.map((course) => {
-                        const verdict = course.verdict;
-                        return verdict === "possible" ? (
-                          <Button
-                            aria-describedby={showPriorEndNote ? priorEndNoteId : undefined}
-                            className="h-auto min-h-11 max-w-full whitespace-normal text-left"
-                            data-course-id={course.courseId}
-                            data-start-time={time}
-                            data-therapist-id={row.therapistId}
-                            key={course.courseId}
-                            onClick={() => onChoose({ startTime: time, therapistId: row.therapistId, courseId: course.courseId })}
-                            variant="secondary"
-                          >
-                            {t(locale, "calls.availability.coursePossible", { code: course.courseCode, minutes: course.durationMinutes })}
-                          </Button>
-                        ) : onOverride ? (
-                          <Button
-                            aria-describedby={showPriorEndNote ? priorEndNoteId : undefined}
-                            className="h-auto min-h-11 max-w-full whitespace-normal text-left border-warning text-warning hover:bg-warning-soft"
-                            data-course-id={course.courseId}
-                            data-override-course-id={course.courseId}
-                            data-start-time={time}
-                            data-therapist-id={row.therapistId}
-                            key={course.courseId}
-                            onClick={() =>
-                              onOverride({
-                                startTime: time,
-                                therapistId: row.therapistId,
-                                courseId: course.courseId,
-                                verdict
-                              })
-                            }
-                            variant="secondary"
-                          >
-                            {impossibleCourseLabel(locale, course)} · {t(locale, "calls.quickBooking.therapist.overrideAssign")}
-                          </Button>
-                        ) : (
-                          <span className="inline-flex min-h-11 items-center text-muted" key={course.courseId}>
-                            {impossibleCourseLabel(locale, course)}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </li>
-                );
-              })}
+            <ul className="grid">
+              {sortAvailabilityRows(rows, time).map((row) => (
+                <AvailabilityRow
+                  expansion={expanded?.therapistId === row.therapistId ? expanded.expansion : null}
+                  key={row.therapistId}
+                  locale={locale}
+                  onChoose={onChoose}
+                  onExpansionChange={(expansion) => setExpanded(expansion ? { therapistId: row.therapistId, expansion } : null)}
+                  onOverride={onOverride}
+                  reserveWarningSlot={reserveWarningSlot}
+                  row={row}
+                  time={time}
+                />
+              ))}
             </ul>
           ) : null}
         </div>

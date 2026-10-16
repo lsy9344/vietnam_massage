@@ -164,8 +164,8 @@ test.describe("티켓 02 업무 흐름 셸", () => {
     await expect(page.getByLabel("조회날짜")).toHaveValue(chosenDate);
 
     await dockZone(page, "정산").click();
-    await zoneMenu(page, "정산").getByRole("link", { name: "귀케어" }).click();
-    await expect(page).toHaveURL(`/settlements/earcare?operatingMonthId=${monthId}&attendanceDate=${chosenDate}`);
+    await zoneMenu(page, "정산").getByRole("link", { name: "운영팀 일일" }).click();
+    await expect(page).toHaveURL(`/settlements/operations?operatingMonthId=${monthId}&attendanceDate=${chosenDate}`);
     // 도구줄의 구역 안 탭도 그대로 쓴다.
     await page.getByRole("navigation", { name: "정산 화면" }).getByRole("link", { name: "Therapist" }).click();
     await expect(page).toHaveURL(`/settlements?operatingMonthId=${monthId}&serviceDate=${chosenDate}`);
@@ -202,7 +202,7 @@ test.describe("티켓 02 업무 흐름 셸", () => {
     await expect(zoneMenu(page, "보고")).toBeHidden();
 
     await dockZone(page, "정산").click();
-    await expect(zoneMenu(page, "정산").getByRole("link")).toHaveText(["근무표", "Therapist", "귀케어", "운영팀 일일", "운영팀 월"]);
+    await expect(zoneMenu(page, "정산").getByRole("link")).toHaveText(["근무표", "Therapist", "운영팀 일일", "운영팀 월"]);
     await zoneMenu(page, "정산").getByRole("link", { name: "운영팀 월" }).click();
     await expect(page).toHaveURL(/\/settlements\/operations\/monthly/);
     await expect(zoneMenu(page, "정산")).toBeHidden();

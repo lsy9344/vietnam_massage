@@ -31,11 +31,6 @@ export function payoutAmount(value: number, input: { isPayoutEligible: boolean; 
   return settlementAmount(value, !input.isPayoutEligible || input.hasBasis);
 }
 
-/** 귀케어 풀은 그날 계산된 방문완료 콜에서 나온다. 그런 콜이 없으면 풀과 배분에 근거가 없다. */
-export function earcareHasBasis(result: { sourceCallCount: number }) {
-  return result.sourceCallCount > 0;
-}
-
 /** 운영팀 인센 정책이 없으면 근거가 없다. 기준 미달의 0은 정책이 정한 결과다. */
 export function incentiveRuleHasBasis(ruleStatus: string) {
   return ruleStatus !== "missing_policy";

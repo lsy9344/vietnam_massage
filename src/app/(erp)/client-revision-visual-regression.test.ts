@@ -4,7 +4,9 @@ import { describe, it } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { CreateCustomerPanel, CustomerEditForm } from "@/app/(erp)/customers/customer-forms";
-import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
+import { CallEditPanel } from "@/app/(erp)/calls/call-edit-panel";
+import { CallLedgerList } from "@/app/(erp)/calls/call-ledger-list";
+import { initialCallRowSave } from "@/app/(erp)/calls/call-row-save";
 import { LocaleProvider } from "@/lib/i18n/client";
 import { renderInShell } from "@/components/shell/test-harness";
 import { ScreenToolbar } from "@/components/shell/screen-toolbar";
@@ -27,7 +29,6 @@ const callGridOptions: ServiceCallFormOptions = {
   paymentMethods: singleOption("CASH", "현금"),
   confirmationCodes: singleOption("Y"),
   therapists: singleOption("therapist-1", "마사지사1"),
-  earcareEmployees: singleOption("earcare-1", "귀케어1"),
   expenseHandlers: singleOption("handler-1", "담당자1")
 };
 
@@ -49,20 +50,19 @@ const discountedCallRow: ServiceCallRowDto = {
   customerMemo: "할인 표시 검증",
   therapist1: { id: "therapist-1", displayName: "마사지사1", staffCode: "THR-001" },
   therapist2: null,
-  earcare: null,
   status: "VISIT_COMPLETE",
   discountTypeCode: "BIRTHDAY",
   paymentMethodCode: "CASH",
   note: null,
   visitRequest: null,
   confirmationCode: "Y",
+  partyId: null,
+  partyPosition: null,
   basePrice: 1500000,
   paymentAmount: 1400000,
   discountAmount: 100000,
   therapist1Commission: 700000,
   therapist2Commission: 0,
-  earcarePoolAmount: 100000,
-  opsCallCredit: 1,
   calculationStatus: "calculated",
   calculationErrorCode: null,
   calculationErrorMessage: null,
@@ -101,25 +101,46 @@ describe("client revision visual regression guards", () => {
 
   it("renders discounted call payment with base price strike-through and actual payment emphasis", () => {
     // i18n 전환: 그리드 금액 포맷은 locale 기반이므로 ko locale을 시드해 기존 천단위(,) 표기를 검증한다.
-    const html = renderToStaticMarkup(
+    const panel = renderToStaticMarkup(
       createElement(LocaleProvider, {
         locale: "ko",
-        children: createElement(EditableCallGrid, {
+        children: createElement(CallEditPanel, {
+          conflict: null,
+          customers: [],
+          focusRequest: null,
           isLocked: true,
-          operatingMonthId: "month-1",
+          onCancel: () => {},
+          onCommit: () => {},
+          onEdit: () => {},
+          onReload: () => {},
+          onRetry: () => {},
+          onSelectCall: () => {},
+          options: callGridOptions,
+          readOnly: false,
+          row: discountedCallRow,
+          rows: [discountedCallRow],
+          save: initialCallRowSave(discountedCallRow),
+          showSettlementAmounts: false,
+          warningsRow: discountedCallRow
+        })
+      })
+    );
+    const list = renderToStaticMarkup(
+      createElement(LocaleProvider, {
+        locale: "ko",
+        children: createElement(CallLedgerList, {
+          isLocked: true,
           options: callGridOptions,
           rows: [discountedCallRow],
-          serviceDate: "2026-06-20",
-          showSettlementColumns: false
+          showSettlementAmounts: false
         })
       })
     );
 
-    assert.match(html, /class="text-\[11px\] text-muted line-through">1,500,000<\/span>/);
-    assert.match(html, /class="font-bold text-foreground">1,400,000<\/span>/);
-    assert.match(html, /고객\/메모/);
-    assert.match(html, /연결 안 함/);
-    assert.match(html, /data-call-cell-column="customerId"/);
+    assert.match(panel, /class="text-xs font-normal text-muted line-through">1,500,000<\/span>/);
+    assert.match(panel, /class="font-bold">1,400,000<\/span>/);
+    assert.match(list, /고객\/메모/);
+    assert.match(list, /할인 표시 검증/);
   });
 
   it("renders the customer record form and the register action in Korean and Vietnamese", () => {
@@ -165,7 +186,6 @@ describe("client revision visual regression guards", () => {
       ["dashboard.today.kpi.opsDailyIncentiveTotal", "일일인센 합계"],
       ["dashboard.today.kpi.expenseTotal", "지출합계"],
       ["dashboard.today.kpi.therapistPayoutTotal", "마사지사 정산"],
-      ["dashboard.today.kpi.earcarePayoutTotal", "귀케어 정산"],
       ["dashboard.today.kpi.dailyCostTotal", "일일비용 합계"]
     ] as const) {
       assert.ok(todayView.includes(`t("${labelKey}")`), `today dashboard must show ${labelKey}`);

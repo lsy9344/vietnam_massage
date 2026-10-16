@@ -1,12 +1,12 @@
 import { testEmployees } from "./support/test-employees";
-import { expect, test, type Browser, type Locator } from "@playwright/test";
+import { expect, test, type Browser, type Locator, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
-import { selectGridOption } from "./support/call-grid";
 
 // 티켓 17: 저장 충돌(STALE_CALL) 비교와 다시 반영. 티켓 15의 두 브라우저 문맥 패턴을 그대로 쓴다.
-// 13:00은 공용 시드(defaultTimeSlots)의 활성 슬롯이다.
+// 13:00은 공용 시드(defaultTimeSlots)의 활성 슬롯이다. 티켓 03 이후 비교·다시 반영은 그 콜의 편집 패널
+// 안에 있다(행에는 입력칸이 없다) — 비교 표 자체(call-conflict-compare.tsx)의 계약은 그대로다.
 const accounts = {
   counterA: { accountId: "t17_counter_a", password: "Ticket17!counterA", staffCode: "E2E-T17-COUNTER-A", sortOrder: 9451 },
   counterB: { accountId: "t17_counter_b", password: "Ticket17!counterB", staffCode: "E2E-T17-COUNTER-B", sortOrder: 9452 }
@@ -73,16 +73,28 @@ async function createCall(memo: string) {
   return call.id as string;
 }
 
-async function openLedger(browser: Browser, key: AccountKey) {
+async function openLedgerPanel(browser: Browser, key: AccountKey, callId: string) {
   const context = await browser.newContext();
   const page = await context.newPage();
   await login(page, accounts[key].accountId, accounts[key].password);
-  await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
+  await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}&call=${callId}`);
   return { context, page };
 }
 
-function saveState(row: Locator) {
-  return row.locator("[data-save-state]");
+function row(page: Page, callId: string) {
+  return page.locator(`tr[data-service-call-id="${callId}"]`);
+}
+
+function lineSaveState(page: Page, callId: string) {
+  return row(page, callId).locator("[data-line-save-state]");
+}
+
+function panel(page: Page) {
+  return page.getByRole("complementary", { name: /^콜 상세/ });
+}
+
+function paymentRegion(panelLocator: Locator) {
+  return panelLocator.getByRole("region", { name: "결제" });
 }
 
 async function cleanup() {
@@ -127,8 +139,6 @@ test.describe("티켓 17 저장 충돌 비교와 다시 반영", () => {
       name: "T17 A",
       durationMinutes: 60,
       basePrice: 1500000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: false,
       tvDisplayName: "T17 A",
       effectiveToMonth: monthKey,
@@ -168,28 +178,26 @@ test.describe("티켓 17 저장 충돌 비교와 다시 반영", () => {
     await prisma.$disconnect();
   });
 
-  test("다른 화면이 먼저 저장하면 충돌 확인 필요가 되어 콜 상세 패널에 비교가 자동으로 열리고, 고른 필드만 다시 반영해 저장한다", async ({ browser }) => {
+  test("다른 화면이 먼저 저장하면 충돌 확인 필요가 되어 편집 패널에 비교가 자동으로 열리고, 고른 필드만 다시 반영해 저장한다", async ({ browser }) => {
     const callId = await createCall("T17 원본");
-    const a = await openLedger(browser, "counterA");
-    const b = await openLedger(browser, "counterB");
+    const a = await openLedgerPanel(browser, "counterA", callId);
+    const b = await openLedgerPanel(browser, "counterB", callId);
 
     try {
-      const aRow = a.page.locator(`tr[data-service-call-id="${callId}"]`);
-      const bRow = b.page.locator(`tr[data-service-call-id="${callId}"]`);
-      await expect(saveState(aRow)).toHaveAttribute("data-save-state", "idle");
-      await expect(saveState(bRow)).toHaveAttribute("data-save-state", "idle");
+      await expect(lineSaveState(a.page, callId)).toHaveAttribute("data-line-save-state", "idle");
+      await expect(lineSaveState(b.page, callId)).toHaveAttribute("data-line-save-state", "idle");
 
-      // 화면 A가 결제수단을 먼저 고르고 저장을 마친다.
-      await selectGridOption(a.page, aRow, "결제수단", "카드");
-      await expect(saveState(aRow)).toHaveAttribute("data-save-state", "saved", { timeout: 20_000 });
+      // 화면 A가 결제수단을 먼저 고르고 저장을 마친다(결제수단은 콤보박스가 아니라 알약 라디오다, 스펙 D19).
+      await paymentRegion(panel(a.page)).getByText("카드", { exact: true }).click();
+      await expect(lineSaveState(a.page, callId)).toHaveAttribute("data-line-save-state", "saved", { timeout: 20_000 });
 
       // 화면 B는 그 사이 저장된 것을 모른 채(옛 updatedAt을 그대로 들고) 다른 칸(고객/메모)을 고친다.
-      const bMemo = bRow.getByLabel("고객/메모");
+      const bMemo = panel(b.page).getByLabel("고객/메모", { exact: true });
       await bMemo.fill("T17 B의 초안");
-      await bMemo.press("Enter");
+      await bMemo.press("Tab");
 
-      // 충돌 확인 필요가 되고, 콜 상세 패널에 비교가 저절로 열린다(체크 1).
-      await expect(saveState(bRow)).toHaveAttribute("data-save-state", "conflict", { timeout: 20_000 });
+      // 충돌 확인 필요가 되고, 이미 열려 있는 편집 패널에 비교가 저절로 보인다(체크 1) — 따로 열 버튼이 없다.
+      await expect(lineSaveState(b.page, callId)).toHaveAttribute("data-line-save-state", "conflict", { timeout: 20_000 });
       const dialog = b.page.getByRole("region", { name: "저장 충돌 비교" });
       await expect(dialog).toBeVisible();
 
@@ -208,7 +216,7 @@ test.describe("티켓 17 저장 충돌 비교와 다시 반영", () => {
       await expect(dialog.getByRole("button")).toHaveText(["최신 내용으로 다시 불러오기", "다시 반영하고 저장"]);
       await expect(dialog.getByRole("button", { name: "다시 반영하고 저장" })).toBeDisabled();
 
-      // 비교는 비모달 상세 구역이다(S2). 원장 입력을 계속 쓸 수 있고 비교가 포커스를 가두지 않는다.
+      // 비교는 비모달 상세 구역이다(S2). 패널 안의 다른 입력을 계속 쓸 수 있고 비교가 포커스를 가두지 않는다.
       await bMemo.focus();
       await expect(bMemo).toBeFocused();
       await expect(dialog).toBeVisible();
@@ -226,10 +234,10 @@ test.describe("티켓 17 저장 충돌 비교와 다시 반영", () => {
       await b.page.keyboard.press("Enter");
 
       // 다시 반영한 저장이 받아들여진다. 비교는 치워지고, 고른 필드만 반영되고 나머지는 최신 값 그대로다.
-      await expect(saveState(bRow)).toHaveAttribute("data-save-state", "saved", { timeout: 20_000 });
+      await expect(lineSaveState(b.page, callId)).toHaveAttribute("data-line-save-state", "saved", { timeout: 20_000 });
       await expect(dialog).toBeHidden();
       await expect(bMemo).toHaveValue("T17 B의 초안");
-      await expect(bRow.getByRole("combobox", { name: "결제수단" })).toHaveValue("카드");
+      await expect(paymentRegion(panel(b.page)).locator('input[data-payment-method="CARD"]')).toBeChecked();
 
       const stored = await (prisma as any).serviceCall.findUnique({ where: { id: callId } });
       expect(stored.customerMemo).toBe("T17 B의 초안");
@@ -243,19 +251,19 @@ test.describe("티켓 17 저장 충돌 비교와 다시 반영", () => {
   test("\"최신 내용으로 다시 불러오기\"는 비교 중인 초안을 통째로 최신 행으로 바꾼다", async ({ page }) => {
     const callId = await createCall("T17 두 번째 원본");
     await login(page, accounts.counterA.accountId, accounts.counterA.password);
-    await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
+    await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}&call=${callId}`);
 
-    const row = page.locator(`tr[data-service-call-id="${callId}"]`);
-    const memo = row.getByLabel("고객/메모");
-    const note = row.getByLabel("비고");
-    await expect(saveState(row)).toHaveAttribute("data-save-state", "idle", { timeout: 20_000 });
+    const edit = panel(page);
+    const memo = edit.getByLabel("고객/메모", { exact: true });
+    const note = edit.getByLabel("비고");
+    await expect(lineSaveState(page, callId)).toHaveAttribute("data-line-save-state", "idle", { timeout: 20_000 });
 
     // 입력만 해 두고(아직 커밋하지 않음) 다른 화면이 적어 둔 것처럼 비고를 직접 바꿔 버전을 올린다.
     await memo.fill("T17 내가 고친 값");
     await (prisma as any).serviceCall.update({ where: { id: callId }, data: { note: "T17 다른 화면이 적은 비고" } });
-    await memo.press("Enter");
+    await memo.press("Tab");
 
-    await expect(saveState(row)).toHaveAttribute("data-save-state", "conflict", { timeout: 20_000 });
+    await expect(lineSaveState(page, callId)).toHaveAttribute("data-line-save-state", "conflict", { timeout: 20_000 });
     const dialog = page.getByRole("region", { name: "저장 충돌 비교" });
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText("T17 내가 고친 값");
@@ -265,7 +273,7 @@ test.describe("티켓 17 저장 충돌 비교와 다시 반영", () => {
 
     // 초안이 통째로 최신 행으로 바뀐다 — 내가 고치던 메모도 되돌아간다. 강제 덮어쓰기가 아니라 다시 불러오기다.
     await expect(dialog).toBeHidden();
-    await expect(saveState(row)).toHaveAttribute("data-save-state", "idle", { timeout: 20_000 });
+    await expect(lineSaveState(page, callId)).toHaveAttribute("data-line-save-state", "idle", { timeout: 20_000 });
     await expect(memo).toHaveValue("T17 두 번째 원본");
     await expect(note).toHaveValue("T17 다른 화면이 적은 비고");
 

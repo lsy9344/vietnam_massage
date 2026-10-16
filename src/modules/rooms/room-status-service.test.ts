@@ -70,7 +70,7 @@ function createMemoryPrisma() {
   );
   const courses = new Map<string, any>([
     ["course-a", { id: "course-a", code: "A", isActive: true, createdAt: new Date("2034-06-01T00:00:00.000Z"), updatedAt: new Date("2034-06-01T00:00:00.000Z") }],
-    ["course-b", { id: "course-b", code: "B", isActive: true, createdAt: new Date("2034-06-01T00:00:00.000Z"), updatedAt: new Date("2034-06-01T00:00:00.000Z") }],
+    ["course-c", { id: "course-c", code: "C", isActive: true, createdAt: new Date("2034-06-01T00:00:00.000Z"), updatedAt: new Date("2034-06-01T00:00:00.000Z") }],
     ["course-missing-policy", { id: "course-missing-policy", code: "Z", isActive: true, createdAt: new Date("2034-06-01T00:00:00.000Z"), updatedAt: new Date("2034-06-01T00:00:00.000Z") }]
   ]);
   const coursePolicies = new Map<string, any>([
@@ -82,8 +82,6 @@ function createMemoryPrisma() {
         name: "A 누루60",
         durationMinutes: 60,
         basePrice: 1500000,
-        opsCallCredit: 1,
-        earcarePoolAmount: 100000,
         requiresSecondTherapist: false,
         tvDisplayName: "A60",
         effectiveFromMonth: "2034-01",
@@ -94,17 +92,15 @@ function createMemoryPrisma() {
       }
     ],
     [
-      "policy-b",
+      "policy-c",
       {
-        id: "policy-b",
-        courseId: "course-b",
-        name: "B 귀청소90",
+        id: "policy-c",
+        courseId: "course-c",
+        name: "C 때밀이90",
         durationMinutes: 90,
         basePrice: 1800000,
-        opsCallCredit: 1,
-        earcarePoolAmount: 200000,
         requiresSecondTherapist: false,
-        tvDisplayName: "B90",
+        tvDisplayName: "C90",
         effectiveFromMonth: "2034-01",
         effectiveToMonth: null,
         isActive: true,
@@ -115,8 +111,7 @@ function createMemoryPrisma() {
   ]);
   const employees = new Map<string, any>([
     ["therapist-1", { id: "therapist-1", displayName: "마사지사1", staffCode: "THR-001", employeeGroup: "THERAPIST", sortOrder: 1, isActive: true }],
-    ["therapist-2", { id: "therapist-2", displayName: "마사지사2", staffCode: "THR-002", employeeGroup: "THERAPIST", sortOrder: 2, isActive: true }],
-    ["earcare-1", { id: "earcare-1", displayName: "귀케어1", staffCode: "EAR-001", employeeGroup: "EARCARE", sortOrder: 1, isActive: true }]
+    ["therapist-2", { id: "therapist-2", displayName: "마사지사2", staffCode: "THR-002", employeeGroup: "THERAPIST", sortOrder: 2, isActive: true }]
   ]);
   const serviceCalls = new Map<string, any>();
   const assignments = new Map<string, any>();
@@ -307,11 +302,10 @@ describe("room status service", () => {
   it("maps 예약, 청소중, 사용중 active calls with course and active assignees", async () => {
     const { client, addCall, addAssignment } = createMemoryPrisma();
     addCall({ id: "call-reserved", roomId: "room-101", status: "RESERVED", startTime: "11:00", courseId: "course-a" });
-    addCall({ id: "call-cleaning", roomId: "room-102", status: "청소중", startTime: "11:30", courseId: "course-b" });
+    addCall({ id: "call-cleaning", roomId: "room-102", status: "청소중", startTime: "11:30", courseId: "course-c" });
     addCall({ id: "call-in-use", roomId: "room-103", status: "사용중", startTime: "11:00", courseId: "course-a" });
     addAssignment("call-in-use", "THERAPIST_1", "therapist-1");
     addAssignment("call-in-use", "THERAPIST_2", "therapist-2");
-    addAssignment("call-in-use", "EARCARE", "earcare-1");
 
     const statuses = await listRoomStatuses({
       operatingMonthId: "month-2034-06",
@@ -333,7 +327,6 @@ describe("room status service", () => {
     assert.equal(room103.remainingMinutes, 45);
     assert.equal(room103.therapist1?.id, "therapist-1");
     assert.equal(room103.therapist2?.staffCode, "THR-002");
-    assert.equal(room103.earcare?.displayName, "귀케어1");
   });
 
   it("excludes 방문완료, 노쇼, and 취소 statuses from current room occupancy", async () => {
@@ -404,7 +397,7 @@ describe("room status service", () => {
 
   it("calculates cross-midnight expected end and clamps elapsed 사용중 to 종료확인 without negative remaining minutes", async () => {
     const { client, addCall } = createMemoryPrisma();
-    addCall({ id: "call-cross-midnight", roomId: "room-101", status: "사용중", startTime: "23:30", courseId: "course-b" });
+    addCall({ id: "call-cross-midnight", roomId: "room-101", status: "사용중", startTime: "23:30", courseId: "course-c" });
     addCall({ id: "call-elapsed", roomId: "room-102", status: "사용중", startTime: "11:00", courseId: "course-a" });
 
     const statuses = await listRoomStatuses({
@@ -495,7 +488,7 @@ describe("room status service", () => {
 
   it("lists, per room, exactly the overlapping calls the call service flags, without re-judging them", async () => {
     const { client, addCall, addAssignment } = createMemoryPrisma();
-    addCall({ id: "early", roomId: "room-101", status: "예약", startTime: "14:00", courseId: "course-b" });
+    addCall({ id: "early", roomId: "room-101", status: "예약", startTime: "14:00", courseId: "course-c" });
     addCall({ id: "completed", roomId: "room-101", status: "방문완료", startTime: "15:00" });
     addCall({ id: "middle", roomId: "room-101", status: "사용중", startTime: "14:30", actualEntryTime: "14:50" });
     addCall({ id: "canceled", roomId: "room-101", status: "취소", startTime: "14:10" });
@@ -504,7 +497,6 @@ describe("room status service", () => {
     addCall({ id: "alone", roomId: "room-102", status: "예약", startTime: "14:00" });
     addAssignment("middle", "THERAPIST_1", "therapist-1");
     addAssignment("middle", "THERAPIST_2", "therapist-2");
-    addAssignment("middle", "EARCARE", "earcare-1");
     const now = new Date("2034-06-05T15:10:00.000+07:00");
     const ledger = await listServiceCallsForDate({ operatingMonthId: "month-2034-06", serviceDate: "2034-06-05", prismaClient: client, now });
     const flagged = (roomId: string) =>
@@ -551,7 +543,7 @@ describe("room status service", () => {
 
   it("keeps the overlap list on a room whose overlapping calls are all 방문완료, which shows as 빈방", async () => {
     const { client, addCall } = createMemoryPrisma();
-    addCall({ id: "first", roomId: "room-101", status: "방문완료", startTime: "14:00", courseId: "course-b" });
+    addCall({ id: "first", roomId: "room-101", status: "방문완료", startTime: "14:00", courseId: "course-c" });
     addCall({ id: "second", roomId: "room-101", status: "방문완료", startTime: "15:00" });
 
     const statuses = await listRoomStatuses({ operatingMonthId: "month-2034-06", serviceDate: "2034-06-05", prismaClient: client, includeOverlaps: true });
@@ -574,7 +566,7 @@ describe("room status service", () => {
 
   it("leaves the list empty and reads only active calls unless overlaps are asked for", async () => {
     const { client, addCall } = createMemoryPrisma();
-    addCall({ id: "early", roomId: "room-101", status: "예약", startTime: "14:00", courseId: "course-b" });
+    addCall({ id: "early", roomId: "room-101", status: "예약", startTime: "14:00", courseId: "course-c" });
     addCall({ id: "late", roomId: "room-101", status: "예약", startTime: "15:00" });
     const reads: any[] = [];
     const findMany = client.serviceCall.findMany;

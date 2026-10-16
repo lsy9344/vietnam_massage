@@ -47,7 +47,7 @@ function report(overrides: Partial<DashboardGraphReportDto> = {}): DashboardGrap
       label: "월마감 지급 구성",
       segments: [
         { key: "therapist", label: "마사지사 지급", amount: 1_000_000 },
-        { key: "earcare", label: "귀케어 지급", amount: 250_000 }
+        { key: "ops_daily", label: "운영팀 일일 인센", amount: 250_000 }
       ]
     },
     warningCounts: {
@@ -117,7 +117,7 @@ describe("리포트", () => {
     assert.doesNotMatch(courses, /bg-accent-(peach|blue|mint|butter)/);
 
     const payout = card(html, "운영팀 인센/월마감 지급 구성");
-    assert.match(text(payout), /^운영팀 인센\/월마감 지급 구성 월마감 지급 구성 마사지사 지급 1,000,000 VND 귀케어 지급 250,000 VND$/);
+    assert.match(text(payout), /^운영팀 인센\/월마감 지급 구성 월마감 지급 구성 마사지사 지급 1,000,000 VND 운영팀 일일 인센 250,000 VND$/);
     assert.match(payout, /bg-accent-peach" style="width:25%"/);
 
     const calls = card(html, "마사지사 담당 콜 순위");

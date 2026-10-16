@@ -27,6 +27,9 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   EMPLOYEE_NOT_ACTIVE: "Vui lòng chọn nhân viên phụ trách đang hoạt động.",
   D_COURSE_SECOND_THERAPIST_REQUIRED: "Gói D cần kỹ thuật viên thứ hai.",
   D_QUICK_BOOKING_DUPLICATE_THERAPIST: "Kỹ thuật viên 1 và 2 phải là người khác nhau.",
+  D_QUICK_BOOKING_PARTY_DUPLICATE_THERAPIST: "Không thể chọn cùng một Therapist cho hai khách trong nhóm.",
+  SERVICE_CALL_PARTY_NOT_FOUND: "Không tìm thấy nhóm để thêm khách. Hãy tải lại sổ rồi thử lại.",
+  SERVICE_CALL_PARTY_CUSTOMER_LINK: "Khách thêm vào nhóm không liên kết với khách hàng. Chỉ cuộc gọi đại diện mới liên kết khách hàng.",
   SERVICE_CALL_NOT_FOUND: "Không tìm thấy dòng sổ cuộc gọi.",
   STALE_CALL: "Cuộc gọi này đã được thay đổi ở màn hình khác. Hãy tải lại rồi mới lưu.",
   CUSTOMER_NOT_FOUND: "Không tìm thấy khách.",
@@ -42,9 +45,7 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   DAILY_EXPENSE_NOT_ACTIVE: "Không thể sửa mục chi phí đã vô hiệu hóa.",
 
   // 근태/정산 입력
-  INVALID_EARCARE_ATTENDANCE_INPUT: "Ngày làm việc không hợp lệ.",
   THERAPIST_EMPLOYEE_NOT_FOUND: "Không tìm thấy kỹ thuật viên đang hoạt động.",
-  EARCARE_EMPLOYEE_NOT_FOUND: "Không tìm thấy nhân viên chăm sóc tai đang hoạt động.",
   OPS_EMPLOYEE_NOT_FOUND: "Không tìm thấy nhân viên vận hành đang hoạt động.",
   ATTENDANCE_STATUS_NOT_FOUND: "Vui lòng chọn mã trạng thái làm việc hợp lệ.",
 
@@ -88,7 +89,11 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   MONTHLY_CLOSE_PAYOUT_RECONFIRMATION_PENDING: "Không thể chốt tháng vì vẫn còn mục cần xác nhận lại chi trả.",
   MONTHLY_CLOSE_PENDING_CLOSE_REASON_REQUIRED: "Vui lòng nhập lý do ngoại lệ.",
   MONTHLY_CLOSE_PENDING_CALLS_CHANGED:
-    "Sau khi bạn xác nhận danh sách, có thêm cuộc gọi mới cần xác nhận trước khi chốt tháng nên không thể chốt. Hãy xác nhận lại danh sách mới."
+    "Sau khi bạn xác nhận danh sách, có thêm cuộc gọi mới cần xác nhận trước khi chốt tháng nên không thể chốt. Hãy xác nhận lại danh sách mới.",
+
+  // 코스 기준정보: 다시 사용, 새 코스 추가(콜 원장 흐름 재구성 D9)
+  COURSE_POLICY_REQUIRED: "Cần nhập chính sách áp dụng cho tháng này để dùng lại gói.",
+  COURSE_CODE_DUPLICATE: "Mã gói đã tồn tại. Gói đã ngừng thì bật lại bằng Dùng lại."
 };
 
 /**
@@ -124,11 +129,7 @@ const KOREAN_MESSAGE_VI: Record<string, string> = {
   "마사지사를 찾을 수 없습니다.": "Không tìm thấy kỹ thuật viên.",
   "활성 마사지사만 지급 확인을 변경할 수 있습니다.": "Chỉ kỹ thuật viên đang hoạt động mới có thể thay đổi xác nhận chi trả.",
   "해당 날짜에 정산 대상 콜이 없는 마사지사는 지급 확인을 할 수 없습니다.": "Không thể xác nhận chi trả cho kỹ thuật viên không có cuộc gọi cần đối soát trong ngày.",
-  // 지급 확인(티켓 31: 귀케어·운영팀) action 안전 메시지
-  "귀케어사를 선택하세요.": "Vui lòng chọn nhân viên chăm sóc tai.",
-  "귀케어사를 찾을 수 없습니다.": "Không tìm thấy nhân viên chăm sóc tai.",
-  "활성 귀케어사만 지급 확인을 변경할 수 있습니다.": "Chỉ nhân viên chăm sóc tai đang hoạt động mới có thể thay đổi xác nhận chi trả.",
-  "해당 날짜의 귀케어 정산 대상을 찾을 수 없습니다.": "Không tìm thấy đối tượng đối soát chăm sóc tai cho ngày này.",
+  // 지급 확인(티켓 31: 운영팀) action 안전 메시지
   "운영팀 직원을 선택하세요.": "Vui lòng chọn nhân viên nhóm vận hành.",
   "운영팀 직원을 찾을 수 없습니다.": "Không tìm thấy nhân viên nhóm vận hành.",
   "활성 운영팀 직원만 지급 확인을 변경할 수 있습니다.": "Chỉ nhân viên nhóm vận hành đang hoạt động mới có thể thay đổi xác nhận chi trả.",
@@ -152,6 +153,8 @@ const KOREAN_MESSAGE_VI: Record<string, string> = {
   "시간은 HH:mm 형식이어야 합니다.": "Giờ phải theo định dạng HH:mm.",
   "실제입장은 10분 단위이거나 비어 있어야 합니다.": "Giờ vào thực tế phải theo bước 10 phút hoặc để trống.",
   "코스를 선택하세요.": "Vui lòng chọn gói dịch vụ.",
+  "일행은 2명 이상이어야 합니다.": "Nhóm phải có từ 2 khách trở lên.",
+  "일행은 10명까지입니다.": "Nhóm tối đa 10 khách.",
   "상태를 선택하세요.": "Vui lòng chọn trạng thái.",
   "담당자를 선택하세요.": "Vui lòng chọn người phụ trách.",
   "내용을 입력하세요.": "Vui lòng nhập nội dung.",

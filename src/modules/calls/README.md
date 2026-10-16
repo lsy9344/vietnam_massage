@@ -5,10 +5,10 @@ Owns the reservation and service-call ledger.
 ## Story 2.1 Scope
 
 - `ServiceCall` stores the date-scoped call row using stable references: `OperatingMonth.id`, `Room.id`, `Course.id`, Story 1.6 time-slot `value`, and code `codeType + code` values.
-- `ServiceCallAssignment` stores 담당자 columns as normalized rows with stable roles: `THERAPIST_1`, `THERAPIST_2`, `EARCARE`.
+- `ServiceCallAssignment` stores 담당자 columns as normalized rows with stable roles: `THERAPIST_1`, `THERAPIST_2`.
 - `listServiceCallsForDate()` returns one selected operating-month/date ledger, ordered by Story 1.6 time-slot sort order and creation order.
 - `saveBasicServiceCallRow()` validates active masters, operating-month date range, locked-month blocking, stable code values, and writes the call row plus assignments in one transaction.
-- Story 2.3 replaces the former payment, commission, earcare pool, and call-credit placeholders with server-derived readonly values.
+- Story 2.3 replaces the former payment and commission placeholders with server-derived readonly values.
 
 ## Story 2.2 Scope
 
@@ -20,9 +20,9 @@ Owns the reservation and service-call ledger.
 ## Story 2.3 Scope
 
 - Completed-call calculation runs in the calls domain service, not in UI 계산 code.
-- Only completed rows calculate money, pool, and recognized-call values. The service accepts both the legacy Korean value `방문완료` and the Story 1.6 stable code `VISIT_COMPLETE`; non-completed rows return a `not_completed` calculation status and are excluded from downstream totals.
+- Only completed rows calculate money values. The service accepts both the legacy Korean value `방문완료` and the Story 1.6 stable code `VISIT_COMPLETE`; non-completed rows return a `not_completed` calculation status and are excluded from downstream totals.
 - Discount is `0` when `discountTypeCode` is empty and fixed `100,000` VND when any discount type is selected.
-- Calculation source of truth is `CoursePolicy.basePrice`, `CoursePolicy.earcarePoolAmount`, `CoursePolicy.opsCallCredit`, and `TherapistCourseRate.amount` for the selected operating month.
+- Calculation source of truth is `CoursePolicy.basePrice` and `TherapistCourseRate.amount` for the selected operating month.
 - Missing course policy or therapist rate is represented by an explicit calculation status and Korean error message rather than silently using zero.
 - `listCompletedServiceCallCalculationsForDate()` exposes only calculated completed rows for settlement/dashboard handoff, including separate `THERAPIST_1` and `THERAPIST_2` assignment records.
 - Calls do not add derived amount columns before monthly close snapshots; amounts are DTO/domain outputs.
@@ -41,8 +41,8 @@ Owns the reservation and service-call ledger.
 - Daily expenses are never physically deleted in normal operation. `deactivateDailyExpense()` soft-deletes with `isActive=false`, and only active expenses contribute to summaries.
 - Expense create/update/deactivate reuse the operating-month date-range and payout lock guardrails. Range failures use `OPERATING_MONTH_DATE_OUT_OF_RANGE`; `마감확정` and `잠금` months use `OPERATING_MONTH_LOCKED`.
 - Expense mutations record `daily_expense.created`, `daily_expense.changed`, and `daily_expense.deactivated` audit events with plain JSON snapshots. Snapshot dates use `YYYY-MM-DD`, amount is number, and handler is employee ID.
-- `getDailyCallLedgerSummary()` returns the daily strip DTO: reservation, completed, no-show, canceled, payment, therapist commission, earcare pool, discount, expense, `netSales`, course summaries, and warning counts.
-- `netSales = paymentTotal - expenseTotal`. Expenses do not change call payment, commission, discount, or earcare pool values.
+- `getDailyCallLedgerSummary()` returns the daily strip DTO: reservation, completed, no-show, canceled, payment, therapist commission, discount, expense, `netSales`, course summaries, and warning counts.
+- `netSales = paymentTotal - expenseTotal`. Expenses do not change call payment, commission, or discount values.
 - Money totals and course summaries include only rows with `calculationStatus === "calculated"`. `not_completed`, missing policy/rate, and `second_therapist_required` rows are excluded from amount and course summary totals.
 - Course summaries are grouped by stable `Course.code` A-E, never by course label or policy name text.
 
@@ -57,7 +57,7 @@ Owns the reservation and service-call ledger.
 
 - `EditableCallGrid` uses TanStack Table as a headless row/column model while preserving the semantic `<table>` ledger markup.
 - Keyboard movement is route-local in `call-ledger-keyboard.ts`: `Tab`/`Shift+Tab` move through editable fields, `Enter` commits and moves below, arrow keys move adjacent cells, and `Esc` restores the last server draft without autosave.
-- Option cells use type-ahead combobox inputs for time, room, course, therapists, earcare, status, discount type, payment method, and confirmation code.
+- Option cells use type-ahead combobox inputs for time, room, course, therapists, status, discount type, payment method, and confirmation code.
 - Comboboxes persist stable value IDs/codes through hidden inputs and draft payloads. Display labels are never sent as downstream keys.
 - Combobox accessibility uses `aria-expanded`, `aria-controls`, and `aria-activedescendant` with a listbox popup. Dropdown options always include visible text labels; swatches are decorative only.
 - Computed readonly cells remain server-derived, `bg-readonly`, tabular, and visually distinct from editable cells.
@@ -83,7 +83,7 @@ Owns the reservation and service-call ledger.
 ## Includes
 
 - service calls
-- therapist and earcare assignments
+- therapist assignments
 - status history
 - daily expenses
 - completed-call payment and commission derivation
@@ -125,3 +125,13 @@ Owns the reservation and service-call ledger.
 - `correctServiceCallCustomerLink()` is the only existing-call link mutation: reason, current version, writable operating month and actor are required; its audit records previous/new ids and reason (ADR 0003). Ordinary row saves reject link changes; the grid's customer action opens the detail panel. New rows may still choose a customer at creation.
 - Planned working-day facts come from the masters read-only query, alongside availability; day off and unset never imply attendance or block booking. Assigned-call queries supply schedule impact without exposing customer/contact/amount data. `assigned-service-call-query.ts` is a dependency-free read boundary used when masters rejects employee deactivation with assigned future calls.
 - Closing reads call calculation errors and unfinished calls through services. Exceptional close requires the displayed unfinished-call ids and a recorded reason (ADR 0005); closing never marks them completed.
+
+## Ledger Flow Redesign Ticket 03 (흐름별 원장 목록과 편집 패널)
+
+This replaces the Story 2.6 grid, the Ticket 19 view switch, and the Ticket 16 add-row form on the ledger tab. The save contract (`call-row-save.ts`, `expectedUpdatedAt`, conflict compare and reapply, leave guard) is unchanged.
+
+- `call-ledger-list.tsx` shows the day's calls as one-line rows in flow groups: in use (`사용중`·`청소중`) → reserved → finished (`방문완료`·`취소`·`노쇼`), each in the server's time-slot order (`ledger-flow.ts`). All rows are siblings in one `tbody`, so a row that moves to another group keeps its save state. The finished group is folded by default; the unfolded state is kept in `localStorage` (`calls.ledger.doneExpanded`) and falls back to folded.
+- Each row owns its `callRowSaveReducer` and renders its edit panel (`call-edit-panel.tsx`) into the workspace's single `SidePanel` through a portal. The panel groups booking, entry, payment (method pills, discount type, calculated amounts, commissions for settlement roles, "결제 완료"), memo, and "더 보기" (visit request, confirmation, customer-link correction). The former call detail panel (all warnings, related calls) is part of it. Fields autosave on choose or blur.
+- Row buttons: "입장" saves `actualEntryTime` = now rounded to ten minutes and `status` = in use; with no room it first offers only rooms not taken by in-use or cleaning calls. "결제" opens the panel at the payment group.
+- Keyboard (`ledgerListKey`): ↑↓ between rows, Enter opens the panel at its first field, Esc returns focus to the row, N opens quick booking (`data-quick-booking-trigger`). Shortcuts are off inside fields and dialogs.
+- New calls come only from quick booking; after it saves, the new row is selected and its panel opens. The old `view` address parameter is ignored. Phone width (<600px) still shows the Ticket 26 card list and a read-only panel until ledger-flow Ticket 05.

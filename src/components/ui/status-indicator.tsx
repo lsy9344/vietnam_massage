@@ -15,12 +15,24 @@ const toneConfig: Record<StatusTone, { glyph: string; className: string }> = {
  * 콜 상태, 근무 예정, 지급 확인 상태, 운영월 단계 같은 상태 표시.
  * 객실 상태는 기존 StatusBadge(객실 상태 전용 색)를 쓴다.
  */
-export function StatusIndicator({ tone, label, className }: { tone: StatusTone; label: string; className?: string }) {
+export function StatusIndicator({
+  tone,
+  label,
+  className,
+  size = "md"
+}: {
+  tone: StatusTone;
+  label: string;
+  className?: string;
+  /** sm: 한 줄에 여러 정보를 쌓는 촘촘한 목록(예: 빠른 예약의 가능 코스 줄)에서 쓰는 12px 칩. */
+  size?: "md" | "sm";
+}) {
   const config = toneConfig[tone];
   return (
     <span
       className={cn(
-        "inline-flex min-h-7 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-sm font-semibold leading-none",
+        "inline-flex items-center whitespace-nowrap rounded-full font-semibold leading-none",
+        size === "sm" ? "min-h-5 gap-1 px-2 text-xs" : "min-h-7 gap-1.5 px-2.5 text-sm",
         config.className,
         className
       )}

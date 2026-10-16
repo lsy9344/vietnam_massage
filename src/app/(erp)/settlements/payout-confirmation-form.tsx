@@ -9,7 +9,7 @@ import type { ActionResult } from "@/lib/action-result";
 
 /**
  * 지급 확인(ADR 0004, 티켓 30) 사건을 쓰는 세 작은 폼: 확인, 재확인, 해제. 재확인과 해제는 사유가 필수다.
- * 네 단위(Therapist·귀케어·운영팀 일일·운영팀 월, 티켓 30·31)가 같은 모양의 action state를 쓰므로(결과 DTO만 다르다)
+ * 세 단위(Therapist·운영팀 일일·운영팀 월, 티켓 30·31)가 같은 모양의 action state를 쓰므로(결과 DTO만 다르다)
  * T로 그 결과 DTO 타입을 받아 직원 패널 어디서나 재사용한다. 폼은 state.ok/formError만 보고 state.data는 쓰지 않는다.
  */
 export type PayoutConfirmationActionState<T> = ActionResult<T> | null;

@@ -2,6 +2,7 @@ import { requireRouteAccess } from "@/lib/authorization";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import { listEmployees } from "@/modules/masters/employee-service";
 import {
+  currentCourseMonthKey,
   listCourses,
   listOpsDailyIncentiveRulesForMonth,
   listOpsMonthlyIncentiveRulesForMonth,
@@ -19,8 +20,11 @@ export default async function CourseMasterPage({ searchParams }: { searchParams:
 
   const operatingMonths = await listOperatingMonths();
   const monthKey = operatingMonths.length > 0 ? [...operatingMonths].sort((a, b) => a.monthKey.localeCompare(b.monthKey))[0].monthKey : "2026-06";
-  const [courses, employees, therapistRates, dailyRules, monthlyRules] = await Promise.all([
+  // 다시 사용·새 코스 추가는 그달(오늘이 속한 달) 기준이다(스펙 D9).
+  const currentMonthKey = currentCourseMonthKey();
+  const [courses, currentMonthCourses, employees, therapistRates, dailyRules, monthlyRules] = await Promise.all([
     listCourses({ monthKey }),
+    listCourses({ monthKey: currentMonthKey }),
     listEmployees(),
     listTherapistCourseRatesForMonth({ monthKey }),
     listOpsDailyIncentiveRulesForMonth({ monthKey }),
@@ -43,6 +47,8 @@ export default async function CourseMasterPage({ searchParams }: { searchParams:
       </div>
       <CoursePolicyManager
         courses={courses}
+        coursesWithCurrentPolicy={currentMonthCourses.filter((course) => course.currentPolicy).map((course) => course.id)}
+        currentMonthKey={currentMonthKey}
         dailyRules={dailyRules}
         initialItem={readMasterItem(params[MASTER_ITEM_PARAM])}
         monthlyRules={monthlyRules}

@@ -42,9 +42,9 @@ function createMemoryPrisma(
     ["course-no-policy", course("course-no-policy", "A")]
   ]);
   const policies = [
-    policy("policy-a", "course-a", "A 누루60", options.belowThreshold ? 10 : 20, false),
-    policy("policy-b", "course-b", "B 귀청소90", options.belowThreshold ? 10 : 20, false),
-    policy("policy-d", "course-d", "D 2:1 90", 10, true)
+    policy("policy-a", "course-a", "A 누루60", false),
+    policy("policy-b", "course-b", "B 귀청소90", false),
+    policy("policy-d", "course-d", "D 2:1 90", true)
   ];
   const employees = new Map<string, any>([
     ["ops-lead", employee("ops-lead", "OPS-LEAD-001", "팀장", "팀장", 1, "OPERATIONS")],
@@ -81,29 +81,35 @@ function createMemoryPrisma(
     rate("rate-1-b", "thr-1", "course-b", 900000),
     rate("rate-1-d", "thr-1", "course-d", 900000)
   ];
+  // 완료 콜 2건(call-a, call-b) 기준: 평소 임계값은 1/2/3콜, 임계값 미달 시나리오는 3/4/5콜로 둔다.
   const dailyRules = options.missingPolicy
     ? []
-    : [
-        rule("rule-30", 30, 50000),
-        rule("rule-40", 40, 100000),
-        rule("rule-50", 50, 200000),
-        { ...rule("rule-old", 10, 999999), effectiveToMonth: "2026-05" }
-      ];
+    : options.belowThreshold
+      ? [
+          rule("rule-3", 3, 50000),
+          rule("rule-4", 4, 100000),
+          rule("rule-5", 5, 200000),
+          { ...rule("rule-old", 1, 999999), effectiveToMonth: "2026-05" }
+        ]
+      : [
+          rule("rule-1", 1, 50000),
+          rule("rule-2", 2, 100000),
+          rule("rule-3", 3, 200000),
+          { ...rule("rule-old", 1, 999999), effectiveToMonth: "2026-05" }
+        ];
   const payoutConfirmationEvents: any[] = [...(options.seedPayoutConfirmationEvents ?? [])];
 
   function course(id: string, codeValue: string) {
     return { id, code: codeValue, isActive: true, createdAt, updatedAt };
   }
 
-  function policy(id: string, courseId: string, name: string, opsCallCredit: number, requiresSecondTherapist: boolean) {
+  function policy(id: string, courseId: string, name: string, requiresSecondTherapist: boolean) {
     return {
       id,
       courseId,
       name,
       durationMinutes: requiresSecondTherapist ? 90 : 60,
       basePrice: 1500000,
-      opsCallCredit,
-      earcarePoolAmount: 0,
       requiresSecondTherapist,
       tvDisplayName: name,
       effectiveFromMonth: "2026-06",
@@ -321,17 +327,17 @@ function createMemoryPrisma(
 }
 
 describe("listOpsDailyIncentives", () => {
-  it("sums calculated completed opsCallCredit and applies the highest satisfied 30/40/50 threshold to NORMAL operations employees only", async () => {
+  it("counts calculated completed calls and applies the highest satisfied threshold to NORMAL operations employees only", async () => {
     const result = await listOpsDailyIncentives({
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
       prismaClient: createMemoryPrisma()
     });
 
-    assert.equal(result.dailyOpsCallCredit, 40);
+    assert.equal(result.dailyOpsCallCount, 2);
     assert.equal(result.sourceCallCount, 2);
     assert.equal(result.ruleStatus, "applied");
-    assert.equal(result.appliedThresholdCallCount, 40);
+    assert.equal(result.appliedThresholdCallCount, 2);
     assert.equal(result.personalIncentiveAmount, 100000);
     assert.equal(result.eligibleCount, 3);
     assert.equal(result.distributedAmount, 300000);
@@ -352,10 +358,10 @@ describe("listOpsDailyIncentives", () => {
       ]
     );
     assert.deepEqual(
-      result.callEvidence.map((evidence) => [evidence.serviceCallId, evidence.serviceDate, evidence.opsCallCredit]),
+      result.callEvidence.map((evidence) => [evidence.serviceCallId, evidence.serviceDate]),
       [
-        ["call-a", "2026-06-10", 20],
-        ["call-b", "2026-06-10", 20]
+        ["call-a", "2026-06-10"],
+        ["call-b", "2026-06-10"]
       ]
     );
   });
@@ -378,14 +384,14 @@ describe("listOpsDailyIncentives", () => {
     });
   });
 
-  it("returns below_threshold with zero payout when daily ops call credit is under 30", async () => {
+  it("returns below_threshold with zero payout when the daily call count is under the minimum threshold", async () => {
     const result = await listOpsDailyIncentives({
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
       prismaClient: createMemoryPrisma({ belowThreshold: true })
     });
 
-    assert.equal(result.dailyOpsCallCredit, 20);
+    assert.equal(result.dailyOpsCallCount, 2);
     assert.equal(result.ruleStatus, "below_threshold");
     assert.equal(result.appliedThresholdCallCount, null);
     assert.equal(result.personalIncentiveAmount, 0);

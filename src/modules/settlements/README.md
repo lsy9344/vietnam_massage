@@ -6,8 +6,6 @@ Owns daily settlement calculations and payout confirmation events.
 
 - therapist shifts
 - therapist daily settlements
-- earcare attendance
-- earcare daily settlements
 - operations-team attendance
 - operations-team daily incentive
 - operations-team monthly incentive preview
@@ -52,30 +50,6 @@ Owns daily settlement calculations and payout confirmation events.
 - `listTherapistFullAttendanceRecognitions({ operatingMonthId, startDate, endDate })` returns `{ sourceStatus: "available", sourceDayCount, rows: [{ employeeId, fullAttendanceDays }] }` from active attendance rows only. `sourceDayCount` is the distinct `attendanceDate` count of active source rows in range.
 - The monthly closing preview (`monthly-closing-preview-service.ts`) wires this function as its default `listTherapistFullAttendanceRecognitions` dependency, replacing the `missing_story_4_1_source` fallback. Story 5.2 owns the 만근수당 threshold/amount constants (20일 이상 2,000,000 VND); Story 4.1 only provides the recognition-day source.
 
-## Earcare Attendance Service
-
-`listEarcareAttendanceForDate()` and `upsertEarcareAttendance()` own daily earcare attendance input for future earcare daily settlement.
-
-- Persists `EarcareAttendance` by `operatingMonthId + attendanceDate + Employee.id`; display names are never stored as downstream keys.
-- Uses active `CodeItem` rows where `codeType === "ATTENDANCE_STATUS"` for status options and stores only the stable `statusCode`.
-- `NORMAL` or a status code whose display name is `정상` is payout eligible; `DAY_OFF`, `LATE`, `EARLY_LEAVE`, `ABSENT`, and equivalent non-normal codes expose `exclusionReason`.
-- The DTO returned by `listEarcareAttendanceForDate()` is reusable by Story 4.4 and includes `employeeId`, `staffCode`, `displayName`, `statusCode`, `statusDisplayName`, `isPayoutEligible`, `exclusionReason`, and `attendanceDate`.
-- `upsertEarcareAttendance()` blocks `마감확정` and `잠금` operating months plus out-of-range dates before any write.
-- Attendance writes and audit logs are one transaction. Audit actions are `earcare_attendance.created` and `earcare_attendance.changed` with plain JSON snapshots, `payoutImpact: true`, and `reason: "payout_affecting"`.
-
-## Earcare Daily Settlement Service
-
-`listEarcareDailySettlements()` owns the read-only daily payout calculation for earcare staff.
-
-- Uses `listEarcareAttendanceForDate()` as the payout 대상 source; the daily settlement service does not recalculate `isPayoutEligible`, `exclusionReason`, status labels, or stable employee identity.
-- Uses `listCompletedServiceCallCalculationsForDate()` as the earcare pool source and includes only `calculationStatus === "calculated"` completed calls in `earcarePoolTotal`.
-- Warning counts expose excluded service-call rows: `notCompleted`, `coursePolicyMissing`, `therapistRateMissing`, and `secondTherapistRequired`.
-- If one or more earcare workers are `NORMAL` / `정상`, `baseShareAmount = Math.floor(earcarePoolTotal / eligibleCount)`.
-- `remainderAmount` is allocated as 1 VND increments to eligible rows in the deterministic attendance order (`sortOrder`, `staffCode`, then `Employee.id` tie-breaker).
-- If no earcare worker is payout eligible, every row returns `payoutAmount = 0` and `undistributedAmount = earcarePoolTotal`.
-- Locked operating months remain readable; only Story 4.3 attendance mutation is disabled.
-- The service creates no payout persistence, no payout edit action, no audit event, and no monthly close snapshot.
-
 ## Ops Attendance Service
 
 `listOpsAttendanceForDate()` and `upsertOpsAttendance()` own daily operations-team attendance input for daily incentive calculation.
@@ -97,7 +71,7 @@ Owns daily settlement calculations and payout confirmation events.
 
 - For `마감확정` or `잠금` months, `/settlements/operations/monthly` shows the closing domain `getMonthlyClosingSnapshot()` value as `확정 스냅샷` before the current recalculation preview.
 - The monthly incentive preview remains useful for drift inspection, but it is labeled `현재 기준 미리보기` and is not the historical payout source.
-- Uses `listCompletedServiceCallCalculationsForDate()` as the 일 총콜 source and sums only `opsCallCredit` from `calculationStatus === "calculated"` completed calls.
+- Uses `listCompletedServiceCallCalculationsForDate()` as the 일 총콜 source and counts only `calculationStatus === "calculated"` completed calls.
 - Warning counts expose excluded service-call rows: `notCompleted`, `coursePolicyMissing`, `therapistRateMissing`, and `secondTherapistRequired`.
 - Uses active `OpsDailyIncentiveRule` rows effective for `OperatingMonth.monthKey`; the highest satisfied `thresholdCallCount` wins.
 - Seed 기준 thresholds are 30/40/50 calls for 50,000/100,000/200,000 VND personal incentive amounts.
@@ -110,7 +84,7 @@ Owns daily settlement calculations and payout confirmation events.
 
 `listOpsMonthlyIncentivePreview()` owns the read-only operations-team monthly incentive preview.
 
-- Uses `listCompletedServiceCallCalculationsForOperatingMonth()` as the monthly total-call source and sums only calculated completed-call `opsCallCredit`.
+- Uses `listCompletedServiceCallCalculationsForOperatingMonth()` as the monthly total-call source and counts only calculated completed calls.
 - Excluded call rows are surfaced as warning counts: `notCompleted`, `coursePolicyMissing`, `therapistRateMissing`, and `secondTherapistRequired`.
 - Uses active `OpsMonthlyIncentiveRule` rows with effective-month filtering: `effectiveFromMonth <= OperatingMonth.monthKey` and `effectiveToMonth` null or greater than/equal to the month key.
 - The highest satisfied `thresholdCallCount` wins. Seed 기준 thresholds are 1000/1100/1200/1300/1400/1500 calls.
@@ -141,6 +115,6 @@ Owns daily settlement calculations and payout confirmation events.
 
 ## Payout Confirmation and Monthly Statements (tickets 30–32)
 
-- `payout-confirmation-service.ts` owns confirm/reconfirm/release events for Therapist daily, earcare daily, operations daily and operations monthly units (ADR 0004). Calculators pass current amounts; `attachPayoutConfirmationsToRows()` adds the event-derived state consistently. Existing confirmed units remain visible at 0 when calculations or active staff rows disappear, so reconfirmation and closing checks still see differences.
+- `payout-confirmation-service.ts` owns confirm/reconfirm/release events for Therapist daily, operations daily and operations monthly units (ADR 0004). Calculators pass current amounts; `attachPayoutConfirmationsToRows()` adds the event-derived state consistently. Existing confirmed units remain visible at 0 when calculations or active staff rows disappear, so reconfirmation and closing checks still see differences.
 - `monthly-statement-service.ts` lives in `../closing/`: it composes settlement calculations with immutable closing snapshots, downstream of settlements. Draft/review months default to current unconfirmed calculations, including reopened months; explicit earlier versions remain selectable. Confirmed/locked months require a snapshot. Historical versions never acquire newly calculated evidence.
 - The read-only planned-work lookup and status vocabulary live in `../masters/planned-working-day-query.ts`. Schedule mutations stay here and ask calls for day-off impact. This prevents availability lookup from importing the schedule mutation service.

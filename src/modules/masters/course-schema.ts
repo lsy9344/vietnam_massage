@@ -8,40 +8,25 @@ export type DefaultCourseSeed = {
   name: string;
   durationMinutes: number;
   basePrice: number;
-  opsCallCredit: number;
-  earcarePoolAmount: number;
   requiresSecondTherapist: boolean;
   tvDisplayName: string;
 };
 
+// B코스(ADR 0006)와 E코스(스펙 D8)는 지금 하지 않아 기본 시드에서 뺐다. 다시 하려면 코스 기준정보의 "다시 사용"으로 켠다.
 export const defaultCourseSeeds: DefaultCourseSeed[] = [
   {
     code: "A",
     name: "60분 A코스 누루마사지",
     durationMinutes: 60,
     basePrice: 1500000,
-    opsCallCredit: 1,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: false,
     tvDisplayName: "A 누루60"
-  },
-  {
-    code: "B",
-    name: "90분 B코스 귀청소+마사지",
-    durationMinutes: 90,
-    basePrice: 1800000,
-    opsCallCredit: 1,
-    earcarePoolAmount: 100000,
-    requiresSecondTherapist: false,
-    tvDisplayName: "B 귀청소90"
   },
   {
     code: "C",
     name: "90분 C코스 때밀이+마사지",
     durationMinutes: 90,
     basePrice: 2000000,
-    opsCallCredit: 1,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: false,
     tvDisplayName: "C 때밀이90"
   },
@@ -50,20 +35,8 @@ export const defaultCourseSeeds: DefaultCourseSeed[] = [
     name: "90분 D코스 2:1 코스",
     durationMinutes: 90,
     basePrice: 3200000,
-    opsCallCredit: 1,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: true,
     tvDisplayName: "D 2:1 90"
-  },
-  {
-    code: "E",
-    name: "120분 E코스 풀코스 패키지",
-    durationMinutes: 120,
-    basePrice: 3000000,
-    opsCallCredit: 1,
-    earcarePoolAmount: 100000,
-    requiresSecondTherapist: false,
-    tvDisplayName: "E 풀코스120"
   }
 ];
 
@@ -99,10 +72,6 @@ const positiveIntSchema = z.coerce
   .number({ error: "숫자를 입력하세요." })
   .int("정수여야 합니다.")
   .min(1, "1 이상이어야 합니다.");
-const nonNegativeIntSchema = z.coerce
-  .number({ error: "숫자를 입력하세요." })
-  .int("정수여야 합니다.")
-  .min(0, "0 이상이어야 합니다.");
 const shareSchema = z.coerce
   .number({ error: "분배율은 숫자여야 합니다." })
   .min(0, "분배율은 0 이상이어야 합니다.")
@@ -128,8 +97,6 @@ const coursePolicyBaseSchema = z.object({
   name: z.string().trim().min(1, "코스명을 입력하세요.").max(100, "코스명은 100자 이하여야 합니다."),
   durationMinutes: positiveIntSchema,
   basePrice: moneySchema,
-  opsCallCredit: nonNegativeIntSchema,
-  earcarePoolAmount: moneySchema,
   requiresSecondTherapist: booleanSchema,
   tvDisplayName: z.string().trim().min(1, "TV 표시명을 입력하세요.").max(40, "TV 표시명은 40자 이하여야 합니다."),
   effectiveFromMonth: monthSchema,
@@ -145,6 +112,27 @@ export const updateCoursePolicySchema = coursePolicyBaseSchema.omit({ courseId: 
 export const deactivateCourseSchema = z.object({
   courseId: idSchema
 });
+
+// 코스 다시 사용(스펙 D9). 그달 정책이 없을 때만 policy를 함께 받는다.
+export const coursePolicyFieldsSchema = coursePolicyBaseSchema.omit({ courseId: true }).superRefine(validateMonthRange);
+
+export const reactivateCourseSchema = z.object({
+  courseId: idSchema,
+  policy: coursePolicyFieldsSchema.optional()
+});
+
+// 새 코스 추가(스펙 D9): 코드와 첫 정책. 코드는 대문자로 맞춘다. A–E 밖의 코드도 받지만 정산·마감·대시보드의
+// 코스별 칸과 대시보드 코스 비율은 A–E만 센다(정산·마감의 직원 합계에는 들어간다).
+export const createCourseSchema = coursePolicyBaseSchema
+  .omit({ courseId: true })
+  .extend({
+    code: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z0-9]{1,4}$/, "코스 코드는 영문 대문자·숫자 1–4자여야 합니다.")
+  })
+  .superRefine(validateMonthRange);
 
 const therapistCourseRateBaseSchema = z.object({
   therapistId: idSchema,

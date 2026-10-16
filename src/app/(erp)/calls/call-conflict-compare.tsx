@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PanelSection } from "@/app/(erp)/settlements/settlement-parts";
 import { useT } from "@/lib/i18n/client";
@@ -11,7 +11,7 @@ import { draftFromRow, type CallRowDraft } from "@/app/(erp)/calls/call-row-save
 
 type Translate = (key: MessageKey, values?: Record<string, string | number>) => string;
 
-/** 원장의 열 순서(CALL_GRID_COLUMNS, editable-call-grid.tsx)와 같은 표시 라벨 key. */
+/** 편집 패널의 칸 라벨(call-edit-panel.tsx)과 같은 표시 라벨 key. */
 const FIELD_LABEL_KEY: Record<EditableCallField, MessageKey> = {
   startTime: "calls.column.time",
   actualEntryTime: "calls.column.actualEntry",
@@ -21,7 +21,6 @@ const FIELD_LABEL_KEY: Record<EditableCallField, MessageKey> = {
   customerId: "calls.column.customer",
   therapist1Id: "calls.column.therapist1",
   therapist2Id: "calls.column.therapist2",
-  earcareEmployeeId: "calls.column.earcare",
   status: "calls.column.reservationStatus",
   discountTypeCode: "calls.column.discountType",
   paymentMethodCode: "calls.column.paymentMethod",
@@ -66,8 +65,6 @@ function fieldValue(
       return optionLabel(options.therapists, draft.therapist1Id) ?? "-";
     case "therapist2Id":
       return optionLabel(options.therapists, draft.therapist2Id) ?? "-";
-    case "earcareEmployeeId":
-      return optionLabel(options.earcareEmployees, draft.earcareEmployeeId) ?? "-";
     case "status":
       return optionLabel(options.statuses, draft.status) ?? draft.status;
     case "discountTypeCode":
@@ -124,63 +121,6 @@ export type CallConflictCompareData = {
   /** "최신 내용으로 다시 불러오기": 초안을 최신 행으로 바꾼다. */
   onReloadLatest: () => void;
 };
-
-type CallConflictRegistry = Record<string, CallConflictCompareData>;
-
-const CallConflictWriterContext = createContext<{
-  register: (compare: CallConflictCompareData) => void;
-  unregister: (rowId: string) => void;
-} | null>(null);
-
-const CallConflictReaderContext = createContext<CallConflictRegistry>({});
-
-/**
- * 원장 행(editable-call-grid.tsx)이 저장 충돌 상태(conflict)인 동안 자기 비교 데이터를 등록한다.
- * 콜 상세 패널은 같은 콜 id로 이 등록을 읽어 비교 화면을 그린다(useUnsavedGuard와 같은 등록 방식,
- * 티켓 18). conflict가 null이면(충돌이 아니면) 등록을 지운다.
- */
-export function useRegisterCallConflict(compare: CallConflictCompareData | null) {
-  const api = useContext(CallConflictWriterContext);
-  useEffect(() => {
-    if (!api || !compare) return;
-    api.register(compare);
-    return () => api.unregister(compare.rowId);
-  }, [api, compare]);
-}
-
-/** 원장 화면을 감싼다(call-ledger-workspace.tsx). 등록된 비교 데이터를 콜 id로 읽을 수 있게 한다. */
-export function CallConflictProvider({ children }: { children: ReactNode }) {
-  const [registry, setRegistry] = useState<CallConflictRegistry>({});
-
-  const register = useCallback((compare: CallConflictCompareData) => {
-    setRegistry((current) => (current[compare.rowId] === compare ? current : { ...current, [compare.rowId]: compare }));
-  }, []);
-  const unregister = useCallback((rowId: string) => {
-    setRegistry((current) => {
-      if (!(rowId in current)) return current;
-      const next = { ...current };
-      delete next[rowId];
-      return next;
-    });
-  }, []);
-  // register/unregister는 이미 안정적이지만(useCallback([])), 이 객체 리터럴은 렌더마다 새로 생겨
-  // Context 소비자(useRegisterCallConflict)의 effect가 "api"가 바뀐 걸로 보고 매 렌더 다시 돌아
-  // register를 또 부르고 → setRegistry → 다시 렌더 → ... 무한 루프가 났었다. useMemo로 참조를 고정한다.
-  const api = useMemo(() => ({ register, unregister }), [register, unregister]);
-
-  return (
-    <CallConflictWriterContext.Provider value={api}>
-      <CallConflictReaderContext.Provider value={registry}>{children}</CallConflictReaderContext.Provider>
-    </CallConflictWriterContext.Provider>
-  );
-}
-
-/** 지금 콜 상세 패널에 열린 콜의 비교 데이터. 그 콜이 충돌 상태가 아니면 null이다. */
-export function useCallConflict(rowId: string | null): CallConflictCompareData | null {
-  const registry = useContext(CallConflictReaderContext);
-  if (!rowId) return null;
-  return registry[rowId] ?? null;
-}
 
 const cellClassName = "border-b border-border px-3 py-2 align-top";
 
@@ -291,10 +231,10 @@ export function CallConflictCompareFields({
 
 /**
  * 저장 충돌 비교(스펙 B07, 스토리 39-43, 티켓 17, S2로 교정). 스펙 321줄 "저장 충돌 비교 | 콜 상세
- * 패널의 충돌 상태 | 패널"대로, 이미 비모달로 열려 있는 콜 상세 패널(SidePanel) 안의 한 구역일 뿐이다.
+ * 패널의 충돌 상태 | 패널"대로, 이미 비모달로 열려 있는 편집 패널(SidePanel) 안의 한 구역일 뿐이다.
  * 포커스를 가두거나 배경을 비활성화하지 않는다(design.md 6.11: ModalPanel은 빠른 예약 같은 생성
  * 흐름에만 쓴다) — 그래서 이 구역이 열려 있는 동안에도 원장의 다른 행을 그대로 다룰 수 있다. 성공
- * (다시 반영/다시 불러오기)하면 이 콜이 더 이상 충돌 상태가 아니게 되어 부르는 쪽(CallDetailPanel)이
+ * (다시 반영/다시 불러오기)하면 이 콜이 더 이상 충돌 상태가 아니게 되어 부르는 쪽(CallEditPanel)이
  * 이 구역을 치운다. 패널 전체를 닫는 것은 그 패널 자신의 닫기 버튼이 하므로 여기에는 없다.
  */
 export function CallConflictCompare({

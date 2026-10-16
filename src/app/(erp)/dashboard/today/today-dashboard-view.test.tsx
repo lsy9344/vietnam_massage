@@ -29,18 +29,16 @@ function metrics(overrides: Partial<TodayDashboardMetricsDto> = {}): TodayDashbo
       netSales: 10_400_000,
       discountTotal: 300_000,
       expenseTotal: 500_000,
-      earcarePoolTotal: 200_000,
-      earcarePayoutTotal: 200_000,
       opsDailyIncentiveTotal: 300_000,
       opsMonthlyIncentiveTotal: 0,
       fullAttendanceAllowanceTotal: 0,
       countKingBonusTotal: 0,
       therapistCommissionTotal: 3_900_000,
       therapistPayoutTotal: 3_900_000,
-      dailyCostTotal: 4_900_000,
+      dailyCostTotal: 4_700_000,
       monthlyCostTotal: 0,
-      settlementPayoutTotal: 4_400_000,
-      netProfit: 6_000_000
+      settlementPayoutTotal: 4_200_000,
+      netProfit: 6_200_000
     },
     therapistSummary: {
       totalAssignedCallCount: 3,
@@ -127,12 +125,12 @@ describe("오늘 대시보드", () => {
 
     // 매출 계열은 라벤더, 비용 계열은 피치(design.md 2.3). 순이익과 비용 합계를 한 값처럼 칠하지 않는다.
     assert.match(money, /bg-accent-lavender"><dt[^>]*>결제합계<\/dt><dd[^>]*>10,900,000 <span[^>]*>VND<\/span><\/dd><dd[^>]*>할인합계 300,000 VND<\/dd>/);
-    assert.match(money, /bg-accent-lavender"><dt[^>]*>순이익<\/dt><dd[^>]*>6,000,000 <span[^>]*>VND<\/span>/);
-    assert.match(money, /bg-accent-peach"><dt[^>]*>일일비용 합계<\/dt><dd[^>]*>4,900,000 <span[^>]*>VND<\/span>/);
+    assert.match(money, /bg-accent-lavender"><dt[^>]*>순이익<\/dt><dd[^>]*>6,200,000 <span[^>]*>VND<\/span>/);
+    assert.match(money, /bg-accent-peach"><dt[^>]*>일일비용 합계<\/dt><dd[^>]*>4,700,000 <span[^>]*>VND<\/span>/);
     // 일일비용 합계를 이루는 금액은 카드가 아니라 목록이다.
     assert.equal(
       text(card(html, "일일비용 내역")),
-      "일일비용 내역 지출합계 500,000 VND 마사지사 정산 3,900,000 VND 귀케어 정산 200,000 VND 일일인센 합계 300,000 VND"
+      "일일비용 내역 지출합계 500,000 VND 마사지사 정산 3,900,000 VND 일일인센 합계 300,000 VND"
     );
     assert.equal(money.match(/bg-accent-/g)?.length, 3);
     // 현금·계좌 잔액은 하루 수납·지출 탭에만 있다(명세 F08 기준 5).

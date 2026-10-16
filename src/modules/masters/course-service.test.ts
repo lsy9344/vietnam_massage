@@ -9,7 +9,9 @@ import {
 } from "@/modules/masters/course-schema";
 import {
   CourseDomainError,
+  createCourse,
   createCoursePolicy,
+  currentCourseMonthKey,
   createOpsDailyIncentiveRule,
   createTherapistCourseRate,
   deactivateCourse,
@@ -17,9 +19,11 @@ import {
   ensureDefaultCoursesAndPolicies,
   getCoursePolicyForMonth,
   getTherapistCourseRateForMonth,
+  listActiveCourses,
   listCourses,
   listOpsDailyIncentiveRulesForMonth,
   listOpsMonthlyIncentiveRulesForMonth,
+  reactivateCourse,
   updateCoursePolicy,
   updateOpsDailyIncentiveRule,
   updateOpsMonthlyIncentiveRule
@@ -173,8 +177,6 @@ describe("course schema", () => {
         name: course.name,
         durationMinutes: course.durationMinutes,
         basePrice: course.basePrice,
-        opsCallCredit: course.opsCallCredit,
-        earcarePoolAmount: course.earcarePoolAmount,
         requiresSecondTherapist: course.requiresSecondTherapist,
         tvDisplayName: course.tvDisplayName
       })),
@@ -184,28 +186,14 @@ describe("course schema", () => {
           name: "60분 A코스 누루마사지",
           durationMinutes: 60,
           basePrice: 1500000,
-          opsCallCredit: 1,
-          earcarePoolAmount: 0,
           requiresSecondTherapist: false,
           tvDisplayName: "A 누루60"
-        },
-        {
-          code: "B",
-          name: "90분 B코스 귀청소+마사지",
-          durationMinutes: 90,
-          basePrice: 1800000,
-          opsCallCredit: 1,
-          earcarePoolAmount: 100000,
-          requiresSecondTherapist: false,
-          tvDisplayName: "B 귀청소90"
         },
         {
           code: "C",
           name: "90분 C코스 때밀이+마사지",
           durationMinutes: 90,
           basePrice: 2000000,
-          opsCallCredit: 1,
-          earcarePoolAmount: 0,
           requiresSecondTherapist: false,
           tvDisplayName: "C 때밀이90"
         },
@@ -214,20 +202,8 @@ describe("course schema", () => {
           name: "90분 D코스 2:1 코스",
           durationMinutes: 90,
           basePrice: 3200000,
-          opsCallCredit: 1,
-          earcarePoolAmount: 0,
           requiresSecondTherapist: true,
           tvDisplayName: "D 2:1 90"
-        },
-        {
-          code: "E",
-          name: "120분 E코스 풀코스 패키지",
-          durationMinutes: 120,
-          basePrice: 3000000,
-          opsCallCredit: 1,
-          earcarePoolAmount: 100000,
-          requiresSecondTherapist: false,
-          tvDisplayName: "E 풀코스120"
         }
       ]
     );
@@ -246,8 +222,6 @@ describe("course schema", () => {
       name: "",
       durationMinutes: "0",
       basePrice: "-1",
-      opsCallCredit: "-1",
-      earcarePoolAmount: "-1",
       requiresSecondTherapist: "maybe",
       tvDisplayName: "",
       effectiveFromMonth: "2026-6",
@@ -284,15 +258,15 @@ describe("course service", () => {
     const dailyRules = await listOpsDailyIncentiveRulesForMonth({ monthKey: "2026-05", prismaClient });
     const monthlyRules = await listOpsMonthlyIncentiveRulesForMonth({ monthKey: "2026-05", prismaClient });
 
-    assert.equal(first.coursesCreated, 5);
-    assert.equal(first.coursePoliciesCreated, 5);
-    assert.equal(first.therapistRatesCreated, 250);
+    assert.equal(first.coursesCreated, 3);
+    assert.equal(first.coursePoliciesCreated, 3);
+    assert.equal(first.therapistRatesCreated, 150);
     assert.equal(first.opsDailyRulesCreated, 3);
     assert.equal(first.opsMonthlyRulesCreated, 6);
     assert.equal(second.coursesCreated + second.coursePoliciesCreated + second.therapistRatesCreated, 0);
-    assert.equal(courses.length, 5);
+    assert.deepEqual(courses.map((course) => course.code), ["A", "C", "D"]);
     assert.equal(courses.find((course) => course.code === "D")?.currentPolicy?.requiresSecondTherapist, true);
-    assert.equal(prismaClient.therapistRates.size, 250);
+    assert.equal(prismaClient.therapistRates.size, 150);
     assert.deepEqual(
       dailyRules.map((rule) => [rule.thresholdCallCount, rule.personalAmount]),
       [
@@ -312,7 +286,24 @@ describe("course service", () => {
         [1500, 25000000, 0.3, 0.35, 0.35]
       ]
     );
-    assert.equal(prismaClient.auditEvents.filter((event: any) => event.action === "course.created").length, 5);
+    assert.equal(prismaClient.auditEvents.filter((event: any) => event.action === "course.created").length, 3);
+  });
+
+  // E코스는 지금 하지 않는다(스펙 D8). 기본 시드가 만들지 않고, 비활성으로 둔 코스를 다시 켜지 않는다.
+  it("does not seed course E and never turns an inactive course back on", async () => {
+    const prismaClient = createMemoryPrisma();
+    prismaClient.seedTherapists();
+    prismaClient.seedOperatingMonth();
+    await ensureDefaultCoursesAndPolicies({ actorId: "admin-1", prismaClient });
+    const courseC = (await listCourses({ monthKey: "2026-06", prismaClient })).find((course) => course.code === "C");
+    assert.ok(courseC);
+    await deactivateCourse({ actorId: "admin-1", courseId: courseC.id, prismaClient });
+
+    const again = await ensureDefaultCoursesAndPolicies({ actorId: "admin-1", prismaClient });
+    const courses = await listCourses({ monthKey: "2026-06", prismaClient });
+    assert.equal(again.coursesCreated, 0);
+    assert.equal(courses.find((course) => course.code === "C")?.isActive, false);
+    assert.equal(courses.some((course) => course.code === "E"), false);
   });
 
   it("preserves stable Course.id and Course.code when display and price policy changes", async () => {
@@ -329,8 +320,6 @@ describe("course service", () => {
       name: before.currentPolicy.name,
       durationMinutes: before.currentPolicy.durationMinutes,
       basePrice: before.currentPolicy.basePrice,
-      opsCallCredit: before.currentPolicy.opsCallCredit,
-      earcarePoolAmount: before.currentPolicy.earcarePoolAmount,
       requiresSecondTherapist: before.currentPolicy.requiresSecondTherapist,
       tvDisplayName: before.currentPolicy.tvDisplayName,
       effectiveFromMonth: before.currentPolicy.effectiveFromMonth,
@@ -343,8 +332,6 @@ describe("course service", () => {
       name: "60분 A코스 새 표시명",
       durationMinutes: 60,
       basePrice: 1600000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: false,
       tvDisplayName: "A 새표시",
       effectiveFromMonth: "2026-07",
@@ -364,7 +351,7 @@ describe("course service", () => {
     prismaClient.seedTherapists();
     prismaClient.seedOperatingMonth();
     await ensureDefaultCoursesAndPolicies({ actorId: "admin-1", prismaClient });
-    const course = (await listCourses({ monthKey: "2026-06", prismaClient })).find((item) => item.code === "B");
+    const course = (await listCourses({ monthKey: "2026-06", prismaClient })).find((item) => item.code === "C");
     assert.ok(course?.currentPolicy);
 
     await updateCoursePolicy({
@@ -373,8 +360,6 @@ describe("course service", () => {
       name: course.currentPolicy.name,
       durationMinutes: course.currentPolicy.durationMinutes,
       basePrice: course.currentPolicy.basePrice,
-      opsCallCredit: course.currentPolicy.opsCallCredit,
-      earcarePoolAmount: course.currentPolicy.earcarePoolAmount,
       requiresSecondTherapist: course.currentPolicy.requiresSecondTherapist,
       tvDisplayName: course.currentPolicy.tvDisplayName,
       effectiveFromMonth: "2026-06",
@@ -384,13 +369,11 @@ describe("course service", () => {
     await createCoursePolicy({
       actorId: "admin-1",
       courseId: course.id,
-      name: "90분 B코스 새 정책",
+      name: "90분 C코스 새 정책",
       durationMinutes: 90,
       basePrice: 1900000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 100000,
       requiresSecondTherapist: false,
-      tvDisplayName: "B 새정책",
+      tvDisplayName: "C 새정책",
       effectiveFromMonth: "2026-07",
       effectiveToMonth: null,
       prismaClient
@@ -398,7 +381,7 @@ describe("course service", () => {
 
     const june = await getCoursePolicyForMonth({ courseId: course.id, monthKey: "2026-06", prismaClient });
     const july = await getCoursePolicyForMonth({ courseId: course.id, monthKey: "2026-07", prismaClient });
-    assert.equal(june.basePrice, 1800000);
+    assert.equal(june.basePrice, 2000000);
     assert.equal(july.basePrice, 1900000);
     await assert.rejects(
       () =>
@@ -408,8 +391,6 @@ describe("course service", () => {
           name: "겹침",
           durationMinutes: 90,
           basePrice: 2000000,
-          opsCallCredit: 1,
-          earcarePoolAmount: 0,
           requiresSecondTherapist: false,
           tvDisplayName: "겹침",
           effectiveFromMonth: "2026-07",
@@ -435,8 +416,6 @@ describe("course service", () => {
           name: "확정월 변경",
           durationMinutes: 60,
           basePrice: 1500000,
-          opsCallCredit: 1,
-          earcarePoolAmount: 0,
           requiresSecondTherapist: false,
           tvDisplayName: "A60",
           effectiveFromMonth: "2026-06",
@@ -477,8 +456,6 @@ describe("course service", () => {
       name: "미래월 정책",
       durationMinutes: 60,
       basePrice: 1600000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: false,
       tvDisplayName: "A 미래",
       effectiveFromMonth: "2026-07",
@@ -533,7 +510,7 @@ describe("course service", () => {
     prismaClient.seedTherapists();
     prismaClient.seedOperatingMonth();
     await ensureDefaultCoursesAndPolicies({ actorId: "admin-1", prismaClient });
-    const course = (await listCourses({ monthKey: "2026-06", prismaClient })).find((item) => item.code === "E");
+    const course = (await listCourses({ monthKey: "2026-06", prismaClient })).find((item) => item.code === "C");
     assert.ok(course);
     const existing = await getTherapistCourseRateForMonth({
       therapistId: "thr-001",
@@ -636,6 +613,136 @@ describe("course service", () => {
     assert.equal(deactivationEvents.length, 1);
     assert.equal(JSON.stringify(deactivationEvents[0].afterValue).includes("2026-06-08T"), false);
     assert.ok(!(deactivationEvents[0].afterValue instanceof Date));
+  });
+
+  const june = new Date("2026-06-15T05:00:00.000Z");
+
+  // 코스 다시 사용(스펙 D9): 비활성 코스를 다시 켠다. 그달 정책이 있으면 그대로 쓰고, 없으면 정책을 함께 받는다.
+  it("turns an inactive course back on with its policy for the month, once, with an audit record", async () => {
+    const prismaClient = createMemoryPrisma();
+    prismaClient.seedTherapists();
+    prismaClient.seedOperatingMonth();
+    await ensureDefaultCoursesAndPolicies({ actorId: "admin-1", prismaClient });
+    const courseC = (await listCourses({ monthKey: "2026-06", prismaClient })).find((course) => course.code === "C");
+    assert.ok(courseC);
+    await deactivateCourse({ actorId: "admin-1", courseId: courseC.id, prismaClient });
+    assert.equal((await listActiveCourses({ monthKey: "2026-06", prismaClient })).some((course) => course.code === "C"), false);
+
+    const after = await reactivateCourse({ actorId: "admin-2", courseId: courseC.id, now: june, prismaClient });
+    await reactivateCourse({ actorId: "admin-2", courseId: courseC.id, now: june, prismaClient });
+
+    assert.equal(after.isActive, true);
+    assert.equal(after.currentPolicy?.name, "90분 C코스 때밀이+마사지");
+    assert.equal((await listActiveCourses({ monthKey: "2026-06", prismaClient })).some((course) => course.code === "C"), true);
+    const events = prismaClient.auditEvents.filter((event: any) => event.action === "course.reactivated");
+    assert.equal(events.length, 1);
+    assert.equal(events[0].actorId, "admin-2");
+    assert.equal(events[0].beforeValue.isActive, false);
+    assert.equal(events[0].afterValue.isActive, true);
+  });
+
+  // 그달은 오늘(Asia/Ho_Chi_Minh)이 속한 달이다. 화면의 기준 적용월(가장 이른 운영월)이 마감확정이어도 이번 달 정책으로 켠다.
+  it("checks the policy for the month of today, not the earliest operating month that may already be closed", async () => {
+    const prismaClient = createMemoryPrisma();
+    prismaClient.seedOperatingMonth("2026-06", "마감확정");
+    prismaClient.seedOperatingMonth("2026-10", "작성중");
+    const courseB = await prismaClient.course.create({ data: { code: "B", isActive: false } });
+    const october = new Date("2026-10-16T05:00:00.000Z");
+    const policy = { name: "90분 B코스", durationMinutes: 90, basePrice: 1800000, requiresSecondTherapist: false, tvDisplayName: "B 90", effectiveFromMonth: "2026-10", effectiveToMonth: null };
+
+    const after = await reactivateCourse({ actorId: "admin-1", courseId: courseB.id, policy, now: october, prismaClient });
+
+    assert.equal(after.isActive, true);
+    assert.equal(after.currentPolicy?.effectiveFromMonth, "2026-10");
+    assert.equal(currentCourseMonthKey(october), "2026-10");
+    // 하노이 시각으로 이미 다음 달이면 그달도 다음 달이다.
+    assert.equal(currentCourseMonthKey(new Date("2026-10-31T18:30:00.000Z")), "2026-11");
+  });
+
+  it("asks for a policy when the reactivated course has none for the month, and creates it with the course", async () => {
+    const prismaClient = createMemoryPrisma();
+    prismaClient.seedOperatingMonth("2026-06");
+    const courseB = await prismaClient.course.create({ data: { code: "B", isActive: false } });
+    await prismaClient.coursePolicy.create({
+      data: { courseId: courseB.id, name: "B 옛 정책", durationMinutes: 90, basePrice: 1, requiresSecondTherapist: false, tvDisplayName: "B", effectiveFromMonth: "2026-01", effectiveToMonth: "2026-05", isActive: true }
+    });
+
+    await assert.rejects(
+      () => reactivateCourse({ actorId: "admin-1", courseId: courseB.id, now: june, prismaClient }),
+      (error) => error instanceof CourseDomainError && error.code === "COURSE_POLICY_REQUIRED"
+    );
+    assert.equal(prismaClient.courses.get(courseB.id).isActive, false);
+
+    // 준 정책이 그달을 덮지 않으면 여전히 받지 않는다.
+    const policy = { name: "90분 B코스", durationMinutes: 90, basePrice: 1800000, requiresSecondTherapist: false, tvDisplayName: "B 90", effectiveFromMonth: "2026-07", effectiveToMonth: null };
+    await assert.rejects(
+      () => reactivateCourse({ actorId: "admin-1", courseId: courseB.id, policy, now: june, prismaClient }),
+      (error) => error instanceof CourseDomainError && error.code === "COURSE_POLICY_REQUIRED"
+    );
+
+    const after = await reactivateCourse({ actorId: "admin-1", courseId: courseB.id, policy: { ...policy, effectiveFromMonth: "2026-06" }, now: june, prismaClient });
+    assert.equal(after.isActive, true);
+    assert.equal(after.currentPolicy?.name, "90분 B코스");
+    assert.equal(after.currentPolicy?.basePrice, 1800000);
+    assert.deepEqual(
+      prismaClient.auditEvents.map((event: any) => event.action).filter((action: string) => action.startsWith("course.")),
+      ["course.policy_changed", "course.reactivated"]
+    );
+  });
+
+  // 새 코스 추가(스펙 D9): 코드(중복 거절), 이름, 시간, 가격, 2인 여부와 첫 정책을 한 번에 만든다.
+  it("adds a new course with its first policy and rejects a code that already exists, active or not", async () => {
+    const prismaClient = createMemoryPrisma();
+    prismaClient.seedTherapists();
+    prismaClient.seedOperatingMonth();
+    await ensureDefaultCoursesAndPolicies({ actorId: "admin-1", prismaClient });
+    await prismaClient.course.create({ data: { code: "E", isActive: false } });
+    const input = { name: "75분 F코스", durationMinutes: 75, basePrice: 1700000, requiresSecondTherapist: true, tvDisplayName: "F 75", effectiveFromMonth: "2026-06", effectiveToMonth: null };
+
+    const created = await createCourse({ actorId: "admin-1", code: " f ", ...input, now: june, prismaClient });
+
+    assert.equal(created.code, "F");
+    assert.equal(created.isActive, true);
+    assert.equal(created.currentPolicy?.durationMinutes, 75);
+    assert.equal(created.currentPolicy?.requiresSecondTherapist, true);
+    const active = await listActiveCourses({ monthKey: "2026-06", prismaClient });
+    assert.deepEqual(active.map((course) => course.code), ["A", "C", "D", "F"]);
+    const courseEvents = prismaClient.auditEvents.filter((event: any) => event.targetId === created.id || event.targetId === created.currentPolicy?.id);
+    assert.deepEqual(courseEvents.map((event: any) => event.action), ["course.created", "course.policy_changed"]);
+
+    for (const code of ["A", "e", "F"]) {
+      await assert.rejects(
+        () => createCourse({ actorId: "admin-1", code, ...input, prismaClient }),
+        (error) => error instanceof CourseDomainError && error.code === "COURSE_CODE_DUPLICATE"
+      );
+    }
+    await assert.rejects(
+      () => createCourse({ actorId: "admin-1", code: "F-1", ...input, prismaClient }),
+      (error) => error instanceof CourseDomainError && error.code === "INVALID_COURSE_INPUT"
+    );
+    assert.equal([...prismaClient.courses.values()].filter((course: any) => course.code.startsWith("F")).length, 1);
+  });
+
+  it("does not add a course whose first policy overlaps a locked month", async () => {
+    const prismaClient = createMemoryPrisma();
+    prismaClient.seedOperatingMonth("2026-06", "마감확정");
+    await assert.rejects(
+      () =>
+        createCourse({
+          actorId: "admin-1",
+          code: "G",
+          name: "G",
+          durationMinutes: 60,
+          basePrice: 0,
+          requiresSecondTherapist: false,
+          tvDisplayName: "G",
+          effectiveFromMonth: "2026-06",
+          effectiveToMonth: null,
+          prismaClient
+        }),
+      (error) => error instanceof CourseDomainError && error.code === "OPERATING_MONTH_LOCKED"
+    );
+    assert.equal(prismaClient.courses.size, 0);
   });
 
   it("returns domain errors instead of silently assuming missing policy values", async () => {

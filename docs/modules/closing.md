@@ -15,7 +15,6 @@ The closing module owns monthly close workflow and payout snapshots:
 - full-attendance bonus
 - monthly ranking bonus
 - operations-team incentive summary
-- earcare payout summary
 - close confirmation
 - close lock and reopen policy
 

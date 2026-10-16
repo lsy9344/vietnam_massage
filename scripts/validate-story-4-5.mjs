@@ -33,8 +33,8 @@ function readJson(path) {
 ].forEach(requireFile);
 
 const packageJson = readJson("package.json");
-if (!packageJson.scripts?.lint?.includes("validate-story-4-4.mjs && node scripts/validate-story-4-5.mjs")) {
-  errors.push("package.json lint script must run scripts/validate-story-4-5.mjs immediately after validate-story-4-4.mjs");
+if (!packageJson.scripts?.lint?.includes("validate-story-4-2.mjs && node scripts/validate-story-4-5.mjs")) {
+  errors.push("package.json lint script must run scripts/validate-story-4-5.mjs immediately after validate-story-4-2.mjs");
 }
 
 const schema = read("prisma/schema.prisma");
@@ -108,8 +108,7 @@ for (const required of [
   "listCompletedServiceCallCalculationsForDate",
   "listServiceCallsForDate",
   "opsDailyIncentiveRule",
-  "dailyOpsCallCredit",
-  "calculation.opsCallCredit",
+  "dailyOpsCallCount",
   "ruleStatus",
   "missing_policy",
   "below_threshold",
@@ -211,8 +210,8 @@ for (const required of [
 
 const incentiveTest = read("src/modules/settlements/ops-daily-incentive-service.test.ts");
 for (const required of [
-  "opsCallCredit",
-  "highest satisfied 30/40/50 threshold",
+  "dailyOpsCallCount",
+  "highest satisfied threshold",
   "below_threshold",
   "missing_policy",
   "notCompleted",
@@ -232,8 +231,8 @@ for (const required of [
   "/settlements/operations?operatingMonthId",
   "운영팀 근무/일일인센",
   "일 총콜",
-  "40콜 이상",
-  "50콜 이상",
+  "3콜 이상",
+  "4콜 이상",
   "30콜 미만",
   "잠긴 운영월입니다",
   "toHaveURL(/\\/calls/)"
@@ -248,7 +247,6 @@ for (const required of [
   "listOpsAttendanceForDate",
   "upsertOpsAttendance",
   "listOpsDailyIncentives",
-  "opsCallCredit",
   "OpsDailyIncentiveRule",
   "highest satisfied",
   "missing_policy",

@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { CallRowSaveStatus, NewCallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
-import { EditableCallGrid } from "@/app/(erp)/calls/editable-call-grid";
+import { CallEditPanel } from "@/app/(erp)/calls/call-edit-panel";
+import { CallLedgerList } from "@/app/(erp)/calls/call-ledger-list";
+import { initialCallRowSave } from "@/app/(erp)/calls/call-row-save";
 import { LocaleProvider } from "@/lib/i18n/client";
 import type { ServiceCallFormOptions, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 
@@ -16,7 +18,6 @@ const options: ServiceCallFormOptions = {
   paymentMethods: [],
   confirmationCodes: [],
   therapists: [{ value: "therapist-1", label: "Therapist 1" }],
-  earcareEmployees: [],
   expenseHandlers: []
 };
 
@@ -38,20 +39,19 @@ const row: ServiceCallRowDto = {
   customerMemo: "지윤",
   therapist1: { id: "therapist-1", displayName: "Therapist 1", staffCode: "THR-001" },
   therapist2: null,
-  earcare: null,
   status: "예약",
   discountTypeCode: null,
   paymentMethodCode: null,
   note: null,
   visitRequest: null,
   confirmationCode: null,
+  partyId: null,
+  partyPosition: null,
   basePrice: 0,
   paymentAmount: 0,
   discountAmount: 0,
   therapist1Commission: 0,
   therapist2Commission: 0,
-  earcarePoolAmount: 0,
-  opsCallCredit: 0,
   calculationStatus: "not_completed",
   calculationErrorCode: null,
   calculationErrorMessage: null,
@@ -82,36 +82,43 @@ function saveStatus(locale: "ko" | "vi", props: Partial<Parameters<typeof CallRo
   );
 }
 
-function cell(markup: string, column: string) {
-  const start = markup.indexOf(`data-call-cell-column="${column}"`);
-  assert.notEqual(start, -1, `${column} 칸이 없다`);
-  return markup.slice(start, markup.indexOf("</td>", start));
-}
-
 function buttons(markup: string) {
   return [...markup.matchAll(/<button[^>]*>([\s\S]*?)<\/button>/g)].map((match) => match[1].replace(/<[^>]+>/g, ""));
 }
 
 describe("call row save status", () => {
-  it("shows a row nobody has edited yet as saved with its save time, in its own cell apart from the warnings", () => {
-    const markup = render(
+  it("shows a call nobody has edited yet as saved with its save time in the panel, and keeps the line's warnings apart", () => {
+    const panel = render(
       "ko",
-      createElement(EditableCallGrid, {
+      createElement(CallEditPanel, {
+        conflict: null,
+        customers: [],
+        focusRequest: null,
         isLocked: false,
-        operatingMonthId: "month-2026-06",
+        onCancel: () => {},
+        onCommit: () => {},
+        onEdit: () => {},
+        onReload: () => {},
+        onRetry: () => {},
+        onSelectCall: () => {},
         options,
+        readOnly: false,
+        row,
         rows: [row],
-        serviceDate: "2026-06-10",
-        showSettlementColumns: false
+        save: initialCallRowSave(row),
+        showSettlementAmounts: false,
+        warningsRow: row
       })
     );
+    const saveState = panel.slice(panel.indexOf("data-save-state"), panel.indexOf("data-save-state") + 600);
+    assert.match(saveState, /data-save-state="idle"/);
+    assert.match(saveState, /저장됨/);
+    assert.match(saveState, /14:28/);
 
-    const saveCell = cell(markup, "calculationStatus");
-    assert.match(saveCell, /저장됨/);
-    assert.match(saveCell, /14:28/);
-    const warningCell = cell(markup, "warnings");
-    assert.match(warningCell, /5:00 예약/);
-    assert.doesNotMatch(warningCell, /저장/);
+    const list = render("ko", createElement(CallLedgerList, { isLocked: false, options, rows: [row], showSettlementAmounts: false }));
+    const warning = list.match(/<button aria-label="경고 1건:[^"]*"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? "";
+    assert.match(warning, /5:00 예약/);
+    assert.doesNotMatch(warning, /저장/);
   });
 
   it("tells saving, saved, failed, and conflict apart by words and by tone", () => {

@@ -61,7 +61,7 @@ describe("WorkflowDockView", () => {
   });
 
   it("marks the zone of the current screen as current", () => {
-    const html = renderDock("administrator", "/settlements/earcare");
+    const html = renderDock("administrator", "/settlements/operations");
 
     assert.deepEqual(
       dockZones(html).filter((zone) => zone.current).map((zone) => zone.label),
@@ -102,12 +102,11 @@ describe("WorkflowDockView", () => {
 
   it("marks the screen you are on in its zone's menu", () => {
     assert.deepEqual(
-      zoneMenu(renderDock("administrator", "/settlements/earcare"), "정산").map((item) => [item.label, item.current]),
+      zoneMenu(renderDock("administrator", "/settlements/operations"), "정산").map((item) => [item.label, item.current]),
       [
         ["근무표", false],
         ["Therapist", false],
-        ["귀케어", true],
-        ["운영팀 일일", false],
+        ["운영팀 일일", true],
         ["운영팀 월", false]
       ]
     );

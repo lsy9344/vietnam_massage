@@ -10,12 +10,6 @@ import {
   type DailyCallLedgerSummaryDto
 } from "@/modules/calls/service-call-service";
 import {
-  listEarcareDailySettlements,
-  type EarcareDailySettlementResultDto,
-  type EarcareDailySettlementRowDto,
-  type EarcareDailySettlementWarningCounts
-} from "@/modules/settlements/earcare-daily-settlement-service";
-import {
   listOpsDailyIncentives,
   type OpsDailyIncentiveResultDto,
   type OpsDailyIncentiveRowDto,
@@ -75,9 +69,6 @@ export type MonthlyClosingPreviewWarningCounts = {
   opsDaily: OpsDailyIncentiveWarningCounts;
   opsMonthly: OpsMonthlyIncentiveWarningCounts;
   opsWarningMessageCount: number;
-  earcare: EarcareDailySettlementWarningCounts;
-  earcareNormalStaffZeroDays: number;
-  earcareUndistributedDays: number;
   total: number;
 };
 
@@ -122,26 +113,15 @@ export type MonthlyClosingOperationsRowDto = {
   monthlyCalculationBasis: string | null;
 };
 
-export type MonthlyClosingEarcareRowDto = {
-  employeeId: string;
-  staffCode: string;
-  displayName: string;
-  eligibleDayCount: number;
-  payoutAmount: number;
-  calculationBasis: string;
-};
-
 export type MonthlyClosingFinancialsDto = {
   paymentTotal: number;
   netSales: number;
   discountTotal: number;
   expenseTotal: number;
-  earcarePoolTotal: number;
   therapistCommissionTotal: number;
 };
 
 export type MonthlyClosingDashboardFinancialsDto = MonthlyClosingFinancialsDto & {
-  earcarePayoutTotal: number;
   opsDailyIncentiveTotal: number;
   opsMonthlyIncentiveTotal: number;
   fullAttendanceAllowanceTotal: number;
@@ -206,19 +186,11 @@ export type MonthlyClosingPreviewDto = {
     dailyIncentiveAmount: number;
     monthlyIncentiveAmount: number;
     totalOpsPayoutAmount: number;
-    monthlyOpsCallCredit: number;
+    monthlyOpsCallCount: number;
     appliedThresholdCallCount: number | null;
     ruleStatus: OpsMonthlyIncentiveResultDto["ruleStatus"];
     warningMessages: string[];
     rows: MonthlyClosingOperationsRowDto[];
-  };
-  earcare: {
-    earcarePoolTotal: number;
-    distributedAmount: number;
-    undistributedAmount: number;
-    sourceCallCount: number;
-    eligibleDayCount: number;
-    rows: MonthlyClosingEarcareRowDto[];
   };
   financials: MonthlyClosingFinancialsDto;
   dashboardFinancials: MonthlyClosingDashboardFinancialsDto;
@@ -227,7 +199,6 @@ export type MonthlyClosingPreviewDto = {
     therapistPayoutAmount: number;
     opsDailyIncentiveAmount: number;
     opsMonthlyIncentiveAmount: number;
-    earcarePayoutAmount: number;
     grandPayoutAmount: number;
   };
   warningCounts: MonthlyClosingPreviewWarningCounts;
@@ -247,7 +218,6 @@ export type MonthlyClosingPreviewDto = {
       therapist: string[];
       operationsDaily: string[];
       operationsMonthly: string[];
-      earcare: string[];
     };
   };
 };
@@ -269,7 +239,6 @@ export type MonthlyClosingPreviewDependencies = {
   }) => Promise<TherapistFullAttendanceRecognitionResultDto>;
   listOpsDailyIncentives: typeof listOpsDailyIncentives;
   listOpsMonthlyIncentivePreview: typeof listOpsMonthlyIncentivePreview;
-  listEarcareDailySettlements: typeof listEarcareDailySettlements;
   getDailyCallLedgerSummary: typeof getDailyCallLedgerSummary;
   listCompletedServiceCallCalculationsForOperatingMonth: typeof listCompletedServiceCallCalculationsForOperatingMonth;
 };
@@ -306,7 +275,6 @@ const defaultDependencies: MonthlyClosingPreviewDependencies = {
   listTherapistFullAttendanceRecognitions: defaultTherapistFullAttendanceRecognitions,
   listOpsDailyIncentives,
   listOpsMonthlyIncentivePreview,
-  listEarcareDailySettlements,
   getDailyCallLedgerSummary,
   listCompletedServiceCallCalculationsForOperatingMonth
 };
@@ -611,7 +579,7 @@ function aggregateOperations(dailyResults: OpsDailyIncentiveResultDto[], monthly
     dailyIncentiveAmount,
     monthlyIncentiveAmount,
     totalOpsPayoutAmount: dailyIncentiveAmount + monthlyIncentiveAmount,
-    monthlyOpsCallCredit: monthlyResult.monthlyOpsCallCredit,
+    monthlyOpsCallCount: monthlyResult.monthlyOpsCallCount,
     appliedThresholdCallCount: monthlyResult.appliedThresholdCallCount,
     ruleStatus: monthlyResult.ruleStatus,
     warningMessages,
@@ -625,59 +593,6 @@ function aggregateOperations(dailyResults: OpsDailyIncentiveResultDto[], monthly
   };
 }
 
-function createEarcareRow(row: EarcareDailySettlementRowDto): MonthlyClosingEarcareRowDto {
-  return {
-    employeeId: row.employeeId,
-    staffCode: row.staffCode,
-    displayName: row.displayName,
-    eligibleDayCount: 0,
-    payoutAmount: 0,
-    calculationBasis: row.calculationBasis
-  };
-}
-
-function aggregateEarcare(dailyResults: EarcareDailySettlementResultDto[]) {
-  const rowsByEmployeeId = new Map<string, MonthlyClosingEarcareRowDto>();
-  const warningCounts: EarcareDailySettlementWarningCounts = {
-    notCompleted: 0,
-    coursePolicyMissing: 0,
-    therapistRateMissing: 0,
-    secondTherapistRequired: 0
-  };
-  let normalStaffZeroDays = 0;
-  let undistributedDays = 0;
-
-  for (const result of dailyResults) {
-    addWarningCounts(warningCounts, result.warningCounts);
-    if (result.earcarePoolTotal > 0 && result.eligibleCount === 0) normalStaffZeroDays += 1;
-    if (result.undistributedAmount > 0) undistributedDays += 1;
-
-    for (const dailyRow of result.rows) {
-      if (!rowsByEmployeeId.has(dailyRow.employeeId)) {
-        rowsByEmployeeId.set(dailyRow.employeeId, createEarcareRow(dailyRow));
-      }
-      const row = rowsByEmployeeId.get(dailyRow.employeeId);
-      if (!row) continue;
-      if (dailyRow.isPayoutEligible) row.eligibleDayCount += 1;
-      row.payoutAmount += dailyRow.payoutAmount;
-      row.calculationBasis = dailyRow.calculationBasis;
-    }
-  }
-
-  const rows = [...rowsByEmployeeId.values()].sort((a, b) => a.staffCode.localeCompare(b.staffCode) || a.employeeId.localeCompare(b.employeeId));
-  return {
-    rows,
-    earcarePoolTotal: dailyResults.reduce((sum, result) => sum + result.earcarePoolTotal, 0),
-    distributedAmount: dailyResults.reduce((sum, result) => sum + result.distributedAmount, 0),
-    undistributedAmount: dailyResults.reduce((sum, result) => sum + result.undistributedAmount, 0),
-    sourceCallCount: dailyResults.reduce((sum, result) => sum + result.sourceCallCount, 0),
-    eligibleDayCount: dailyResults.reduce((sum, result) => sum + result.eligibleCount, 0),
-    warningCounts,
-    normalStaffZeroDays,
-    undistributedDays
-  };
-}
-
 function aggregateFinancials(dailyResults: DailyCallLedgerSummaryDto[]): MonthlyClosingFinancialsDto {
   return dailyResults.reduce(
     (totals, result) => ({
@@ -685,7 +600,6 @@ function aggregateFinancials(dailyResults: DailyCallLedgerSummaryDto[]): Monthly
       netSales: totals.netSales + result.netSales,
       discountTotal: totals.discountTotal + result.discountTotal,
       expenseTotal: totals.expenseTotal + result.expenseTotal,
-      earcarePoolTotal: totals.earcarePoolTotal + result.earcarePoolTotal,
       therapistCommissionTotal: totals.therapistCommissionTotal + result.therapistCommissionTotal
     }),
     {
@@ -693,7 +607,6 @@ function aggregateFinancials(dailyResults: DailyCallLedgerSummaryDto[]): Monthly
       netSales: 0,
       discountTotal: 0,
       expenseTotal: 0,
-      earcarePoolTotal: 0,
       therapistCommissionTotal: 0
     }
   );
@@ -703,7 +616,6 @@ function dashboardNetProfit(input: {
   paymentTotal: number;
   expenseTotal: number;
   therapistPayoutTotal: number;
-  earcarePayoutTotal: number;
   opsDailyIncentiveTotal: number;
   opsMonthlyIncentiveTotal: number;
 }) {
@@ -711,7 +623,6 @@ function dashboardNetProfit(input: {
     input.paymentTotal -
     input.expenseTotal -
     input.therapistPayoutTotal -
-    input.earcarePayoutTotal -
     input.opsDailyIncentiveTotal -
     input.opsMonthlyIncentiveTotal
   );
@@ -721,21 +632,17 @@ function aggregateDashboardFinancials(input: {
   financials: MonthlyClosingFinancialsDto;
   therapists: ReturnType<typeof aggregateTherapists>;
   operations: ReturnType<typeof aggregateOperations>;
-  earcare: ReturnType<typeof aggregateEarcare>;
 }): MonthlyClosingDashboardFinancialsDto {
   const fullAttendanceAllowanceTotal = input.therapists.rows.reduce((sum, row) => sum + row.fullAttendanceAllowanceAmount, 0);
   const countKingBonusTotal = input.therapists.rows.reduce((sum, row) => sum + row.countKingBonusAmount, 0);
   const therapistPayoutTotal = input.therapists.payoutAmount;
-  const earcarePayoutTotal = input.earcare.distributedAmount;
   const opsDailyIncentiveTotal = input.operations.dailyIncentiveAmount;
   const opsMonthlyIncentiveTotal = input.operations.monthlyIncentiveAmount;
-  const dailyCostTotal =
-    input.financials.expenseTotal + input.financials.therapistCommissionTotal + earcarePayoutTotal + opsDailyIncentiveTotal;
+  const dailyCostTotal = input.financials.expenseTotal + input.financials.therapistCommissionTotal + opsDailyIncentiveTotal;
   const monthlyCostTotal = fullAttendanceAllowanceTotal + countKingBonusTotal + opsMonthlyIncentiveTotal;
 
   return {
     ...input.financials,
-    earcarePayoutTotal,
     opsDailyIncentiveTotal,
     opsMonthlyIncentiveTotal,
     fullAttendanceAllowanceTotal,
@@ -743,12 +650,11 @@ function aggregateDashboardFinancials(input: {
     therapistPayoutTotal,
     dailyCostTotal,
     monthlyCostTotal,
-    settlementPayoutTotal: therapistPayoutTotal + earcarePayoutTotal + opsDailyIncentiveTotal + opsMonthlyIncentiveTotal,
+    settlementPayoutTotal: therapistPayoutTotal + opsDailyIncentiveTotal + opsMonthlyIncentiveTotal,
     netProfit: dashboardNetProfit({
       paymentTotal: input.financials.paymentTotal,
       expenseTotal: input.financials.expenseTotal,
       therapistPayoutTotal,
-      earcarePayoutTotal,
       opsDailyIncentiveTotal,
       opsMonthlyIncentiveTotal
     })
@@ -874,7 +780,6 @@ function financialEmptyDayResult(): DailyCallLedgerSummaryDto {
     canceledCount: 0,
     paymentTotal: 0,
     therapistCommissionTotal: 0,
-    earcarePoolTotal: 0,
     discountTotal: 0,
     expenseTotal: 0,
     netSales: 0,
@@ -892,20 +797,17 @@ function representativeEvidence(input: {
   therapists: TherapistDailySettlementResultDto[];
   opsDaily: OpsDailyIncentiveResultDto[];
   opsMonthly: OpsMonthlyIncentiveResultDto;
-  earcare: EarcareDailySettlementResultDto[];
 }) {
   return {
     therapist: input.therapists.flatMap((result) => result.settlements.flatMap((row) => row.assignmentEvidence.map((evidence) => evidence.serviceCallId))).slice(0, 5),
     operationsDaily: input.opsDaily.flatMap((result) => result.callEvidence.map((evidence) => evidence.serviceCallId)).slice(0, 5),
-    operationsMonthly: input.opsMonthly.callEvidence.map((evidence) => evidence.serviceCallId).slice(0, 5),
-    earcare: input.earcare.flatMap((result) => result.poolEvidence.map((evidence) => evidence.serviceCallId)).slice(0, 5)
+    operationsMonthly: input.opsMonthly.callEvidence.map((evidence) => evidence.serviceCallId).slice(0, 5)
   };
 }
 
 function warningTotal(input: {
   therapists: ReturnType<typeof aggregateTherapists>;
   operations: ReturnType<typeof aggregateOperations>["warningCounts"];
-  earcare: ReturnType<typeof aggregateEarcare>;
 }) {
   const opsDaily =
     input.operations.daily.notCompleted +
@@ -917,11 +819,6 @@ function warningTotal(input: {
     input.operations.monthly.coursePolicyMissing +
     input.operations.monthly.therapistRateMissing +
     input.operations.monthly.secondTherapistRequired;
-  const earcareWarnings =
-    input.earcare.warningCounts.notCompleted +
-    input.earcare.warningCounts.coursePolicyMissing +
-    input.earcare.warningCounts.therapistRateMissing +
-    input.earcare.warningCounts.secondTherapistRequired;
 
   return (
     input.therapists.warningCounts.coursePolicyMissing +
@@ -933,10 +830,7 @@ function warningTotal(input: {
     input.therapists.fullAttendanceSourceMissing +
     opsDaily +
     opsMonthly +
-    input.operations.warningMessageCount +
-    earcareWarnings +
-    input.earcare.normalStaffZeroDays +
-    input.earcare.undistributedDays
+    input.operations.warningMessageCount
   );
 }
 
@@ -1009,17 +903,6 @@ export async function listMonthlyClosingPreview(input: {
     prismaClient: client as unknown as Parameters<typeof listOpsMonthlyIncentivePreview>[0]["prismaClient"]
   });
 
-  const earcareDailyResults: EarcareDailySettlementResultDto[] = await mapWithConcurrency(
-    dates,
-    MONTHLY_CLOSING_QUERY_CONCURRENCY,
-    (serviceDate) =>
-      dependencies.listEarcareDailySettlements({
-        operatingMonthId: parsed.data.operatingMonthId,
-        serviceDate,
-        prismaClient: client as unknown as Parameters<typeof listEarcareDailySettlements>[0]["prismaClient"]
-      })
-  );
-
   const financialDailyResults: DailyCallLedgerSummaryDto[] = await mapWithConcurrency(
     dates,
     MONTHLY_CLOSING_QUERY_CONCURRENCY,
@@ -1040,16 +923,14 @@ export async function listMonthlyClosingPreview(input: {
 
   const therapists = aggregateTherapists(therapistDailyResults, activeTherapists, fullAttendanceResult);
   const operations = aggregateOperations(opsDailyResults, opsMonthlyResult);
-  const earcare = aggregateEarcare(earcareDailyResults);
   const financials = aggregateFinancials(financialDailyResults);
-  const dashboardFinancials = aggregateDashboardFinancials({ financials, therapists, operations, earcare });
+  const dashboardFinancials = aggregateDashboardFinancials({ financials, therapists, operations });
   const graphReport = aggregateGraphReport({ dates, dailyResults: financialDailyResults, completedCalculations, therapistDailyResults });
-  const total = warningTotal({ therapists, operations: operations.warningCounts, earcare });
+  const total = warningTotal({ therapists, operations: operations.warningCounts });
   const policyWarningCount =
     therapists.warningCounts.coursePolicyMissing +
     operations.warningCounts.daily.coursePolicyMissing +
-    operations.warningCounts.monthly.coursePolicyMissing +
-    earcare.warningCounts.coursePolicyMissing;
+    operations.warningCounts.monthly.coursePolicyMissing;
 
   return {
     operatingMonthId: operatingMonth.id,
@@ -1067,19 +948,11 @@ export async function listMonthlyClosingPreview(input: {
       dailyIncentiveAmount: operations.dailyIncentiveAmount,
       monthlyIncentiveAmount: operations.monthlyIncentiveAmount,
       totalOpsPayoutAmount: operations.totalOpsPayoutAmount,
-      monthlyOpsCallCredit: operations.monthlyOpsCallCredit,
+      monthlyOpsCallCount: operations.monthlyOpsCallCount,
       appliedThresholdCallCount: operations.appliedThresholdCallCount,
       ruleStatus: operations.ruleStatus,
       warningMessages: operations.warningMessages,
       rows: operations.rows
-    },
-    earcare: {
-      rows: earcare.rows,
-      earcarePoolTotal: earcare.earcarePoolTotal,
-      distributedAmount: earcare.distributedAmount,
-      undistributedAmount: earcare.undistributedAmount,
-      sourceCallCount: earcare.sourceCallCount,
-      eligibleDayCount: earcare.eligibleDayCount
     },
     financials,
     dashboardFinancials,
@@ -1088,8 +961,7 @@ export async function listMonthlyClosingPreview(input: {
       therapistPayoutAmount: therapists.payoutAmount,
       opsDailyIncentiveAmount: operations.dailyIncentiveAmount,
       opsMonthlyIncentiveAmount: operations.monthlyIncentiveAmount,
-      earcarePayoutAmount: earcare.distributedAmount,
-      grandPayoutAmount: therapists.payoutAmount + operations.dailyIncentiveAmount + operations.monthlyIncentiveAmount + earcare.distributedAmount
+      grandPayoutAmount: therapists.payoutAmount + operations.dailyIncentiveAmount + operations.monthlyIncentiveAmount
     },
     warningCounts: {
       therapistCoursePolicyMissing: therapists.warningCounts.coursePolicyMissing,
@@ -1104,15 +976,12 @@ export async function listMonthlyClosingPreview(input: {
       opsDaily: operations.warningCounts.daily,
       opsMonthly: operations.warningCounts.monthly,
       opsWarningMessageCount: operations.warningCounts.warningMessageCount,
-      earcare: earcare.warningCounts,
-      earcareNormalStaffZeroDays: earcare.normalStaffZeroDays,
-      earcareUndistributedDays: earcare.undistributedDays,
       total
     },
     evidence: {
       period: `${startDate} ~ ${endDate}`,
       sourceDayCount: dates.length,
-      includedCallCount: therapists.totalCallCount + operations.sourceCallCount + earcare.sourceCallCount,
+      includedCallCount: therapists.totalCallCount + operations.sourceCallCount,
       excludedCallCount: therapists.warningCounts.excludedCallCount,
       fullAttendanceSourceStatus: therapists.fullAttendanceSourceStatus,
       fullAttendanceSourceDayCount: therapists.fullAttendanceSourceDayCount,
@@ -1124,8 +993,7 @@ export async function listMonthlyClosingPreview(input: {
       representativeEvidence: representativeEvidence({
         therapists: therapistDailyResults,
         opsDaily: opsDailyResults,
-        opsMonthly: opsMonthlyResult,
-        earcare: earcareDailyResults
+        opsMonthly: opsMonthlyResult
       })
     }
   };

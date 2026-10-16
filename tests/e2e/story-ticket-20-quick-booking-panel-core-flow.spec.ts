@@ -111,8 +111,6 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
       name: "T20 A",
       durationMinutes: 60,
       basePrice: 1500000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: false,
       tvDisplayName: "T20 A",
       effectiveToMonth: monthKey,
@@ -211,7 +209,8 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
 
     await dialog.getByRole("button", { name: "예약 저장" }).click();
 
-    // 저장하면 패널이 닫히고, 그 콜이 원장 표에 나타나며 포커스가 그 행으로 간다(스토리 65).
+    // 저장하면 빠른 예약 패널이 닫히고, 그 콜이 원장 표에 나타나며 그 줄이 선택돼 편집 패널이 열린다
+    // (주소에 call=<id>). 포커스는 그 줄을 여는 버튼으로 간다(스토리 65, 티켓 03).
     await expect(dialog).toBeHidden();
     await expect(page.getByText("이미 저장된 콜입니다.", { exact: true })).toBeHidden();
     const created = await (prisma as any).serviceCall.findMany({ where: { customerMemo: memo } });
@@ -227,7 +226,8 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
 
     const row = page.locator(`tr[data-service-call-id="${created[0].id}"]`);
     await expect(row).toBeVisible({ timeout: 10_000 });
-    await expect(row.locator('input:not([type="hidden"]), select, button, a, [tabindex]').first()).toBeFocused({ timeout: 10_000 });
+    await expect(page).toHaveURL(new RegExp(`call=${created[0].id}$`));
+    await expect(row.locator(`[data-call-open="${created[0].id}"]`)).toBeFocused({ timeout: 10_000 });
   });
 
   test("응답 유실 뒤 같은 요청으로 재시도하면 패널 밖에 이미 저장 안내가 남고 저장된 행으로 포커스가 간다 (티켓 38)", async ({ page }) => {
@@ -262,7 +262,8 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
     const calls = await prisma.serviceCall.findMany({ where: { customerMemo: memo } });
     expect(calls).toHaveLength(1);
     const row = page.locator(`tr[data-service-call-id="${calls[0].id}"]`);
-    await expect(row.locator('input:not([type="hidden"]), select, button, a, [tabindex]').first()).toBeFocused();
+    await expect(page).toHaveURL(new RegExp(`call=${calls[0].id}$`));
+    await expect(row.locator(`[data-call-open="${calls[0].id}"]`)).toBeFocused();
   });
 
   test("태블릿 폭(768px): 같은 흐름으로 예약을 만들 수 있다", async ({ page }) => {

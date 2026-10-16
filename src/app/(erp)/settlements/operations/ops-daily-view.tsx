@@ -101,7 +101,7 @@ export function OpsDailyView({
 
             <PanelSection title={t("settlements.ops.panel.basis")}>
               <dl>
-                <DetailRow label={t("settlements.ops.summary.dailyTotalCalls")} value={`${result.dailyOpsCallCredit}${callSuffix}`} />
+                <DetailRow label={t("settlements.ops.summary.dailyTotalCalls")} value={`${result.dailyOpsCallCount}${callSuffix}`} />
                 <DetailRow label={t("settlements.ops.summary.appliedThreshold")} value={opsThresholdLabel(locale, result)} />
                 <DetailRow
                   label={t("settlements.ops.summary.perPerson")}
@@ -120,7 +120,7 @@ export function OpsDailyView({
                   {result.callEvidence.map((evidence) => (
                     <li key={evidence.serviceCallId}>
                       <EvidenceCallItem
-                        amount={`${evidence.opsCallCredit}${callSuffix}`}
+                        amount={`1${callSuffix}`}
                         call={evidence.call}
                         canOpenLedger={canOpenLedger}
                         locale={locale}

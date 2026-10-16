@@ -113,7 +113,7 @@ export default async function OperationsAttendancePage({ searchParams }: { searc
                 accent="mint"
                 label={t("settlements.ops.summary.dailyTotalCalls")}
                 note={t("settlements.ops.summary.dailyTotalCallsBasis", { count: incentiveResult.sourceCallCount })}
-                value={`${incentiveResult.dailyOpsCallCredit}${t("settlements.callSuffix")}`}
+                value={`${incentiveResult.dailyOpsCallCount}${t("settlements.callSuffix")}`}
               />
               <SummaryCard
                 accent="peach"

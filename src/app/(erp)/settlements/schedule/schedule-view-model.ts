@@ -22,7 +22,6 @@ export const SCHEDULE_WEEKDAY_MESSAGE_KEYS: readonly MessageKey[] = [
 /** 직원 마스터(masters.employees.group.*)와 같은 직군 라벨 key를 재사용한다. */
 export const EMPLOYEE_GROUP_MESSAGE_KEYS: Record<EmployeeGroup, MessageKey> = {
   OPERATIONS: "masters.employees.group.OPERATIONS",
-  EARCARE: "masters.employees.group.EARCARE",
   THERAPIST: "masters.employees.group.THERAPIST"
 };
 

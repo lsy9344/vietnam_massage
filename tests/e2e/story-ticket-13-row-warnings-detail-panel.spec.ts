@@ -1,10 +1,11 @@
 import { testEmployees } from "./support/test-employees";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 
-// 티켓 13: 원장 행 경고 목록(첫 경고와 +N), 콜 상세 패널(주소의 콜 id, 관련 콜 이동, 포커스 복귀)과 접근 권한.
+// 티켓 13: 원장 행 경고 버튼(첫 경고와 전체 건수, title에 전체 문장), 편집 패널(주소의 콜 id, 관련 콜 이동,
+// 포커스 복귀)과 접근 권한. 콜 상세 패널은 티켓 03에서 편집 패널로 합쳐졌다 — 경고·관련 콜 구역은 그대로 옮겨졌다.
 // 날짜를 한참 과거로 두어 "지금"이 모든 표시 종료보다 늦다(시계를 흉내 내지 않는다).
 const accounts = {
   counter: { accountId: "t13_counter", password: "Ticket13!counter" },
@@ -126,8 +127,6 @@ test.describe("티켓 13 원장 행 경고와 콜 상세 패널", () => {
       name: "T13 A",
       durationMinutes: 60,
       basePrice: 1500000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: false,
       tvDisplayName: "T13 A",
       effectiveToMonth: null,
@@ -165,46 +164,61 @@ test.describe("티켓 13 원장 행 경고와 콜 상세 패널", () => {
     await prisma.$disconnect();
   });
 
-  test("행에는 첫 경고와 나머지 건수만 보이고, 저장 상태는 다른 칸에 있다", async ({ page }) => {
+  function line(page: Page, callId: string) {
+    return page.locator(`tr[data-service-call-id="${callId}"]`);
+  }
+
+  // 경고 버튼(티켓 03): aria-label이 "경고 N건: 첫 경고"다. 보이는 글자는 "▲ N"뿐이고 전체 문장은 title에 있다.
+  function warningsButton(page: Page, callId: string) {
+    return line(page, callId).getByRole("button", { name: /^경고 \d+건:/ });
+  }
+
+  test("행에는 경고 버튼 하나(첫 경고와 전체 건수)만 보이고, 저장 상태는 같은 칸의 다른 자리에 있다", async ({ page }) => {
     await login(page, accounts.counter.accountId, accounts.counter.password);
     await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
 
-    const back = page.locator(`tr[data-service-call-id="${backCallId}"]`);
-    await expect(back.locator('[data-call-cell-column="warnings"]')).toContainText("앞 시술이 아직 끝나지 않았습니다");
-    await expect(back.locator('[data-call-cell-column="warnings"]')).not.toContainText("+");
+    // 경고가 하나면 건수가 1이고, title에도 그 한 문장만 있다.
+    const back = warningsButton(page, backCallId);
+    await expect(back).toHaveAccessibleName("경고 1건: 앞 시술이 아직 끝나지 않았습니다");
+    await expect(back).toHaveAttribute("title", "앞 시술이 아직 끝나지 않았습니다");
 
-    const third = page.locator(`tr[data-service-call-id="${thirdCallId}"]`);
-    const thirdWarnings = third.locator('[data-call-cell-column="warnings"]');
-    await expect(thirdWarnings).toContainText("앞 시술이 아직 끝나지 않았습니다");
-    await expect(thirdWarnings).toContainText("+1");
-    await expect(thirdWarnings).not.toContainText("저장");
+    // thirdCallId는 방문완료라 완료·취소 묶음에 있고, 그 묶음은 기본으로 접혀 있다(스펙 D16).
+    await page.getByRole("button", { name: "완료·취소·노쇼 1건" }).click();
+    // 경고가 둘이면 전체 건수(2)가 보이고, title에 둘 다(줄바꿈으로) 있다 — "+1"이 아니라 총 건수다.
+    const third = warningsButton(page, thirdCallId);
+    await expect(third).toHaveAccessibleName("경고 2건: 앞 시술이 아직 끝나지 않았습니다");
+    await expect(third).toHaveAttribute("title", "앞 시술이 아직 끝나지 않았습니다\n계산 오류");
+    // 아직 이 화면에서 고치지 않은 행(idle)은 저장 칩이 보이지 않는다 — 경고와 저장은 같은 칸의 다른 표시다.
+    await expect(line(page, thirdCallId).locator("[data-line-save-state]")).not.toContainText("저장");
 
-    // 앞 콜에는 양보 경고가 그대로 남는다.
-    const front = page.locator(`tr[data-service-call-id="${frontCallId}"]`);
-    await expect(front.locator('[data-call-cell-column="warnings"]')).toContainText("4:00 예약이 있습니다");
+    // 앞 콜에는 양보 경고가 그대로 남는다(12시간제로 말한다).
+    await expect(warningsButton(page, frontCallId)).toHaveAccessibleName("경고 1건: 4:00 예약이 있습니다");
   });
 
-  test("경고를 누르면 패널이 열리고 주소에 콜 id가 남으며, 닫으면 포커스가 그 행으로 돌아온다", async ({ page }) => {
+  test("경고를 누르면 편집 패널이 열리고 주소에 콜 id가 남으며, 닫으면 포커스가 그 행의 시간 버튼으로 돌아온다", async ({ page }) => {
     await login(page, accounts.counter.accountId, accounts.counter.password);
     await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
 
-    const third = page.locator(`tr[data-service-call-id="${thirdCallId}"]`);
-    await third.locator('[data-call-cell-column="warnings"] button').click();
+    // thirdCallId는 방문완료라 완료·취소 묶음에 있고, 그 묶음은 기본으로 접혀 있다(스펙 D16).
+    await page.getByRole("button", { name: "완료·취소·노쇼 1건" }).click();
+    await warningsButton(page, thirdCallId).click();
 
     await expect(page).toHaveURL(new RegExp(`call=${thirdCallId}$`));
     const panel = page.getByRole("complementary", { name: /^콜 상세 · 17:00/ });
     await expect(panel).toBeVisible();
-    await expect(panel.getByRole("list").first().getByRole("listitem")).toHaveCount(2);
-    await expect(panel.getByText("앞 시술이 아직 끝나지 않았습니다")).toBeVisible();
-    await expect(panel.getByText("계산 오류")).toBeVisible();
-    await expect(third).toHaveAttribute("data-selected", "true");
+    const warningsRegion = panel.getByRole("region", { name: "경고" });
+    await expect(warningsRegion.getByRole("listitem")).toHaveCount(2);
+    await expect(warningsRegion.getByText("앞 시술이 아직 끝나지 않았습니다")).toBeVisible();
+    await expect(warningsRegion.getByText("계산 오류")).toBeVisible();
+    await expect(line(page, thirdCallId)).toHaveAttribute("data-selected", "true");
     // 원장의 날짜는 그대로다.
     await expect(page).toHaveURL(new RegExp(`serviceDate=${serviceDate}`));
 
     await panel.getByRole("button", { name: "닫기" }).click();
     await expect(panel).toHaveCount(0);
     await expect(page).not.toHaveURL(/call=/);
-    await expect(third.locator('[data-call-cell-column="warnings"] button')).toBeFocused();
+    // 패널을 연 것이 경고 버튼이어도, 닫으면 그 행의 시간(상세 열기) 버튼으로 포커스가 돌아온다(원장 공통 규칙, 티켓 03).
+    await expect(line(page, thirdCallId).locator("[data-call-open]")).toBeFocused();
   });
 
   test("주소의 콜 id로 바로 열리고, 관련 콜을 누르면 같은 원장의 그 콜로 옮겨 간다", async ({ page }) => {
@@ -213,30 +227,30 @@ test.describe("티켓 13 원장 행 경고와 콜 상세 패널", () => {
 
     const panel = page.getByRole("complementary", { name: /^콜 상세 · 16:00/ });
     await expect(panel).toBeVisible();
-    await expect(page.locator(`tr[data-service-call-id="${backCallId}"]`)).toHaveAttribute("data-selected", "true");
+    await expect(line(page, backCallId)).toHaveAttribute("data-selected", "true");
 
-    await panel.locator(`[data-related-call="${frontCallId}"]`).click();
+    await panel.getByRole("region", { name: "관련 콜" }).locator(`[data-related-call="${frontCallId}"]`).click();
     await expect(page).toHaveURL(new RegExp(`serviceDate=${serviceDate}&call=${frontCallId}$`));
     await expect(page.getByRole("complementary", { name: /^콜 상세 · 15:00/ })).toBeVisible();
-    await expect(page.locator(`tr[data-service-call-id="${frontCallId}"]`)).toHaveAttribute("data-selected", "true");
+    await expect(line(page, frontCallId)).toHaveAttribute("data-selected", "true");
 
-    // 관련 콜로 옮겨 다녀도 닫으면 패널을 처음 연 행으로 돌아간다.
+    // 관련 콜로 옮겨 다녀도 닫으면 그 콜은 더 이상 골라진 상태가 아니다.
     await page.getByRole("complementary", { name: /^콜 상세/ }).getByRole("button", { name: "닫기" }).click();
     await expect(page).not.toHaveURL(/call=/);
-    await expect(page.locator(`tr[data-service-call-id="${frontCallId}"]`)).toHaveAttribute("data-selected", "false");
+    await expect(line(page, frontCallId)).toHaveAttribute("data-selected", "false");
   });
 
-  test("행의 경고 버튼으로 열고 관련 콜로 옮긴 뒤 닫으면 처음 연 행의 버튼에 포커스가 돌아온다", async ({ page }) => {
+  test("행의 경고 버튼으로 열고 관련 콜로 옮긴 뒤 닫으면 처음 연 행의 시간 버튼에 포커스가 돌아온다", async ({ page }) => {
     await login(page, accounts.counter.accountId, accounts.counter.password);
     await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
 
-    await page.locator(`tr[data-service-call-id="${backCallId}"] [data-call-cell-column="warnings"] button`).click();
+    await warningsButton(page, backCallId).click();
     const panel = page.getByRole("complementary", { name: /^콜 상세 · 16:00/ });
-    await panel.locator(`[data-related-call="${frontCallId}"]`).click();
+    await panel.getByRole("region", { name: "관련 콜" }).locator(`[data-related-call="${frontCallId}"]`).click();
     await expect(page.getByRole("complementary", { name: /^콜 상세 · 15:00/ })).toBeVisible();
 
     await page.getByRole("complementary", { name: /^콜 상세/ }).getByRole("button", { name: "닫기" }).click();
-    await expect(page.locator(`tr[data-service-call-id="${backCallId}"] [data-call-cell-column="warnings"] button`)).toBeFocused();
+    await expect(line(page, backCallId).locator("[data-call-open]")).toBeFocused();
   });
 
   for (const width of [1440, 1024, 390]) {
@@ -251,7 +265,18 @@ test.describe("티켓 13 원장 행 경고와 콜 상세 패널", () => {
     });
   }
 
-  test("웨이터는 콜 원장과 콜 상세 주소에 들어가지 못한다", async ({ page }) => {
+  test("390px(휴대폰 폭)에서는 줄을 눌러도 읽기 전용 패널이라 입력칸이 없다", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await login(page, accounts.counter.accountId, accounts.counter.password);
+    await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}&call=${thirdCallId}`);
+
+    const panel = page.getByRole("complementary", { name: /^콜 상세 · 17:00/ });
+    await expect(panel).toBeVisible();
+    await expect(panel.getByRole("region", { name: "경고" }).getByText("앞 시술이 아직 끝나지 않았습니다")).toBeVisible();
+    await expect(panel.locator("input, select, textarea")).toHaveCount(0);
+  });
+
+  test("웨이터는 콜 원장과 편집 패널 주소에 들어가지 못한다", async ({ page }) => {
     await login(page, accounts.waiter.accountId, accounts.waiter.password);
     await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}&call=${backCallId}`);
     await expect(page).toHaveURL(/\/rooms$/);

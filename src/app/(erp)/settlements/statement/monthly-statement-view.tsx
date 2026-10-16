@@ -127,20 +127,7 @@ function SummarySection({ result, locale, t }: { result: MonthlyStatementDto; lo
                 }
               />
             </>
-          ) : (
-            <DetailRow
-              label={t("settlements.statement.summary.earcare.pool")}
-              value={
-                <span className="grid justify-end gap-0.5">
-                  <span>{vnd(locale, summary.payoutAmount)}</span>
-                  <span className="text-xs font-normal text-muted">
-                    {settlementBasisText(locale, summary.calculationBasis)} ·{" "}
-                    {t("settlements.statement.basis.earcare.eligibleDays", { count: summary.eligibleDayCount })}
-                  </span>
-                </span>
-              }
-            />
-          )}
+          ) : null}
         </dl>
       )}
     </PanelSection>

@@ -5,10 +5,11 @@ import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 
 /**
- * 티켓 25: 콜 상세 패널의 고객 연결 정정(F06, ADR 0003). 사유 필수·STALE_CALL·잠금 거절과 감사 내용은
+ * 티켓 25: 편집 패널의 고객 연결 정정(F06, ADR 0003). 사유 필수·STALE_CALL·잠금 거절과 감사 내용은
  * 콜 서비스 단위 테스트(service-call-service.test.ts의 "customer link correction")가 가리므로,
  * 여기서는 화면에서 실제로 그 작업을 끝까지 할 수 있는지, 사유 없이는 거절되는지, 잠금 운영월에서는
  * 폼 대신 안내만 보이는지, 고객 화면으로 바로 갈 수 있는지만 확인한다.
+ * 콜 원장 흐름 재구성(티켓 03)으로 고객 연결 정정은 편집 패널의 "더 보기"를 펼쳐야 보인다.
  */
 
 const counter = { accountId: "t25_counter", password: "Ticket25!counter" };
@@ -28,6 +29,19 @@ let courseId = "";
 
 function auditRow(page: Page, targetId: string) {
   return page.getByRole("row").filter({ hasText: targetId });
+}
+
+function line(page: Page, serviceCallId: string) {
+  return page.locator(`tr[data-service-call-id="${serviceCallId}"]`);
+}
+
+/** 그 콜의 편집 패널을 열고 "더 보기"를 펼쳐, 고객 연결 정정 구역(region)을 돌려준다. */
+async function openCustomerLinkSection(page: Page, serviceCallId: string, time: string) {
+  await line(page, serviceCallId).locator("[data-call-open]").click();
+  const panel = page.getByRole("complementary", { name: new RegExp(`^콜 상세 · ${time}`) });
+  await expect(panel).toBeVisible();
+  await panel.getByText("더 보기").click();
+  return panel.getByRole("region", { name: "고객 연결 정정" });
 }
 
 async function seedAccount(accountId: string, password: string, role: "counter" | "administrator", staffCode: string, sortOrder: number) {
@@ -146,28 +160,26 @@ test.describe("티켓 25 콜 상세 패널의 고객 연결 정정", () => {
 
     await login(page, counter.accountId, counter.password);
     await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
-    await page.locator(`tr[data-service-call-id="${call.id}"]`).getByRole("button", { name: "고객 연결 정정", exact: true }).click();
+    const section = await openCustomerLinkSection(page, call.id, "15:00");
 
-    const panel = page.getByRole("complementary", { name: /^콜 상세 · 15:00/ });
-    await expect(panel).toBeVisible();
-    await expect(panel.getByText("지금 연결")).toBeVisible();
-    await expect(panel).toContainText("T25 민아");
+    await expect(section.getByText("지금 연결")).toBeVisible();
+    await expect(section).toContainText("T25 민아");
 
-    await panel.getByRole("combobox", { name: "새로 연결할 고객 검색" }).fill("T25 수아");
-    const search = panel.getByRole("combobox", { name: "새로 연결할 고객 검색" });
-    await expect(panel.getByRole("option", { name: "T25 수아" })).toBeVisible();
+    await section.getByRole("combobox", { name: "새로 연결할 고객 검색" }).fill("T25 수아");
+    const search = section.getByRole("combobox", { name: "새로 연결할 고객 검색" });
+    await expect(section.getByRole("option", { name: "T25 수아" })).toBeVisible();
     await search.press("ArrowDown");
     await expect(search).toHaveAttribute("aria-activedescendant", "customer-link-candidates-option-0");
     await search.press("Enter");
-    await expect(panel.getByText("바꿀 고객: T25 수아")).toBeVisible();
+    await expect(section.getByText("바꿀 고객: T25 수아")).toBeVisible();
 
-    await panel.getByLabel("정정 사유").fill("T25 다른 손님 전화로 잘못 연결됨");
-    await panel.getByRole("button", { name: "고객 연결 정정" }).click();
+    await section.getByLabel("정정 사유").fill("T25 다른 손님 전화로 잘못 연결됨");
+    await section.getByRole("button", { name: "고객 연결 정정", exact: true }).click();
 
-    await expect(panel.getByText("고객 연결을 정정했습니다.")).toBeVisible();
-    await expect(panel.getByText("지금 연결")).toBeVisible();
-    await expect(panel).toContainText("T25 수아");
-    await expect(panel).not.toContainText("T25 민아");
+    await expect(section.getByText("고객 연결을 정정했습니다.")).toBeVisible();
+    await expect(section.getByText("지금 연결")).toBeVisible();
+    await expect(section).toContainText("T25 수아");
+    await expect(section).not.toContainText("T25 민아");
 
     await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: call.id } })).customerId).toBe(rightCustomerId);
 
@@ -184,14 +196,13 @@ test.describe("티켓 25 콜 상세 패널의 고객 연결 정정", () => {
 
     await login(page, counter.accountId, counter.password);
     await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
-    await page.locator(`tr[data-service-call-id="${call.id}"] td`).first().click();
+    const section = await openCustomerLinkSection(page, call.id, "16:00");
 
-    const panel = page.getByRole("complementary", { name: /^콜 상세 · 16:00/ });
-    await panel.getByRole("button", { name: "고객 연결 정정" }).click();
-    await expect(panel.getByText("정정 사유를 입력하세요.")).toBeVisible();
+    await section.getByRole("button", { name: "고객 연결 정정", exact: true }).click();
+    await expect(section.getByText("정정 사유를 입력하세요.")).toBeVisible();
     await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: call.id } })).customerId).toBe(wrongCustomerId);
 
-    const goToCustomer = panel.getByRole("link", { name: "고객 화면으로 이동" });
+    const goToCustomer = section.getByRole("link", { name: "고객 화면으로 이동" });
     await expect(goToCustomer).toHaveAttribute("href", new RegExp(`visitCustomer=${wrongCustomerId}$`));
     await goToCustomer.click();
     await expect(page).toHaveURL(new RegExp(`visitCustomer=${wrongCustomerId}`));
@@ -203,10 +214,9 @@ test.describe("티켓 25 콜 상세 패널의 고객 연결 정정", () => {
 
     await login(page, counter.accountId, counter.password);
     await page.goto(`/calls?operatingMonthId=${lockedMonthId}&serviceDate=${lockedServiceDate}`);
-    await page.locator(`tr[data-service-call-id="${call.id}"] td`).first().click();
+    const section = await openCustomerLinkSection(page, call.id, "15:00");
 
-    const panel = page.getByRole("complementary", { name: /^콜 상세 · 15:00/ });
-    await expect(panel.getByText("마감확정 또는 잠금 운영월입니다. 관리자가 재오픈해야 고객 연결을 정정할 수 있습니다.")).toBeVisible();
-    await expect(panel.getByLabel("정정 사유")).toHaveCount(0);
+    await expect(section.getByText("마감확정 또는 잠금 운영월입니다. 관리자가 재오픈해야 고객 연결을 정정할 수 있습니다.")).toBeVisible();
+    await expect(section.getByLabel("정정 사유")).toHaveCount(0);
   });
 });

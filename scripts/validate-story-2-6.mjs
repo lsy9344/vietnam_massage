@@ -21,7 +21,9 @@ function readJson(path) {
 [
   "package.json",
   "pnpm-lock.yaml",
-  "src/app/(erp)/calls/editable-call-grid.tsx",
+  "src/app/(erp)/calls/call-ledger-list.tsx",
+  "src/app/(erp)/calls/call-edit-panel.tsx",
+  "src/app/(erp)/calls/call-ledger-fields.tsx",
   "src/app/(erp)/calls/call-ledger-keyboard.ts",
   "src/app/(erp)/calls/call-ledger-keyboard.test.ts",
   "tests/e2e/story-2-6-call-ledger-keyboard-typeahead.spec.ts",
@@ -45,7 +47,9 @@ if (!lockfile.includes("'@tanstack/react-table'")) {
 
 // 행 저장 순서와 저장 상태 표시는 티켓 15에서 call-row-save.ts·call-row-save-status.tsx·공통 SaveStatus로 옮겼다.
 const grid = [
-  "src/app/(erp)/calls/editable-call-grid.tsx",
+  "src/app/(erp)/calls/call-ledger-list.tsx",
+  "src/app/(erp)/calls/call-edit-panel.tsx",
+  "src/app/(erp)/calls/call-ledger-fields.tsx",
   "src/app/(erp)/calls/call-row-save.ts",
   "src/app/(erp)/calls/call-row-save-status.tsx",
   "src/components/ui/save-status.tsx"
@@ -53,47 +57,44 @@ const grid = [
   .map(read)
   .join("\n");
 for (const required of [
-  "useReactTable",
-  "getCoreRowModel",
   "role=\"combobox\"",
   "role=\"listbox\"",
   "role=\"option\"",
   "aria-expanded",
   "aria-controls",
   "aria-activedescendant",
-  "moveTabCell",
-  "moveEnterCell",
-  "moveAdjacentCell",
-  "cancelCellDraft",
-  "focusLedgerCell",
+  // 원장 표의 칸 이동은 흐름별 목록의 줄 이동(ledgerListKey)과 편집 패널 칸(data-call-field)으로 바뀌었다(콜 원장 흐름 재구성 티켓 03).
+  "data-call-field",
+  "data-call-open",
   "event.currentTarget.select()",
-  "data-call-cell-row",
-  "data-call-cell-column",
   "bg-readonly",
   "aria-live=\"polite\"",
   "aria-invalid",
   "aria-describedby"
 ]) {
-  if (!grid.includes(required)) errors.push(`editable-call-grid.tsx missing ${required}`);
+  if (!grid.includes(required)) errors.push(`call ledger list/panel missing ${required}`);
 }
 
 const helper = read("src/app/(erp)/calls/call-ledger-keyboard.ts");
 for (const required of [
   "EDITABLE_CALL_FIELDS",
-  "READONLY_CALL_FIELDS",
-  "moveTabCell",
-  "moveEnterCell",
-  "moveAdjacentCell",
-  "cancelCellDraft",
-  "paymentAmount",
-  "earcarePoolAmount"
+  "cancelCellDraft"
 ]) {
   if (!helper.includes(required)) errors.push(`call-ledger-keyboard.ts missing ${required}`);
 }
 
+const listKeys = read("src/app/(erp)/calls/ledger-flow.ts");
+for (const required of ["ledgerListKey", "ArrowDown", "ArrowUp", "Enter", "Escape", "quickBooking"]) {
+  if (!listKeys.includes(required)) errors.push(`ledger-flow.ts missing ${required}`);
+}
+
 const unitTest = read("src/app/(erp)/calls/call-ledger-keyboard.test.ts");
-for (const required of ["Tab and Shift+Tab", "Enter commits", "Arrow movement", "computed cells", "Esc cancel"]) {
+for (const required of ["Esc cancel"]) {
   if (!unitTest.includes(required)) errors.push(`call-ledger-keyboard.test.ts missing ${required}`);
+}
+const listKeyTest = read("src/app/(erp)/calls/ledger-flow.test.ts");
+for (const required of ["ledger list keys", "leaves typing alone"]) {
+  if (!listKeyTest.includes(required)) errors.push(`ledger-flow.test.ts missing ${required}`);
 }
 
 const e2e = read("tests/e2e/story-2-6-call-ledger-keyboard-typeahead.spec.ts");

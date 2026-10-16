@@ -92,12 +92,10 @@ describe("Story 7.3 migration verification report", () => {
     for (const requiredArea of [
       "calls.payment",
       "calls.discount",
-      "calls.ops-credit",
       "calls.d-course",
       "rooms.status",
       "operations.daily-incentive",
       "operations.monthly-incentive",
-      "earcare.zero-worker-pool",
       "therapist.role-settlement",
       "closing.final-payout"
     ]) {
@@ -137,9 +135,9 @@ describe("Story 7.3 migration verification report", () => {
     const report = buildMigrationVerificationReport({
       persistedIssues: [
         issue({
-          itemKey: "calculation:earcare.zero-worker-pool:earcare-zero-worker",
+          itemKey: "calculation:calls.payment:call-complete-a-discount",
           kind: "calculation_comparison",
-          sourceSheet: "귀케어일정산",
+          sourceSheet: "실시간콜입력",
           relatedRequirement: "FR-37",
           relatedStory: "Story 7.2",
           status: "재검증 필요",
@@ -148,7 +146,7 @@ describe("Story 7.3 migration verification report", () => {
       ]
     });
 
-    const row = report.calculationRows.find((candidate) => candidate.itemKey === "calculation:earcare.zero-worker-pool:earcare-zero-worker");
+    const row = report.calculationRows.find((candidate) => candidate.itemKey === "calculation:calls.payment:call-complete-a-discount");
     assert.ok(row);
     assert.equal(row.status, "pass");
     assert.equal(row.issueStatus, "재검증 필요");
@@ -157,7 +155,7 @@ describe("Story 7.3 migration verification report", () => {
 
   it("filters by sheet, FR, story, status, and kind using bounded URL search params", () => {
     const filters = parseMigrationVerificationFilters({
-      sheet: "귀케어일정산",
+      sheet: "실시간콜입력",
       fr: "FR-37",
       story: "Story 7.2",
       status: "재검증 필요",
@@ -168,9 +166,9 @@ describe("Story 7.3 migration verification report", () => {
       filters,
       persistedIssues: [
         issue({
-          itemKey: "calculation:earcare.zero-worker-pool:earcare-zero-worker",
+          itemKey: "calculation:calls.payment:call-complete-a-discount",
           kind: "calculation_comparison",
-          sourceSheet: "귀케어일정산",
+          sourceSheet: "실시간콜입력",
           relatedRequirement: "FR-37",
           relatedStory: "Story 7.2",
           status: "재검증 필요"
@@ -181,7 +179,7 @@ describe("Story 7.3 migration verification report", () => {
 
     assert.deepEqual(report.filters, filters);
     assert.equal(report.openIssueRows.length, 1);
-    assert.equal(report.openIssueRows[0]?.itemKey, "calculation:earcare.zero-worker-pool:earcare-zero-worker");
+    assert.equal(report.openIssueRows[0]?.itemKey, "calculation:calls.payment:call-complete-a-discount");
   });
 
   it("validates status and note, then appends issue history in one transaction", async () => {

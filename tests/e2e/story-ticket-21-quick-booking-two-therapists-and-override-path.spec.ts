@@ -129,8 +129,6 @@ test.describe("티켓 21 빠른 예약: 두 명 코스와 경고 확인 후 배�
       name: "T21 2인",
       durationMinutes: 90,
       basePrice: 3200000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 0,
       requiresSecondTherapist: true,
       tvDisplayName: "T21D",
       effectiveToMonth: monthKey,
@@ -247,13 +245,16 @@ test.describe("티켓 21 빠른 예약: 두 명 코스와 경고 확인 후 배�
     await row1.getByRole("button", { name: /T21D 90분 가능/ }).click();
 
     const secondSection = dialog.getByRole("heading", { name: "두 번째 Therapist" }).locator("xpath=ancestor::div[1]");
-    const overrideButton = secondSection
-      .getByText("T21 마사지사3")
-      .locator("xpath=ancestor::li[1]")
-      .getByRole("button", { name: /경고 확인 후 배정/ });
+    const candidate3 = secondSection.getByText("T21 마사지사3").locator("xpath=ancestor::li[1]");
+    // 수당 없는 후보는 "가능" 칩이 아니라 불가 칩이다. 누르면 그 줄 아래에 이유와 경고 확인 버튼이 열린다(스펙 D3·D5).
+    await expect(candidate3.getByRole("button", { name: /T21D 90분 가능/ })).toHaveCount(0);
+    const impossibleChip = candidate3.getByRole("button", { name: "T21D 90분 · 이 코스 불가" });
+    await expect(impossibleChip).toHaveAttribute("aria-expanded", "false");
+    await impossibleChip.click();
+    await expect(impossibleChip).toHaveAttribute("aria-expanded", "true");
+    await expect(candidate3.getByText("T21D 90분 · 이 코스 불가", { exact: true })).toBeVisible();
+    const overrideButton = candidate3.getByRole("button", { name: "경고 확인 후 배정" });
     await expect(overrideButton).toBeVisible();
-    // "가능"과는 다른 문구다(가능 버튼이 아니다).
-    await expect(overrideButton).not.toHaveText(/^T21D 90분 가능$/);
     await overrideButton.click();
 
     // 경고 문장을 먼저 보여 준다(스펙 F01). 취소하면 아직 배정되지 않는다.

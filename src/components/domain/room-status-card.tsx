@@ -17,7 +17,7 @@ function courseLabel(status: RoomStatusDto) {
 }
 
 function assigneeLine(status: RoomStatusDto) {
-  const names = [status.therapist1?.displayName, status.therapist2?.displayName, status.earcare?.displayName].filter(Boolean);
+  const names = [status.therapist1?.displayName, status.therapist2?.displayName].filter(Boolean);
   return names.length > 0 ? names.join(" / ") : "-";
 }
 

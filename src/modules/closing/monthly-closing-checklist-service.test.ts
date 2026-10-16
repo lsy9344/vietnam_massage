@@ -48,20 +48,19 @@ function row(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDto {
     customerMemo: null,
     therapist1: { id: "thr-1", displayName: "Mai", staffCode: "THR-001" },
     therapist2: null,
-    earcare: null,
     status: "방문완료",
     discountTypeCode: null,
     paymentMethodCode: "CASH",
     note: null,
     visitRequest: null,
     confirmationCode: null,
+    partyId: null,
+    partyPosition: null,
     basePrice: 1500000,
     paymentAmount: 1500000,
     discountAmount: 0,
     therapist1Commission: 700000,
     therapist2Commission: 0,
-    earcarePoolAmount: 0,
-    opsCallCredit: 1,
     calculationStatus: "calculated",
     calculationErrorCode: null,
     calculationErrorMessage: null,
@@ -82,7 +81,6 @@ function dayLedgerSummary(overrides: Partial<DailyCallLedgerSummaryDto> = {}): D
     canceledCount: 0,
     paymentTotal: 0,
     therapistCommissionTotal: 0,
-    earcarePoolTotal: 0,
     discountTotal: 0,
     expenseTotal: 0,
     netSales: 0,
@@ -117,7 +115,6 @@ function baseDependencies(overrides: Partial<MonthlyClosingChecklistDependencies
     listServiceCallsForOperatingMonth: async () => [],
     getDailyCallLedgerSummary: async () => dayLedgerSummary(),
     listTherapistDailyPayoutConfirmationsForMonth: async () => [],
-    listEarcareDailyPayoutConfirmationsForMonth: async () => [],
     listOpsDailyPayoutConfirmationsForMonth: async () => [],
     listOpsMonthlyIncentivePreview: async () =>
       ({
@@ -127,7 +124,7 @@ function baseDependencies(overrides: Partial<MonthlyClosingChecklistDependencies
         endDate: "2026-06-02",
         isClosedOrLocked: false,
         previewStatus: "draft_current",
-        monthlyOpsCallCredit: 0,
+        monthlyOpsCallCount: 0,
         sourceCallCount: 0,
         appliedThresholdCallCount: null,
         totalMonthlyIncentiveAmount: 0,
@@ -167,7 +164,7 @@ describe("listMonthlyClosingChecklist", () => {
     );
   });
 
-  it("세 직군 중 지급 재확인 필요 단위가 하나라도 있으면 확정을 막는다", async () => {
+  it("두 직군 중 지급 재확인 필요 단위가 하나라도 있으면 확정을 막는다", async () => {
     const result = await listMonthlyClosingChecklist({
       operatingMonthId: "month-2026-06",
       prismaClient: createOperatingMonthPrisma(),
@@ -184,7 +181,7 @@ describe("listMonthlyClosingChecklist", () => {
     assert.equal(result.isConfirmBlocked, true);
   });
 
-  it("네 단위(마사지사 일일·귀케어 일일·운영팀 일일·운영팀 월) 모두에서 재확인 필요를 모은다", async () => {
+  it("세 단위(마사지사 일일·운영팀 일일·운영팀 월) 모두에서 재확인 필요를 모은다", async () => {
     const result = await listMonthlyClosingChecklist({
       operatingMonthId: "month-2026-06",
       prismaClient: createOperatingMonthPrisma(),
@@ -192,9 +189,6 @@ describe("listMonthlyClosingChecklist", () => {
         listTherapistDailyPayoutConfirmationsForMonth: async () => [
           { serviceDate: "2026-06-01", employeeId: "thr-1", payoutConfirmation: reconfirmationPendingPayout(100, 90) },
           { serviceDate: "2026-06-02", employeeId: "thr-2", payoutConfirmation: unconfirmedPayout(0) }
-        ],
-        listEarcareDailyPayoutConfirmationsForMonth: async () => [
-          { serviceDate: "2026-06-01", employeeId: "ear-1", payoutConfirmation: reconfirmationPendingPayout(200, 150) }
         ],
         listOpsDailyPayoutConfirmationsForMonth: async () => [
           { serviceDate: "2026-06-01", employeeId: "ops-1", payoutConfirmation: reconfirmationPendingPayout(300, 250) }
@@ -207,7 +201,7 @@ describe("listMonthlyClosingChecklist", () => {
             endDate: "2026-06-02",
             isClosedOrLocked: false,
             previewStatus: "draft_current",
-            monthlyOpsCallCredit: 0,
+            monthlyOpsCallCount: 0,
             sourceCallCount: 0,
             appliedThresholdCallCount: null,
             totalMonthlyIncentiveAmount: 0,
@@ -234,7 +228,7 @@ describe("listMonthlyClosingChecklist", () => {
     });
 
     const unitTypes = result.payoutReconfirmationUnits.map((unit) => unit.unitType).sort();
-    assert.deepEqual(unitTypes, ["EARCARE_DAILY", "OPS_DAILY", "OPS_MONTHLY", "THERAPIST_DAILY"]);
+    assert.deepEqual(unitTypes, ["OPS_DAILY", "OPS_MONTHLY", "THERAPIST_DAILY"]);
     const opsMonthlyUnit = result.payoutReconfirmationUnits.find((unit) => unit.unitType === "OPS_MONTHLY");
     assert.equal(opsMonthlyUnit?.serviceDate, null);
     assert.equal(opsMonthlyUnit?.employeeId, "ops-monthly-1");

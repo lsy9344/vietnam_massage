@@ -37,7 +37,12 @@ export function selectNowSlot(activeSlots: ReadonlyArray<{ value: string }>, now
   return chosen;
 }
 
-function clockMinutes(value: string): number {
+export function clockMinutes(value: string): number {
   const [hour, minute] = value.split(":").map(Number);
   return (hour ?? 0) * 60 + (minute ?? 0);
+}
+
+/** "지금"의 시계 값(HH:mm, 이 기기의 시계). 빠른 예약의 "지금"과 원장 줄의 "입장"이 함께 쓴다. */
+export function nowClockString(date = new Date()): string {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }

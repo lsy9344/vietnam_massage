@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   CustomerStep,
   ErrorSummary,
+  PartyGuestNav,
   QuickBookingPanel,
   ReviewStep,
   RoomStep,
@@ -48,7 +49,6 @@ const options: ServiceCallFormOptions = {
   paymentMethods: [],
   confirmationCodes: [],
   therapists: [{ value: "therapist-1", label: "마사지사1" }],
-  earcareEmployees: [],
   expenseHandlers: []
 };
 
@@ -82,7 +82,6 @@ function draft(overrides: Partial<NewCallRowDraft> = {}): NewCallRowDraft {
     customerId: null,
     therapist1Id: null,
     therapist2Id: null,
-    earcareEmployeeId: null,
     status: "RESERVED",
     discountTypeCode: null,
     paymentMethodCode: null,
@@ -475,7 +474,7 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
     assert.match(chosen, /role="alert">코스를 선택하세요\.</);
   });
 
-  it("Therapist·코스 단계: 두 명 코스는 두 번째 Therapist를 따로 고르고, 시간 부족·수당 없음은 경고 확인 후 배정 버튼이다", () => {
+  it("Therapist·코스 단계: 두 명 코스는 두 번째 Therapist를 첫 목록과 같은 한 줄 모양으로 따로 고르고, 시간 부족·수당 없음은 불가 칩이다", () => {
     const rows: TherapistAvailabilityRowDto[] = [
       {
         therapistId: "therapist-1",
@@ -548,16 +547,16 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
       />
     );
     assert.match(noSecondYet, /두 번째 Therapist/);
-    // 두 번째 후보 목록(<ul>...</ul>)만 떼어 본다. 이미 고른 첫 번째 Therapist(therapist-1)는 거기서 빠진다.
-    const secondCandidateList = noSecondYet.slice(noSecondYet.indexOf("<ul"), noSecondYet.lastIndexOf("</ul>"));
-    assert.doesNotMatch(secondCandidateList, /마사지사1/);
-    // 시간 부족·수당 없음 후보는 "가능"과 다른 문구의 경고 확인 버튼이다.
-    assert.match(secondCandidateList, /마사지사2[\s\S]*?D 90분 · 시간 부족 · 경고 확인 후 배정/);
-    assert.match(secondCandidateList, /마사지사3[\s\S]*?D 90분 · 이 코스 불가 · 경고 확인 후 배정/);
-    assert.doesNotMatch(secondCandidateList, /마사지사2[\s\S]*?D 90분 가능/);
-    // 두 번째 Therapist 후보도 근무표(27)의 근무 예정을 함께 보여 준다(티켓 29). 휴무라도 후보에서 빠지지 않는다.
-    assert.match(secondCandidateList, /마사지사2[\s\S]*?근무 예정/);
-    assert.match(secondCandidateList, /마사지사3[\s\S]*?휴무/);
+    // 두 번째 후보 줄만 떼어 본다. 이미 고른 첫 번째 Therapist(therapist-1)는 거기서 빠진다.
+    const secondLine = (therapistId: string) => noSecondYet.split("<li").find((part) => part.includes(`data-second-therapist-row="${therapistId}"`)) ?? "";
+    assert.equal(secondLine("therapist-1"), "");
+    // 두 번째 후보도 첫 목록과 같은 한 줄 모양이다(D5): 이름 · 상태 · 고른 코스의 칩 하나. 근무표·출근 칸은 없다.
+    assert.match(secondLine("therapist-2"), />마사지사2<[\s\S]*가능[\s\S]*aria-expanded="false"[^>]*aria-label="D 90분 · 시간 부족"/);
+    assert.match(secondLine("therapist-3"), />마사지사3<[\s\S]*불가 · 16:00부터[\s\S]*aria-label="D 90분 · 이 코스 불가"/);
+    assert.doesNotMatch(secondLine("therapist-2"), /D 90분 가능/);
+    assert.doesNotMatch(secondLine("therapist-2") + secondLine("therapist-3"), /근무 예정|휴무|출근/);
+    // 칩 id가 첫 목록의 같은 Therapist 줄과 겹치지 않는다.
+    assert.doesNotMatch(noSecondYet, /data-second-therapist-row="therapist-1"/);
 
     const secondChosen = render(
       "ko",
@@ -752,3 +751,158 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
     assert.match(html, /코스를 선택하세요\./);
   });
 });
+
+describe("빠른 예약 — 일행(스펙 D10–D12, 티켓 02)", () => {
+  function availability(therapistId: string, therapistName: string): TherapistAvailabilityRowDto {
+    return {
+      therapistId,
+      therapistName,
+      attendance: "checked_in",
+      shiftCheck: false,
+      available: true,
+      unavailableReason: null,
+      inServiceDisplayEnd: null,
+      freeFrom: null,
+      nextReservationTime: null,
+      freeMinutes: 60,
+      priorServiceEndCheck: false,
+      plannedWorkingDayStatus: "미입력",
+      courses: [{ courseId: "course-a", courseCode: "A", courseName: "A 60분", durationMinutes: 60, verdict: "possible", requiresSecondTherapist: false }]
+    };
+  }
+
+  it("고객 단계: 인원 수를 고르며 기본은 1명이다(ko·vi)", () => {
+    const props = {
+      ...customerStepExtras("ko"),
+      customers,
+      disabled: false,
+      draft: draft(),
+      fieldErrors: {},
+      monthEndDate: "2026-06-30",
+      monthStartDate: "2026-06-01",
+      onEdit: () => undefined,
+      options
+    };
+    const one = render("ko", <CustomerStep {...props} />);
+    assert.match(one, />인원</);
+    assert.match(one, /<option value="1" selected="">1명<\/option>/);
+    assert.match(one, /<option value="10">10명<\/option>/);
+
+    const three = render("vi", <CustomerStep {...props} {...customerStepExtras("vi")} onPartySizeChange={() => undefined} partySize={3} />);
+    assert.match(three, />Số khách</);
+    assert.match(three, /<option value="3" selected="">3 khách<\/option>/);
+  });
+
+  it("Therapist·코스 단계: 손님을 차례로 고르는 줄이 보이고, 다른 손님이 고른 Therapist는 목록에서 빠진다", () => {
+    const html = render(
+      "ko",
+      <TherapistStep
+        availabilityFailed={false}
+        availabilityPending={false}
+        availabilityRows={[availability("therapist-1", "마사지사1"), availability("therapist-2", "마사지사2")]}
+        availabilityTime="15:00"
+        courseId=""
+        courseLabel={null}
+        disabled={false}
+        excludedTherapistIds={new Set(["therapist-1"])}
+        fieldErrors={{ therapist1Id: ["같은 Therapist를 일행의 두 손님에게 고를 수 없습니다."] }}
+        guestNav={
+          <PartyGuestNav
+            active={2}
+            disabled={false}
+            errorPositions={new Set([2])}
+            guests={[
+              { position: 1, summary: "A 60분 · 마사지사1" },
+              { position: 2, summary: null }
+            ]}
+            onSelect={() => undefined}
+          />
+        }
+        locale="ko"
+        onChoose={() => undefined}
+        onChooseSecond={() => undefined}
+        onClear={() => undefined}
+        onClearSecond={() => undefined}
+        onTimeChange={() => undefined}
+        options={options}
+        therapist1Id={null}
+        therapist2Label={null}
+        therapistLabel={null}
+      />
+    );
+    assert.match(html, /aria-label="일행 손님"/);
+    assert.match(html, /손님 1 · A 60분 · 마사지사1/);
+    assert.match(html, /aria-pressed="true"[^>]*>손님 2 · 선택 안 함/);
+    assert.match(html, /마사지사2/);
+    assert.doesNotMatch(html, />마사지사1</);
+    assert.match(html, /role="alert">같은 Therapist를 일행의 두 손님에게 고를 수 없습니다\.</);
+  });
+
+  it("객실·메모 단계: 일행이면 손님마다 객실을 고르거나 비운다", () => {
+    const html = render(
+      "ko",
+      <RoomStep
+        customers={customers}
+        disabled={false}
+        draft={draft({ roomId: "room-101" })}
+        fieldErrors={{ "guests.2.roomId": ["활성 객실을 선택하세요."] }}
+        guests={[
+          { courseId: "course-a", therapist1Id: "therapist-1", therapist2Id: null, roomId: "room-101" },
+          { courseId: "", therapist1Id: null, therapist2Id: null, roomId: null }
+        ]}
+        monthEndDate="2026-06-30"
+        monthStartDate="2026-06-01"
+        onEdit={() => undefined}
+        onGuestRoomChange={() => undefined}
+        options={options}
+      />
+    );
+    assert.match(html, />손님 1 객실</);
+    assert.match(html, />손님 2 객실</);
+    assert.match(html, /<option value="room-101" selected="">101 호실<\/option>/);
+    assert.match(html, /role="alert">활성 객실을 선택하세요\.</);
+  });
+
+  it("확인 단계: 일행이면 인원과 손님별 코스·Therapist·객실을 요약한다", () => {
+    const html = render(
+      "ko",
+      <ReviewStep
+        courseLabel="A 60분"
+        customerLabel="정 대표"
+        disabled={false}
+        draft={draft({ startTime: "15:00" })}
+        guestSummaries={[
+          { position: 1, courseLabel: "A 60분", therapistLabel: "마사지사1", therapist2Label: null, roomLabel: "101 호실" },
+          { position: 2, courseLabel: "D 90분", therapistLabel: "마사지사2", therapist2Label: "마사지사3", roomLabel: null }
+        ]}
+        message={null}
+        notice={null}
+        onCancel={() => undefined}
+        onRetry={() => undefined}
+        onSave={() => undefined}
+        roomLabel="101 호실"
+        status="idle"
+        therapist2Label={null}
+        therapistLabel="마사지사1"
+      />
+    );
+    assert.match(html, /정 대표/);
+    assert.match(html, /2026-06-10 15:00/);
+    assert.match(html, />2명</);
+    assert.match(html, />손님 1<[\s\S]*?A 60분 · 마사지사1 · 101 호실/);
+    assert.match(html, />손님 2<[\s\S]*?D 90분 · 마사지사2 · 마사지사3 · 미배정/);
+  });
+
+  it("패널 요약: 손님별 오류는 손님 번호를 붙여 보인다", () => {
+    const html = render(
+      "ko",
+      <ErrorSummary
+        fieldErrors={{ "guests.3.therapist2Id": ["D코스는 마사지사2 필수입니다."] }}
+        message="손님 3: D코스는 마사지사2 필수입니다."
+        onJump={() => undefined}
+      />
+    );
+    assert.match(html, /<button[^>]*>손님 3 · D코스는 마사지사2 필수입니다\.<\/button>/);
+  });
+});
+

@@ -152,8 +152,6 @@ export function auditSourcePath(entry: AuditEntry): string | null {
       return withQuery("/customers", [["visitCustomer", entry.targetId]]);
     case "therapist_attendance":
       return withQuery("/settlements", [["operatingMonthId", month], ["serviceDate", snapshotText(entry, "attendanceDate")]], [employee]);
-    case "earcare_attendance":
-      return withQuery("/settlements/earcare", [["operatingMonthId", month], ["attendanceDate", snapshotText(entry, "attendanceDate")]], [employee]);
     case "ops_attendance":
       return withQuery("/settlements/operations", [["operatingMonthId", month], ["attendanceDate", snapshotText(entry, "attendanceDate")]], [employee]);
     case "monthly_close":
@@ -177,6 +175,7 @@ const targetLabelKeys: Record<string, MessageKey> = {
   customer: "audit.target.customer",
   daily_expense: "audit.target.dailyExpense",
   therapist_attendance: "audit.target.therapistAttendance",
+  // 귀케어 담당 기능 폐기 후에도 과거 audit_logs 행의 대상 종류 라벨을 보이기 위해 남긴다.
   earcare_attendance: "audit.target.earcareAttendance",
   ops_attendance: "audit.target.opsAttendance",
   monthly_close: "audit.target.monthlyClose",

@@ -52,7 +52,6 @@ export function draftFromRow(row: ServiceCallRowDto): CallRowDraft {
     customerId: row.customerId ?? null,
     therapist1Id: row.therapist1?.id ?? null,
     therapist2Id: row.therapist2?.id ?? null,
-    earcareEmployeeId: row.earcare?.id ?? null,
     status: row.status,
     discountTypeCode: row.discountTypeCode ?? null,
     paymentMethodCode: row.paymentMethodCode ?? null,

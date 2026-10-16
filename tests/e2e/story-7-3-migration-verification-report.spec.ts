@@ -5,7 +5,7 @@ import { argon2idOptions, login as loginAccount } from "./support/auth";
 import { expect, test, type Page } from "@playwright/test";
 
 
-const story73OpenIssueKey = "calculation:earcare.zero-worker-pool:earcare-zero-worker";
+const story73OpenIssueKey = "calculation:calls.payment:story73-open-issue";
 
 type StoryAccount = {
   accountId: string;
@@ -119,7 +119,7 @@ async function seedOpenTrackingIssue() {
     where: { itemKey: story73OpenIssueKey },
     update: {
       kind: "calculation_comparison",
-      sourceSheet: "귀케어일정산",
+      sourceSheet: "실시간콜입력",
       relatedRequirement: "FR-37",
       relatedStory: "Story 7.2",
       status: "재검증 필요",
@@ -129,7 +129,7 @@ async function seedOpenTrackingIssue() {
     create: {
       itemKey: story73OpenIssueKey,
       kind: "calculation_comparison",
-      sourceSheet: "귀케어일정산",
+      sourceSheet: "실시간콜입력",
       relatedRequirement: "FR-37",
       relatedStory: "Story 7.2",
       status: "재검증 필요",

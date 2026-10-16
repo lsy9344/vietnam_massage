@@ -45,8 +45,6 @@ export type ConfirmDialogSummary = {
   operationsCount: number;
   opsDailyIncentiveAmount: number;
   opsMonthlyIncentiveAmount: number;
-  earcarePayoutAmount: number;
-  earcareCount: number;
   warningCount: number;
 };
 
@@ -227,7 +225,7 @@ export function ClosingActionPanel({
                         <div className="mt-1 text-lg font-semibold text-foreground tabular-nums">{confirmSummary.warningCount}{t("settlements.countSuffix")}</div>
                       </div>
                     </div>
-                    <dl className="grid gap-2 text-sm sm:grid-cols-3">
+                    <dl className="grid gap-2 text-sm sm:grid-cols-2">
                       <div className="border border-border bg-background px-3 py-2">
                         <dt className="text-xs text-muted">{t("closing.confirmDialog.therapist")}</dt>
                         <dd className="mt-1 font-semibold tabular-nums">{formatVnd(locale, t, confirmSummary.therapistPayoutAmount)}</dd>
@@ -243,11 +241,6 @@ export function ClosingActionPanel({
                             monthly: formatVnd(locale, t, confirmSummary.opsMonthlyIncentiveAmount)
                           })}
                         </dd>
-                      </div>
-                      <div className="border border-border bg-background px-3 py-2">
-                        <dt className="text-xs text-muted">{t("closing.confirmDialog.earcare")}</dt>
-                        <dd className="mt-1 font-semibold tabular-nums">{formatVnd(locale, t, confirmSummary.earcarePayoutAmount)}</dd>
-                        <dd className="mt-1 text-xs text-muted">{confirmSummary.earcareCount}{t("settlements.peopleSuffix")}</dd>
                       </div>
                     </dl>
                     {pendingCloseRequiresException ? (

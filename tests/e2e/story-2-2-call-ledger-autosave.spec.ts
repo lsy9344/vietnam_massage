@@ -1,7 +1,8 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { selectGridOption } from "./support/call-grid";
 import { restoreUserAccount, setCodeItemActive } from "./support/cleanup";
 
 
@@ -18,7 +19,6 @@ type SeededData = {
   courseId: string;
   therapist1Id: string;
   therapist2Id: string;
-  earcareEmployeeId: string;
   counterAccountDbId: string;
 };
 
@@ -83,7 +83,7 @@ async function seedEmployee(staffCode: string, displayName: string, employeeGrou
     update: {
       displayName,
       employeeGroup,
-      position: employeeGroup === "EARCARE" ? "귀케어" : "마사지사",
+      position: "마사지사",
       shiftType: "전체",
       baseSalary: 0,
       employmentStatus: "재직",
@@ -94,7 +94,7 @@ async function seedEmployee(staffCode: string, displayName: string, employeeGrou
       staffCode,
       displayName,
       employeeGroup,
-      position: employeeGroup === "EARCARE" ? "귀케어" : "마사지사",
+      position: "마사지사",
       shiftType: "전체",
       baseSalary: 0,
       employmentStatus: "재직",
@@ -162,8 +162,6 @@ async function seedStoryData(): Promise<SeededData> {
         name: "E2E 자동저장60",
         durationMinutes: 60,
         basePrice: 1500000,
-        opsCallCredit: 1,
-        earcarePoolAmount: 0,
         requiresSecondTherapist: false,
         tvDisplayName: "E2E 자동저장60",
         effectiveToMonth: null,
@@ -177,8 +175,6 @@ async function seedStoryData(): Promise<SeededData> {
         name: "E2E 자동저장60",
         durationMinutes: 60,
         basePrice: 1500000,
-        opsCallCredit: 1,
-        earcarePoolAmount: 0,
         requiresSecondTherapist: false,
         tvDisplayName: "E2E 자동저장60",
         effectiveFromMonth: "2032-03",
@@ -190,7 +186,6 @@ async function seedStoryData(): Promise<SeededData> {
 
   const therapist1 = await seedEmployee("E2E22-THR-001", "E2E22 마사지사1", "THERAPIST", 92201);
   const therapist2 = await seedEmployee("E2E22-THR-002", "E2E22 마사지사2", "THERAPIST", 92202);
-  const earcare = await seedEmployee("E2E22-EAR-001", "E2E22 귀케어1", "EARCARE", 92201);
 
   await (prisma as any).timeSlot.upsert({
     where: { value: "12:00" },
@@ -209,7 +204,6 @@ async function seedStoryData(): Promise<SeededData> {
     courseId: course.id,
     therapist1Id: therapist1.id,
     therapist2Id: therapist2.id,
-    earcareEmployeeId: earcare.id,
     counterAccountDbId: counter.id
   };
 }
@@ -233,27 +227,30 @@ async function createCallRow(input: { operatingMonthId: string; serviceDate: str
   await (prisma as any).serviceCallAssignment.createMany({
     data: [
       { serviceCallId: call.id, assignmentRole: "THERAPIST_1", employeeId: seededData.therapist1Id },
-      { serviceCallId: call.id, assignmentRole: "THERAPIST_2", employeeId: seededData.therapist2Id },
-      { serviceCallId: call.id, assignmentRole: "EARCARE", employeeId: seededData.earcareEmployeeId }
+      { serviceCallId: call.id, assignmentRole: "THERAPIST_2", employeeId: seededData.therapist2Id }
     ]
   });
   return call;
 }
 
-function rowByText(page: Page, text: string) {
-  return page.getByRole("row", { name: new RegExp(text) });
+function line(page: Page, callId: string) {
+  return page.locator(`tr[data-service-call-id="${callId}"]`);
 }
 
-/**
- * Story 2.6 type-ahead 콤보박스 셀 선택 헬퍼.
- * 상태/결제수단 등 그리드 셀은 `<select>`가 아니라 `role="combobox"` 입력이므로
- * focus → 라벨 입력 → Enter 커밋 패턴으로 선택한다(과거 `selectOption`은 동작하지 않음).
- */
-async function selectGridCombobox(scope: Locator, label: string, value: string) {
-  const combobox = scope.getByRole("combobox", { name: label });
-  await combobox.focus();
-  await combobox.fill(value);
-  await combobox.press("Enter");
+/** 티켓 03: 칸은 더 이상 행에 있지 않다. 줄을 눌러 연 편집 패널이 자동저장 칸을 쥔다. */
+function panel(page: Page) {
+  return page.getByRole("complementary", { name: /^콜 상세/ });
+}
+
+async function openPanel(page: Page, callId: string) {
+  // Next.js의 로딩 스켈레톤이 아직 실제 콜 원장으로 바뀌기 전에 눌러도 재시도하도록, 줄이 실제로
+  // 보일 때까지 먼저 기다린 뒤 연다.
+  const row = line(page, callId);
+  await expect(row).toBeVisible();
+  await row.locator("[data-call-open]").click();
+  const edit = panel(page);
+  await expect(edit).toBeVisible();
+  return edit;
 }
 
 test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
@@ -272,7 +269,7 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
     seededData = await seedStoryData();
   });
 
-  test("counter는 기존 행을 blur로 자동저장하고 상태 변경 이력과 감사 로그를 남긴다", async ({ page }) => {
+  test("counter는 패널에서 기존 행을 blur·고르기로 자동저장하고 상태 변경 이력과 감사 로그를 남긴다", async ({ page }) => {
     const originalMemo = `E2E22 autosave original ${Date.now().toString(36)}`;
     const updatedMemo = `E2E22 autosave updated ${Date.now().toString(36)}`;
     const call = await createCallRow({ operatingMonthId: seededData.openMonthId, serviceDate: "2032-03-05", memo: originalMemo });
@@ -280,21 +277,20 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
     await login(page, "story22_counter", "Story22!counter");
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2032-03-05`);
 
-    const row = rowByText(page, originalMemo);
-    await expect(row).toBeVisible();
-    // 메모를 바꾸면 row의 접근성 이름(=memo 텍스트)이 바뀌어 originalMemo 기반 row 로케이터가
-    // stale해진다. fill/blur는 텍스트와 무관한 안정 식별자(data-service-call-id)로 셀을 잡는다.
-    const stableRow = page.locator(`tr[data-service-call-id="${call.id}"]`);
-    await stableRow.getByLabel("고객/메모").fill(updatedMemo);
-    await stableRow.getByLabel("고객/메모").blur();
+    await expect(line(page, call.id)).toContainText(originalMemo);
+    const edit = await openPanel(page, call.id);
+    const memo = edit.getByLabel("고객/메모");
+    await memo.fill(updatedMemo);
+    await memo.blur();
     // 처음 불러온 행도 "저장됨"으로 보이므로(티켓 15) 이 화면의 저장이 끝났는지는 data-save-state로 본다.
-    const saveState = stableRow.locator("[data-save-state]");
+    const saveState = edit.locator("[data-save-state]");
     await expect(saveState).toHaveAttribute("data-save-state", "saved");
     await expect(saveState).toContainText("저장됨");
+    await expect(line(page, call.id)).toContainText(updatedMemo);
 
-    const updatedRow = rowByText(page, updatedMemo);
-    await selectGridCombobox(updatedRow, "상태", "사용중");
-    await selectGridCombobox(updatedRow, "결제수단", "카드");
+    await selectGridOption(page, edit, "상태", "사용중");
+    const payment = edit.getByRole("region", { name: "결제" });
+    await payment.getByText("카드", { exact: true }).click();
     await expect(saveState).toHaveAttribute("data-save-state", "saved");
 
     await expect
@@ -324,7 +320,7 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
     );
   });
 
-  test("자동저장 실패는 입력값을 유지하고 저장 실패 상태에서 같은 draft로 재시도한다", async ({ page }) => {
+  test("자동저장 실패는 패널의 입력값을 유지하고 저장 실패 상태에서 같은 draft로 재시도한다", async ({ page }) => {
     const originalMemo = `E2E22 retry original ${Date.now().toString(36)}`;
     const retryMemo = `E2E22 retry kept ${Date.now().toString(36)}`;
     const call = await createCallRow({ operatingMonthId: seededData.openMonthId, serviceDate: "2032-03-06", memo: originalMemo });
@@ -333,26 +329,29 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2032-03-06`);
 
     try {
-      // memo를 바꾸면 텍스트 기반 row가 stale해지므로 안정 식별자로 셀을 잡는다.
-      const stableRow = page.locator(`tr[data-service-call-id="${call.id}"]`);
-      await stableRow.getByLabel("고객/메모").fill(retryMemo);
-      await stableRow.getByLabel("고객/메모").blur();
-      const saveState = stableRow.locator("[data-save-state]");
+      const edit = await openPanel(page, call.id);
+      const memo = edit.getByLabel("고객/메모");
+      await memo.fill(retryMemo);
+      await memo.blur();
+      const saveState = edit.locator("[data-save-state]");
       await expect(saveState).toHaveAttribute("data-save-state", "saved");
 
-      // 저장 성공은 목록을 다시 불러온다. 그 뒤에 코드를 비활성화해야 화면에는 "카드"가 남아 있고
+      // 저장 성공은 패널/목록을 다시 불러온다. 그 뒤에 코드를 비활성화해야 화면에는 "카드"가 남아 있고
       // 서버만 거부하는 상태가 되어, 자동저장 실패 경로를 재현할 수 있다.
       await setCodeItemActive("PAYMENT_METHOD", "CARD", false);
-      await selectGridCombobox(stableRow, "결제수단", "카드");
+      const payment = edit.getByRole("region", { name: "결제" });
+      await payment.getByText("카드", { exact: true }).click();
 
-      // 저장 상태 칩은 기호와 글자가 한 요소라 정확히 일치시키지 않는다. 계산 칸에는 "저장 보류 계산 대기"가 뜬다.
-      await expect(rowByText(page, retryMemo).getByText("저장 실패")).toBeVisible();
-      await expect(rowByText(page, retryMemo).getByText("저장 보류 계산 대기")).toBeVisible();
-      await expect(rowByText(page, retryMemo).getByRole("button", { name: /재시도|retry/i })).toBeVisible();
-      await expect(rowByText(page, retryMemo).getByLabel("고객/메모")).toHaveValue(retryMemo);
+      // 저장 상태 칩은 기호와 글자가 한 요소라 정확히 일치시키지 않는다. 결제 묶음의 계산 줄에는
+      // "저장 보류 계산 대기"가 뜬다.
+      await expect(saveState).toHaveAttribute("data-save-state", "failed");
+      await expect(saveState).toContainText("저장 실패");
+      await expect(payment.getByText("저장 보류 계산 대기")).toBeVisible();
+      await expect(edit.getByRole("button", { name: "재시도" })).toBeVisible();
+      await expect(memo).toHaveValue(retryMemo);
 
       await setCodeItemActive("PAYMENT_METHOD", "CARD", true);
-      await rowByText(page, retryMemo).getByRole("button", { name: /재시도|retry/i }).click();
+      await edit.getByRole("button", { name: "재시도" }).click();
       await expect(saveState).toHaveAttribute("data-save-state", "saved");
       await expect(saveState).toContainText("저장됨");
 
@@ -364,22 +363,23 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
     }
   });
 
-  test("잠금 운영월의 기존 콜 행은 read-only이며 autosave retry 동작이 노출되지 않는다", async ({ page }) => {
+  test("잠금 운영월의 기존 콜 패널은 read-only이며 재시도 동작이 노출되지 않는다", async ({ page }) => {
     const memo = `E2E22 locked ${Date.now().toString(36)}`;
-    await createCallRow({ operatingMonthId: seededData.lockedMonthId, serviceDate: "2032-04-05", memo });
+    const call = await createCallRow({ operatingMonthId: seededData.lockedMonthId, serviceDate: "2032-04-05", memo });
 
     await login(page, "story22_counter", "Story22!counter");
-    await page.goto(`/calls?operatingMonthId=${seededData.lockedMonthId}&serviceDate=2032-04-05`);
+    await page.goto(`/calls?operatingMonthId=${seededData.lockedMonthId}&serviceDate=2032-04-05&call=${call.id}`);
 
-    const row = rowByText(page, memo);
     // 잠금 안내는 콜 그리드와 지출 패널 두 곳에 뜬다.
     await expect(page.getByText("잠긴 운영월입니다.").first()).toBeVisible();
-    await expect(row.getByLabel("고객/메모")).toBeDisabled();
-    await expect(row.getByLabel("상태")).toBeDisabled();
-    await expect(row.getByRole("button", { name: /재시도|retry/i })).toHaveCount(0);
+    const edit = panel(page);
+    await expect(edit).toBeVisible();
+    await expect(edit.getByLabel("고객/메모")).toBeDisabled();
+    await expect(edit.getByRole("combobox", { name: "상태" })).toBeDisabled();
+    await expect(edit.getByRole("button", { name: "재시도" })).toHaveCount(0);
   });
 
-  test("권한이 사라진 사용자의 autosave는 서버에서 차단되고 안전한 한국어 오류로 저장 실패가 된다", async ({ page }) => {
+  test("권한이 사라진 사용자의 패널 자동저장은 서버에서 차단되고 안전한 한국어 오류로 저장 실패가 된다", async ({ page }) => {
     const memo = `E2E22 permission ${Date.now().toString(36)}`;
     const draftMemo = `E2E22 permission draft ${Date.now().toString(36)}`;
     const call = await createCallRow({ operatingMonthId: seededData.openMonthId, serviceDate: "2032-03-07", memo });
@@ -392,14 +392,16 @@ test.describe("Story 2.2 콜 행 자동저장과 상태 변경 이력", () => {
       data: { role: "read_only_viewer" }
     });
     try {
-      // memo를 바꾸면 텍스트 기반 row가 stale해지므로 안정 식별자로 셀을 잡는다.
-      const row = page.locator(`tr[data-service-call-id="${call.id}"]`);
-      await row.getByLabel("고객/메모").fill(draftMemo);
-      await row.getByLabel("고객/메모").blur();
+      const edit = await openPanel(page, call.id);
+      const memoField = edit.getByLabel("고객/메모");
+      await memoField.fill(draftMemo);
+      await memoField.blur();
 
-      await expect(rowByText(page, draftMemo).getByText("저장 실패")).toBeVisible();
+      const saveState = edit.locator("[data-save-state]");
+      await expect(saveState).toHaveAttribute("data-save-state", "failed");
+      await expect(saveState).toContainText("저장 실패");
       await expect(page.getByText("권한이 없습니다.")).toBeVisible();
-      await expect(rowByText(page, draftMemo).getByLabel("고객/메모")).toHaveValue(draftMemo);
+      await expect(memoField).toHaveValue(draftMemo);
 
       const saved = await (prisma as any).serviceCall.findUnique({ where: { id: call.id } });
       expect(saved?.customerMemo).toBe(memo);

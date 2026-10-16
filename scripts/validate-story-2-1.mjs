@@ -26,7 +26,7 @@ function readJson(path) {
   "src/app/(erp)/calls/actions.ts",
   "src/app/(erp)/calls/page.tsx",
   "src/app/(erp)/calls/loading.tsx",
-  "src/app/(erp)/calls/editable-call-grid.tsx",
+  "src/app/(erp)/calls/call-ledger-list.tsx",
   "tests/e2e/story-2-1-call-ledger-basic.spec.ts",
   "src/modules/calls/README.md",
   "docs/modules/calls.md",
@@ -69,7 +69,6 @@ for (const required of [
   "serviceCallInputSchema",
   "THERAPIST_1",
   "THERAPIST_2",
-  "EARCARE",
   "운영월을 선택하세요.",
   "날짜는 YYYY-MM-DD",
   "시간은 HH:mm"
@@ -93,9 +92,7 @@ for (const required of [
   "$transaction",
   "paymentAmount",
   "therapist1Commission",
-  "therapist2Commission",
-  "earcarePoolAmount",
-  "opsCallCredit"
+  "therapist2Commission"
 ]) {
   if (!service.includes(required)) errors.push(`service-call-service.ts missing ${required}`);
 }
@@ -120,7 +117,7 @@ for (const required of [
   if (!actions.includes(required)) errors.push(`calls actions missing ${required}`);
 }
 
-const page = `${read("src/app/(erp)/calls/page.tsx")}\n${read("src/app/(erp)/calls/loading.tsx")}\n${read("src/app/(erp)/calls/editable-call-grid.tsx")}`;
+const page = `${read("src/app/(erp)/calls/page.tsx")}\n${read("src/app/(erp)/calls/loading.tsx")}\n${read("src/app/(erp)/calls/call-ledger-list.tsx")}\n${read("src/app/(erp)/calls/call-ledger-workspace.tsx")}`;
 for (const required of [
   "requireRouteAccess(\"/calls\")",
   "operatingMonthId",
@@ -128,10 +125,12 @@ for (const required of [
   "DateContextControls",
   "listServiceCallsForDate",
   "listServiceCallFormOptions",
-  "EditableCallGrid",
+  // 흐름별 원장 목록(콜 원장 흐름 재구성 티켓 03)이 원장 표와 표 아래 새 행 입력을 대신한다. 새 콜은 빠른 예약으로만 만든다.
+  "CallLedgerWorkspace",
+  "CallLedgerList",
   // i18n 전환: 한국어 UI 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
   "calls.grid.empty.title",
-  "calls.addRow.submit",
+  "calls.grid.empty.description",
   "calls.grid.lockedTitle",
   "Skeleton"
 ]) {
@@ -143,7 +142,7 @@ for (const required of ["min={selectedMonth.startDate}", "max={selectedMonth.end
   if (!dateContextControls.includes(required)) errors.push(`date-context-controls.tsx missing ${required}`);
 }
 const koMessages = read("src/lib/i18n/messages/ko.ts");
-for (const label of ["이 날짜의 콜이 없습니다", "새 콜 행 추가", "잠긴 운영월입니다."]) {
+for (const label of ["이 날짜의 콜이 없습니다", "빠른 예약으로 새 콜을 만든다.", "잠긴 운영월입니다."]) {
   if (!koMessages.includes(label)) errors.push(`messages/ko.ts missing calls label: ${label}`);
 }
 
@@ -166,7 +165,8 @@ for (const required of [
   "Story 2.1",
   "/calls",
   "이 날짜의 콜이 없습니다",
-  "새 콜 행 추가",
+  // 티켓 03: 표 아래 "새 콜 행 추가"는 없어지고 새 콜은 빠른 예약으로만 만든다.
+  "빠른 예약",
   "운영월 범위를 벗어난 날짜입니다.",
   "잠긴 운영월입니다.",
   "non-write role",

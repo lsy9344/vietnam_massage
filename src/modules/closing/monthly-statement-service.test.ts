@@ -91,8 +91,7 @@ function therapistPreview(overrides: Partial<MonthlyClosingPreviewDto["therapist
         }
       ]
     },
-    operations: { rows: [] } as any,
-    earcare: { rows: [] } as any
+    operations: { rows: [] } as any
   } as unknown as MonthlyClosingPreviewDto;
 }
 
@@ -111,26 +110,6 @@ function opsPreview(): MonthlyClosingPreviewDto {
           totalOpsPayoutAmount: 600000,
           dailyEvidenceCount: 2,
           monthlyCalculationBasis: "월 콜 수 기준 적용"
-        }
-      ]
-    } as any,
-    earcare: { rows: [] } as any
-  } as unknown as MonthlyClosingPreviewDto;
-}
-
-function earcarePreview(): MonthlyClosingPreviewDto {
-  return {
-    therapists: { rows: [] } as any,
-    operations: { rows: [] } as any,
-    earcare: {
-      rows: [
-        {
-          employeeId: "emp-1",
-          staffCode: "EAR-001",
-          displayName: "직원1",
-          eligibleDayCount: 2,
-          payoutAmount: 300000,
-          calculationBasis: "풀 균등 분배"
         }
       ]
     } as any
@@ -336,7 +315,7 @@ describe("getMonthlyStatement", () => {
           reopenedAt: null,
           reopenedByAccountId: null,
           reopenReason: null,
-          snapshot: { therapists: { rows: [] }, operations: { rows: [] }, earcare: { rows: [] } }
+          snapshot: { therapists: { rows: [] }, operations: { rows: [] } }
         }) as unknown as MonthlyClosingDto,
       listTherapistDailyPayoutConfirmationsForMonth: async () => []
     };
@@ -363,56 +342,7 @@ describe("getMonthlyStatement", () => {
     );
   });
 
-  it("세 직군(귀케어) 직원도 명세서를 볼 수 있다", async () => {
-    const prismaClient = createMemoryPrisma({ employeeGroup: "EARCARE" });
-    const dependencies: Partial<MonthlyStatementDependencies> = {
-      listMonthlyClosingVersions: async () => noVersions(),
-      listMonthlyClosingPreview: async () => earcarePreview(),
-      listEarcareDailySettlements: async ({ serviceDate }: any) => ({
-        operatingMonthId: "month-1",
-        serviceDate,
-        isLocked: false,
-        earcarePoolTotal: 300000,
-        sourceCallCount: 2,
-        eligibleCount: 1,
-        baseShareAmount: 0,
-        remainderAmount: 0,
-        distributedAmount: 300000,
-        undistributedAmount: 0,
-        warningCounts: { notCompleted: 0, coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
-        rows: [
-          {
-            employeeId: "emp-1",
-            staffCode: "EAR-001",
-            displayName: "직원1",
-            statusCode: "NORMAL",
-            statusDisplayName: "정상",
-            isPayoutEligible: true,
-            exclusionReason: null,
-            baseShareAmount: 150000,
-            remainderShareAmount: 0,
-            payoutAmount: 150000,
-            calculationBasis: "풀 균등 분배",
-            payoutConfirmation: payout("unconfirmed", 150000)
-          }
-        ],
-        poolEvidence: [{ serviceCallId: "call-e", serviceDate, earcarePoolAmount: 150000, call: call("call-e", serviceDate) }]
-      })
-    };
-
-    const result = await getMonthlyStatement({ operatingMonthId: "month-1", employeeId: "emp-1", prismaClient, dependencies });
-
-    assert.equal(result.employeeGroup, "EARCARE");
-    assert.equal(result.finalAmount, 300000);
-    assert.deepEqual(result.summary, { kind: "EARCARE", payoutAmount: 300000, calculationBasis: "풀 균등 분배", eligibleDayCount: 2 });
-    assert.equal(result.evidence.available, true);
-    if (result.evidence.available) {
-      assert.equal(result.evidence.dailyEntries.length, 2);
-      assert.equal(result.evidence.dailyEntries[0].attendanceSummary, "정상");
-    }
-  });
-
-  it("세 직군(운영팀) 직원은 일일 인센 단위와 월 인센 단위가 함께 payoutUnits에 담긴다", async () => {
+  it("두 직군(운영팀) 직원은 일일 인센 단위와 월 인센 단위가 함께 payoutUnits에 담긴다", async () => {
     const prismaClient = createMemoryPrisma({ employeeGroup: "OPERATIONS" });
     const dependencies: Partial<MonthlyStatementDependencies> = {
       listMonthlyClosingVersions: async () => noVersions(),
@@ -425,7 +355,7 @@ describe("getMonthlyStatement", () => {
         operatingMonthId: "month-1",
         serviceDate,
         isLocked: false,
-        dailyOpsCallCredit: 10,
+        dailyOpsCallCount: 10,
         sourceCallCount: 2,
         appliedThresholdCallCount: 10,
         personalIncentiveAmount: 50000,
@@ -449,7 +379,7 @@ describe("getMonthlyStatement", () => {
             payoutConfirmation: payout("confirmed", 50000)
           }
         ],
-        callEvidence: [{ serviceCallId: "call-o", serviceDate, opsCallCredit: 1, call: call("call-o", serviceDate) }]
+        callEvidence: [{ serviceCallId: "call-o", serviceDate, call: call("call-o", serviceDate) }]
       })
     };
 

@@ -54,8 +54,6 @@ for (const required of [
   "@map(\"course_id\")",
   "@map(\"duration_minutes\")",
   "@map(\"base_price\")",
-  "@map(\"ops_call_credit\")",
-  "@map(\"earcare_pool_amount\")",
   "@map(\"requires_second_therapist\")",
   "@map(\"tv_display_name\")",
   "@map(\"effective_from_month\")",
