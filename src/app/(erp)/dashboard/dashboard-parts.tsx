@@ -1,8 +1,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { CallStatusChip, type CallStatusKey } from "@/components/domain/call-status-chip";
 import { DetailRow } from "@/components/ui/detail-row";
 import { ScreenState } from "@/components/ui/screen-state";
-import { StatusIndicator, type StatusTone } from "@/components/ui/status-indicator";
+import { StatusIndicator } from "@/components/ui/status-indicator";
 import { createTranslator } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
 import { formatNumber } from "@/lib/i18n/format";
@@ -14,18 +15,18 @@ import type { TodayDashboardMetricsDto } from "@/modules/dashboard/dashboard-que
 type StatusCounts = TodayDashboardMetricsDto["statusCounts"];
 
 // 예약건수는 상태가 아니라 원장에 등록된 전체 건수라 칩 없이 글자로 둔다(REQ-009).
-const statusRows: Array<{ key: keyof StatusCounts; labelKey: MessageKey; tone: StatusTone | null }> = [
-  { key: "reservation", labelKey: "dashboard.status.reservationCount", tone: null },
-  { key: "inUse", labelKey: "dashboard.status.inUse", tone: "info" },
-  { key: "cleaning", labelKey: "dashboard.status.cleaning", tone: "info" },
-  { key: "completed", labelKey: "dashboard.status.completed", tone: "success" },
-  { key: "noShow", labelKey: "dashboard.status.noShow", tone: "warning" },
-  { key: "canceled", labelKey: "dashboard.status.canceled", tone: "neutral" }
+const statusRows: Array<{ key: keyof StatusCounts; labelKey: MessageKey; status: CallStatusKey | null }> = [
+  { key: "reservation", labelKey: "dashboard.status.reservationCount", status: null },
+  { key: "inUse", labelKey: "dashboard.status.inUse", status: "inUse" },
+  { key: "cleaning", labelKey: "dashboard.status.cleaning", status: "cleaning" },
+  { key: "completed", labelKey: "dashboard.status.completed", status: "completed" },
+  { key: "noShow", labelKey: "dashboard.status.noShow", status: "noShow" },
+  { key: "canceled", labelKey: "dashboard.status.canceled", status: "canceled" }
 ];
 
 const inProgress = new Set<keyof StatusCounts>(["inUse", "cleaning"]);
 
-/** 상태별 건수 한 줄. 콜 상태는 객실 상태색 배지가 아니라 StatusIndicator로 보인다(design.md 2.5). */
+/** 상태별 건수 한 줄. 콜 상태는 객실 상태색 배지가 아니라 원장 머리와 같은 CallStatusChip으로 보인다(design.md 2.5, 6.8). */
 export function DashboardStatusCounts({
   label,
   counts,
@@ -44,17 +45,22 @@ export function DashboardStatusCounts({
     : statusRows;
   return (
     <section aria-label={label}>
-      <ul className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        {rows.map((row) => (
-          <li className="inline-flex min-h-7 items-center gap-1.5" key={row.key}>
-            {row.tone ? (
-              <StatusIndicator label={t(row.labelKey)} tone={row.tone} />
-            ) : (
-              <span className="text-sm font-semibold text-foreground">{t(row.labelKey)}</span>
-            )}{" "}
-            <span className="text-sm font-semibold text-foreground">{t("dashboard.count", { count: formatNumber(locale, counts[row.key]) })}</span>
-          </li>
-        ))}
+      <ul className="flex flex-wrap items-center gap-1.5">
+        {rows.map((row) => {
+          const count = t("dashboard.count", { count: formatNumber(locale, counts[row.key]) });
+          return (
+            <li className="inline-flex min-h-9 items-center gap-1.5" key={row.key}>
+              {row.status ? (
+                <CallStatusChip count={{ value: counts[row.key], text: count }} label={t(row.labelKey)} status={row.status} />
+              ) : (
+                <>
+                  <span className="text-sm font-semibold text-foreground">{t(row.labelKey)}</span>{" "}
+                  <span className="mr-1 text-sm font-semibold text-foreground">{count}</span>
+                </>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

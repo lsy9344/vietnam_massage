@@ -39,9 +39,9 @@ export default async function MonthlyDashboardLoading() {
             <Skeleton className="h-28 rounded-lg" key={index} />
           ))}
         </section>
-        <section className="flex flex-wrap gap-x-4 gap-y-2" aria-label={t("dashboard.monthly.loading.statusCountsAria")}>
+        <section className="flex flex-wrap gap-1.5" aria-label={t("dashboard.monthly.loading.statusCountsAria")}>
           {Array.from({ length: 6 }, (_, index) => (
-            <Skeleton className="h-7 w-24 rounded-full" key={index} />
+            <Skeleton className="h-9 w-28 rounded-full" key={index} />
           ))}
         </section>
         <div className="grid grid-cols-1 gap-4 min-[840px]:grid-cols-2 min-[1200px]:grid-cols-3">

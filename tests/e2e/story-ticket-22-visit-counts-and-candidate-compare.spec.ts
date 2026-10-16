@@ -156,9 +156,9 @@ test.describe("티켓 22 방문 건수와 같은 연락처 후보 비교", () =>
     const panel = page.getByRole("complementary", { name: "T22 수아" });
     await expect(panel.getByLabel("연락처")).toHaveValue(sharedPhone);
     const counts = panel.getByRole("list", { name: "방문완료·노쇼·취소 건수" });
-    await expect(counts).toContainText("방문완료1건");
-    await expect(counts).toContainText("노쇼0건");
-    await expect(counts).toContainText("취소0건");
+    await expect(counts).toContainText("방문완료 1건");
+    await expect(counts).toContainText("노쇼 0건");
+    await expect(counts).toContainText("취소 0건");
 
     await page.getByRole("combobox", { name: "고객 검색" }).fill(sharedPhone);
     await minaRow.click();
@@ -166,9 +166,9 @@ test.describe("티켓 22 방문 건수와 같은 연락처 후보 비교", () =>
 
     const minaPanel = page.getByRole("complementary", { name: "T22 민아" });
     const minaCounts = minaPanel.getByRole("list", { name: "방문완료·노쇼·취소 건수" });
-    await expect(minaCounts).toContainText("방문완료1건");
-    await expect(minaCounts).toContainText("노쇼1건");
-    await expect(minaCounts).toContainText("취소1건");
+    await expect(minaCounts).toContainText("방문완료 1건");
+    await expect(minaCounts).toContainText("노쇼 1건");
+    await expect(minaCounts).toContainText("취소 1건");
     // 예약은 그 건수에 들어가지 않지만 이력 표에는 그대로 남는다.
     const history = minaPanel.getByRole("region", { name: "방문 이력" });
     await expect(history.getByRole("row", { name: /T22 민아 예약/ })).toBeVisible();

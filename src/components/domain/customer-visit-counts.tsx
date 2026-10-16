@@ -1,14 +1,14 @@
-import { StatusIndicator, type StatusTone } from "@/components/ui/status-indicator";
+import { CallStatusChip, type CallStatusKey } from "@/components/domain/call-status-chip";
 import { t } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
 import { formatNumber } from "@/lib/i18n/format";
 import type { MessageKey } from "@/lib/i18n/types";
 import type { CustomerVisitCountsDto } from "@/modules/calls/service-call-service";
 
-const statuses: Array<{ key: keyof CustomerVisitCountsDto; labelKey: MessageKey; tone: StatusTone }> = [
-  { key: "completedCount", labelKey: "calls.summary.completed", tone: "success" },
-  { key: "noShowCount", labelKey: "calls.summary.noShow", tone: "warning" },
-  { key: "canceledCount", labelKey: "calls.summary.canceled", tone: "neutral" }
+const statuses: Array<{ key: keyof CustomerVisitCountsDto; labelKey: MessageKey; status: CallStatusKey }> = [
+  { key: "completedCount", labelKey: "calls.summary.completed", status: "completed" },
+  { key: "noShowCount", labelKey: "calls.summary.noShow", status: "noShow" },
+  { key: "canceledCount", labelKey: "calls.summary.canceled", status: "canceled" }
 ];
 
 /**
@@ -19,11 +19,14 @@ const statuses: Array<{ key: keyof CustomerVisitCountsDto; labelKey: MessageKey;
 export function CustomerVisitCounts({ counts, locale }: { counts: CustomerVisitCountsDto; locale: Locale }) {
   const countLabel = (value: number) => `${formatNumber(locale, value)}${t(locale, "calls.summary.countSuffix")}`;
   return (
-    <ul aria-label={t(locale, "customers.visitCounts.aria")} className="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <ul aria-label={t(locale, "customers.visitCounts.aria")} className="flex flex-wrap items-center gap-1.5">
       {statuses.map((status) => (
-        <li className="inline-flex items-center gap-1.5" key={status.key}>
-          <StatusIndicator label={t(locale, status.labelKey)} tone={status.tone} />
-          <span className="text-sm font-semibold text-foreground">{countLabel(counts[status.key])}</span>
+        <li className="inline-flex" key={status.key}>
+          <CallStatusChip
+            count={{ value: counts[status.key], text: countLabel(counts[status.key]) }}
+            label={t(locale, status.labelKey)}
+            status={status.status}
+          />
         </li>
       ))}
     </ul>

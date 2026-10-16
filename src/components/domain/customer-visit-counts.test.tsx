@@ -11,6 +11,9 @@ describe("고객 방문 건수(B09)", () => {
 
     assert.match(html, /^<ul aria-label="방문완료·노쇼·취소 건수"/);
     assert.match(html, /방문완료[\s\S]*?3건[\s\S]*?노쇼[\s\S]*?0건[\s\S]*?취소[\s\S]*?1건/);
+    // 원장 머리와 같은 콜 상태 칩이다: 건수는 칩 안 방울, 0건(노쇼)은 채우지 않는다.
+    assert.match(html, /bg-success text-success-foreground[^"]*">[\s\S]*?방문완료<\/span> <span[^>]*>3건<\/span>/);
+    assert.doesNotMatch(html, /bg-danger/);
   });
 
   it("speaks Vietnamese", () => {

@@ -228,9 +228,9 @@ test.describe("티켓 24 빠른 예약 새 고객 함께 저장과 최근 방문
 
     // 방문완료·노쇼·취소 건수(0건 포함)와 최근 방문의 코스·Therapist·방문별 요청이 보인다.
     const counts = dialog.getByRole("list", { name: "방문완료·노쇼·취소 건수" });
-    await expect(counts).toContainText("방문완료1건");
-    await expect(counts).toContainText("노쇼0건");
-    await expect(counts).toContainText("취소0건");
+    await expect(counts).toContainText("방문완료 1건");
+    await expect(counts).toContainText("노쇼 0건");
+    await expect(counts).toContainText("취소 0건");
     await expect(dialog.getByText(/코스 가져오기: A/)).toBeVisible();
     await expect(dialog.getByText("Therapist 가져오기: T24 마사지사")).toBeVisible();
     await expect(dialog.getByText("방문별 요청 가져오기: 조용한 방으로 부탁드립니다")).toBeVisible();
