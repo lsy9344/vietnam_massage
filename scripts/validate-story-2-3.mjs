@@ -22,7 +22,7 @@ function readJson(path) {
   "src/modules/calls/service-call-service.ts",
   "src/modules/calls/service-call-service.test.ts",
   "src/app/(erp)/calls/daily-summary-strip.tsx",
-  "src/app/(erp)/calls/editable-call-grid.tsx",
+  "src/app/(erp)/calls/call-edit-panel.tsx",
   "tests/e2e/story-2-3-completed-call-calculation.spec.ts",
   "src/modules/calls/README.md",
   "docs/modules/calls.md",
@@ -60,14 +60,15 @@ if (/paymentAmount\s*:\s*null/.test(service)) {
 }
 
 // 계산 상태 문구 키는 원장 표와 하루 수납·지출이 함께 쓰도록 calculation-status-message.ts로 옮겼다(티켓 03).
-const grid = `${read("src/app/(erp)/calls/editable-call-grid.tsx")}\n${read("src/app/(erp)/calls/calculation-status-message.ts")}`;
+// 계산값은 원장 편집 패널의 결제 묶음(call-edit-panel.tsx)이 보인다(콜 원장 흐름 재구성 티켓 03).
+const grid = `${read("src/app/(erp)/calls/call-edit-panel.tsx")}\n${read("src/app/(erp)/calls/calculation-status-message.ts")}`;
 for (const required of [
-  "ComputedCell",
-  "bg-readonly",
+  "PaymentAmounts",
+  "line-through",
   "[font-variant-numeric:tabular-nums]",
-  "formatVnd",
+  "formatNumber",
   // 티켓 15: 저장 실패나 충돌로 남은 초안이면 계산값 대신 대기 표시를 한다.
-  "isSaveHeld(saveStatus)",
+  "isSaveHeld(status)",
   "calculationStatus",
   // i18n 전환: 계산/컬럼 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
   "calls.calc.errorPending",
@@ -78,7 +79,7 @@ for (const required of [
   "calls.column.therapist1Commission",
   "calls.column.therapist2Commission"
 ]) {
-  if (!grid.includes(required)) errors.push(`editable-call-grid.tsx missing ${required}`);
+  if (!grid.includes(required)) errors.push(`call ledger list/panel missing ${required}`);
 }
 const koMessages = read("src/lib/i18n/messages/ko.ts");
 for (const label of ["저장 보류 계산 대기", "계산됨", "비완료 제외", "정책 없음", "결제금액", "마사지사1수당", "마사지사2수당"]) {

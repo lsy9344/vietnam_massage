@@ -269,8 +269,26 @@ async function createCallRow(input: { serviceDate: string; memo: string; status?
   return call;
 }
 
-function rowByText(page: Page, text: string) {
-  return page.getByRole("row", { name: new RegExp(text) });
+function line(page: Page, callId: string) {
+  return page.locator(`tr[data-service-call-id="${callId}"]`);
+}
+
+/** 티켓 03: 계산값은 더 이상 행 칸이 아니라 편집 패널의 결제 묶음(`[data-calculation-status]`)에 readonly로 뜬다. */
+function panel(page: Page) {
+  return page.getByRole("complementary", { name: /^콜 상세/ });
+}
+
+/**
+ * 완료·취소 묶음은 기본으로 접혀 있다(스펙 D16). 주소의 `call=`로 열면 그 콜이 완료 묶음이어도
+ * 자동으로 펼쳐지므로, 접힌 줄을 눌러야 하는 문제 없이 패널을 바로 연다.
+ */
+async function openPanel(page: Page, callId: string) {
+  const url = new URL(page.url());
+  url.searchParams.set("call", callId);
+  await page.goto(url.toString());
+  const edit = panel(page);
+  await expect(edit).toBeVisible();
+  return edit;
 }
 
 test.describe("Story 2.3 방문완료 기준 계산 표시", () => {
@@ -288,59 +306,62 @@ test.describe("Story 2.3 방문완료 기준 계산 표시", () => {
     seededData = await seedStoryData();
   });
 
-  test("방문완료 전환 후 서버 계산값을 readonly 셀에 표시하고 할인 변경을 즉시 반영한다", async ({ page }) => {
+  test("방문완료 전환 후 서버 계산값을 패널의 결제 묶음(readonly)에 표시하고 할인 변경을 즉시 반영한다", async ({ page }) => {
     const memo = `E2E23 calculation ${Date.now().toString(36)}`;
-    await createCallRow({ serviceDate: "2032-05-05", memo });
+    const call = await createCallRow({ serviceDate: "2032-05-05", memo });
 
     await loginAsAdministrator(page);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2032-05-05`);
 
-    const row = rowByText(page, memo);
-    await expect(row).toBeVisible();
+    await expect(line(page, call.id)).toContainText(memo);
+    const edit = await openPanel(page, call.id);
+    const payment = edit.getByRole("region", { name: "결제" });
     // REQ-007: 결제수단이 있으면 방문완료 전에도 선결제 매출로 결제금액이 잡힌다.
     // 수당은 방문완료 이후에만 계산한다.
-    await expect(row.getByText("계산됨")).toBeVisible();
-    await expect(row.getByText("1,500,000")).toBeVisible();
-    await expect(row.getByText("700,000")).toHaveCount(0);
+    await expect(payment.getByText("계산됨")).toBeVisible();
+    await expect(payment.getByText("1,500,000")).toBeVisible();
+    await expect(payment.getByText("700,000")).toHaveCount(0);
 
-    await selectGridOption(page, row, "상태", "방문완료");
-    await expect(row.getByText("계산됨")).toBeVisible();
-    await expect(row.getByText("1,500,000")).toBeVisible();
-    await expect(row.getByText("700,000")).toBeVisible();
-    await expect(row.getByText("300,000")).toBeVisible();
-    await expect(row.getByText(/^100,000$/)).toHaveCount(0);
+    await selectGridOption(page, edit, "상태", "방문완료");
+    await expect(payment.getByText("계산됨")).toBeVisible();
+    await expect(payment.getByText("1,500,000")).toBeVisible();
+    await expect(payment.getByText("700,000")).toBeVisible();
+    await expect(payment.getByText("300,000")).toBeVisible();
+    await expect(payment.getByText(/^100,000$/)).toHaveCount(0);
 
-    await selectGridOption(page, row, "할인구분", "생일자");
-    await expect(row.getByText("1,400,000")).toBeVisible();
-    await expect(row.getByText(/^100,000$/)).toHaveCount(1);
+    await selectGridOption(page, edit, "할인구분", "생일자");
+    await expect(payment.getByText("1,400,000")).toBeVisible();
+    await expect(payment.getByText(/^100,000$/)).toHaveCount(1);
   });
 
   test("비완료 행은 계산 집계에서 제외된 상태로 표시한다", async ({ page }) => {
     const memo = `E2E23 not completed ${Date.now().toString(36)}`;
-    await createCallRow({ serviceDate: "2032-05-06", memo, status: "CANCELED", discountTypeCode: "BIRTHDAY" });
+    const call = await createCallRow({ serviceDate: "2032-05-06", memo, status: "CANCELED", discountTypeCode: "BIRTHDAY" });
 
     await login(page);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2032-05-06`);
 
-    const row = rowByText(page, memo);
-    await expect(row.getByText("비완료 제외")).toBeVisible();
-    await expect(row.getByText("계산됨")).toHaveCount(0);
-    await expect(row.getByText("1,400,000")).toHaveCount(0);
+    const edit = await openPanel(page, call.id);
+    const payment = edit.getByRole("region", { name: "결제" });
+    await expect(payment.getByText("비완료 제외")).toBeVisible();
+    await expect(payment.getByText("계산됨")).toHaveCount(0);
+    await expect(payment.getByText("1,400,000")).toHaveCount(0);
   });
 
   test("수당 정책이 없으면 성공 계산처럼 보이지 않고 정책 없음 상태를 표시한다", async ({ page }) => {
     const memo = `E2E23 missing rate ${Date.now().toString(36)}`;
-    await createCallRow({ serviceDate: "2032-05-07", memo, status: "VISIT_COMPLETE", missingRate: true });
+    const call = await createCallRow({ serviceDate: "2032-05-07", memo, status: "VISIT_COMPLETE", missingRate: true });
 
     await login(page);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2032-05-07`);
 
-    const row = rowByText(page, memo);
+    const edit = await openPanel(page, call.id);
+    const payment = edit.getByRole("region", { name: "결제" });
     // 서버 domain error는 "마사지사1 수당 정책을 찾을 수 없습니다."이지만 화면은 역할 번호 없는
     // i18n 문구(calls.calc.therapistRateMissing)를 보여준다.
-    await expect(row.getByText("마사지사 수당 정책을 찾을 수 없습니다.")).toBeVisible();
-    await expect(row.getByText("계산됨")).toHaveCount(0);
-    await expect(row.getByText("1,800,000")).toHaveCount(0);
+    await expect(payment.getByText("마사지사 수당 정책을 찾을 수 없습니다.")).toBeVisible();
+    await expect(payment.getByText("계산됨")).toHaveCount(0);
+    await expect(payment.getByText("1,800,000")).toHaveCount(0);
   });
 
   test.afterAll(async () => {

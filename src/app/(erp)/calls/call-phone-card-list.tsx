@@ -15,7 +15,7 @@ const cardClassName =
 
 /**
  * 휴대폰 폭(600px 미만)의 원장 카드 목록(명세 F08, 티켓 26). 넓은 표의 축소판이 아니라 다른 렌더이고,
- * 태블릿 이상에서는 보이지 않는다(editable-call-grid.tsx가 두 렌더를 CSS로만 서로 민다). 카드는 예약시각,
+ * 태블릿 이상에서는 보이지 않는다(call-ledger-list.tsx가 두 렌더를 CSS로만 서로 민다). 카드는 예약시각,
  * 객실, 코스, Therapist, 상태, 첫 경고만 보여 주는 읽기 전용 요약이라 고객 연락처나 금액은 여기 없다.
  * 누르면 그 콜의 상세 패널(이미 읽기 전용, 티켓 13)이 열린다.
  */
@@ -26,7 +26,7 @@ export function CallPhoneCardList({
   rows,
   selectedCallId = null
 }: {
-  /** editable-call-grid.tsx가 usePhoneWidth()로 재는 실제 폭(티켓 26 회귀, story-2-1). */
+  /** call-ledger-list.tsx가 usePhoneWidth()로 재는 실제 폭(티켓 26 회귀, story-2-1). */
   isPhoneWidth: boolean;
   onOpenDetail: (callId: string) => void;
   options: ServiceCallFormOptions;
@@ -36,7 +36,7 @@ export function CallPhoneCardList({
   const t = useT();
 
   if (rows.length === 0) {
-    // 태블릿 이상 폭에서는 editable-call-grid.tsx의 표 쪽이 이미 같은 빈 상태 문구를 보여 준다. 이 블록은
+    // 태블릿 이상 폭에서는 call-ledger-list.tsx의 목록 쪽이 이미 같은 빈 상태 문구를 보여 준다. 이 블록은
     // CSS(min-[600px]:hidden)로만 숨겨지고 DOM에는 남으므로, 그리지 않고 아예 빼서 "이 날짜의 콜이
     // 없습니다"를 찾는 검사가 두 군데에 걸리지 않게 한다.
     if (!isPhoneWidth) {

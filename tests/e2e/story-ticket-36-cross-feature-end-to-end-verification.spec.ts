@@ -3,7 +3,6 @@ import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
-import { selectGridOption } from "./support/call-grid";
 import { openEmployeePanel } from "./support/settlement";
 
 /**
@@ -234,7 +233,7 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
     expect(call.status).toBe("RESERVED"); // 빠른 예약 서버 액션은 영문 코드로 저장한다(티켓 20과 같다).
     expect(call.roomId).toBe(room.id);
 
-    // 3) 입장·객실 확인: 상태를 사용중으로 바꾸고 객실 화면에 반영되는지 본다.
+    // 3) 입장·객실 확인: 줄 끝 "입장" 버튼으로 사용중이 되고, 객실 화면에 반영되는지 본다(티켓 03의 줄 끝 버튼).
     // 운영 빌드에서는 서버 액션 뒤 원장 표 자동 갱신(revalidatePath)이 가끔 늦는다(e2e-environment 메모).
     // 새로고침을 곁들여 다시 시도한다.
     const row = page.locator(`tr[data-service-call-id="${call.id}"]`);
@@ -243,8 +242,10 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
       await expect(row).toBeVisible({ timeout: 3_000 });
     }).toPass({ timeout: 30_000 });
     await row.scrollIntoViewIfNeeded();
-    await selectGridOption(page, row, "상태", "사용중");
-    await expect(row.locator('[data-save-state="saved"]')).toBeVisible();
+    // 빠른 예약에서 이미 객실을 골라 뒀으므로(roomId=room.id) 입장이 빈 객실 고르기 없이 바로 저장된다(스펙 D18).
+    await row.getByRole("button", { name: "15:00 콜 입장" }).click();
+    await expect(row.locator("[data-line-save-state]")).toHaveAttribute("data-line-save-state", "saved");
+    await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: call.id } })).status).toBe("IN_USE");
 
     await page.goto(`/rooms?operatingMonthId=${month.id}&serviceDate=${serviceDate}`);
     const roomCard = page.getByTestId("room-status-card").filter({ hasText: "T36 중심흐름 호실" });
@@ -254,17 +255,27 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
     }).toPass({ timeout: 30_000 });
     await expect(roomCard).toContainText("T36 중심흐름 A");
 
-    // 4) 완료·수납: 방문완료로 바꾸고 결제수단을 고르면, 같은 날짜의 "하루 수납·지출" 탭 합계에 반영된다.
+    // 4) 완료·수납: 줄 끝 "결제" 버튼이 편집 패널의 결제 묶음을 연다. 결제수단 알약을 고르고 "결제 완료"로
+    // 방문완료가 되면, 같은 날짜의 "하루 수납·지출" 탭 합계에 반영된다.
     await page.goto(`/calls?operatingMonthId=${month.id}&serviceDate=${serviceDate}`);
     await expect(async () => {
       await page.reload();
       await expect(row).toBeVisible({ timeout: 3_000 });
     }).toPass({ timeout: 30_000 });
     await row.scrollIntoViewIfNeeded();
-    await selectGridOption(page, row, "상태", "방문완료");
-    await expect(row.locator('[data-save-state="saved"]')).toBeVisible();
-    await selectGridOption(page, row, "결제수단", "현금");
-    await expect(row.locator('[data-save-state="saved"]')).toBeVisible();
+    await row.getByRole("button", { name: "15:00 콜 결제" }).click();
+    await expect(page).toHaveURL(new RegExp(`call=${call.id}$`));
+    const panel = page.getByRole("complementary", { name: /^콜 상세/ });
+    const payment = panel.getByRole("region", { name: "결제" });
+    await expect(payment).toBeVisible();
+
+    // 보기 전환(옛 F02, 티켓 19)이 사라져도 권한은 그대로다: 카운터는 패널의 결제 묶음에서도 수당을 볼 수 없다.
+    await expect(payment.locator("[data-calculation-status]")).not.toContainText("마사지사1수당");
+
+    await payment.getByText("현금", { exact: true }).click();
+    await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: call.id } })).paymentMethodCode).toBe("CASH");
+    await payment.getByRole("button", { name: "결제 완료" }).click();
+    await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: call.id } })).status).toBe("VISIT_COMPLETE");
 
     const cashCards = page.getByLabel("하루 수납 요약");
     await expect(async () => {
@@ -272,10 +283,6 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
       await expect(cashCards.locator("div").filter({ hasText: /^결제합계/ })).toContainText("1,500,000 VND", { timeout: 3_000 });
     }).toPass({ timeout: 30_000 });
     await expect(cashCards.locator("div").filter({ hasText: /^순매출/ })).toContainText("1,500,000 VND");
-
-    // 보기 전환(F02, 티켓 19)이 권한을 넓히지 않는다: 카운터가 "수납·정산" 보기로 바꿔도 수당 열은 없다.
-    await page.goto(`/calls?operatingMonthId=${month.id}&serviceDate=${serviceDate}&view=settlement`);
-    await expect(page.getByRole("columnheader", { name: "마사지사1수당" })).toHaveCount(0);
 
     // 5) 지급 확인: 정산 담당이 그 콜의 수당을 확인한다.
     await login(page, settlementManager.accountId, settlementManager.password);
@@ -446,9 +453,11 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
     }).toPass({ timeout: 20_000 });
     const firstClosing = await (prisma as any).monthlyClosing.findFirstOrThrow({ where: { operatingMonthId: month.id, closeVersion: 1 } });
 
-    // 2) 마감확정 상태에서는 고객 연결 정정이 잠겨 있다(티켓 25와 같은 안내).
+    // 2) 마감확정 상태에서는 고객 연결 정정이 잠겨 있다(티켓 25와 같은 안내). 그 정정 폼은 패널의 "더 보기"
+    // 안에 있으므로(스펙 D20, 티켓 03) 펼쳐야 보인다.
     await page.goto(`/calls?operatingMonthId=${month.id}&serviceDate=${serviceDate}&call=${call.id}`);
     const panel = page.getByRole("complementary", { name: /^콜 상세/ });
+    await panel.getByText("더 보기").click();
     await expect(panel.getByText("마감확정 또는 잠금 운영월입니다. 관리자가 재오픈해야 고객 연결을 정정할 수 있습니다.")).toBeVisible();
 
     // V12: closing:reopen 재검사. 관리자 화면을 열어 둔 채 호출 시점의 역할만 정산 담당으로 바꿔, 재오픈
@@ -470,8 +479,9 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
       expect(latest?.status).toBe("검토중");
     }).toPass({ timeout: 20_000 });
 
-    // 4) 재오픈 뒤에는 고객 연결 정정이 가능하다.
+    // 4) 재오픈 뒤에는 고객 연결 정정이 가능하다. 새로 연 패널이라 "더 보기"를 다시 펼친다.
     await page.goto(`/calls?operatingMonthId=${month.id}&serviceDate=${serviceDate}&call=${call.id}`);
+    await panel.getByText("더 보기").click();
     await expect(panel.getByText("지금 연결")).toBeVisible();
     await panel.getByRole("combobox", { name: "새로 연결할 고객 검색" }).fill("T36 재오픈 새고객");
     await panel.getByRole("option", { name: "T36 재오픈 새고객" }).click();

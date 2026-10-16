@@ -120,7 +120,7 @@ describe("CallPhoneCardList (ticket 26)", () => {
     assert.match(html, /이 날짜의 콜이 없습니다/);
   });
 
-  // 회귀(story-2-1): 태블릿 이상 폭에서는 editable-call-grid.tsx의 표 쪽이 이미 같은 빈 상태 문구를
+  // 회귀(story-2-1): 태블릿 이상 폭에서는 call-ledger-list.tsx의 목록 쪽이 이미 같은 빈 상태 문구를
   // 보여 준다. CSS(min-[600px]:hidden)로만 숨기면 두 문구가 함께 DOM에 남아 "이 날짜의 콜이 없습니다"를
   // 찾는 검사가 strict-mode 위반으로 깨진다. 태블릿 이상에서는 이 컴포넌트가 아예 아무것도 그리지 않는다.
   it("태블릿 이상 폭에서는 콜이 없어도 아무것도 그리지 않는다(표 쪽 문구와 중복 방지)", () => {

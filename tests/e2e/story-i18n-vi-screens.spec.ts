@@ -70,10 +70,28 @@ async function seed() {
       isActive: true
     }
   });
-  return { monthId: month.id, serviceDate: `${MONTH_KEY}-10` };
+
+  // 콜 원장 목록 헤더·흐름 묶음 제목 검증용 콜 하나(티켓 03). 대시보드 "콜이 없는 날" 검증(serviceDate)과
+  // 날짜를 분리해 서로 영향을 주지 않는다.
+  const ledgerServiceDate = `${MONTH_KEY}-11`;
+  await (prisma as any).serviceCall.deleteMany({ where: { operatingMonthId: month.id, customerMemo: "i18n 예약" } });
+  const course = await (prisma as any).course.upsert({ where: { code: "I18N" }, update: { isActive: true }, create: { code: "I18N", isActive: true } });
+  await (prisma as any).timeSlot.upsert({ where: { value: "11:00" }, update: { isActive: true }, create: { value: "11:00", sortOrder: 7995, isActive: true } });
+  await (prisma as any).serviceCall.create({
+    data: {
+      operatingMonthId: month.id,
+      serviceDate: new Date(`${ledgerServiceDate}T00:00:00.000Z`),
+      startTime: "11:00",
+      courseId: course.id,
+      customerMemo: "i18n 예약",
+      status: "RESERVED"
+    }
+  });
+
+  return { monthId: month.id, serviceDate: `${MONTH_KEY}-10`, ledgerServiceDate };
 }
 
-let seeded: { monthId: string; serviceDate: string };
+let seeded: { monthId: string; serviceDate: string; ledgerServiceDate: string };
 
 /** vi 기본(쿠키 없음)으로 로그인한다. 라벨이 베트남어이므로 vi locator를 쓴다. */
 async function loginVi(page: Page) {
@@ -105,15 +123,20 @@ test.describe("i18n 업무 화면 베트남어(vi)", () => {
     await expect(page.getByText("운영월 상태")).toHaveCount(0);
   });
 
-  test("콜 원장 그리드 컬럼 헤더가 베트남어로 보인다", async ({ page }) => {
+  test("콜 원장 목록 헤더와 흐름 묶음 제목이 베트남어로 보인다", async ({ page }) => {
     await loginVi(page);
-    await page.goto(`/calls?operatingMonthId=${seeded.monthId}&serviceDate=${seeded.serviceDate}`);
+    await page.goto(`/calls?operatingMonthId=${seeded.monthId}&serviceDate=${seeded.ledgerServiceDate}`);
     await expect(page.locator("html")).toHaveAttribute("lang", "vi");
-    // 그리드 컬럼 헤더(객실/코스/결제수단 등)가 vi.
-    await expect(page.getByRole("columnheader", { name: "Phòng" }).first()).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "Gói dịch vụ" }).first()).toBeVisible();
-    // 새 콜 행 추가 버튼 vi.
-    await expect(page.getByRole("button", { name: "Thêm dòng cuộc gọi mới" })).toBeVisible();
+    // 콜 원장 흐름 재구성(티켓 03): 넓은 표가 흐름별 한 줄 목록으로 바뀌었다. 목록 헤더가 vi.
+    const list = page.getByRole("table", { name: "Sổ cuộc gọi theo luồng" });
+    await expect(list).toBeVisible();
+    for (const header of ["Giờ", "Khách/Ghi chú", "Gói dịch vụ", "Kỹ thuật viên", "Phòng", "Trạng thái"]) {
+      await expect(list.getByRole("columnheader", { name: header })).toBeVisible();
+    }
+    // 흐름 묶음 제목(지금 이용 중/예약/완료·취소)도 vi.
+    await expect(page.locator('[data-ledger-flow="reserved"]')).toContainText("Đặt trước");
+    // 표 아래 "새 콜 행 추가"는 없어졌다(새 콜은 빠른 예약으로만 만든다).
+    await expect(page.getByRole("button", { name: "Thêm dòng cuộc gọi mới" })).toHaveCount(0);
   });
 
   test("오늘 대시보드 KPI 라벨이 베트남어로 보인다", async ({ page }) => {

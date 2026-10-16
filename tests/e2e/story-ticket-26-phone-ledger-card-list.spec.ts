@@ -209,14 +209,16 @@ test.describe("티켓 26 휴대폰 원장 카드 목록", () => {
     await expect(backCard).toBeFocused();
   });
 
-  test("태블릿 폭(768px) 이상: 넓은 표와 빠른 예약이 보이고 카드 목록은 숨는다", async ({ page }) => {
+  test("태블릿 폭(768px) 이상: 흐름별 원장 목록과 빠른 예약이 보이고 카드 목록은 숨는다", async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 900 });
     await login(page, accounts.counter.accountId, accounts.counter.password);
     await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
 
     await expect(page.getByRole("list", { name: "원장 카드 목록" })).toBeHidden();
-    await expect(page.locator(`tr[data-service-call-id="${noWarningCallId}"]`)).toBeVisible();
-    await expect(page.getByRole("button", { name: "새 콜 행 추가" })).toBeVisible();
+    // 콜 원장 흐름 재구성(티켓 03): 넓은 표는 흐름별 원장 목록(tr[data-ledger-line])으로 바뀌었고,
+    // 표 아래 "새 콜 행 추가"는 없어졌다(새 콜은 빠른 예약으로만 만든다).
+    await expect(page.locator(`tr[data-ledger-line][data-service-call-id="${noWarningCallId}"]`)).toBeVisible();
+    await expect(page.getByRole("button", { name: "새 콜 행 추가" })).toHaveCount(0);
     // 가능 코스(빠른 예약의 Therapist·코스 단계)는 티켓 20부터 패널 안으로 옮겨, 태블릿 폭에서도
     // 머리의 "빠른 예약" 버튼으로만 보인다(명세 F08).
     await expect(page.getByRole("button", { name: "빠른 예약" })).toBeVisible();

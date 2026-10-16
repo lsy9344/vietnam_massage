@@ -1,8 +1,9 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 import { defaultRooms } from "@/modules/masters/room-schema";
+import { selectGridOption } from "./support/call-grid";
 
 const monthKey = "2032-07";
 const assignedDate = "2032-07-05";
@@ -196,9 +197,12 @@ async function seedStoryData(): Promise<SeededData> {
   await upsertRate(therapist1.id, course.id, 700000);
   await upsertRate(therapist2.id, course.id, 300000);
 
+  // "11:00"은 기본 시드에 이미 sortOrder 10으로 있다. 그 sortOrder를 바꾸면 영업일 시작(dayStartFromSlots,
+  // service-call-service.ts)이 전역으로 밀려 같은 DB의 다른 스펙(예: 티켓 26)의 날짜 경계 계산이 깨진다.
+  // isActive만 보장한다.
   await (prisma as any).timeSlot.upsert({
     where: { value: "11:00" },
-    update: { sortOrder: 98701, isActive: true },
+    update: { isActive: true },
     create: { value: "11:00", sortOrder: 98701, isActive: true }
   });
   await upsertCodeItem("SERVICE_STATUS", "예약", "예약", 98701);
@@ -243,25 +247,21 @@ async function createCompletedCall(memo: string, input?: { serviceDate?: string;
   return call;
 }
 
-function addRowCell(page: Page, columnId: string) {
-  return page.locator(`[data-call-cell-row="0"][data-call-cell-column="${columnId}"]`);
+// 콜 원장 흐름 재구성(티켓 03)으로 표 아래 새 행 입력(data-call-cell-*)은 없어졌다. 줄은 입력칸이 없고,
+// 모든 칸은 오른쪽 편집 패널에서 고친다.
+function line(page: Page, serviceCallId: string) {
+  return page.locator(`tr[data-service-call-id="${serviceCallId}"]`);
 }
 
-async function selectCombobox(page: Page, columnId: string, value: string) {
-  const combobox = addRowCell(page, columnId);
-  await combobox.click();
-  await page.locator(`[role="option"][id$="-option-${value}"]`).click();
+function panel(page: Page) {
+  return page.getByRole("complementary", { name: /^콜 상세/ });
 }
 
-async function selectRowCombobox(row: Locator, label: string, value: string) {
-  const combobox = row.getByRole("combobox", { name: label });
-  await combobox.click();
-  await combobox.fill(value);
-  await combobox.press("Enter");
-}
-
-function rowByText(page: Page, text: string) {
-  return page.getByRole("row", { name: new RegExp(text) });
+async function openPanel(page: Page, serviceCallId: string) {
+  await line(page, serviceCallId).locator("[data-call-open]").click();
+  const edit = panel(page);
+  await expect(edit).toBeVisible();
+  return edit;
 }
 
 test.describe("Client revision browser verification", () => {
@@ -272,51 +272,61 @@ test.describe("Client revision browser verification", () => {
     await createCompletedCall("WO Verify completed settlement redaction");
   });
 
-  test("counter call ledger hides settlement columns while admin can see settlement amounts", async ({ page }) => {
+  test("counter call ledger hides settlement amounts while admin can see them in the panel's payment group", async ({ page }) => {
+    const call = await (prisma as any).serviceCall.findFirst({ where: { customerMemo: "WO Verify completed settlement redaction" } });
+
     await login(page, seededData.accounts.counter.accountId, seededData.accounts.counter.password);
-    await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${assignedDate}`);
+    // 완료된 콜은 흐름별 목록의 "완료·취소" 묶음에 들어가 기본으로 접혀 있다(스펙 D16, 티켓 03). 열린 콜(?call=)이
+    // 그 묶음의 콜이면 화면이 자동으로 펼친다.
+    await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${assignedDate}&call=${call.id}`);
 
-    for (const header of ["마사지사1수당", "마사지사2수당"]) {
-      await expect(page.getByRole("columnheader", { name: header })).toHaveCount(0);
-    }
-    await expect(page.getByText("마사지사정산")).toHaveCount(0);
-    await expect(page.getByRole("columnheader", { name: "마사지사 담당 수" })).toHaveCount(0);
+    const counterPanel = panel(page);
+    await expect(counterPanel).toBeVisible();
+    const counterPayment = counterPanel.getByRole("region", { name: "결제" });
+    await expect(counterPayment).toBeVisible();
+    await expect(counterPayment.getByText("마사지사1수당")).toHaveCount(0);
+    await expect(counterPayment.getByText("마사지사2수당")).toHaveCount(0);
 
-    const counterRow = rowByText(page, "WO Verify completed settlement redaction");
-    await selectRowCombobox(counterRow, "결제수단", "카드");
-    // 처음 불러온 행도 "저장됨"으로 보이므로 이 화면의 저장이 끝났는지는 data-save-state로 본다.
-    await expect(counterRow.locator('[data-save-state="saved"]')).toBeVisible();
+    await counterPayment.getByText("카드", { exact: true }).click();
+    await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: call.id } })).paymentMethodCode).toBe("CARD");
+    await expect(counterPanel.locator('[data-save-state="saved"]')).toContainText("저장됨");
 
     await login(page, seededData.accounts.administrator.accountId, seededData.accounts.administrator.password);
-    await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${assignedDate}`);
+    await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${assignedDate}&call=${call.id}`);
 
-    await expect(page.getByRole("columnheader", { name: "마사지사1수당" }).first()).toBeVisible();
-    await expect(page.locator('[data-call-cell-column="therapist1Commission"]').first()).toContainText("700,000");
-    await expect(page.locator('[data-call-cell-column="therapist2Commission"]').first()).toContainText("300,000");
+    const adminPayment = panel(page).getByRole("region", { name: "결제" });
+    await expect(adminPayment.getByText("마사지사1수당")).toBeVisible();
+    const commission1 = adminPayment.locator("div").filter({ has: page.locator("dt", { hasText: "마사지사1수당" }) });
+    const commission2 = adminPayment.locator("div").filter({ has: page.locator("dt", { hasText: "마사지사2수당" }) });
+    await expect(commission1).toContainText("700,000");
+    await expect(commission2).toContainText("300,000");
 
     await login(page, seededData.accounts.settlement_manager.accountId, seededData.accounts.settlement_manager.password);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${assignedDate}`);
     await expect(page).toHaveURL(/\/settlements(?:\?|$)/);
   });
 
-  test("unassigned reservation can be saved, later assigned, and stays out of room occupancy until assigned", async ({ page }) => {
+  test("unassigned reservation stays out of room occupancy until assigned in the panel", async ({ page }) => {
     const memo = `WO Verify unassigned ${Date.now().toString(36)}`;
+
+    // 새 콜은 빠른 예약으로만 만든다(스펙 D22) — 그 생성 흐름은 다른 스펙이 가린다. 이 테스트의 목적은
+    // 미배정 콜이 객실 점유에서 빠졌다가 배정 뒤 반영되는지라, 콜은 DB로 바로 만든다.
+    const call = await (prisma as any).serviceCall.create({
+      data: {
+        operatingMonthId: seededData.openMonthId,
+        serviceDate: new Date(`${unassignedDate}T00:00:00.000Z`),
+        startTime: "11:00",
+        roomId: null,
+        courseId: seededData.courseId,
+        customerMemo: memo,
+        status: "예약"
+      }
+    });
 
     await login(page, seededData.accounts.counter.accountId, seededData.accounts.counter.password);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${unassignedDate}`);
-
-    await selectCombobox(page, "startTime", "11:00");
-    await selectCombobox(page, "courseId", seededData.courseId);
-    await addRowCell(page, "customerMemo").fill(memo);
-    await selectCombobox(page, "status", "예약");
-    await page.getByRole("button", { name: "새 콜 행 추가" }).click();
-
-    await expect(page.getByText("저장됨").first()).toBeVisible();
-    const savedRow = rowByText(page, memo);
-    await expect(savedRow.getByRole("combobox", { name: "객실" })).toHaveValue("미배정");
-
-    const call = await (prisma as any).serviceCall.findFirst({ where: { customerMemo: memo } });
-    expect(call?.roomId).toBeNull();
+    await expect(line(page, call.id)).toContainText("미배정");
+    expect(call.roomId).toBeNull();
 
     for (const path of ["/rooms", "/live"] as const) {
       await page.goto(`${path}?operatingMonthId=${seededData.openMonthId}&serviceDate=${unassignedDate}`);
@@ -330,9 +340,9 @@ test.describe("Client revision browser verification", () => {
 
     await login(page, seededData.accounts.counter.accountId, seededData.accounts.counter.password);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${unassignedDate}`);
-    const stableRow = page.locator(`tr[data-service-call-id="${call.id}"]`);
-    await selectRowCombobox(stableRow, "객실", "401 호실");
-    await expect(stableRow.getByText("저장됨")).toBeVisible();
+    const edit = await openPanel(page, call.id);
+    await selectGridOption(page, edit, "객실", "401 호실");
+    await expect(edit.locator('[data-save-state="saved"]')).toContainText("저장됨");
 
     await expect
       .poll(async () => {

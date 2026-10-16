@@ -24,6 +24,7 @@ let monthId = "";
 let customerId = "";
 let rateMissingCallId = "";
 let customerCallId = "";
+let reservedCallId = "";
 
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, sortOrder: number) {
   return testEmployees.upsert({
@@ -180,7 +181,7 @@ test.describe("티켓 03 콜 원장 화면 분리", () => {
       startTime: "13:00",
       paymentMethodCode: "CASH"
     });
-    await createCall({ therapistId: ratedTherapist.id, roomId: room.id, courseId: course.id, memo: "T03 예약", status: "RESERVED", startTime: "15:00" });
+    reservedCallId = await createCall({ therapistId: ratedTherapist.id, roomId: room.id, courseId: course.id, memo: "T03 예약", status: "RESERVED", startTime: "15:00" });
   });
 
   test.afterAll(async () => {
@@ -199,7 +200,9 @@ test.describe("티켓 03 콜 원장 화면 분리", () => {
     await expect(counts).toContainText("예약 1건");
     await expect(counts).toContainText("방문완료 2건");
     await expect(page.getByRole("heading", { name: "콜 원장 그리드" })).toBeInViewport();
-    await expect(page.locator(`tr[data-service-call-id="${customerCallId}"]`)).toBeInViewport();
+    await expect(page.getByRole("table", { name: "흐름별 콜 원장" })).toBeInViewport();
+    // 완료·취소 묶음은 기본 접힘이다(스펙 D16, 티켓 03). 접히지 않는 예약 줄로 "첫 화면에 보인다"를 확인한다.
+    await expect(page.locator(`tr[data-service-call-id="${reservedCallId}"]`)).toBeInViewport();
 
     await expect(page.getByLabel("일별 지출")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "지출 추가" })).toHaveCount(0);

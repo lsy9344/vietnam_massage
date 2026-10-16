@@ -169,6 +169,15 @@ async function createCallRow(memo: string) {
   });
 }
 
+function line(page: Page, callId: string) {
+  return page.locator(`tr[data-service-call-id="${callId}"]`);
+}
+
+/** 티켓 03: type-ahead 콤보박스는 그리드 셀이 아니라 편집 패널의 칸으로 옮겨졌다. */
+function panel(page: Page) {
+  return page.getByRole("complementary", { name: /^콜 상세/ });
+}
+
 test.describe("Story 2.6 keyboard-first call ledger type-ahead", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -178,63 +187,53 @@ test.describe("Story 2.6 keyboard-first call ledger type-ahead", () => {
     await createCallRow("Story 2.6 row two");
   });
 
-  test("supports mouse-free navigation, combobox ARIA, Esc cancel, and computed readonly cells", async ({ page }) => {
+  // 티켓 03: 원장 표의 칸별 type-ahead(Story 2.6)는 없어지고 편집 패널의 칸으로 옮겼다. ARIA 계약
+  // (aria-expanded·aria-activedescendant, ↓로 열기, ↑↓로 고르기, Enter로 정하기)은 그대로 지킨다.
+  test("패널 콤보박스는 type-ahead ARIA 계약을 지키고 고른 값을 바로 저장한다", async ({ page }) => {
     await loginAsCounter(page);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${seededData.serviceDate}`);
 
-    // 제목의 조부모(`..` 두 번)는 헤더 div라 표를 포함하지 않는다. 제목을 가진 section으로 잡는다.
-    const grid = page.locator("section").filter({ has: page.getByRole("heading", { name: "콜 원장 그리드" }) });
-    const roomCombobox = grid.getByRole("combobox", { name: "객실" }).first();
-    await roomCombobox.focus();
-    await expect(roomCombobox).toHaveAttribute("aria-expanded", "false");
+    // Next.js의 로딩 스켈레톤이 아직 실제 콜 원장으로 바뀌기 전에 눌러도 재시도하도록, 줄이 실제로
+    // 보일 때까지 먼저 기다린다.
+    const firstRow = page.locator("tr[data-ledger-line]").first();
+    await expect(firstRow).toBeVisible();
+    await firstRow.click();
+    const edit = panel(page);
+    await expect(edit).toBeVisible();
+
+    // 할인구분은 시드값이 비어 있어(null) 고르면 실제로 값이 바뀐다 — 저장 상태가 "idle"에서
+    // "saved"로 실제로 넘어가는지까지 본다(객실처럼 이미 같은 값을 다시 고르면 바뀐 게 없어 보내지 않는다).
+    const discountCombobox = edit.getByRole("combobox", { name: "할인구분" });
+    await discountCombobox.focus();
+    await expect(discountCombobox).toHaveAttribute("aria-expanded", "false");
 
     // focus 시 컴포넌트가 현재 라벨을 넣고 전체 선택하는데, 첫 글자가 그 선택보다 먼저 도착하면
     // 기존 라벨 뒤에 붙어 필터가 아무것도 못 찾는다. 직접 전체 선택한 뒤 타이핑한다.
-    await roomCombobox.press("ControlOrMeta+a");
-    await roomCombobox.pressSequentially("E2E26");
-    await expect(roomCombobox).toHaveAttribute("aria-expanded", "true");
+    await discountCombobox.press("ControlOrMeta+a");
+    await discountCombobox.pressSequentially("생일자");
+    await expect(discountCombobox).toHaveAttribute("aria-expanded", "true");
     // 필터 결과가 렌더되기 전에 방향키를 누르면 활성 옵션이 잡히지 않는다.
     await expect(page.getByRole("listbox").getByRole("option")).not.toHaveCount(0);
-    await roomCombobox.press("ArrowDown");
-    await expect(roomCombobox).toHaveAttribute("aria-activedescendant", /option/);
-    await roomCombobox.press("Enter");
-    await expect(grid.getByText(/저장됨/).first()).toBeVisible();
-
-    await page.keyboard.press("Tab");
-    await expect(grid.getByRole("combobox", { name: "코스" }).first()).toBeFocused();
-    await page.keyboard.press("Shift+Tab");
-    await expect(roomCombobox).toBeFocused();
-
-    await page.keyboard.press("Enter");
-    await expect(grid.getByRole("combobox", { name: "객실" }).nth(1)).toBeFocused();
-
-    const memoCell = grid.getByLabel("고객/메모").first();
-    await memoCell.focus();
-    await memoCell.fill("Story 2.6 cancel draft");
-    await page.keyboard.press("Escape");
-    await expect(memoCell).toHaveValue("Story 2.6 row one");
-    await expect(grid.getByText("저장 중")).toHaveCount(0);
-    await expect(grid.getByText("저장 보류 계산 대기")).toHaveCount(0);
-
-    // 앞선 셀의 blur 처리(120ms 지연)와 자동저장 후 재렌더가 겹치면 focus가 곧바로 풀린다.
-    // 포커스가 붙을 때까지 재시도한 뒤 방향키를 눌러야 셀 이동이 사라지지 않는다.
-    const confirmationCombobox = grid.getByRole("combobox", { name: "확인값" }).first();
-    await expect(async () => {
-      await confirmationCombobox.focus();
-      await expect(confirmationCombobox).toBeFocused();
-    }).toPass();
-    await page.keyboard.press("ArrowRight");
-    await expect(page.locator('[data-call-cell-row="0"][data-call-cell-column="paymentAmount"]')).toBeFocused();
+    await discountCombobox.press("ArrowDown");
+    await expect(discountCombobox).toHaveAttribute("aria-activedescendant", /option/);
+    await discountCombobox.press("Enter");
+    await expect(edit.locator('[data-save-state="saved"]')).toContainText("저장됨");
+    await expect(discountCombobox).toHaveValue("생일자");
   });
 
-  test("keeps D-course second therapist accessibility while using type-ahead cells", async ({ page }) => {
+  test("D코스로 바꾸면 패널 type-ahead로도 마사지사2 필수 오류와 저장 보류 계산 대기가 뜬다", async ({ page }) => {
     await loginAsCounter(page);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${seededData.serviceDate}`);
 
-    // 제목의 조부모(`..` 두 번)는 헤더 div라 표를 포함하지 않는다. 제목을 가진 section으로 잡는다.
-    const grid = page.locator("section").filter({ has: page.getByRole("heading", { name: "콜 원장 그리드" }) });
-    const row = grid.locator("tr[data-service-call-id]").first();
-    const courseCombobox = row.getByRole("combobox", { name: "코스" });
+    // Next.js의 로딩 스켈레톤이 아직 실제 콜 원장으로 바뀌기 전에 눌러도 재시도하도록, 줄이 실제로
+    // 보일 때까지 먼저 기다린다.
+    const firstRow = page.locator("tr[data-ledger-line]").first();
+    await expect(firstRow).toBeVisible();
+    await firstRow.click();
+    const edit = panel(page);
+    await expect(edit).toBeVisible();
+
+    const courseCombobox = edit.getByRole("combobox", { name: "코스" });
     await courseCombobox.focus();
     await courseCombobox.press("ControlOrMeta+a");
     await courseCombobox.pressSequentially("Story26 D");
@@ -243,13 +242,12 @@ test.describe("Story 2.6 keyboard-first call ledger type-ahead", () => {
     await expect(page.getByRole("listbox").getByRole("option")).not.toHaveCount(0);
     await courseCombobox.press("Enter");
 
-    // D코스로 바꾸는 순간 마사지사2가 없어 서버가 저장을 거부한다. 같은 문구가 계산 상태 셀에도
-    // 뜨므로 필드 오류는 id로 특정한다.
-    await expect(row.locator('[id$="-therapist2-error"]')).toContainText("D코스는 마사지사2 필수입니다. 마사지사2를 배정해야 저장됩니다.");
-    // 저장 상태 칩은 기호와 글자가 한 요소라 정확히 일치시키지 않는다.
-    await expect(row.getByText("저장 실패")).toBeVisible();
+    // D코스로 바꾸는 순간 마사지사2가 없어 서버가 저장을 거부한다. 패널 맨 위 저장 실패 배너도 같은
+    // 문구를 role=alert로 보이므로 첫 번째 요소로 특정한다.
+    const error = edit.locator('[role="alert"]').filter({ hasText: "D코스는 마사지사2 필수입니다. 마사지사2를 배정해야 저장됩니다." }).first();
+    await expect(error).toBeVisible();
 
-    const statusCombobox = row.getByRole("combobox", { name: "상태" });
+    const statusCombobox = edit.getByRole("combobox", { name: "상태" });
     await expect(async () => {
       await statusCombobox.focus();
       await expect(statusCombobox).toBeFocused();
@@ -258,10 +256,49 @@ test.describe("Story 2.6 keyboard-first call ledger type-ahead", () => {
     await statusCombobox.pressSequentially("방문완료");
     await statusCombobox.press("Enter");
 
-    await expect(row.locator('[id$="-therapist2-error"]')).toBeVisible();
-    const therapist2 = row.getByRole("combobox", { name: "마사지사2" });
+    await expect(error).toBeVisible();
+    const therapist2 = edit.getByRole("combobox", { name: "마사지사2" });
     await expect(therapist2).toHaveAttribute("aria-invalid", "true");
-    await expect(therapist2).toHaveAttribute("aria-describedby", /therapist2-error/);
+    await expect(therapist2).toHaveAttribute("aria-describedby", /error/);
+    await expect(edit.getByRole("region", { name: "결제" }).getByText("저장 보류 계산 대기")).toBeVisible();
+  });
+
+  // 티켓 03: 원장은 Tab/Shift+Tab 칸 이동이 없어지고(스펙 D21, 보통 브라우저 탭 순서다), 대신 목록
+  // ↑↓로 줄 이동, Enter로 패널 첫 칸, Esc로 그 줄로 복귀, N으로 빠른 예약을 쓴다.
+  test("원장 목록 키보드: ↑↓ 줄 이동, Enter는 패널 시간 칸, Esc는 그 줄로, N은 빠른 예약", async ({ page }) => {
+    await loginAsCounter(page);
+    await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${seededData.serviceDate}`);
+
+    // Next.js의 로딩 스켈레톤이 아직 실제 콜 원장으로 바뀌기 전에 포커스를 줘도 재시도하도록, 줄이
+    // 실제로 보일 때까지 먼저 기다린다.
+    const opener = (id: string) => line(page, id).locator("[data-call-open]");
+    const first = page.locator("tr[data-ledger-line]").first().locator("[data-call-open]");
+    await expect(first).toBeVisible();
+    await first.focus();
+    await page.keyboard.press("ArrowDown");
+    const secondId = await page.locator("tr[data-ledger-line]").nth(1).getAttribute("data-service-call-id");
+    await expect(opener(secondId!)).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(first).toBeFocused();
+
+    await page.keyboard.press("Enter");
+    const firstId = await page.locator("tr[data-ledger-line]").first().getAttribute("data-service-call-id");
+    await expect(page).toHaveURL(new RegExp(`call=${firstId}$`));
+    const startTime = panel(page).getByRole("combobox", { name: "시간" });
+    await expect(startTime).toBeFocused();
+
+    // 입력칸 안에서는 N이 글자로 들어가고 빠른 예약이 열리지 않는다.
+    const note = panel(page).getByLabel("비고");
+    await note.focus();
+    await page.keyboard.press("n");
+    await expect(page.getByRole("dialog", { name: "빠른 예약" })).toHaveCount(0);
+
+    await page.keyboard.press("Escape");
+    await expect(opener(firstId!)).toBeFocused();
+    await expect(panel(page)).toBeVisible();
+
+    await page.keyboard.press("n");
+    await expect(page.getByRole("dialog", { name: "빠른 예약" })).toBeVisible();
   });
 
   test.afterAll(async () => {

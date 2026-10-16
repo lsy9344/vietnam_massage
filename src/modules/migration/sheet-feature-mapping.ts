@@ -70,7 +70,7 @@ export const SHEET_FEATURE_MAPPINGS: SheetFeatureMapping[] = [
       "U:X 영역은 일별 지출, 일별 요약, 코스별 요약으로 분리된다.",
       "hidden K/L 계산 column과 3,060 hidden rows는 workbook evidence로 보존한다."
     ],
-    erpSurfaces: ["/calls", "src/app/(erp)/calls/editable-call-grid.tsx", "src/app/(erp)/calls/daily-expense-panel.tsx"],
+    erpSurfaces: ["/calls", "src/app/(erp)/calls/call-ledger-list.tsx", "src/app/(erp)/calls/daily-expense-panel.tsx"],
     settings: ["CodeItem 상태/결제수단/할인구분/확인값", "Room.id", "Course.id", "Employee.id", "TimeSlot.value"],
     calculationEngines: [
       "src/modules/calls/service-call-service.ts",

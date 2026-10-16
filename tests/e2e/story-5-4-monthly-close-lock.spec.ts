@@ -230,8 +230,10 @@ test.describe("Story 5.4 monthly close lock", () => {
     await login(page, seededData.accounts.counter, "Story54!counter");
 
     await page.goto(`/calls?operatingMonthId=${seededData.counterLockedMonth.id}`);
-    await expect(page.getByText("마감확정 또는 잠금 운영월입니다.").first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "새 콜 행 추가" })).toBeDisabled();
+    // 티켓 03: 원장은 흐름별 목록이 되며, 잠긴 운영월 안내는 "잠긴 운영월입니다."(calls.grid.lockedTitle)로
+    // 바뀌고 표 아래 "새 콜 행 추가"는 없어져 "빠른 예약" 트리거가 잠기는지로 대신 본다.
+    await expect(page.getByText("잠긴 운영월입니다.").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "빠른 예약" })).toBeDisabled();
     // 티켓 03: 지출 입력은 같은 날짜의 "하루 수납·지출" 탭에 있다.
     await page.getByRole("navigation", { name: "콜 원장 보기" }).getByRole("link", { name: "하루 수납·지출" }).click();
     await expect(page.getByText("마감확정 또는 잠금 운영월입니다. 지출 입력과 수정이 차단됩니다.")).toBeVisible();

@@ -1,12 +1,12 @@
 import { testEmployees } from "./support/test-employees";
-import { expect, test, type Browser, type Locator } from "@playwright/test";
+import { expect, test, type Browser, type Locator, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
-import { selectGridOption } from "./support/call-grid";
 
 // 티켓 15: 기존 행 저장의 버전 검사(STALE_CALL)와 행 저장 상태. 두 브라우저 문맥이 실제 Postgres에 함께 저장한다.
-// 13:00은 공용 시드(defaultTimeSlots)의 활성 슬롯이다.
+// 13:00은 공용 시드(defaultTimeSlots)의 활성 슬롯이다. 티켓 03 이후 원장 행에는 입력칸이 없어 저장은 편집
+// 패널에서 하고, 행은 저장 상태 표시(`data-line-save-state`)만 들고 있다 — 계약은 그대로 패널로 옮겨졌다.
 const accounts = {
   counterA: { accountId: "t15_counter_a", password: "Ticket15!counterA", staffCode: "E2E-T15-COUNTER-A", sortOrder: 9431 },
   counterB: { accountId: "t15_counter_b", password: "Ticket15!counterB", staffCode: "E2E-T15-COUNTER-B", sortOrder: 9432 }
@@ -76,16 +76,29 @@ async function createCall(memo: string) {
   return call.id as string;
 }
 
-async function openLedger(browser: Browser, key: AccountKey) {
+async function openLedgerPanel(browser: Browser, key: AccountKey, callId: string) {
   const context = await browser.newContext();
   const page = await context.newPage();
   await login(page, accounts[key].accountId, accounts[key].password);
-  await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
+  // 패널은 그 콜을 고쳐야 하므로(행에는 입력칸이 없다, 티켓 03) 바로 그 콜의 편집 패널을 연다.
+  await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}&call=${callId}`);
   return { context, page };
 }
 
-function saveState(row: Locator) {
-  return row.locator("[data-save-state]");
+function row(page: Page, callId: string) {
+  return page.locator(`tr[data-service-call-id="${callId}"]`);
+}
+
+function lineSaveState(page: Page, callId: string) {
+  return row(page, callId).locator("[data-line-save-state]");
+}
+
+function panel(page: Page) {
+  return page.getByRole("complementary", { name: /^콜 상세/ });
+}
+
+function paymentRegion(panelLocator: Locator) {
+  return panelLocator.getByRole("region", { name: "결제" });
 }
 
 async function cleanup() {
@@ -172,25 +185,28 @@ test.describe("티켓 15 기존 행 저장 충돌 거절과 행 저장 상태", 
 
   test("두 화면이 같은 콜을 함께 저장하면 하나만 저장되고, 다른 화면은 충돌 확인 필요와 자기 초안을 남긴다", async ({ browser }) => {
     const callId = await createCall("T15 동시 저장 원본");
-    const a = await openLedger(browser, "counterA");
-    const b = await openLedger(browser, "counterB");
+    const a = await openLedgerPanel(browser, "counterA", callId);
+    const b = await openLedgerPanel(browser, "counterB", callId);
 
     try {
       const screens = [
-        { key: "counterA" as const, row: a.page.locator(`tr[data-service-call-id="${callId}"]`), page: a.page, paymentLabel: "카드", payment: "CARD" },
-        { key: "counterB" as const, row: b.page.locator(`tr[data-service-call-id="${callId}"]`), page: b.page, paymentLabel: "계좌", payment: "BANK_TRANSFER" }
+        { key: "counterA" as const, page: a.page, paymentLabel: "카드", payment: "CARD" },
+        { key: "counterB" as const, page: b.page, paymentLabel: "계좌", payment: "BANK_TRANSFER" }
       ];
       for (const screen of screens) {
-        await expect(saveState(screen.row)).toHaveAttribute("data-save-state", "idle");
-        await expect(saveState(screen.row)).toContainText("저장됨");
+        await expect(lineSaveState(screen.page, callId)).toHaveAttribute("data-line-save-state", "idle");
+        await expect(panel(screen.page).locator('[data-save-state="idle"]')).toContainText("저장됨");
       }
 
       // 두 화면 모두 같은 updatedAt을 들고 있다. 결제수단을 고르는 순간 각자 저장한다(결제수단 변경은 감사 대상이다).
-      await Promise.all(screens.map((screen) => selectGridOption(screen.page, screen.row, "결제수단", screen.paymentLabel)));
+      // 결제수단은 콤보박스가 아니라 알약 라디오라 그 글자를 누른다(스펙 D19).
+      await Promise.all(
+        screens.map((screen) => paymentRegion(panel(screen.page)).getByText(screen.paymentLabel, { exact: true }).click())
+      );
       for (const screen of screens) {
-        await expect(saveState(screen.row)).toHaveAttribute("data-save-state", /^(saved|conflict)$/);
+        await expect(lineSaveState(screen.page, callId)).toHaveAttribute("data-line-save-state", /^(saved|conflict)$/);
       }
-      const states = await Promise.all(screens.map((screen) => saveState(screen.row).getAttribute("data-save-state")));
+      const states = await Promise.all(screens.map((screen) => lineSaveState(screen.page, callId).getAttribute("data-line-save-state")));
       expect([...states].sort()).toEqual(["conflict", "saved"]);
       const winner = screens[states.indexOf("saved")];
       const loser = screens[states.indexOf("conflict")];
@@ -205,39 +221,38 @@ test.describe("티켓 15 기존 행 저장 충돌 거절과 행 저장 상태", 
       expect(await (prisma as any).serviceCallStatusHistory.count({ where: { serviceCallId: callId } })).toBe(0);
 
       // 거절된 화면은 충돌 확인 필요와 거절 문구를 보이고, 입력한 초안을 그대로 둔다. 강제 덮어쓰기 버튼은 없다.
-      const loserSaveCell = loser.row.locator('[data-call-cell-column="calculationStatus"]');
-      await expect(loserSaveCell).toContainText("충돌 확인 필요");
-      await expect(loserSaveCell).toContainText(staleMessage);
-      await expect(loserSaveCell.getByRole("button")).toHaveText(["최신 내용으로 다시 불러오기"]);
-      await expect(loser.row.getByRole("combobox", { name: "결제수단" })).toHaveValue(loser.paymentLabel);
-      await expect(loser.row.locator('[data-call-cell-column="warnings"]')).not.toContainText("충돌");
+      const loserStatus = panel(loser.page).locator('[data-save-state="conflict"]');
+      await expect(loserStatus).toContainText("충돌 확인 필요");
+      await expect(loserStatus).toContainText(staleMessage);
+      await expect(loserStatus.getByRole("button")).toHaveText(["최신 내용으로 다시 불러오기"]);
+      await expect(paymentRegion(panel(loser.page)).locator(`input[data-payment-method="${loser.payment}"]`)).toBeChecked();
 
       // 충돌 상태에서 더 고쳐도 다시 불러오기 전에는 저장하지 않는다. 초안은 남는다.
-      const loserMemo = loser.row.getByLabel("고객/메모");
+      const loserMemo = panel(loser.page).getByLabel("고객/메모", { exact: true });
       await loserMemo.fill("T15 거절된 화면 메모");
-      await loserMemo.press("Enter");
-      await expect(saveState(loser.row)).toHaveAttribute("data-save-state", "conflict");
+      await loserMemo.press("Tab");
+      await expect(lineSaveState(loser.page, callId)).toHaveAttribute("data-line-save-state", "conflict");
       await expect(loserMemo).toHaveValue("T15 거절된 화면 메모");
       expect((await (prisma as any).serviceCall.findUnique({ where: { id: callId } })).customerMemo).toBe("T15 동시 저장 원본");
 
       // 먼저 저장한 화면이 그 사이 한 번 더 저장한다. 다시 불러오기는 거절 당시가 아니라 지금 저장된 행을 가져온다.
-      const winnerMemo = winner.row.getByLabel("고객/메모");
+      const winnerMemo = panel(winner.page).getByLabel("고객/메모", { exact: true });
       await winnerMemo.fill("T15 먼저 저장한 화면 메모");
-      await winnerMemo.press("Enter");
+      await winnerMemo.press("Tab");
       await expect
         .poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: callId } })).customerMemo)
         .toBe("T15 먼저 저장한 화면 메모");
 
-      await loser.row.getByRole("button", { name: "최신 내용으로 다시 불러오기" }).click();
-      await expect(saveState(loser.row)).toHaveAttribute("data-save-state", "idle");
-      await expect(saveState(loser.row)).toContainText("저장됨");
+      await loserStatus.getByRole("button", { name: "최신 내용으로 다시 불러오기" }).click();
+      await expect(lineSaveState(loser.page, callId)).toHaveAttribute("data-line-save-state", "idle");
+      await expect(panel(loser.page).locator('[data-save-state="idle"]')).toContainText("저장됨");
       await expect(loserMemo).toHaveValue("T15 먼저 저장한 화면 메모");
-      await expect(loser.row.getByRole("combobox", { name: "결제수단" })).toHaveValue(winner.paymentLabel);
+      await expect(paymentRegion(panel(loser.page)).locator(`input[data-payment-method="${winner.payment}"]`)).toBeChecked();
 
       // 다시 불러온 뒤의 저장은 받아들여진다.
       await loserMemo.fill("T15 다시 불러온 뒤 저장");
-      await loserMemo.press("Enter");
-      await expect(saveState(loser.row)).toHaveAttribute("data-save-state", "saved");
+      await loserMemo.press("Tab");
+      await expect(lineSaveState(loser.page, callId)).toHaveAttribute("data-line-save-state", "saved");
       await expect
         .poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: callId } })).customerMemo)
         .toBe("T15 다시 불러온 뒤 저장");
@@ -248,7 +263,7 @@ test.describe("티켓 15 기존 행 저장 충돌 거절과 행 저장 상태", 
     }
   });
 
-  test("같은 행을 빠르게 연달아 고치면 자기 저장끼리 충돌하지 않고 마지막 입력으로 끝나며, 늦게 온 응답이 입력을 되돌리지 않는다", async ({ page }) => {
+  test("같은 콜을 빠르게 연달아 고치면 자기 저장끼리 충돌하지 않고 마지막 입력으로 끝나며, 늦게 온 응답이 입력을 되돌리지 않는다", async ({ page }) => {
     const callId = await createCall("T15 연속 저장 원본");
     await login(page, accounts.counterA.accountId, accounts.counterA.password);
     const isAutosave = (request: { method(): string; headers(): Record<string, string> }) =>
@@ -263,31 +278,31 @@ test.describe("티켓 15 기존 행 저장 충돌 거절과 행 저장 상태", 
         await route.continue();
       }
     );
-    await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
+    await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}&call=${callId}`);
 
-    const row = page.locator(`tr[data-service-call-id="${callId}"]`);
-    const memo = row.getByLabel("고객/메모");
-    const payment = row.getByRole("combobox", { name: "결제수단" });
+    const edit = panel(page);
+    const memo = edit.getByLabel("고객/메모", { exact: true });
+    const payment = paymentRegion(edit);
     await memo.fill("T15 첫 입력");
-    await memo.press("Enter");
-    await expect(saveState(row)).toHaveAttribute("data-save-state", "saving");
-    await expect(saveState(row)).toContainText("저장 중");
+    await memo.press("Tab");
+    await expect(lineSaveState(page, callId)).toHaveAttribute("data-line-save-state", "saving");
+    await expect(edit.locator('[data-save-state="saving"]')).toContainText("저장 중");
     const nextSave = page.waitForRequest(isAutosave);
 
-    // 첫 저장의 응답을 기다리는 동안에도 입력칸은 열려 있다. 결제수단을 고르고 메모를 또 고친다(메모는 아직 확정하지 않는다).
-    expect(await payment.isEnabled()).toBe(true);
-    await selectGridOption(page, row, "결제수단", "카드");
+    // 첫 저장의 응답을 기다리는 동안에도 입력칸은 열려 있다. 결제수단을 고르고(알약 라디오) 메모를 또 고친다(메모는 아직 확정하지 않는다).
+    expect(await payment.locator('input[type="radio"]').first().isEnabled()).toBe(true);
+    await payment.getByText("카드", { exact: true }).click();
     await memo.fill("T15 마지막 입력");
 
     // 다음 저장은 첫 응답을 받은 뒤에야 나간다. 그 늦은 응답이 화면의 최신 입력을 되돌리지 않았다.
     await nextSave;
     await expect(memo).toHaveValue("T15 마지막 입력");
-    await expect(payment).toHaveValue("카드");
-    await memo.press("Enter");
+    await expect(payment.locator('input[data-payment-method="CARD"]')).toBeChecked();
+    await memo.press("Tab");
 
-    await expect(saveState(row)).toHaveAttribute("data-save-state", "saved", { timeout: 15_000 });
+    await expect(lineSaveState(page, callId)).toHaveAttribute("data-line-save-state", "saved", { timeout: 15_000 });
     await expect(memo).toHaveValue("T15 마지막 입력");
-    await expect(payment).toHaveValue("카드");
+    await expect(payment.locator('input[data-payment-method="CARD"]')).toBeChecked();
     await expect
       .poll(async () => {
         const stored = await (prisma as any).serviceCall.findUnique({ where: { id: callId } });

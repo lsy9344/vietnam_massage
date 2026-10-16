@@ -36,7 +36,7 @@ import {
   type QuickBookingState,
   type QuickBookingStep
 } from "@/app/(erp)/calls/quick-booking-draft";
-import { selectNowSlot } from "@/app/(erp)/calls/quick-booking-now-slot";
+import { nowClockString, selectNowSlot } from "@/app/(erp)/calls/quick-booking-now-slot";
 import {
   AvailabilityRow,
   availabilityRowWarnings,
@@ -63,7 +63,7 @@ import type {
   TherapistAvailabilityRowDto
 } from "@/modules/calls/service-call-service";
 
-/** 새 콜 저장 응답을 이만큼 기다려도 오지 않으면 "저장 여부 확인 중"이 된다(editable-call-grid.tsx의 새 행과 같은 값). */
+/** 새 콜 저장 응답을 이만큼 기다려도 오지 않으면 "저장 여부 확인 중"이 된다(티켓 16). */
 const QUICK_BOOKING_SAVE_TIMEOUT_MS = 15_000;
 
 const stepLabelKey: Record<QuickBookingStep, MessageKey> = {
@@ -78,18 +78,16 @@ function stepIndex(step: QuickBookingStep) {
   return QUICK_BOOKING_STEPS.indexOf(step);
 }
 
-/** "지금" 버튼이 selectNowSlot에 넘길 지금 시각(HH:mm, 로컬 시계). */
-function nowClockString(date = new Date()) {
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
-
-/** 저장 직후 새 행이 원장 표에 나타날 때까지(서버 액션 뒤 자동 라우터 새로고침은 비동기) 짧게 재시도하며 찾아 스크롤·포커스한다. */
+/**
+ * 저장 직후 새 콜 줄을 골라 편집 패널을 연다(티켓 03). 서버 액션 뒤 자동 라우터 새로고침은 비동기라 줄이
+ * 원장 목록에 나타날 때까지 짧게 재시도하며 찾는다. 줄의 여는 버튼을 누른 것과 같아 포커스도 그 줄에 남는다.
+ */
 function focusCreatedRow(serviceCallId: string, attemptsLeft = 20) {
-  const row = firstVisible<HTMLElement>(`[data-service-call-id="${CSS.escape(serviceCallId)}"]`);
-  if (row) {
-    row.scrollIntoView({ block: "center" });
-    // date 칸의 serviceCallId 숨은 입력(EditableCallRow)은 포커스를 받을 수 없어 건너뛴다.
-    (row.querySelector<HTMLElement>('input:not([type="hidden"]), select, button, a, [tabindex]') ?? row).focus();
+  const opener = firstVisible<HTMLElement>(`[data-call-open="${CSS.escape(serviceCallId)}"]`);
+  if (opener) {
+    opener.scrollIntoView({ block: "center" });
+    opener.click();
+    opener.focus();
     return;
   }
   if (attemptsLeft <= 0) return;
@@ -1271,10 +1269,11 @@ export function QuickBookingPanel({
         title={t("calls.quickBooking.title")}
         trigger={
           // 빠른 예약은 원장 탭 머리의 주요 버튼이다(명세 F08). 휴대폰 폭에서는 제공하지 않는다(티켓 20).
+          // 원장 목록의 N 단축키(티켓 03)가 data-quick-booking-trigger로 이 버튼을 찾아 누른다.
           // ModalPanel의 trigger로 등록해야 Radix가 이 버튼을 패널의 Dialog.Trigger로 알아, 패널을
           // 닫을 때 포커스를 여기로 돌려준다(S3, 스토리 70) — 트리거 없이 따로 둔 버튼은 그 연결이 없어
           // 닫은 뒤 포커스가 body로 빠졌다.
-          <Button aria-haspopup="dialog" className="hidden min-[600px]:inline-flex" disabled={isLocked} type="button">
+          <Button aria-haspopup="dialog" className="hidden min-[600px]:inline-flex" data-quick-booking-trigger="" disabled={isLocked} type="button">
             {t("calls.quickBooking.open")}
           </Button>
         }
