@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ServiceCallOption, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
 import { Button } from "@/components/ui/button";
 import { inputFieldClassName } from "@/components/ui/input-field";
@@ -6,8 +7,6 @@ import { WarningSummary } from "@/components/ui/warning-summary";
 import { t } from "@/lib/i18n";
 import { scheduleStatusLabel } from "@/lib/i18n/codes";
 import type { Locale } from "@/lib/i18n/config";
-
-const cellClassName = "border-b border-border px-3 py-2";
 
 export type AvailabilityCourseChoice = {
   startTime: string;
@@ -21,6 +20,25 @@ export type AvailabilityCourseChoice = {
  */
 export type AvailabilityCourseOverrideChoice = AvailabilityCourseChoice & {
   verdict: "time_short" | "rate_missing";
+};
+
+/**
+ * 출근 시각이 입력된 Therapist(출근 중과 퇴근 포함)만 남긴다. 걸러 낼 때는 첫 번째 Therapist 목록과
+ * 두 번째 Therapist 후보 목록이 같은 결과를 쓰도록 한 곳에서 계산한다.
+ * 아무도 출근이 입력되지 않았으면(아직 출근 전이거나 출근 입력이 없는 날짜) 걸러 낼 근거가 없어 전체를
+ * 그대로 돌려주고 nobodyAttended로 알린다. hiddenCount는 출근이 입력되지 않은 Therapist 수다.
+ */
+export function filterByAttendance(rows: TherapistAvailabilityRowDto[], showAll: boolean) {
+  const attended = rows.filter((row) => row.attendance !== "before_check_in");
+  if (attended.length === 0) return { rows, hiddenCount: 0, nobodyAttended: rows.length > 0 };
+  return { rows: showAll ? rows : attended, hiddenCount: rows.length - attended.length, nobodyAttended: false };
+}
+
+export type AvailabilityAttendanceFilter = {
+  hiddenCount: number;
+  nobodyAttended: boolean;
+  onShowAllChange: (showAll: boolean) => void;
+  showAll: boolean;
 };
 
 // 두 번째 Therapist 후보 목록(티켓 21)도 같은 출근 표시 문구를 쓴다.
@@ -69,6 +87,16 @@ export function impossibleCourseLabel(locale: Locale, course: TherapistAvailabil
     : t(locale, "calls.availability.courseTimeShort", values);
 }
 
+// 좁은 서랍에서도 가로로 넘치지 않게 칸마다 "이름 값" 한 쌍으로 두고, 모자라면 다음 줄로 넘긴다.
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+      <dt className="text-xs font-semibold text-muted">{label}</dt>
+      <dd>{children}</dd>
+    </div>
+  );
+}
+
 function nextLabel(locale: Locale, row: TherapistAvailabilityRowDto) {
   const next = row.nextReservationTime ?? t(locale, "calls.availability.nextNone");
   if (!row.available || row.freeMinutes === null) return next;
@@ -76,6 +104,7 @@ function nextLabel(locale: Locale, row: TherapistAvailabilityRowDto) {
 }
 
 export function TherapistAvailabilityView({
+  attendanceFilter,
   failed,
   locale,
   open,
@@ -88,6 +117,8 @@ export function TherapistAvailabilityView({
   onTimeChange,
   onToggle
 }: {
+  /** 주면 출근 전 Therapist를 숨겼다는 안내와 "출근 전도 보기" 체크칸을 보인다(rows는 부르는 쪽이 이미 걸러 넘긴다). */
+  attendanceFilter?: AvailabilityAttendanceFilter;
   failed: boolean;
   locale: Locale;
   open: boolean;
@@ -138,6 +169,20 @@ export function TherapistAvailabilityView({
       {open ? (
         <div className="border-t border-border p-4" id="therapist-availability-panel">
           <p className="mb-3 text-xs text-muted">{t(locale, "calls.availability.scheduleNote")}</p>
+          {attendanceFilter?.nobodyAttended ? (
+            <p className="mb-3 text-xs text-muted">{t(locale, "calls.availability.attendanceNone")}</p>
+          ) : null}
+          {attendanceFilter && attendanceFilter.hiddenCount > 0 ? (
+            <label className="mb-3 flex min-h-11 items-center gap-2 text-sm text-foreground">
+              <input
+                checked={attendanceFilter.showAll}
+                className="h-5 w-5 accent-brand"
+                onChange={(event) => attendanceFilter.onShowAllChange(event.target.checked)}
+                type="checkbox"
+              />
+              {t(locale, "calls.availability.showBeforeCheckIn", { count: attendanceFilter.hiddenCount })}
+            </label>
+          ) : null}
           {pending ? <p className="text-sm text-muted">{t(locale, "calls.availability.loading")}</p> : null}
           {failed ? <p className="text-sm text-danger">{t(locale, "calls.availability.loadError")}</p> : null}
           {!pending && !failed && rows.length === 0 ? (
@@ -147,92 +192,82 @@ export function TherapistAvailabilityView({
             </div>
           ) : null}
           {!pending && !failed && rows.length > 0 ? (
-            <div className="overflow-x-auto rounded-md border border-border bg-surface">
-              <table className="w-full border-collapse text-left text-sm">
-                <thead>
-                  <tr className="bg-readonly text-xs font-semibold text-muted">
-                    <th className={cellClassName} scope="col">{t(locale, "calls.availability.column.therapist")}</th>
-                    <th className={cellClassName} scope="col">{t(locale, "calls.availability.column.schedule")}</th>
-                    <th className={cellClassName} scope="col">{t(locale, "calls.availability.column.attendance")}</th>
-                    <th className={cellClassName} scope="col">{t(locale, "calls.availability.column.thisTime")}</th>
-                    <th className={cellClassName} scope="col">{t(locale, "calls.availability.column.next")}</th>
-                    <th className={cellClassName} scope="col">{t(locale, "calls.availability.column.courses")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => {
-                    const priorEndNoteId = `therapist-availability-prior-end-${row.therapistId}`;
-                    const showPriorEndNote = row.priorServiceEndCheck && row.courses.some((course) => course.verdict === "possible");
-                    return (
-                      <tr className="align-top hover:bg-readonly" key={row.therapistId}>
-                        <th className={`${cellClassName} font-semibold text-foreground`} scope="row">{row.therapistName}</th>
-                        <td className={cellClassName}>
-                          <Schedule locale={locale} row={row} />
-                        </td>
-                        <td className={cellClassName}>
-                          <Attendance locale={locale} row={row} />
-                        </td>
-                        <td className={cellClassName}>
-                          <ThisTime locale={locale} row={row} />
-                        </td>
-                        <td className={cellClassName}>{nextLabel(locale, row)}</td>
-                        <td className={cellClassName}>
-                          <div className="flex flex-wrap gap-2">
-                            {showPriorEndNote ? (
-                              <span className="basis-full" id={priorEndNoteId}>
-                                <WarningSummary locale={locale} warnings={[t(locale, "calls.availability.priorServiceEndCheck")]} />
-                              </span>
-                            ) : null}
-                            {row.courses.map((course) => {
-                              const verdict = course.verdict;
-                              return verdict === "possible" ? (
-                                <Button
-                                  aria-describedby={showPriorEndNote ? priorEndNoteId : undefined}
-                                  className="h-auto min-h-11 max-w-full whitespace-normal text-left"
-                                  data-course-id={course.courseId}
-                                  data-start-time={time}
-                                  data-therapist-id={row.therapistId}
-                                  key={course.courseId}
-                                  onClick={() => onChoose({ startTime: time, therapistId: row.therapistId, courseId: course.courseId })}
-                                  variant="secondary"
-                                >
-                                  {t(locale, "calls.availability.coursePossible", { code: course.courseCode, minutes: course.durationMinutes })}
-                                </Button>
-                              ) : onOverride ? (
-                                <Button
-                                  aria-describedby={showPriorEndNote ? priorEndNoteId : undefined}
-                                  className="h-auto min-h-11 max-w-full whitespace-normal text-left border-warning text-warning hover:bg-warning-soft"
-                                  data-course-id={course.courseId}
-                                  data-override-course-id={course.courseId}
-                                  data-start-time={time}
-                                  data-therapist-id={row.therapistId}
-                                  key={course.courseId}
-                                  onClick={() =>
-                                    onOverride({
-                                      startTime: time,
-                                      therapistId: row.therapistId,
-                                      courseId: course.courseId,
-                                      verdict
-                                    })
-                                  }
-                                  variant="secondary"
-                                >
-                                  {impossibleCourseLabel(locale, course)} · {t(locale, "calls.quickBooking.therapist.overrideAssign")}
-                                </Button>
-                              ) : (
-                                <span className="inline-flex min-h-11 items-center text-muted" key={course.courseId}>
-                                  {impossibleCourseLabel(locale, course)}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <ul className="grid gap-2">
+              {rows.map((row) => {
+                const priorEndNoteId = `therapist-availability-prior-end-${row.therapistId}`;
+                const showPriorEndNote = row.priorServiceEndCheck && row.courses.some((course) => course.verdict === "possible");
+                return (
+                  <li
+                    className="grid gap-2 rounded-md border border-border bg-surface px-3 py-2.5 hover:bg-readonly"
+                    data-availability-row={row.therapistId}
+                    key={row.therapistId}
+                  >
+                    <span className="font-semibold text-foreground">{row.therapistName}</span>
+                    <dl className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
+                      <Fact label={t(locale, "calls.availability.column.schedule")}>
+                        <Schedule locale={locale} row={row} />
+                      </Fact>
+                      <Fact label={t(locale, "calls.availability.column.attendance")}>
+                        <Attendance locale={locale} row={row} />
+                      </Fact>
+                      <Fact label={t(locale, "calls.availability.column.thisTime")}>
+                        <ThisTime locale={locale} row={row} />
+                      </Fact>
+                      <Fact label={t(locale, "calls.availability.column.next")}>{nextLabel(locale, row)}</Fact>
+                    </dl>
+                    <div className="flex flex-wrap gap-2">
+                      {showPriorEndNote ? (
+                        <span className="basis-full" id={priorEndNoteId}>
+                          <WarningSummary locale={locale} warnings={[t(locale, "calls.availability.priorServiceEndCheck")]} />
+                        </span>
+                      ) : null}
+                      {row.courses.map((course) => {
+                        const verdict = course.verdict;
+                        return verdict === "possible" ? (
+                          <Button
+                            aria-describedby={showPriorEndNote ? priorEndNoteId : undefined}
+                            className="h-auto min-h-11 max-w-full whitespace-normal text-left"
+                            data-course-id={course.courseId}
+                            data-start-time={time}
+                            data-therapist-id={row.therapistId}
+                            key={course.courseId}
+                            onClick={() => onChoose({ startTime: time, therapistId: row.therapistId, courseId: course.courseId })}
+                            variant="secondary"
+                          >
+                            {t(locale, "calls.availability.coursePossible", { code: course.courseCode, minutes: course.durationMinutes })}
+                          </Button>
+                        ) : onOverride ? (
+                          <Button
+                            aria-describedby={showPriorEndNote ? priorEndNoteId : undefined}
+                            className="h-auto min-h-11 max-w-full whitespace-normal text-left border-warning text-warning hover:bg-warning-soft"
+                            data-course-id={course.courseId}
+                            data-override-course-id={course.courseId}
+                            data-start-time={time}
+                            data-therapist-id={row.therapistId}
+                            key={course.courseId}
+                            onClick={() =>
+                              onOverride({
+                                startTime: time,
+                                therapistId: row.therapistId,
+                                courseId: course.courseId,
+                                verdict
+                              })
+                            }
+                            variant="secondary"
+                          >
+                            {impossibleCourseLabel(locale, course)} · {t(locale, "calls.quickBooking.therapist.overrideAssign")}
+                          </Button>
+                        ) : (
+                          <span className="inline-flex min-h-11 items-center text-muted" key={course.courseId}>
+                            {impossibleCourseLabel(locale, course)}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           ) : null}
         </div>
       ) : null}

@@ -32,6 +32,7 @@ import {
 import { selectNowSlot } from "@/app/(erp)/calls/quick-booking-now-slot";
 import {
   attendanceKey,
+  filterByAttendance,
   impossibleCourseLabel,
   TherapistAvailabilityView,
   type AvailabilityCourseChoice,
@@ -563,6 +564,9 @@ export function TherapistStep({
   const t = useT();
   // 경고 확인 후 배정은 버튼을 누른 즉시 적용하지 않고, 경고 문장을 먼저 보여준 뒤 확인을 받는다(스펙 F01).
   const [pendingOverride, setPendingOverride] = useState<PendingTherapistOverride | null>(null);
+  // 기본은 출근 시각이 입력된 Therapist만 보인다. 출근 전 Therapist는 체크하면 함께 보인다.
+  const [showBeforeCheckIn, setShowBeforeCheckIn] = useState(false);
+  const attendance = filterByAttendance(availabilityRows, showBeforeCheckIn);
 
   // 코스 정책상 두 번째 Therapist가 필요한지는 가능 코스 행이 코스마다 함께 알려준다(티켓 11). 같은 코스는
   // 어느 행에서 찾아도 같은 값이다.
@@ -573,7 +577,8 @@ export function TherapistStep({
         .find((course) => course.courseId === courseId)?.requiresSecondTherapist
   );
   // 같은 사람을 Therapist 1·2로 고르는 것은 저장 오류라, 후보 목록에서 이미 고른 첫 번째 Therapist는 뺀다.
-  const secondCandidates = availabilityRows.filter((row) => row.therapistId !== therapist1Id);
+  // 첫 번째 목록과 같은 출근 기준으로 거른다.
+  const secondCandidates = attendance.rows.filter((row) => row.therapistId !== therapist1Id);
 
   const overrideVerdict = pendingOverride ? (pendingOverride.kind === "first" ? pendingOverride.choice.verdict : pendingOverride.verdict) : null;
   const overrideTherapistName = pendingOverride?.therapistName ?? "";
@@ -605,6 +610,12 @@ export function TherapistStep({
         시간 부족·수당 없음 코스는 onOverride로 "경고 확인 후 배정" 경로를 더한다(티켓 21).
       */}
       <TherapistAvailabilityView
+        attendanceFilter={{
+          hiddenCount: attendance.hiddenCount,
+          nobodyAttended: attendance.nobodyAttended,
+          onShowAllChange: setShowBeforeCheckIn,
+          showAll: showBeforeCheckIn
+        }}
         failed={availabilityFailed}
         locale={locale}
         onChoose={onChoose}
@@ -616,7 +627,7 @@ export function TherapistStep({
         onToggle={() => {}}
         open
         pending={availabilityPending}
-        rows={availabilityRows}
+        rows={attendance.rows}
         time={availabilityTime}
         timeSlots={options.timeSlots}
       />
@@ -651,12 +662,12 @@ export function TherapistStep({
                         </span>
                       </span>
                       {verdict === "possible" ? (
-                        <Button disabled={disabled} onClick={() => onChooseSecond(row.therapistId)} type="button" variant="secondary">
+                        <Button className="h-auto min-h-11 max-w-full whitespace-normal text-left" disabled={disabled} onClick={() => onChooseSecond(row.therapistId)} type="button" variant="secondary">
                           {t("calls.availability.coursePossible", { code: course.courseCode, minutes: course.durationMinutes })}
                         </Button>
                       ) : (
                         <Button
-                          className="border-warning text-warning hover:bg-warning-soft"
+                          className="h-auto min-h-11 max-w-full whitespace-normal text-left border-warning text-warning hover:bg-warning-soft"
                           disabled={disabled}
                           onClick={() => setPendingOverride({ kind: "second", therapistId: row.therapistId, therapistName: row.therapistName, verdict })}
                           type="button"

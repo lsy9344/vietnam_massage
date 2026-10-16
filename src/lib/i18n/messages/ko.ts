@@ -297,12 +297,10 @@ export const ko = {
   "calls.availability.time": "시각",
   "calls.availability.expand": "펼치기",
   "calls.availability.collapse": "접기",
-  "calls.availability.column.therapist": "Therapist",
   "calls.availability.column.schedule": "근무표",
   "calls.availability.column.attendance": "출근",
   "calls.availability.column.thisTime": "이 시각",
   "calls.availability.column.next": "다음 예약",
-  "calls.availability.column.courses": "가능한 코스",
   "calls.availability.attendance.beforeCheckIn": "출근 전",
   "calls.availability.attendance.checkedIn": "출근",
   "calls.availability.attendance.checkedOut": "퇴근(현재 퇴근)",
@@ -321,6 +319,8 @@ export const ko = {
   "calls.availability.loading": "불러오는 중",
   "calls.availability.loadError": "가능 코스를 불러오지 못했습니다. 시각을 다시 선택해 보세요.",
   "calls.availability.scheduleNote": "근무표의 근무 예정은 그 시각까지 근무한다는 보장이 아닙니다. 실제 출근 여부는 출근 칸을 확인하세요.",
+  "calls.availability.showBeforeCheckIn": "출근 전 Therapist {count}명도 보기",
+  "calls.availability.attendanceNone": "출근 시각이 입력된 Therapist가 없어 전체를 보여 줍니다.",
 
   // 콜 그리드 본문/상태
   "calls.grid.title": "콜 원장 그리드",
