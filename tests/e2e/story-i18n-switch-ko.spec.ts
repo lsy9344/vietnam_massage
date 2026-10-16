@@ -91,6 +91,6 @@ test.describe("i18n 언어 전환", () => {
     await expect(page.locator("html")).toHaveAttribute("lang", "ko");
     const dock = page.getByRole("navigation", { name: "업무 이동" });
     await expect(dock).toBeVisible();
-    await expect(dock.getByRole("link", { name: "현장", exact: true })).toBeVisible();
+    await expect(dock.getByRole("button", { name: "현장", exact: true })).toBeVisible();
   });
 });

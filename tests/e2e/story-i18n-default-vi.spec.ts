@@ -79,9 +79,10 @@ test.describe("i18n 기본 베트남어(vi)", () => {
     // 도크(aria-label)와 구역 라벨이 베트남어다.
     const dock = page.getByRole("navigation", { name: "Chuyển khu vực nghiệp vụ" });
     await expect(dock).toBeVisible();
-    await expect(dock.getByRole("link", { name: "Vận hành", exact: true })).toHaveAttribute("aria-current", "page");
+    // 현장은 화면이 둘이라 화면 메뉴를 여는 버튼이다.
+    await expect(dock.getByRole("button", { name: "Vận hành", exact: true })).toHaveAttribute("aria-current", "true");
     await expect(dock.getByRole("button", { name: "Tôi", exact: true })).toBeVisible();
     // 한국어 구역 라벨은 없다.
-    await expect(dock.getByRole("link", { name: "현장", exact: true })).toHaveCount(0);
+    await expect(dock.locator("[data-dock-zone]", { hasText: "현장" })).toHaveCount(0);
   });
 });

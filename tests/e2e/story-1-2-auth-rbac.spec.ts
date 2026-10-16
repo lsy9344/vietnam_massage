@@ -130,9 +130,11 @@ test.describe("Story 1.2 직원 로그인과 RBAC", () => {
         await expect(dock).toHaveCount(0);
         return;
       }
-      await expect(dock.getByRole("link")).toHaveText(user.zones);
+      // 화면이 하나인 구역은 링크, 둘 이상인 구역은 화면 메뉴를 여는 버튼이다.
+      const zones = dock.locator("[data-dock-zone]");
+      await expect(zones).toHaveText(user.zones);
       for (const zone of allZones.filter((zone) => !user.zones.includes(zone))) {
-        await expect(dock.getByRole("link", { name: zone, exact: true })).toHaveCount(0);
+        await expect(zones.filter({ hasText: new RegExp(`^${zone}$`) })).toHaveCount(0);
       }
     });
   }

@@ -16,6 +16,7 @@ export const vi: Messages = {
   "shell.skip.dock": "Tới chuyển khu vực",
   "shell.dock.aria": "Chuyển khu vực nghiệp vụ",
   "shell.dock.more": "Thêm",
+  "shell.dock.backToMore": "Danh sách Thêm",
   "shell.zone.ledger": "Sổ gọi",
   "shell.zone.floor": "Vận hành",
   "shell.zone.customers": "Khách",

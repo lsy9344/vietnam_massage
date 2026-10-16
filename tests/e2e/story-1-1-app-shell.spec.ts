@@ -17,8 +17,9 @@ test.describe("Story 1.1 ERP 앱 쉘", () => {
 
     const dock = page.getByRole("navigation", { name: "업무 이동" });
     await expect(dock).toBeVisible();
-    await expect(dock.getByRole("link")).toHaveText(dockZones);
-    await expect(dock.getByRole("link", { name: "현장", exact: true })).toHaveAttribute("aria-current", "page");
+    // 화면이 하나인 구역은 링크, 둘 이상인 구역은 화면 메뉴를 여는 버튼이다.
+    await expect(dock.locator("[data-dock-zone]")).toHaveText(dockZones);
+    await expect(dock.getByRole("button", { name: "현장", exact: true })).toHaveAttribute("aria-current", "true");
 
     // 로그인 직후 /live 랜딩이 실제로 렌더된다 (운영월 유무와 무관하게 heading은 항상 존재).
     await expect(page.getByRole("heading", { name: "첫화면 실시간 현황", level: 1 })).toBeVisible();

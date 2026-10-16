@@ -33,6 +33,19 @@ function dock(page: Page) {
   return page.getByRole("navigation", { name: "업무 이동" });
 }
 
+// 도크 줄의 구역 항목. 화면이 하나인 구역은 링크, 둘 이상인 구역은 화면 메뉴를 여는 버튼이다.
+function dockZones(page: Page) {
+  return dock(page).locator("[data-dock-zone]:visible");
+}
+
+function dockZone(page: Page, name: string) {
+  return dockZones(page).filter({ hasText: new RegExp(`^${name}$`) });
+}
+
+function zoneMenu(page: Page, zone: string) {
+  return page.getByRole("group", { name: `${zone} 화면` });
+}
+
 async function seedAccount(role: Role) {
   const account = accounts[role];
   const staffCode = `E2E-SHELL02-${role.toUpperCase()}`;
@@ -101,10 +114,9 @@ test.describe("티켓 02 업무 흐름 셸", () => {
         await expect(dock(page)).toHaveCount(0);
         return;
       }
-      const zoneLinks = dock(page).getByRole("link");
-      await expect(zoneLinks).toHaveText(expected.zones);
+      await expect(dockZones(page)).toHaveText(expected.zones);
       for (const zone of allZones.filter((zone) => !expected.zones.includes(zone))) {
-        await expect(dock(page).getByRole("link", { name: zone, exact: true })).toHaveCount(0);
+        await expect(dockZone(page, zone)).toHaveCount(0);
       }
     });
   }
@@ -116,7 +128,7 @@ test.describe("티켓 02 업무 흐름 셸", () => {
     // design.md 6.1: 도크는 화면 아래 가장자리에서 12px(--dock-inset) 떨어져 떠 있다.
     expect(box && viewport ? Math.round(box.y + box.height) : 0).toBe((viewport?.height ?? 0) - 12);
     await expect(page.getByRole("navigation", { name: "ERP 도메인 메뉴" })).toHaveCount(0);
-    await expect(dock(page).getByRole("link", { name: "현장", exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(dockZone(page, "현장")).toHaveAttribute("aria-current", "true");
     expect(await page.evaluate(() => getComputedStyle(document.body).minWidth)).not.toBe("1280px");
   });
 
@@ -142,22 +154,60 @@ test.describe("티켓 02 업무 흐름 셸", () => {
     await expect(page).toHaveURL(/\/sign-in/);
   });
 
-  test("도크로 구역을 옮겨도 고른 운영월·날짜가 유지되고 원장은 늘 원장 탭으로 열린다", async ({ page }) => {
+  test("도크의 구역 메뉴로 화면을 옮겨도 고른 운영월·날짜가 유지되고, 원장 메뉴의 원장은 원장 탭으로 열린다", async ({ page }) => {
     await login(page, accounts.administrator.accountId, accounts.administrator.password);
     await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${chosenDate}&customerQuery=shell02`);
 
-    await dock(page).getByRole("link", { name: "현장", exact: true }).click();
+    await dockZone(page, "현장").click();
+    await zoneMenu(page, "현장").getByRole("link", { name: "객실" }).click();
     await expect(page).toHaveURL(`/rooms?operatingMonthId=${monthId}&serviceDate=${chosenDate}`);
     await expect(page.getByLabel("조회날짜")).toHaveValue(chosenDate);
 
-    await dock(page).getByRole("link", { name: "정산", exact: true }).click();
-    await expect(page).toHaveURL(`/settlements?operatingMonthId=${monthId}&serviceDate=${chosenDate}`);
-    await page.getByRole("navigation", { name: "정산 화면" }).getByRole("link", { name: "귀케어" }).click();
+    await dockZone(page, "정산").click();
+    await zoneMenu(page, "정산").getByRole("link", { name: "귀케어" }).click();
     await expect(page).toHaveURL(`/settlements/earcare?operatingMonthId=${monthId}&attendanceDate=${chosenDate}`);
+    // 도구줄의 구역 안 탭도 그대로 쓴다.
+    await page.getByRole("navigation", { name: "정산 화면" }).getByRole("link", { name: "Therapist" }).click();
+    await expect(page).toHaveURL(`/settlements?operatingMonthId=${monthId}&serviceDate=${chosenDate}`);
 
-    await dock(page).getByRole("link", { name: "원장", exact: true }).click();
+    await dockZone(page, "원장").click();
+    await zoneMenu(page, "원장").getByRole("link", { name: "원장", exact: true }).click();
     await expect(page).toHaveURL(`/calls?operatingMonthId=${monthId}&serviceDate=${chosenDate}`);
     await expect(page.getByLabel("조회날짜")).toHaveValue(chosenDate);
+  });
+
+  test("화면이 둘 이상인 구역을 누르면 그 구역 위에 화면 메뉴가 뜨고, 화면을 고르거나 Esc나 바깥을 누르면 닫힌다", async ({ page }) => {
+    await login(page, accounts.administrator.accountId, accounts.administrator.password);
+    const viewport = page.viewportSize();
+    const dockBox = await dock(page).boundingBox();
+
+    for (const zone of ["정산", "설정"]) {
+      await dockZone(page, zone).click();
+      const zoneBox = await dockZone(page, zone).boundingBox();
+      const menuBox = await zoneMenu(page, zone).boundingBox();
+      // 메뉴는 도크 위에 뜨고, 누른 구역과 가로로 겹치며, 오른쪽 끝 구역에서도 화면 안에 있다.
+      expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThanOrEqual(dockBox?.y ?? 0);
+      expect(menuBox?.x ?? 0).toBeLessThanOrEqual((zoneBox?.x ?? 0) + (zoneBox?.width ?? 0));
+      expect((menuBox?.x ?? 0) + (menuBox?.width ?? 0)).toBeGreaterThanOrEqual(zoneBox?.x ?? 0);
+      expect((menuBox?.x ?? 0) + (menuBox?.width ?? 0)).toBeLessThanOrEqual(viewport?.width ?? 0);
+
+      await page.keyboard.press("Escape");
+      await expect(zoneMenu(page, zone)).toBeHidden();
+      await expect(dockZone(page, zone)).toBeFocused();
+    }
+
+    await dockZone(page, "보고").click();
+    await expect(zoneMenu(page, "보고")).toBeVisible();
+    await page.getByRole("heading", { level: 1 }).click();
+    await expect(zoneMenu(page, "보고")).toBeHidden();
+
+    await dockZone(page, "정산").click();
+    await expect(zoneMenu(page, "정산").getByRole("link")).toHaveText(["Therapist", "귀케어", "운영팀 일일", "운영팀 월"]);
+    await zoneMenu(page, "정산").getByRole("link", { name: "운영팀 월" }).click();
+    await expect(page).toHaveURL(/\/settlements\/operations\/monthly/);
+    await expect(zoneMenu(page, "정산")).toBeHidden();
+    await dockZone(page, "정산").click();
+    await expect(zoneMenu(page, "정산").getByRole("link", { name: "운영팀 월" })).toHaveAttribute("aria-current", "page");
   });
 
   test("도구줄의 이전·다음 날 링크로 날짜를 옮긴다", async ({ page }) => {
@@ -214,27 +264,31 @@ test.describe("티켓 02 업무 흐름 셸", () => {
     expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(dockTop);
   });
 
-  test("840px 미만에서 관리자는 앞 네 구역과 더보기를 보고, 더보기로 나머지 구역에 간다", async ({ page }) => {
+  test("840px 미만에서 관리자는 앞 네 구역과 더보기를 보고, 더보기 안의 구역 메뉴로 나머지 화면에 간다", async ({ page }) => {
     await page.setViewportSize({ width: 600, height: 900 });
     await login(page, accounts.administrator.accountId, accounts.administrator.password);
 
-    for (const zone of ["원장", "현장", "고객", "정산"]) {
-      await expect(dock(page).getByRole("link", { name: zone, exact: true })).toBeVisible();
-    }
-    await expect(dock(page).getByRole("link", { name: "마감", exact: true })).toBeHidden();
-    await expect(dock(page).getByRole("link", { name: "보고", exact: true })).toBeHidden();
-    await dock(page).getByRole("button", { name: "더보기" }).click();
-    await dock(page).getByRole("link", { name: "설정", exact: true }).click();
-    await expect(page).toHaveURL(/\/masters\/operating-months$/);
+    await expect(dockZones(page)).toHaveText(["원장", "현장", "고객", "정산"]);
+    await dock(page).getByRole("button", { name: "더보기", exact: true }).click();
+    // 화면이 하나인 마감은 링크, 보고·설정은 그 구역의 화면 메뉴로 들어간다.
+    await expect(dock(page).getByRole("link", { name: "마감", exact: true })).toBeVisible();
+    await dock(page).getByRole("button", { name: "설정", exact: true }).click();
+    await expect(dock(page).getByRole("button", { name: "더보기 목록" })).toBeFocused();
+    await expect(dock(page).locator("[data-dock-overflow]").getByText("설정 화면")).toBeVisible();
+    await dock(page).getByRole("link", { name: "감사" }).click();
+    await expect(page).toHaveURL(/\/audit$/);
+    await expect(dock(page).getByRole("link", { name: "감사" })).toBeHidden();
+
+    // 다시 열면 더보기 목록부터 보인다.
+    await dock(page).getByRole("button", { name: "더보기", exact: true }).click();
+    await expect(dock(page).getByRole("button", { name: "보고", exact: true })).toBeVisible();
   });
 
   test("840px 미만에서도 구역이 넷 이하인 역할은 더보기 없이 모두 본다", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, accounts.counter.accountId, accounts.counter.password);
 
-    for (const zone of ["원장", "현장", "고객", "보고"]) {
-      await expect(dock(page).getByRole("link", { name: zone, exact: true })).toBeVisible();
-    }
+    await expect(dockZones(page)).toHaveText(["원장", "현장", "고객", "보고"]);
     await expect(dock(page).getByRole("button", { name: "더보기" })).toBeHidden();
   });
 
@@ -245,10 +299,11 @@ test.describe("티켓 02 업무 흐름 셸", () => {
     await page.reload();
 
     const viDock = page.getByRole("navigation", { name: "Chuyển khu vực nghiệp vụ" });
-    await expect(viDock.getByRole("link")).toHaveText(["Sổ gọi", "Vận hành", "Khách", "Đối soát", "Chốt tháng", "Báo cáo", "Thiết lập"]);
+    const viZones = viDock.locator("[data-dock-zone]:visible");
+    await expect(viZones).toHaveText(["Sổ gọi", "Vận hành", "Khách", "Đối soát", "Chốt tháng", "Báo cáo", "Thiết lập"]);
     const overflow = await viDock.evaluate((element) => element.scrollWidth - element.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
-    for (const box of await Promise.all((await viDock.getByRole("link").all()).map((link) => link.boundingBox()))) {
+    for (const box of await Promise.all((await viZones.all()).map((zone) => zone.boundingBox()))) {
       expect(box?.height ?? 0).toBeLessThanOrEqual(48);
     }
   });

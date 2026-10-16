@@ -147,7 +147,7 @@ UI를 만들거나 고치기 전에 이 문서를 읽는다. 화면에 새 모�
 ## 5. 그림자와 움직임
 
 - 제자리에 놓인 카드, 표, 패널, 요약 카드, 도크에는 그림자가 없다.
-- 팝오버(나 메뉴, 더보기)만 `--shadow-float` 한 단계를 쓴다.
+- 팝오버(나 메뉴, 더보기, 도크의 구역 메뉴)만 `--shadow-float` 한 단계를 쓴다.
 - 서랍과 다이얼로그는 그림자 대신 뒤를 `bg-foreground/20 backdrop-blur-[3px]`로 덮는다.
 - 움직임은 색·배경·테두리·투명도만 150–250ms 바뀐다(`transition-colors`). 위치 이동, 크기 변화, 회전은 쓰지 않는다.
 - 동작 줄이기 설정에서는 `globals.css`가 모든 전환을 즉시 끝낸다.
@@ -159,6 +159,7 @@ UI를 만들거나 고치기 전에 이 문서를 읽는다. 화면에 새 모�
 - 화면 가장자리에서 12px(600px 미만은 8px) 떨어져 떠 있는 섬이다: `--surface-float`, 1px `--border`, 24px 모서리.
 - 840px 미만에서는 항목 글자를 13px, 좌우 여백을 8px로 줄여 베트남어 라벨 네 구역 + 더보기 + 나가 한 줄에 들어간다. 360px 폭에서 "Chốt tháng"이 여백 없이 꼭 맞으므로 라벨을 늘리면 이 폭에서 다시 확인한다.
 - 항목은 알약이고 hover는 `--readonly`다. 현재 구역은 `--readonly` 바탕에 글자 아래 골드 막대가 붙는다.
+- 화면이 둘 이상인 구역은 누르면 그 구역 위에 화면 메뉴(6.12 팝오버)를 띄운다. 840px 이상에서는 라벨 뒤에 작은 위쪽 삼각형(`.shell-dock-menu-trigger`)으로 메뉴가 있음을 보이고, 840px 미만에서는 라벨이 한 줄에 들어가도록 뺀다. 메뉴는 누른 구역의 왼쪽 끝에 맞춰 뜨고 화면 오른쪽에 넘치면 오른쪽 끝에 맞춘다(CSS 앵커 위치, 모르는 브라우저에서는 도크 오른쪽 끝 위).
 - 도크에 가리지 않도록 본문 아래 여백과 높이 계산은 `--dock-space`를 쓴다. 예: `max-h-[calc(100vh-var(--dock-space))]`.
 
 ### 6.2 화면 도구줄 — `ScreenToolbar`, `.screen-toolbar`, `.screen-tab`, `.screen-field`, `.screen-step`
@@ -235,7 +236,7 @@ UI를 만들거나 고치기 전에 이 문서를 읽는다. 화면에 새 모�
 
 ### 6.12 팝오버 — `.shell-popover`
 
-`--surface-float`, `--border`, 18px, `--shadow-float`, 안쪽 여백 6px. 메뉴 항목은 `rounded-sm` 44px다.
+`--surface-float`, `--border`, 18px, `--shadow-float`, 안쪽 여백 6px. 메뉴 항목은 `rounded-sm` 44px다(`.shell-menu-item`). 지금 화면인 항목은 표의 선택 행처럼 `--readonly` 바탕과 왼쪽 3px 검정 막대다. 목록에 이름이 필요하면 맨 위에 `text-xs font-semibold text-muted` 머리말을 두고 그것으로 묶음 이름을 단다(예: 도크의 "정산 화면"). 도크 위에 뜨는 팝오버는 창 높이를 넘으면 안에서 스크롤한다.
 
 ### 6.13 로딩, 빈 상태, 오류 — `Skeleton`, `ScreenState`
 

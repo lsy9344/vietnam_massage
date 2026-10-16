@@ -246,8 +246,10 @@ test.describe("티켓 03 콜 원장 화면 분리", () => {
     await expect(page).toHaveURL(`${ledgerUrl}&tab=cashbook`);
     await expect(page.getByLabel("일별 지출")).toBeVisible();
 
-    // 도크로 원장 구역에 들어가면 늘 원장 탭이다.
-    await page.getByRole("navigation", { name: "업무 이동" }).getByRole("link", { name: "원장", exact: true }).click();
+    // 도크의 원장 메뉴에서 원장을 고르면 하루 수납·지출 탭에 있었어도 원장 탭이 열린다.
+    const dock = page.getByRole("navigation", { name: "업무 이동" });
+    await dock.getByRole("button", { name: "원장", exact: true }).click();
+    await page.getByRole("group", { name: "원장 화면" }).getByRole("link", { name: "원장", exact: true }).click();
     await expect(page).toHaveURL(ledgerUrl);
   });
 

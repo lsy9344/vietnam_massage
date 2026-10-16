@@ -15,6 +15,7 @@ export const ko = {
   "shell.skip.dock": "업무 이동으로",
   "shell.dock.aria": "업무 이동",
   "shell.dock.more": "더보기",
+  "shell.dock.backToMore": "더보기 목록",
   "shell.zone.ledger": "원장",
   "shell.zone.floor": "현장",
   "shell.zone.customers": "고객",
