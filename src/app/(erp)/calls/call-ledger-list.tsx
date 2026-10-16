@@ -17,7 +17,6 @@ import { callRowSaveReducer, initialCallRowSave, isSaveHeld, type CallRowDraft, 
 import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
 import type { CallConflictCompareData } from "@/app/(erp)/calls/call-conflict-compare";
 import { CallEditPanel, type CallPanelFocusRequest } from "@/app/(erp)/calls/call-edit-panel";
-import { CallPhoneCardList } from "@/app/(erp)/calls/call-phone-card-list";
 import { optionLabel } from "@/app/(erp)/calls/call-ledger-fields";
 import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
 import { nowClockString } from "@/app/(erp)/calls/quick-booking-now-slot";
@@ -91,7 +90,16 @@ const COLUMNS: Array<{ id: string; labelKey: MessageKey; width?: string }> = [
   { id: "action", labelKey: "calls.list.action", width: "6rem" }
 ];
 
-const cellClass = "border-b border-border px-2 py-2 align-middle";
+const cellClass = "border-b border-border px-2 py-2 align-middle max-[599px]:border-0 max-[599px]:px-1 max-[599px]:py-0.5";
+
+/**
+ * 휴대폰 폭(600px 미만, 스펙 D23)은 같은 표를 줄마다 세 줄 격자로 그린다: 시간은 왼쪽에 세로로 걸치고,
+ * 고객/메모 → 코스·매니저·객실 → 상태·경고·할 일 순서다. 칸은 DOM 순서대로 자리를 채운다.
+ */
+const phoneLineClass =
+  "max-[599px]:grid max-[599px]:grid-cols-[3.5rem_repeat(3,minmax(0,1fr))] max-[599px]:items-center max-[599px]:gap-x-1 max-[599px]:border-b max-[599px]:border-border max-[599px]:px-1 max-[599px]:py-1.5 [&>td:first-child]:max-[599px]:row-span-3 [&>td:first-child]:max-[599px]:self-start [&>td:nth-child(2)]:max-[599px]:col-span-3";
+/** 휴대폰 폭에서 줄이 아닌 행(묶음 머리, 일행 머리, 객실 고르기)은 한 칸짜리 블록이다. */
+const phoneBlockRowClass = "max-[599px]:block [&>*]:max-[599px]:block";
 
 /**
  * 원장 한 줄(스펙 D17)과 그 콜의 저장 상태. 저장은 줄마다 하나씩 보내고(callRowSaveReducer), 입장 버튼과
@@ -265,7 +273,7 @@ function CallLedgerLine({
     <>
       {/* 편집 패널이 열린 줄은 선택된 줄 모양이다(design.md 6.6). 버튼이 아닌 자리를 눌러도 패널이 열린다. */}
       <tr
-        className="cursor-pointer transition-colors hover:bg-readonly data-[selected=true]:bg-readonly [&[data-selected=true]>td:first-child]:[box-shadow:inset_3px_0_0_var(--brand)]"
+        className={`cursor-pointer transition-colors hover:bg-readonly data-[selected=true]:bg-readonly [&[data-selected=true]>td:first-child]:[box-shadow:inset_3px_0_0_var(--brand)] ${phoneLineClass}`}
         data-ledger-line=""
         data-selected={selected}
         data-service-call-id={row.id}
@@ -325,11 +333,12 @@ function CallLedgerLine({
           </span>
         </td>
         <td className={`${cellClass} text-right`}>
-          {action === "enter" ? (
+          {/* 휴대폰 폭은 읽기 전용이라(티켓 26) 할 일 버튼을 두지 않는다. */}
+          {readOnly ? null : action === "enter" ? (
             <Button
               aria-label={t("calls.list.enterAria", { time })}
               className="h-11 px-4"
-              disabled={isLocked || !inUse || readOnly}
+              disabled={isLocked || !inUse}
               onClick={() => enter()}
               type="button"
               variant="secondary"
@@ -340,7 +349,7 @@ function CallLedgerLine({
             <Button
               aria-label={t("calls.list.payAria", { time })}
               className="h-11 px-4"
-              disabled={isLocked || readOnly}
+              disabled={isLocked}
               onClick={() => onOpen(row.id, "payment")}
               type="button"
               variant="secondary"
@@ -351,7 +360,7 @@ function CallLedgerLine({
         </td>
       </tr>
       {pickingRoom ? (
-        <tr hidden={hidden}>
+        <tr className={phoneBlockRowClass} hidden={hidden}>
           <td className={`${cellClass} bg-readonly`} colSpan={COLUMNS.length}>
             <div
               aria-label={t("calls.list.pickRoomAria", { time })}
@@ -451,7 +460,6 @@ function CallPartyHead({
   const label = lead.customerMemo ? t("calls.party.headWithMemo", { memo: lead.customerMemo, size }) : t("calls.party.head", { size });
   const targets = partyEntryTargets(sectionRows);
   const roomless = targets.filter((target) => target.needsRoom);
-  const disabled = isLocked || readOnly;
   const canEnter = Boolean(statusCodeFor(options.statuses, "inUse"));
   const canCancel = Boolean(statusCodeFor(options.statuses, "canceled"));
 
@@ -481,48 +489,51 @@ function CallPartyHead({
 
   return (
     <>
-      <tr data-ledger-party={lead.partyId ?? ""} data-ledger-party-flow={flow} hidden={hidden}>
+      <tr className={phoneBlockRowClass} data-ledger-party={lead.partyId ?? ""} data-ledger-party-flow={flow} hidden={hidden}>
         <td className={`${cellClass} bg-readonly`} colSpan={COLUMNS.length}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm font-semibold text-foreground">{label}</span>
-            <span className="flex flex-wrap gap-2">
-              {targets.length > 0 ? (
-                <>
+            {/* 휴대폰 폭은 읽기 전용이고 빠른 예약도 없어(티켓 26) 일행 동작을 두지 않는다. */}
+            {readOnly ? null : (
+              <span className="flex flex-wrap gap-2">
+                {targets.length > 0 ? (
+                  <>
+                    <Button
+                      aria-label={t("calls.party.enterAria", { party: label })}
+                      className="h-11 px-4"
+                      disabled={isLocked || !canEnter}
+                      onClick={enterAll}
+                      type="button"
+                      variant="secondary"
+                    >
+                      {t("calls.party.enter")}
+                    </Button>
+                    <Button
+                      aria-label={t("calls.party.cancelAria", { party: label })}
+                      className="h-11 px-4"
+                      disabled={isLocked || !canCancel}
+                      onClick={() => setConfirmCancel(true)}
+                      type="button"
+                      variant="ghost"
+                    >
+                      {t("calls.party.cancel")}
+                    </Button>
+                  </>
+                ) : null}
+                {first ? (
                   <Button
-                    aria-label={t("calls.party.enterAria", { party: label })}
+                    aria-label={t("calls.party.addAria", { party: label })}
                     className="h-11 px-4"
-                    disabled={disabled || !canEnter}
-                    onClick={enterAll}
-                    type="button"
-                    variant="secondary"
-                  >
-                    {t("calls.party.enter")}
-                  </Button>
-                  <Button
-                    aria-label={t("calls.party.cancelAria", { party: label })}
-                    className="h-11 px-4"
-                    disabled={disabled || !canCancel}
-                    onClick={() => setConfirmCancel(true)}
+                    disabled={isLocked}
+                    onClick={onAdd}
                     type="button"
                     variant="ghost"
                   >
-                    {t("calls.party.cancel")}
+                    {t("calls.party.add")}
                   </Button>
-                </>
-              ) : null}
-              {first ? (
-                <Button
-                  aria-label={t("calls.party.addAria", { party: label })}
-                  className="h-11 px-4"
-                  disabled={disabled}
-                  onClick={onAdd}
-                  type="button"
-                  variant="ghost"
-                >
-                  {t("calls.party.add")}
-                </Button>
-              ) : null}
-            </span>
+                ) : null}
+              </span>
+            )}
           </div>
           {failures.length > 0 ? (
             <ScreenState
@@ -544,7 +555,7 @@ function CallPartyHead({
         </td>
       </tr>
       {picking ? (
-        <tr hidden={hidden}>
+        <tr className={phoneBlockRowClass} hidden={hidden}>
           <td className={`${cellClass} bg-readonly`} colSpan={COLUMNS.length}>
             <div
               aria-label={t("calls.party.pickRoomsAria", { party: label })}
@@ -651,7 +662,7 @@ export function CallLedgerList({
   showSettlementAmounts: boolean;
 }) {
   const t = useT();
-  // 콜이 없을 때 빈 상태 문구를 표·카드 양쪽에 두지 않으려면 실제 폭을 알아야 한다(회귀, story-2-1).
+  // 휴대폰 폭(600px 미만)은 같은 목록을 읽기 전용으로 쓴다(스펙 D23, 티켓 26의 규칙).
   const isPhoneWidth = usePhoneWidth();
   const [doneExpanded, setDoneExpanded] = useState(false);
   // 고른 완료 콜 때문에 펼친 묶음을 사용자가 다시 접었으면, 그 콜을 고른 동안은 접힌 채로 둔다.
@@ -687,7 +698,7 @@ export function CallLedgerList({
   for (const section of sections) {
     const collapsed = section.flow === "done" && !showDone;
     body.push(
-      <tr data-ledger-flow={section.flow} key={`flow-${section.flow}`}>
+      <tr className={phoneBlockRowClass} data-ledger-flow={section.flow} key={`flow-${section.flow}`}>
         <th className="border-b border-border bg-surface px-2 pb-2 pt-4 text-left align-bottom" colSpan={COLUMNS.length} scope="colgroup">
           {section.flow === "done" ? (
             <button
@@ -786,40 +797,37 @@ export function CallLedgerList({
         <span className="text-xs text-muted">{t("calls.grid.rowCount", { count: rows.length })}</span>
       </div>
 
-      {/* 휴대폰 폭(600px 미만)은 아직 카드 목록이다(티켓 26). 티켓 05에서 이 목록으로 합친다. */}
-      <div className="min-[600px]:hidden">
-        <CallPhoneCardList isPhoneWidth={isPhoneWidth} onOpenDetail={(id) => onOpen(id)} options={options} rows={rows} selectedCallId={selectedCallId} />
-      </div>
-
-      <div className="hidden min-[600px]:block">
-        {rows.length === 0 ? (
-          // 휴대폰 폭에서는 카드 목록이 같은 빈 상태 문구를 그린다. 이 블록은 CSS로만 숨으므로 그리지 않는다(회귀, story-2-1).
-          isPhoneWidth ? null : (
-            <div className="grid gap-1 px-4 py-8">
-              <p className="text-sm font-medium text-foreground">{t("calls.grid.empty.title")}</p>
-              <p className="text-xs text-muted">{t("calls.grid.empty.description")}</p>
-            </div>
-          )
-        ) : null}
-        {/* 콜이 없어도 줄 구조는 그대로 둔다 — 빠른 예약으로 첫 콜을 만들면 같은 자리에 줄이 생긴다. */}
-        <table aria-label={t("calls.list.aria")} className="w-full table-fixed border-collapse text-left" data-call-ledger-list="" hidden={rows.length === 0}>
-          <colgroup>
+      {rows.length === 0 ? (
+        <div className="grid gap-1 px-4 py-8">
+          <p className="text-sm font-medium text-foreground">{t("calls.grid.empty.title")}</p>
+          {/* 휴대폰 폭에는 빠른 예약이 없다(티켓 26). */}
+          {isPhoneWidth ? null : <p className="text-xs text-muted">{t("calls.grid.empty.description")}</p>}
+        </div>
+      ) : null}
+      {/* 콜이 없어도 줄 구조는 그대로 둔다 — 빠른 예약으로 첫 콜을 만들면 같은 자리에 줄이 생긴다. 휴대폰 폭은
+          같은 표를 블록과 줄 격자로 그린다(스펙 D23). */}
+      <table
+        aria-label={t("calls.list.aria")}
+        className="w-full table-fixed border-collapse text-left max-[599px]:block"
+        data-call-ledger-list=""
+        hidden={rows.length === 0}
+      >
+        <colgroup>
+          {COLUMNS.map((column) => (
+            <col key={column.id} style={column.width ? { width: column.width } : undefined} />
+          ))}
+        </colgroup>
+        <thead className="bg-readonly text-xs font-semibold text-muted max-[599px]:hidden">
+          <tr>
             {COLUMNS.map((column) => (
-              <col key={column.id} style={column.width ? { width: column.width } : undefined} />
+              <th className="whitespace-nowrap border-b border-border px-2 py-2 text-left" key={column.id} scope="col">
+                {column.id === "action" ? <span className="sr-only">{t(column.labelKey)}</span> : t(column.labelKey)}
+              </th>
             ))}
-          </colgroup>
-          <thead className="bg-readonly text-xs font-semibold text-muted">
-            <tr>
-              {COLUMNS.map((column) => (
-                <th className="whitespace-nowrap border-b border-border px-2 py-2 text-left" key={column.id} scope="col">
-                  {column.id === "action" ? <span className="sr-only">{t(column.labelKey)}</span> : t(column.labelKey)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>{body}</tbody>
-        </table>
-      </div>
+          </tr>
+        </thead>
+        <tbody className="max-[599px]:block">{body}</tbody>
+      </table>
     </section>
   );
 }

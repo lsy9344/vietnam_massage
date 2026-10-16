@@ -7,14 +7,14 @@ import { useT } from "@/lib/i18n/client";
 import { CallLedgerList } from "@/app/(erp)/calls/call-ledger-list";
 import type { CallPanelFocusRequest } from "@/app/(erp)/calls/call-edit-panel";
 import { ledgerListKey } from "@/app/(erp)/calls/ledger-flow";
+import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
 import { CALL_PARAM } from "@/lib/ledger-address";
 import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 
 /**
- * 같은 콜 id의 속성을 가진 여러 노드 중 실제로 보이는 것 하나를 고른다. 휴대폰 폭의 카드 목록과
- * 태블릿 이상의 목록은 같은 `data-service-call-id`/`data-call-open`을 CSS로만 서로 숨겨 쓰는데(티켓 26),
- * `querySelector`는 숨은 쪽을 먼저 찾을 수 있어 스크롤·포커스 복귀가 틀린 노드를 집는다. 빠른 예약 패널이
- * 저장 직후 새 줄을 고를 때도 같은 함정이 있어(티켓 20) 그쪽에서도 이 함수를 그대로 가져다 쓴다.
+ * 같은 선택자에 걸리는 노드 중 실제로 보이는 것 하나를 고른다. 접힌 완료 묶음의 줄처럼 숨은 노드를
+ * `querySelector`가 먼저 찾으면 스크롤·포커스 복귀가 틀린 노드를 집는다. 빠른 예약 패널이 저장 직후 새 줄을
+ * 고를 때도(티켓 20) 이 함수를 그대로 가져다 쓴다.
  */
 export function firstVisible<T extends Element>(selector: string): T | null {
   const nodes = document.querySelectorAll<T>(selector);
@@ -99,6 +99,14 @@ export function CallLedgerWorkspace({
   const [panelFocus, setPanelFocus] = useState<CallPanelFocusRequest | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  // 휴대폰 폭(600px 미만)에서 패널은 목록을 덮는 전체 화면 시트다(스펙 D23).
+  const isPhoneWidth = usePhoneWidth();
+
+  // 시트가 목록을 덮으므로 열리면 포커스를 시트 안(닫기 버튼)으로 옮긴다. 닫으면 SidePanel과 useCallSelection이
+  // 연 줄로 돌려준다.
+  useEffect(() => {
+    if (selected && isPhoneWidth) panelRef.current?.querySelector<HTMLElement>("aside button")?.focus();
+  }, [selected, isPhoneWidth]);
 
   function open(id: string, focus?: CallPanelFocusRequest["target"]) {
     select(id);
@@ -155,6 +163,11 @@ export function CallLedgerWorkspace({
         case "back": {
           if (!selected || !target || !panelRef.current?.contains(target)) return;
           event.preventDefault();
+          // 휴대폰 시트 뒤의 줄은 보이지 않으므로 시트를 닫는다.
+          if (isPhoneWidth) {
+            select(null);
+            return;
+          }
           firstVisible<HTMLElement>(`[data-call-open="${CSS.escape(selected)}"]`)?.focus();
           return;
         }
@@ -163,7 +176,7 @@ export function CallLedgerWorkspace({
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected]);
+  }, [selected, isPhoneWidth]);
 
   const title = selectedRow
     ? selectedRow.customerMemo
@@ -175,7 +188,8 @@ export function CallLedgerWorkspace({
     // 원장 위에서 저장하지 않은 입력이 있는 동안 떠나기 전 안내를 받으려면(스펙 B07, 티켓 18) 이 컴포넌트는
     // page.tsx가 CallLeaveGuard 안에서 그려야 한다 — 빠른 예약 패널은 원장 탭 머리의 주요 버튼이라 이 컴포넌트
     // 밖(같은 탭의 형제)에 있으므로, 안내는 여기 말고 그 공통 조상에서 건다.
-    // 목록은 패널이 열려도 같은 자리에 둔다(초안 유지). 1200px 미만에서는 패널이 목록 위에 쌓인다.
+    // 목록은 패널이 열려도 같은 자리에 둔다(초안 유지). 1200px 미만에서는 패널이 목록 위에 쌓이고, 600px 미만에서는
+    // 전체 화면 시트로 목록과 도크를 덮는다(스펙 D23).
     <div className={selected ? "grid grid-cols-1 items-start gap-6 min-[1200px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "grid grid-cols-1"}>
       <div className="min-w-0" ref={listRef}>
         <CallLedgerList
@@ -197,7 +211,11 @@ export function CallLedgerWorkspace({
       {selected ? (
         <div className="order-first min-w-0 min-[1200px]:sticky min-[1200px]:top-4 min-[1200px]:order-none" ref={panelRef}>
           {/* 패널 틀은 여기 하나다. 내용은 고른 줄(CallLedgerLine)이 자기 저장 상태와 함께 이 자리에 그린다. */}
-          <SidePanel onClose={() => select(null)} title={title}>
+          <SidePanel
+            className="max-[599px]:fixed max-[599px]:inset-0 max-[599px]:z-50 max-[599px]:max-h-none max-[599px]:rounded-none max-[599px]:border-0"
+            onClose={() => select(null)}
+            title={title}
+          >
             {selectedRow ? (
               <div ref={setPanelHost} />
             ) : (

@@ -368,8 +368,6 @@ export const ko = {
   "calls.panel.payComplete": "결제 완료",
   "calls.panel.calculation": "계산",
 
-  // 휴대폰 폭 원장 카드 목록(명세 F08, 티켓 26)
-  "calls.phoneCard.aria": "원장 카드 목록",
 
   // 빠른 예약 패널(스펙 F01·F08, 티켓 20)
   "calls.quickBooking.open": "빠른 예약",

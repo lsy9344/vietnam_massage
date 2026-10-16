@@ -265,7 +265,7 @@ test.describe("티켓 13 원장 행 경고와 콜 상세 패널", () => {
     });
   }
 
-  test("390px(휴대폰 폭)에서는 카드를 눌러도 읽기 전용 패널이라 입력칸이 없다", async ({ page }) => {
+  test("390px(휴대폰 폭)에서는 줄을 눌러도 읽기 전용 패널이라 입력칸이 없다", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 900 });
     await login(page, accounts.counter.accountId, accounts.counter.password);
     await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}&call=${thirdCallId}`);

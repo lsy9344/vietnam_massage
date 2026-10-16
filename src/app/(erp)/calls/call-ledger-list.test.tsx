@@ -282,22 +282,42 @@ describe("ledger line warnings", () => {
   });
 });
 
-describe("phone width (ticket 26, until ticket 05)", () => {
-  it("keeps the phone card list in a phone-only block before the list", () => {
-    const html = renderList([ledgerRow()]);
-    assert.match(html, /min-\[600px\]:hidden/);
-    assert.match(html, /aria-label="원장 카드 목록"/);
-    const cardIndex = html.indexOf("101 호실 · A 누루60");
-    assert.ok(cardIndex > -1 && cardIndex < html.indexOf("<table"));
+describe("phone width (ticket 26, ledger flow ticket 05)", () => {
+  const rows = [
+    ledgerRow({ id: "reserved-12", startTime: "12:00", status: "RESERVED", customerMemo: "정 대표", partyId: "party-jung", partyPosition: 1 }),
+    ledgerRow({ id: "reserved-12b", startTime: "12:00", status: "RESERVED", customerMemo: "정 대표", partyId: "party-jung", partyPosition: 2 }),
+    ledgerRow({ id: "in-use-13", startTime: "13:00", status: "IN_USE" })
+  ];
+
+  it("draws the same flow list on a phone, with no separate card list", () => {
+    const html = withWindowWidth(false, () => renderList(rows));
+    assert.doesNotMatch(html, /원장 카드 목록/);
+    assert.equal((html.match(/<table/g) ?? []).length, 1);
+    // 같은 줄이 600px 미만에서 세 줄 격자가 된다.
+    assert.match(line(html, "in-use-13"), /^<tr[^>]*max-\[599px\]:grid/);
   });
 
-  // 회귀(story-2-1): 콜이 없는 날짜에 빈 상태 문구가 카드와 목록 양쪽에 남으면 strict-mode 검사가 깨진다.
-  it("shows exactly one empty-day message for the actual width", () => {
+  it("keeps the phone read-only: no enter, pay, or party buttons", () => {
+    const phone = withWindowWidth(false, () => renderList(rows));
+    // 줄에는 패널을 여는 시간 버튼만 남는다.
+    assert.deepEqual(buttons(line(phone, "reserved-12")), ["12:00"]);
+    assert.deepEqual(buttons(line(phone, "in-use-13")), ["13:00"]);
+    assert.doesNotMatch(phone, /일행 입장|일행 취소|1명 추가/);
+    assert.match(phone, /정 대표 일행 2명/);
+
+    const wide = withWindowWidth(true, () => renderList(rows));
+    assert.deepEqual(buttons(line(wide, "in-use-13")).slice(-1), ["결제"]);
+    assert.match(wide, /일행 입장/);
+  });
+
+  // 회귀(story-2-1): 콜이 없는 날짜의 빈 상태 문구는 한 번만 나온다. 휴대폰 폭에는 빠른 예약이 없어 안내도 뺀다.
+  it("shows exactly one empty-day message, without the quick booking hint on a phone", () => {
     const count = (html: string) => (html.match(/이 날짜의 콜이 없습니다/g) ?? []).length;
     assert.equal(count(renderList([])), 1);
     assert.equal(count(withWindowWidth(false, () => renderList([]))), 1);
     assert.equal(count(withWindowWidth(true, () => renderList([]))), 1);
     assert.match(renderList([]), /빠른 예약으로 새 콜을 만든다/);
+    assert.doesNotMatch(withWindowWidth(false, () => renderList([])), /빠른 예약으로 새 콜을 만든다/);
   });
 });
 

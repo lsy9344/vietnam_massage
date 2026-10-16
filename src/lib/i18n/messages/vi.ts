@@ -368,8 +368,6 @@ export const vi: Messages = {
   "calls.panel.payComplete": "Hoàn tất thanh toán",
   "calls.panel.calculation": "Tính toán",
 
-  // 휴대폰 폭 원장 카드 목록(명세 F08, 티켓 26)
-  "calls.phoneCard.aria": "Danh sách thẻ sổ cuộc gọi",
 
   // 빠른 예약 패널(스펙 F01·F08, 티켓 20)
   "calls.quickBooking.open": "Đặt lịch nhanh",
