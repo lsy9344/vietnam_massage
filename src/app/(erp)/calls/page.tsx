@@ -11,13 +11,15 @@ import {
   listServiceCallFormOptions,
   listServiceCallsForDate,
   listTherapistAvailability,
-  redactServiceCallSettlementAmounts
+  redactServiceCallSettlementAmounts,
+  unassignedReservedCallCountFromRows
 } from "@/modules/calls/service-call-service";
 import { AddExpensePanel, DailyExpensePanel } from "@/app/(erp)/calls/daily-expense-panel";
 import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { CallLedgerWorkspace } from "@/app/(erp)/calls/call-ledger-workspace";
 import { LedgerStatusCounts } from "@/app/(erp)/calls/ledger-status-counts";
 import { QuickBookingPanel } from "@/app/(erp)/calls/quick-booking-panel";
+import { TherapistCallStrip } from "@/app/(erp)/calls/therapist-call-counts";
 import { CallLeaveGuard } from "@/app/(erp)/calls/unsaved-guard";
 import { ledgerHref, ledgerTabParams, parseLedgerTab, type LedgerTab } from "@/lib/ledger-address";
 import { DateContextControls } from "@/components/shell/date-context-controls";
@@ -171,6 +173,8 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
           customerHref={linkToScreen(account.role, "/customers", { operatingMonthId: selectedMonth.id, date: serviceDate })}
           locale={locale}
         />
+        {/* Therapist별 한 것·예약 수. 출근 상태와 콜 수는 빠른 예약에 넘기는 가능 판정 행에 이미 있다. */}
+        <TherapistCallStrip locale={locale} rows={availabilityRows} unassignedCount={unassignedReservedCallCountFromRows(rows)} />
         <CallLedgerWorkspace
           key={`${selectedMonth.id}:${serviceDate}`}
           customers={customers}

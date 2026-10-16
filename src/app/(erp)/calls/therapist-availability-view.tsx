@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ServiceCallOption, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
 import { clockMinutes } from "@/app/(erp)/calls/quick-booking-now-slot";
+import { TherapistCallCount } from "@/app/(erp)/calls/therapist-call-counts";
 import { Button } from "@/components/ui/button";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import { StatusIndicator } from "@/components/ui/status-indicator";
@@ -110,7 +111,7 @@ const chipClassName = "h-11 gap-1 whitespace-nowrap px-2.5";
 const chipTextClassName = "text-sm font-semibold";
 
 /**
- * 가능 코스의 한 줄(스펙 D1–D5): 이름(퇴근이면 흐린 "퇴근") · 상태 · 코스 칩 · 경고 아이콘. 펼친 것은 줄 아래에 연다.
+ * 가능 코스의 한 줄(스펙 D1–D5): 이름(퇴근이면 흐린 "퇴근")과 그날 콜 수 · 상태 · 코스 칩 · 경고 아이콘. 펼친 것은 줄 아래에 연다.
  * 첫 Therapist 목록과 두 번째 Therapist 후보 목록이 함께 쓴다. 두 번째 목록은 고른 코스의 칩 하나만 넘긴다.
  */
 export function AvailabilityRow({
@@ -157,6 +158,7 @@ export function AvailabilityRow({
           <span className="flex min-w-0 items-baseline gap-1.5 text-sm">
             <span className="font-semibold text-foreground [overflow-wrap:anywhere]">{row.therapistName}</span>
             {row.attendance === "checked_out" ? <span className="shrink-0 text-xs text-muted">{t(locale, "calls.availability.checkedOutTag")}</span> : null}
+            <TherapistCallCount locale={locale} row={row} />
           </span>
           <RowStatus locale={locale} row={row} />
         </div>

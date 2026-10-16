@@ -508,6 +508,12 @@ export const vi: Messages = {
   "calls.statusCounts.aria": "Số ca theo trạng thái",
   "calls.statusCounts.total": "Tất cả",
   "calls.statusCounts.reserved": "Đặt trước",
+  // 원장 띠: Therapist별 그날 한 것(사용중·청소중·방문완료)과 예약 수, 미배정 예약 수.
+  "calls.therapistCounts.aria": "Số ca theo Therapist",
+  "calls.therapistCounts.legend": "Đã làm +Đặt trước",
+  "calls.therapistCounts.count": "Đã làm {done}, đặt trước {reserved}",
+  "calls.therapistCounts.idle": "Chưa có ca",
+  "calls.therapistCounts.unassigned": "Chưa phân công {count}",
   "calls.customerScreenLink": "Màn hình khách",
   "calls.cashbook.cardsAria": "Tóm tắt thu trong ngày",
   "calls.cashbook.monthNote": "Tháng này {amount}",

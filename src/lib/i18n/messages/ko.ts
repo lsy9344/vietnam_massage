@@ -509,6 +509,12 @@ export const ko = {
   "calls.statusCounts.aria": "상태별 건수",
   "calls.statusCounts.total": "전체",
   "calls.statusCounts.reserved": "예약",
+  // 원장 띠: Therapist별 그날 한 것(사용중·청소중·방문완료)과 예약 수, 미배정 예약 수.
+  "calls.therapistCounts.aria": "Therapist별 콜 수",
+  "calls.therapistCounts.legend": "한 것 +예약",
+  "calls.therapistCounts.count": "한 것 {done}, 예약 {reserved}",
+  "calls.therapistCounts.idle": "콜 없음",
+  "calls.therapistCounts.unassigned": "미배정 {count}",
   "calls.customerScreenLink": "고객 화면",
   "calls.cashbook.cardsAria": "하루 수납 요약",
   "calls.cashbook.monthNote": "이번 달 {amount}",

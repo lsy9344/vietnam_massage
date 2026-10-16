@@ -482,6 +482,9 @@ export type TherapistAvailabilityRowDto = {
   // 근무표(27)에 적힌 그날의 근무 예정. 실제 출근(attendance)과는 다른 테이블이라 서로 다른 값일 수 있고,
   // 가능 판정·코스 버튼을 바꾸지 않는 안내일 뿐이다(스토리 12–13, 60, 104, V07).
   plannedWorkingDayStatus: PlannedWorkingDayCellStatus;
+  // 그날 이 Therapist가 맡은 콜 수(원장 띠, 빠른 예약 카드). done은 사용중·청소중·방문완료, reserved는 예약이다.
+  // 노쇼·취소는 세지 않는다. Therapist가 둘인 콜은 두 사람에게 각자 1개다(정산과 같은 방식). 가능 판정과는 무관하다.
+  callCounts: { done: number; reserved: number };
   courses: TherapistAvailabilityCourseDto[];
 };
 
@@ -1731,6 +1734,17 @@ export async function listTherapistAvailability(input: {
       }
     }
   }
+  const callCountsByTherapist = new Map<string, { done: number; reserved: number }>();
+  for (const call of calls) {
+    const done = isInUseStatus(call.status) || isCleaningStatus(call.status) || isCompletedServiceCallStatus(call.status);
+    if (!done && !isReservationStatus(call.status)) continue;
+    for (const therapistId of new Set(assignedTherapistIds(call))) {
+      const counts = callCountsByTherapist.get(therapistId) ?? { done: 0, reserved: 0 };
+      if (done) counts.done += 1;
+      else counts.reserved += 1;
+      callCountsByTherapist.set(therapistId, counts);
+    }
+  }
   const occupancyOf = (therapistId: string) => [
     ...(intervalsByTherapist.get(therapistId) ?? []),
     ...(overrunsByTherapist.get(therapistId) ?? [])
@@ -1787,6 +1801,7 @@ export async function listTherapistAvailability(input: {
       freeMinutes,
       priorServiceEndCheck: overruns.length > 0,
       plannedWorkingDayStatus: plannedWorkingDayStatusByTherapist.get(therapist.id) ?? "미입력",
+      callCounts: callCountsByTherapist.get(therapist.id) ?? { done: 0, reserved: 0 },
       courses: offeredCourses.map((course) => {
         const fits = available && freeMinutes !== null && course.durationMinutes <= freeMinutes;
         const rateHolders = rateHoldersByCourse.get(course.courseId) ?? [];
@@ -3207,6 +3222,11 @@ export function ledgerStatusCountsFromRows(rows: ServiceCallRowDto[]): LedgerSta
     noShowCount: count(isNoShowStatus),
     canceledCount: count(isCanceledStatus)
   };
+}
+
+// 원장 띠 끝의 "미배정 N": 예약 상태인데 첫 번째 Therapist가 비어 있는 콜 수.
+export function unassignedReservedCallCountFromRows(rows: ServiceCallRowDto[]) {
+  return rows.filter((row) => isReservationStatus(row.status) && row.therapist1 === null).length;
 }
 
 export type CalculationWarningStatus = Extract<

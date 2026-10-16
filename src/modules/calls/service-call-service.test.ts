@@ -18,6 +18,7 @@ import {
   listCustomerVisitHistory,
   listCustomers,
   ledgerStatusCountsFromRows,
+  unassignedReservedCallCountFromRows,
   mostRecentCustomerVisit,
   listDailyExpensesForDate,
   listCompletedServiceCallCalculationsForDate,
@@ -4304,6 +4305,39 @@ describe("therapist availability attendance and shift check", () => {
   });
 });
 
+describe("therapist availability call counts", () => {
+  it("counts started calls as done and reservations as booked for each Therapist, skipping no-shows and cancellations", async () => {
+    const prismaClient = createMemoryPrisma();
+    const call = (id: string, startTime: string, status: string, assignments: Array<{ role: string; employeeId: string }>, serviceDate?: string) =>
+      addAvailabilityCall(prismaClient, { id, startTime, courseId: "course-a", status, serviceDate, assignments });
+    const first = (employeeId: string) => ({ role: "THERAPIST_1", employeeId });
+    call("in-use", "11:00", "사용중", [first("therapist-1")]);
+    call("cleaning", "12:00", "CLEANING", [first("therapist-1")]);
+    call("complete", "13:00", "방문완료", [first("therapist-1")]);
+    call("reserved", "16:00", "예약", [first("therapist-1")]);
+    call("no-show", "17:00", "노쇼", [first("therapist-1")]);
+    call("canceled", "18:00", "CANCELED", [first("therapist-1")]);
+    // Therapist가 둘인 콜은 두 사람에게 각자 1개다. 같은 사람이 두 역할에 있으면 1개다.
+    call("pair", "19:00", "RESERVED", [first("therapist-1"), { role: "THERAPIST_2", employeeId: "therapist-2" }]);
+    call("same-twice", "20:00", "예약", [first("therapist-2"), { role: "THERAPIST_2", employeeId: "therapist-2" }]);
+    call("other-day", "11:00", "방문완료", [first("therapist-2")], "2026-06-11");
+
+    const rows = await availabilityAt(prismaClient, "15:00");
+    assert.deepEqual(
+      rows.map((row) => ({ therapistId: row.therapistId, callCounts: row.callCounts })),
+      [
+        { therapistId: "therapist-1", callCounts: { done: 3, reserved: 2 } },
+        { therapistId: "therapist-2", callCounts: { done: 0, reserved: 2 } }
+      ]
+    );
+  });
+
+  it("gives zero counts to a Therapist without calls that day", async () => {
+    const rows = await availabilityAt(createMemoryPrisma(), "15:00");
+    assert.deepEqual(rows.map((row) => row.callCounts), [{ done: 0, reserved: 0 }, { done: 0, reserved: 0 }]);
+  });
+});
+
 describe("actual entry and display end", () => {
   it("yields a 15:20 arrival of 60 minutes to the 16:00 reservation and keeps that booking", async () => {
     const prismaClient = createMemoryPrisma();
@@ -4700,6 +4734,23 @@ describe("calculation warning calls", () => {
         calculationStatus: "second_therapist_required"
       }
     ]);
+  });
+});
+
+describe("unassigned reserved call count", () => {
+  it("counts reservations without a first Therapist only", () => {
+    const assignee = { id: "therapist-1", displayName: "린", staffCode: "T01" };
+    assert.equal(
+      unassignedReservedCallCountFromRows([
+        ledgerRow({ id: "open", status: "예약" }),
+        ledgerRow({ id: "open-code", status: "RESERVED" }),
+        ledgerRow({ id: "assigned", status: "예약", therapist1: assignee }),
+        ledgerRow({ id: "in-use", status: "사용중" }),
+        ledgerRow({ id: "canceled", status: "취소" })
+      ]),
+      2
+    );
+    assert.equal(unassignedReservedCallCountFromRows([]), 0);
   });
 });
 

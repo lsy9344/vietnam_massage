@@ -20,6 +20,7 @@ function row(overrides: Partial<TherapistAvailabilityRowDto> = {}): TherapistAva
     freeMinutes: 60,
     priorServiceEndCheck: false,
     plannedWorkingDayStatus: "미입력",
+    callCounts: { done: 0, reserved: 0 },
     courses: [
       { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "possible", requiresSecondTherapist: false },
       { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, verdict: "time_short", requiresSecondTherapist: false }
@@ -172,6 +173,24 @@ describe("therapist availability panel", () => {
     // 퇴근해도 코스 칩은 그대로다.
     assert.match(lineOf("t-out"), /aria-label="A 60분 가능"/);
     assert.match(renderView({ locale: "vi", open: true, rows: [row({ attendance: "checked_out" })] }), />Đã về<\/span>/);
+  });
+
+  it("puts the day's done +booked count next to the name, marking only a checked-in Therapist with none", () => {
+    const html = renderView({
+      open: true,
+      rows: [
+        row({ therapistId: "t-busy", therapistName: "린", attendance: "checked_in", callCounts: { done: 3, reserved: 2 } }),
+        row({ therapistId: "t-idle", therapistName: "마이", attendance: "checked_in" }),
+        row({ therapistId: "t-before", therapistName: "전", attendance: "before_check_in" })
+      ]
+    });
+    const lineOf = (therapistId: string) => html.split("<li").find((part) => part.includes(`data-availability-row="${therapistId}"`)) ?? "";
+    // 이름 줄 안에 붙여 카드 높이를 그대로 둔다.
+    assert.match(lineOf("t-busy"), />린<\/span><span [^>]*data-therapist-call-count=""[^>]*>[\s\S]*?>3<\/span>[\s\S]*?>\+2<\/span><span class="sr-only">한 것 3, 예약 2<\/span>/);
+    assert.match(lineOf("t-idle"), /bg-warning-soft[^"]*" data-idle=""/);
+    assert.match(lineOf("t-idle"), /한 것 0, 예약 0, 콜 없음/);
+    // 출근 전이면 0이어도 강조하지 않는다.
+    assert.doesNotMatch(lineOf("t-before") + lineOf("t-busy"), /data-idle/);
   });
 
   it("sorts the lines: available first, then the soonest free, then checked out", () => {
