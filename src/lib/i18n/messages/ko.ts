@@ -632,6 +632,7 @@ export const ko = {
   "settlements.therapist.attendance.fullNotRecognized": "만근 미인정 ({minutes}분)",
   "settlements.therapist.attendance.checkInTimeAria": "{name} 출근시간",
   "settlements.therapist.attendance.checkOutTimeAria": "{name} 퇴근시간",
+  "settlements.therapist.attendance.action.useNow": "현재 시간 입력",
   "settlements.therapist.attendance.empty.title": "활성 마사지사가 없습니다",
   "settlements.therapist.attendance.empty.description": "직원 마스터에서 마사지사를 활성화한 뒤 다시 조회하세요.",
   "settlements.therapist.attendance.title": "마사지사 출퇴근 입력",

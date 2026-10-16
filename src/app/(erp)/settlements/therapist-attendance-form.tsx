@@ -1,11 +1,12 @@
 "use client";
 
-import { useActionState, useId, useRef } from "react";
+import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DetailRow } from "@/components/ui/detail-row";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { WarningList } from "@/components/ui/warning-summary";
+import { currentBusinessTimeHm } from "@/lib/business-time";
 import { useT } from "@/lib/i18n/client";
 import type { Translator } from "@/lib/i18n";
 import {
@@ -88,6 +89,15 @@ export function TherapistAttendanceForm({
   const busy = pending || clearPending;
   // Clearable while a persisted row exists — even a check-in-only row (isComplete=false).
   const canClear = !disabled && displayRow.id !== null;
+  const [checkInTime, setCheckInTime] = useState(displayRow.checkInTime ?? "");
+  const [checkOutTime, setCheckOutTime] = useState(displayRow.checkOutTime ?? "");
+  // 저장·비우기 뒤 서버가 돌려준 시각으로 칸을 맞춘다. 현재 시간 버튼이 넣은 값은 그 전까지 유지된다.
+  useEffect(() => {
+    setCheckInTime(displayRow.checkInTime ?? "");
+    setCheckOutTime(displayRow.checkOutTime ?? "");
+  }, [displayRow.checkInTime, displayRow.checkOutTime]);
+  const fieldsDisabled = disabled || busy;
+  const useNowLabel = t("settlements.therapist.attendance.action.useNow");
 
   return (
     <div className="grid gap-3">
@@ -101,45 +111,57 @@ export function TherapistAttendanceForm({
         <input name="attendanceDate" type="hidden" value={attendanceDate} />
         <input name="employeeId" type="hidden" value={row.employeeId} />
       </form>
-      <div className="grid grid-cols-2 gap-3">
-        <label className="grid content-start gap-1.5">
+      <div className="grid grid-cols-1 gap-3 min-[840px]:grid-cols-2">
+        <div className="grid content-start gap-1.5">
           <span className="text-sm font-semibold text-foreground">{t("settlements.therapist.attendance.column.checkIn")}</span>
-          <input
-            aria-describedby={checkInError ? checkInErrorId : undefined}
-            aria-invalid={checkInError ? "true" : undefined}
-            aria-label={t("settlements.therapist.attendance.checkInTimeAria", { name: row.displayName })}
-            className={inputFieldClassName({ invalid: Boolean(checkInError) })}
-            defaultValue={displayRow.checkInTime ?? ""}
-            disabled={disabled || busy}
-            form={formId}
-            name="checkInTime"
-            type="time"
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              aria-describedby={checkInError ? checkInErrorId : undefined}
+              aria-invalid={checkInError ? "true" : undefined}
+              aria-label={t("settlements.therapist.attendance.checkInTimeAria", { name: row.displayName })}
+              className={inputFieldClassName({ className: "min-w-0 w-36", invalid: Boolean(checkInError) })}
+              disabled={fieldsDisabled}
+              form={formId}
+              name="checkInTime"
+              onChange={(event) => setCheckInTime(event.target.value)}
+              type="time"
+              value={checkInTime}
+            />
+            <Button disabled={fieldsDisabled} onClick={() => setCheckInTime(currentBusinessTimeHm())} type="button" variant="secondary">
+              {useNowLabel}
+            </Button>
+          </div>
           {checkInError ? (
             <span className="text-sm text-danger" id={checkInErrorId} role="alert">
               {checkInError}
             </span>
           ) : null}
-        </label>
-        <label className="grid content-start gap-1.5">
+        </div>
+        <div className="grid content-start gap-1.5">
           <span className="text-sm font-semibold text-foreground">{t("settlements.therapist.attendance.column.checkOut")}</span>
-          <input
-            aria-describedby={checkOutError ? checkOutErrorId : undefined}
-            aria-invalid={checkOutError ? "true" : undefined}
-            aria-label={t("settlements.therapist.attendance.checkOutTimeAria", { name: row.displayName })}
-            className={inputFieldClassName({ invalid: Boolean(checkOutError) })}
-            defaultValue={displayRow.checkOutTime ?? ""}
-            disabled={disabled || busy}
-            form={formId}
-            name="checkOutTime"
-            type="time"
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              aria-describedby={checkOutError ? checkOutErrorId : undefined}
+              aria-invalid={checkOutError ? "true" : undefined}
+              aria-label={t("settlements.therapist.attendance.checkOutTimeAria", { name: row.displayName })}
+              className={inputFieldClassName({ className: "min-w-0 w-36", invalid: Boolean(checkOutError) })}
+              disabled={fieldsDisabled}
+              form={formId}
+              name="checkOutTime"
+              onChange={(event) => setCheckOutTime(event.target.value)}
+              type="time"
+              value={checkOutTime}
+            />
+            <Button disabled={fieldsDisabled} onClick={() => setCheckOutTime(currentBusinessTimeHm())} type="button" variant="secondary">
+              {useNowLabel}
+            </Button>
+          </div>
           {checkOutError ? (
             <span className="text-sm text-danger" id={checkOutErrorId} role="alert">
               {checkOutError}
             </span>
           ) : null}
-        </label>
+        </div>
       </div>
       <dl>
         <DetailRow label={t("settlements.therapist.attendance.column.standbyMinutes")} value={displayRow.standbyMinutes ?? "—"} />

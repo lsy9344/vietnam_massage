@@ -631,6 +631,7 @@ export const vi: Messages = {
   "settlements.therapist.attendance.fullNotRecognized": "Chưa công nhận đủ công ({minutes} phút)",
   "settlements.therapist.attendance.checkInTimeAria": "Giờ vào của {name}",
   "settlements.therapist.attendance.checkOutTimeAria": "Giờ ra của {name}",
+  "settlements.therapist.attendance.action.useNow": "Nhập giờ hiện tại",
   "settlements.therapist.attendance.empty.title": "Không có KTV massage đang hoạt động",
   "settlements.therapist.attendance.empty.description": "Hãy kích hoạt KTV massage trong dữ liệu gốc nhân viên rồi tra cứu lại.",
   "settlements.therapist.attendance.title": "Nhập chuyên cần KTV massage",
