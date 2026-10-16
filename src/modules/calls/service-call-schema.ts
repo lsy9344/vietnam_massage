@@ -76,14 +76,42 @@ export const customerInputSchema = z.object({
   preferenceNote: optionalText
 });
 
+const newRowRequestId = z.string().trim().min(1, "새 행 요청 id가 올바르지 않습니다.").max(100, "새 행 요청 id가 올바르지 않습니다.");
+
 // 원장 새 행은 초안마다 화면이 요청 id를 하나 만든다. 응답을 받지 못해 다시 보낼 때도 같은 id를 보낸다.
 export const serviceCallCreateInputSchema = serviceCallInputSchema
   .omit({ serviceCallId: true, expectedUpdatedAt: true })
   .extend({
-    requestId: z.string().trim().min(1, "새 행 요청 id가 올바르지 않습니다.").max(100, "새 행 요청 id가 올바르지 않습니다."),
+    requestId: newRowRequestId,
     // 빠른 예약의 새 고객(F01, 티켓 24): 고객 지정 세 갈래(기존 id/새 고객/고객 없음) 중 하나다. 콜과
     // 같은 트랜잭션에서 만들어, 같은 요청 id로 다시 보내도 고객이 두 번 생기지 않는다.
     newCustomer: customerInputSchema.nullable().optional()
+  })
+  .refine((data) => !(data.customerId && data.newCustomer), {
+    message: "기존 고객과 새 고객을 동시에 지정할 수 없습니다.",
+    path: ["newCustomer"]
+  });
+
+// 빠른 예약 일행의 손님 한 명(스펙 D10, 티켓 02). 시각·고객·메모는 일행이 공유하고, 코스·Therapist·객실만 손님마다 다르다.
+export const quickBookingGuestSchema = z.object({
+  courseId: z.string().trim().min(1, "코스를 선택하세요."),
+  therapist1Id: optionalId,
+  therapist2Id: optionalId,
+  roomId: optionalId
+});
+
+export const QUICK_BOOKING_PARTY_MAX_GUESTS = 10;
+
+// 빠른 예약 일행 저장(스펙 D10–D12, 티켓 02). 요청 id는 일행 저장 하나에 하나다. 손님은 1번(대표)부터 순서대로다.
+export const quickBookingPartyInputSchema = serviceCallInputSchema
+  .omit({ serviceCallId: true, expectedUpdatedAt: true, courseId: true, therapist1Id: true, therapist2Id: true, roomId: true })
+  .extend({
+    requestId: newRowRequestId,
+    newCustomer: customerInputSchema.nullable().optional(),
+    guests: z
+      .array(quickBookingGuestSchema)
+      .min(2, "일행은 2명 이상이어야 합니다.")
+      .max(QUICK_BOOKING_PARTY_MAX_GUESTS, `일행은 ${QUICK_BOOKING_PARTY_MAX_GUESTS}명까지입니다.`)
   })
   .refine((data) => !(data.customerId && data.newCustomer), {
     message: "기존 고객과 새 고객을 동시에 지정할 수 없습니다.",
@@ -123,6 +151,8 @@ export const serviceCallCustomerLinkCorrectionSchema = z.object({
 export type ServiceCallInput = z.infer<typeof serviceCallInputSchema>;
 export type ServiceCallAutosaveInput = z.infer<typeof serviceCallAutosaveInputSchema>;
 export type ServiceCallCreateInput = z.infer<typeof serviceCallCreateInputSchema>;
+export type QuickBookingGuestInput = z.infer<typeof quickBookingGuestSchema>;
+export type QuickBookingPartyInput = z.infer<typeof quickBookingPartyInputSchema>;
 export type DailyExpenseInput = Omit<z.infer<typeof dailyExpenseInputSchema>, "method"> & {
   method?: "cash" | "bank" | "" | null;
 };

@@ -361,6 +361,12 @@ export const ko = {
   "calls.quickBooking.review.customerNone": "고객 없음",
   "calls.quickBooking.previous": "이전",
   "calls.quickBooking.next": "다음",
+  "calls.quickBooking.customer.partySize": "인원",
+  "calls.quickBooking.customer.partySizeOption": "{count}명",
+  "calls.quickBooking.party.guestsAria": "일행 손님",
+  "calls.quickBooking.party.guest": "손님 {position}",
+  "calls.quickBooking.party.guestRoom": "손님 {position} 객실",
+  "calls.quickBooking.party.guestError": "손님 {position}: {message}",
   "calls.quickBooking.save": "예약 저장",
   // 패널을 저장 없이 닫을 때의 안내는 calls.leaveGuard.*(티켓 18)를 그대로 쓴다.
 

@@ -6,6 +6,7 @@ import {
   correctServiceCallCustomerLink,
   createCustomer,
   createDailyExpense,
+  createQuickBookingParty,
   createQuickBookingServiceCall,
   createServiceCallRow,
   customerSharedPhone,
@@ -28,6 +29,7 @@ import {
   roomFloorFactsForDate,
   saveBasicServiceCallRow,
   searchCustomerVisitCandidates,
+  QuickBookingGuestError,
   ServiceCallDomainError,
   updateCustomer,
   updateDailyExpense,
@@ -486,6 +488,7 @@ function createMemoryPrisma() {
           .filter(
             (call) =>
               (where?.operatingMonthId === undefined || call.operatingMonthId === where.operatingMonthId) &&
+              (where?.partyId === undefined || call.partyId === where.partyId) &&
               matchesDay(call.serviceDate, where?.serviceDate)
           )
           .map(withRelations);
@@ -5708,6 +5711,201 @@ describe("quick booking: two-therapist courses and the override path (F01, 티�
     assert.equal(row.alreadySaved, false);
     assert.equal(row.row.therapist1?.id, "therapist-1");
     assert.equal(row.row.therapist2?.id, "therapist-1");
+  });
+});
+
+describe("quick booking party (스펙 D10–D13, 티켓 02)", () => {
+  function addTherapist(prismaClient: ReturnType<typeof createMemoryPrisma>, id: string, displayName: string) {
+    const template = prismaClient.employees.get("therapist-1");
+    prismaClient.employees.set(id, { ...template, id, displayName, staffCode: id.toUpperCase(), sortOrder: 3 });
+  }
+
+  /** 3인 일행 하나. 손님 1은 A코스·101호실, 손님 2는 A코스 객실 없음, 손님 3은 D코스(두 명) — 같은 시각과 메모를 쓴다. */
+  function party(
+    prismaClient: ReturnType<typeof createMemoryPrisma>,
+    requestId: string,
+    changes: Partial<Parameters<typeof createQuickBookingParty>[0]> = {}
+  ) {
+    return createQuickBookingParty({
+      requestId,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      customerMemo: "정 대표 일행",
+      status: "예약",
+      guests: [
+        { courseId: "course-a", therapist1Id: "therapist-1", therapist2Id: null, roomId: "room-101" },
+        { courseId: "course-a", therapist1Id: "therapist-2", therapist2Id: null, roomId: null },
+        { courseId: "course-d", therapist1Id: "therapist-3", therapist2Id: "therapist-4", roomId: null }
+      ],
+      actorId: "counter-account",
+      prismaClient,
+      ...changes
+    });
+  }
+
+  function partyClient() {
+    const prismaClient = createMemoryPrisma();
+    addTherapist(prismaClient, "therapist-3", "마사지사3");
+    addTherapist(prismaClient, "therapist-4", "마사지사4");
+    return prismaClient;
+  }
+
+  function callsOnDate(prismaClient: ReturnType<typeof createMemoryPrisma>) {
+    return listServiceCallsForDate({ operatingMonthId: "month-2026-06", serviceDate: "2026-06-10", prismaClient });
+  }
+
+  it("makes one call per guest at the shared time and memo, each with the guest's own course, therapist and room", async () => {
+    const prismaClient = partyClient();
+
+    const result = await party(prismaClient, "party-1");
+
+    assert.equal(result.alreadySaved, false);
+    assert.deepEqual(
+      result.rows.map((row) => [row.startTime, row.customerMemo, row.courseId, row.therapist1?.id, row.therapist2?.id ?? null, row.roomId]),
+      [
+        ["11:00", "정 대표 일행", "course-a", "therapist-1", null, "room-101"],
+        ["11:00", "정 대표 일행", "course-a", "therapist-2", null, null],
+        ["11:00", "정 대표 일행", "course-d", "therapist-3", "therapist-4", null]
+      ]
+    );
+    assert.equal((await callsOnDate(prismaClient)).length, 3);
+  });
+
+  it("links the customer to the first call only and audits each call's creation with the party id and position", async () => {
+    const prismaClient = partyClient();
+    const customer = await createCustomer({ name: "정 대표", actorId: "counter-account", prismaClient });
+    const auditsBefore = prismaClient.auditEvents.length;
+
+    const result = await party(prismaClient, "party-2", { customerId: customer.id });
+
+    assert.deepEqual(result.rows.map((row) => row.customerId), [customer.id, null, null]);
+    const created = prismaClient.auditEvents.slice(auditsBefore);
+    assert.deepEqual(
+      created.map((event: any) => [event.action, event.targetId, event.beforeValue, event.afterValue.partyId, event.afterValue.partyPosition]),
+      result.rows.map((row, index) => ["service_call.row_changed", row.id, null, result.partyId, index + 1])
+    );
+    assert.ok(result.partyId);
+  });
+
+  it("creates a new customer once for the party and links it to the first call", async () => {
+    const prismaClient = partyClient();
+
+    const result = await party(prismaClient, "party-3", { customerMemo: null, newCustomer: { name: "새 대표", phone: "0901112222" } });
+
+    const customers = await listCustomers({ prismaClient });
+    assert.deepEqual(customers.map((customer) => customer.name), ["새 대표"]);
+    assert.deepEqual(result.rows.map((row) => row.customerId), [customers[0].id, null, null]);
+  });
+
+  it("makes nothing — no call, no new customer — when one guest fails, and names that guest and field", async () => {
+    const prismaClient = partyClient();
+
+    await assert.rejects(
+      () =>
+        party(prismaClient, "party-4", {
+          newCustomer: { name: "새 대표" },
+          guests: [
+            { courseId: "course-a", therapist1Id: "therapist-1", therapist2Id: null, roomId: null },
+            { courseId: "course-a", therapist1Id: "therapist-2", therapist2Id: null, roomId: null },
+            { courseId: "course-d", therapist1Id: "therapist-3", therapist2Id: null, roomId: null }
+          ]
+        }),
+      (error: unknown) =>
+        error instanceof QuickBookingGuestError &&
+        error.code === "D_COURSE_SECOND_THERAPIST_REQUIRED" &&
+        error.guestPosition === 3 &&
+        error.field === "therapist2Id"
+    );
+    assert.deepEqual(await callsOnDate(prismaClient), []);
+    assert.deepEqual(await listCustomers({ prismaClient }), []);
+  });
+
+  it("rejects the same therapist for two guests, on the later guest's field", async () => {
+    const prismaClient = partyClient();
+
+    await assert.rejects(
+      () =>
+        party(prismaClient, "party-5", {
+          guests: [
+            { courseId: "course-d", therapist1Id: "therapist-1", therapist2Id: "therapist-2", roomId: null },
+            { courseId: "course-a", therapist1Id: "therapist-2", therapist2Id: null, roomId: null }
+          ]
+        }),
+      (error: unknown) =>
+        error instanceof QuickBookingGuestError &&
+        error.code === "D_QUICK_BOOKING_PARTY_DUPLICATE_THERAPIST" &&
+        error.guestPosition === 2 &&
+        error.field === "therapist1Id"
+    );
+    assert.deepEqual(await callsOnDate(prismaClient), []);
+  });
+
+  it("keeps a guest's own Therapist 1·2 duplicate as a quick booking error on that guest", async () => {
+    const prismaClient = partyClient();
+
+    await assert.rejects(
+      () =>
+        party(prismaClient, "party-6", {
+          guests: [
+            { courseId: "course-a", therapist1Id: "therapist-1", therapist2Id: null, roomId: null },
+            { courseId: "course-d", therapist1Id: "therapist-2", therapist2Id: "therapist-2", roomId: null }
+          ]
+        }),
+      (error: unknown) =>
+        error instanceof QuickBookingGuestError && error.code === "D_QUICK_BOOKING_DUPLICATE_THERAPIST" && error.guestPosition === 2
+    );
+  });
+
+  it("does not pin a shared problem (an inactive time slot) on any one guest", async () => {
+    const prismaClient = partyClient();
+
+    await assert.rejects(
+      () => party(prismaClient, "party-7", { startTime: "04:00" }),
+      (error: unknown) => error instanceof ServiceCallDomainError && !(error instanceof QuickBookingGuestError) && error.code === "TIME_SLOT_NOT_ACTIVE"
+    );
+    assert.deepEqual(await callsOnDate(prismaClient), []);
+  });
+
+  it("is blocked by a locked operating month the same as a single booking, before any guest is looked at", async () => {
+    const prismaClient = partyClient();
+
+    await assert.rejects(
+      () => party(prismaClient, "party-locked", { operatingMonthId: "month-locked", serviceDate: "2026-07-10" }),
+      (error: unknown) => error instanceof ServiceCallDomainError && !(error instanceof QuickBookingGuestError) && error.code === "OPERATING_MONTH_LOCKED"
+    );
+  });
+
+  it("returns the party already made from the same request id, writing nothing more", async () => {
+    const prismaClient = partyClient();
+    await party(prismaClient, "party-8-other", { startTime: "01:00" });
+
+    const first = await party(prismaClient, "party-8");
+    const auditsAfterFirst = prismaClient.auditEvents.length;
+    const again = await party(prismaClient, "party-8");
+
+    assert.equal(again.alreadySaved, true);
+    assert.equal(again.partyId, first.partyId);
+    assert.deepEqual(again.rows, first.rows);
+    assert.deepEqual(again.rows.map((row) => row.startTime), ["11:00", "11:00", "11:00"]);
+    assert.equal((await callsOnDate(prismaClient)).length, 6);
+    assert.equal(prismaClient.auditEvents.length, auditsAfterFirst);
+  });
+
+  it("allows two guests in the same room; the overlap stays a ledger warning", async () => {
+    const prismaClient = partyClient();
+
+    const result = await party(prismaClient, "party-9", {
+      guests: [
+        { courseId: "course-a", therapist1Id: "therapist-1", therapist2Id: null, roomId: "room-101" },
+        { courseId: "course-a", therapist1Id: "therapist-2", therapist2Id: null, roomId: "room-101" }
+      ]
+    });
+
+    assert.deepEqual(
+      result.rows.map((row) => row.warnings.some((warning) => warning.code === "room_overlap")),
+      [true, true]
+    );
   });
 });
 

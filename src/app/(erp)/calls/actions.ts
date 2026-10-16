@@ -16,6 +16,7 @@ import {
   customerSharedPhone,
   customerVisitCountsFromRows,
   deactivateDailyExpense,
+  createQuickBookingParty,
   createQuickBookingServiceCall,
   createServiceCallRow,
   getServiceCallRow,
@@ -27,6 +28,7 @@ import {
   updateDailyExpense,
   redactServiceCallSettlementAmounts,
   listTherapistAvailability,
+  QuickBookingGuestError,
   ServiceCallDomainError,
   StaleServiceCallError,
   type CustomerDto,
@@ -42,12 +44,15 @@ import {
   dailyExpenseDeactivateSchema,
   dailyExpenseInputSchema,
   dailyExpenseUpdateSchema,
+  quickBookingPartyInputSchema,
   serviceCallAutosaveInputSchema,
   serviceCallCreateInputSchema,
   serviceCallCustomerLinkCorrectionSchema,
+  type QuickBookingPartyInput,
   type ServiceCallAutosaveInput,
   type ServiceCallCreateInput
 } from "@/modules/calls/service-call-schema";
+import { quickBookingGuestFieldKey, quickBookingPartyIssueField } from "@/app/(erp)/calls/quick-booking-draft";
 
 /** 오래된 저장(STALE_CALL)이면 저장은 거절되고, 화면이 다시 불러올 수 있게 지금의 행을 함께 받는다. */
 export type ServiceCallAutosaveResult =
@@ -217,6 +222,49 @@ export async function createQuickBookingServiceCallAction(input: ServiceCallCrea
     return alreadySaved ? { ok: true, data, notice: t(locale, "calls.save.alreadySaved") } : { ok: true, data };
   } catch (error) {
     return mapActionError<ServiceCallRowDto>(error, locale);
+  }
+}
+
+/**
+ * 빠른 예약 일행 저장(스펙 D10–D12, 티켓 02). 손님마다 콜 하나를 한 번에 만들고 1번(대표) 콜부터 순서대로
+ * 돌려준다. 같은 요청 id로 다시 보내면 이미 만든 일행을 "이미 저장된 콜입니다"와 함께 돌려준다. 한 손님의
+ * 값이 걸리면 아무것도 만들지 않고, 그 손님의 칸 오류와 "손님 N: …" 요약을 돌려준다.
+ */
+export async function createQuickBookingPartyAction(input: QuickBookingPartyInput): Promise<ActionResult<ServiceCallRowDto[]>> {
+  const locale = await getLocale();
+  const parsed = quickBookingPartyInputSchema.safeParse(input);
+
+  if (!parsed.success) {
+    // flatten은 첫 경로로만 묶어 손님 칸 오류가 모두 "guests"로 접힌다. 손님·칸별 키로 나눠 그 손님 옆에 보인다.
+    const fieldErrors: Record<string, string[]> = {};
+    for (const issue of parsed.error.issues) {
+      const field = quickBookingPartyIssueField(issue.path);
+      (fieldErrors[field] ??= []).push(issue.message);
+    }
+    return {
+      ok: false,
+      fieldErrors: toFieldErrors(fieldErrors, locale),
+      formError: t(locale, "action.error.invalidInput")
+    };
+  }
+
+  try {
+    const account = await requirePermission("call:write");
+    const { rows, alreadySaved } = await createQuickBookingParty({ ...parsed.data, actorId: account.id });
+    revalidatePath("/calls");
+    const data = rows.map((row) => visibleServiceCallRowForRole(row, account.role));
+    return alreadySaved ? { ok: true, data, notice: t(locale, "calls.save.alreadySaved") } : { ok: true, data };
+  } catch (error) {
+    if (error instanceof QuickBookingGuestError) {
+      const message = resolveDomainErrorMessage(locale, error.code, error.message);
+      return {
+        ok: false,
+        fieldErrors: { [quickBookingGuestFieldKey(error.guestPosition, error.field)]: [message] },
+        formError: t(locale, "calls.quickBooking.party.guestError", { position: error.guestPosition, message }),
+        domainErrorCode: error.code
+      };
+    }
+    return mapActionError<ServiceCallRowDto[]>(error, locale);
   }
 }
 

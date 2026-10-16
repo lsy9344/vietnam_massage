@@ -361,6 +361,12 @@ export const vi: Messages = {
   "calls.quickBooking.review.customerNone": "Không có khách hàng",
   "calls.quickBooking.previous": "Trước",
   "calls.quickBooking.next": "Tiếp",
+  "calls.quickBooking.customer.partySize": "Số khách",
+  "calls.quickBooking.customer.partySizeOption": "{count} khách",
+  "calls.quickBooking.party.guestsAria": "Khách trong nhóm",
+  "calls.quickBooking.party.guest": "Khách {position}",
+  "calls.quickBooking.party.guestRoom": "Phòng của khách {position}",
+  "calls.quickBooking.party.guestError": "Khách {position}: {message}",
   "calls.quickBooking.save": "Lưu đặt lịch",
   // 패널을 저장 없이 닫을 때의 안내는 calls.leaveGuard.*(티켓 18)를 그대로 쓴다.
 

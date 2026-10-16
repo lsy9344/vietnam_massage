@@ -1,5 +1,6 @@
-import { ServiceCallDomainError } from "./service-call-domain-error";
-export { ServiceCallDomainError } from "./service-call-domain-error";
+import { randomUUID } from "node:crypto";
+import { QuickBookingGuestError, ServiceCallDomainError } from "./service-call-domain-error";
+export { QuickBookingGuestError, ServiceCallDomainError } from "./service-call-domain-error";
 export { listAssignedServiceCallsForEmployeeFromDate } from "./assigned-service-call-query";
 
 import { prisma } from "@/lib/prisma";
@@ -21,6 +22,7 @@ import {
   dailyExpenseDeactivateSchema,
   dailyExpenseInputSchema,
   dailyExpenseUpdateSchema,
+  quickBookingPartyInputSchema,
   savedVersionMessage,
   serviceCallAutosaveInputSchema,
   serviceCallCreateInputSchema,
@@ -31,6 +33,8 @@ import {
   type DailyExpenseDeactivateInput,
   type DailyExpenseInput,
   type DailyExpenseUpdateInput,
+  type QuickBookingGuestInput,
+  type QuickBookingPartyInput,
   type ServiceCallAssignmentRole,
   type ServiceCallAutosaveInput,
   type ServiceCallCreateInput,
@@ -171,6 +175,8 @@ type ServiceCallRecord = {
   note: string | null;
   visitRequest: string | null;
   confirmationCode: string | null;
+  partyId?: string | null;
+  partyPosition?: number | null;
   createdAt: Date;
   updatedAt: Date;
   assignments?: ServiceCallAssignmentRecord[];
@@ -1139,6 +1145,8 @@ function toAuditSnapshot(record: ServiceCallRecord): AuditJsonSnapshot {
       therapist1Id: assignmentEmployeeId(record, "THERAPIST_1"),
       therapist2Id: assignmentEmployeeId(record, "THERAPIST_2")
     },
+    // 일행 콜만 일행 칸을 남긴다(티켓 02). 일행이 아닌 콜의 감사 스냅샷 모양은 그대로다.
+    ...(record.partyId ? { partyId: record.partyId, partyPosition: record.partyPosition ?? null } : {}),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString()
   };
@@ -1968,6 +1976,137 @@ export async function createQuickBookingServiceCall(
   return createServiceCallRow(input);
 }
 
+export type QuickBookingPartyResult = {
+  /** 요청 id로 찾은 콜이 일행이 아니면(한 건 저장) null이다. */
+  partyId: string | null;
+  /** 일행 순번(1번 대표 콜부터) 순서다. */
+  rows: ServiceCallRowDto[];
+  /** 같은 요청 id로 이미 만든 일행을 돌려줬다. 이번 요청은 아무것도 쓰지 않았다. */
+  alreadySaved: boolean;
+};
+
+type QuickBookingGuestField = QuickBookingGuestError["field"];
+
+/** 손님 한 명의 검사 하나. 걸리면 그 손님·칸을 오류에 붙인다. */
+async function checkGuest<T>(position: number, field: QuickBookingGuestField, check: () => T | Promise<T>) {
+  try {
+    return await check();
+  } catch (error) {
+    if (error instanceof ServiceCallDomainError && !(error instanceof QuickBookingGuestError)) {
+      throw new QuickBookingGuestError(error, position, field);
+    }
+    throw error;
+  }
+}
+
+/**
+ * 손님 한 명을 쓰기 전에 검사한다. 저장(writeServiceCallRow)도 같은 검사를 하지만, 일행은 누구의 어느 칸이
+ * 걸렸는지 알려야 하고 한 명이라도 걸리면 아무것도 쓰지 않아야 해서 모두 먼저 본다.
+ */
+async function assertQuickBookingGuest(
+  tx: ServiceCallPrismaClient,
+  guest: QuickBookingGuestInput,
+  position: number,
+  context: { monthKey: string; status: string; earlierTherapistIds: ReadonlySet<string> }
+) {
+  await checkGuest(position, "roomId", () => assertRoomRequiredForStatus({ roomId: guest.roomId, status: context.status }));
+  await checkGuest(position, "roomId", () => assertActiveRoom(tx, guest.roomId));
+  const policy = await checkGuest(position, "courseId", () => assertActiveCourse(tx, { courseId: guest.courseId, monthKey: context.monthKey }));
+  await checkGuest(position, "therapist1Id", () => assertActiveEmployee(tx, { role: "THERAPIST_1", employeeId: guest.therapist1Id }));
+  await checkGuest(position, "therapist2Id", () => assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: guest.therapist2Id }));
+  await checkGuest(position, "therapist2Id", () => assertSecondTherapistRequirement({ policy, therapist2Id: guest.therapist2Id }));
+  await checkGuest(position, "therapist2Id", () => assertDistinctTherapists(guest));
+  for (const field of ["therapist1Id", "therapist2Id"] as const) {
+    const therapistId = guest[field];
+    if (therapistId && context.earlierTherapistIds.has(therapistId)) {
+      throw new QuickBookingGuestError(
+        new ServiceCallDomainError("같은 Therapist를 일행의 두 손님에게 고를 수 없습니다.", "D_QUICK_BOOKING_PARTY_DUPLICATE_THERAPIST"),
+        position,
+        field
+      );
+    }
+  }
+}
+
+async function findPartyByRequestId(client: ServiceCallPrismaClient, requestId: string) {
+  const record = await client.serviceCall.findUnique({ where: { requestId } });
+  if (!record) return null;
+  const members = record.partyId
+    ? [...(await client.serviceCall.findMany({ where: { partyId: record.partyId } }))].sort(
+        (a, b) => (a.partyPosition ?? 0) - (b.partyPosition ?? 0)
+      )
+    : [record];
+  const rows: ServiceCallRowDto[] = [];
+  for (const member of members) {
+    rows.push(await toRowDto(client, await findServiceCallWithRelations(client, member.id)));
+  }
+  return { partyId: record.partyId ?? null, rows };
+}
+
+/**
+ * 빠른 예약 일행 저장(스펙 D10–D13, 티켓 02). 손님마다 콜 하나를 한 트랜잭션에서 만든다. 손님 한 명이라도
+ * 검증에 걸리면 아무것도 만들지 않는다. 시각·고객/메모·비고·방문별 요청은 모든 콜에 같고, 고객 연결은 1번
+ * 콜에만 한다. 요청 id는 일행 저장 하나에 하나라 1번 콜에 적고, 같은 요청 id로 다시 오면 이미 만든 일행을
+ * 돌려준다. 권한·운영월 잠금·활성 여부 검사는 한 건 저장(createQuickBookingServiceCall)과 같다.
+ */
+export async function createQuickBookingParty(
+  input: QuickBookingPartyInput & { actorId?: string; prismaClient?: ServiceCallPrismaClient }
+): Promise<QuickBookingPartyResult> {
+  const parsed = quickBookingPartyInputSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "콜 원장 입력값이 올바르지 않습니다.", "INVALID_SERVICE_CALL_INPUT");
+  }
+  const { requestId, newCustomer, guests, ...shared } = parsed.data;
+  const client = getClient(input.prismaClient);
+
+  try {
+    return await runInTransaction(client, async (tx) => {
+      const existing = await findPartyByRequestId(tx, requestId);
+      if (existing) {
+        return { ...existing, alreadySaved: true };
+      }
+
+      // 일행이 함께 쓰는 값은 손님에 앞서 한 번 본다. 여기서 걸린 오류는 특정 손님의 것이 아니다.
+      const { month } = await assertWritableDate(tx, { operatingMonthId: shared.operatingMonthId, serviceDate: shared.serviceDate });
+      await Promise.all([
+        assertActiveTimeSlot(tx, shared.startTime),
+        assertActiveCode(tx, { codeType: "SERVICE_STATUS", code: shared.status, required: true }),
+        assertActiveCode(tx, { codeType: "DISCOUNT_TYPE", code: shared.discountTypeCode }),
+        assertActiveCode(tx, { codeType: "PAYMENT_METHOD", code: shared.paymentMethodCode }),
+        assertActiveCode(tx, { codeType: "CONFIRMATION", code: shared.confirmationCode })
+      ]);
+      const earlierTherapistIds = new Set<string>();
+      for (const [index, guest] of guests.entries()) {
+        await assertQuickBookingGuest(tx, guest, index + 1, { monthKey: month.monthKey, status: shared.status, earlierTherapistIds });
+        for (const therapistId of [guest.therapist1Id, guest.therapist2Id]) {
+          if (therapistId) earlierTherapistIds.add(therapistId);
+        }
+      }
+
+      const customerId = newCustomer ? (await createCustomerRecord(tx, newCustomer, requireActor(input.actorId))).id : shared.customerId;
+      const partyId = randomUUID();
+      for (const [index, guest] of guests.entries()) {
+        await writeServiceCallRow(
+          tx,
+          { ...shared, ...guest, customerId: index === 0 ? customerId : null },
+          { actorId: input.actorId, requestId: index === 0 ? requestId : undefined, party: { partyId, partyPosition: index + 1 } }
+        );
+      }
+      // 앞 손님의 행은 뒤 손님이 생기기 전에 읽혀 객실 겹침 같은 경고가 빠져 있다. 일행 전체를 다시 읽어 돌려준다.
+      const saved = await findPartyByRequestId(tx, requestId);
+      return { partyId, rows: saved?.rows ?? [], alreadySaved: false };
+    });
+  } catch (error) {
+    // 같은 요청 id의 일행 저장이 동시에 들어와 1번 콜의 요청 id 유일성 위반으로 이쪽이 실패했다(트랜잭션은
+    // 통째로 롤백된다). 먼저 만든 일행을 같은 응답으로 돌려준다.
+    const existing = isUniqueConstraintError(error) ? await findPartyByRequestId(client, requestId) : null;
+    if (!existing) {
+      throw error;
+    }
+    return { ...existing, alreadySaved: true };
+  }
+}
+
 async function findServiceCallRowByRequestId(client: ServiceCallPrismaClient, requestId: string) {
   const record = await client.serviceCall.findUnique({ where: { requestId } });
   return record ? toRowDto(client, await findServiceCallWithRelations(client, record.id)) : null;
@@ -1998,7 +2137,7 @@ async function assertCustomerLinkUnchanged(
 async function writeServiceCallRow(
   tx: ServiceCallPrismaClient,
   input: ServiceCallInput,
-  options: { actorId?: string; requestId?: string }
+  options: { actorId?: string; requestId?: string; party?: { partyId: string; partyPosition: number } }
 ) {
   assertRoomRequiredForStatus({ roomId: input.roomId, status: input.status });
   const { month, serviceDate } = await assertWritableDate(tx, {
@@ -2026,8 +2165,10 @@ async function writeServiceCallRow(
   if (beforeLinked) await assertCustomerLinkUnchanged(tx, beforeLinked, input.customerId, input.expectedUpdatedAt);
   const customerId = await resolveLinkedCustomerId(tx, input.customerId, beforeLinked?.customerId);
   const linkChanged = linkedCustomerId(beforeLinked ?? {}) !== customerId;
+  // 일행 콜은 고객 연결이 없어도 콜마다 생성 감사를 남긴다(티켓 02). 그 감사에 일행 id가 담긴다.
+  const audited = linkChanged || Boolean(options.party);
   // A link change is a sensitive call edit. Reject it before the write when no actor can be audited.
-  const actorId = linkChanged ? requireActor(options.actorId) : options.actorId?.trim() || "";
+  const actorId = audited ? requireActor(options.actorId) : options.actorId?.trim() || "";
   const data = {
     operatingMonthId: input.operatingMonthId,
     serviceDate,
@@ -2058,7 +2199,13 @@ async function writeServiceCallRow(
     );
     serviceCall = await findServiceCallWithRelations(tx, input.serviceCallId);
   } else {
-    serviceCall = await tx.serviceCall.create({ data: { ...data, requestId: options.requestId ?? null } });
+    serviceCall = await tx.serviceCall.create({
+      data: {
+        ...data,
+        requestId: options.requestId ?? null,
+        ...(options.party ? { partyId: options.party.partyId, partyPosition: options.party.partyPosition } : {})
+      }
+    });
   }
 
   await Promise.all([
@@ -2075,7 +2222,7 @@ async function writeServiceCallRow(
   ]);
 
   const after = await findServiceCallWithRelations(tx, serviceCall.id);
-  if (linkChanged) {
+  if (audited) {
     await recordAuditEvent(
       {
         actorId,

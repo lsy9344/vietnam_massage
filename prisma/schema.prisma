@@ -254,6 +254,9 @@ model ServiceCall {
   visitRequest      String?                    @map("visit_request")
   confirmationCode  String?                    @map("confirmation_code")
   requestId         String?                    @unique @map("request_id")
+  // 빠른 예약 일행(스펙 D13, ADR 0007). 일행이 아닌 콜은 둘 다 비어 있다. 순번은 1부터이고 1번이 대표 콜이다.
+  partyId           String?                    @map("party_id")
+  partyPosition     Int?                       @map("party_position")
   createdAt         DateTime                   @default(now()) @map("created_at")
   updatedAt         DateTime                   @updatedAt @map("updated_at")
   assignments       ServiceCallAssignment[]
@@ -263,6 +266,7 @@ model ServiceCall {
   @@index([roomId, serviceDate], map: "idx_service_calls_room_date")
   @@index([status, serviceDate], map: "idx_service_calls_status_date")
   @@index([customerId], map: "idx_service_calls_customer_id")
+  @@index([partyId], map: "idx_service_calls_party_id")
   @@map("service_calls")
 }
 
