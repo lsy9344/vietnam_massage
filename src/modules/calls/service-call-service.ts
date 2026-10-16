@@ -16,7 +16,6 @@ import { listActiveEmployees } from "@/modules/masters/employee-service";
 import { listActiveRooms } from "@/modules/masters/room-service";
 import { listPlannedWorkingDayStatusesForDate, type PlannedWorkingDayCellStatus } from "@/modules/masters/planned-working-day-query";
 import {
-  assignmentRoles,
   customerInputSchema,
   customerUpdateSchema,
   dailyExpenseDeactivateSchema,
@@ -624,12 +623,6 @@ function toIsoDateOnly(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function assertAssignmentRole(value: string): asserts value is ServiceCallAssignmentRole {
-  if (!assignmentRoles.includes(value as ServiceCallAssignmentRole)) {
-    throw new ServiceCallDomainError("담당자 역할이 올바르지 않습니다.", "INVALID_ASSIGNMENT_ROLE");
-  }
-}
-
 function isDateWithinOperatingMonth(date: Date, month: OperatingMonthRecord) {
   return date.getTime() >= month.startDate.getTime() && date.getTime() <= month.endDate.getTime();
 }
@@ -862,11 +855,10 @@ function toAssigneeDto(record: EmployeeRecord): ServiceCallAssigneeDto {
   };
 }
 
+// 마이그레이션 0006(ADR 0006)을 적용하기 전 DB에는 귀케어 담당(EARCARE) 배정이 남아 있다. 그 배정은 원장 칸이
+// 아니므로 거절하지 않고 지나친다(운영 DB에 0006 없이 프리뷰를 붙일 때).
 function assignmentByRole(record: ServiceCallRecord, role: ServiceCallAssignmentRole) {
-  return (record.assignments ?? []).find((assignment) => {
-    assertAssignmentRole(assignment.assignmentRole);
-    return assignment.assignmentRole === role && assignment.isActive !== false;
-  });
+  return (record.assignments ?? []).find((assignment) => assignment.assignmentRole === role && assignment.isActive !== false);
 }
 
 async function toRowDto(

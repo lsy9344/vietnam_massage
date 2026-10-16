@@ -741,6 +741,28 @@ describe("service call service", () => {
     assert.equal(saved.paymentMethodCode, "현금");
   });
 
+  it("lists a call that still carries an earcare assignment from before migration 0006 (ADR 0006)", async () => {
+    const prismaClient = createMemoryPrisma();
+    const row = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      customerMemo: "귀케어 남은 콜",
+      therapist1Id: "therapist-1",
+      status: "예약",
+      prismaClient
+    });
+    await prismaClient.serviceCallAssignment.create({ data: { serviceCallId: row.id, employeeId: "therapist-2", assignmentRole: "EARCARE" } });
+
+    const rows = await listServiceCallsForDate({ operatingMonthId: "month-2026-06", serviceDate: "2026-06-10", prismaClient });
+
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].therapist1?.id, "therapist-1");
+    assert.equal(rows[0].therapist2, null);
+  });
+
   it("saves the call's visit request apart from its note, and both show up distinctly on reload (F06, 티켓 23)", async () => {
     const prismaClient = createMemoryPrisma();
 
