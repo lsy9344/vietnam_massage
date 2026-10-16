@@ -196,6 +196,16 @@ test.describe("티켓 18 떠나기 전 안내", () => {
     await expect(row.getByRole("combobox", { name: "코스" })).toHaveValue(/T18 D/);
     await expect(row.getByText("저장 실패")).toBeVisible();
 
+    // 도크의 구역 메뉴에서 화면을 골라도 안내가 나오고, 메뉴는 안내 창 위에 남지 않는다.
+    await page.getByRole("navigation", { name: "업무 이동" }).getByRole("button", { name: "현장", exact: true }).click();
+    const floorMenu = page.getByRole("group", { name: "현장 화면" });
+    await floorMenu.getByRole("link", { name: "객실" }).click();
+    await expect(leaveGuardDialog(page)).toBeVisible();
+    await expect(floorMenu).toBeHidden();
+    await leaveGuardDialog(page).getByRole("button", { name: "취소" }).click();
+    await expect(page).toHaveURL(ledgerUrl);
+    await expect(row.getByText("저장 실패")).toBeVisible();
+
     // 앱의 다른 화면(고객 화면)으로 이동: 안내가 나오고, 이번에는 나가기를 고른다.
     await page.getByRole("link", { name: "고객 화면" }).click();
     await expect(leaveGuardDialog(page)).toBeVisible();

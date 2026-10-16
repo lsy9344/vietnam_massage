@@ -70,6 +70,8 @@ export function CallLeaveGuard({ children }: { children: ReactNode }) {
       if (!href || href.startsWith("#")) return;
       event.preventDefault();
       event.stopPropagation();
+      // 도크의 구역 메뉴처럼 팝오버 안의 링크면 메뉴를 닫는다. 팝오버는 맨 위 층이라 열어 두면 안내 창을 덮는다.
+      anchor.closest<HTMLElement>("[popover]")?.hidePopover();
       setPendingHref(href);
     }
     document.addEventListener("click", handleClick, { capture: true });

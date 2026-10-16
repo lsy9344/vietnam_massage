@@ -24,6 +24,14 @@ export type ScreenRoute = {
   dateContext?: ScreenDateContext;
   /** 구역 안 탭에 두지 않는 화면. TV는 현장 화면 도구줄의 "TV 화면 열기"로 연다. */
   notATab?: true;
+  /** 화면 안의 보기 탭. 도크의 구역 메뉴에는 화면 대신 보기마다 한 줄씩 보인다. 첫 보기가 주소에 보기 값이 없을 때의 보기다. */
+  views?: readonly ScreenView[];
+};
+
+/** 화면 안의 보기: 같은 화면 주소에 붙는 주소 값(예: 원장의 tab=cashbook)으로 나뉜다. */
+export type ScreenView = {
+  labelKey: MessageKey;
+  params: Record<string, string>;
 };
 
 /** 구역을 옮겨도 유지하는 운영월·날짜. */
@@ -34,9 +42,15 @@ export type ScreenContext = {
 
 const reportRoles: Role[] = ["administrator", "counter", "settlement_manager", "read_only_viewer"];
 
+// 원장 화면의 보기 탭. 주소 값은 원장 화면의 것(src/lib/ledger-address.ts)과 같다.
+const ledgerViews: readonly ScreenView[] = [
+  { labelKey: "calls.tab.ledger", params: {} },
+  { labelKey: "calls.tab.cashbook", params: { tab: "cashbook" } }
+];
+
 // 같은 구역 안에서는 적힌 순서가 탭 순서다.
 export const screenRoutes: readonly ScreenRoute[] = [
-  { path: "/calls", labelKey: "shell.tab.calls", zone: "ledger", roles: ["administrator", "counter"], dateContext: "serviceDate" },
+  { path: "/calls", labelKey: "shell.tab.calls", zone: "ledger", roles: ["administrator", "counter"], dateContext: "serviceDate", views: ledgerViews },
   { path: "/rooms", labelKey: "shell.tab.rooms", zone: "floor", roles: ["administrator", "counter", "waiter", "read_only_viewer"], dateContext: "serviceDate" },
   { path: "/live", labelKey: "shell.tab.live", zone: "floor", roles: ["administrator", "counter"], dateContext: "serviceDate" },
   { path: "/tv", labelKey: "shell.tab.tv", zone: "floor", roles: ["administrator", "counter", "read_only_viewer"], dateContext: "serviceDate", notATab: true },
@@ -124,8 +138,8 @@ export function readScreenContext(searchParams: Pick<URLSearchParams, "get">): S
   };
 }
 
-/** 화면 주소에 그 화면이 받는 운영월·날짜 맥락만 붙인다. */
-export function screenHref(route: ScreenRoute, context: ScreenContext) {
+/** 화면 주소에 그 화면이 받는 운영월·날짜 맥락만 붙인다. 보기를 주면 그 보기의 주소 값을 뒤에 붙인다. */
+export function screenHref(route: ScreenRoute, context: ScreenContext, view?: ScreenView) {
   const params = new URLSearchParams();
   if (route.dateContext && context.operatingMonthId) {
     params.set("operatingMonthId", context.operatingMonthId);
@@ -133,15 +147,42 @@ export function screenHref(route: ScreenRoute, context: ScreenContext) {
   if (route.dateContext && route.dateContext !== "month" && context.date) {
     params.set(route.dateContext, context.date);
   }
+  for (const [name, value] of Object.entries(view?.params ?? {})) {
+    params.set(name, value);
+  }
   const query = params.toString();
   return query ? `${route.path}?${query}` : route.path;
 }
 
-// 도크는 첫 탭으로 들어간다. 정산은 기존 날짜·운영월 맥락을 지키는 Therapist 화면으로 들어간다.
-export function getZoneHref(role: Role, zone: Zone, context: ScreenContext) {
-  const tabs = getZoneTabs(role, zone);
-  const firstTab = (zone === "settlements" ? tabs.find((tab) => tab.path === "/settlements") : null) ?? tabs[0];
-  return firstTab ? screenHref(firstTab, context) : null;
+export type ZoneMenuItem = { labelKey: MessageKey; href: string; current: boolean };
+
+/** 도크의 구역 메뉴: 그 역할이 들어갈 수 있는 구역 안 화면을 탭 순서로, 지금 화면에 current를 붙인다. */
+export function getZoneMenu(
+  role: Role,
+  zone: Zone,
+  context: ScreenContext,
+  current: { path: string; params: Pick<URLSearchParams, "get"> }
+): ZoneMenuItem[] {
+  return getZoneTabs(role, zone).flatMap((route) => {
+    const onRoute = route.path === current.path;
+    if (!route.views) {
+      return [{ labelKey: route.labelKey, href: screenHref(route, context), current: onRoute }];
+    }
+    const currentView = onRoute ? viewFromParams(route.views, current.params) : null;
+    return route.views.map((view) => ({
+      labelKey: view.labelKey,
+      href: screenHref(route, context, view),
+      current: view === currentView
+    }));
+  });
+}
+
+function viewFromParams(views: readonly ScreenView[], params: Pick<URLSearchParams, "get">) {
+  const chosen = views.find((view) => {
+    const entries = Object.entries(view.params);
+    return entries.length > 0 && entries.every(([name, value]) => params.get(name) === value);
+  });
+  return chosen ?? views[0];
 }
 
 /**

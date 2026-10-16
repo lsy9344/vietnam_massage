@@ -5,7 +5,7 @@ import {
   getCompactDock,
   getDockZones,
   getRoleLandingPath,
-  getZoneHref,
+  getZoneMenu,
   getZoneTabs,
   linkToScreen,
   readScreenContext,
@@ -102,41 +102,44 @@ describe("workflow dock below 840px", () => {
 
 describe("moving between zones with the dock", () => {
   const ledgerContext = readScreenContext(new URLSearchParams("operatingMonthId=m-2026-10&serviceDate=2026-10-14"));
+  // 구역의 첫 화면 주소: 화면이 하나인 구역의 도크 링크이자 구역 메뉴의 첫 줄이다.
+  const firstScreenHref = (role: Parameters<typeof getZoneMenu>[0], zone: Parameters<typeof getZoneMenu>[1], context: typeof ledgerContext) =>
+    getZoneMenu(role, zone, context, { path: "/", params: new URLSearchParams() })[0]?.href ?? null;
 
   it("carries the chosen operating month and date into dated zones", () => {
-    assert.equal(getZoneHref("counter", "floor", ledgerContext), "/rooms?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
-    assert.equal(getZoneHref("administrator", "settlements", ledgerContext), "/settlements?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
-    assert.equal(getZoneHref("counter", "reports", ledgerContext), "/dashboard/today?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
+    assert.equal(firstScreenHref("counter", "floor", ledgerContext), "/rooms?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
+    assert.equal(firstScreenHref("administrator", "ledger", ledgerContext), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
+    assert.equal(firstScreenHref("counter", "reports", ledgerContext), "/dashboard/today?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
   });
 
   it("carries only the operating month into the month-only closing zone", () => {
-    assert.equal(getZoneHref("settlement_manager", "closing", ledgerContext), "/closing?operatingMonthId=m-2026-10");
+    assert.equal(firstScreenHref("settlement_manager", "closing", ledgerContext), "/closing?operatingMonthId=m-2026-10");
   });
 
   it("reads the attendance date of the earcare and operations screens as the date to carry", () => {
     const earcareContext = readScreenContext(new URLSearchParams("operatingMonthId=m-2026-10&attendanceDate=2026-10-12"));
-    assert.equal(getZoneHref("administrator", "ledger", earcareContext), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-12");
+    assert.equal(firstScreenHref("administrator", "ledger", earcareContext), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-12");
   });
 
-  it("always opens the ledger tab of the ledger zone, dropping the ledger's own query state", () => {
+  it("puts the ledger tab first in the ledger zone, dropping the ledger's own query state", () => {
     const ledgerWithSearch = readScreenContext(
       new URLSearchParams("operatingMonthId=m-2026-10&serviceDate=2026-10-14&customerQuery=kim&visitMemo=vip")
     );
-    assert.equal(getZoneHref("counter", "ledger", ledgerWithSearch), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
+    assert.equal(firstScreenHref("counter", "ledger", ledgerWithSearch), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
   });
 
   it("opens the first tab the role can enter and leaves undated zones without date context", () => {
-    assert.equal(getZoneHref("administrator", "settings", ledgerContext), "/masters/operating-months");
-    assert.equal(getZoneHref("read_only_viewer", "settings", ledgerContext), "/masters/sheet-mapping");
-    assert.equal(getZoneHref("administrator", "floor", ledgerContext), "/rooms?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
+    assert.equal(firstScreenHref("administrator", "settings", ledgerContext), "/masters/operating-months");
+    assert.equal(firstScreenHref("read_only_viewer", "settings", ledgerContext), "/masters/sheet-mapping");
+    assert.equal(firstScreenHref("administrator", "floor", ledgerContext), "/rooms?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
   });
 
   it("opens the undated customer screen without the ledger's month and date", () => {
-    assert.equal(getZoneHref("counter", "customers", ledgerContext), "/customers");
+    assert.equal(firstScreenHref("counter", "customers", ledgerContext), "/customers");
   });
 
   it("links to the bare first tab when no month or date has been chosen yet", () => {
-    assert.equal(getZoneHref("counter", "ledger", readScreenContext(new URLSearchParams())), "/calls");
+    assert.equal(firstScreenHref("counter", "ledger", readScreenContext(new URLSearchParams())), "/calls");
   });
 });
 
@@ -175,6 +178,39 @@ describe("zone tabs", () => {
     assert.equal(zoneForPath("/audit"), "settings");
     assert.equal(zoneForPath("/tv"), "floor");
     assert.equal(zoneForPath("/sign-in"), null);
+  });
+});
+
+describe("zone menu in the dock", () => {
+  const context = { operatingMonthId: "m-2026-10", date: "2026-10-14" };
+  const at = (path: string, query = "") => ({ path, params: new URLSearchParams(query) });
+
+  it("lists the zone's screens the role can enter with the month and date, marking the screen you are on", () => {
+    assert.deepEqual(getZoneMenu("administrator", "settlements", context, at("/settlements/earcare")), [
+      { labelKey: "shell.tab.schedule", href: "/settlements/schedule", current: false },
+      { labelKey: "shell.tab.therapist", href: "/settlements?operatingMonthId=m-2026-10&serviceDate=2026-10-14", current: false },
+      { labelKey: "shell.tab.earcare", href: "/settlements/earcare?operatingMonthId=m-2026-10&attendanceDate=2026-10-14", current: true },
+      { labelKey: "shell.tab.opsDaily", href: "/settlements/operations?operatingMonthId=m-2026-10&attendanceDate=2026-10-14", current: false },
+      { labelKey: "shell.tab.opsMonthly", href: "/settlements/operations/monthly?operatingMonthId=m-2026-10", current: false }
+    ]);
+  });
+
+  it("splits the ledger into its two views, the ledger view being current unless the cashbook is open", () => {
+    const ledger = { labelKey: "calls.tab.ledger", href: "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-14" };
+    const cashbook = { labelKey: "calls.tab.cashbook", href: "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-14&tab=cashbook" };
+
+    assert.deepEqual(getZoneMenu("counter", "ledger", context, at("/calls", "tab=cashbook")), [
+      { ...ledger, current: false },
+      { ...cashbook, current: true }
+    ]);
+    assert.deepEqual(getZoneMenu("counter", "ledger", context, at("/calls", "customerQuery=kim")), [
+      { ...ledger, current: true },
+      { ...cashbook, current: false }
+    ]);
+    assert.deepEqual(
+      getZoneMenu("counter", "ledger", context, at("/rooms")).map((item) => item.current),
+      [false, false]
+    );
   });
 });
 
