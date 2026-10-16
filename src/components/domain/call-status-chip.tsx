@@ -5,6 +5,21 @@ export type CallStatusKey = "reserved" | "inUse" | "cleaning" | "completed" | "n
 
 type FilledStatus = Exclude<CallStatusKey, "reserved" | "canceled">;
 
+// 기준정보 코드(RESERVED 등)와 옛 한국어 값(예약 등)을 모두 받는다(service-call-service.ts, ledger-flow.ts의 STATUS_CODES와 같다).
+const statusValues: Record<CallStatusKey, readonly string[]> = {
+  reserved: ["RESERVED", "예약"],
+  inUse: ["IN_USE", "USING", "사용중"],
+  cleaning: ["CLEANING", "청소중"],
+  completed: ["VISIT_COMPLETE", "방문완료"],
+  noShow: ["NO_SHOW", "노쇼"],
+  canceled: ["CANCELED", "CANCELLED", "취소"]
+};
+
+/** 콜의 상태 값을 칩 종류로 바꾼다. 모르는 값이면 null. */
+export function callStatusKeyOf(status: string): CallStatusKey | null {
+  return (Object.keys(statusValues) as CallStatusKey[]).find((key) => statusValues[key].includes(status)) ?? null;
+}
+
 // 네 상태는 모양도 색도 서로 다르다(재생, 반짝임, 체크, 엑스). fill은 채운 칩, accent는 밝은 바탕 위의 같은 색이다.
 // 예약·취소는 채우지 않은 ○ 칩 그대로다.
 const filledConfig: Record<FilledStatus, { icon: ReactNode; fill: string; accent: string }> = {
@@ -33,42 +48,45 @@ const filledConfig: Record<FilledStatus, { icon: ReactNode; fill: string; accent
 };
 
 /**
- * 상태별 건수 한 줄(원장 머리, 실시간 요약, 대시보드, 고객 방문 건수)의 콜 상태 칩(design.md 2.4, 6.8): 진한 색으로 채운 알약 + 흰 그림 기호.
+ * 상태별 건수 한 줄(원장 머리, 실시간 요약, 대시보드, 고객 방문 건수)과 원장 목록 줄의 콜 상태 칩(design.md 2.4, 6.8): 진한 색으로 채운 알약 + 흰 그림 기호.
  * count.text를 주면 건수를 칩 끝의 밝은 방울에 넣는다. 0건이면 채움을 빼서 건수가 있는 상태만 튀게 한다.
+ * sm은 원장 목록 줄의 상태 칸처럼 표 안에서 쓰는 12px 칩이다(건수 방울 없이). 칸보다 긴 이름은 말줄임으로 잘린다.
  */
 export function CallStatusChip({
   status,
   label,
   count,
+  size = "md",
   className
 }: {
   status: CallStatusKey;
   label: string;
   /** value는 0건 판단용, text는 방울에 보일 글자(예: "2건"). 건수가 오른쪽 값 칸에 따로 있으면 value만 준다. */
   count?: { value: number; text?: string };
+  size?: "md" | "sm";
   className?: string;
 }) {
   const filled = status === "reserved" || status === "canceled" ? null : filledConfig[status];
   const isEmptyFilled = filled !== null && count?.value === 0;
-  const countText = count?.text;
+  const countText = size === "md" ? count?.text : undefined;
   return (
     <span
       className={cn(
-        "inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-full text-sm font-semibold leading-none",
-        countText === undefined ? "px-3" : "pl-3 pr-1.5",
+        "inline-flex items-center whitespace-nowrap rounded-full font-semibold leading-none",
+        size === "sm" ? "min-h-6 max-w-full gap-1 px-1.5 text-xs" : cn("min-h-9 gap-1.5 text-sm", countText === undefined ? "px-3" : "pl-3 pr-1.5"),
         !filled ? "border border-border-strong bg-surface text-foreground" : isEmptyFilled ? "border border-border-strong text-muted" : filled.fill,
         className
       )}
     >
       {filled ? (
-        <svg aria-hidden="true" className={cn("size-4 shrink-0", isEmptyFilled && filled.accent)} viewBox="0 0 24 24">
+        <svg aria-hidden="true" className={cn(size === "sm" ? "size-3" : "size-4", "shrink-0", isEmptyFilled && filled.accent)} viewBox="0 0 24 24">
           {filled.icon}
         </svg>
       ) : (
         // U+FE0E: 기호를 늘 글자 모양으로 그린다(이모지로 바뀌지 않게).
-        <span aria-hidden="true">{"○︎"}</span>
+        <span aria-hidden="true">{"○\uFE0E"}</span>
       )}
-      <span>{label}</span>
+      <span className={size === "sm" ? "min-w-0 truncate" : undefined}>{label}</span>
       {countText === undefined ? null : (
         <>
           {" "}

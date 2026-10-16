@@ -7,7 +7,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import { ScreenState } from "@/components/ui/screen-state";
 import { SaveStatus } from "@/components/ui/save-status";
-import { StatusIndicator, type StatusTone } from "@/components/ui/status-indicator";
+import { CallStatusChip, callStatusKeyOf } from "@/components/domain/call-status-chip";
+import { StatusIndicator } from "@/components/ui/status-indicator";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { MessageKey } from "@/lib/i18n/types";
 import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto } from "@/modules/calls/service-call-service";
@@ -70,14 +71,6 @@ function writeDoneExpanded(expanded: boolean) {
   }
 }
 
-function statusTone(status: string): StatusTone {
-  const flow = ledgerFlowOf(status);
-  if (flow === "active") return "info";
-  if (status === "VISIT_COMPLETE" || status === "방문완료") return "success";
-  if (status === "NO_SHOW" || status === "노쇼") return "warning";
-  return "neutral";
-}
-
 // 열 너비: 고객/메모만 남는 폭을 받고 나머지는 고정이다. 1280px에서 패널을 열어도(목록 약 50rem) 가로 스크롤이 없다.
 const COLUMNS: Array<{ id: string; labelKey: MessageKey; width?: string }> = [
   { id: "time", labelKey: "calls.column.time", width: "4rem" },
@@ -85,7 +78,7 @@ const COLUMNS: Array<{ id: string; labelKey: MessageKey; width?: string }> = [
   { id: "course", labelKey: "calls.column.course", width: "5.5rem" },
   { id: "therapists", labelKey: "calls.list.therapists", width: "7.5rem" },
   { id: "room", labelKey: "calls.column.room", width: "6rem" },
-  { id: "status", labelKey: "calls.column.status", width: "7rem" },
+  { id: "status", labelKey: "calls.column.status", width: "8rem" },
   { id: "signals", labelKey: "calls.list.signals", width: "4.5rem" },
   { id: "action", labelKey: "calls.list.action", width: "6rem" }
 ];
@@ -266,6 +259,8 @@ function CallLedgerLine({
     .filter(Boolean)
     .join(" · ");
   const roomLabel = draft.roomId ? optionLabel(options.rooms, draft.roomId) || serverRow.roomLabel : null;
+  const statusKey = callStatusKeyOf(draft.status);
+  const statusLabel = optionLabel(options.statuses, draft.status) || draft.status;
   const warnings = freshestRow.warnings.map((warning) => callWarningLabel(t, warning));
   const freeRooms = pickingRoom ? freeRoomOptions(options.rooms, rows, row.id) : [];
 
@@ -308,7 +303,11 @@ function CallLedgerLine({
         </td>
         <td className={cellClass}>
           <span className="grid justify-items-start gap-0.5">
-            <StatusIndicator label={optionLabel(options.statuses, draft.status) || draft.status} size="sm" tone={statusTone(draft.status)} />
+            {statusKey ? (
+              <CallStatusChip label={statusLabel} size="sm" status={statusKey} />
+            ) : (
+              <StatusIndicator label={statusLabel} size="sm" tone="neutral" />
+            )}
             {draft.note ? <span className="max-w-full truncate text-xs text-muted">{draft.note}</span> : null}
           </span>
         </td>

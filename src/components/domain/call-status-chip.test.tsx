@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CallStatusChip } from "@/components/domain/call-status-chip";
+import { CallStatusChip, callStatusKeyOf } from "@/components/domain/call-status-chip";
 
 // 기호(aria-hidden)를 뺀 글자.
 function text(html: string) {
@@ -69,5 +69,34 @@ describe("콜 상태 칩", () => {
     const one = renderToStaticMarkup(<CallStatusChip count={{ value: 1 }} label="노쇼" status="noShow" />);
     assert.match(one, /bg-danger text-danger-foreground/);
     assert.equal(text(one), "노쇼");
+  });
+
+  it("reads both master codes and the old Korean values as a call status", () => {
+    const cases: Array<[string, ReturnType<typeof callStatusKeyOf>]> = [
+      ["RESERVED", "reserved"],
+      ["예약", "reserved"],
+      ["IN_USE", "inUse"],
+      ["USING", "inUse"],
+      ["사용중", "inUse"],
+      ["CLEANING", "cleaning"],
+      ["청소중", "cleaning"],
+      ["VISIT_COMPLETE", "completed"],
+      ["방문완료", "completed"],
+      ["NO_SHOW", "noShow"],
+      ["노쇼", "noShow"],
+      ["CANCELED", "canceled"],
+      ["CANCELLED", "canceled"],
+      ["취소", "canceled"],
+      ["SOMETHING_ELSE", null]
+    ];
+    for (const [status, key] of cases) assert.equal(callStatusKeyOf(status), key, status);
+  });
+
+  it("has a small size for status cells inside table rows", () => {
+    const html = renderToStaticMarkup(<CallStatusChip label="청소중" size="sm" status="cleaning" />);
+    assert.match(html, /^<span class="[^"]*min-h-6 max-w-full gap-1 px-1\.5 text-xs[^"]*bg-warning text-warning-foreground/);
+    assert.match(html, /<svg[^>]*class="size-3/);
+    // 좁은 칸에서 긴 이름(베트남어 등)은 옆 칸을 덮지 않고 말줄임으로 잘린다.
+    assert.match(html, /<span class="min-w-0 truncate">청소중<\/span>/);
   });
 });

@@ -210,6 +210,25 @@ describe("flow ledger list (ticket 03)", () => {
     assert.ok(!buttons(line(html, "done-11")).includes("입장") && !buttons(line(html, "done-11")).includes("결제"));
   });
 
+  it("shows each line's status with the same symbol and color as the status counts above the list", () => {
+    const html = renderList([
+      ...rows,
+      ledgerRow({ id: "cleaning-14", startTime: "14:00", status: "CLEANING" }),
+      ledgerRow({ id: "no-show-10", startTime: "10:00", status: "NO_SHOW" })
+    ]);
+    assert.match(line(html, "in-use-13"), /bg-info text-info-foreground[^"]*"><svg[\s\S]*?<span[^>]*>사용중<\/span>/);
+    assert.match(line(html, "cleaning-14"), /bg-warning text-warning-foreground[^"]*"><svg/);
+    assert.match(line(html, "done-11"), /bg-success text-success-foreground[^"]*"><svg[\s\S]*?<span[^>]*>방문완료<\/span>/);
+    assert.match(line(html, "no-show-10"), /bg-danger text-danger-foreground[^"]*"><svg/);
+    assert.match(line(html, "reserved-12"), /border border-border-strong bg-surface text-foreground[^"]*"><span aria-hidden="true">○︎<\/span><span[^>]*>예약<\/span>/);
+  });
+
+  it("keeps a status it does not know as a plain ○ chip with its own name", () => {
+    const html = renderList([ledgerRow({ id: "hold-15", startTime: "15:00", status: "ON_HOLD" })]);
+    assert.doesNotMatch(line(html, "hold-15"), /<svg[^>]*viewBox="0 0 24 24"/);
+    assert.match(line(html, "hold-15"), /<span aria-hidden="true">○︎<\/span>ON_HOLD/);
+  });
+
   it("fits the width: a fixed-layout table with no minimum width and no sideways scroll box", () => {
     const html = renderList(rows);
     assert.match(html, /<table[^>]*class="w-full table-fixed/);
