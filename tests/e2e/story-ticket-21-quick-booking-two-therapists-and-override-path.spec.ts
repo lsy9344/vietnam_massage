@@ -206,7 +206,7 @@ test.describe("티켓 21 빠른 예약: 두 명 코스와 경고 확인 후 배�
 
     await goToTherapistStep(page, dialog, memo);
 
-    const row1 = dialog.getByRole("rowheader", { name: "T21 마사지사1", exact: true }).locator("xpath=ancestor::tr[1]");
+    const row1 = dialog.locator("[data-availability-row]").filter({ has: page.getByText("T21 마사지사1", { exact: true }) });
     await row1.getByRole("button", { name: /T21D 90분 가능/ }).click();
     await expect(dialog.getByText("T21 2인 · T21 마사지사1")).toBeVisible();
 
@@ -243,7 +243,7 @@ test.describe("티켓 21 빠른 예약: 두 명 코스와 경고 확인 후 배�
 
     await goToTherapistStep(page, dialog, memo);
 
-    const row1 = dialog.getByRole("rowheader", { name: "T21 마사지사1", exact: true }).locator("xpath=ancestor::tr[1]");
+    const row1 = dialog.locator("[data-availability-row]").filter({ has: page.getByText("T21 마사지사1", { exact: true }) });
     await row1.getByRole("button", { name: /T21D 90분 가능/ }).click();
 
     const secondSection = dialog.getByRole("heading", { name: "두 번째 Therapist" }).locator("xpath=ancestor::div[1]");

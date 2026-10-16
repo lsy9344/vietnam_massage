@@ -207,8 +207,8 @@ test.describe("티켓 29 가능 코스의 근무 예정 표시", () => {
 
     await goToTherapistStep(page, dialog, memo);
 
-    // 첫 Therapist 표: 휴무인 마사지사1도 "근무표" 칸에 휴무가 보이고, 코스 버튼은 꺼지지 않는다.
-    const row1 = dialog.getByRole("rowheader", { name: "T29 마사지사1", exact: true }).locator("xpath=ancestor::tr[1]");
+    // 첫 Therapist 목록: 휴무인 마사지사1도 "근무표" 칸에 휴무가 보이고, 코스 버튼은 꺼지지 않는다.
+    const row1 = dialog.locator("[data-availability-row]").filter({ has: page.getByText("T29 마사지사1", { exact: true }) });
     await expect(row1.getByText("휴무", { exact: true })).toBeVisible();
     await row1.getByRole("button", { name: /T29D 90분 가능/ }).click();
     await expect(dialog.getByText("T29 2인 · T29 마사지사1")).toBeVisible();
@@ -248,8 +248,8 @@ test.describe("티켓 29 가능 코스의 근무 예정 표시", () => {
 
     await goToTherapistStep(page, dialog, `T29 vi ${Date.now().toString(36)}`);
 
-    await expect(dialog.getByText("Lịch làm việc", { exact: true })).toBeVisible();
-    const row1 = dialog.getByRole("rowheader", { name: "T29 마사지사1", exact: true }).locator("xpath=ancestor::tr[1]");
+    await expect(dialog.getByText("Lịch làm việc", { exact: true }).first()).toBeVisible();
+    const row1 = dialog.locator("[data-availability-row]").filter({ has: page.getByText("T29 마사지사1", { exact: true }) });
     await expect(row1.getByText("Nghỉ", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Dự kiến làm việc trong lịch không đảm bảo có mặt đến giờ đó.")).toBeVisible();
   });

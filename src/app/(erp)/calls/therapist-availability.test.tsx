@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { TherapistAvailabilityView } from "@/app/(erp)/calls/therapist-availability-view";
+import { filterByAttendance, TherapistAvailabilityView } from "@/app/(erp)/calls/therapist-availability-view";
 import type { TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
 
 const timeSlots = [{ value: "15:00", label: "15:00" }, { value: "16:00", label: "16:00" }];
@@ -80,11 +80,10 @@ describe("therapist availability panel", () => {
       ]
     });
 
-    assert.match(html, /Therapist/);
+    assert.match(html, /근무표/);
     assert.match(html, /출근/);
     assert.match(html, /이 시각/);
     assert.match(html, /다음 예약/);
-    assert.match(html, /가능한 코스/);
     assert.match(html, /마사지사1/);
     assert.match(html, /출근 전/);
     assert.match(html, />가능</);
@@ -113,7 +112,6 @@ describe("therapist availability panel", () => {
     assert.match(vietnamese, /Gói có thể/);
     assert.match(vietnamese, /Không thể · từ 15:30/);
     assert.match(vietnamese, /Chưa đến/);
-    assert.match(vietnamese, /Therapist/);
   });
 
   it("says the therapist is still in service, when to check, and when they free up, without recomputing the hold", () => {
@@ -170,7 +168,7 @@ describe("therapist availability panel", () => {
         row({ therapistId: "t-out", therapistName: "후", attendance: "checked_out", shiftCheck: true })
       ]
     });
-    const rowOf = (therapistId: string) => html.split("<tr").find((part) => part.includes(`data-therapist-id="${therapistId}"`)) ?? "";
+    const rowOf = (therapistId: string) => html.split("<li").find((part) => part.includes(`data-therapist-id="${therapistId}"`)) ?? "";
     assert.match(rowOf("t-before"), /출근 전[\s\S]*근무 확인 필요/);
     assert.match(rowOf("t-in"), /출근/);
     assert.doesNotMatch(rowOf("t-in"), /출근 전|퇴근|근무 확인 필요/);
@@ -195,7 +193,7 @@ describe("therapist availability panel", () => {
         row({ therapistId: "t-unset", therapistName: "미입력자", attendance: "before_check_in", plannedWorkingDayStatus: "미입력" })
       ]
     });
-    const rowOf = (therapistId: string) => html.split("<tr").find((part) => part.includes(`data-therapist-id="${therapistId}"`)) ?? "";
+    const rowOf = (therapistId: string) => html.split("<li").find((part) => part.includes(`data-therapist-id="${therapistId}"`)) ?? "";
     assert.match(html, /근무표/);
     assert.match(rowOf("t-planned"), /근무 예정[\s\S]*출근/);
     assert.match(rowOf("t-off"), /휴무[\s\S]*출근 전/);
@@ -245,6 +243,87 @@ describe("therapist availability panel", () => {
     const vietnamese = renderView({ locale: "vi", open: true, rows: [] });
     assert.match(vietnamese, /Không có Therapist để xem ở giờ này\./);
     assert.match(vietnamese, /Hãy kiểm tra Therapist đang hoạt động trong danh mục nhân viên\./);
+  });
+
+  // 좁은 서랍(30rem)에서도 가로로 밀지 않도록 Therapist마다 한 장씩 쌓는다. 표나 가로 스크롤 상자가 없다.
+  it("stacks each therapist as one card with the course buttons on their own line, with no table or sideways scroll", () => {
+    const html = renderView({ open: true, rows: [row({ therapistId: "t-1", therapistName: "첫째" }), row({ therapistId: "t-2", therapistName: "둘째" })] });
+    assert.doesNotMatch(html, /<table|<tr|overflow-x-auto|min-w-\[/);
+    const cards = html.split("<li").slice(1);
+    assert.equal(cards.length, 2);
+    for (const card of cards) {
+      // 이름, 칸 이름·값 쌍(<dl>), 코스 버튼 순서다.
+      assert.ok(card.indexOf("<dl") > 0 && card.indexOf("<dl") < card.indexOf("</dl>") && card.indexOf("</dl>") < card.indexOf("A 60분 가능"));
+    }
+    assert.match(cards[0], /data-availability-row="t-1"[\s\S]*첫째[\s\S]*<dt[^>]*>근무표<\/dt>[\s\S]*<dt[^>]*>출근<\/dt>[\s\S]*<dt[^>]*>이 시각<\/dt>[\s\S]*<dt[^>]*>다음 예약<\/dt>/);
+  });
+
+  it("keeps only therapists whose check-in is entered, checked out included, and says so when nobody has checked in", () => {
+    const rows = [
+      row({ therapistId: "t-before", therapistName: "전", attendance: "before_check_in" }),
+      row({ therapistId: "t-in", therapistName: "중", attendance: "checked_in" }),
+      row({ therapistId: "t-out", therapistName: "후", attendance: "checked_out" })
+    ];
+    const attended = filterByAttendance(rows, false);
+    assert.deepEqual(attended.rows.map((entry) => entry.therapistId), ["t-in", "t-out"]);
+    assert.equal(attended.hiddenCount, 1);
+    assert.equal(attended.nobodyAttended, false);
+
+    const everyone = filterByAttendance(rows, true);
+    assert.deepEqual(everyone.rows.map((entry) => entry.therapistId), ["t-before", "t-in", "t-out"]);
+    assert.equal(everyone.hiddenCount, 1);
+
+    // 아무도 출근이 입력되지 않았으면(내일 이후 날짜, 아직 출근 전) 걸러 낼 근거가 없어 전체를 보인다.
+    const nobody = filterByAttendance([rows[0], row({ therapistId: "t-2", attendance: "before_check_in" })], false);
+    assert.equal(nobody.rows.length, 2);
+    assert.equal(nobody.hiddenCount, 0);
+    assert.equal(nobody.nobodyAttended, true);
+    assert.deepEqual(filterByAttendance([], false), { rows: [], hiddenCount: 0, nobodyAttended: false });
+  });
+
+  it("offers a checkbox for the hidden before-check-in therapists, and a note when nobody is entered", () => {
+    const filtered = renderView({
+      open: true,
+      rows: [row({ therapistId: "t-in", therapistName: "중", attendance: "checked_in" })],
+      attendanceFilter: { hiddenCount: 2, nobodyAttended: false, onShowAllChange: () => undefined, showAll: false }
+    });
+    assert.match(filtered, /<input[^>]*type="checkbox"/);
+    assert.doesNotMatch(filtered, /<input[^>]*checked=""/);
+    assert.match(filtered, /출근 전 Therapist 2명도 보기/);
+    assert.doesNotMatch(filtered, /출근 시각이 입력된 Therapist가 없어/);
+
+    const shown = renderView({
+      open: true,
+      rows: [row({ attendance: "checked_in" })],
+      attendanceFilter: { hiddenCount: 2, nobodyAttended: false, onShowAllChange: () => undefined, showAll: true }
+    });
+    assert.match(shown, /<input[^>]*checked=""[^>]*type="checkbox"|<input[^>]*type="checkbox"[^>]*checked=""/);
+
+    const nobody = renderView({
+      open: true,
+      rows: [row()],
+      attendanceFilter: { hiddenCount: 0, nobodyAttended: true, onShowAllChange: () => undefined, showAll: false }
+    });
+    assert.match(nobody, /출근 시각이 입력된 Therapist가 없어 전체를 보여 줍니다\./);
+    assert.doesNotMatch(nobody, /type="checkbox"/);
+
+    // 필터를 주지 않으면(기존 호출) 아무것도 더 보이지 않는다.
+    assert.doesNotMatch(renderView({ open: true, rows: [row()] }), /type="checkbox"|출근 시각이 입력된/);
+
+    const vietnamese = renderView({
+      locale: "vi",
+      open: true,
+      rows: [row({ attendance: "checked_in" })],
+      attendanceFilter: { hiddenCount: 3, nobodyAttended: false, onShowAllChange: () => undefined, showAll: false }
+    });
+    assert.match(vietnamese, /Hiện cả 3 Therapist chưa đến/);
+    const vietnameseNobody = renderView({
+      locale: "vi",
+      open: true,
+      rows: [row()],
+      attendanceFilter: { hiddenCount: 0, nobodyAttended: true, onShowAllChange: () => undefined, showAll: false }
+    });
+    assert.match(vietnameseNobody, /Chưa có Therapist nào được nhập giờ đến nên hiển thị tất cả\./);
   });
 
   // 가능 코스에서 고르면 원장 새 행이 아니라 빠른 예약 패널의 Therapist·코스를 채운다(티켓 20).

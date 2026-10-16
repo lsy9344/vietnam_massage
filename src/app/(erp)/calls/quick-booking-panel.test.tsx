@@ -510,7 +510,7 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
       {
         therapistId: "therapist-3",
         therapistName: "마사지사3",
-        attendance: "before_check_in",
+        attendance: "checked_in",
         shiftCheck: false,
         available: false,
         unavailableReason: "booked",
@@ -584,6 +584,53 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
     );
     assert.match(secondChosen, />마사지사2</);
     assert.match(secondChosen, /role="alert">Therapist 1과 Therapist 2는 서로 다른 사람이어야 합니다\.</);
+  });
+
+  it("Therapist·코스 단계: 출근 시각이 입력된 Therapist만 첫 목록과 두 번째 후보에 보이고, 출근 전은 체크하면 보인다", () => {
+    const baseRow = (id: string, name: string, attendance: TherapistAvailabilityRowDto["attendance"]): TherapistAvailabilityRowDto => ({
+      therapistId: id,
+      therapistName: name,
+      attendance,
+      shiftCheck: false,
+      available: true,
+      unavailableReason: null,
+      inServiceDisplayEnd: null,
+      freeFrom: null,
+      nextReservationTime: null,
+      freeMinutes: 90,
+      priorServiceEndCheck: false,
+      plannedWorkingDayStatus: "미입력",
+      courses: [{ courseId: "course-d", courseCode: "D", courseName: "D 2:1 90", durationMinutes: 90, verdict: "possible", requiresSecondTherapist: true }]
+    });
+    const rows = [baseRow("t-1", "출근자1", "checked_in"), baseRow("t-2", "출근자2", "checked_in"), baseRow("t-3", "미출근자", "before_check_in")];
+    const html = render(
+      "ko",
+      <TherapistStep
+        availabilityFailed={false}
+        availabilityPending={false}
+        availabilityRows={rows}
+        availabilityTime="15:00"
+        courseId="course-d"
+        courseLabel="D 2:1 90"
+        disabled={false}
+        fieldErrors={{}}
+        locale="ko"
+        onChoose={() => undefined}
+        onChooseSecond={() => undefined}
+        onClear={() => undefined}
+        onClearSecond={() => undefined}
+        onTimeChange={() => undefined}
+        options={options}
+        therapist1Id="t-1"
+        therapist2Label={null}
+        therapistLabel="출근자1"
+      />
+    );
+    assert.match(html, /출근자1/);
+    assert.match(html, /출근자2/);
+    assert.doesNotMatch(html, /미출근자/);
+    assert.match(html, /<input[^>]*type="checkbox"/);
+    assert.match(html, /출근 전 Therapist 1명도 보기/);
   });
 
   it("객실·메모 단계: 객실은 선택이고 메모는 500자까지다", () => {

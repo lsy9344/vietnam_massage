@@ -189,8 +189,7 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
 
     // 3단계: Therapist·코스. 가능 버튼은 Therapist와 코스만 채우고 아직 저장하지 않는다(스토리 59).
     // 두 번째 Therapist("T20 마사지사2")와 행이 섞이지 않게, 정확히 이 이름의 행 안에서 가능 버튼을 고른다.
-    const therapistCell = dialog.getByRole("rowheader", { name: "T20 마사지사", exact: true });
-    const therapistRow = therapistCell.locator("xpath=ancestor::tr[1]");
+    const therapistRow = dialog.locator("[data-availability-row]").filter({ has: page.getByText("T20 마사지사", { exact: true }) });
     const courseButton = therapistRow.getByRole("button", { name: /A 60분 가능/ });
     await expect(courseButton).toBeVisible({ timeout: 10_000 });
     await courseButton.click();
@@ -240,7 +239,7 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
     await dialog.getByRole("button", { name: "다음" }).click();
     await dialog.getByLabel("시간").selectOption("15:00");
     await dialog.getByRole("button", { name: "다음" }).click();
-    const therapist = dialog.getByRole("rowheader", { name: "T20 마사지사", exact: true }).locator("xpath=ancestor::tr[1]");
+    const therapist = dialog.locator("[data-availability-row]").filter({ has: page.getByText("T20 마사지사", { exact: true }) });
     await therapist.getByRole("button", { name: /A 60분 가능/ }).click();
     await dialog.getByRole("button", { name: "다음" }).click();
     await dialog.getByRole("button", { name: "다음" }).click();

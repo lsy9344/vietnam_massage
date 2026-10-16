@@ -220,7 +220,7 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
     await dialog.getByLabel("시간").selectOption("15:00");
     await dialog.getByRole("button", { name: "다음" }).click();
 
-    const therapistRow = dialog.getByRole("rowheader", { name: "T36 중심흐름 마사지사", exact: true }).locator("xpath=ancestor::tr[1]");
+    const therapistRow = dialog.locator("[data-availability-row]").filter({ has: page.getByText("T36 중심흐름 마사지사", { exact: true }) });
     const courseButton = therapistRow.getByRole("button", { name: /A 60분 가능/ });
     await expect(courseButton).toBeVisible({ timeout: 10_000 });
     await courseButton.click();
