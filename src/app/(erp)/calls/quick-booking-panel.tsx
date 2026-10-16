@@ -31,16 +31,17 @@ import {
 } from "@/app/(erp)/calls/quick-booking-draft";
 import { selectNowSlot } from "@/app/(erp)/calls/quick-booking-now-slot";
 import {
-  attendanceKey,
+  AvailabilityRow,
+  availabilityRowWarnings,
   filterByAttendance,
-  impossibleCourseLabel,
+  sortAvailabilityRows,
   TherapistAvailabilityView,
   type AvailabilityCourseChoice,
-  type AvailabilityCourseOverrideChoice
+  type AvailabilityCourseOverrideChoice,
+  type AvailabilityRowExpansion
 } from "@/app/(erp)/calls/therapist-availability-view";
 import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
 import { CUSTOMER_SEARCH_DEBOUNCE_MS, customerScreenHref } from "@/app/(erp)/customers/customer-search";
-import { scheduleStatusLabel } from "@/lib/i18n/codes";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { Locale } from "@/lib/i18n/config";
 import type { MessageKey } from "@/lib/i18n/types";
@@ -566,6 +567,8 @@ export function TherapistStep({
   const [pendingOverride, setPendingOverride] = useState<PendingTherapistOverride | null>(null);
   // 기본은 출근 시각이 입력된 Therapist만 보인다. 출근 전 Therapist는 체크하면 함께 보인다.
   const [showBeforeCheckIn, setShowBeforeCheckIn] = useState(false);
+  // 두 번째 후보 목록에서 펼친 줄(불가 칩의 이유, 경고 문구). 첫 목록과 따로 둔다.
+  const [secondExpanded, setSecondExpanded] = useState<{ therapistId: string; expansion: AvailabilityRowExpansion } | null>(null);
   const attendance = filterByAttendance(availabilityRows, showBeforeCheckIn);
 
   // 코스 정책상 두 번째 Therapist가 필요한지는 가능 코스 행이 코스마다 함께 알려준다(티켓 11). 같은 코스는
@@ -579,6 +582,7 @@ export function TherapistStep({
   // 같은 사람을 Therapist 1·2로 고르는 것은 저장 오류라, 후보 목록에서 이미 고른 첫 번째 Therapist는 뺀다.
   // 첫 번째 목록과 같은 출근 기준으로 거른다.
   const secondCandidates = attendance.rows.filter((row) => row.therapistId !== therapist1Id);
+  const secondReserveWarningSlot = secondCandidates.some((candidate) => availabilityRowWarnings(locale, candidate).length > 0);
 
   const overrideVerdict = pendingOverride ? (pendingOverride.kind === "first" ? pendingOverride.choice.verdict : pendingOverride.verdict) : null;
   const overrideTherapistName = pendingOverride?.therapistName ?? "";
@@ -648,35 +652,27 @@ export function TherapistStep({
           ) : (
             <>
               <p className="text-sm text-muted">{t("calls.quickBooking.therapist.secondUnset")}</p>
-              <ul className="grid gap-2">
-                {secondCandidates.map((row) => {
+              <ul className="grid">
+                {sortAvailabilityRows(secondCandidates, availabilityTime).map((row) => {
                   const course = row.courses.find((candidate) => candidate.courseId === courseId);
                   if (!course) return null;
-                  const verdict = course.verdict;
                   return (
-                    <li className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border px-3 py-2" key={row.therapistId}>
-                      <span className="text-sm">
-                        <span className="font-semibold text-foreground">{row.therapistName}</span>{" "}
-                        <span className="text-muted">
-                          {scheduleStatusLabel(locale, row.plannedWorkingDayStatus)} · {t(attendanceKey[row.attendance])}
-                        </span>
-                      </span>
-                      {verdict === "possible" ? (
-                        <Button className="h-auto min-h-11 max-w-full whitespace-normal text-left" disabled={disabled} onClick={() => onChooseSecond(row.therapistId)} type="button" variant="secondary">
-                          {t("calls.availability.coursePossible", { code: course.courseCode, minutes: course.durationMinutes })}
-                        </Button>
-                      ) : (
-                        <Button
-                          className="h-auto min-h-11 max-w-full whitespace-normal text-left border-warning text-warning hover:bg-warning-soft"
-                          disabled={disabled}
-                          onClick={() => setPendingOverride({ kind: "second", therapistId: row.therapistId, therapistName: row.therapistName, verdict })}
-                          type="button"
-                          variant="secondary"
-                        >
-                          {impossibleCourseLabel(locale, course)} · {t("calls.quickBooking.therapist.overrideAssign")}
-                        </Button>
-                      )}
-                    </li>
+                    <AvailabilityRow
+                      courses={[course]}
+                      disabled={disabled}
+                      expansion={secondExpanded?.therapistId === row.therapistId ? secondExpanded.expansion : null}
+                      key={row.therapistId}
+                      locale={locale}
+                      onChoose={(choice) => onChooseSecond(choice.therapistId)}
+                      onExpansionChange={(expansion) => setSecondExpanded(expansion ? { therapistId: row.therapistId, expansion } : null)}
+                      onOverride={(choice) =>
+                        setPendingOverride({ kind: "second", therapistId: row.therapistId, therapistName: row.therapistName, verdict: choice.verdict })
+                      }
+                      reserveWarningSlot={secondReserveWarningSlot}
+                      row={row}
+                      second
+                      time={availabilityTime}
+                    />
                   );
                 })}
               </ul>

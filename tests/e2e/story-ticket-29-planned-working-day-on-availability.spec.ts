@@ -9,6 +9,8 @@ import { argon2idOptions, login, setLocaleCookie } from "./support/auth";
  * 티켓 29: 가능 코스에 근무 예정 표시(F02, 스토리 12–13, 60, 104, V07). 가능 코스 행의 근무 예정 값
  * 자체는 service-call-service.test.ts(메모리 Prisma)가 확인했으므로, 여기서는 실제 화면(빠른 예약의
  * Therapist·코스 단계, 두 Therapist 모두)과 두 언어 문구, 그리고 휴무여도 저장이 막히지 않는 것을 확인한다.
+ * 콜 원장 흐름 재구성 티켓 01(스펙 D1·D5)부터 가능 코스는 매니저 한 줄이라 근무표·출근 칸이 줄에서 빠졌다.
+ * 근무 예정은 서비스 값으로만 남고, 휴무여도 칩과 저장이 막히지 않는다는 점을 그대로 확인한다.
  */
 const account = { accountId: "t29_counter", password: "Ticket29!counter", staffCode: "E2E-T29-COUNTER", sortOrder: 92901 };
 const today = businessTodayIsoDate();
@@ -196,7 +198,7 @@ test.describe("티켓 29 가능 코스의 근무 예정 표시", () => {
     await prisma.$disconnect();
   });
 
-  test("휴무인 첫 Therapist도 코스 버튼이 그대로 보이고, 근무 예정인 두 번째 Therapist도 가능 코스 목록에 근무 예정이 함께 보이며, 둘 다 배정해도 저장이 막히지 않는다", async ({ page }) => {
+  test("휴무인 첫 Therapist도 코스 칩이 그대로 보이고, 근무 예정인 두 번째 Therapist와 함께 배정해도 저장이 막히지 않는다", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     const memo = `T29 휴무도 저장 ${Date.now().toString(36)}`;
     await login(page, account.accountId, account.password);
@@ -205,23 +207,20 @@ test.describe("티켓 29 가능 코스의 근무 예정 표시", () => {
 
     await goToTherapistStep(page, dialog, memo);
 
-    // 첫 Therapist 목록: 휴무인 마사지사1도 "근무표" 칸에 휴무가 보이고, 코스 버튼은 꺼지지 않는다.
+    // 첫 Therapist 목록: 휴무인 마사지사1도 코스 칩이 꺼지지 않는다. 근무표 칸은 한 줄 목록에서 빠졌다(D1).
     const row1 = dialog.locator("[data-availability-row]").filter({ has: page.getByText("T29 마사지사1", { exact: true }) });
-    await expect(row1.getByText("휴무", { exact: true })).toBeVisible();
+    await expect(row1.getByText("휴무", { exact: true })).toHaveCount(0);
     await row1.getByRole("button", { name: /T29D 90분 가능/ }).click();
     await expect(dialog.getByText("T29 2인 · T29 마사지사1")).toBeVisible();
 
-    // 두 번째 Therapist 후보 목록: 근무 예정인 마사지사2가 그 값과 함께 보인다.
+    // 두 번째 Therapist 후보 목록도 같은 한 줄 모양이다(D5). 근무 예정인 마사지사2를 고른다.
     const secondHeading = dialog.getByRole("heading", { name: "두 번째 Therapist" });
     await expect(secondHeading).toBeVisible();
     const secondSection = secondHeading.locator("xpath=ancestor::div[1]");
     const candidate2 = secondSection.getByText("T29 마사지사2").locator("xpath=ancestor::li[1]");
-    await expect(candidate2.getByText("근무 예정", { exact: false })).toBeVisible();
+    await expect(candidate2.getByText("근무 예정", { exact: false })).toHaveCount(0);
     await candidate2.getByRole("button", { name: /T29D 90분 가능/ }).click();
     await expect(secondSection.getByText("T29 마사지사2")).toBeVisible();
-
-    // 근무 예정은 보장이 아니라는 안내가 패널에 함께 있다.
-    await expect(dialog.getByText("근무표의 근무 예정은 그 시각까지 근무한다는 보장이 아닙니다.")).toBeVisible();
 
     await dialog.getByRole("button", { name: "다음" }).click();
     await dialog.getByLabel("객실").selectOption({ label: "T29 호실" });
@@ -238,7 +237,7 @@ test.describe("티켓 29 가능 코스의 근무 예정 표시", () => {
     expect(roles).toContainEqual(["THERAPIST_2", therapist2Id]);
   });
 
-  test("베트남어 화면에서는 근무표 칸 제목과 상태, 보장이 아니라는 안내가 번역된다", async ({ page }) => {
+  test("베트남어 화면에서는 한 줄의 상태와 코스 칩이 번역되고 근무표 칸은 없다", async ({ page }) => {
     await login(page, account.accountId, account.password);
     await setLocaleCookie(page, "vi");
     await openQuickBooking(page, monthId, today);
@@ -246,9 +245,10 @@ test.describe("티켓 29 가능 코스의 근무 예정 표시", () => {
 
     await goToTherapistStep(page, dialog, `T29 vi ${Date.now().toString(36)}`);
 
-    await expect(dialog.getByText("Lịch làm việc", { exact: true }).first()).toBeVisible();
     const row1 = dialog.locator("[data-availability-row]").filter({ has: page.getByText("T29 마사지사1", { exact: true }) });
-    await expect(row1.getByText("Nghỉ", { exact: true })).toBeVisible();
-    await expect(dialog.getByText("Dự kiến làm việc trong lịch không đảm bảo có mặt đến giờ đó.")).toBeVisible();
+    await expect(row1.getByRole("button", { name: "T29D 90 phút, có thể" })).toBeVisible();
+    await expect(row1).toContainText("Có thể");
+    await expect(dialog.getByText("Lịch làm việc", { exact: true })).toHaveCount(0);
+    await expect(row1.getByText("Nghỉ", { exact: true })).toHaveCount(0);
   });
 });

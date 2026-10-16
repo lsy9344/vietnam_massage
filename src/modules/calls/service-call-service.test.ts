@@ -34,6 +34,7 @@ import {
   type CustomerVisitHistoryRowDto,
   type ServiceCallRowDto
 } from "@/modules/calls/service-call-service";
+import { createCourse, reactivateCourse } from "@/modules/masters/course-service";
 
 function dbDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
@@ -369,8 +370,9 @@ function createMemoryPrisma() {
 
   const client: any = {
     operatingMonth: {
-      async findMany() {
-        return [...operatingMonths.values()].sort((a, b) => b.monthKey.localeCompare(a.monthKey));
+      async findMany({ orderBy }: any = {}) {
+        const ascending = Array.isArray(orderBy) && orderBy[0]?.monthKey === "asc";
+        return [...operatingMonths.values()].sort((a, b) => (ascending ? a.monthKey.localeCompare(b.monthKey) : b.monthKey.localeCompare(a.monthKey)));
       },
       async findUnique({ where }: any) {
         return operatingMonths.get(where.id) ?? null;
@@ -386,13 +388,34 @@ function createMemoryPrisma() {
     },
     course: {
       async findUnique({ where }: any) {
+        if (where.code) return [...courses.values()].find((course) => course.code === where.code) ?? null;
         return courses.get(where.id) ?? null;
       },
       async findMany() {
         return [...courses.values()].sort((a, b) => a.code.localeCompare(b.code));
+      },
+      // 코스 기준정보(다시 사용, 새 코스 추가)가 같은 클라이언트로 쓰는 경로.
+      async create({ data }: any) {
+        const record = { id: `course-${data.code.toLowerCase()}`, ...data, createdAt, updatedAt };
+        courses.set(record.id, record);
+        return record;
+      },
+      async updateMany({ where, data }: any) {
+        const record = courses.get(where.id);
+        if (!record) return { count: 0 };
+        courses.set(where.id, { ...record, ...data });
+        return { count: 1 };
       }
     },
     coursePolicy: {
+      async create({ data }: any) {
+        const record = { id: `policy-${data.courseId}-${coursePolicies.size}`, ...data, createdAt, updatedAt };
+        coursePolicies.set(record.id, record);
+        return record;
+      },
+      async findUnique({ where }: any) {
+        return coursePolicies.get(where.id) ?? null;
+      },
       async findMany({ where }: any = {}) {
         return [...coursePolicies.values()].filter(
           (policy) => matchesFilter(policy.courseId, where?.courseId) && (where?.isActive === undefined || policy.isActive === where.isActive)
@@ -3368,6 +3391,46 @@ function courseVerdict(rows: Awaited<ReturnType<typeof listTherapistAvailability
 }
 
 describe("therapist availability", () => {
+  // 코스 기준정보에서 다시 켠 코스와 새로 더한 코스는 가능 코스, 빠른 예약·원장 코스 선택에 바로 나온다(스펙 D9).
+  it("shows a course turned back on and a newly added course in availability and the course options right away", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCourse(prismaClient, { id: "course-b", code: "B", name: "B 90", durationMinutes: 90, isActive: false });
+    const courseIds = async () => ({
+      availability: (await availabilityAt(prismaClient, "15:00")).find((row) => row.therapistId === "therapist-1")?.courses.map((course) => course.courseId),
+      options: (await listServiceCallFormOptions({ operatingMonthId: "month-2026-06", prismaClient })).courses.map((course) => course.value)
+    });
+
+    const before = await courseIds();
+    assert.equal(before.availability?.includes("course-b"), false);
+    assert.equal(before.options.includes("course-b"), false);
+
+    const june = new Date("2026-06-15T05:00:00.000Z");
+    await reactivateCourse({ actorId: "admin-1", courseId: "course-b", now: june, prismaClient });
+    const added = await createCourse({
+      actorId: "admin-1",
+      code: "F",
+      name: "F 75",
+      durationMinutes: 75,
+      basePrice: 1700000,
+      requiresSecondTherapist: false,
+      tvDisplayName: "F 75",
+      effectiveFromMonth: "2026-06",
+      effectiveToMonth: "2026-06",
+      now: june,
+      prismaClient
+    });
+
+    const after = await courseIds();
+    assert.ok(after.availability?.includes("course-b"));
+    assert.ok(after.availability?.includes(added.id));
+    assert.ok(after.options.includes("course-b"));
+    assert.ok(after.options.includes(added.id));
+    // 새 코스는 아직 Therapist 수당이 없어 "이 코스 불가"로 나온다. 칩 문구는 코드와 시간이다.
+    const rows = await availabilityAt(prismaClient, "15:00");
+    const newCourse = rows.find((row) => row.therapistId === "therapist-1")?.courses.find((course) => course.courseId === added.id);
+    assert.deepEqual(newCourse && { code: newCourse.courseCode, minutes: newCourse.durationMinutes, verdict: newCourse.verdict }, { code: "F", minutes: 75, verdict: "rate_missing" });
+  });
+
   it("makes 15:00 unavailable until 15:30 when a 14:00 call is 90 minutes", async () => {
     const prismaClient = createMemoryPrisma();
     addAvailabilityCall(prismaClient, {

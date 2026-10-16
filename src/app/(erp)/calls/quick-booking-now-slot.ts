@@ -37,7 +37,7 @@ export function selectNowSlot(activeSlots: ReadonlyArray<{ value: string }>, now
   return chosen;
 }
 
-function clockMinutes(value: string): number {
+export function clockMinutes(value: string): number {
   const [hour, minute] = value.split(":").map(Number);
   return (hour ?? 0) * 60 + (minute ?? 0);
 }

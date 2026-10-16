@@ -84,7 +84,7 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
       });
     }
 
-    // 공용 마스터 시드는 객실/직원/코드/시간 슬롯만 만든다. 이 스펙이 검증하는 기본 A~E 코스와
+    // 공용 마스터 시드는 객실/직원/코드/시간 슬롯만 만든다. 이 스펙이 검증하는 기본 A·C·D 코스와
     // 정책·수당·인센 규칙은 여기서 직접 보장한다(멱등).
     const administrator = await (prisma as any).userAccount.findUniqueOrThrow({
       where: { accountId: "story18_administrator" },
@@ -129,7 +129,7 @@ test.describe("Story 1.8 코스 마스터와 수당/인센 정책 관리", () =>
     await expect(page.getByRole("heading", { name: "코스/수당/인센", level: 1 })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "설정 화면" }).getByRole("link", { name: "코스·수당" })).toHaveAttribute("aria-current", "page");
     // 코스 목록은 읽기 전용 표다. TV 표시명은 그 표의 칸 글자다.
-    for (const tvLabel of ["A 누루60", "C 때밀이90", "D 2:1 90", "E 풀코스120"]) {
+    for (const tvLabel of ["A 누루60", "C 때밀이90", "D 2:1 90"]) {
       await expect(page.getByRole("cell", { name: tvLabel, exact: true }).first()).toBeVisible();
     }
     // "마사지사2 필요" 열의 D 코스 값.

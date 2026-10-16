@@ -473,7 +473,7 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
     assert.match(chosen, /role="alert">코스를 선택하세요\.</);
   });
 
-  it("Therapist·코스 단계: 두 명 코스는 두 번째 Therapist를 따로 고르고, 시간 부족·수당 없음은 경고 확인 후 배정 버튼이다", () => {
+  it("Therapist·코스 단계: 두 명 코스는 두 번째 Therapist를 첫 목록과 같은 한 줄 모양으로 따로 고르고, 시간 부족·수당 없음은 불가 칩이다", () => {
     const rows: TherapistAvailabilityRowDto[] = [
       {
         therapistId: "therapist-1",
@@ -546,16 +546,16 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
       />
     );
     assert.match(noSecondYet, /두 번째 Therapist/);
-    // 두 번째 후보 목록(<ul>...</ul>)만 떼어 본다. 이미 고른 첫 번째 Therapist(therapist-1)는 거기서 빠진다.
-    const secondCandidateList = noSecondYet.slice(noSecondYet.indexOf("<ul"), noSecondYet.lastIndexOf("</ul>"));
-    assert.doesNotMatch(secondCandidateList, /마사지사1/);
-    // 시간 부족·수당 없음 후보는 "가능"과 다른 문구의 경고 확인 버튼이다.
-    assert.match(secondCandidateList, /마사지사2[\s\S]*?D 90분 · 시간 부족 · 경고 확인 후 배정/);
-    assert.match(secondCandidateList, /마사지사3[\s\S]*?D 90분 · 이 코스 불가 · 경고 확인 후 배정/);
-    assert.doesNotMatch(secondCandidateList, /마사지사2[\s\S]*?D 90분 가능/);
-    // 두 번째 Therapist 후보도 근무표(27)의 근무 예정을 함께 보여 준다(티켓 29). 휴무라도 후보에서 빠지지 않는다.
-    assert.match(secondCandidateList, /마사지사2[\s\S]*?근무 예정/);
-    assert.match(secondCandidateList, /마사지사3[\s\S]*?휴무/);
+    // 두 번째 후보 줄만 떼어 본다. 이미 고른 첫 번째 Therapist(therapist-1)는 거기서 빠진다.
+    const secondLine = (therapistId: string) => noSecondYet.split("<li").find((part) => part.includes(`data-second-therapist-row="${therapistId}"`)) ?? "";
+    assert.equal(secondLine("therapist-1"), "");
+    // 두 번째 후보도 첫 목록과 같은 한 줄 모양이다(D5): 이름 · 상태 · 고른 코스의 칩 하나. 근무표·출근 칸은 없다.
+    assert.match(secondLine("therapist-2"), />마사지사2<[\s\S]*가능[\s\S]*aria-expanded="false"[^>]*aria-label="D 90분 · 시간 부족"/);
+    assert.match(secondLine("therapist-3"), />마사지사3<[\s\S]*불가 · 16:00부터[\s\S]*aria-label="D 90분 · 이 코스 불가"/);
+    assert.doesNotMatch(secondLine("therapist-2"), /D 90분 가능/);
+    assert.doesNotMatch(secondLine("therapist-2") + secondLine("therapist-3"), /근무 예정|휴무|출근/);
+    // 칩 id가 첫 목록의 같은 Therapist 줄과 겹치지 않는다.
+    assert.doesNotMatch(noSecondYet, /data-second-therapist-row="therapist-1"/);
 
     const secondChosen = render(
       "ko",

@@ -13,12 +13,14 @@ import type {
   TherapistCourseRateDto
 } from "@/modules/masters/course-service";
 import {
+  createCourseAction,
   createCoursePolicyAction,
   createOpsDailyIncentiveRuleAction,
   createOpsMonthlyIncentiveRuleAction,
   createTherapistCourseRateAction,
   deactivateCourseAction,
   endTherapistCourseRateAction,
+  reactivateCourseAction,
   updateCoursePolicyAction,
   updateOpsDailyIncentiveRuleAction,
   updateOpsMonthlyIncentiveRuleAction,
@@ -41,11 +43,12 @@ function periodLabel(from: string, to: string | null, openEnded: string) {
 
 // 정책 저장 실패는 필드별 이유(예: "적용 종료월은 시작월보다 빠를 수 없습니다.")를 칸 아래에 보여야
 // 운영자가 무엇을 고쳐야 하는지 알 수 있다. 폼 전체 오류만 보여 주면 원인을 알 수 없다.
-function PolicyInputs({ course, policy, monthKey, state }: { course: CourseDto; policy: CoursePolicyDto | null; monthKey: string; state: CourseActionState }) {
+// course가 없으면 새 코스 추가 폼의 정책 칸이다(코스 id 없이 코드와 함께 보낸다).
+function PolicyInputs({ course, policy, monthKey, state }: { course: CourseDto | null; policy: CoursePolicyDto | null; monthKey: string; state: CourseActionState }) {
   const t = useT();
   return (
     <>
-      <input name="courseId" type="hidden" value={course.id} />
+      {course ? <input name="courseId" type="hidden" value={course.id} /> : null}
       <div className="grid gap-4 min-[1200px]:grid-cols-2">
         <TextField defaultValue={policy?.name ?? ""} label={t("masters.courses.field.courseName")} name="name" required state={state} />
         <TextField defaultValue={policy?.tvDisplayName ?? ""} label={t("masters.courses.field.tvDisplayName")} name="tvDisplayName" required state={state} />
@@ -55,7 +58,7 @@ function PolicyInputs({ course, policy, monthKey, state }: { course: CourseDto; 
         <TextField defaultValue={policy?.effectiveToMonth ?? ""} hint={t("masters.courses.toMonthHint")} label={t("masters.courses.field.toMonth")} name="effectiveToMonth" pattern={monthPattern} placeholder="YYYY-MM" state={state} />
       </div>
       <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-foreground">
-        <input className="h-5 w-5 accent-brand" defaultChecked={policy?.requiresSecondTherapist ?? course.code === "D"} name="requiresSecondTherapist" type="checkbox" value="true" />
+        <input className="h-5 w-5 accent-brand" defaultChecked={policy?.requiresSecondTherapist ?? course?.code === "D"} name="requiresSecondTherapist" type="checkbox" value="true" />
         {t("masters.courses.secondTherapistRequired")}
       </label>
     </>
@@ -92,10 +95,6 @@ function CourseDeactivateForm({ course }: { course: CourseDto }) {
   const t = useT();
   const [state, formAction, pending] = useActionState<CourseActionState, FormData>(deactivateCourseAction, null);
 
-  if (!course.isActive) {
-    return <p className="text-sm text-muted">{t("masters.common.alreadyInactive")}</p>;
-  }
-
   return (
     <form action={formAction} className="grid gap-3">
       <input name="courseId" type="hidden" value={course.id} />
@@ -105,7 +104,43 @@ function CourseDeactivateForm({ course }: { course: CourseDto }) {
   );
 }
 
-function CoursePanel({ course, monthKey, onClose }: { course: CourseDto; monthKey: string; onClose: () => void }) {
+// 비활성 코스를 다시 켠다(스펙 D9). 그달(currentMonthKey) 정책이 없으면 정책 칸을 함께 받는다.
+function CourseReactivateForm({ course, currentMonthKey, hasCurrentPolicy }: { course: CourseDto; currentMonthKey: string; hasCurrentPolicy: boolean }) {
+  const t = useT();
+  const [state, formAction, pending] = useActionState<CourseActionState, FormData>(reactivateCourseAction, null);
+
+  return (
+    <form action={formAction} className="grid gap-4">
+      <p className="text-sm text-muted">{t("masters.courses.reactivateNote")}</p>
+      {hasCurrentPolicy ? (
+        <input name="courseId" type="hidden" value={course.id} />
+      ) : (
+        <>
+          <p className="text-sm font-semibold text-warning">
+            <span aria-hidden="true">{"▲︎ "}</span>
+            {t("masters.courses.reactivatePolicyNote", { monthKey: currentMonthKey })}
+          </p>
+          <PolicyInputs course={course} monthKey={currentMonthKey} policy={null} state={state} />
+        </>
+      )}
+      <SaveRow label={t("masters.courses.reactivate")} pending={pending} state={state} />
+    </form>
+  );
+}
+
+function CoursePanel({
+  course,
+  currentMonthKey,
+  hasCurrentPolicy,
+  monthKey,
+  onClose
+}: {
+  course: CourseDto;
+  currentMonthKey: string;
+  hasCurrentPolicy: boolean;
+  monthKey: string;
+  onClose: () => void;
+}) {
   const t = useT();
   const locale = useLocale();
   const policy = course.currentPolicy;
@@ -137,9 +172,15 @@ function CoursePanel({ course, monthKey, onClose }: { course: CourseDto; monthKe
             <DetailRow label={t("masters.common.updatedAt")} value={masterDateTime(locale, course.updatedAt)} />
           </dl>
         </PanelSection>
-        <PanelSection title={t("masters.common.deactivateTitle")}>
-          <CourseDeactivateForm course={course} />
-        </PanelSection>
+        {course.isActive ? (
+          <PanelSection title={t("masters.common.deactivateTitle")}>
+            <CourseDeactivateForm course={course} />
+          </PanelSection>
+        ) : (
+          <PanelSection title={t("masters.courses.reactivateTitle")}>
+            <CourseReactivateForm course={course} currentMonthKey={currentMonthKey} hasCurrentPolicy={hasCurrentPolicy} />
+          </PanelSection>
+        )}
       </div>
     </SidePanel>
   );
@@ -319,6 +360,40 @@ function CreateRulePanel({ kind, monthKey, onCreated }: { kind: "daily" | "month
   );
 }
 
+// 새 코스 추가(스펙 D9): 코드와 첫 정책을 함께 만든다. 만든 뒤 그 코스의 패널을 연다.
+function CreateCoursePanel({ monthKey, onCreated }: { monthKey: string; onCreated: (item: CourseScreenItem) => void }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const label = t("masters.courses.add");
+  const [state, formAction, pending] = useActionState<CourseActionState, FormData>(async (previous, formData) => {
+    const result = await createCourseAction(previous, formData);
+    if (result?.ok) {
+      setOpen(false);
+      onCreated({ kind: "course", courseId: result.data.id });
+    }
+    return result;
+  }, null);
+
+  return (
+    <ModalPanel description={t("masters.courses.addDescription")} onOpenChange={setOpen} open={open} title={label} trigger={<Button variant="secondary">{label}</Button>}>
+      <form action={formAction} className="grid gap-4">
+        <TextField
+          autoCapitalize="characters"
+          hint={t("masters.courses.codeHint")}
+          label={t("masters.courses.field.code")}
+          maxLength={4}
+          name="code"
+          pattern="[A-Za-z0-9]{1,4}"
+          required
+          state={state}
+        />
+        <PolicyInputs course={null} monthKey={monthKey} policy={null} state={state} />
+        <SaveRow label={label} pending={pending} primary state={state} />
+      </form>
+    </ModalPanel>
+  );
+}
+
 function RateMatrix({
   courses,
   rates,
@@ -398,10 +473,13 @@ function RateMatrix({
 
 /**
  * 코스·수당·인센: 코스 목록, 마사지사 × 코스 수당 표, 운영팀 일·월 인센 규칙. 고른 코스·수당 칸·규칙의 패널에서
- * 변경 영향을 먼저 보고 고친다. 코스 추가와 적용월 선택은 데이터 계약에 없다(기준 적용월은 페이지가 정한다).
+ * 변경 영향을 먼저 보고 고친다. 새 코스 추가와 비활성 코스 다시 사용은 관리자만 한다(스펙 D9). 적용월 선택은 없다
+ * (기준 적용월은 페이지가 정한다).
  */
 export function CoursePolicyManager({
   courses,
+  coursesWithCurrentPolicy,
+  currentMonthKey,
   dailyRules,
   monthlyRules,
   monthKey,
@@ -410,6 +488,10 @@ export function CoursePolicyManager({
   initialItem
 }: {
   courses: CourseDto[];
+  /** 그달(currentMonthKey)에 적용되는 정책이 있는 코스 id. 다시 사용할 때 정책 칸을 받을지 정한다. */
+  coursesWithCurrentPolicy: string[];
+  /** 다시 사용·새 코스 추가의 그달: 오늘이 속한 달(스펙 D9). */
+  currentMonthKey: string;
   dailyRules: OpsDailyIncentiveRuleDto[];
   monthlyRules: OpsMonthlyIncentiveRuleDto[];
   monthKey: string;
@@ -429,7 +511,17 @@ export function CoursePolicyManager({
   let panel = null;
   if (selected?.kind === "course") {
     const course = courses.find((candidate) => candidate.id === selected.courseId);
-    if (course) panel = <CoursePanel course={course} monthKey={monthKey} onClose={close} />;
+    if (course) {
+      panel = (
+        <CoursePanel
+          course={course}
+          currentMonthKey={currentMonthKey}
+          hasCurrentPolicy={coursesWithCurrentPolicy.includes(course.id)}
+          monthKey={monthKey}
+          onClose={close}
+        />
+      );
+    }
   } else if (selected?.kind === "rate") {
     const course = courses.find((candidate) => candidate.id === selected.courseId);
     const therapist = therapists.find((candidate) => candidate.id === selected.therapistId);
@@ -447,7 +539,12 @@ export function CoursePolicyManager({
   return (
     <MasterSplit hint={t("masters.common.panelHint")} panel={panel} panelRef={panelRef}>
       <section aria-labelledby="course-list-title" className="grid gap-3">
-        <MasterSectionHeading count={t("masters.common.count", { count: courses.length })} id="course-list-title" title={t("masters.courses.baseCourseMaster")} />
+        <MasterSectionHeading
+          action={<CreateCoursePanel monthKey={currentMonthKey} onCreated={(item) => choose(item)} />}
+          count={t("masters.common.count", { count: courses.length })}
+          id="course-list-title"
+          title={t("masters.courses.baseCourseMaster")}
+        />
         <MasterTable
           head={
             <>

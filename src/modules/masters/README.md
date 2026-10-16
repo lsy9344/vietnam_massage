@@ -74,7 +74,7 @@ None. This module is the source of reference data for other modules.
 코스/수당/인센 정책은 콜 계산, 정산, 월마감이 공유할 코스 고유 ID와 적용월 정책 이력을 소유한다.
 
 - `Course` owns stable identity: `Course.id`, stable code `A` through `E`, and `isActive`. Display values and prices live in `CoursePolicy`. `B` exists only as a legacy inactive row (its historical calls still reference `Course.code="B"`); the default seeds no longer include it, and seeding does not revive it.
-- `ensureDefaultCoursesAndPolicies()` prepares default A/C/D/E courses, current course policies, therapist course rates, and operations daily/monthly incentive rules idempotently.
+- `ensureDefaultCoursesAndPolicies()` prepares default A/C/D courses (B and E stay inactive; reactivate them from the course master), current course policies, therapist course rates, and operations daily/monthly incentive rules idempotently.
 - Default course policies preserve workbook values: A 60 minutes 1,500,000 VND, C 90 minutes 2,000,000 VND, D 90 minutes 3,200,000 VND, E 120 minutes 3,000,000 VND. D has `requiresSecondTherapist=true`; A/C/E are false.
 - `TherapistCourseRate` seeds by stable `Employee.staffCode` from `THR-001` through `THR-050`, then stores `Employee.id` and `Course.id`. `THR-001` through `THR-004` get A 700,000, C 900,000, D/E 0; `THR-005` through `THR-050` get explicit 0 values for A, C, D, E.
 - Operations daily incentive defaults are 30/40/50 calls with 50,000/100,000/200,000 VND personal amounts.

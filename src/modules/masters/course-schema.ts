@@ -12,6 +12,7 @@ export type DefaultCourseSeed = {
   tvDisplayName: string;
 };
 
+// B코스(ADR 0006)와 E코스(스펙 D8)는 지금 하지 않아 기본 시드에서 뺐다. 다시 하려면 코스 기준정보의 "다시 사용"으로 켠다.
 export const defaultCourseSeeds: DefaultCourseSeed[] = [
   {
     code: "A",
@@ -36,14 +37,6 @@ export const defaultCourseSeeds: DefaultCourseSeed[] = [
     basePrice: 3200000,
     requiresSecondTherapist: true,
     tvDisplayName: "D 2:1 90"
-  },
-  {
-    code: "E",
-    name: "120분 E코스 풀코스 패키지",
-    durationMinutes: 120,
-    basePrice: 3000000,
-    requiresSecondTherapist: false,
-    tvDisplayName: "E 풀코스120"
   }
 ];
 
@@ -119,6 +112,27 @@ export const updateCoursePolicySchema = coursePolicyBaseSchema.omit({ courseId: 
 export const deactivateCourseSchema = z.object({
   courseId: idSchema
 });
+
+// 코스 다시 사용(스펙 D9). 그달 정책이 없을 때만 policy를 함께 받는다.
+export const coursePolicyFieldsSchema = coursePolicyBaseSchema.omit({ courseId: true }).superRefine(validateMonthRange);
+
+export const reactivateCourseSchema = z.object({
+  courseId: idSchema,
+  policy: coursePolicyFieldsSchema.optional()
+});
+
+// 새 코스 추가(스펙 D9): 코드와 첫 정책. 코드는 대문자로 맞춘다. A–E 밖의 코드도 받지만 정산·마감·대시보드의
+// 코스별 칸과 대시보드 코스 비율은 A–E만 센다(정산·마감의 직원 합계에는 들어간다).
+export const createCourseSchema = coursePolicyBaseSchema
+  .omit({ courseId: true })
+  .extend({
+    code: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z0-9]{1,4}$/, "코스 코드는 영문 대문자·숫자 1–4자여야 합니다.")
+  })
+  .superRefine(validateMonthRange);
 
 const therapistCourseRateBaseSchema = z.object({
   therapistId: idSchema,

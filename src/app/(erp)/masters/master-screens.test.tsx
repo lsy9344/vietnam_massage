@@ -237,10 +237,12 @@ describe("코스·수당", () => {
     updatedAt: stamp
   };
 
-  function renderCourses(initialItem: string | null) {
+  function renderCourses(initialItem: string | null, courses: CourseDto[] = [course], coursesWithCurrentPolicy = courses.map((item) => item.id)) {
     return render(
       <CoursePolicyManager
-        courses={[course]}
+        courses={courses}
+        coursesWithCurrentPolicy={coursesWithCurrentPolicy}
+        currentMonthKey="2026-10"
         dailyRules={[]}
         initialItem={initialItem}
         monthKey="2026-06"
@@ -263,6 +265,43 @@ describe("코스·수당", () => {
     assert.ok(impact > 0);
     assert.ok(html.indexOf(`>${t("ko", "masters.courses.saveCurrentPolicy")}<`) > impact);
     assert.ok(html.indexOf(`>${t("ko", "masters.courses.saveNewPolicyHistory")}<`) > impact);
+  });
+
+  // 코스 다시 사용과 새 코스 추가(콜 원장 흐름 재구성 스펙 D9).
+  it("코스 목록 위에 새 코스 추가 버튼이 있다", () => {
+    const html = renderCourses(null);
+    assert.match(html, new RegExp(`<button[^>]*>${t("ko", "masters.courses.add")}</button>`));
+    assert.match(render(<CoursePolicyManager courses={[course]} coursesWithCurrentPolicy={[course.id]} currentMonthKey="2026-10" dailyRules={[]} initialItem={null} monthKey="2026-06" monthlyRules={[]} therapistRates={[]} therapists={[]} />, "vi"), new RegExp(`>${t("vi", "masters.courses.add")}<`));
+  });
+
+  it("비활성 코스 패널은 비활성 처리 대신 다시 사용을 보이고, 그달 정책이 있으면 정책 칸 없이 켠다", () => {
+    const inactive: CourseDto = { ...course, id: "course-b", code: "B", isActive: false, currentPolicy: { ...course.currentPolicy!, id: "policy-b", courseId: "course-b" } };
+    const html = renderCourses(courseItemKey({ kind: "course", courseId: "course-b" }), [course, inactive]);
+    assert.ok(html.includes(`>${t("ko", "masters.courses.reactivate")}<`));
+    assert.ok(html.includes(t("ko", "masters.courses.reactivateNote")));
+    assert.ok(!html.includes(`>${t("ko", "masters.common.deactivate")}<`));
+    const reactivateForm = html.slice(html.lastIndexOf("<form", html.indexOf(t("ko", "masters.courses.reactivateNote"))), html.indexOf("</form>", html.indexOf(t("ko", "masters.courses.reactivateNote"))));
+    assert.match(reactivateForm, /name="courseId"[^>]*value="course-b"/);
+    assert.doesNotMatch(reactivateForm, /name="durationMinutes"/);
+  });
+
+  // 그달은 오늘이 속한 달(여기서는 2026-10)이다. 기준 적용월(2026-06) 정책이 있어도 그달 정책이 없으면 함께 받는다.
+  it("그달 정책이 없는 비활성 코스는 다시 사용할 때 정책을 함께 받는다", () => {
+    const inactive: CourseDto = { ...course, id: "course-e", code: "E", isActive: false };
+    const html = renderCourses(courseItemKey({ kind: "course", courseId: "course-e" }), [course, inactive], [course.id]);
+    const note = t("ko", "masters.courses.reactivatePolicyNote", { monthKey: "2026-10" });
+    assert.ok(html.includes(note));
+    const reactivateForm = html.slice(html.lastIndexOf("<form", html.indexOf(note)), html.indexOf("</form>", html.indexOf(note)));
+    for (const field of ["name", "tvDisplayName", "durationMinutes", "basePrice", "effectiveFromMonth", "effectiveToMonth", "requiresSecondTherapist"]) {
+      assert.match(reactivateForm, new RegExp(`name="${field}"`));
+    }
+    assert.match(reactivateForm, /name="effectiveFromMonth"[^>]*value="2026-10"|value="2026-10"[^>]*name="effectiveFromMonth"/);
+  });
+
+  it("활성 코스 패널에는 다시 사용이 없다", () => {
+    const html = renderCourses(courseItemKey({ kind: "course", courseId: "course-a" }));
+    assert.ok(html.includes(`>${t("ko", "masters.common.deactivate")}<`));
+    assert.ok(!html.includes(`>${t("ko", "masters.courses.reactivate")}<`));
   });
 
   it("미등록 칸을 고르면 기준 적용월부터 만드는 폼을 보인다", () => {

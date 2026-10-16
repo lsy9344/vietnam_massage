@@ -34,6 +34,12 @@ describe("resolveDomainErrorMessage", () => {
     assert.equal(resolveDomainErrorMessage("vi", "STALE_CALL", ko), "Cuộc gọi này đã được thay đổi ở màn hình khác. Hãy tải lại rồi mới lưu.");
   });
 
+  it("코스 다시 사용·새 코스 추가 거절 문구가 두 언어로 있다", () => {
+    assert.equal(hasDomainErrorTranslation("COURSE_POLICY_REQUIRED"), true);
+    assert.equal(hasDomainErrorTranslation("COURSE_CODE_DUPLICATE"), true);
+    assert.equal(resolveDomainErrorMessage("vi", "COURSE_CODE_DUPLICATE", "이미 있는 코스 코드입니다."), "Mã gói đã tồn tại. Gói đã ngừng thì bật lại bằng Dùng lại.");
+  });
+
   it("hasDomainErrorTranslation은 매핑 여부를 알려준다", () => {
     assert.equal(hasDomainErrorTranslation("ROOM_REQUIRED_FOR_STATUS"), true);
     assert.equal(hasDomainErrorTranslation("NOPE"), false);

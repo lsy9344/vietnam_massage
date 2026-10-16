@@ -86,7 +86,11 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   MONTHLY_CLOSE_PAYOUT_RECONFIRMATION_PENDING: "Không thể chốt tháng vì vẫn còn mục cần xác nhận lại chi trả.",
   MONTHLY_CLOSE_PENDING_CLOSE_REASON_REQUIRED: "Vui lòng nhập lý do ngoại lệ.",
   MONTHLY_CLOSE_PENDING_CALLS_CHANGED:
-    "Sau khi bạn xác nhận danh sách, có thêm cuộc gọi mới cần xác nhận trước khi chốt tháng nên không thể chốt. Hãy xác nhận lại danh sách mới."
+    "Sau khi bạn xác nhận danh sách, có thêm cuộc gọi mới cần xác nhận trước khi chốt tháng nên không thể chốt. Hãy xác nhận lại danh sách mới.",
+
+  // 코스 기준정보: 다시 사용, 새 코스 추가(콜 원장 흐름 재구성 D9)
+  COURSE_POLICY_REQUIRED: "Cần nhập chính sách áp dụng cho tháng này để dùng lại gói.",
+  COURSE_CODE_DUPLICATE: "Mã gói đã tồn tại. Gói đã ngừng thì bật lại bằng Dùng lại."
 };
 
 /**
