@@ -278,8 +278,8 @@ test.describe("Ticket 33 closing checklist and confirm blocking", () => {
     const dialog = page.getByRole("alertdialog");
     await expect(dialog).toBeVisible();
 
-    // 티켓 34: 마감 확인 대상 콜이 있으면 확인 체크와 사유 없이는 "지급 스냅샷 확정"이 막힌다.
-    const submitButton = dialog.getByRole("button", { name: "지급 스냅샷 확정" });
+    // 티켓 34: 마감 확인 대상 콜이 있으면 확인 체크와 사유 없이는 "지급 기록 확정"이 막힌다.
+    const submitButton = dialog.getByRole("button", { name: "지급 기록 확정" });
     await expect(submitButton).toBeDisabled();
     await dialog.getByRole("checkbox", { name: /위 1건을 확인했습니다/ }).check();
     await expect(submitButton).toBeDisabled();

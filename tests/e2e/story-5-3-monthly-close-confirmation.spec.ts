@@ -28,9 +28,9 @@ async function confirmMonthlyCloseThroughDialog(page: Page) {
   await page.getByRole("button", { name: "마감 확정" }).click();
   const dialog = page.getByRole("alertdialog", { name: /월마감을 확정할까요/ });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("확정 시 스냅샷이 고정되어 이후 설정 변경으로 재계산되지 않습니다.");
-  await expect(dialog.getByRole("button", { name: "지급 스냅샷 확정" })).toBeEnabled();
-  await dialog.getByRole("button", { name: "지급 스냅샷 확정" }).click();
+  await expect(dialog).toContainText("확정 시 확정 기록이 고정되어 이후 설정 변경으로 재계산되지 않습니다.");
+  await expect(dialog.getByRole("button", { name: "지급 기록 확정" })).toBeEnabled();
+  await dialog.getByRole("button", { name: "지급 기록 확정" }).click();
 }
 
 function story53WorkerSuffix(workerIndex: number) {
@@ -182,9 +182,10 @@ test.describe("Story 5.3 monthly close confirmation snapshot", () => {
 
     await confirmMonthlyCloseThroughDialog(page);
 
-    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("확정 기록", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("현재 기준 미리보기").first()).toBeVisible();
-    await expect(page.getByText(/snapshot id/)).toBeVisible();
+    await expect(page.getByText(/확정 버전 \d+\. 확정한 계정 .+ 확정 시각 \d{4}-\d{2}-\d{2} \d{2}:\d{2} \(베트남 시간\)/)).toBeVisible();
+    await expect(page.getByText(/snapshot id/)).toHaveCount(0);
     await expect(page.getByRole("button", { name: "잠금" })).toBeEnabled();
 
     const operatingMonth = await (prisma as any).operatingMonth.findUnique({
@@ -245,7 +246,7 @@ test.describe("Story 5.3 monthly close confirmation snapshot", () => {
     await page.goto(`/closing?operatingMonthId=${seededData.reviewOperatingMonthId}`);
 
     await confirmMonthlyCloseThroughDialog(page);
-    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("확정 기록", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("확정 전체 지급 합계")).toBeVisible();
 
     const closing = await (prisma as any).monthlyClosing.findFirst({

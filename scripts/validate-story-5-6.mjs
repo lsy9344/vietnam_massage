@@ -82,8 +82,8 @@ for (const required of [
   if (!panel.includes(required)) errors.push(`closing-action-panel.tsx missing ${required}`);
 }
 requireMoved(panel, "closing-action-panel.tsx", "closing.action.close", "닫기");
-requireMoved(panel, "closing-action-panel.tsx", "closing.confirmDialog.description", "확정 시 스냅샷이 고정되어 이후 설정 변경으로 재계산되지 않습니다.");
-requireMoved(panel, "closing-action-panel.tsx", "closing.action.confirmSnapshot", "지급 스냅샷 확정");
+requireMoved(panel, "closing-action-panel.tsx", "closing.confirmDialog.description", "확정 시 확정 기록이 고정되어 이후 설정 변경으로 재계산되지 않습니다.");
+requireMoved(panel, "closing-action-panel.tsx", "closing.action.confirmSnapshot", "지급 기록 확정");
 if (panel.includes("<form action={confirmAction} className=\"grid gap-1\">")) {
   errors.push("ClosingActionPanel must not keep the old direct confirm submit form");
 }
@@ -124,8 +124,8 @@ for (const required of [
   "Story 5.6 monthly close double-confirm dialog",
   "getByRole(\"alertdialog\"",
   "getByRole(\"button\", { name: \"마감 확정\" })",
-  "지급 스냅샷 확정",
-  "확정 시 스냅샷이 고정되어 이후 설정 변경으로 재계산되지 않습니다.",
+  "지급 기록 확정",
+  "확정 시 확정 기록이 고정되어 이후 설정 변경으로 재계산되지 않습니다.",
   "monthlyClosing.count",
   "monthly_close.confirmed",
   "keyboard.press(\"Escape\")",
@@ -144,12 +144,12 @@ for (const required of [
 }
 
 const story53E2e = read("tests/e2e/story-5-3-monthly-close-confirmation.spec.ts");
-if (!story53E2e.includes("confirmMonthlyCloseThroughDialog") || !story53E2e.includes("지급 스냅샷 확정")) {
+if (!story53E2e.includes("confirmMonthlyCloseThroughDialog") || !story53E2e.includes("지급 기록 확정")) {
   errors.push("Story 5.3 E2E must use the new second-confirm dialog flow");
 }
 
 const story55E2e = read("tests/e2e/story-5-5-monthly-close-reopen.spec.ts");
-if (!story55E2e.includes("confirmMonthlyCloseThroughDialog") || !story55E2e.includes("지급 스냅샷 확정")) {
+if (!story55E2e.includes("confirmMonthlyCloseThroughDialog") || !story55E2e.includes("지급 기록 확정")) {
   errors.push("Story 5.5 E2E must use the new second-confirm dialog flow for reconfirm");
 }
 

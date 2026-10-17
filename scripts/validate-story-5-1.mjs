@@ -102,10 +102,10 @@ requireMoved(page, "closing page.tsx", "closing.summary.opsMonthly", "운영팀 
 requireMoved(page, "closing page.tsx", "closing.summary.grandPayout", "전체 지급 합계");
 requireMoved(page, "closing page.tsx", "closing.therapist.title", "마사지사");
 requireMoved(page, "closing page.tsx", "closing.operations.title", "운영팀");
-requireMoved(page, "closing page.tsx", "closing.evidence.title", "산출 근거/warning");
+requireMoved(page, "closing page.tsx", "closing.evidence.title", "이번 달 계산 기준");
 requireMoved(page, "closing page.tsx", "closing.preview.draftDescription", "미확정 미리보기");
 requireMoved(page, "closing page.tsx", "closing.preview.current", "현재 기준 미리보기");
-requireMoved(page, "closing page.tsx", "closing.preview.closedDescription", "확정값은 월마감 스냅샷 기준");
+requireMoved(page, "closing page.tsx", "closing.preview.closedDescription", "확정값은 월마감 확정 기록 기준");
 requireMoved(page, "closing page.tsx", "settlements.requery", "재조회");
 for (const forbidden of ["use server", "action=", "recordAuditEvent", "revalidatePath", "MonthlyClose", "createMonthlyClose"]) {
   if (page.includes(forbidden)) errors.push(`closing page.tsx must not add write/snapshot behavior: ${forbidden}`);
@@ -148,14 +148,14 @@ for (const required of [
   "전체 지급 합계",
   "E2E51 마사지사",
   "1,400,000 VND",
-  "source day count 2",
-  "excluded call count 1",
+  "(2일).",
+  "마사지사 정산에서 뺀 콜 1건",
   "대표 evidence",
   "selectOption(seededData.lockedOperatingMonthId)",
   "미확정 미리보기",
   "현재 기준 미리보기",
-  "확정값은 월마감 스냅샷 기준",
-  "산출 근거/warning",
+  "확정값은 월마감 확정 기록 기준",
+  "이번 달 계산 기준",
   "toHaveURL(/\\/calls/)",
   "toHaveURL(/\\/rooms/)"
 ]) {

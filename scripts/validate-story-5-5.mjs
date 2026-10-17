@@ -152,7 +152,7 @@ for (const required of [
 ]) {
   if (!page.includes(required)) errors.push(`closing page.tsx missing ${required}`);
 }
-requireMoved(page, "closing page.tsx", "closing.snapshot.previous", "이전 확정 스냅샷");
+requireMoved(page, "closing page.tsx", "closing.snapshot.previous", "이전 확정 기록");
 requireMoved(page, "closing page.tsx", "closing.snapshot.headingPrevious", "재오픈 전 확정값");
 requireMoved(page, "closing page.tsx", "closing.preview.current", "현재 기준 미리보기");
 
@@ -186,7 +186,7 @@ for (const required of [
   "/closing?operatingMonthId",
   "재오픈 사유",
   "monthly_close.reopened",
-  "이전 확정 스냅샷",
+  "이전 확정 기록",
   "closeVersion",
   "관리자만 재오픈할 수 있습니다.",
   "권한이 없습니다.",

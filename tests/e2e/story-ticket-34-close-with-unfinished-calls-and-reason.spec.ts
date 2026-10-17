@@ -190,7 +190,7 @@ test.describe("Ticket 34 close with unfinished calls and a recorded reason", () 
     const dialog = page.getByRole("alertdialog");
     await expect(dialog).toBeVisible();
 
-    const submitButton = dialog.getByRole("button", { name: "지급 스냅샷 확정" });
+    const submitButton = dialog.getByRole("button", { name: "지급 기록 확정" });
     await expect(submitButton).toBeDisabled();
     await dialog.getByRole("checkbox", { name: /위 1건을 확인했습니다/ }).check();
     await dialog.getByLabel("예외 마감 사유").fill("기존 예약은 다음달 초 방문이 확정되어 예외로 마감합니다");

@@ -338,9 +338,10 @@ test.describe("Story 5.2 monthly closing bonuses", () => {
     // Story 4.1 출퇴근 입력이 들어온 뒤로 만근 source는 항상 available이라 "Story 4.1 ... source 없음"은
     // 더 이상 뜨지 않는다. 대신 만근 판정 근거와 갯수왕 tie-breaker 근거를 확인한다.
     await expect(page.getByText("만근 인정 0일 / 20일 미만").first()).toBeVisible();
-    await expect(page.getByText("tie-breaker: totalCallCount desc, monthlySettlementAmount desc, staffCode asc, Employee.id asc").first()).toBeVisible();
-    await expect(page.getByText("만근 source missing 0").first()).toBeVisible();
-    await expect(page.getByText("갯수왕 대상 3명").first()).toBeVisible();
+    await expect(page.getByText("동점이면 월 정산액이 큰 순, 그래도 같으면 직원코드 순").first()).toBeVisible();
+    await expect(page.getByText("이 기록으로 만근을 계산했습니다").first()).toBeVisible();
+    await expect(page.getByText("갯수왕 후보 3명").first()).toBeVisible();
+    await expect(page.getByText("만근 source missing")).toHaveCount(0);
   });
 
   test("counter and waiter roles still cannot access /closing", async ({ page }) => {

@@ -311,7 +311,7 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
     await confirmButton.click();
     const confirmDialog = page.getByRole("alertdialog");
     await expect(confirmDialog).toBeVisible();
-    await confirmDialog.getByRole("button", { name: "지급 스냅샷 확정" }).click();
+    await confirmDialog.getByRole("button", { name: "지급 기록 확정" }).click();
 
     await expect(async () => {
       const latest = await (prisma as any).operatingMonth.findUnique({ where: { id: month.id }, select: { status: true } });
@@ -402,7 +402,7 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
     const confirmButton = page.getByRole("button", { name: "마감 확정" });
     await expect(confirmButton).toBeEnabled();
     await confirmButton.click();
-    await page.getByRole("alertdialog").getByRole("button", { name: "지급 스냅샷 확정" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "지급 기록 확정" }).click();
 
     await expect(async () => {
       const latest = await (prisma as any).operatingMonth.findUnique({ where: { id: month.id }, select: { status: true } });
@@ -446,7 +446,7 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
     }).toPass({ timeout: 20_000 });
     await page.reload();
     await page.getByRole("button", { name: "마감 확정" }).click();
-    await page.getByRole("alertdialog").getByRole("button", { name: "지급 스냅샷 확정" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "지급 기록 확정" }).click();
     await expect(async () => {
       const latest = await (prisma as any).operatingMonth.findUnique({ where: { id: month.id }, select: { status: true } });
       expect(latest?.status).toBe("마감확정");
@@ -503,7 +503,7 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
     // 5) 재확정하면 새 버전이 만들어지고, 이전 버전의 스냅샷은 그대로 남는다.
     await page.goto(`/closing?operatingMonthId=${month.id}`);
     await page.getByRole("button", { name: "마감 확정" }).click();
-    await page.getByRole("alertdialog").getByRole("button", { name: "지급 스냅샷 확정" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "지급 기록 확정" }).click();
     await expect(async () => {
       const count = await (prisma as any).monthlyClosing.count({ where: { operatingMonthId: month.id } });
       expect(count).toBe(2);

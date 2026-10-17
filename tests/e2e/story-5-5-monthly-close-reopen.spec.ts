@@ -26,8 +26,8 @@ async function confirmMonthlyCloseThroughDialog(page: Page) {
   await page.getByRole("button", { name: "마감 확정" }).click();
   const dialog = page.getByRole("alertdialog", { name: /월마감을 확정할까요/ });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("확정 시 스냅샷이 고정되어 이후 설정 변경으로 재계산되지 않습니다.");
-  await dialog.getByRole("button", { name: "지급 스냅샷 확정" }).click();
+  await expect(dialog).toContainText("확정 시 확정 기록이 고정되어 이후 설정 변경으로 재계산되지 않습니다.");
+  await dialog.getByRole("button", { name: "지급 기록 확정" }).click();
 }
 
 function story55WorkerSuffix(workerIndex: number) {
@@ -212,12 +212,12 @@ test.describe("Story 5.5 monthly close reopen", () => {
     await login(page, seededData.accounts.admin, "Story55!admin");
 
     await page.goto(`/closing?operatingMonthId=${seededData.adminLockedMonth.id}`);
-    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("확정 기록", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "재오픈" })).toBeEnabled();
     await page.getByLabel("재오픈 사유").fill("Story 5.5 관리자 사유 기반 재오픈");
     await page.getByRole("button", { name: "재오픈" }).click();
     await expect(page.getByText("운영월 상태: 검토중").first()).toBeVisible();
-    await expect(page.getByText("이전 확정 스냅샷")).toBeVisible();
+    await expect(page.getByText("이전 확정 기록")).toBeVisible();
     await expect(page.getByText("현재 기준 미리보기").first()).toBeVisible();
 
     const reopenedMonth = await (prisma as any).operatingMonth.findUnique({ where: { id: seededData.adminLockedMonth.id }, select: { status: true } });
@@ -252,12 +252,12 @@ test.describe("Story 5.5 monthly close reopen", () => {
 
     await page.goto(`/closing?operatingMonthId=${seededData.adminConfirmedMonth.id}`);
     await expect(page.getByText("운영월 상태: 마감확정").first()).toBeVisible();
-    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("확정 기록", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "재오픈" })).toBeEnabled();
     await page.getByLabel("재오픈 사유").fill("Story 5.5 마감확정 상태에서 바로 재오픈");
     await page.getByRole("button", { name: "재오픈" }).click();
     await expect(page.getByText("운영월 상태: 검토중").first()).toBeVisible();
-    await expect(page.getByText("이전 확정 스냅샷")).toBeVisible();
+    await expect(page.getByText("이전 확정 기록")).toBeVisible();
 
     const reopenedMonth = await (prisma as any).operatingMonth.findUnique({ where: { id: seededData.adminConfirmedMonth.id }, select: { status: true } });
     expect(reopenedMonth?.status).toBe("검토중");
