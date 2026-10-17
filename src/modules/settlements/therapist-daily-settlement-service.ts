@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { mapWithConcurrency } from "@/lib/concurrency";
 import {
   listServiceCallsForDate,
+  listServiceCallsForOperatingMonth,
   type ServiceCallAssigneeDto,
   type ServiceCallRowDto
 } from "@/modules/calls/service-call-service";
@@ -375,6 +377,7 @@ export async function listTherapistDailySettlements(input: {
   operatingMonthId: string;
   serviceDate: string;
   prismaClient?: TherapistDailySettlementPrismaClient;
+  serviceCallRows?: ServiceCallRowDto[];
 }): Promise<TherapistDailySettlementResultDto> {
   const parsed = settlementQuerySchema.safeParse(input);
   if (!parsed.success) {
@@ -385,11 +388,13 @@ export async function listTherapistDailySettlements(input: {
   const [operatingMonth, therapistEmployees, rows] = await Promise.all([
     client.operatingMonth.findUnique({ where: { id: parsed.data.operatingMonthId } }),
     client.employee.findMany({ where: { employeeGroup: "THERAPIST", isActive: true }, orderBy: [{ sortOrder: "asc" }, { staffCode: "asc" }] }),
-    listServiceCallsForDate({
-      operatingMonthId: parsed.data.operatingMonthId,
-      serviceDate: parsed.data.serviceDate,
-      prismaClient: client as Parameters<typeof listServiceCallsForDate>[0]["prismaClient"]
-    })
+    input.serviceCallRows
+      ? Promise.resolve(input.serviceCallRows)
+      : listServiceCallsForDate({
+          operatingMonthId: parsed.data.operatingMonthId,
+          serviceDate: parsed.data.serviceDate,
+          prismaClient: client as Parameters<typeof listServiceCallsForDate>[0]["prismaClient"]
+        })
   ]);
 
   if (!operatingMonth) {
@@ -493,6 +498,51 @@ export async function listTherapistDailySettlements(input: {
     warningCounts,
     excludedCallCount
   };
+}
+
+function eachIsoDate(startDate: string, endDate: string) {
+  const dates: string[] = [];
+  let cursor = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+  while (cursor <= end) {
+    const year = cursor.getUTCFullYear();
+    const month = String(cursor.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(cursor.getUTCDate()).padStart(2, "0");
+    dates.push(`${year}-${month}-${day}`);
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return dates;
+}
+
+// 그래프와 월마감은 지급 확인을 유지한 채, 콜 원장만 운영월에 한 번 읽는다.
+export async function listTherapistDailySettlementsForOperatingMonth(input: {
+  operatingMonthId: string;
+  startDate: string;
+  endDate: string;
+  prismaClient?: TherapistDailySettlementPrismaClient;
+}): Promise<TherapistDailySettlementResultDto[]> {
+  const client = getClient(input.prismaClient);
+  const rows = await listServiceCallsForOperatingMonth({
+    operatingMonthId: input.operatingMonthId,
+    startDate: input.startDate,
+    endDate: input.endDate,
+    prismaClient: client as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
+  });
+  const rowsByDate = new Map<string, ServiceCallRowDto[]>();
+  for (const row of rows) {
+    const bucket = rowsByDate.get(row.serviceDate) ?? [];
+    bucket.push(row);
+    rowsByDate.set(row.serviceDate, bucket);
+  }
+
+  return mapWithConcurrency(eachIsoDate(input.startDate, input.endDate), 5, (serviceDate) =>
+    listTherapistDailySettlements({
+      operatingMonthId: input.operatingMonthId,
+      serviceDate,
+      prismaClient: client,
+      serviceCallRows: rowsByDate.get(serviceDate) ?? []
+    })
+  );
 }
 
 /** 운영월의 날짜 하나와 그 날짜의 마사지사별 지급 확인 상태(월 전체 집계용, 티켓 32·33). */

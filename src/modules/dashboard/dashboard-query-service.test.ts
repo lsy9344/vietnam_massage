@@ -153,6 +153,19 @@ function createDashboardPrisma(options: { operatingMonthMissing?: boolean; noCal
     return a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10);
   }
 
+  function matchesDay(recordDate: Date, filter: unknown) {
+    if (filter == null) return true;
+    if (filter instanceof Date) return sameDate(recordDate, filter);
+    if (typeof filter === "object") {
+      const range = filter as { gte?: Date; lte?: Date };
+      const iso = recordDate.toISOString().slice(0, 10);
+      if (range.gte instanceof Date && iso < range.gte.toISOString().slice(0, 10)) return false;
+      if (range.lte instanceof Date && iso > range.lte.toISOString().slice(0, 10)) return false;
+      return range.gte instanceof Date || range.lte instanceof Date;
+    }
+    return false;
+  }
+
   return {
     operatingMonth: {
       async findUnique({ where }: any) {
@@ -165,7 +178,7 @@ function createDashboardPrisma(options: { operatingMonthMissing?: boolean; noCal
         return serviceCalls.filter(
           (record) =>
             (where?.operatingMonthId === undefined || record.operatingMonthId === where.operatingMonthId) &&
-            (where?.serviceDate === undefined || sameDate(record.serviceDate, where.serviceDate))
+            matchesDay(record.serviceDate, where?.serviceDate)
         );
       }
     },
@@ -175,7 +188,7 @@ function createDashboardPrisma(options: { operatingMonthMissing?: boolean; noCal
           .filter(
             (expense) =>
               (where?.operatingMonthId === undefined || expense.operatingMonthId === where.operatingMonthId) &&
-              (where?.expenseDate === undefined || sameDate(expense.expenseDate, where.expenseDate)) &&
+              matchesDay(expense.expenseDate, where?.expenseDate) &&
               (where?.isActive === undefined || expense.isActive === where.isActive)
           )
           .map((expense) => ({ ...expense, handledByEmployee: employees.get(expense.handledByEmployeeId) }));
@@ -219,8 +232,8 @@ function createDashboardPrisma(options: { operatingMonthMissing?: boolean; noCal
   } as any;
 }
 
-// 월 단위 화면은 하루씩 30번 조회를 반복한다. 행마다 수당을 다시 읽으면(N+1) 왕복이 수백 번으로
-// 불어나 실제 운영(Cloudflare -> Hyperdrive)에서 페이지가 10초씩 걸렸다. 조회 횟수를 세어 회귀를 막는다.
+// 월 단위 화면이 날짜마다 콜을 다시 읽으면 원격 DB 왕복이 페이지를 수 초로 늘린다.
+// 한 달 조회는 콜과 지출을 한 번씩만 읽어야 한다. 조회 횟수를 세어 회귀를 막는다.
 function countingPrisma(client: any) {
   const counts = new Map<string, number>();
   const delegates = new Map<string, unknown>();
@@ -1166,9 +1179,7 @@ describe("getDashboardGraphReport", () => {
 });
 
 describe("월 단위 조회 비용", () => {
-  const DAYS_IN_MONTH = 30;
-
-  it("월간 대시보드는 하루당 수당 조회를 한 번으로 묶고 시간 슬롯을 재조회하지 않는다", async () => {
+  it("월간 대시보드는 한 달 콜과 지출을 한 번씩만 읽고 시간 슬롯을 재조회하지 않는다", async () => {
     const { proxy, counts } = countingPrisma(createDashboardPrisma());
 
     await getMonthlyDashboardMetrics({
@@ -1178,13 +1189,17 @@ describe("월 단위 조회 비용", () => {
     });
 
     assert.ok(
-      (counts.get("therapistCourseRate.findMany") ?? 0) <= DAYS_IN_MONTH,
-      `therapistCourseRate.findMany=${counts.get("therapistCourseRate.findMany")} (하루 1회를 넘으면 행 단위 N+1이다)`
+      (counts.get("serviceCall.findMany") ?? 0) <= 2,
+      `serviceCall.findMany=${counts.get("serviceCall.findMany")} (날짜마다 읽으면 원격 DB에서 페이지가 수 초가 된다)`
+    );
+    assert.ok(
+      (counts.get("dailyExpense.findMany") ?? 0) <= 1,
+      `dailyExpense.findMany=${counts.get("dailyExpense.findMany")}`
     );
     assert.equal(counts.get("timeSlot.findMany"), 1);
   });
 
-  it("그래프 리포트는 같은 날짜를 두 경로가 조회해도 콜 원장을 한 번만 읽는다", async () => {
+  it("그래프 리포트는 한 달 콜을 한 번만 읽고 마사지사 순위도 그 결과를 재사용한다", async () => {
     const { proxy, counts } = countingPrisma(createDashboardPrisma());
 
     await getDashboardGraphReport({
@@ -1199,12 +1214,12 @@ describe("월 단위 조회 비용", () => {
     });
 
     assert.ok(
-      (counts.get("serviceCall.findMany") ?? 0) <= DAYS_IN_MONTH,
-      `serviceCall.findMany=${counts.get("serviceCall.findMany")} (일자별 조회는 두 집계 경로가 공유해야 한다)`
+      (counts.get("serviceCall.findMany") ?? 0) <= 2,
+      `serviceCall.findMany=${counts.get("serviceCall.findMany")} (날짜마다 읽으면 원격 DB에서 페이지가 수 초가 된다)`
     );
     assert.ok(
-      (counts.get("therapistCourseRate.findMany") ?? 0) <= DAYS_IN_MONTH,
-      `therapistCourseRate.findMany=${counts.get("therapistCourseRate.findMany")}`
+      (counts.get("dailyExpense.findMany") ?? 0) <= 1,
+      `dailyExpense.findMany=${counts.get("dailyExpense.findMany")}`
     );
     assert.equal(counts.get("timeSlot.findMany"), 1);
   });

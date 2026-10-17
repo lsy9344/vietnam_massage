@@ -5,6 +5,7 @@ import { memoizePrismaReads } from "@/lib/prisma-read-cache";
 import {
   getDailyCallLedgerSummary,
   listCompletedServiceCallCalculationsForOperatingMonth,
+  listDailyCallLedgerSummariesForOperatingMonth,
   type CompletedServiceCallCalculationDto,
   type DailyCourseSummaryDto
 } from "@/modules/calls/service-call-service";
@@ -19,6 +20,7 @@ import {
 } from "@/modules/closing/monthly-closing-preview-service";
 import {
   listTherapistDailySettlements,
+  listTherapistDailySettlementsForOperatingMonth,
   type TherapistDailySettlementDto
 } from "@/modules/settlements/therapist-daily-settlement-service";
 import { listOpsDailyIncentives } from "@/modules/settlements/ops-daily-incentive-service";
@@ -823,17 +825,22 @@ export async function getMonthlyDashboardMetrics(input: {
     endDate: toIsoDateOnly(operatingMonthRecord.endDate),
     status: operatingMonthRecord.status
   };
-  const summaries = await mapWithConcurrency(
-    dateRange(operatingMonth.startDate, operatingMonth.endDate),
-    DASHBOARD_QUERY_CONCURRENCY,
-    (serviceDate) =>
-      dependencies.getDailyCallLedgerSummary({
+  const serviceDates = dateRange(operatingMonth.startDate, operatingMonth.endDate);
+  const summaries = input.dependencies?.getDailyCallLedgerSummary
+    ? await mapWithConcurrency(serviceDates, DASHBOARD_QUERY_CONCURRENCY, (serviceDate) =>
+        dependencies.getDailyCallLedgerSummary({
+          operatingMonthId: parsed.data.operatingMonthId,
+          serviceDate,
+          includeMonthTill: false,
+          prismaClient: client as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
+        })
+      )
+    : await listDailyCallLedgerSummariesForOperatingMonth({
         operatingMonthId: parsed.data.operatingMonthId,
-        serviceDate,
-        includeMonthTill: false,
-        prismaClient: client as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
-      })
-  );
+        startDate: operatingMonth.startDate,
+        endDate: operatingMonth.endDate,
+        prismaClient: client as Parameters<typeof listDailyCallLedgerSummariesForOperatingMonth>[0]["prismaClient"]
+      });
 
   const statusCounts = summaries.reduce(
     (totals, summary) => ({
@@ -1109,27 +1116,41 @@ export async function getDashboardGraphReport(input: {
     }
   } else {
     const [dailySummaries, completedCalculations, therapistDailyResults, preview] = await Promise.all([
-      mapWithConcurrency(serviceDates, DASHBOARD_QUERY_CONCURRENCY, (serviceDate) =>
-        dependencies.getDailyCallLedgerSummary({
-          operatingMonthId: parsed.data.operatingMonthId,
-          serviceDate,
-          includeMonthTill: false,
-          prismaClient: client as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
-        })
-      ),
+      input.dependencies?.getDailyCallLedgerSummary
+        ? mapWithConcurrency(serviceDates, DASHBOARD_QUERY_CONCURRENCY, (serviceDate) =>
+            dependencies.getDailyCallLedgerSummary({
+              operatingMonthId: parsed.data.operatingMonthId,
+              serviceDate,
+              includeMonthTill: false,
+              prismaClient: client as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
+            })
+          )
+        : listDailyCallLedgerSummariesForOperatingMonth({
+            operatingMonthId: parsed.data.operatingMonthId,
+            startDate: operatingMonth.startDate,
+            endDate: operatingMonth.endDate,
+            prismaClient: client as Parameters<typeof listDailyCallLedgerSummariesForOperatingMonth>[0]["prismaClient"]
+          }),
       dependencies.listCompletedServiceCallCalculationsForOperatingMonth({
         operatingMonthId: parsed.data.operatingMonthId,
         startDate: operatingMonth.startDate,
         endDate: operatingMonth.endDate,
         prismaClient: client as Parameters<typeof listCompletedServiceCallCalculationsForOperatingMonth>[0]["prismaClient"]
       }),
-      mapWithConcurrency(serviceDates, DASHBOARD_QUERY_CONCURRENCY, (serviceDate) =>
-        dependencies.listTherapistDailySettlements({
-          operatingMonthId: parsed.data.operatingMonthId,
-          serviceDate,
-          prismaClient: client as Parameters<typeof listTherapistDailySettlements>[0]["prismaClient"]
-        })
-      ),
+      input.dependencies?.listTherapistDailySettlements
+        ? mapWithConcurrency(serviceDates, DASHBOARD_QUERY_CONCURRENCY, (serviceDate) =>
+            dependencies.listTherapistDailySettlements({
+              operatingMonthId: parsed.data.operatingMonthId,
+              serviceDate,
+              prismaClient: client as Parameters<typeof listTherapistDailySettlements>[0]["prismaClient"]
+            })
+          )
+        : listTherapistDailySettlementsForOperatingMonth({
+            operatingMonthId: parsed.data.operatingMonthId,
+            startDate: operatingMonth.startDate,
+            endDate: operatingMonth.endDate,
+            prismaClient: client as Parameters<typeof listTherapistDailySettlementsForOperatingMonth>[0]["prismaClient"]
+          }),
       dependencies.listMonthlyClosingPreview({
         operatingMonthId: parsed.data.operatingMonthId,
         prismaClient: client as Parameters<typeof listMonthlyClosingPreview>[0]["prismaClient"]

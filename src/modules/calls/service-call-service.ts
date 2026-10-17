@@ -3083,19 +3083,18 @@ function emptyCourseSummaries(): DailyCourseSummaryDto[] {
   }));
 }
 
-export async function getDailyCallLedgerSummary(input: {
-  operatingMonthId: string;
-  serviceDate: string;
-  includeMonthTill?: boolean;
-  prismaClient?: ServiceCallPrismaClient;
-}): Promise<DailyCallLedgerSummaryDto> {
-  const client = getClient(input.prismaClient);
-  const rows = await listServiceCallsForDate({ ...input, prismaClient: client });
-  const expenses = await listDailyExpensesForDate({
-    operatingMonthId: input.operatingMonthId,
-    expenseDate: input.serviceDate,
-    prismaClient: client
-  });
+function eachIsoDate(startDate: string, endDate: string) {
+  const dates: string[] = [];
+  let cursor = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+  while (cursor <= end) {
+    dates.push(toIsoDateOnly(cursor));
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return dates;
+}
+
+function summarizeCallLedgerDay(rows: ServiceCallRowDto[], expenses: DailyExpenseDto[]): DailyCallLedgerSummaryDto {
   const courseSummaries = emptyCourseSummaries();
   const courseSummaryByCode = new Map(courseSummaries.map((summary) => [summary.courseCode, summary]));
   const paymentMethodTotals: DailyCallLedgerSummaryDto["paymentMethodTotals"] = {
@@ -3145,8 +3144,6 @@ export async function getDailyCallLedgerSummary(input: {
 
   const expenseTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0);
   const dayTill = tillFromReceipts({ cash: paymentMethodTotals.cash, bank: paymentMethodTotals.bank }, expenses);
-  // 시재를 그리지 않는 화면은 날짜마다 운영월 전체를 다시 읽지 않는다.
-  const monthTill = input.includeMonthTill === false ? emptyTill() : await monthTillFor(client, input.operatingMonthId);
   return {
     reservationCount: rows.length,
     inUseCount: rows.filter((row) => isInUseStatus(row.status)).length,
@@ -3160,10 +3157,70 @@ export async function getDailyCallLedgerSummary(input: {
     expenseTotal,
     netSales: paymentTotal - expenseTotal,
     paymentMethodTotals,
-    till: { day: dayTill, month: monthTill },
+    till: { day: dayTill, month: emptyTill() },
     courseSummaries,
     warningCounts
   };
+}
+
+export async function getDailyCallLedgerSummary(input: {
+  operatingMonthId: string;
+  serviceDate: string;
+  includeMonthTill?: boolean;
+  prismaClient?: ServiceCallPrismaClient;
+}): Promise<DailyCallLedgerSummaryDto> {
+  const client = getClient(input.prismaClient);
+  const rows = await listServiceCallsForDate({ ...input, prismaClient: client });
+  const expenses = await listDailyExpensesForDate({
+    operatingMonthId: input.operatingMonthId,
+    expenseDate: input.serviceDate,
+    prismaClient: client
+  });
+  const summary = summarizeCallLedgerDay(rows, expenses);
+  // 시재를 그리지 않는 화면은 날짜마다 운영월 전체를 다시 읽지 않는다.
+  if (input.includeMonthTill === false) return summary;
+  return {
+    ...summary,
+    till: { day: summary.till.day, month: await monthTillFor(client, input.operatingMonthId) }
+  };
+}
+
+// 월간 대시보드와 그래프 리포트는 하루 함수를 날짜 수만큼 호출하면 원격 DB 왕복이 페이지를 수 초로 늘린다.
+export async function listDailyCallLedgerSummariesForOperatingMonth(input: {
+  operatingMonthId: string;
+  startDate: string;
+  endDate: string;
+  prismaClient?: ServiceCallPrismaClient;
+}): Promise<DailyCallLedgerSummaryDto[]> {
+  const client = getClient(input.prismaClient);
+  const [rows, expenses] = await Promise.all([
+    listServiceCallsForOperatingMonth({
+      operatingMonthId: input.operatingMonthId,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      prismaClient: client
+    }),
+    findActiveExpenses(client, {
+      operatingMonthId: input.operatingMonthId,
+      expenseDate: { gte: toDateOnly(input.startDate), lte: toDateOnly(input.endDate) }
+    })
+  ]);
+  const rowsByDate = new Map<string, ServiceCallRowDto[]>();
+  for (const row of rows) {
+    const bucket = rowsByDate.get(row.serviceDate) ?? [];
+    bucket.push(row);
+    rowsByDate.set(row.serviceDate, bucket);
+  }
+  const expensesByDate = new Map<string, DailyExpenseDto[]>();
+  for (const expense of expenses) {
+    const bucket = expensesByDate.get(expense.expenseDate) ?? [];
+    bucket.push(expense);
+    expensesByDate.set(expense.expenseDate, bucket);
+  }
+
+  return eachIsoDate(input.startDate, input.endDate).map((serviceDate) =>
+    summarizeCallLedgerDay(rowsByDate.get(serviceDate) ?? [], expensesByDate.get(serviceDate) ?? [])
+  );
 }
 
 export function completedServiceCallCalculationsFromRows(rows: ServiceCallRowDto[]): CompletedServiceCallCalculationDto[] {
