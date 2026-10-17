@@ -2,7 +2,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import {
   completedServiceCallCalculationsFromRows,
-  listServiceCallsForOperatingMonth
+  listServiceCallsForOperatingMonth,
+  type ServiceCallRowDto
 } from "@/modules/calls/service-call-service";
 import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/modules/settlements/settlement-evidence-call";
 import {
@@ -415,6 +416,7 @@ async function assertPayoutHasIncentiveRow(input: { client: OpsMonthlyIncentiveP
 export async function listOpsMonthlyIncentivePreview(input: {
   operatingMonthId: string;
   prismaClient?: OpsMonthlyIncentivePrismaClient;
+  serviceCallRows?: ServiceCallRowDto[];
 }): Promise<OpsMonthlyIncentiveResultDto> {
   const parsed = previewQuerySchema.safeParse(input);
   if (!parsed.success) throw toFieldError(parsed.error);
@@ -436,12 +438,14 @@ export async function listOpsMonthlyIncentivePreview(input: {
       where: { employeeGroup: "OPERATIONS", isActive: true },
       orderBy: [{ sortOrder: "asc" }, { staffCode: "asc" }, { id: "asc" }]
     }),
-    listServiceCallsForOperatingMonth({
-      operatingMonthId: parsed.data.operatingMonthId,
-      startDate,
-      endDate,
-      prismaClient: client as unknown as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
-    }),
+    input.serviceCallRows
+      ? Promise.resolve(input.serviceCallRows)
+      : listServiceCallsForOperatingMonth({
+          operatingMonthId: parsed.data.operatingMonthId,
+          startDate,
+          endDate,
+          prismaClient: client as unknown as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
+        }),
     client.opsMonthlyIncentiveRule.findMany({
       where: { isActive: true },
       orderBy: [{ thresholdCallCount: "desc" }, { effectiveFromMonth: "desc" }]

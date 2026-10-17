@@ -747,15 +747,23 @@ export default async function ClosingPage({ searchParams }: { searchParams: Prom
   let errorMessage: string | null = null;
 
   try {
-    result = await listMonthlyClosingPreview({
-      operatingMonthId: selectedMonth.id
-    });
-    checklist = await listMonthlyClosingChecklist({
-      operatingMonthId: selectedMonth.id
-    });
-    closingSnapshot = await getMonthlyClosingSnapshot({
-      operatingMonthId: selectedMonth.id
-    });
+    const [previewResult, checklistResult, snapshotResult] = await Promise.all([
+      listMonthlyClosingPreview({
+        operatingMonthId: selectedMonth.id
+      }),
+      listMonthlyClosingChecklist({
+        operatingMonthId: selectedMonth.id
+      }),
+      getMonthlyClosingSnapshot({
+        operatingMonthId: selectedMonth.id
+      }).catch((error: unknown) => {
+        if (error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND") return null;
+        throw error;
+      })
+    ]);
+    result = previewResult;
+    checklist = checklistResult;
+    closingSnapshot = snapshotResult;
   } catch (error) {
     if (error instanceof MonthlyClosingDomainError && error.code === "MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND") {
       closingSnapshot = null;

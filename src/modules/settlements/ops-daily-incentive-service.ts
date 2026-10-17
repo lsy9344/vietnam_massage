@@ -5,9 +5,11 @@ import {
   completedServiceCallCalculationsFromRows,
   listCompletedServiceCallCalculationsForDate,
   listServiceCallsForDate,
+  listServiceCallsForOperatingMonth,
   type ServiceCallRowDto
 } from "@/modules/calls/service-call-service";
 import {
+  listOpsAttendanceByDateForOperatingMonth,
   listOpsAttendanceForDate,
   type OpsAttendanceDto,
   type OpsAttendanceForDateDto
@@ -17,6 +19,8 @@ import {
   confirmPayoutConfirmation,
   listActivelyConfirmedUnitEmployeeIds,
   attachPayoutConfirmationsToRows,
+  derivePayoutConfirmationStatus,
+  listPayoutConfirmationHistoriesByDate,
   toPayoutConfirmationPrismaClient,
   reconfirmPayoutConfirmation,
   releasePayoutConfirmation,
@@ -284,6 +288,8 @@ export async function listOpsDailyIncentives(input: {
   prismaClient?: OpsDailyIncentivePrismaClient;
   serviceCallRows?: ServiceCallRowDto[];
   attendance?: OpsAttendanceForDateDto;
+  /** 월간 집계는 금액만 쓴다. 지급 확인 조회를 날짜마다 하지 않는다. */
+  skipPayoutReads?: boolean;
 }): Promise<OpsDailyIncentiveResultDto> {
   const parsed = incentiveQuerySchema.safeParse(input);
   if (!parsed.success) throw toFieldError(parsed.error);
@@ -349,7 +355,7 @@ export async function listOpsDailyIncentives(input: {
   // S7(ADR 0004): 확인 사건이 있는 단위는 그날 출근 행이 없어도(직원이 비활성되어도) 금액 0인 행으로
   // 남긴다. 그래야 attachPayoutConfirmations가 "지급 재확인 필요"로 가리고, 마감 점검도 이 차이를 막을
   // 수 있다.
-  if (client.payoutConfirmationEvent) {
+  if (!input.skipPayoutReads && client.payoutConfirmationEvent) {
     const confirmedEmployeeIds = await listActivelyConfirmedUnitEmployeeIds({
       unitType: "OPS_DAILY",
       operatingMonthId: parsed.data.operatingMonthId,
@@ -375,15 +381,20 @@ export async function listOpsDailyIncentives(input: {
     }
   }
 
-  const rowsWithPayoutConfirmation = await attachPayoutConfirmationsToRows({
-      unitType: "OPS_DAILY",
-      currentAmount: (row) => row.payoutAmount,
-    client,
-    operatingMonthId: parsed.data.operatingMonthId,
-    serviceDate: parsed.data.serviceDate,
-    operatingMonthStatus: operatingMonth.status,
-    rows
-  });
+  const rowsWithPayoutConfirmation = input.skipPayoutReads
+    ? rows.map((row) => ({
+        ...row,
+        payoutConfirmation: derivePayoutConfirmationStatus([], row.payoutAmount, operatingMonth.status)
+      }))
+    : await attachPayoutConfirmationsToRows({
+        unitType: "OPS_DAILY",
+        currentAmount: (row) => row.payoutAmount,
+        client,
+        operatingMonthId: parsed.data.operatingMonthId,
+        serviceDate: parsed.data.serviceDate,
+        operatingMonthStatus: operatingMonth.status,
+        rows
+      });
 
   return {
     operatingMonthId: parsed.data.operatingMonthId,
@@ -437,12 +448,63 @@ export async function listOpsDailyPayoutConfirmationsForMonth(input: {
     throw new OpsDailyIncentiveDomainError("운영월을 찾을 수 없습니다.", "OPERATING_MONTH_NOT_FOUND");
   }
 
+  const startDate = toIsoDate(operatingMonth.startDate);
+  const endDate = toIsoDate(operatingMonth.endDate);
+  const [monthRows, attendanceByDate, historiesByDate] = await Promise.all([
+    listServiceCallsForOperatingMonth({
+      operatingMonthId: parsed.data.operatingMonthId,
+      startDate,
+      endDate,
+      prismaClient: client as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
+    }),
+    listOpsAttendanceByDateForOperatingMonth({
+      operatingMonthId: parsed.data.operatingMonthId,
+      startDate,
+      endDate,
+      prismaClient: client as Parameters<typeof listOpsAttendanceByDateForOperatingMonth>[0]["prismaClient"]
+    }),
+    listPayoutConfirmationHistoriesByDate({
+      unitType: "OPS_DAILY",
+      operatingMonthId: parsed.data.operatingMonthId,
+      startDate,
+      endDate,
+      prismaClient: toPayoutConfirmationPrismaClient(client)
+    })
+  ]);
+  const rowsByDate = new Map<string, ServiceCallRowDto[]>();
+  for (const row of monthRows) {
+    const bucket = rowsByDate.get(row.serviceDate) ?? [];
+    bucket.push(row);
+    rowsByDate.set(row.serviceDate, bucket);
+  }
+
   const results: OpsDailyPayoutConfirmationDto[] = [];
-  for (let cursor = operatingMonth.startDate; cursor <= operatingMonth.endDate; cursor = new Date(cursor.getTime() + 86400000)) {
-    const serviceDate = toIsoDate(cursor);
-    const dayResult = await listOpsDailyIncentives({ operatingMonthId: parsed.data.operatingMonthId, serviceDate, prismaClient: client });
+  for (const serviceDate of [...attendanceByDate.keys()]) {
+    const dayResult = await listOpsDailyIncentives({
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate,
+      prismaClient: client,
+      serviceCallRows: rowsByDate.get(serviceDate) ?? [],
+      attendance: attendanceByDate.get(serviceDate),
+      skipPayoutReads: true
+    });
+    const histories = historiesByDate.get(serviceDate) ?? new Map<string, PayoutConfirmationDto["history"]>();
+    const seen = new Set<string>();
     for (const row of dayResult.rows) {
-      results.push({ serviceDate, employeeId: row.employeeId, payoutConfirmation: row.payoutConfirmation });
+      seen.add(row.employeeId);
+      results.push({
+        serviceDate,
+        employeeId: row.employeeId,
+        payoutConfirmation: derivePayoutConfirmationStatus(histories.get(row.employeeId) ?? [], row.payoutAmount, operatingMonth.status)
+      });
+    }
+    for (const [employeeId, history] of histories) {
+      if (seen.has(employeeId) || history[0]?.eventType === "release") continue;
+      results.push({
+        serviceDate,
+        employeeId,
+        payoutConfirmation: derivePayoutConfirmationStatus(history, 0, operatingMonth.status)
+      });
     }
   }
   return results;

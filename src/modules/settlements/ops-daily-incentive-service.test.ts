@@ -208,6 +208,21 @@ function createMemoryPrisma(
     return sameDate(a, b);
   }
 
+  function matchesDay(recordDate: Date | null, filter: unknown) {
+    if (filter === undefined) return true;
+    if (filter === null || recordDate === null) return filter === recordDate;
+    if (!(recordDate instanceof Date)) return false;
+    if (filter instanceof Date) return sameDate(recordDate, filter);
+    if (typeof filter === "object" && filter) {
+      const range = filter as { gte?: Date; lte?: Date };
+      const iso = recordDate.toISOString().slice(0, 10);
+      if (range.gte instanceof Date && iso < range.gte.toISOString().slice(0, 10)) return false;
+      if (range.lte instanceof Date && iso > range.lte.toISOString().slice(0, 10)) return false;
+      return range.gte instanceof Date || range.lte instanceof Date;
+    }
+    return false;
+  }
+
   const client: any = {
     operatingMonth: {
       async findUnique({ where }: any) {
@@ -229,7 +244,7 @@ function createMemoryPrisma(
         const results = payoutConfirmationEvents.filter((record) => {
           if (where?.unitType !== undefined && record.unitType !== where.unitType) return false;
           if (where?.operatingMonthId !== undefined && record.operatingMonthId !== where.operatingMonthId) return false;
-          if (where?.serviceDate !== undefined && !sameDateOrNull(record.serviceDate, where.serviceDate)) return false;
+          if (!matchesDay(record.serviceDate, where?.serviceDate)) return false;
           if (where?.employeeId !== undefined) {
             if (typeof where.employeeId === "string") {
               if (record.employeeId !== where.employeeId) return false;
@@ -272,7 +287,7 @@ function createMemoryPrisma(
         return [...attendances.values()].filter(
           (record) =>
             (where?.operatingMonthId === undefined || record.operatingMonthId === where.operatingMonthId) &&
-            (where?.attendanceDate === undefined || sameDate(record.attendanceDate, where.attendanceDate)) &&
+            matchesDay(record.attendanceDate, where?.attendanceDate) &&
             (where?.isActive === undefined || record.isActive === where.isActive)
         );
       }
@@ -282,7 +297,7 @@ function createMemoryPrisma(
         return serviceCalls.filter(
           (record) =>
             (where?.operatingMonthId === undefined || record.operatingMonthId === where.operatingMonthId) &&
-            (where?.serviceDate === undefined || sameDate(record.serviceDate, where.serviceDate))
+            matchesDay(record.serviceDate, where?.serviceDate)
         );
       }
     },

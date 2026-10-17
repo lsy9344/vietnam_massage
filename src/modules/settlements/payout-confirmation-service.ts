@@ -509,6 +509,44 @@ export async function listActivelyConfirmedUnitEmployeeIds(input: {
   return [...latestByEmployeeId.entries()].filter(([, record]) => record.eventType !== "release").map(([employeeId]) => employeeId);
 }
 
+/**
+ * 운영월 범위의 지급 확인 사건을 날짜·직원별로 묶는다. 이력은 최신이 먼저다.
+ * 마감 점검이 날짜마다 사건을 다시 읽지 않게 한다.
+ */
+export async function listPayoutConfirmationHistoriesByDate(input: {
+  unitType: PayoutConfirmationUnitType;
+  operatingMonthId: string;
+  startDate: string;
+  endDate: string;
+  prismaClient?: PayoutConfirmationPrismaClient;
+}): Promise<Map<string, Map<string, PayoutConfirmationEventDto[]>>> {
+  const client = getClient(input.prismaClient);
+  const byDate = new Map<string, Map<string, PayoutConfirmationEventDto[]>>();
+  if (!client.payoutConfirmationEvent?.findMany) return byDate;
+
+  const records = await client.payoutConfirmationEvent.findMany({
+    where: {
+      unitType: input.unitType,
+      operatingMonthId: input.operatingMonthId,
+      serviceDate: { gte: toDateOnly(input.startDate), lte: toDateOnly(input.endDate) }
+    },
+    include: actorInclude,
+    orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }]
+  });
+
+  for (const record of records) {
+    if (!record.serviceDate) continue;
+    const serviceDate = record.serviceDate.toISOString().slice(0, 10);
+    const byEmployee = byDate.get(serviceDate) ?? new Map<string, PayoutConfirmationEventDto[]>();
+    const history = byEmployee.get(record.employeeId) ?? [];
+    history.push(toEventDto(record));
+    byEmployee.set(record.employeeId, history);
+    byDate.set(serviceDate, byEmployee);
+  }
+
+  return byDate;
+}
+
 /** 계산 서비스가 넘기는 클라이언트를 지급 확인 저장소의 좁은 경계로 맞춘다. */
 export function toPayoutConfirmationPrismaClient(client: unknown) {
   return client as Parameters<typeof listPayoutConfirmations>[0]["prismaClient"];

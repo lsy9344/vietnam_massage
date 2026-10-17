@@ -3191,15 +3191,18 @@ export async function listDailyCallLedgerSummariesForOperatingMonth(input: {
   startDate: string;
   endDate: string;
   prismaClient?: ServiceCallPrismaClient;
+  serviceCallRows?: ServiceCallRowDto[];
 }): Promise<DailyCallLedgerSummaryDto[]> {
   const client = getClient(input.prismaClient);
   const [rows, expenses] = await Promise.all([
-    listServiceCallsForOperatingMonth({
-      operatingMonthId: input.operatingMonthId,
-      startDate: input.startDate,
-      endDate: input.endDate,
-      prismaClient: client
-    }),
+    input.serviceCallRows
+      ? Promise.resolve(input.serviceCallRows)
+      : listServiceCallsForOperatingMonth({
+          operatingMonthId: input.operatingMonthId,
+          startDate: input.startDate,
+          endDate: input.endDate,
+          prismaClient: client
+        }),
     findActiveExpenses(client, {
       operatingMonthId: input.operatingMonthId,
       expenseDate: { gte: toDateOnly(input.startDate), lte: toDateOnly(input.endDate) }

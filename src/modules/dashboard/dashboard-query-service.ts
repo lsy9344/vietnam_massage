@@ -6,6 +6,7 @@ import {
   getDailyCallLedgerSummary,
   listCompletedServiceCallCalculationsForOperatingMonth,
   listDailyCallLedgerSummariesForOperatingMonth,
+  listServiceCallsForOperatingMonth,
   type CompletedServiceCallCalculationDto,
   type DailyCourseSummaryDto
 } from "@/modules/calls/service-call-service";
@@ -826,6 +827,14 @@ export async function getMonthlyDashboardMetrics(input: {
     status: operatingMonthRecord.status
   };
   const serviceDates = dateRange(operatingMonth.startDate, operatingMonth.endDate);
+  const sharedCallRows = input.dependencies?.getDailyCallLedgerSummary
+    ? null
+    : await listServiceCallsForOperatingMonth({
+        operatingMonthId: parsed.data.operatingMonthId,
+        startDate: operatingMonth.startDate,
+        endDate: operatingMonth.endDate,
+        prismaClient: client as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
+      });
   const summaries = input.dependencies?.getDailyCallLedgerSummary
     ? await mapWithConcurrency(serviceDates, DASHBOARD_QUERY_CONCURRENCY, (serviceDate) =>
         dependencies.getDailyCallLedgerSummary({
@@ -839,7 +848,8 @@ export async function getMonthlyDashboardMetrics(input: {
         operatingMonthId: parsed.data.operatingMonthId,
         startDate: operatingMonth.startDate,
         endDate: operatingMonth.endDate,
-        prismaClient: client as Parameters<typeof listDailyCallLedgerSummariesForOperatingMonth>[0]["prismaClient"]
+        prismaClient: client as Parameters<typeof listDailyCallLedgerSummariesForOperatingMonth>[0]["prismaClient"],
+        serviceCallRows: sharedCallRows ?? undefined
       });
 
   const statusCounts = summaries.reduce(
@@ -951,7 +961,8 @@ export async function getMonthlyDashboardMetrics(input: {
   } else {
     const preview = await dependencies.listMonthlyClosingPreview({
       operatingMonthId: parsed.data.operatingMonthId,
-      prismaClient: client as Parameters<typeof listMonthlyClosingPreview>[0]["prismaClient"]
+      prismaClient: client as Parameters<typeof listMonthlyClosingPreview>[0]["prismaClient"],
+      ...(sharedCallRows ? { serviceCallRows: sharedCallRows } : {})
     });
     sourceBasis = {
       kind: "current_recalculation",
@@ -1114,6 +1125,25 @@ export async function getDashboardGraphReport(input: {
       snapshotMissing = true;
       sourceBasis = toGraphSourceBasis({ operatingMonthStatus: operatingMonth.status, closing: null, snapshotMissing: true });
     }
+  } else if (
+    !input.dependencies?.getDailyCallLedgerSummary &&
+    !input.dependencies?.listTherapistDailySettlements &&
+    !input.dependencies?.listCompletedServiceCallCalculationsForOperatingMonth
+  ) {
+    const preview = await dependencies.listMonthlyClosingPreview({
+      operatingMonthId: parsed.data.operatingMonthId,
+      prismaClient: client as Parameters<typeof listMonthlyClosingPreview>[0]["prismaClient"]
+    });
+    dailyRevenueTrend = preview.graphReport.dailyRevenueTrend;
+    noShowCancelTrend = preview.graphReport.noShowCancelTrend;
+    callLedgerWarnings = preview.graphReport.callLedgerWarnings;
+    totalStatusCount = preview.graphReport.totalStatusCount;
+    courseMix = preview.graphReport.courseMix;
+    therapistCallRanking = preview.graphReport.therapistCallRanking;
+    settlementSource = preview;
+    settlementWarnings = preview.warningCounts;
+    settlementExcludedCallCount = preview.evidence.excludedCallCount;
+    sourceBasis = toGraphSourceBasis({ operatingMonthStatus: operatingMonth.status, closing: null, snapshotMissing: false });
   } else {
     const [dailySummaries, completedCalculations, therapistDailyResults, preview] = await Promise.all([
       input.dependencies?.getDailyCallLedgerSummary

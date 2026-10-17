@@ -13,6 +13,7 @@ import {
   listActivelyConfirmedUnitEmployeeIds,
   derivePayoutConfirmationStatus,
   attachPayoutConfirmationsToRows,
+  listPayoutConfirmationHistoriesByDate,
   toPayoutConfirmationPrismaClient,
   reconfirmPayoutConfirmation,
   releasePayoutConfirmation,
@@ -378,6 +379,9 @@ export async function listTherapistDailySettlements(input: {
   serviceDate: string;
   prismaClient?: TherapistDailySettlementPrismaClient;
   serviceCallRows?: ServiceCallRowDto[];
+  rateLookup?: Awaited<ReturnType<typeof loadApplicableRates>>;
+  /** 월간 집계는 금액만 쓴다. 지급 확인 조회를 날짜마다 하지 않는다. */
+  skipPayoutReads?: boolean;
 }): Promise<TherapistDailySettlementResultDto> {
   const parsed = settlementQuerySchema.safeParse(input);
   if (!parsed.success) {
@@ -402,7 +406,7 @@ export async function listTherapistDailySettlements(input: {
   }
 
   const employeesById = new Map(therapistEmployees.map((employee) => [employee.id, employee]));
-  const rateLookup = await loadApplicableRates(client, rows);
+  const rateLookup = input.rateLookup ?? (await loadApplicableRates(client, rows));
   const settlementsByEmployeeId = new Map<string, TherapistDailySettlementDto>();
   const warningCounts = {
     coursePolicyMissing: 0,
@@ -467,7 +471,7 @@ export async function listTherapistDailySettlements(input: {
   // S7(ADR 0004): 확인 사건이 있는 단위는 그날 완료 콜이 없어도(콜이 취소·노쇼로 정정되거나 마사지사가
   // 비활성되어도) 금액 0인 행으로 남긴다. 그래야 attachPayoutConfirmations가 "지급 재확인 필요"로
   // 가리고, 마감 점검도 이 차이를 막을 수 있다.
-  if (client.payoutConfirmationEvent) {
+  if (!input.skipPayoutReads && client.payoutConfirmationEvent) {
     const confirmedEmployeeIds = await listActivelyConfirmedUnitEmployeeIds({
       unitType: "THERAPIST_DAILY",
       operatingMonthId: parsed.data.operatingMonthId,
@@ -482,19 +486,22 @@ export async function listTherapistDailySettlements(input: {
   }
 
   const settlements = [...settlementsByEmployeeId.values()].sort((a, b) => a.sortOrder - b.sortOrder || a.staffCode.localeCompare(b.staffCode));
+  const settlementsWithPayout = input.skipPayoutReads
+    ? settlements
+    : await attachPayoutConfirmationsToRows({
+        unitType: "THERAPIST_DAILY",
+        currentAmount: (row) => row.totalCommissionAmount,
+        client,
+        operatingMonthId: parsed.data.operatingMonthId,
+        serviceDate: parsed.data.serviceDate,
+        operatingMonthStatus: operatingMonth.status,
+        rows: settlements
+      });
 
   return {
     operatingMonthId: parsed.data.operatingMonthId,
     serviceDate: parsed.data.serviceDate,
-    settlements: await attachPayoutConfirmationsToRows({
-      unitType: "THERAPIST_DAILY",
-      currentAmount: (row) => row.totalCommissionAmount,
-      client,
-      operatingMonthId: parsed.data.operatingMonthId,
-      serviceDate: parsed.data.serviceDate,
-      operatingMonthStatus: operatingMonth.status,
-      rows: settlements
-    }),
+    settlements: settlementsWithPayout,
     warningCounts,
     excludedCallCount
   };
@@ -520,14 +527,18 @@ export async function listTherapistDailySettlementsForOperatingMonth(input: {
   startDate: string;
   endDate: string;
   prismaClient?: TherapistDailySettlementPrismaClient;
+  serviceCallRows?: ServiceCallRowDto[];
 }): Promise<TherapistDailySettlementResultDto[]> {
   const client = getClient(input.prismaClient);
-  const rows = await listServiceCallsForOperatingMonth({
-    operatingMonthId: input.operatingMonthId,
-    startDate: input.startDate,
-    endDate: input.endDate,
-    prismaClient: client as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
-  });
+  const rows =
+    input.serviceCallRows ??
+    (await listServiceCallsForOperatingMonth({
+      operatingMonthId: input.operatingMonthId,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      prismaClient: client as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
+    }));
+  const rateLookup = await loadApplicableRates(client, rows);
   const rowsByDate = new Map<string, ServiceCallRowDto[]>();
   for (const row of rows) {
     const bucket = rowsByDate.get(row.serviceDate) ?? [];
@@ -540,7 +551,9 @@ export async function listTherapistDailySettlementsForOperatingMonth(input: {
       operatingMonthId: input.operatingMonthId,
       serviceDate,
       prismaClient: client,
-      serviceCallRows: rowsByDate.get(serviceDate) ?? []
+      serviceCallRows: rowsByDate.get(serviceDate) ?? [],
+      rateLookup,
+      skipPayoutReads: true
     })
   );
 }
@@ -573,12 +586,47 @@ export async function listTherapistDailyPayoutConfirmationsForMonth(input: {
     throw new Error("운영월을 찾을 수 없습니다.");
   }
 
+  const startDate = toIsoDate(operatingMonth.startDate);
+  const endDate = toIsoDate(operatingMonth.endDate);
+  const [dayResults, historiesByDate] = await Promise.all([
+    listTherapistDailySettlementsForOperatingMonth({
+      operatingMonthId: parsed.data.operatingMonthId,
+      startDate,
+      endDate,
+      prismaClient: client
+    }),
+    listPayoutConfirmationHistoriesByDate({
+      unitType: "THERAPIST_DAILY",
+      operatingMonthId: parsed.data.operatingMonthId,
+      startDate,
+      endDate,
+      prismaClient: toPayoutConfirmationPrismaClient(client)
+    })
+  ]);
+
   const results: TherapistDailyPayoutConfirmationDto[] = [];
-  for (let cursor = operatingMonth.startDate; cursor <= operatingMonth.endDate; cursor = new Date(cursor.getTime() + 86400000)) {
-    const serviceDate = toIsoDate(cursor);
-    const dayResult = await listTherapistDailySettlements({ operatingMonthId: parsed.data.operatingMonthId, serviceDate, prismaClient: client });
+  for (const dayResult of dayResults) {
+    const histories = historiesByDate.get(dayResult.serviceDate) ?? new Map<string, PayoutConfirmationDto["history"]>();
+    const seen = new Set<string>();
     for (const settlement of dayResult.settlements) {
-      results.push({ serviceDate, employeeId: settlement.employeeId, payoutConfirmation: settlement.payoutConfirmation });
+      seen.add(settlement.employeeId);
+      results.push({
+        serviceDate: dayResult.serviceDate,
+        employeeId: settlement.employeeId,
+        payoutConfirmation: derivePayoutConfirmationStatus(
+          histories.get(settlement.employeeId) ?? [],
+          settlement.totalCommissionAmount,
+          operatingMonth.status
+        )
+      });
+    }
+    for (const [employeeId, history] of histories) {
+      if (seen.has(employeeId) || history[0]?.eventType === "release") continue;
+      results.push({
+        serviceDate: dayResult.serviceDate,
+        employeeId,
+        payoutConfirmation: derivePayoutConfirmationStatus(history, 0, operatingMonth.status)
+      });
     }
   }
   return results;

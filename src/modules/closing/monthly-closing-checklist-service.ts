@@ -5,6 +5,7 @@ import { memoizePrismaReads } from "@/lib/prisma-read-cache";
 import {
   IN_USE_SERVICE_CALL_STATUSES,
   getDailyCallLedgerSummary,
+  listDailyCallLedgerSummariesForOperatingMonth,
   listServiceCallsForOperatingMonth,
   type DailyCallLedgerSummaryDto,
   type ServiceCallCalculationStatus,
@@ -221,15 +222,25 @@ async function aggregateFinancials(input: {
   dates: string[];
   client: MonthlyClosingChecklistPrismaClient;
   dependencies: MonthlyClosingChecklistDependencies;
+  useMonthBatch: boolean;
+  serviceCallRows?: ServiceCallRowDto[];
 }): Promise<MonthlyClosingChecklistFinancialsDto> {
-  const dailyResults = await mapWithConcurrency(input.dates, MONTHLY_CLOSING_CHECKLIST_QUERY_CONCURRENCY, (serviceDate) =>
-    input.dependencies.getDailyCallLedgerSummary({
-      operatingMonthId: input.operatingMonthId,
-      serviceDate,
-      includeMonthTill: false,
-      prismaClient: input.client as unknown as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
-    })
-  );
+  const dailyResults = input.useMonthBatch
+    ? await listDailyCallLedgerSummariesForOperatingMonth({
+        operatingMonthId: input.operatingMonthId,
+        startDate: input.dates[0] ?? "",
+        endDate: input.dates[input.dates.length - 1] ?? "",
+        prismaClient: input.client as Parameters<typeof listDailyCallLedgerSummariesForOperatingMonth>[0]["prismaClient"],
+        serviceCallRows: input.serviceCallRows
+      })
+    : await mapWithConcurrency(input.dates, MONTHLY_CLOSING_CHECKLIST_QUERY_CONCURRENCY, (serviceDate) =>
+        input.dependencies.getDailyCallLedgerSummary({
+          operatingMonthId: input.operatingMonthId,
+          serviceDate,
+          includeMonthTill: false,
+          prismaClient: input.client as unknown as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
+        })
+      );
 
   const paymentMethodTotals = dailyResults.reduce(
     (totals, result) => ({
@@ -246,7 +257,7 @@ async function aggregateFinancials(input: {
   // till.month는 조회한 날짜와 무관하게 운영월 전체의 누적이라(service-call-service.monthTillFor),
   // 날짜 하나만 includeMonthTill로 다시 불러 현금/계좌 잔액을 얻는다.
   const monthTillDay = input.dates[0];
-  const monthTill = monthTillDay
+  const monthTill = !input.useMonthBatch && monthTillDay
     ? await input.dependencies.getDailyCallLedgerSummary({
         operatingMonthId: input.operatingMonthId,
         serviceDate: monthTillDay,
@@ -254,12 +265,19 @@ async function aggregateFinancials(input: {
         prismaClient: input.client as unknown as Parameters<typeof getDailyCallLedgerSummary>[0]["prismaClient"]
       })
     : null;
+  const summedDayTill = dailyResults.reduce(
+    (totals, result) => ({
+      cashBalance: totals.cashBalance + result.till.day.cashBalance,
+      bankBalance: totals.bankBalance + result.till.day.bankBalance
+    }),
+    { cashBalance: 0, bankBalance: 0 }
+  );
 
   return {
     paymentMethodTotals,
     expenseTotal,
-    cashBalance: monthTill?.till.month.cashBalance ?? 0,
-    bankBalance: monthTill?.till.month.bankBalance ?? 0,
+    cashBalance: input.useMonthBatch ? summedDayTill.cashBalance : (monthTill?.till.month.cashBalance ?? 0),
+    bankBalance: input.useMonthBatch ? summedDayTill.bankBalance : (monthTill?.till.month.bankBalance ?? 0),
     netSales
   };
 }
@@ -292,15 +310,22 @@ export async function listMonthlyClosingChecklist(input: {
   }
   const dates = dateRange(startDate, endDate);
 
-  const [allRows, payoutReconfirmationUnits, financials] = await Promise.all([
-    dependencies.listServiceCallsForOperatingMonth({
-      operatingMonthId: parsed.data.operatingMonthId,
-      startDate,
-      endDate,
-      prismaClient: client as unknown as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
-    }),
+  const allRows = await dependencies.listServiceCallsForOperatingMonth({
+    operatingMonthId: parsed.data.operatingMonthId,
+    startDate,
+    endDate,
+    prismaClient: client as unknown as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
+  });
+  const [payoutReconfirmationUnits, financials] = await Promise.all([
     listPayoutReconfirmationUnits({ operatingMonthId: parsed.data.operatingMonthId, client, dependencies }),
-    aggregateFinancials({ operatingMonthId: parsed.data.operatingMonthId, dates, client, dependencies })
+    aggregateFinancials({
+      operatingMonthId: parsed.data.operatingMonthId,
+      dates,
+      client,
+      dependencies,
+      useMonthBatch: !input.dependencies?.getDailyCallLedgerSummary,
+      serviceCallRows: allRows
+    })
   ]);
 
   const calculationErrorCalls = allRows
