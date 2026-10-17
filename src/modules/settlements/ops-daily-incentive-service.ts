@@ -455,13 +455,13 @@ export async function listOpsDailyPayoutConfirmationsForMonth(input: {
       operatingMonthId: parsed.data.operatingMonthId,
       startDate,
       endDate,
-      prismaClient: client as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
+      prismaClient: client as unknown as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
     }),
     listOpsAttendanceByDateForOperatingMonth({
       operatingMonthId: parsed.data.operatingMonthId,
       startDate,
       endDate,
-      prismaClient: client as Parameters<typeof listOpsAttendanceByDateForOperatingMonth>[0]["prismaClient"]
+      prismaClient: client as unknown as Parameters<typeof listOpsAttendanceByDateForOperatingMonth>[0]["prismaClient"]
     }),
     listPayoutConfirmationHistoriesByDate({
       unitType: "OPS_DAILY",

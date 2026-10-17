@@ -536,7 +536,7 @@ export async function listTherapistDailySettlementsForOperatingMonth(input: {
       operatingMonthId: input.operatingMonthId,
       startDate: input.startDate,
       endDate: input.endDate,
-      prismaClient: client as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
+      prismaClient: client as unknown as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
     }));
   const rateLookup = await loadApplicableRates(client, rows);
   const rowsByDate = new Map<string, ServiceCallRowDto[]>();

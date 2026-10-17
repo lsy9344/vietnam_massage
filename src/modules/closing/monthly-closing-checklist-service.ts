@@ -230,7 +230,7 @@ async function aggregateFinancials(input: {
         operatingMonthId: input.operatingMonthId,
         startDate: input.dates[0] ?? "",
         endDate: input.dates[input.dates.length - 1] ?? "",
-        prismaClient: input.client as Parameters<typeof listDailyCallLedgerSummariesForOperatingMonth>[0]["prismaClient"],
+        prismaClient: input.client as unknown as Parameters<typeof listDailyCallLedgerSummariesForOperatingMonth>[0]["prismaClient"],
         serviceCallRows: input.serviceCallRows
       })
     : await mapWithConcurrency(input.dates, MONTHLY_CLOSING_CHECKLIST_QUERY_CONCURRENCY, (serviceDate) =>
