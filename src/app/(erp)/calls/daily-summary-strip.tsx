@@ -55,16 +55,12 @@ export function DailySummaryStrip({
   locale: Locale;
 }) {
   const showTherapistAssignmentCount = showSettlementAmounts;
-  // 이번 달 잔액·시재는 관리자·정산 담당에게만 보인다(1018 스펙 D18). 페이지도 그때만 운영월 시재를 읽어 넣는다.
-  const showMonthTill = showSettlementAmounts;
   const warningTotal =
     summary.warningCounts.coursePolicyMissing + summary.warningCounts.therapistRateMissing + summary.warningCounts.secondTherapistRequired;
   const vndSuffix = t(locale, "calls.summary.vndSuffix");
   const amount = (value: number) => formatNumber(locale, value);
   const formatVnd = (value: number) => `${amount(value)} ${vndSuffix}`;
   const balance = (value: number, kind: "cash" | "bank") => balanceAmount(locale, value, kind);
-  const monthNote = (value: number, kind: "cash" | "bank") =>
-    t(locale, "calls.cashbook.monthNote", { amount: `${balance(value, kind)} ${vndSuffix}` });
 
   return (
     <section aria-label={t(locale, "calls.summary.aria")} className="grid grid-cols-1 gap-6">
@@ -74,14 +70,12 @@ export function DailySummaryStrip({
         <SummaryCard
           accent="blue"
           label={t(locale, "calls.summary.cashBalance")}
-          note={showMonthTill ? monthNote(summary.till.month.cashBalance, "cash") : undefined}
           unit={vndSuffix}
           value={balance(summary.till.day.cashBalance, "cash")}
         />
         <SummaryCard
           accent="blue"
           label={t(locale, "calls.summary.bankBalance")}
-          note={showMonthTill ? monthNote(summary.till.month.bankBalance, "bank") : undefined}
           unit={vndSuffix}
           value={balance(summary.till.day.bankBalance, "bank")}
         />
@@ -121,7 +115,7 @@ export function DailySummaryStrip({
           </dl>
         </Card>
         <Card title={t(locale, "calls.cashbook.till")}>
-          <TillTable day={summary.till.day} locale={locale} month={showMonthTill ? summary.till.month : null} />
+          <TillTable day={summary.till.day} locale={locale} />
         </Card>
       </div>
 
@@ -155,14 +149,12 @@ export function DailySummaryStrip({
   );
 }
 
-function TillTable({ day, month, locale }: { day: TillBalanceDto; month: TillBalanceDto | null; locale: Locale }) {
+/** 시재는 오늘만 보인다. 이번 달 시재는 하루 수납 화면에 두지 않고 마감·보고 화면에서 본다(1018 스펙 D18). */
+function TillTable({ day, locale }: { day: TillBalanceDto; locale: Locale }) {
   const vndSuffix = t(locale, "calls.summary.vndSuffix");
   const formatVnd = (value: number) => `${formatNumber(locale, value)} ${vndSuffix}`;
   const formatBalance = (value: number, kind: "cash" | "bank") => `${balanceAmount(locale, value, kind)} ${vndSuffix}`;
-  const periods = [
-    { key: "today", label: t(locale, "calls.cashbook.till.today"), till: day },
-    ...(month ? [{ key: "month", label: t(locale, "calls.cashbook.till.month"), till: month }] : [])
-  ];
+  const periods = [{ key: "today", label: t(locale, "calls.cashbook.till.today"), till: day }];
 
   return (
     <div className="mt-3 overflow-x-auto rounded-md border border-border">

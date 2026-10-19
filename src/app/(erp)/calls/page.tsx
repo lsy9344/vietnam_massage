@@ -104,8 +104,8 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
       listServiceCallsForDate(ledgerDate),
       listServiceCallFormOptions({ operatingMonthId: selectedMonth.id, locale }),
       listDailyExpensesForDate({ operatingMonthId: selectedMonth.id, expenseDate: serviceDate }),
-      // 이번 달 시재는 관리자·정산 담당에게만 읽어 보낸다(1018 스펙 D18). 카운터의 HTML에는 그 숫자가 없다.
-      getDailyCallLedgerSummary({ ...ledgerDate, includeMonthTill: canViewSettlementAmounts })
+      // 하루 수납 화면은 오늘 숫자만 보인다. 이번 달 시재는 누구에게도 읽어 보내지 않는다(1018 스펙 D18) — 마감·보고 화면에서 본다.
+      getDailyCallLedgerSummary({ ...ledgerDate, includeMonthTill: false })
     ]);
 
     return (

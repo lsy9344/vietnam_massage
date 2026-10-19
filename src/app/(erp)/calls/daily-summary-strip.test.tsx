@@ -88,8 +88,8 @@ describe("하루 수납·지출 탭 요약", () => {
 
     assert.match(text(cards), /결제합계 2,900,000 VND/);
     assert.match(text(cards), /순매출 2,850,000 VND/);
-    assert.match(text(cards), /현금 잔액 1,450,000 VND 이번 달 8,700,000 VND/);
-    assert.match(text(cards), /계좌 잔액 400,000 VND 이번 달 1,900,000 VND/);
+    assert.match(text(cards), /현금 잔액 1,450,000 VND/);
+    assert.match(text(cards), /계좌 잔액 400,000 VND/);
     // 순매출과 잔액은 다른 카드, 다른 색이다(ADR 0002).
     assert.equal((cards.match(/bg-accent-lavender/g) ?? []).length, 2);
     assert.equal((cards.match(/bg-accent-blue/g) ?? []).length, 2);
@@ -128,13 +128,13 @@ describe("하루 수납·지출 탭 요약", () => {
     assert.match(shown, /지출합계 50,000 VND/);
   });
 
-  it("shows the day and month till receipts, expenses and balances, marking a shortage in the table", () => {
+  it("shows the day till receipts, expenses and balances, marking a shortage in the table", () => {
     const html = render({
       showSettlementAmounts: true,
       summary: summary({
         till: {
           day: { cashReceipts: 1000, cashExpenses: 51000, cashBalance: -50000, bankReceipts: 0, bankExpenses: 0, bankBalance: 0 },
-          month: { cashReceipts: 9000000, cashExpenses: 300000, cashBalance: 8700000, bankReceipts: 2000000, bankExpenses: 100000, bankBalance: 1900000 }
+          month: zeroTill()
         }
       })
     });
@@ -142,20 +142,25 @@ describe("하루 수납·지출 탭 요약", () => {
 
     assert.match(text(till), /오늘 현금 1,000 VND 51,000 VND 부족 50,000 VND/);
     assert.match(text(till), /계좌 0 VND 0 VND 0 VND/);
-    assert.match(text(till), /이번 달 현금 9,000,000 VND 300,000 VND 8,700,000 VND/);
-    assert.match(text(till), /계좌 2,000,000 VND 100,000 VND 1,900,000 VND/);
     assert.match(till, /text-danger[^"]*">부족 50,000 VND/);
   });
 
-  // 1018 스펙 D18: 이번 달 숫자는 관리자·정산 담당에게만 보낸다. 카운터에게는 오늘 숫자만 남는다.
-  it("leaves this month's balances and till out for viewers without settlement amounts", () => {
-    const counter = render();
-    const cards = text(summaryCards(counter));
+  // 1018 스펙 D18(2026-10-19 고침): 하루 수납 화면은 오늘 숫자만 보인다. 이번 달은 누구에게도 보이지 않고, 마감·보고 화면에 남는다.
+  it("never shows this month's balances or till, even for settlement viewers", () => {
+    for (const showSettlementAmounts of [false, true]) {
+      const html = render({
+        showSettlementAmounts,
+        summary: summary({
+          till: {
+            day: { cashReceipts: 1000, cashExpenses: 0, cashBalance: 1000, bankReceipts: 0, bankExpenses: 0, bankBalance: 0 },
+            month: { cashReceipts: 9000000, cashExpenses: 300000, cashBalance: 8700000, bankReceipts: 2000000, bankExpenses: 100000, bankBalance: 1900000 }
+          }
+        })
+      });
 
-    assert.match(cards, /현금 잔액 1,450,000 VND/);
-    assert.match(cards, /계좌 잔액 400,000 VND/);
-    assert.doesNotMatch(counter, /이번 달|8,700,000|9,000,000|1,900,000/);
-    assert.match(text(counter.match(/<table[^>]*aria-label="시재"[\s\S]*?<\/table>/)?.[0] ?? ""), /오늘 현금/);
+      assert.doesNotMatch(html, /이번 달|8,700,000|9,000,000|1,900,000|2,000,000/);
+      assert.match(text(html.match(/<table[^>]*aria-label="시재"[\s\S]*?<\/table>/)?.[0] ?? ""), /오늘 현금 1,000 VND/);
+    }
   });
 
   it("keeps settlement amounts and the therapist assignment column for settlement viewers only", () => {

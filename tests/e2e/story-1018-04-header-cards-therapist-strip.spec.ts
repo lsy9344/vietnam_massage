@@ -6,7 +6,7 @@ import { argon2idOptions, login } from "./support/auth";
 import { quickBookingLine, quickBookingPanel } from "./support/quick-booking";
 
 // 1018 티켓 04: 원장 머리의 상태 카드 7개, Therapist 현황 줄(대상·숫자·정렬·빠른 예약·걸러 보기·접기 기억·미지명),
-// 하루 수납의 이번 달 숫자는 관리자·정산 담당에게만. 지금 상태(지금 가능/사용 중)의 시각 계산은 단위 테스트가 보고, 여기서는
+// 하루 수납 화면에는 누구에게도 이번 달 숫자가 없다. 지금 상태(지금 가능/사용 중)의 시각 계산은 단위 테스트가 보고, 여기서는
 // 출근 기록으로 정해지는 출근 전·퇴근과 화면 동작을 본다. 먼 뒤 날짜라 자동 청소 중이 끼어들지 않는다.
 const accounts = {
   counter: { accountId: "t1018_04_counter", password: "Ticket1018-04!counter", role: "counter" },
@@ -117,7 +117,7 @@ async function stripOrder(page: Page) {
   return strip(page).locator("[data-therapist-status]").evaluateAll((items) => items.map((item) => item.getAttribute("data-therapist-status")));
 }
 
-test.describe("1018 티켓 04: 상태 카드와 Therapist 현황 줄, 하루 수납 이번 달 권한", () => {
+test.describe("1018 티켓 04: 상태 카드와 Therapist 현황 줄, 하루 수납은 오늘 숫자만", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeAll(async () => {
@@ -290,25 +290,26 @@ test.describe("1018 티켓 04: 상태 카드와 Therapist 현황 줄, 하루 수
     expect(widths.scroll).toBeLessThanOrEqual(widths.client);
   });
 
-  test("하루 수납의 이번 달 숫자는 관리자에게만 보내고 카운터의 HTML에는 없다", async ({ page }) => {
+  // 1018 스펙 D18(2026-10-19 고침): 월간 숫자는 마감·보고 화면에서 본다. 관리자에게도 하루 수납 화면에는 오늘만 보인다.
+  test("하루 수납 화면은 카운터에게도 관리자에게도 이번 달 숫자를 보내지 않는다", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     const cashbookUrl = `${ledgerUrl()}&tab=cashbook`;
 
-    await login(page, accounts.counter.accountId, accounts.counter.password);
-    await page.goto(cashbookUrl);
-    await expect(page.getByLabel("하루 수납 요약")).toBeVisible();
-    await expect(page.getByRole("table", { name: "시재" })).toContainText("오늘");
-    await expect(page.locator("main")).not.toContainText("이번 달");
-    // 화면에서 숨긴 것이 아니라 서버가 보내지 않는다. 받은 HTML(RSC 데이터 포함)에 그 달 숫자가 없다.
-    const counterHtml = await page.content();
-    expect(counterHtml).not.toContain("123,457");
-    expect(counterHtml).not.toContain(String(monthOnlyExpense));
+    for (const account of [accounts.counter, accounts.admin]) {
+      await page.context().clearCookies();
+      await login(page, account.accountId, account.password);
+      await page.goto(cashbookUrl);
+      await expect(page.getByLabel("하루 수납 요약")).toBeVisible();
+      await expect(page.getByRole("table", { name: "시재" })).toContainText("오늘");
+      await expect(page.locator("main")).not.toContainText("이번 달");
+      // 화면에서 숨긴 것이 아니라 서버가 보내지 않는다. 받은 HTML(RSC 데이터 포함)에 그 달 숫자가 없다.
+      const html = await page.content();
+      expect(html, account.role).not.toContain("123,457");
+      expect(html, account.role).not.toContain(String(monthOnlyExpense));
+    }
 
-    await page.context().clearCookies();
-    await login(page, accounts.admin.accountId, accounts.admin.password);
-    await page.goto(cashbookUrl);
-    await expect(page.getByLabel("하루 수납 요약")).toContainText("이번 달");
-    await expect(page.getByRole("table", { name: "시재" })).toContainText("이번 달");
-    await expect(page.getByRole("table", { name: "시재" })).toContainText("123,457");
+    // 운영월 누적 시재는 관리자의 마감 화면에 그대로 남는다(ADR 0002).
+    await page.goto(`/closing?operatingMonthId=${monthId}`);
+    await expect(page.locator("main")).toContainText("123,457");
   });
 });
