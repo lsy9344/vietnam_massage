@@ -270,7 +270,7 @@ async function createCallRow(input: { serviceDate: string; memo: string; status?
 }
 
 function line(page: Page, callId: string) {
-  return page.locator(`tr[data-service-call-id="${callId}"]`);
+  return page.locator(`[data-ledger-line][data-service-call-id="${callId}"]`);
 }
 
 /** 티켓 03: 계산값은 더 이상 행 칸이 아니라 편집 패널의 결제 묶음(`[data-calculation-status]`)에 readonly로 뜬다. */

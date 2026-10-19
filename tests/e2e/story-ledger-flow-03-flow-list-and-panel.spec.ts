@@ -4,8 +4,8 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 
-// 콜 원장 흐름 재구성 티켓 03: 흐름별 원장 목록(지금 이용 중 → 예약 → 완료·취소·노쇼), 줄 끝 입장·결제, 오른쪽 편집 패널,
-// 키보드 동선, 보기 전환·새 행 입력 없음, 1280·1024px 가로 스크롤 없음, 운영월 잠금.
+// 콜 원장 흐름 재구성 티켓 03: 원장 목록, 줄 끝 입장·결제, 오른쪽 편집 패널, 키보드 동선, 보기 전환·새 행 입력 없음,
+// 1280·1024px 가로 스크롤 없음, 운영월 잠금. 1018 티켓 02에서 흐름 묶음 대신 예약시각순 두 줄 행 목록 하나가 됐다.
 const account = { accountId: "lf03_counter", password: "LedgerFlow03!counter" };
 const monthKey = "2025-03";
 const lockedMonthKey = "2025-02";
@@ -89,7 +89,7 @@ async function cleanup() {
 }
 
 function line(page: Page, callId: string) {
-  return page.locator(`tr[data-service-call-id="${callId}"]`);
+  return page.locator(`[data-ledger-line][data-service-call-id="${callId}"]`);
 }
 
 function panel(page: Page) {
@@ -98,7 +98,7 @@ function panel(page: Page) {
 
 async function openLedger(page: Page, query = "") {
   await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}${query}`);
-  await expect(page.getByRole("table", { name: "흐름별 콜 원장" })).toBeVisible();
+  await expect(page.getByRole("list", { name: "콜 원장 목록" })).toBeVisible();
 }
 
 test.describe("콜 원장 흐름 재구성 티켓 03 흐름별 목록과 편집 패널", () => {
@@ -181,25 +181,23 @@ test.describe("콜 원장 흐름 재구성 티켓 03 흐름별 목록과 편집 
     await prisma.$disconnect();
   });
 
-  test("하루 콜이 지금 이용 중 → 예약 → 완료·취소·노쇼로 묶이고, 완료 묶음은 접혀 있다가 펼친 상태를 기억한다", async ({ page }) => {
+  test("하루 콜이 묶음 없이 한 목록이고, 완료·취소·노쇼는 하단에 접혀 있다가 펼친 상태를 기억한다", async ({ page }) => {
     await login(page, account.accountId, account.password);
     await openLedger(page);
 
-    // 묶음 안의 순서는 시간 슬롯 순서다. 공유 DB에서는 다른 스펙이 슬롯 순서를 바꾸므로 묶음만 본다.
-    const groups = await page.locator("tbody > tr").evaluateAll((rows) => {
-      const result: Record<string, string[]> = {};
-      let flow = "";
-      for (const row of rows) {
-        if (row.hasAttribute("data-ledger-flow")) flow = row.getAttribute("data-ledger-flow") ?? "";
-        else if (row.hasAttribute("data-ledger-line")) (result[flow] ??= []).push(row.getAttribute("data-service-call-id") ?? "");
+    // 순서는 시간 슬롯 순서다. 공유 DB에서는 다른 스펙이 슬롯 순서를 바꾸므로 위 목록과 하단 영역만 본다(1018 스펙 D3·D9).
+    const parts = await page.locator("[data-call-ledger-list] > li").evaluateAll((items) => {
+      const result: Record<string, string[]> = { open: [], done: [] };
+      let part = "open";
+      for (const item of items) {
+        if (item.hasAttribute("data-ledger-done-toggle")) part = "done";
+        else if (item.hasAttribute("data-ledger-line")) result[part].push(item.getAttribute("data-service-call-id") ?? "");
       }
       return result;
     });
-    expect(groups.active?.sort()).toEqual([inUseCallId, paidCallId].sort());
-    expect(groups.reserved?.sort()).toEqual([reservedNoRoomId, reservedWithRoomId].sort());
-    expect(groups.done).toEqual([doneCallId]);
-    await expect(page.locator("[data-ledger-flow=active]")).toContainText("지금 이용 중 2건");
-    await expect(page.locator("[data-ledger-flow=reserved]")).toContainText("예약 2건");
+    expect(parts.open.sort()).toEqual([inUseCallId, paidCallId, reservedNoRoomId, reservedWithRoomId].sort());
+    expect(parts.done).toEqual([doneCallId]);
+    await expect(page.getByText("지금 이용 중")).toHaveCount(0);
     await expect(line(page, doneCallId)).toBeHidden();
 
     const toggle = page.getByRole("button", { name: "완료·취소·노쇼 1건" });
@@ -219,7 +217,7 @@ test.describe("콜 원장 흐름 재구성 티켓 03 흐름별 목록과 편집 
     await expect(page.getByRole("navigation", { name: "원장 표 보기" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "새 콜 행 추가" })).toHaveCount(0);
     await expect(line(page, inUseCallId)).toContainText("LF03 이용 손님");
-    await expect(page.locator("tr[data-ledger-line] input")).toHaveCount(0);
+    await expect(page.locator("[data-ledger-line] input")).toHaveCount(0);
   });
 
   test("입장: 객실이 있으면 지금 시각과 사용중으로 바로 저장하고, 없으면 빈 객실만 골라 저장한다", async ({ page }) => {
@@ -240,7 +238,8 @@ test.describe("콜 원장 흐름 재구성 티켓 03 흐름별 목록과 편집 
     expect((await (prisma as any).serviceCall.findUnique({ where: { id: reservedNoRoomId } })).status).toBe("IN_USE");
 
     await page.reload();
-    await expect(page.locator("[data-ledger-flow=active]")).toContainText("지금 이용 중 4건");
+    await expect(line(page, reservedNoRoomId)).toContainText("사용중");
+    await expect(line(page, reservedWithRoomId)).toContainText("사용중");
   });
 
   test("결제: 줄의 결제가 패널의 결제 묶음을 열고, 결제수단 알약과 결제 완료로 방문완료가 된다", async ({ page }) => {
@@ -274,7 +273,6 @@ test.describe("콜 원장 흐름 재구성 티켓 03 흐름별 목록과 편집 
     await note.fill("LF03 비고");
     await note.press("Tab");
     await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: inUseCallId } })).note).toBe("LF03 비고");
-    await expect(line(page, inUseCallId)).toContainText("LF03 비고");
 
     await edit.getByText("더 보기").click();
     await expect(edit.getByLabel("방문별 요청")).toBeVisible();
@@ -287,16 +285,16 @@ test.describe("콜 원장 흐름 재구성 티켓 03 흐름별 목록과 편집 
     await openLedger(page);
 
     const opener = (id: string) => line(page, id).locator("[data-call-open]");
-    const first = page.locator("tr[data-ledger-line]").first().locator("[data-call-open]");
+    const first = page.locator("[data-ledger-line]").first().locator("[data-call-open]");
     await first.focus();
     await page.keyboard.press("ArrowDown");
-    const secondId = await page.locator("tr[data-ledger-line]").nth(1).getAttribute("data-service-call-id");
+    const secondId = await page.locator("[data-ledger-line]").nth(1).getAttribute("data-service-call-id");
     await expect(opener(secondId!)).toBeFocused();
     await page.keyboard.press("ArrowUp");
     await expect(first).toBeFocused();
 
     await page.keyboard.press("Enter");
-    const firstId = await page.locator("tr[data-ledger-line]").first().getAttribute("data-service-call-id");
+    const firstId = await page.locator("[data-ledger-line]").first().getAttribute("data-service-call-id");
     await expect(page).toHaveURL(new RegExp(`call=${firstId}$`));
     const startTime = panel(page).getByRole("combobox", { name: "시간" });
     await expect(startTime).toBeFocused();
@@ -328,7 +326,7 @@ test.describe("콜 원장 흐름 재구성 티켓 03 흐름별 목록과 편집 
       await expect(panel(page)).toBeVisible();
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(overflow).toBeLessThanOrEqual(0);
-      const table = page.getByRole("table", { name: "흐름별 콜 원장" });
+      const table = page.getByRole("list", { name: "콜 원장 목록" });
       const box = await table.evaluate((element) => ({ scroll: element.scrollWidth, client: element.clientWidth }));
       expect(box.scroll).toBeLessThanOrEqual(box.client);
     });

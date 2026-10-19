@@ -30,6 +30,7 @@ const row: ServiceCallRowDto = {
   actualEntryTime: null,
   actualEndTime: null,
   displayEnd: "17:00",
+  reservedEnd: "17:00",
   warningTime: "17:00",
   warnings: [{ code: "yield_to_reservation", relatedTime: "17:00", relatedCallIds: ["after"] }],
   roomId: "room-101",

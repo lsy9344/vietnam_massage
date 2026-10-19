@@ -165,7 +165,7 @@ test.describe("티켓 13 원장 행 경고와 콜 상세 패널", () => {
   });
 
   function line(page: Page, callId: string) {
-    return page.locator(`tr[data-service-call-id="${callId}"]`);
+    return page.locator(`[data-ledger-line][data-service-call-id="${callId}"]`);
   }
 
   // 경고 버튼(티켓 03): aria-label이 "경고 N건: 첫 경고"다. 보이는 글자는 "▲ N"뿐이고 전체 문장은 title에 있다.

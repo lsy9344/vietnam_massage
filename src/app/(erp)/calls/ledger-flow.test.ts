@@ -4,7 +4,13 @@ import {
   entryClock,
   freeRoomOptions,
   ledgerFlowItems,
-  ledgerFlowSections,
+  ledgerTimeline,
+  lateMinutes,
+  ledgerEndView,
+  ledgerWhoLabel,
+  roomPickList,
+  therapistPickList,
+  nowDividerIndex,
   ledgerListKey,
   nextLedgerAction,
   partyEntryTargets,
@@ -15,9 +21,9 @@ function call(id: string, startTime: string, status: string) {
   return { id, startTime, status };
 }
 
-describe("ledger flow sections", () => {
-  it("puts calls in use, then reservations, then finished calls, keeping the ledger's time order inside each", () => {
-    const sections = ledgerFlowSections([
+describe("ledger timeline (1018 ticket 02)", () => {
+  it("keeps every open call in one list in the ledger's time order, and moves finished calls to the folded part", () => {
+    const timeline = ledgerTimeline([
       call("done-11", "11:00", "VISIT_COMPLETE"),
       call("reserved-12", "12:00", "RESERVED"),
       call("in-use-13", "13:00", "IN_USE"),
@@ -27,12 +33,134 @@ describe("ledger flow sections", () => {
       call("no-show-17", "17:00", "노쇼")
     ]);
 
-    assert.deepEqual(
-      sections.map((section) => [section.flow, section.rows.map((row) => row.id)]),
+    assert.deepEqual(timeline.open.map((row) => row.id), ["reserved-12", "in-use-13", "cleaning-14", "reserved-16"]);
+    assert.deepEqual(timeline.done.map((row) => row.id), ["done-11", "canceled-15", "no-show-17"]);
+  });
+});
+
+describe("now line and lateness (1018 ticket 02)", () => {
+  it("puts the now line before the first call booked after now, counting past midnight as the same business day", () => {
+    const times = ["23:00", "00:30", "01:00", "02:00"];
+    assert.equal(nowDividerIndex(times, "01:00", "11:00"), 3);
+    assert.equal(nowDividerIndex(times, "22:00", "11:00"), 0);
+    assert.equal(nowDividerIndex(times, "03:00", "11:00"), 4);
+  });
+
+  it("says how many minutes a reservation is late once its time has passed, and nothing for other statuses", () => {
+    assert.equal(lateMinutes("RESERVED", "00:30", "01:05", "11:00"), 35);
+    assert.equal(lateMinutes("예약", "23:50", "00:10", "11:00"), 20);
+    assert.equal(lateMinutes("RESERVED", "01:00", "01:00", "11:00"), null);
+    assert.equal(lateMinutes("RESERVED", "02:00", "01:00", "11:00"), null);
+    assert.equal(lateMinutes("IN_USE", "00:30", "01:05", "11:00"), null);
+  });
+});
+
+describe("entry and end on the top line (1018 ticket 02)", () => {
+  it("shows not entered before entry, the expected display end faintly before the end, and the actual end after it", () => {
+    assert.deepEqual(ledgerEndView({ actualEntryTime: null, actualEndTime: null, displayEnd: "17:00" }), { kind: "notEntered" });
+    assert.deepEqual(ledgerEndView({ actualEntryTime: "16:10", actualEndTime: null, displayEnd: "17:10" }), { kind: "expected", time: "17:10" });
+    assert.deepEqual(ledgerEndView({ actualEntryTime: "16:10", actualEndTime: "16:58", displayEnd: "17:10" }), { kind: "actual", time: "16:58" });
+  });
+});
+
+describe("who booked, on the bottom line (1018 ticket 02)", () => {
+  const channels = [{ value: "TELEGRAM", label: "텔레그램" }];
+  const customers = [{ id: "customer-kim", name: "김민수" }];
+  const call = (overrides: Partial<Parameters<typeof ledgerWhoLabel>[0]> = {}) => ({
+    bookingChannelCode: null,
+    bookerName: null,
+    customerId: null,
+    customerMemo: null,
+    ...overrides
+  });
+
+  it("names the booking channel and the booker", () => {
+    assert.deepEqual(ledgerWhoLabel(call({ bookingChannelCode: "TELEGRAM", bookerName: "홍길동" }), channels, customers), {
+      channel: "텔레그램",
+      name: "홍길동"
+    });
+  });
+
+  it("falls back on old calls to the customer's name, then to the first line of the customer memo", () => {
+    assert.deepEqual(ledgerWhoLabel(call({ customerId: "customer-kim", customerMemo: "메모" }), channels, customers), { channel: null, name: "김민수" });
+    assert.deepEqual(ledgerWhoLabel(call({ customerMemo: "정 대표\n2층 선호" }), channels, customers), { channel: null, name: "정 대표" });
+    assert.deepEqual(ledgerWhoLabel(call(), channels, customers), { channel: null, name: null });
+  });
+});
+
+describe("therapist cell list (1018 ticket 02)", () => {
+  const therapist = (
+    therapistId: string,
+    verdict: "possible" | "time_short" | "rate_missing",
+    done: number,
+    attendance: "before_check_in" | "checked_in" | "checked_out" = "checked_in"
+  ) => ({
+    therapistId,
+    therapistName: therapistId,
+    attendance,
+    available: verdict === "possible",
+    freeFrom: verdict === "time_short" ? "18:00" : null,
+    callCounts: { done, reserved: 0 },
+    courses: [{ courseId: "course-a", verdict }]
+  });
+
+  it("puts who can take the call's course first, fewest finished today first, and the rest below with why", () => {
+    const list = therapistPickList(
       [
-        ["active", ["in-use-13", "cleaning-14"]],
-        ["reserved", ["reserved-12", "reserved-16"]],
-        ["done", ["done-11", "canceled-15", "no-show-17"]]
+        therapist("busy", "time_short", 0),
+        therapist("two-done", "possible", 2),
+        therapist("no-rate", "rate_missing", 0),
+        therapist("none-done", "possible", 0),
+        therapist("gone", "possible", 0, "checked_out"),
+        therapist("not-in-yet", "possible", 0, "before_check_in"),
+        therapist("one-done", "possible", 1)
+      ],
+      "course-a"
+    );
+    assert.deepEqual(
+      list.map((entry) => [entry.therapistId, entry.verdict]),
+      [
+        ["none-done", "possible"],
+        ["one-done", "possible"],
+        ["two-done", "possible"],
+        ["busy", "time_short"],
+        ["no-rate", "rate_missing"],
+        ["gone", "possible"],
+        ["not-in-yet", "possible"]
+      ]
+    );
+  });
+
+  it("judges a course the day's availability does not offer by the time alone", () => {
+    const list = therapistPickList([therapist("busy", "time_short", 0), therapist("free", "possible", 0)], "course-retired");
+    assert.deepEqual(
+      list.map((entry) => [entry.therapistId, entry.verdict]),
+      [
+        ["free", "possible"],
+        ["busy", "time_short"]
+      ]
+    );
+  });
+});
+
+describe("room cell list (1018 ticket 02)", () => {
+  it("puts free rooms first and keeps rooms in use or being cleaned below", () => {
+    const rooms = [
+      { value: "room-101", label: "101" },
+      { value: "room-102", label: "102" },
+      { value: "room-103", label: "103" }
+    ];
+    const rows = [
+      { id: "me", status: "RESERVED", roomId: "room-103" },
+      { id: "using", status: "IN_USE", roomId: "room-101" },
+      { id: "later", status: "RESERVED", roomId: "room-102" }
+    ];
+    assert.deepEqual(
+      roomPickList(rooms, rows, "me").map((room) => [room.value, room.free]),
+      [
+        ["room-102", true],
+        ["room-103", true],
+        ["room-101", false]
       ]
     );
   });
@@ -51,13 +179,13 @@ describe("parties inside a flow section", () => {
       { id: "solo-11", status: "RESERVED", partyId: null, partyPosition: null },
       member("jung-3", "NO_SHOW", 3)
     ];
-    const [, reserved, done] = ledgerFlowSections(rows);
+    const { open, done } = ledgerTimeline(rows);
 
-    const summary = (section: typeof reserved) =>
-      ledgerFlowItems(section.rows, rows).map((item) =>
+    const summary = (part: typeof open) =>
+      ledgerFlowItems(part, rows).map((item) =>
         item.kind === "call" ? item.row.id : [item.partyId, item.size, item.lead.id, item.rows.map((row) => row.id)]
       );
-    assert.deepEqual(summary(reserved), ["solo-10", ["party-jung", 3, "jung-1", ["jung-1", "jung-2"]], "solo-11"]);
+    assert.deepEqual(summary(open), ["solo-10", ["party-jung", 3, "jung-1", ["jung-1", "jung-2"]], "solo-11"]);
     assert.deepEqual(summary(done), [["party-jung", 3, "jung-1", ["jung-3"]]]);
   });
 

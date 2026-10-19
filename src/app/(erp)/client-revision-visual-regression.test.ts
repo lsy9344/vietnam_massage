@@ -41,6 +41,7 @@ const discountedCallRow: ServiceCallRowDto = {
   actualEntryTime: null,
   actualEndTime: null,
   displayEnd: "13:00",
+  reservedEnd: "13:00",
   warningTime: null,
   warnings: [],
   roomId: "room-101",
@@ -143,8 +144,8 @@ describe("client revision visual regression guards", () => {
 
     assert.match(panel, /class="text-xs font-normal text-muted line-through">1,500,000<\/span>/);
     assert.match(panel, /class="font-bold">1,400,000<\/span>/);
-    assert.match(list, /고객\/메모/);
-    assert.match(list, /할인 표시 검증/);
+    // 1018 티켓 02: 열 머리가 없는 두 줄 행이다. 예약자명이 없는 콜은 아랫줄 첫 칸에 고객/메모를 보인다.
+    assert.match(list, /data-line-who=""[^>]*>[\s\S]*?할인 표시 검증/);
   });
 
   it("renders the customer record form and the register action in Korean and Vietnamese", () => {

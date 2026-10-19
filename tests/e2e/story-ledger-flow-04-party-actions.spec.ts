@@ -84,12 +84,12 @@ function call(id: string) {
 }
 
 function line(page: Page, callId: string) {
-  return page.locator(`tr[data-service-call-id="${callId}"]`);
+  return page.locator(`[data-ledger-line][data-service-call-id="${callId}"]`);
 }
 
 /** 그 흐름 묶음 안의 일행 머리 줄. 일행이 여러 묶음에 흩어지면 묶음마다 머리 줄이 있다. */
 function partyHead(page: Page, flow: string, partyId: string) {
-  return page.locator(`tr[data-ledger-party="${partyId}"][data-ledger-party-flow="${flow}"]`);
+  return page.locator(`[data-ledger-party="${partyId}"][data-ledger-party-part="${flow}"]`);
 }
 
 function panel(page: Page) {
@@ -98,7 +98,7 @@ function panel(page: Page) {
 
 async function openLedger(page: Page) {
   await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
-  await expect(page.getByRole("table", { name: "흐름별 콜 원장" })).toBeVisible();
+  await expect(page.getByRole("list", { name: "콜 원장 목록" })).toBeVisible();
 }
 
 test.describe("콜 원장 흐름 재구성 티켓 04 일행 묶음과 일행 동작", () => {
@@ -210,11 +210,11 @@ test.describe("콜 원장 흐름 재구성 티켓 04 일행 묶음과 일행 동
     await prisma.$disconnect();
   });
 
-  test("3인 일행 전체 입장 → 1명 결제 → 1명 노쇼: 일행은 묶음마다 붙어 보이고 결제·노쇼는 사람별이다", async ({ page }) => {
+  test("3인 일행 전체 입장 → 1명 결제 → 1명 노쇼: 일행은 위 목록과 하단에 머리 줄과 함께 붙어 보이고 결제·노쇼는 사람별이다", async ({ page }) => {
     await login(page, account.accountId, account.password);
     await openLedger(page);
 
-    const head = partyHead(page, "reserved", jung.partyId);
+    const head = partyHead(page, "open", jung.partyId);
     await expect(head).toContainText("LF04 정 대표 일행 3명");
     await expect(line(page, jung.ids[1])).toContainText("일행 2/3");
 
@@ -237,7 +237,7 @@ test.describe("콜 원장 흐름 재구성 티켓 04 일행 묶음과 일행 동
 
     // 결제는 사람별이다: 손님 1만 결제한다.
     await page.reload();
-    await expect(partyHead(page, "active", jung.partyId)).toContainText("LF04 정 대표 일행 3명");
+    await expect(partyHead(page, "open", jung.partyId)).toContainText("LF04 정 대표 일행 3명");
     await line(page, jung.ids[0]).getByRole("button", { name: "13:00 콜 결제" }).click();
     const payment = panel(page).getByRole("region", { name: "결제" });
     await expect(payment).toBeVisible();
@@ -261,14 +261,14 @@ test.describe("콜 원장 흐름 재구성 티켓 04 일행 묶음과 일행 동
     await expect.poll(async () => (await call(jung.ids[1])).status).toBe("NO_SHOW");
     expect((await call(jung.ids[2])).status).toBe("IN_USE");
 
-    // 흩어진 일행은 묶음마다 머리 줄 아래 붙고 "일행 N/3"이 남는다.
+    // 하단으로 내려간 손님도 하단의 머리 줄 아래 붙고 "일행 N/3"이 남는다(1018 스펙 D8·D9).
     await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
-    await expect(page.getByRole("table", { name: "흐름별 콜 원장" })).toBeVisible();
+    await expect(page.getByRole("list", { name: "콜 원장 목록" })).toBeVisible();
     await page.getByRole("button", { name: /^완료·취소·노쇼 \d+건$/ }).click();
     await expect(partyHead(page, "done", jung.partyId)).toContainText("LF04 정 대표 일행 3명");
     await expect(line(page, jung.ids[0])).toContainText("일행 1/3");
     await expect(line(page, jung.ids[1])).toContainText("일행 2/3");
-    await expect(partyHead(page, "active", jung.partyId)).toBeVisible();
+    await expect(partyHead(page, "open", jung.partyId)).toBeVisible();
     await expect(line(page, jung.ids[2])).toContainText("일행 3/3");
   });
 
@@ -278,13 +278,12 @@ test.describe("콜 원장 흐름 재구성 티켓 04 일행 묶음과 일행 동
     // 화면이 읽은 뒤 다른 화면이 손님 3을 먼저 고쳤다. 이 화면의 저장은 낡은 저장으로 거절된다.
     await (prisma as any).serviceCall.update({ where: { id: choi.ids[2] }, data: { note: "LF04 다른 화면" } });
 
-    const head = partyHead(page, "reserved", choi.partyId);
+    const head = partyHead(page, "open", choi.partyId);
     await head.getByRole("button", { name: "LF04 최 대표 일행 3명 전체 입장" }).click();
     await expect.poll(async () => (await call(choi.ids[1])).status).toBe("IN_USE");
     const failure = head.getByRole("alert");
     await expect(failure).toContainText("저장하지 못한 손님이 있습니다");
     await expect(failure).toContainText("손님 3: 다른 화면에서 이 콜이 바뀌었습니다");
-    await expect(partyHead(page, "active", choi.partyId).getByRole("alert")).toHaveCount(0);
     expect((await call(choi.ids[2])).status).toBe("RESERVED");
   });
 
@@ -292,7 +291,7 @@ test.describe("콜 원장 흐름 재구성 티켓 04 일행 묶음과 일행 동
     await login(page, account.accountId, account.password);
     await openLedger(page);
 
-    const head = partyHead(page, "reserved", park.partyId);
+    const head = partyHead(page, "open", park.partyId);
     await head.getByRole("button", { name: "LF04 박 대표 일행 3명 남은 예약 취소" }).click();
     const confirm = page.getByRole("alertdialog", { name: "일행 예약을 취소할까요?" });
     await expect(confirm).toContainText("남은 예약 2건");
@@ -308,7 +307,7 @@ test.describe("콜 원장 흐름 재구성 티켓 04 일행 묶음과 일행 동
     await login(page, account.accountId, account.password);
     await openLedger(page);
 
-    await partyHead(page, "active", park.partyId).getByRole("button", { name: "LF04 박 대표 일행 3명에 1명 추가" }).click();
+    await partyHead(page, "open", park.partyId).getByRole("button", { name: "LF04 박 대표 일행 3명에 1명 추가" }).click();
     const dialog = page.getByRole("dialog", { name: "빠른 예약" });
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText("LF04 박 대표 일행(3명)에 1명을 더합니다");
@@ -331,7 +330,7 @@ test.describe("콜 원장 흐름 재구성 티켓 04 일행 묶음과 일행 동
 
     // 저장 뒤 자동 새로고침은 운영 빌드에서 늦을 때가 있어 다시 불러와 본다.
     await page.reload();
-    await expect(partyHead(page, "reserved", park.partyId)).toContainText("LF04 박 대표 일행 4명");
+    await expect(partyHead(page, "open", park.partyId)).toContainText("LF04 박 대표 일행 4명");
     await expect(line(page, added.id)).toContainText("일행 4/4");
   });
 });

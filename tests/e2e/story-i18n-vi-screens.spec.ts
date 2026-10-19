@@ -123,18 +123,15 @@ test.describe("i18n 업무 화면 베트남어(vi)", () => {
     await expect(page.getByText("운영월 상태")).toHaveCount(0);
   });
 
-  test("콜 원장 목록 헤더와 흐름 묶음 제목이 베트남어로 보인다", async ({ page }) => {
+  test("콜 원장 목록과 두 줄 행의 글자가 베트남어로 보인다", async ({ page }) => {
     await loginVi(page);
     await page.goto(`/calls?operatingMonthId=${seeded.monthId}&serviceDate=${seeded.ledgerServiceDate}`);
     await expect(page.locator("html")).toHaveAttribute("lang", "vi");
-    // 콜 원장 흐름 재구성(티켓 03): 넓은 표가 흐름별 한 줄 목록으로 바뀌었다. 목록 헤더가 vi.
-    const list = page.getByRole("table", { name: "Sổ cuộc gọi theo luồng" });
+    // 1018 티켓 02: 원장은 예약 하나 = 두 줄 행의 목록이다. 목록 이름, 결제 배지, 칸 안 목록 버튼이 vi.
+    const list = page.getByRole("list", { name: "Danh sách sổ cuộc gọi" });
     await expect(list).toBeVisible();
-    for (const header of ["Giờ", "Khách/Ghi chú", "Gói dịch vụ", "Kỹ thuật viên", "Phòng", "Trạng thái"]) {
-      await expect(list.getByRole("columnheader", { name: header })).toBeVisible();
-    }
-    // 흐름 묶음 제목(지금 이용 중/예약/완료·취소)도 vi.
-    await expect(page.locator('[data-ledger-flow="reserved"]')).toContainText("Đặt trước");
+    await expect(list.locator("[data-ledger-line]").first()).toContainText("thanh toán");
+    await expect(list.getByRole("button", { name: /^Chọn phòng cho cuộc gọi / }).first()).toBeVisible();
     // 표 아래 "새 콜 행 추가"는 없어졌다(새 콜은 빠른 예약으로만 만든다).
     await expect(page.getByRole("button", { name: "Thêm dòng cuộc gọi mới" })).toHaveCount(0);
   });

@@ -101,7 +101,7 @@ function roomCard(page: Page) {
 
 // 티켓 03 이후 원장 행에는 입력칸도 "경고" 칸도 없다. 경고는 버튼 하나(aria-label "경고 N건: 첫 경고")뿐이다.
 function line(page: Page, callId: string) {
-  return page.locator(`tr[data-service-call-id="${callId}"]`);
+  return page.locator(`[data-ledger-line][data-service-call-id="${callId}"]`);
 }
 
 const dateQuery = () => `operatingMonthId=${monthId}&serviceDate=${serviceDate}`;

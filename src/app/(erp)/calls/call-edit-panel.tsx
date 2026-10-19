@@ -167,9 +167,7 @@ export function CallEditPanel({
       <div className="grid gap-6" data-call-panel={row.id} ref={panelRef}>
         {warningsSection}
         <dl>
-          <DetailRow label={t("calls.column.time")} value={row.startTime} />
-          <DetailRow label={t("calls.column.actualEntry")} value={row.actualEntryTime ?? "-"} />
-          <DetailRow label={t("calls.detail.displayEnd")} value={row.displayEnd} />
+          <CallTimes row={row} t={t} />
           <DetailRow label={t("calls.column.room")} value={row.roomLabel} />
           <DetailRow label={t("calls.column.course")} value={row.courseLabel} />
           <DetailRow label={t("calls.column.therapist1")} value={row.therapist1?.displayName ?? "-"} />
@@ -235,6 +233,9 @@ export function CallEditPanel({
       </PanelSection>
 
       <PanelSection title={t("calls.panel.section.entry")}>
+        <dl>
+          <CallTimes row={row} t={t} />
+        </dl>
         <ActualEntryField
           disabled={disabled}
           displayEnd={row.displayEnd}
@@ -319,6 +320,28 @@ export function CallEditPanel({
         </div>
       </details>
     </div>
+  );
+}
+
+/**
+ * 콜의 상세 시각 여섯 개(1018 스펙 D10). 다음 가능 시각은 Therapist가 이 콜에서 풀리는 시각이다: 실제 종료가 있으면
+ * 실제 종료, 없으면 표시 종료(스펙 D2). 이 화면이 마지막으로 받은 저장 결과로 보인다.
+ */
+function CallTimes({ row, t }: { row: ServiceCallRowDto; t: (key: MessageKey, values?: Record<string, string | number>) => string }) {
+  const times: Array<[string, MessageKey, string]> = [
+    ["booking", "calls.panel.times.booking", `${row.startTime} · ${row.courseLabel}`],
+    ["actualEntry", "calls.panel.times.actualEntry", row.actualEntryTime ?? "-"],
+    ["reservedEnd", "calls.panel.times.reservedEnd", row.reservedEnd],
+    ["displayEnd", "calls.panel.times.displayEnd", row.displayEnd],
+    ["actualEnd", "calls.panel.times.actualEnd", row.actualEndTime ?? "-"],
+    ["nextFree", "calls.panel.times.nextFree", row.actualEndTime ?? row.displayEnd]
+  ];
+  return (
+    <>
+      {times.map(([id, label, value]) => (
+        <DetailRow key={id} label={<span data-call-time={id}>{t(label)}</span>} value={<span className="[font-variant-numeric:tabular-nums]">{value}</span>} />
+      ))}
+    </>
   );
 }
 

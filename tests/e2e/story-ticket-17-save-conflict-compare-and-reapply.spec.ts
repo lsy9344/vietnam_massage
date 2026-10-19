@@ -82,7 +82,7 @@ async function openLedgerPanel(browser: Browser, key: AccountKey, callId: string
 }
 
 function row(page: Page, callId: string) {
-  return page.locator(`tr[data-service-call-id="${callId}"]`);
+  return page.locator(`[data-ledger-line][data-service-call-id="${callId}"]`);
 }
 
 function lineSaveState(page: Page, callId: string) {

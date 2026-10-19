@@ -3635,6 +3635,33 @@ describe("therapist availability", () => {
     assert.equal(therapist2?.freeFrom, null);
   });
 
+  // 원장 Therapist 칸 목록(1018 티켓 02)은 그 콜 자신의 점유를 빼고 본다. 지금 배정된 사람도 그 콜에는 가능이다.
+  it("leaves out the call being reassigned, so its own therapist is not blocked by it", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "call-1500",
+      startTime: "15:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const blocked = await availabilityAt(prismaClient, "15:00");
+    assert.equal(blocked.find((row) => row.therapistId === "therapist-1")?.available, false);
+
+    const own = await listTherapistAvailability({
+      operatingMonthId: "month-2026-06",
+      serviceDate: availabilityDate,
+      time: "15:00",
+      excludeCallId: "call-1500",
+      prismaClient
+    });
+    const therapist1 = own.find((row) => row.therapistId === "therapist-1");
+    assert.equal(therapist1?.available, true);
+    // 오늘 콜 수는 그대로 센다.
+    assert.deepEqual(therapist1?.callCounts, { done: 0, reserved: 1 });
+  });
+
   it("keeps 15:00 free when the earlier call ends at 15:00, and chains occupancy through a call that starts then", async () => {
     const touching = createMemoryPrisma();
     addAvailabilityCall(touching, {
@@ -4640,6 +4667,8 @@ describe("actual entry and display end", () => {
     ).find((row) => row.id === "late");
     assert.equal(aloneRow?.displayEnd, "16:20");
     assert.equal(aloneRow?.warningTime, null);
+    // 예약 기준 예상 종료(1018 스펙 D10)는 입장과 관계없이 예약시각 + 코스 길이다.
+    assert.equal(aloneRow?.reservedEnd, "16:00");
 
     const later = createMemoryPrisma();
     addAvailabilityCall(later, {
@@ -4888,6 +4917,7 @@ function ledgerRow(overrides: Partial<ServiceCallRowDto>): ServiceCallRowDto {
     actualEntryTime: null,
     actualEndTime: null,
     displayEnd: "12:00",
+    reservedEnd: "12:00",
     warningTime: null,
     warnings: [],
     roomId: "room-101",

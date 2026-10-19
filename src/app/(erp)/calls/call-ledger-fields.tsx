@@ -46,8 +46,9 @@ const LISTBOX_MAX_HEIGHT = 240; // px
 const LISTBOX_GAP = 4; // px gap between the input and the popup.
 
 // 패널은 세로로 스크롤되는 상자라 그 안에 절대 위치로 띄운 목록은 잘린다. 입력칸의 화면 위치에 맞춰 body에
-// 그리고(portal), 화면 아래쪽에서는 입력칸 위로 뒤집어 스크롤 없이 항목이 보이게 한다.
-function measureListboxPosition(anchor: HTMLElement): ListboxPosition {
+// 그리고(portal), 화면 아래쪽에서는 입력칸 위로 뒤집어 스크롤 없이 항목이 보이게 한다. 원장 줄의 칸 안 목록
+// (ledger-cell-picker.tsx)도 같은 자리 재기를 쓴다.
+export function measureListboxPosition(anchor: HTMLElement): ListboxPosition {
   const rect = anchor.getBoundingClientRect();
   const spaceBelow = window.innerHeight - rect.bottom - LISTBOX_GAP;
   const spaceAbove = rect.top - LISTBOX_GAP;

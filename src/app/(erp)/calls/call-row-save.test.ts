@@ -12,6 +12,7 @@ function savedRow(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDto
     actualEntryTime: null,
     actualEndTime: null,
     displayEnd: "17:00",
+    reservedEnd: "17:00",
     warningTime: null,
     warnings: [],
     roomId: "room-101",

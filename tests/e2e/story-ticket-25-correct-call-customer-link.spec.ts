@@ -32,7 +32,7 @@ function auditRow(page: Page, targetId: string) {
 }
 
 function line(page: Page, serviceCallId: string) {
-  return page.locator(`tr[data-service-call-id="${serviceCallId}"]`);
+  return page.locator(`[data-ledger-line][data-service-call-id="${serviceCallId}"]`);
 }
 
 /** 그 콜의 편집 패널을 열고 "더 보기"를 펼쳐, 고객 연결 정정 구역(region)을 돌려준다. */

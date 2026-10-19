@@ -224,7 +224,7 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
       therapistId
     ]);
 
-    const row = page.locator(`tr[data-service-call-id="${created[0].id}"]`);
+    const row = page.locator(`[data-ledger-line][data-service-call-id="${created[0].id}"]`);
     await expect(row).toBeVisible({ timeout: 10_000 });
     await expect(page).toHaveURL(new RegExp(`call=${created[0].id}$`));
     await expect(row.locator(`[data-call-open="${created[0].id}"]`)).toBeFocused({ timeout: 10_000 });
@@ -261,7 +261,7 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
     await expect(page.getByRole("status").filter({ hasText: "이미 저장된 콜입니다." })).toBeVisible();
     const calls = await prisma.serviceCall.findMany({ where: { customerMemo: memo } });
     expect(calls).toHaveLength(1);
-    const row = page.locator(`tr[data-service-call-id="${calls[0].id}"]`);
+    const row = page.locator(`[data-ledger-line][data-service-call-id="${calls[0].id}"]`);
     await expect(page).toHaveURL(new RegExp(`call=${calls[0].id}$`));
     await expect(row.locator(`[data-call-open="${calls[0].id}"]`)).toBeFocused();
   });

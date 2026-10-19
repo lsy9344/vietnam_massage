@@ -251,7 +251,7 @@ async function seedCall(input: { operatingMonthId: string; serviceDate: string; 
 }
 
 function line(page: Page, callId: string) {
-  return page.locator(`tr[data-service-call-id="${callId}"]`);
+  return page.locator(`[data-ledger-line][data-service-call-id="${callId}"]`);
 }
 
 function panel(page: Page) {
@@ -331,8 +331,8 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
     await expect(page).toHaveURL(new RegExp(`call=${savedCall.id}$`));
     await expect(line(page, savedCall.id)).toContainText(memo);
     expect(savedCall.assignments.map((assignment: any) => assignment.assignmentRole)).toEqual(["THERAPIST_1"]);
-    // 콜이 생기면 원장 표 머리글이 보인다.
-    await expect(page.getByRole("columnheader", { name: "코스" }).first()).toBeVisible();
+    // 콜이 생기면 원장 목록이 보인다.
+    await expect(page.getByRole("list", { name: "콜 원장 목록" })).toBeVisible();
 
     // 마사지사2·할인구분·결제수단·확인값은 빠른 예약에 없다 — 편집 패널에서 고친다(스펙 D20).
     const edit = panel(page);

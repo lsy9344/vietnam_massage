@@ -1,5 +1,5 @@
 /**
- * 흐름별 원장 목록(스펙 D16–D18, 티켓 03)의 규칙. 화면 없이 돌아가는 순수 함수만 둔다.
+ * 원장 목록(스펙 D16–D18, 티켓 03; 1018 스펙 D3–D10)의 규칙. 화면 없이 돌아가는 순수 함수만 둔다.
  * 상태 코드는 기준정보 코드(RESERVED 등)와 옛 한국어 값(예약 등)을 모두 받는다(service-call-service.ts와 같다).
  */
 export type LedgerFlow = "active" | "reserved" | "done";
@@ -14,14 +14,64 @@ export function ledgerFlowOf(status: string): LedgerFlow {
   return "done";
 }
 
-export const LEDGER_FLOWS: readonly LedgerFlow[] = ["active", "reserved", "done"];
+/**
+ * 두 줄 원장(1018 스펙 D3·D9)의 목록: 예약·사용중·청소중은 받은 순서(예약시각순) 그대로 한 목록이고,
+ * 방문완료·취소·노쇼는 하단 접기 영역으로 간다.
+ */
+export function ledgerTimeline<Row extends { status: string }>(rows: readonly Row[]) {
+  return {
+    open: rows.filter((row) => ledgerFlowOf(row.status) !== "done"),
+    done: rows.filter((row) => ledgerFlowOf(row.status) === "done")
+  };
+}
+
+/** 영업일 안의 분(첫 슬롯 시각 dayStart보다 이른 시계 값은 자정을 넘긴 다음 날로 본다). */
+function businessMinuteOf(clock: string, dayStart: string) {
+  const minutes = clockMinutes(clock);
+  return minutes < clockMinutes(dayStart) ? minutes + 24 * 60 : minutes;
+}
+
+function clockMinutes(clock: string) {
+  const [hour, minute] = clock.split(":").map(Number);
+  return (hour ?? 0) * 60 + (minute ?? 0);
+}
+
+/** `지금 HH:MM` 구분선(스펙 D5)이 들어갈 자리: 예약시각이 지금보다 늦은 첫 줄 앞이다. 지금과 같은 시각은 위에 둔다. */
+export function nowDividerIndex(startTimes: readonly string[], now: string, dayStart: string) {
+  const at = businessMinuteOf(now, dayStart);
+  const index = startTimes.findIndex((time) => businessMinuteOf(time, dayStart) > at);
+  return index === -1 ? startTimes.length : index;
+}
+
+/** 예약 상태인데 예약시각이 지났으면 늦은 분(스펙 D5). 그 밖에는 null이다. */
+export function lateMinutes(status: string, startTime: string, now: string, dayStart: string) {
+  if (!RESERVED_STATUSES.includes(status)) return null;
+  const late = businessMinuteOf(now, dayStart) - businessMinuteOf(startTime, dayStart);
+  return late > 0 ? late : null;
+}
+
+export type LedgerEndView = { kind: "notEntered" } | { kind: "expected"; time: string } | { kind: "actual"; time: string };
+
+/** 윗줄 종료 칸(스펙 D4): 입장 전 `미입장`, 종료 전 흐린 `예상`(표시 종료), 종료 뒤 진한 실제 종료. */
+export function ledgerEndView(call: { actualEntryTime: string | null; actualEndTime: string | null; displayEnd: string }): LedgerEndView {
+  if (call.actualEndTime) return { kind: "actual", time: call.actualEndTime };
+  if (!call.actualEntryTime) return { kind: "notEntered" };
+  return { kind: "expected", time: call.displayEnd };
+}
 
 /**
- * 하루 콜을 흐름 묶음으로 나눈다. 묶음 안은 받은 순서를 지킨다 — 서버가 시간 슬롯 순서(자정을 넘는 영업일 포함)로
- * 이미 예약시각순으로 정렬해 준다. 빈 묶음도 돌려준다(화면이 "0건"을 보일지 정한다).
+ * 아랫줄 첫 칸(스펙 D3·D10): 예약 경로와 예약자명. 예약자명이 없는 옛 콜은 연결된 고객 이름, 그것도 없으면
+ * 고객/메모의 첫 줄을 보인다.
  */
-export function ledgerFlowSections<Row extends { status: string }>(rows: readonly Row[]) {
-  return LEDGER_FLOWS.map((flow) => ({ flow, rows: rows.filter((row) => ledgerFlowOf(row.status) === flow) }));
+export function ledgerWhoLabel(
+  call: { bookingChannelCode: string | null; bookerName: string | null; customerId: string | null; customerMemo: string | null },
+  channels: ReadonlyArray<{ value: string; label: string }>,
+  customers: ReadonlyArray<{ id: string; name: string }>
+) {
+  const channel = call.bookingChannelCode ? (channels.find((option) => option.value === call.bookingChannelCode)?.label ?? call.bookingChannelCode) : null;
+  const customerName = call.customerId ? customers.find((customer) => customer.id === call.customerId)?.name : undefined;
+  const memoLine = call.customerMemo?.split("\n")[0]?.trim();
+  return { channel, name: call.bookerName?.trim() || customerName || memoLine || null };
 }
 
 type PartyMember = { id: string; partyId: string | null; partyPosition: number | null };
@@ -99,6 +149,46 @@ export function freeRoomOptions<Room extends { value: string }>(
     rows.filter((row) => row.id !== callId && row.roomId && ledgerFlowOf(row.status) === "active").map((row) => row.roomId)
   );
   return rooms.filter((room) => !occupied.has(room.value));
+}
+
+/** 객실 칸 목록(스펙 D6): 빈 객실(freeRoomOptions와 같은 뜻)이 먼저, 쓰는 중이거나 청소 중인 객실이 아래다. */
+export function roomPickList<Room extends { value: string }>(
+  rooms: readonly Room[],
+  rows: ReadonlyArray<{ id: string; status: string; roomId: string | null }>,
+  callId: string
+): Array<Room & { free: boolean }> {
+  const free = new Set(freeRoomOptions(rooms, rows, callId).map((room) => room.value));
+  const marked = rooms.map((room) => ({ ...room, free: free.has(room.value) }));
+  return [...marked.filter((room) => room.free), ...marked.filter((room) => !room.free)];
+}
+
+export type TherapistPickVerdict = "possible" | "time_short" | "rate_missing";
+
+type TherapistPickSource = {
+  therapistId: string;
+  therapistName: string;
+  attendance: "before_check_in" | "checked_in" | "checked_out";
+  available: boolean;
+  freeFrom: string | null;
+  callCounts: { done: number };
+  courses: ReadonlyArray<{ courseId: string; verdict: TherapistPickVerdict }>;
+};
+
+/**
+ * Therapist 칸 목록(스펙 D6): 출근해 있고 그 콜의 시각·코스에 가능한 사람이 위이고 오늘 완료가 적은 순이다.
+ * 출근 전·퇴근한 사람과 불가한 사람은 아래에 가능 판정 순서대로 둔다(빠른 예약의 출근 기본값 D23과 같은 뜻).
+ * 불가한 사람은 고르기 전에 그 이유로 경고한다. 그 달 정책이 없어 가능 판정에 없는 코스는 시각만으로 본다.
+ */
+export function therapistPickList<Row extends TherapistPickSource>(rows: readonly Row[], courseId: string) {
+  const entries = rows.map((row) => ({
+    ...row,
+    verdict: row.courses.find((course) => course.courseId === courseId)?.verdict ?? (row.available ? "possible" : "time_short")
+  }));
+  const top = entries.filter((entry) => entry.verdict === "possible" && entry.attendance === "checked_in");
+  return [
+    ...[...top].sort((left, right) => left.callCounts.done - right.callCounts.done),
+    ...entries.filter((entry) => !top.includes(entry))
+  ];
 }
 
 const STATUS_CODES = {

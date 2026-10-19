@@ -228,7 +228,7 @@ async function createCallRow(input: { memo: string; courseId: string; therapist2
 }
 
 function line(page: Page, callId: string) {
-  return page.locator(`tr[data-service-call-id="${callId}"]`);
+  return page.locator(`[data-ledger-line][data-service-call-id="${callId}"]`);
 }
 
 /** 티켓 03: 칸은 더 이상 행에 없다. 줄을 눌러 연 편집 패널이 같은 필드/계산값을 보인다. */

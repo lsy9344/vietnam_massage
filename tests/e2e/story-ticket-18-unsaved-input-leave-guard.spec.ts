@@ -16,7 +16,7 @@ let callId = "";
 
 // 콜 원장 흐름 재구성(티켓 03)으로 줄에는 입력칸이 없다. 저장은 편집 패널의 칸에서 한다.
 function line(page: Page, serviceCallId: string) {
-  return page.locator(`tr[data-service-call-id="${serviceCallId}"]`);
+  return page.locator(`[data-ledger-line][data-service-call-id="${serviceCallId}"]`);
 }
 
 function panel(page: Page) {

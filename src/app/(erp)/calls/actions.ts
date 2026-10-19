@@ -478,7 +478,7 @@ export async function updateCustomerAction(
   }
 }
 
-export async function loadTherapistAvailabilityAction(input: { operatingMonthId: string; serviceDate: string; time: string }) {
+export async function loadTherapistAvailabilityAction(input: { operatingMonthId: string; serviceDate: string; time: string; excludeCallId?: string }) {
   await requireRouteAccess("/calls");
   return listTherapistAvailability(input);
 }

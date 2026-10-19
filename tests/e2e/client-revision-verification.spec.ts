@@ -250,7 +250,7 @@ async function createCompletedCall(memo: string, input?: { serviceDate?: string;
 // 콜 원장 흐름 재구성(티켓 03)으로 표 아래 새 행 입력(data-call-cell-*)은 없어졌다. 줄은 입력칸이 없고,
 // 모든 칸은 오른쪽 편집 패널에서 고친다.
 function line(page: Page, serviceCallId: string) {
-  return page.locator(`tr[data-service-call-id="${serviceCallId}"]`);
+  return page.locator(`[data-ledger-line][data-service-call-id="${serviceCallId}"]`);
 }
 
 function panel(page: Page) {

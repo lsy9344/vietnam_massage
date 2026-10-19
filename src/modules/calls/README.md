@@ -126,7 +126,7 @@ Owns the reservation and service-call ledger.
 - Planned working-day facts come from the masters read-only query, alongside availability; day off and unset never imply attendance or block booking. Assigned-call queries supply schedule impact without exposing customer/contact/amount data. `assigned-service-call-query.ts` is a dependency-free read boundary used when masters rejects employee deactivation with assigned future calls.
 - Closing reads call calculation errors and unfinished calls through services. Exceptional close requires the displayed unfinished-call ids and a recorded reason (ADR 0005); closing never marks them completed.
 
-## Ledger Flow Redesign Ticket 03 (흐름별 원장 목록과 편집 패널)
+## Ledger Flow Redesign Ticket 03 (흐름별 원장 목록과 편집 패널, 목록 모양은 1018 Ticket 02가 대체)
 
 This replaces the Story 2.6 grid, the Ticket 19 view switch, and the Ticket 16 add-row form on the ledger tab. The save contract (`call-row-save.ts`, `expectedUpdatedAt`, conflict compare and reapply, leave guard) is unchanged.
 
@@ -141,3 +141,12 @@ This replaces the Story 2.6 grid, the Ticket 19 view switch, and the Ticket 16 a
 - `ServiceCallRowDto`, the save input, and the audit snapshot carry `actualEndTime` (HH:mm, any minute), `bookingChannelCode` (an active `BOOKING_CHANNEL` code), and `bookerName`. Like `actualEntryTime`, a save that leaves one of them out keeps the stored value; `null` clears it. Stale-save rejection and request ids are unchanged. A changed actual end is a sensitive row change (`service_call.row_changed`).
 - Availability holds a Therapist over [reservation time, actual end) when the call has an actual end, and over [reservation time, display end) when it does not (spec D2, ADR 0001). An in-use call with an actual end adds no hold past its display end.
 - `listServiceCallFormOptions()` returns `bookingChannels`.
+
+## 1018 Ticket 02 (두 줄 원장)
+
+This replaces the flow-grouped table of Ledger Flow Ticket 03 above; the save contract, row buttons (enter, pay) and keyboard are unchanged until 1018 Ticket 03.
+
+- `call-ledger-list.tsx` is an `ol` of two-line rows in the server's time-slot order (`ledgerTimeline` in `ledger-flow.ts`). Top line: reservation time, `입장 → 종료` (`미입장` / faint `예상` display end / actual end, `ledgerEndView`), status chip, main button. Bottom line: booking channel and booker (`ledgerWhoLabel`: booker name, else the linked customer's name, else the first line of customer memo), course, Therapist ▾, room ▾, payment badge. Finished calls are folded at the bottom; on the business today a `지금 HH:MM` line sits before the first later call and late reservations say `N분 늦음` (`nowDividerIndex`, `lateMinutes`). Parties keep their head row and a left bar.
+- The ▾ cells (`ledger-cell-picker.tsx`) open a listbox in place. The Therapist list asks `listTherapistAvailability` at the call's time with `excludeCallId` (the call's own hold is left out, counts are not) and orders it with `therapistPickList`: checked-in therapists who can take the course first, fewest finished today first; the rest below. Picking one who cannot take it goes through the quick-booking override warning. The room list puts free rooms (`freeRoomOptions`) first (`roomPickList`). Both save through the row's own save state.
+- `ServiceCallRowDto.reservedEnd` is reservation time + course length. The edit panel's entry group shows six times: reservation time·course, actual entry, reserved end, display end, actual end, next free time (actual end, else display end).
+- Phone width shows the same two-line rows read-only (no main button, plain text instead of ▾ cells).

@@ -200,9 +200,9 @@ test.describe("티켓 03 콜 원장 화면 분리", () => {
     await expect(counts).toContainText("예약 1건");
     await expect(counts).toContainText("방문완료 2건");
     await expect(page.getByRole("heading", { name: "콜 원장 그리드" })).toBeInViewport();
-    await expect(page.getByRole("table", { name: "흐름별 콜 원장" })).toBeInViewport();
+    await expect(page.getByRole("list", { name: "콜 원장 목록" })).toBeInViewport();
     // 완료·취소 묶음은 기본 접힘이다(스펙 D16, 티켓 03). 접히지 않는 예약 줄로 "첫 화면에 보인다"를 확인한다.
-    await expect(page.locator(`tr[data-service-call-id="${reservedCallId}"]`)).toBeInViewport();
+    await expect(page.locator(`[data-ledger-line][data-service-call-id="${reservedCallId}"]`)).toBeInViewport();
 
     await expect(page.getByLabel("일별 지출")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "지출 추가" })).toHaveCount(0);
@@ -267,7 +267,7 @@ test.describe("티켓 03 콜 원장 화면 분리", () => {
 
     await expect(page).toHaveURL(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}&call=${rateMissingCallId}`);
     await expect(toolbarTabs(page).getByRole("link", { name: "원장", exact: true })).toHaveAttribute("aria-current", "page");
-    const target = page.locator(`tr#call-${rateMissingCallId}`);
+    const target = page.locator(`[data-ledger-line]#call-${rateMissingCallId}`);
     await expect(target).toBeInViewport();
     await expect(target).toHaveAttribute("data-selected", "true");
     await expect(page.getByRole("complementary", { name: /^콜 상세/ })).toBeVisible();
@@ -319,8 +319,8 @@ test.describe("티켓 03 콜 원장 화면 분리", () => {
 
     await history.getByRole("link", { name: serviceDate }).click();
     await expect(page).toHaveURL(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}&call=${customerCallId}`);
-    await expect(page.locator(`tr#call-${customerCallId}`)).toBeInViewport();
-    await expect(page.locator(`tr#call-${customerCallId}`)).toHaveAttribute("data-selected", "true");
+    await expect(page.locator(`[data-ledger-line]#call-${customerCallId}`)).toBeInViewport();
+    await expect(page.locator(`[data-ledger-line]#call-${customerCallId}`)).toHaveAttribute("data-selected", "true");
   });
 
   test("고객 등록과 정정은 고객 화면에서 저장된다", async ({ page }) => {

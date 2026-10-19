@@ -166,7 +166,7 @@ test.describe("티켓 26 휴대폰 원장(흐름별 목록과 전체 화면 시�
     await expect(page.getByRole("list", { name: "원장 카드 목록" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "빠른 예약" })).toBeHidden();
 
-    const noWarningLine = page.locator(`tr[data-ledger-line][data-service-call-id="${noWarningCallId}"]`);
+    const noWarningLine = page.locator(`[data-ledger-line][data-service-call-id="${noWarningCallId}"]`);
     await expect(noWarningLine).toBeVisible();
     await expect(noWarningLine).toContainText("11:00");
     await expect(noWarningLine).toContainText("T26 호실");
@@ -176,7 +176,7 @@ test.describe("티켓 26 휴대폰 원장(흐름별 목록과 전체 화면 시�
     await expect(noWarningLine.getByRole("button", { name: /^경고/ })).toHaveCount(0);
 
     // 경고는 줄의 경고 버튼에 개수와 첫 경고로 보인다.
-    const backLine = page.locator(`tr[data-ledger-line][data-service-call-id="${backCallId}"]`);
+    const backLine = page.locator(`[data-ledger-line][data-service-call-id="${backCallId}"]`);
     await expect(backLine.getByRole("button", { name: /^경고 1건: 앞 시술이 아직 끝나지 않았습니다/ })).toBeVisible();
 
     // 읽기 전용: 예약 줄의 입장, 사용중 줄의 결제가 없다.
@@ -226,9 +226,9 @@ test.describe("티켓 26 휴대폰 원장(흐름별 목록과 전체 화면 시�
     await login(page, accounts.counter.accountId, accounts.counter.password);
     await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
 
-    // 콜 원장 흐름 재구성(티켓 03): 넓은 표는 흐름별 원장 목록(tr[data-ledger-line])으로 바뀌었고,
+    // 콜 원장 흐름 재구성(티켓 03): 넓은 표는 흐름별 원장 목록으로, 1018 티켓 02에서 두 줄 행 목록([data-ledger-line])으로 바뀌었고,
     // 표 아래 "새 콜 행 추가"는 없어졌다(새 콜은 빠른 예약으로만 만든다).
-    const noWarningLine = page.locator(`tr[data-ledger-line][data-service-call-id="${noWarningCallId}"]`);
+    const noWarningLine = page.locator(`[data-ledger-line][data-service-call-id="${noWarningCallId}"]`);
     await expect(noWarningLine).toBeVisible();
     await expect(noWarningLine.getByRole("button", { name: "11:00 콜 입장" })).toBeVisible();
     await expect(page.getByRole("button", { name: "새 콜 행 추가" })).toHaveCount(0);

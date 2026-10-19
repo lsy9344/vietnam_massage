@@ -10,15 +10,16 @@ import { SaveStatus } from "@/components/ui/save-status";
 import { CallStatusChip, callStatusKeyOf } from "@/components/domain/call-status-chip";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { useLocale, useT } from "@/lib/i18n/client";
-import type { MessageKey } from "@/lib/i18n/types";
-import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto } from "@/modules/calls/service-call-service";
-import { autosaveServiceCallRowAction, reloadServiceCallRowAction } from "@/app/(erp)/calls/actions";
+import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
+import { autosaveServiceCallRowAction, loadTherapistAvailabilityAction, reloadServiceCallRowAction } from "@/app/(erp)/calls/actions";
+import { businessClockString, businessTodayServiceDate } from "@/lib/operating-date";
 import { ledgerCallAnchorId } from "@/lib/ledger-address";
 import { callRowSaveReducer, initialCallRowSave, isSaveHeld, type CallRowDraft, type RowSaveStatus } from "@/app/(erp)/calls/call-row-save";
 import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
 import type { CallConflictCompareData } from "@/app/(erp)/calls/call-conflict-compare";
 import { CallEditPanel, type CallPanelFocusRequest } from "@/app/(erp)/calls/call-edit-panel";
-import { optionLabel } from "@/app/(erp)/calls/call-ledger-fields";
+import { nullableValue, optionLabel } from "@/app/(erp)/calls/call-ledger-fields";
+import { LedgerCellPicker, type LedgerPickOption } from "@/app/(erp)/calls/ledger-cell-picker";
 import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
 import { nowClockString } from "@/app/(erp)/calls/quick-booking-now-slot";
 import { requestQuickBookingJoinParty } from "@/app/(erp)/calls/quick-booking-party-join";
@@ -26,13 +27,19 @@ import { callWarningLabel } from "@/app/(erp)/calls/call-warning-label";
 import {
   entryClock,
   freeRoomOptions,
+  lateMinutes,
+  ledgerEndView,
   ledgerFlowItems,
   ledgerFlowOf,
-  ledgerFlowSections,
+  ledgerTimeline,
+  ledgerWhoLabel,
   nextLedgerAction,
+  nowDividerIndex,
   partyEntryTargets,
+  roomPickList,
   statusCodeFor,
-  type LedgerFlow
+  therapistPickList,
+  type TherapistPickVerdict
 } from "@/app/(erp)/calls/ledger-flow";
 
 export type OpenCall = (callId: string, focus?: CallPanelFocusRequest["target"]) => void;
@@ -46,11 +53,21 @@ type PartyCommand = PartyAction & { token: number };
 /** 일행 동작 하나(token)를 받은 손님 줄의 저장 결과. 그 뒤 사람별로 고친 저장은 알리지 않는다. */
 type PartyCommandOutcome = { token: number; status: RowSaveStatus; message: string | null };
 
-const FLOW_TITLE_KEY: Record<LedgerFlow, MessageKey> = {
-  active: "calls.flow.active",
-  reserved: "calls.flow.reserved",
-  done: "calls.flow.done"
-};
+/** 오늘 영업일과 지금 시각(영업 시간대). `지금` 구분선과 `N분 늦음`(스펙 D5)은 오늘 원장에서만 보인다. */
+export type LedgerClock = { today: string; time: string };
+
+/** 서버 렌더와 첫 화면이 같도록 붙은 뒤에 시계를 읽고, 30초마다 다시 읽는다. */
+function useLedgerClock(timeSlots: ServiceCallFormOptions["timeSlots"], enabled: boolean) {
+  const [clock, setClock] = useState<LedgerClock | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    const tick = () => setClock({ today: businessTodayServiceDate(timeSlots), time: businessClockString() });
+    tick();
+    const timer = window.setInterval(tick, 30_000);
+    return () => window.clearInterval(timer);
+  }, [timeSlots, enabled]);
+  return clock;
+}
 
 /** 완료 묶음을 펼쳐 둔 상태는 이 기기에 남긴다(스펙 D16). 저장소를 못 쓰면 접힌 기본값이다. */
 const DONE_EXPANDED_STORAGE_KEY = "calls.ledger.doneExpanded";
@@ -71,35 +88,19 @@ function writeDoneExpanded(expanded: boolean) {
   }
 }
 
-// 열 너비: 고객/메모만 남는 폭을 받고 나머지는 고정이다. 1280px에서 패널을 열어도(목록 약 50rem) 가로 스크롤이 없다.
-const COLUMNS: Array<{ id: string; labelKey: MessageKey; width?: string }> = [
-  { id: "time", labelKey: "calls.column.time", width: "4rem" },
-  { id: "customerMemo", labelKey: "calls.column.customerMemo" },
-  { id: "course", labelKey: "calls.column.course", width: "5.5rem" },
-  { id: "therapists", labelKey: "calls.list.therapists", width: "7.5rem" },
-  { id: "room", labelKey: "calls.column.room", width: "6rem" },
-  { id: "status", labelKey: "calls.column.status", width: "8rem" },
-  { id: "signals", labelKey: "calls.list.signals", width: "4.5rem" },
-  { id: "action", labelKey: "calls.list.action", width: "6rem" }
-];
-
-const cellClass = "border-b border-border px-2 py-2 align-middle max-[599px]:border-0 max-[599px]:px-1 max-[599px]:py-0.5";
+/** 일행 손님 줄과 머리 줄은 왼쪽 세로 막대로 묶는다(스펙 D8). 고른 일행 줄은 그 막대 안쪽에 선택 막대를 더한다. */
+const partyBarClass = "[box-shadow:inset_4px_0_0_var(--border-strong)]";
+const selectedBarClass = "data-[selected=true]:[box-shadow:inset_3px_0_0_var(--brand)]";
+const selectedPartyBarClass = "data-[selected=true]:[box-shadow:inset_4px_0_0_var(--border-strong),inset_7px_0_0_var(--brand)]";
 
 /**
- * 휴대폰 폭(600px 미만, 스펙 D23)은 같은 표를 줄마다 세 줄 격자로 그린다: 시간은 왼쪽에 세로로 걸치고,
- * 고객/메모 → 코스·매니저·객실 → 상태·경고·할 일 순서다. 칸은 DOM 순서대로 자리를 채운다.
- */
-const phoneLineClass =
-  "max-[599px]:grid max-[599px]:grid-cols-[3.5rem_repeat(3,minmax(0,1fr))] max-[599px]:items-center max-[599px]:gap-x-1 max-[599px]:border-b max-[599px]:border-border max-[599px]:px-1 max-[599px]:py-1.5 [&>td:first-child]:max-[599px]:row-span-3 [&>td:first-child]:max-[599px]:self-start [&>td:nth-child(2)]:max-[599px]:col-span-3";
-/** 휴대폰 폭에서 줄이 아닌 행(묶음 머리, 일행 머리, 객실 고르기)은 한 칸짜리 블록이다. */
-const phoneBlockRowClass = "max-[599px]:block [&>*]:max-[599px]:block";
-
-/**
- * 원장 한 줄(스펙 D17)과 그 콜의 저장 상태. 저장은 줄마다 하나씩 보내고(callRowSaveReducer), 입장 버튼과
- * 편집 패널이 같은 저장 상태를 쓴다. 패널은 이 줄이 골라졌을 때 작업면의 패널 자리(panelHost)에 그린다 —
- * 그래서 패널을 닫거나 다른 줄로 옮겨도 이 줄의 초안과 저장 중인 요청이 그대로 남는다.
+ * 원장 한 줄(1018 스펙 D3): 예약 하나를 두 줄로 보인다. 윗줄은 예약시각 · 입장 → 종료 · 상태 · 주 버튼, 아랫줄은
+ * 경로·예약자 · 코스 · Therapist ▾ · 객실 ▾ · 결제다. 저장은 줄마다 하나씩 보내고(callRowSaveReducer), 주 버튼과
+ * 칸 안 목록과 편집 패널이 같은 저장 상태를 쓴다. 패널은 이 줄이 골라졌을 때 작업면의 패널 자리(panelHost)에
+ * 그린다 — 그래서 패널을 닫거나 다른 줄로 옮겨도 이 줄의 초안과 저장 중인 요청이 그대로 남는다.
  */
 function CallLedgerLine({
+  clock,
   customers,
   hidden,
   isLocked,
@@ -117,6 +118,8 @@ function CallLedgerLine({
   selected,
   showSettlementAmounts
 }: {
+  /** 오늘 원장이면 지금 시각과 영업일 시작(첫 슬롯). 늦음 표시에 쓴다. */
+  clock: { time: string; dayStart: string } | null;
   customers: CustomerDto[];
   hidden: boolean;
   isLocked: boolean;
@@ -148,6 +151,10 @@ function CallLedgerLine({
   const request = save.inFlight;
   const [pickingRoom, setPickingRoom] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
+  // Therapist 칸 목록(스펙 D6): 열 때마다 그 콜의 시각·코스로 가능 판정을 다시 받는다. null은 불러오는 중이다.
+  const [therapistChoices, setTherapistChoices] = useState<TherapistAvailabilityRowDto[] | null>(null);
+  const [therapistChoicesFailed, setTherapistChoicesFailed] = useState(false);
+  const [pendingOverride, setPendingOverride] = useState<{ therapistId: string; name: string; verdict: TherapistPickVerdict } | null>(null);
 
   // 저장은 줄마다 하나씩 보낸다. 응답을 받으면 모아 둔 수정이 다음 저장으로 inFlight에 들어온다.
   useEffect(() => {
@@ -251,10 +258,72 @@ function CallLedgerLine({
     commit(changes);
   }
 
+  async function loadTherapistChoices() {
+    setTherapistChoices(null);
+    setTherapistChoicesFailed(false);
+    try {
+      setTherapistChoices(
+        await loadTherapistAvailabilityAction({
+          operatingMonthId: row.operatingMonthId,
+          serviceDate: row.serviceDate,
+          time: draft.startTime,
+          excludeCallId: row.id
+        })
+      );
+    } catch {
+      setTherapistChoices([]);
+      setTherapistChoicesFailed(true);
+    }
+  }
+
+  const therapistList = therapistChoices ? therapistPickList(therapistChoices, draft.courseId) : null;
+  const therapistOptions: LedgerPickOption[] | null = therapistList
+    ? [
+        ...therapistList.map((entry) => ({
+          value: entry.therapistId,
+          label: entry.therapistName,
+          detail:
+            entry.verdict === "rate_missing"
+              ? t("calls.cell.rateMissing")
+              : entry.verdict === "time_short"
+                ? entry.freeFrom
+                  ? t("calls.cell.freeFrom", { time: entry.freeFrom })
+                  : t("calls.cell.timeShort")
+                : entry.attendance === "checked_out"
+                  ? t("calls.availability.checkedOutTag")
+                  : entry.attendance === "before_check_in"
+                    ? t("calls.cell.beforeCheckIn")
+                    : t("calls.cell.doneToday", { count: entry.callCounts.done }),
+          muted: entry.verdict !== "possible" || entry.attendance !== "checked_in"
+        })),
+        { value: "", label: t("calls.cell.unassigned") }
+      ]
+    : null;
+
+  // 불가한 사람은 빠른 예약과 같은 경고를 확인한 뒤 배정한다(기존 경고 후 배정 경로). 미지명 줄이면 이것이 배정이다.
+  function pickTherapist(value: string) {
+    const entry = therapistList?.find((candidate) => candidate.therapistId === value);
+    if (entry && entry.verdict !== "possible") {
+      setPendingOverride({ therapistId: entry.therapistId, name: entry.therapistName, verdict: entry.verdict });
+      return;
+    }
+    commit({ therapist1Id: nullableValue(value) });
+  }
+
+  const roomOptions: LedgerPickOption[] = [
+    ...roomPickList(options.rooms, rows, row.id).map((room) => ({
+      value: room.value,
+      label: room.label,
+      detail: room.free ? undefined : t("calls.cell.roomBusy"),
+      muted: !room.free
+    })),
+    { value: "", label: t("calls.placeholder.roomUnassigned") }
+  ];
+
   const time = draft.startTime;
   const courseLabel = optionLabel(options.courses, draft.courseId) || serverRow.courseLabel;
   const therapistName = (id: string | null | undefined, assigned: ServiceCallRowDto["therapist1"]) =>
-    !id ? null : assigned?.id === id ? assigned.displayName : optionLabel(options.therapists, id) || id;
+    !id ? null : assigned?.id === id ? assigned.displayName : (therapistChoices?.find((choice) => choice.therapistId === id)?.therapistName ?? (optionLabel(options.therapists, id) || id));
   const therapists = [therapistName(draft.therapist1Id, serverRow.therapist1), therapistName(draft.therapist2Id, serverRow.therapist2)]
     .filter(Boolean)
     .join(" · ");
@@ -263,130 +332,206 @@ function CallLedgerLine({
   const statusLabel = optionLabel(options.statuses, draft.status) || draft.status;
   const warnings = freshestRow.warnings.map((warning) => callWarningLabel(t, warning));
   const freeRooms = pickingRoom ? freeRoomOptions(options.rooms, rows, row.id) : [];
+  const end = ledgerEndView({ actualEntryTime: draft.actualEntryTime ?? null, actualEndTime: draft.actualEndTime ?? null, displayEnd: freshestRow.displayEnd });
+  const late = clock ? lateMinutes(draft.status, draft.startTime, clock.time, clock.dayStart) : null;
+  const who = ledgerWhoLabel(
+    {
+      bookingChannelCode: draft.bookingChannelCode ?? null,
+      bookerName: draft.bookerName ?? null,
+      customerId: draft.customerId ?? null,
+      customerMemo: draft.customerMemo ?? null
+    },
+    options.bookingChannels,
+    customers
+  );
+  const therapistText = therapists || t("calls.cell.unassigned");
+  const roomText = roomLabel ?? t("calls.placeholder.roomUnassigned");
+  const paid = Boolean(draft.paymentMethodCode);
 
   return (
-    <>
-      {/* 편집 패널이 열린 줄은 선택된 줄 모양이다(design.md 6.6). 버튼이 아닌 자리를 눌러도 패널이 열린다. */}
-      <tr
-        className={`cursor-pointer transition-colors hover:bg-readonly data-[selected=true]:bg-readonly [&[data-selected=true]>td:first-child]:[box-shadow:inset_3px_0_0_var(--brand)] ${phoneLineClass}`}
-        data-ledger-line=""
-        data-selected={selected}
-        data-service-call-id={row.id}
-        hidden={hidden}
-        id={ledgerCallAnchorId(row.id)}
-        onClick={(event) => {
-          if ((event.target as HTMLElement).closest("button, a, input")) return;
-          onOpen(row.id);
-        }}
-      >
-        <td className={cellClass}>
+    // 편집 패널이 열린 줄은 선택된 줄 모양이다(design.md 6.6). 버튼이 아닌 자리를 눌러도 패널이 열린다.
+    <li
+      className={`grid cursor-pointer gap-1 border-b border-border px-3 py-2 transition-colors hover:bg-readonly data-[selected=true]:bg-readonly ${party ? `${partyBarClass} ${selectedPartyBarClass}` : selectedBarClass}`}
+      data-ledger-line=""
+      data-ledger-party-member={row.partyId ?? undefined}
+      data-selected={selected}
+      data-service-call-id={row.id}
+      hidden={hidden}
+      id={ledgerCallAnchorId(row.id)}
+      onClick={(event) => {
+        // 칸 안 목록은 body에 그리지만 React 이벤트는 이 줄까지 올라온다. 줄 안에서 누른 것만 패널을 연다.
+        if (!event.currentTarget.contains(event.target as Node)) return;
+        if ((event.target as HTMLElement).closest("button, a, input")) return;
+        onOpen(row.id);
+      }}
+    >
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1" data-line-top="">
+        <button
+          aria-label={t("calls.detail.rowAria", { time })}
+          className="min-h-11 rounded-sm px-1 text-lg font-semibold text-foreground [font-variant-numeric:tabular-nums] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-secondary"
+          data-call-open={row.id}
+          onClick={() => onOpen(row.id)}
+          type="button"
+        >
+          {time}
+        </button>
+        <span className="whitespace-nowrap text-sm text-foreground [font-variant-numeric:tabular-nums]" data-line-clock={end.kind}>
+          {end.kind === "notEntered" ? (
+            <span className="text-muted">{t("calls.line.notEntered")}</span>
+          ) : (
+            <>
+              {draft.actualEntryTime ? t("calls.line.entry", { time: draft.actualEntryTime }) : null}
+              {" → "}
+              {end.kind === "expected" ? (
+                <span className="text-faint">{t("calls.line.expectedEnd", { time: end.time })}</span>
+              ) : (
+                <span className="font-semibold">{end.time}</span>
+              )}
+            </>
+          )}
+        </span>
+        {late ? <StatusIndicator label={t("calls.line.late", { minutes: late })} size="sm" tone="warning" /> : null}
+        {statusKey ? (
+          <CallStatusChip label={statusLabel} size="sm" status={statusKey} />
+        ) : (
+          <StatusIndicator label={statusLabel} size="sm" tone="neutral" />
+        )}
+        {warnings.length > 0 ? (
+          // 누르는 영역은 44px(design.md 4.3)이고, 보이는 칩은 그 안의 작은 경고 칩이다.
           <button
-            aria-label={t("calls.detail.rowAria", { time })}
-            className="min-h-11 rounded-sm px-1 text-sm font-semibold text-foreground [font-variant-numeric:tabular-nums] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-secondary"
-            data-call-open={row.id}
+            aria-label={t("calls.list.warningsAria", { count: warnings.length, first: warnings[0] })}
+            className="inline-flex min-h-11 items-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-secondary"
             onClick={() => onOpen(row.id)}
+            title={warnings.join("\n")}
             type="button"
           >
-            {time}
+            <span className="inline-flex min-h-7 items-center gap-1 rounded-full bg-warning-soft px-2 text-xs font-semibold text-warning">
+              <span aria-hidden="true">▲︎</span>
+              <span className="[font-variant-numeric:tabular-nums]">{warnings.length}</span>
+            </span>
           </button>
-        </td>
-        <td className={`${cellClass} text-sm text-foreground`}>
-          <span className="grid">
-            <span className="truncate">{draft.customerMemo ?? <span className="text-muted">-</span>}</span>
-            {party ? <span className="truncate text-xs text-muted">{t("calls.party.position", party)}</span> : null}
-          </span>
-        </td>
-        <td className={`${cellClass} truncate text-sm text-foreground`}>{courseLabel}</td>
-        <td className={`${cellClass} truncate text-sm text-foreground`}>{therapists || <span className="text-muted">-</span>}</td>
-        <td className={`${cellClass} truncate text-sm text-foreground`}>
-          {roomLabel ?? <span className="text-muted">{t("calls.placeholder.roomUnassigned")}</span>}
-        </td>
-        <td className={cellClass}>
-          <span className="grid justify-items-start gap-0.5">
-            {statusKey ? (
-              <CallStatusChip label={statusLabel} size="sm" status={statusKey} />
-            ) : (
-              <StatusIndicator label={statusLabel} size="sm" tone="neutral" />
-            )}
-            {draft.note ? <span className="max-w-full truncate text-xs text-muted">{draft.note}</span> : null}
-          </span>
-        </td>
-        <td className={cellClass}>
-          <span className="grid justify-items-start gap-0.5" data-line-save-state={saveStatus}>
-            {warnings.length > 0 ? (
-              // 누르는 영역은 44px(design.md 4.3)이고, 보이는 칩은 그 안의 작은 경고 칩이다.
-              <button
-                aria-label={t("calls.list.warningsAria", { count: warnings.length, first: warnings[0] })}
-                className="inline-flex min-h-11 items-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-secondary"
-                onClick={() => onOpen(row.id)}
-                title={warnings.join("\n")}
+        ) : null}
+        <span data-line-save-state={saveStatus}>
+          {saveStatus === "saving" || isSaveHeld(saveStatus) ? <SaveStatus locale={locale} state={saveStatus === "saving" ? "saving" : saveStatus} /> : null}
+        </span>
+        {/* 휴대폰 폭은 읽기 전용이라(티켓 26) 주 버튼을 두지 않는다. */}
+        {readOnly || !action ? null : (
+          <span className="ml-auto">
+            {action === "enter" ? (
+              <Button
+                aria-label={t("calls.list.enterAria", { time })}
+                className="h-11 px-4"
+                disabled={isLocked || !inUse}
+                onClick={() => enter()}
                 type="button"
+                variant="secondary"
               >
-                <span className="inline-flex min-h-7 items-center gap-1 rounded-full bg-warning-soft px-2 text-xs font-semibold text-warning">
-                  <span aria-hidden="true">▲︎</span>
-                  <span className="[font-variant-numeric:tabular-nums]">{warnings.length}</span>
-                </span>
-              </button>
-            ) : null}
-            {saveStatus === "saving" || isSaveHeld(saveStatus) ? <SaveStatus locale={locale} state={saveStatus === "saving" ? "saving" : saveStatus} /> : null}
-          </span>
-        </td>
-        <td className={`${cellClass} text-right`}>
-          {/* 휴대폰 폭은 읽기 전용이라(티켓 26) 할 일 버튼을 두지 않는다. */}
-          {readOnly ? null : action === "enter" ? (
-            <Button
-              aria-label={t("calls.list.enterAria", { time })}
-              className="h-11 px-4"
-              disabled={isLocked || !inUse}
-              onClick={() => enter()}
-              type="button"
-              variant="secondary"
-            >
-              {t("calls.list.enter")}
-            </Button>
-          ) : action === "pay" ? (
-            <Button
-              aria-label={t("calls.list.payAria", { time })}
-              className="h-11 px-4"
-              disabled={isLocked}
-              onClick={() => onOpen(row.id, "payment")}
-              type="button"
-              variant="secondary"
-            >
-              {t("calls.list.pay")}
-            </Button>
-          ) : null}
-        </td>
-      </tr>
-      {pickingRoom ? (
-        <tr className={phoneBlockRowClass} hidden={hidden}>
-          <td className={`${cellClass} bg-readonly`} colSpan={COLUMNS.length}>
-            <div
-              aria-label={t("calls.list.pickRoomAria", { time })}
-              className="flex flex-wrap items-center gap-2"
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setPickingRoom(false);
-                }
-              }}
-              ref={pickerRef}
-              role="group"
-            >
-              <span className="text-sm font-semibold text-foreground">{t("calls.list.pickRoom")}</span>
-              {freeRooms.length === 0 ? <span className="text-sm text-muted">{t("calls.list.noFreeRoom")}</span> : null}
-              {freeRooms.map((room) => (
-                <Button className="h-11 px-4" data-entry-room={room.value} key={room.value} onClick={() => enter(room.value)} type="button" variant="secondary">
-                  {room.label}
-                </Button>
-              ))}
-              <Button className="h-11 px-4" onClick={() => setPickingRoom(false)} type="button" variant="ghost">
-                {t("common.confirm.cancel")}
+                {t("calls.list.enter")}
               </Button>
-            </div>
-          </td>
-        </tr>
+            ) : (
+              <Button
+                aria-label={t("calls.list.payAria", { time })}
+                className="h-11 px-4"
+                disabled={isLocked}
+                onClick={() => onOpen(row.id, "payment")}
+                type="button"
+                variant="secondary"
+              >
+                {t("calls.list.pay")}
+              </Button>
+            )}
+          </span>
+        )}
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-foreground" data-line-bottom="">
+        <span className="flex min-w-0 max-w-full items-center gap-1.5" data-line-who="">
+          {who.channel ? <span className="shrink-0 text-xs font-semibold text-muted">{who.channel}</span> : null}
+          <span className="min-w-0 truncate">{who.name ?? <span className="text-muted">-</span>}</span>
+          {party ? <span className="shrink-0 text-xs text-muted">{t("calls.party.position", party)}</span> : null}
+        </span>
+        <span className="whitespace-nowrap">{courseLabel}</span>
+        {readOnly ? (
+          <>
+            <span className="min-w-0 truncate">{therapistText}</span>
+            <span className="whitespace-nowrap">{roomText}</span>
+          </>
+        ) : (
+          <>
+            <LedgerCellPicker
+              disabled={isLocked}
+              emptyText={t("calls.cell.empty")}
+              failedText={therapistChoicesFailed ? t("calls.cell.failed") : null}
+              field="therapist1Id"
+              label={t("calls.cell.therapistAria", { time })}
+              loadingText={t("calls.cell.loading")}
+              onOpen={() => void loadTherapistChoices()}
+              onPick={pickTherapist}
+              options={therapistOptions}
+              value={draft.therapist1Id ?? ""}
+            >
+              {therapistText}
+            </LedgerCellPicker>
+            <LedgerCellPicker
+              disabled={isLocked}
+              emptyText={t("calls.cell.empty")}
+              field="roomId"
+              label={t("calls.cell.roomAria", { time })}
+              loadingText={t("calls.cell.loading")}
+              onPick={(value) => commit({ roomId: nullableValue(value) })}
+              options={roomOptions}
+              value={draft.roomId ?? ""}
+            >
+              {roomText}
+            </LedgerCellPicker>
+          </>
+        )}
+        <StatusIndicator label={paid ? t("calls.line.paid") : t("calls.line.unpaid")} size="sm" tone={paid ? "success" : "neutral"} />
+      </div>
+      {pickingRoom ? (
+        <div
+          aria-label={t("calls.list.pickRoomAria", { time })}
+          className="flex flex-wrap items-center gap-2 rounded-sm bg-readonly px-2 py-2"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setPickingRoom(false);
+            }
+          }}
+          ref={pickerRef}
+          role="group"
+        >
+          <span className="text-sm font-semibold text-foreground">{t("calls.list.pickRoom")}</span>
+          {freeRooms.length === 0 ? <span className="text-sm text-muted">{t("calls.list.noFreeRoom")}</span> : null}
+          {freeRooms.map((room) => (
+            <Button className="h-11 px-4" data-entry-room={room.value} key={room.value} onClick={() => enter(room.value)} type="button" variant="secondary">
+              {room.label}
+            </Button>
+          ))}
+          <Button className="h-11 px-4" onClick={() => setPickingRoom(false)} type="button" variant="ghost">
+            {t("common.confirm.cancel")}
+          </Button>
+        </div>
       ) : null}
+      <ConfirmDialog
+        cancelLabel={t("common.confirm.cancel")}
+        confirmLabel={t("calls.quickBooking.therapist.overrideAssign")}
+        description={
+          pendingOverride
+            ? t(pendingOverride.verdict === "rate_missing" ? "calls.quickBooking.therapist.overrideRateMissing" : "calls.quickBooking.therapist.overrideTimeShort", {
+                therapist: pendingOverride.name
+              })
+            : undefined
+        }
+        onConfirm={() => {
+          if (pendingOverride) commit({ therapist1Id: pendingOverride.therapistId });
+          setPendingOverride(null);
+        }}
+        onOpenChange={(open) => {
+          if (!open) setPendingOverride(null);
+        }}
+        open={pendingOverride !== null}
+        title={t("calls.quickBooking.therapist.overrideTitle")}
+      />
       {selected && panelHost
         ? createPortal(
             <CallEditPanel
@@ -411,19 +556,18 @@ function CallLedgerLine({
             panelHost
           )
         : null}
-    </>
+    </li>
   );
 }
 
 /**
- * 일행 머리 줄(스펙 D14, 티켓 04): "정 대표 일행 3명"과 일행 동작. 일행 콜이 여러 흐름 묶음에 흩어지면 묶음마다
- * 머리 줄이 있다. 전체 입장·취소는 예약인 손님이 있는 머리 줄에, 1명 추가와 실패한 손님 안내는 일행의 첫 머리
- * 줄에 한 번만 둔다. 입장·취소 저장은 각 손님 줄이 자기 저장 상태로 한다.
+ * 일행 머리 줄(스펙 D14, 티켓 04; 1018 스펙 D8): "정 대표 일행 3명"과 일행 동작. 일행 손님이 하단 완료 영역으로
+ * 내려가면 그 영역에도 머리 줄이 있다. 전체 입장·취소는 예약인 손님이 있는 머리 줄에, 1명 추가와 실패한 손님 안내는
+ * 일행의 첫 머리 줄에 한 번만 둔다. 입장·취소 저장은 각 손님 줄이 자기 저장 상태로 한다.
  */
 function CallPartyHead({
   failures,
   first,
-  flow,
   hidden,
   isLocked,
   lead,
@@ -431,6 +575,7 @@ function CallPartyHead({
   onCancel,
   onEnter,
   options,
+  part,
   readOnly,
   rows,
   sectionRows,
@@ -438,7 +583,6 @@ function CallPartyHead({
 }: {
   failures: Array<{ position: number; message: string | null }>;
   first: boolean;
-  flow: LedgerFlow;
   hidden: boolean;
   isLocked: boolean;
   lead: ServiceCallRowDto;
@@ -446,6 +590,8 @@ function CallPartyHead({
   onCancel: (callIds: string[]) => void;
   onEnter: (callIds: string[], rooms: Record<string, string>) => void;
   options: ServiceCallFormOptions;
+  /** 위 목록(open)의 머리 줄인지 하단 완료 영역(done)의 머리 줄인지. */
+  part: "open" | "done";
   readOnly: boolean;
   rows: ServiceCallRowDto[];
   sectionRows: ServiceCallRowDto[];
@@ -488,8 +634,12 @@ function CallPartyHead({
 
   return (
     <>
-      <tr className={phoneBlockRowClass} data-ledger-party={lead.partyId ?? ""} data-ledger-party-flow={flow} hidden={hidden}>
-        <td className={`${cellClass} bg-readonly`} colSpan={COLUMNS.length}>
+      <li
+        className={`grid gap-2 border-b border-border bg-readonly px-3 py-2 ${partyBarClass}`}
+        data-ledger-party={lead.partyId ?? ""}
+        data-ledger-party-part={part}
+        hidden={hidden}
+      >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm font-semibold text-foreground">{label}</span>
             {/* 휴대폰 폭은 읽기 전용이고 빠른 예약도 없어(티켓 26) 일행 동작을 두지 않는다. */}
@@ -536,7 +686,7 @@ function CallPartyHead({
           </div>
           {failures.length > 0 ? (
             <ScreenState
-              className="mt-2 px-3 py-3"
+              className="px-3 py-3"
               description={
                 <ul className="grid gap-0.5">
                   {failures.map((failure) => (
@@ -551,11 +701,7 @@ function CallPartyHead({
               title={t("calls.party.failedTitle")}
             />
           ) : null}
-        </td>
-      </tr>
       {picking ? (
-        <tr className={phoneBlockRowClass} hidden={hidden}>
-          <td className={`${cellClass} bg-readonly`} colSpan={COLUMNS.length}>
             <div
               aria-label={t("calls.party.pickRoomsAria", { party: label })}
               className="flex flex-wrap items-end gap-3"
@@ -612,9 +758,8 @@ function CallPartyHead({
                 {t("common.confirm.cancel")}
               </Button>
             </div>
-          </td>
-        </tr>
       ) : null}
+      </li>
       <ConfirmDialog
         cancelLabel={t("common.confirm.cancel")}
         confirmLabel={t("calls.party.cancelConfirm")}
@@ -632,11 +777,13 @@ function CallPartyHead({
 }
 
 /**
- * 흐름별 원장 목록(스펙 D15–D17, 티켓 03): 지금 이용 중 → 예약 → 완료·취소·노쇼. 모든 줄은 한 tbody의 형제라
- * 상태가 바뀌어 다른 묶음으로 옮겨도 그 줄의 저장 상태가 새로 시작하지 않는다. 접힌 완료 묶음의 줄도 숨김(hidden)일
- * 뿐 그대로 있어, 골라 둔 줄의 패널과 저장 중인 요청이 남는다.
+ * 두 줄 원장 목록(1018 스펙 D3–D9): 예약·사용중·청소중을 예약시각순 한 목록으로 두고, 오늘이면 `지금 HH:MM`
+ * 구분선을 넣는다. 방문완료·취소·노쇼는 하단 접기 영역이다. 모든 줄은 한 목록의 형제라 상태가 바뀌어 하단으로
+ * 옮겨도 그 줄의 저장 상태가 새로 시작하지 않는다. 접힌 줄도 숨김(hidden)일 뿐 그대로 있어, 골라 둔 줄의 패널과
+ * 저장 중인 요청이 남는다.
  */
 export function CallLedgerList({
+  clock: clockOverride,
   customers = [],
   isLocked,
   onOpen = () => {},
@@ -648,6 +795,8 @@ export function CallLedgerList({
   selectedCallId = null,
   showSettlementAmounts
 }: {
+  /** 시계를 정해 줄 때(테스트). 없으면 이 기기의 시계를 영업 시간대로 읽는다. */
+  clock?: LedgerClock | null;
   customers?: CustomerDto[];
   isLocked: boolean;
   onOpen?: OpenCall;
@@ -663,26 +812,27 @@ export function CallLedgerList({
   const t = useT();
   // 휴대폰 폭(600px 미만)은 같은 목록을 읽기 전용으로 쓴다(스펙 D23, 티켓 26의 규칙).
   const isPhoneWidth = usePhoneWidth();
+  const liveClock = useLedgerClock(options.timeSlots, clockOverride === undefined);
+  const clock = clockOverride === undefined ? liveClock : clockOverride;
+  const dayStart = options.timeSlots[0]?.value ?? "00:00";
+  const isToday = Boolean(clock && rows[0] && rows[0].serviceDate === clock.today);
+  const lineClock = isToday && clock ? { time: clock.time, dayStart } : null;
   const [doneExpanded, setDoneExpanded] = useState(false);
-  // 고른 완료 콜 때문에 펼친 묶음을 사용자가 다시 접었으면, 그 콜을 고른 동안은 접힌 채로 둔다.
+  // 고른 완료 콜 때문에 펼친 영역을 사용자가 다시 접었으면, 그 콜을 고른 동안은 접힌 채로 둔다.
   const [foldedFor, setFoldedFor] = useState<string | null>(null);
   useEffect(() => {
     setDoneExpanded(readDoneExpanded());
   }, []);
-  const sections = ledgerFlowSections(rows);
+  const timeline = ledgerTimeline(rows);
   // 일행 동작(티켓 04): 일행마다 마지막으로 보낸 일과, 일행 콜 줄들이 알려 온 저장 상태.
   const [partyCommands, setPartyCommands] = useState<Record<string, PartyCommand>>({});
   const [partyOutcomes, setPartyOutcomes] = useState<Record<string, PartyCommandOutcome>>({});
-  const commandToken = useRef(0);
   function sendPartyCommand(partyId: string, action: PartyAction) {
-    commandToken.current += 1;
-    setPartyCommands((current) => ({ ...current, [partyId]: { ...action, token: commandToken.current } }));
+    setPartyCommands((current) => ({ ...current, [partyId]: { ...action, token: (current[partyId]?.token ?? 0) + 1 } }));
   }
   const reportPartyOutcome = (callId: string, outcome: PartyCommandOutcome) => setPartyOutcomes((current) => ({ ...current, [callId]: outcome }));
-  // 실패 안내는 일행 입장·취소 버튼이 있는 예약 묶음의 머리 줄에 둔다. 예약이 남지 않았으면 일행의 첫 머리 줄에 둔다.
-  const reservedParties = new Set(rows.filter((row) => row.partyId && ledgerFlowOf(row.status) === "reserved").map((row) => row.partyId));
-  // 주소나 관련 콜로 접힌 완료 묶음의 콜을 고르면 그 묶음을 펼친다(기기에 남기지는 않는다).
-  const selectedIsDone = rows.some((row) => row.id === selectedCallId && ledgerFlowOf(row.status) === "done");
+  // 주소나 관련 콜로 접힌 완료 영역의 콜을 고르면 그 영역을 펼친다(기기에 남기지는 않는다).
+  const selectedIsDone = timeline.done.some((row) => row.id === selectedCallId);
   const revealSelected = selectedIsDone && foldedFor !== selectedCallId;
   const showDone = doneExpanded || revealSelected;
 
@@ -692,93 +842,105 @@ export function CallLedgerList({
     writeDoneExpanded(!showDone);
   }
 
-  const body: ReactNode[] = [];
   const headedParties = new Set<string>();
-  for (const section of sections) {
-    const collapsed = section.flow === "done" && !showDone;
-    body.push(
-      <tr className={phoneBlockRowClass} data-ledger-flow={section.flow} key={`flow-${section.flow}`}>
-        <th className="border-b border-border bg-surface px-2 pb-2 pt-4 text-left align-bottom" colSpan={COLUMNS.length} scope="colgroup">
-          {section.flow === "done" ? (
-            <button
-              aria-expanded={showDone}
-              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm font-semibold text-foreground transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary"
-              onClick={toggleDone}
-              type="button"
-            >
-              <span aria-hidden="true">{showDone ? "▾" : "▸"}</span>
-              {t("calls.flow.doneToggle", { count: section.rows.length })}
-            </button>
-          ) : (
-            <span className="text-[0.9375rem] font-semibold text-foreground">
-              {t(FLOW_TITLE_KEY[section.flow])} <span className="text-sm text-muted">{t("calls.flow.count", { count: section.rows.length })}</span>
-            </span>
-          )}
-        </th>
-      </tr>
-    );
-    const line = (row: ServiceCallRowDto, party: { position: number; size: number } | null) => (
-      <CallLedgerLine
-        customers={customers}
-        hidden={collapsed}
-        isLocked={isLocked}
-        key={row.id}
-        onOpen={onOpen}
-        onPartyOutcome={reportPartyOutcome}
-        onSelectRelated={onSelectRelated}
-        options={options}
-        panelFocus={row.id === selectedCallId ? panelFocus : null}
-        panelHost={panelHost}
-        party={party}
-        partyCommand={row.partyId ? (partyCommands[row.partyId] ?? null) : null}
-        readOnly={isPhoneWidth}
-        row={row}
-        rows={rows}
-        selected={row.id === selectedCallId}
-        showSettlementAmounts={showSettlementAmounts}
-      />
-    );
-    for (const item of ledgerFlowItems(section.rows, rows)) {
-      if (item.kind === "call") {
-        body.push(line(item.row, null));
-        continue;
-      }
+  const line = (row: ServiceCallRowDto, party: { position: number; size: number } | null, hidden: boolean) => (
+    <CallLedgerLine
+      clock={lineClock}
+      customers={customers}
+      hidden={hidden}
+      isLocked={isLocked}
+      key={row.id}
+      onOpen={onOpen}
+      onPartyOutcome={reportPartyOutcome}
+      onSelectRelated={onSelectRelated}
+      options={options}
+      panelFocus={row.id === selectedCallId ? panelFocus : null}
+      panelHost={panelHost}
+      party={party}
+      partyCommand={row.partyId ? (partyCommands[row.partyId] ?? null) : null}
+      readOnly={isPhoneWidth}
+      row={row}
+      rows={rows}
+      selected={row.id === selectedCallId}
+      showSettlementAmounts={showSettlementAmounts}
+    />
+  );
+  /** 한 부분(위 목록이나 하단 완료 영역)의 줄들. 일행은 그 부분에서 처음 나오는 손님 자리에 머리 줄과 함께 붙는다. */
+  const partNodes = (part: "open" | "done", partRows: ServiceCallRowDto[], hidden: boolean) =>
+    ledgerFlowItems(partRows, rows).map((item) => {
+      if (item.kind === "call") return { startTime: item.row.startTime, nodes: [line(item.row, null, hidden)] };
       const { partyId, size, lead } = item;
       const first = !headedParties.has(partyId);
       headedParties.add(partyId);
       const command = partyCommands[partyId];
-      const showsFailures = section.flow === "reserved" || (first && !reservedParties.has(partyId));
       const failures =
-        showsFailures && command
+        first && command
           ? command.callIds.flatMap((callId) => {
               const outcome = partyOutcomes[callId];
               if (outcome?.token !== command.token || !isSaveHeld(outcome.status)) return [];
               return [{ position: rows.find((row) => row.id === callId)?.partyPosition ?? 0, message: outcome.message }];
             })
           : [];
-      body.push(
-        <CallPartyHead
-          failures={failures}
-          first={first}
-          flow={section.flow}
-          hidden={collapsed}
-          isLocked={isLocked}
-          key={`party-${section.flow}-${partyId}`}
-          lead={lead}
-          onAdd={() =>
-            requestQuickBookingJoinParty({ partyId, serviceDate: lead.serviceDate, startTime: lead.startTime, customerMemo: lead.customerMemo, size })
-          }
-          onCancel={(callIds) => sendPartyCommand(partyId, { kind: "cancel", callIds })}
-          onEnter={(callIds, rooms) => sendPartyCommand(partyId, { kind: "enter", callIds, rooms })}
-          options={options}
-          readOnly={isPhoneWidth}
-          rows={rows}
-          sectionRows={item.rows}
-          size={size}
-        />
-      );
-      for (const row of item.rows) body.push(line(row, { position: row.partyPosition ?? 0, size }));
-    }
+      return {
+        startTime: item.rows[0]?.startTime ?? lead.startTime,
+        nodes: [
+          <CallPartyHead
+            failures={failures}
+            first={first}
+            hidden={hidden}
+            isLocked={isLocked}
+            key={`party-${part}-${partyId}`}
+            lead={lead}
+            onAdd={() =>
+              requestQuickBookingJoinParty({ partyId, serviceDate: lead.serviceDate, startTime: lead.startTime, customerMemo: lead.customerMemo, size })
+            }
+            onCancel={(callIds) => sendPartyCommand(partyId, { kind: "cancel", callIds })}
+            onEnter={(callIds, rooms) => sendPartyCommand(partyId, { kind: "enter", callIds, rooms })}
+            options={options}
+            part={part}
+            readOnly={isPhoneWidth}
+            rows={rows}
+            sectionRows={item.rows}
+            size={size}
+          />,
+          ...item.rows.map((row) => line(row, { position: row.partyPosition ?? 0, size }, hidden))
+        ]
+      };
+    });
+
+  const openItems = partNodes("open", timeline.open, false);
+  const body: ReactNode[] = openItems.flatMap((item) => item.nodes);
+  if (isToday && clock) {
+    const index = nowDividerIndex(
+      openItems.map((item) => item.startTime),
+      clock.time,
+      dayStart
+    );
+    const at = openItems.slice(0, index).reduce((count, item) => count + item.nodes.length, 0);
+    body.splice(
+      at,
+      0,
+      <li className="flex items-center gap-2 px-3 py-1 text-xs font-semibold text-foreground" data-ledger-now="" key="now">
+        <span className="whitespace-nowrap [font-variant-numeric:tabular-nums]">{t("calls.line.now", { time: clock.time })}</span>
+        <span aria-hidden="true" className="h-0.5 flex-1 bg-foreground" />
+      </li>
+    );
+  }
+  if (timeline.done.length > 0) {
+    body.push(
+      <li className="border-b border-border px-3 pb-2 pt-4" data-ledger-done-toggle="" key="done-toggle">
+        <button
+          aria-expanded={showDone}
+          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm font-semibold text-foreground transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary"
+          onClick={toggleDone}
+          type="button"
+        >
+          <span aria-hidden="true">{showDone ? "▾" : "▸"}</span>
+          {t("calls.flow.doneToggle", { count: timeline.done.length })}
+        </button>
+      </li>,
+      ...partNodes("done", timeline.done, !showDone).flatMap((item) => item.nodes)
+    );
   }
 
   return (
@@ -803,30 +965,11 @@ export function CallLedgerList({
           {isPhoneWidth ? null : <p className="text-xs text-muted">{t("calls.grid.empty.description")}</p>}
         </div>
       ) : null}
-      {/* 콜이 없어도 줄 구조는 그대로 둔다 — 빠른 예약으로 첫 콜을 만들면 같은 자리에 줄이 생긴다. 휴대폰 폭은
-          같은 표를 블록과 줄 격자로 그린다(스펙 D23). */}
-      <table
-        aria-label={t("calls.list.aria")}
-        className="w-full table-fixed border-collapse text-left max-[599px]:block"
-        data-call-ledger-list=""
-        hidden={rows.length === 0}
-      >
-        <colgroup>
-          {COLUMNS.map((column) => (
-            <col key={column.id} style={column.width ? { width: column.width } : undefined} />
-          ))}
-        </colgroup>
-        <thead className="bg-readonly text-xs font-semibold text-muted max-[599px]:hidden">
-          <tr>
-            {COLUMNS.map((column) => (
-              <th className="whitespace-nowrap border-b border-border px-2 py-2 text-left" key={column.id} scope="col">
-                {column.id === "action" ? <span className="sr-only">{t(column.labelKey)}</span> : t(column.labelKey)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="max-[599px]:block">{body}</tbody>
-      </table>
+      {/* 콜이 없어도 목록은 그대로 둔다 — 빠른 예약으로 첫 콜을 만들면 같은 자리에 줄이 생긴다. 휴대폰 폭도 같은
+          두 줄 행이다(스펙 D9). */}
+      <ol aria-label={t("calls.list.aria")} className="grid min-w-0" data-call-ledger-list="" hidden={rows.length === 0}>
+        {body}
+      </ol>
     </section>
   );
 }

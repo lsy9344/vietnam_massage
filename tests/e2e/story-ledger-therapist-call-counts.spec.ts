@@ -108,7 +108,7 @@ function stripItem(page: Page, therapistId: string) {
 
 async function openLedger(page: Page) {
   await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
-  await expect(page.getByRole("table", { name: "흐름별 콜 원장" })).toBeVisible();
+  await expect(page.getByRole("list", { name: "콜 원장 목록" })).toBeVisible();
 }
 
 test.describe("원장 띠와 빠른 예약 카드의 Therapist별 한 것 +예약", () => {
@@ -220,7 +220,7 @@ test.describe("원장 띠와 빠른 예약 카드의 Therapist별 한 것 +예�
     await page.setViewportSize({ width: 1280, height: 800 });
     await login(page, account.accountId, account.password);
     await openLedger(page);
-    const reservedLine = page.locator(`tr[data-service-call-id="${reservedCallId}"]`);
+    const reservedLine = page.locator(`[data-ledger-line][data-service-call-id="${reservedCallId}"]`);
 
     await reservedLine.getByRole("button", { name: "16:00 콜 입장" }).click();
     await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: reservedCallId } })).status).toBe("IN_USE");

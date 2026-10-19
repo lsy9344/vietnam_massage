@@ -236,7 +236,7 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
     // 3) 입장·객실 확인: 줄 끝 "입장" 버튼으로 사용중이 되고, 객실 화면에 반영되는지 본다(티켓 03의 줄 끝 버튼).
     // 운영 빌드에서는 서버 액션 뒤 원장 표 자동 갱신(revalidatePath)이 가끔 늦는다(e2e-environment 메모).
     // 새로고침을 곁들여 다시 시도한다.
-    const row = page.locator(`tr[data-service-call-id="${call.id}"]`);
+    const row = page.locator(`[data-ledger-line][data-service-call-id="${call.id}"]`);
     await expect(async () => {
       await page.reload();
       await expect(row).toBeVisible({ timeout: 3_000 });

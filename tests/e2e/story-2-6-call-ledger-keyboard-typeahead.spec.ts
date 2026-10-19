@@ -170,7 +170,7 @@ async function createCallRow(memo: string) {
 }
 
 function line(page: Page, callId: string) {
-  return page.locator(`tr[data-service-call-id="${callId}"]`);
+  return page.locator(`[data-ledger-line][data-service-call-id="${callId}"]`);
 }
 
 /** 티켓 03: type-ahead 콤보박스는 그리드 셀이 아니라 편집 패널의 칸으로 옮겨졌다. */
@@ -195,7 +195,7 @@ test.describe("Story 2.6 keyboard-first call ledger type-ahead", () => {
 
     // Next.js의 로딩 스켈레톤이 아직 실제 콜 원장으로 바뀌기 전에 눌러도 재시도하도록, 줄이 실제로
     // 보일 때까지 먼저 기다린다.
-    const firstRow = page.locator("tr[data-ledger-line]").first();
+    const firstRow = page.locator("[data-ledger-line]").first();
     await expect(firstRow).toBeVisible();
     await firstRow.click();
     const edit = panel(page);
@@ -227,7 +227,7 @@ test.describe("Story 2.6 keyboard-first call ledger type-ahead", () => {
 
     // Next.js의 로딩 스켈레톤이 아직 실제 콜 원장으로 바뀌기 전에 눌러도 재시도하도록, 줄이 실제로
     // 보일 때까지 먼저 기다린다.
-    const firstRow = page.locator("tr[data-ledger-line]").first();
+    const firstRow = page.locator("[data-ledger-line]").first();
     await expect(firstRow).toBeVisible();
     await firstRow.click();
     const edit = panel(page);
@@ -272,17 +272,17 @@ test.describe("Story 2.6 keyboard-first call ledger type-ahead", () => {
     // Next.js의 로딩 스켈레톤이 아직 실제 콜 원장으로 바뀌기 전에 포커스를 줘도 재시도하도록, 줄이
     // 실제로 보일 때까지 먼저 기다린다.
     const opener = (id: string) => line(page, id).locator("[data-call-open]");
-    const first = page.locator("tr[data-ledger-line]").first().locator("[data-call-open]");
+    const first = page.locator("[data-ledger-line]").first().locator("[data-call-open]");
     await expect(first).toBeVisible();
     await first.focus();
     await page.keyboard.press("ArrowDown");
-    const secondId = await page.locator("tr[data-ledger-line]").nth(1).getAttribute("data-service-call-id");
+    const secondId = await page.locator("[data-ledger-line]").nth(1).getAttribute("data-service-call-id");
     await expect(opener(secondId!)).toBeFocused();
     await page.keyboard.press("ArrowUp");
     await expect(first).toBeFocused();
 
     await page.keyboard.press("Enter");
-    const firstId = await page.locator("tr[data-ledger-line]").first().getAttribute("data-service-call-id");
+    const firstId = await page.locator("[data-ledger-line]").first().getAttribute("data-service-call-id");
     await expect(page).toHaveURL(new RegExp(`call=${firstId}$`));
     const startTime = panel(page).getByRole("combobox", { name: "시간" });
     await expect(startTime).toBeFocused();

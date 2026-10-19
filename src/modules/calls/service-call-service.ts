@@ -315,6 +315,8 @@ export type ServiceCallRowDto = {
   /** 실제 종료(1018 스펙 D1·D2). 있으면 Therapist가 이 콜에 묶이는 끝이다. */
   actualEndTime: string | null;
   displayEnd: string;
+  /** 예약 기준 예상 종료(1018 스펙 D10): 입장과 관계없이 예약시각 + 코스 길이다. */
+  reservedEnd: string;
   warningTime: string | null;
   /** 우선순위 순서의 경고 목록. 비어 있으면 경고가 없다. */
   warnings: CallRowWarningDto[];
@@ -898,6 +900,9 @@ async function toRowDto(
     actualEntryTime: display.actualEntryTime,
     actualEndTime: storedActualEndTime(record),
     displayEnd: display.displayEnd,
+    reservedEnd: CLOCK_TIME.test(record.startTime)
+      ? formatBusinessMinute(businessMinute(record.startTime, context.dayStart) + courseDurationMinutes(record))
+      : display.displayEnd,
     warningTime: display.warningTime,
     warnings: deriveRowWarnings(record, context, display, calculation.calculationStatus, now),
     roomId: record.roomId,
@@ -1661,6 +1666,8 @@ export async function listTherapistAvailability(input: {
   operatingMonthId: string;
   serviceDate: string;
   time: string;
+  /** 원장 Therapist 칸 목록(1018 티켓 02): 다시 배정하는 그 콜의 점유는 빼고 본다. 콜 수는 그대로 센다. */
+  excludeCallId?: string;
   now?: Date;
   prismaClient?: ServiceCallPrismaClient;
 }): Promise<TherapistAvailabilityRowDto[]> {
@@ -1735,6 +1742,7 @@ export async function listTherapistAvailability(input: {
   const releaseContext = { dayCalls: calls, dayStart };
   for (const call of calls) {
     if (!occupiesAvailability(call.status) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(call.startTime)) continue;
+    if (call.id === input.excludeCallId) continue;
     const policy = currentPolicyForCourse(policies, call.courseId, month.monthKey);
     if (!policy) continue;
     const start = businessMinute(call.startTime, dayStart);
@@ -1758,6 +1766,7 @@ export async function listTherapistAvailability(input: {
   if (isToday) {
     for (const call of calls) {
       if (!isInUseStatus(call.status) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(call.startTime)) continue;
+      if (call.id === input.excludeCallId) continue;
       // 실제 종료가 있으면 Therapist는 그때 풀렸다(스펙 D2). 표시 종료 뒤를 다시 잡지 않는다.
       if (storedActualEndTime(call)) continue;
       const displayEnd = displayEndChoice(call, releaseContext).minute;
