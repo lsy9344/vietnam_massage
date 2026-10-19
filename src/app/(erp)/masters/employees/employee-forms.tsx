@@ -29,6 +29,8 @@ import { SaveRow, SelectField, TextField } from "@/app/(erp)/masters/master-fiel
 import { ActiveStatus, Cell, HeadCell, ImpactNotice, MasterSectionHeading, MasterTable, PanelSection, masterDateTime } from "@/app/(erp)/masters/master-parts";
 import { TherapistAccountPanel } from "@/app/(erp)/masters/employees/therapist-account-panel";
 import { MasterSplit, SelectableRow, useMasterSelection, useSelectCreatedItem } from "@/app/(erp)/masters/master-workspace";
+import { TherapistMemoPanel } from "@/app/(erp)/masters/employees/therapist-memo-panel";
+import type { TherapistMemoDto } from "@/modules/therapists/therapist-memo-service";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { Translator } from "@/lib/i18n";
 import { formatNumber } from "@/lib/i18n/format";
@@ -230,7 +232,16 @@ function DeactivateForm({ employee }: { employee: EmployeeDto }) {
   );
 }
 
-function EmployeePanel({ employee, onClose }: { employee: EmployeeDto; onClose: () => void }) {
+function EmployeePanel({
+  employee,
+  onClose,
+  therapistMemos
+}: {
+  employee: EmployeeDto;
+  onClose: () => void;
+  /** 티켓 12: null이면 이 계정에는 메모가 아예 안 보내진 것이고(therapist:manage 없음), 섹션도 그리지 않는다. */
+  therapistMemos: TherapistMemoDto[] | null;
+}) {
   const t = useT();
   const locale = useLocale();
   return (
@@ -262,6 +273,9 @@ function EmployeePanel({ employee, onClose }: { employee: EmployeeDto; onClose: 
           </PanelSection>
         )}
         <div className="grid gap-6 print:hidden">
+          {employee.employeeGroup === "THERAPIST" && therapistMemos ? (
+            <TherapistMemoPanel employeeId={employee.id} memos={therapistMemos} />
+          ) : null}
           <PanelSection title={t("masters.common.details")}>
             <dl>
               <DetailRow label={t("masters.employees.employeeId")} value={employee.id} />
@@ -280,7 +294,16 @@ function EmployeePanel({ employee, onClose }: { employee: EmployeeDto; onClose: 
 }
 
 /** 직원 마스터: 직군별 직원 목록과, 고른 직원의 변경 영향·프로필·계정 연결·비활성 처리 패널. */
-export function EmployeeManager({ employees, initialItem }: { employees: EmployeeDto[]; initialItem: string | null }) {
+export function EmployeeManager({
+  employees,
+  initialItem,
+  therapistMemosByEmployeeId = null
+}: {
+  employees: EmployeeDto[];
+  initialItem: string | null;
+  /** 티켓 12: therapist:manage가 없는 계정에는 page.tsx가 이 prop 자체를 null로 보낸다. */
+  therapistMemosByEmployeeId?: Record<string, TherapistMemoDto[]> | null;
+}) {
   const t = useT();
   const locale = useLocale();
   const { selected, select, panelRef } = useMasterSelection(initialItem);
@@ -289,7 +312,15 @@ export function EmployeeManager({ employees, initialItem }: { employees: Employe
   return (
     <MasterSplit
       hint={t("masters.common.panelHint")}
-      panel={selectedEmployee ? <EmployeePanel employee={selectedEmployee} onClose={() => select(null)} /> : null}
+      panel={
+        selectedEmployee ? (
+          <EmployeePanel
+            employee={selectedEmployee}
+            onClose={() => select(null)}
+            therapistMemos={therapistMemosByEmployeeId?.[selectedEmployee.id] ?? null}
+          />
+        ) : null
+      }
       panelRef={panelRef}
     >
       {employeeGroups.map((group) => {

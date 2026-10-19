@@ -28,6 +28,9 @@ model UserAccount {
   therapistDailySettlementPayments TherapistDailySettlementPayment[]
   changedTherapistDailySettlementPaymentHistories TherapistDailySettlementPaymentHistory[]
   payoutConfirmationEvents PayoutConfirmationEvent[]
+  authoredTherapistNotices TherapistNotice[] @relation("TherapistNoticeAuthor")
+  withdrawnTherapistNotices TherapistNotice[] @relation("TherapistNoticeWithdrawnBy")
+  authoredTherapistInternalMemos TherapistInternalMemo[]
 
   @@map("user_accounts")
 }
@@ -57,6 +60,9 @@ model Employee {
   therapistDailySettlementPayments TherapistDailySettlementPayment[]
   plannedWorkingDays     PlannedWorkingDay[]
   payoutConfirmationEvents PayoutConfirmationEvent[]
+  targetedTherapistNotices TherapistNotice[]
+  therapistNoticeRecipients TherapistNoticeRecipient[]
+  therapistInternalMemos TherapistInternalMemo[]
 
   @@unique([employeeGroup, sortOrder], map: "uq_employees_employee_group_sort_order")
   @@map("employees")
@@ -461,6 +467,21 @@ model PayoutConfirmationEvent {
   @@map("payout_confirmation_events")
 }
 
+// 티켓 12: 직원 화면의 Therapist 패널에 쌓는 내부 메모(스펙 D27, M24). 관리자만 읽고 쓰고, 추가만 한다
+// (수정·삭제 없음). 더하기만 하는 새 표(D29), 운영 DB 적용은 사용자 확인 뒤에 한다.
+model TherapistInternalMemo {
+  id              String      @id @default(cuid())
+  employeeId      String      @map("employee_id")
+  employee        Employee    @relation(fields: [employeeId], references: [id])
+  authorAccountId String      @map("author_account_id")
+  authorAccount   UserAccount @relation(fields: [authorAccountId], references: [id])
+  body            String
+  createdAt       DateTime    @default(now()) @map("created_at")
+
+  @@index([employeeId, createdAt], map: "idx_therapist_internal_memos_employee_created_at")
+  @@map("therapist_internal_memos")
+}
+
 model CoursePolicy {
   id                      String   @id @default(cuid())
   courseId                String   @map("course_id")
@@ -526,4 +547,43 @@ model OpsMonthlyIncentiveRule {
 
   @@index([thresholdCallCount, effectiveFromMonth], map: "idx_ops_monthly_incentive_rules_lookup")
   @@map("ops_monthly_incentive_rules")
+}
+
+// Therapist 공지(스펙 D25, M24, 티켓 10). 관리자가 Therapist 전체나 특정 Therapist 한 명에게 보낸다.
+// 보낸 공지는 고칠 수 없고 내리기만 한다(withdrawnAt). 받는 사람 줄은 TherapistNoticeRecipient에
+// 보낼 때 고정한다 — 더하기만 하는 마이그레이션이다(D29).
+model TherapistNotice {
+  id                   String                     @id @default(cuid())
+  authorAccountId      String                     @map("author_account_id")
+  authorAccount        UserAccount                @relation("TherapistNoticeAuthor", fields: [authorAccountId], references: [id])
+  body                 String
+  // "전체" | "특정"(CONTEXT.md 공지 용어). "특정"일 때만 targetEmployeeId가 있다.
+  targetType           String                     @map("target_type")
+  targetEmployeeId     String?                    @map("target_employee_id")
+  targetEmployee       Employee?                  @relation(fields: [targetEmployeeId], references: [id])
+  sentAt               DateTime                   @default(now()) @map("sent_at")
+  withdrawnAt          DateTime?                   @map("withdrawn_at")
+  withdrawnByAccountId String?                     @map("withdrawn_by_account_id")
+  withdrawnByAccount   UserAccount?               @relation("TherapistNoticeWithdrawnBy", fields: [withdrawnByAccountId], references: [id])
+  createdAt            DateTime                   @default(now()) @map("created_at")
+  recipients           TherapistNoticeRecipient[]
+
+  @@index([sentAt], map: "idx_therapist_notices_sent_at")
+  @@map("therapist_notices")
+}
+
+// 공지 받는 사람 줄: 보낼 때의 활성 Therapist 계정 기준으로 한 번 만들고 바뀌지 않는다.
+// readAt이 비어 있으면 안 읽음이다(스펙 D25).
+model TherapistNoticeRecipient {
+  id         String          @id @default(cuid())
+  noticeId   String          @map("notice_id")
+  notice     TherapistNotice @relation(fields: [noticeId], references: [id])
+  employeeId String          @map("employee_id")
+  employee   Employee        @relation(fields: [employeeId], references: [id])
+  readAt     DateTime?       @map("read_at")
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  @@unique([noticeId, employeeId], map: "uq_therapist_notice_recipients_notice_employee")
+  @@index([employeeId, readAt], map: "idx_therapist_notice_recipients_employee_read")
+  @@map("therapist_notice_recipients")
 }

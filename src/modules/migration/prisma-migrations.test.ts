@@ -48,4 +48,13 @@ describe("Prisma migration chain", () => {
     assert.match(sql, /ADD COLUMN "password_change_required" BOOLEAN NOT NULL DEFAULT false/);
     assert.doesNotMatch(sql, /DROP COLUMN|DROP TABLE/);
   });
+
+  it("Therapist 내부 메모 표는 더하기만 하고, 직원·작성 계정을 FK로 묶는다(스펙 D27, D29)", () => {
+    const sql = migrationSql("20261020121200_add_therapist_internal_memos");
+
+    assert.match(sql, /CREATE TABLE "therapist_internal_memos"/);
+    assert.doesNotMatch(sql, /DROP COLUMN|DROP TABLE/);
+    assert.match(sql, /FOREIGN KEY \("employee_id"\) REFERENCES "employees"\("id"\)/);
+    assert.match(sql, /FOREIGN KEY \("author_account_id"\) REFERENCES "user_accounts"\("id"\)/);
+  });
 });
