@@ -1367,6 +1367,11 @@ export const vi: Messages = {
   "masters.employees.createDescription": "Nhân viên mới được đưa vào danh sách phân công trong sổ gọi và danh sách chấm công, đối soát theo nhóm.",
   "masters.employees.accountNotLinked": "Chưa liên kết",
   "masters.employees.initialSecretHint": "Chỉ nhập khi tạo tài khoản mới.",
+  "masters.employees.memo.title": "Ghi chú nội bộ KTV",
+  "masters.employees.memo.hint": "Chỉ có thể thêm, chỉ quản trị viên xem và viết được.",
+  "masters.employees.memo.empty": "Chưa có ghi chú nào.",
+  "masters.employees.memo.fieldLabel": "Nội dung ghi chú",
+  "masters.employees.memo.add": "Thêm ghi chú",
   "masters.employees.shift.all": "Cả ngày",
   "masters.employees.shift.day": "Ca ngày",
   "masters.employees.shift.night": "Ca đêm",
@@ -1601,6 +1606,7 @@ export const vi: Messages = {
   "audit.target.therapistCourseRate": "Hoa hồng liệu trình KTV",
   "audit.target.opsDailyIncentiveRule": "Quy tắc thưởng ngày nhóm vận hành",
   "audit.target.opsMonthlyIncentiveRule": "Quy tắc thưởng tháng nhóm vận hành",
+  "audit.target.therapistInternalMemo": "Ghi chú nội bộ KTV",
 
   // Màn hình dành riêng cho KTV (ticket 01): 4 tab dưới, menu "Tôi", cơ chế làm mới chung.
   "therapist.nav.aria": "Di chuyển màn hình KTV",

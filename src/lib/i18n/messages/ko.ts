@@ -1373,6 +1373,11 @@ export const ko = {
   "masters.employees.createDescription": "만든 직원은 직군에 맞춰 원장 배정과 출근·정산 명단에 들어갑니다.",
   "masters.employees.accountNotLinked": "미연결",
   "masters.employees.initialSecretHint": "새 계정을 만들 때만 입력합니다.",
+  "masters.employees.memo.title": "Therapist 내부 메모",
+  "masters.employees.memo.hint": "추가만 할 수 있고, 관리자만 보고 씁니다.",
+  "masters.employees.memo.empty": "아직 메모가 없습니다.",
+  "masters.employees.memo.fieldLabel": "메모 내용",
+  "masters.employees.memo.add": "메모 추가",
   "masters.employees.shift.all": "전체",
   "masters.employees.shift.day": "주간",
   "masters.employees.shift.night": "야간",
@@ -1607,6 +1612,7 @@ export const ko = {
   "audit.target.therapistCourseRate": "Therapist 코스 수당",
   "audit.target.opsDailyIncentiveRule": "운영팀 일일 인센티브 규칙",
   "audit.target.opsMonthlyIncentiveRule": "운영팀 월 인센티브 규칙",
+  "audit.target.therapistInternalMemo": "Therapist 내부 메모",
 
   // Therapist 전용 화면(티켓 01): 아래 탭 네 개, "나" 메뉴, 새로고침 공통 조각. vi에서 Therapist는 "KTV"다.
   "therapist.nav.aria": "Therapist 화면 이동",
