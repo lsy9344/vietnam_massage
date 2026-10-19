@@ -28,7 +28,9 @@ type TherapistAttendanceRecord = {
   attendanceDate: Date;
   employeeId: string;
   checkInMinute: number;
+  checkInMethod: string;
   checkOutMinute: number | null;
+  checkOutMethod: string | null;
   standbyMinutes: number | null;
   isFullAttendanceRecognized: boolean;
   isActive: boolean;
@@ -68,6 +70,18 @@ type TherapistAttendancePrismaClient = {
 // 퇴근이 저장됐는데 그날 그 Therapist의 사용중 콜이 있다. 저장은 막지 않고 콜도 바꾸지 않는다.
 export type TherapistAttendanceWarning = { code: "IN_SERVICE_CALL"; serviceCallIds: string[] };
 
+// 출근·퇴근에 찍힌 방식(스펙 D16, M23). 05(직접 찍기)·06(근태 달력)·09(정정 승인)·11(현황)이
+// 이 상수와 타입을 그대로 쓴다. "이전 기록"은 이 칸이 생기기 전 기록에만 쓰고(가정, D16),
+// 저장 액션은 넘기지 않는다(liveTherapistAttendanceMethods 참고).
+export const therapistAttendanceMethods = ["직접", "대리 입력", "정정 승인", "이전 기록"] as const;
+export type TherapistAttendanceMethod = (typeof therapistAttendanceMethods)[number];
+export const legacyTherapistAttendanceMethod: TherapistAttendanceMethod = "이전 기록";
+
+// 저장 액션(upsertTherapistAttendance)이 넘길 수 있는 방식. 직접 찍기는 "직접"(05),
+// 기존 출퇴근 화면은 "대리 입력"(이 티켓), 정정 승인은 "정정 승인"(09)을 넘긴다.
+export const liveTherapistAttendanceMethods = ["직접", "대리 입력", "정정 승인"] as const;
+export type LiveTherapistAttendanceMethod = (typeof liveTherapistAttendanceMethods)[number];
+
 export type TherapistAttendanceDto = {
   id: string | null;
   operatingMonthId: string;
@@ -77,7 +91,9 @@ export type TherapistAttendanceDto = {
   displayName: string;
   sortOrder: number;
   checkInTime: string | null;
+  checkInMethod: TherapistAttendanceMethod | null;
   checkOutTime: string | null;
+  checkOutMethod: TherapistAttendanceMethod | null;
   standbyMinutes: number | null;
   isFullAttendanceRecognized: boolean;
   isComplete: boolean;
@@ -132,6 +148,8 @@ const attendanceUpsertSchema = attendanceQuerySchema.extend({
     .string()
     .trim()
     .refine((value) => value === "" || timeRegex.test(value), "퇴근시간은 HH:mm 형식이어야 합니다."),
+  // 이 호출이 (바뀐 쪽에) 남기는 방식. "이전 기록"은 받지 않는다(마이그레이션 백필 전용).
+  method: z.enum(liveTherapistAttendanceMethods, { error: "출퇴근 방식을 확인하세요." }),
   actorId: z.string().trim().min(1, "행위자 계정이 필요합니다.")
 });
 
@@ -211,6 +229,34 @@ function isFullAttendance(standbyMinutes: number) {
   return standbyMinutes >= FULL_ATTENDANCE_STANDBY_MINUTES;
 }
 
+// 바뀐 쪽만 방식이 바뀐다(스펙 M23). 이전 줄이 없거나 비활성(지워짐)이면 새로 찍는 것과 같다.
+function resolveCheckInMethod(input: {
+  method: LiveTherapistAttendanceMethod;
+  before: TherapistAttendanceRecord | null;
+  checkInMinute: number;
+}): TherapistAttendanceMethod {
+  const before = input.before;
+  if (!before || !before.isActive || before.checkInMinute !== input.checkInMinute) {
+    return input.method;
+  }
+  return before.checkInMethod as TherapistAttendanceMethod;
+}
+
+// 퇴근을 지우면 방식도 비운다. 퇴근 시각이 새로 생기거나 바뀌면 이 호출의 방식이 되고,
+// 그대로면 기존 방식을 지킨다(스펙 M23).
+function resolveCheckOutMethod(input: {
+  method: LiveTherapistAttendanceMethod;
+  before: TherapistAttendanceRecord | null;
+  checkOutMinute: number | null;
+}): TherapistAttendanceMethod | null {
+  if (input.checkOutMinute === null) return null;
+  const before = input.before;
+  if (!before || !before.isActive || before.checkOutMinute !== input.checkOutMinute) {
+    return input.method;
+  }
+  return (before.checkOutMethod as TherapistAttendanceMethod | null) ?? input.method;
+}
+
 function assertDateInOperatingMonth(operatingMonth: OperatingMonthRecord, attendanceDate: string) {
   const startDate = toIsoDate(operatingMonth.startDate);
   const endDate = toIsoDate(operatingMonth.endDate);
@@ -253,7 +299,9 @@ function attendanceSnapshot(record: TherapistAttendanceRecord | null): AuditJson
     attendanceDate: toIsoDate(record.attendanceDate),
     employeeId: record.employeeId,
     checkInMinute: record.checkInMinute,
+    checkInMethod: record.checkInMethod,
     checkOutMinute: record.checkOutMinute,
+    checkOutMethod: record.checkOutMethod,
     standbyMinutes: record.standbyMinutes,
     isFullAttendanceRecognized: record.isFullAttendanceRecognized,
     isActive: record.isActive,
@@ -284,7 +332,9 @@ function toDto(input: {
     displayName: input.employee.displayName,
     sortOrder: input.employee.sortOrder,
     checkInTime: active ? minuteToTime(active.checkInMinute) : null,
+    checkInMethod: active ? (active.checkInMethod as TherapistAttendanceMethod) : null,
     checkOutTime: active && active.checkOutMinute !== null ? minuteToTime(active.checkOutMinute) : null,
+    checkOutMethod: active && active.checkOutMethod !== null ? (active.checkOutMethod as TherapistAttendanceMethod) : null,
     standbyMinutes: active ? active.standbyMinutes : null,
     isFullAttendanceRecognized: active ? active.isFullAttendanceRecognized : false,
     isComplete,
@@ -399,6 +449,7 @@ export async function upsertTherapistAttendance(input: {
   employeeId: string;
   checkInTime: string;
   checkOutTime: string;
+  method: LiveTherapistAttendanceMethod;
   actorId: string;
   prismaClient?: TherapistAttendancePrismaClient;
 }): Promise<TherapistAttendanceDto> {
@@ -429,6 +480,8 @@ export async function upsertTherapistAttendance(input: {
 
     await lockAttendanceKey(tx, parsed.data);
     const before = await findAttendance(tx, parsed.data);
+    const checkInMethod = resolveCheckInMethod({ method: parsed.data.method, before, checkInMinute });
+    const checkOutMethod = resolveCheckOutMethod({ method: parsed.data.method, before, checkOutMinute });
     const after = await tx.therapistAttendance.upsert({
       where: {
         operatingMonthId_attendanceDate_employeeId: {
@@ -442,14 +495,18 @@ export async function upsertTherapistAttendance(input: {
         attendanceDate: toDate(parsed.data.attendanceDate),
         employeeId: parsed.data.employeeId,
         checkInMinute,
+        checkInMethod,
         checkOutMinute,
+        checkOutMethod,
         standbyMinutes,
         isFullAttendanceRecognized,
         isActive: true
       },
       update: {
         checkInMinute,
+        checkInMethod,
         checkOutMinute,
+        checkOutMethod,
         standbyMinutes,
         isFullAttendanceRecognized,
         isActive: true

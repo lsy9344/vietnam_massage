@@ -153,7 +153,7 @@ describe("getMonthlyStatement", () => {
         isLocked: false,
         rows:
           attendanceDate === "2026-06-01"
-            ? [{ id: "att-1", operatingMonthId: "month-1", attendanceDate, employeeId: "emp-1", staffCode: "THR-001", displayName: "직원1", sortOrder: 1, checkInTime: "09:00", checkOutTime: "18:00", standbyMinutes: null, isFullAttendanceRecognized: true, isComplete: true, incompleteReason: null, isLocked: false, warnings: [] }]
+            ? [{ id: "att-1", operatingMonthId: "month-1", attendanceDate, employeeId: "emp-1", staffCode: "THR-001", displayName: "직원1", sortOrder: 1, checkInTime: "09:00", checkInMethod: "대리 입력" as const, checkOutTime: "18:00", checkOutMethod: "대리 입력" as const, standbyMinutes: null, isFullAttendanceRecognized: true, isComplete: true, incompleteReason: null, isLocked: false, warnings: [] }]
             : []
       })
     };

@@ -358,7 +358,11 @@ model TherapistAttendance {
   employeeId                 String         @map("employee_id")
   employee                   Employee       @relation(fields: [employeeId], references: [id])
   checkInMinute              Int            @map("check_in_minute")
+  // 출근·퇴근에 찍힌 방식(스펙 D16, M23): 직접, 대리 입력, 정정 승인, 이전 기록. 이 칸이 생기기 전
+  // 기록은 "이전 기록"이다(가정, D16, 20261020120400 마이그레이션 백필). 퇴근이 없으면 퇴근 방식도 비어 있다.
+  checkInMethod              String         @default("이전 기록") @map("check_in_method")
   checkOutMinute             Int?           @map("check_out_minute")
+  checkOutMethod             String?        @map("check_out_method")
   standbyMinutes             Int?           @map("standby_minutes")
   isFullAttendanceRecognized Boolean        @map("is_full_attendance_recognized")
   isActive                   Boolean        @default(true) @map("is_active")
