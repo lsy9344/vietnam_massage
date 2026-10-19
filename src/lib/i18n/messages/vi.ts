@@ -139,6 +139,18 @@ export const vi: Messages = {
   "roomCard.openInLedger": "Mở chi tiết cuộc gọi trong Sổ gọi",
   "roomCard.openInLedgerAria": "Mở cuộc gọi {time} của {room} trong Sổ gọi",
 
+  // 객실 평면도(실시간·TV)
+  "floorPlan.floor": "Tầng {floor}",
+  "floorPlan.elevator": "Thang máy",
+  "floorPlan.corridor": "Hành lang",
+  "floorPlan.freeNow": "Trống ngay",
+  "floorPlan.freeSoon": "Sắp trống",
+  "floorPlan.none": "Không có",
+  "floorPlan.remaining": "còn {minutes} phút",
+  "floorPlan.legend": "Trạng thái",
+  "floorPlan.others": "Khác",
+  "floorPlan.selectedRoom": "Phòng đã chọn",
+
   // 실시간 갱신 컨트롤러
   "roomRefresh.aria": "Trạng thái cập nhật thời gian thực",
   "roomRefresh.refreshing": "Đang cập nhật",

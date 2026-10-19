@@ -62,6 +62,7 @@ export function ModalPanel({
   title,
   description,
   trigger,
+  onCloseAutoFocus,
   children
 }: {
   open?: boolean;
@@ -69,6 +70,8 @@ export function ModalPanel({
   title: string;
   description?: string;
   trigger?: ReactNode;
+  /** trigger 없이 여는 서랍이 닫힐 때 포커스를 돌릴 자리를 정한다(event.preventDefault() 후 직접 focus). */
+  onCloseAutoFocus?: (event: Event) => void;
   children: ReactNode;
 }) {
   const t = useT();
@@ -78,6 +81,7 @@ export function ModalPanel({
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-foreground/20 backdrop-blur-[3px]" />
         <DialogPrimitive.Content
+          onCloseAutoFocus={onCloseAutoFocus}
           className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-surface-float text-foreground outline-none min-[600px]:inset-y-4 min-[600px]:left-auto min-[600px]:right-4 min-[600px]:w-[min(30rem,calc(100vw-2rem))] min-[600px]:rounded-xl min-[600px]:border min-[600px]:border-border"
         >
           <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">

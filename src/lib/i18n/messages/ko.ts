@@ -139,6 +139,18 @@ export const ko = {
   "roomCard.openInLedger": "원장에서 콜 상세 열기",
   "roomCard.openInLedgerAria": "{room} {time} 콜을 원장에서 열기",
 
+  // 객실 평면도(실시간·TV)
+  "floorPlan.floor": "{floor}층",
+  "floorPlan.elevator": "엘리베이터",
+  "floorPlan.corridor": "복도",
+  "floorPlan.freeNow": "지금 빈방",
+  "floorPlan.freeSoon": "곧 비는 방",
+  "floorPlan.none": "없음",
+  "floorPlan.remaining": "{minutes}분 남음",
+  "floorPlan.legend": "상태",
+  "floorPlan.others": "기타",
+  "floorPlan.selectedRoom": "선택한 객실",
+
   // 실시간 갱신 컨트롤러
   "roomRefresh.aria": "실시간 갱신 상태",
   "roomRefresh.refreshing": "갱신 중",

@@ -328,15 +328,18 @@ test.describe("Client revision browser verification", () => {
     await expect(line(page, call.id)).toContainText("미배정");
     expect(call.roomId).toBeNull();
 
-    for (const path of ["/rooms", "/live"] as const) {
-      await page.goto(`${path}?operatingMonthId=${seededData.openMonthId}&serviceDate=${unassignedDate}`);
-      await expect(page.getByTestId("room-status-card").first()).toBeVisible();
-      await expect(page.getByTestId("room-status-card").filter({ hasText: "WO 미배정60" })).toHaveCount(0);
-    }
+    await page.goto(`/rooms?operatingMonthId=${seededData.openMonthId}&serviceDate=${unassignedDate}`);
+    await expect(page.getByTestId("room-status-card").first()).toBeVisible();
+    await expect(page.getByTestId("room-status-card").filter({ hasText: "WO 미배정60" })).toHaveCount(0);
+    // 실시간 객실판은 평면도라 코스 이름이 없다. 미배정 예약이 어느 방도 예약으로 차지하지 않는지 본다.
+    await page.goto(`/live?operatingMonthId=${seededData.openMonthId}&serviceDate=${unassignedDate}`);
+    await expect(page.getByTestId("floor-plan-room").first()).toBeVisible();
+    await expect(page.getByTestId("floor-plan-room").filter({ has: page.getByLabel("상태: 예약") })).toHaveCount(0);
 
     await login(page, seededData.accounts.read_only_viewer.accountId, seededData.accounts.read_only_viewer.password);
     await page.goto(`/tv?operatingMonthId=${seededData.openMonthId}&serviceDate=${unassignedDate}`);
-    await expect(page.getByTestId("room-status-card").filter({ hasText: "WO 미배정60" })).toHaveCount(0);
+    await expect(page.getByTestId("floor-plan-room").first()).toBeVisible();
+    await expect(page.getByTestId("floor-plan-room").filter({ has: page.getByLabel("상태: 예약") })).toHaveCount(0);
 
     await login(page, seededData.accounts.counter.accountId, seededData.accounts.counter.password);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${unassignedDate}`);

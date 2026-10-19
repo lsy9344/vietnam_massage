@@ -179,9 +179,15 @@ for (const forbidden of ["role=\"button\"", "onClick=", "cursor-pointer", "hover
   if (roomCard.includes(forbidden)) errors.push(`room-status-card.tsx must stay read-only and not include ${forbidden}`);
 }
 
-for (const route of ["src/app/(erp)/live/page.tsx", "src/app/(erp)/rooms/page.tsx", "src/app/tv/page.tsx"]) {
+// 객실 평면도(.scratch/room-floor-plan D4): TV 객실판은 공용 RoomFloorPlan(StatusBadge)으로 그린다.
+const sharedStatusRendering = {
+  "src/app/(erp)/live/page.tsx": ["RoomStatusCard", "listRoomStatuses", "status={status}"],
+  "src/app/(erp)/rooms/page.tsx": ["RoomStatusCard", "listRoomStatuses", "status={status}"],
+  "src/app/tv/page.tsx": ["RoomFloorPlan", "listRoomStatuses", "statuses={roomStatuses}"]
+};
+for (const [route, requiredList] of Object.entries(sharedStatusRendering)) {
   const source = read(route);
-  for (const required of ["RoomStatusCard", "listRoomStatuses", "status={status}"]) {
+  for (const required of requiredList) {
     if (!source.includes(required)) errors.push(`${route} missing shared status rendering: ${required}`);
   }
   for (const forbidden of ["statusBadgeConfig", "statusColor", "statusClass", "bg-status-active", "bg-status-reserved", "bg-status-cleaning", "bg-status-empty"]) {
@@ -189,7 +195,7 @@ for (const route of ["src/app/(erp)/live/page.tsx", "src/app/(erp)/rooms/page.ts
   }
 }
 const tvPage = read("src/app/tv/page.tsx");
-if (!tvPage.includes("variant=\"tv\"")) errors.push("src/app/tv/page.tsx must render RoomStatusCard variant=\"tv\"");
+if (!tvPage.includes("variant=\"tv\"")) errors.push("src/app/tv/page.tsx must render RoomFloorPlan variant=\"tv\"");
 
 const emptyState = read("src/components/domain/erp-empty-state.tsx");
 for (const required of ["StatusBadge", "statusBadgeStates.map", "state={state}"]) {

@@ -205,21 +205,28 @@ test.describe("Ticket 04 floor screens", () => {
     });
   }
 
-  test("reads as short cards at phone width and never scrolls the page sideways", async ({ page }) => {
+  test("reads as short floor cards at phone width and never scrolls the page sideways", async ({ page }) => {
     await login(page, accounts.admin.accountId, accounts.admin.password);
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(floorPath("/live"));
-    const cards = page.getByTestId("room-status-card");
-    await expect(cards.filter({ hasText: defaultRoomNames })).toHaveCount(defaultRooms.length);
-    const inUseCard = cards.filter({ hasText: "T04 Mai" });
+    // 실시간 객실판은 층별 평면도다(.scratch/room-floor-plan). 기본 객실은 모두 층 카드 안 제자리에 있다.
+    const placedRooms = page.locator('[data-floor] [data-testid="floor-plan-room"]');
+    await expect(placedRooms).toHaveCount(defaultRooms.length);
+    // 코스·담당자·시각은 방을 눌러 연 서랍의 객실 카드에 있다.
+    await page.locator('[data-testid="floor-plan-room"][aria-label^="401 호실, "]').click();
+    const inUseCard = page.getByRole("dialog", { name: "선택한 객실" }).getByTestId("room-status-card");
+    await expect(inUseCard).toContainText("T04 Mai");
     await expect(inUseCard).toContainText("T04 B90 스톤 테라피");
     await expect(inUseCard).toContainText(/시작\s*20:00/);
-    // 휴대폰에서 실시간 카드는 한 손 화면 안에 여러 장이 보이는 짧은 카드다(데스크톱 카드를 줄인 게 아니다).
-    for (const box of await cards.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect()))) {
+    await page.keyboard.press("Escape");
+    // 휴대폰에서 층 카드는 한 손 화면 안에 여러 층이 보이는 짧은 카드다.
+    for (const box of await page.locator("[data-floor]").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect()))) {
       expect(box.height).toBeLessThanOrEqual(200);
       expect(box.width).toBeLessThanOrEqual(390);
     }
+    // 객실판은 /rooms에서는 객실 카드, 평면도 화면에서는 방 이름표다.
+    const boardItems = page.locator('[data-testid="room-status-card"], [data-testid="floor-plan-room"]');
 
     for (const locale of ["ko", "vi"] as const) {
       await setLocaleCookie(page, locale);
@@ -227,7 +234,7 @@ test.describe("Ticket 04 floor screens", () => {
         await page.setViewportSize({ width, height: 900 });
         for (const path of ["/live", "/rooms", "/tv"] as const) {
           await page.goto(floorPath(path));
-          await expect(cards.first()).toBeVisible();
+          await expect(boardItems.first()).toBeVisible();
           expect(await documentOverflow(page), `${locale} ${path} @${width}`).toBe(0);
         }
       }

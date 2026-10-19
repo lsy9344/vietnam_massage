@@ -60,16 +60,28 @@ const serviceDate = currentOperatingServiceDate();
 const monthKey = serviceDate.slice(0, 7);
 const expectedRoomOrder = ["401 호실", "402 호실", "301 호실", "302 호실", "303 호실", "201 호실", "202 호실", "203 호실", "101 호실", "102 호실", "103 호실"];
 const expectedRoomNamePattern = new RegExp(expectedRoomOrder.join("|"));
+// 객실 평면도(.scratch/room-floor-plan): 실시간 화면은 층 카드(4→1층)에 방을 실제 자리 순서로 놓는다.
+const expectedFloorPlan: Record<number, string[]> = {
+  4: ["402 호실", "401 호실"],
+  3: ["303 호실", "302 호실", "301 호실"],
+  2: ["203 호실", "202 호실", "201 호실"],
+  1: ["103 호실", "102 호실", "101 호실"]
+};
 const statusAriaLabels = ["상태: 예약", "상태: 사용중", "상태: 종료임박", "상태: 청소중", "상태: 종료확인", "상태: 빈방"] as const;
 const tvRampClasses = ["text-[40px]", "text-[28px]", "text-[22px]"] as const;
 
-function statusSurfacePaths() {
+/**
+ * plan: 객실판이 평면도인 화면. drawer: 방 이름표를 눌러 서랍의 객실 카드를 여는 화면(실시간).
+ * TV 평면도는 읽기 전용이라 객실 카드가 없다.
+ */
+function statusSurfaces() {
   return [
-    `/live?operatingMonthId=${seededData.openMonthId}&serviceDate=${serviceDate}`,
-    `/rooms?operatingMonthId=${seededData.openMonthId}&serviceDate=${serviceDate}`,
-    `/tv?operatingMonthId=${seededData.openMonthId}&serviceDate=${serviceDate}`
-  ] as const;
+    { path: `/live?operatingMonthId=${seededData.openMonthId}&serviceDate=${serviceDate}`, plan: true, drawer: true },
+    { path: `/rooms?operatingMonthId=${seededData.openMonthId}&serviceDate=${serviceDate}`, plan: false, drawer: false },
+    { path: `/tv?operatingMonthId=${seededData.openMonthId}&serviceDate=${serviceDate}`, plan: true, drawer: false }
+  ];
 }
+type StatusSurface = ReturnType<typeof statusSurfaces>[number];
 
 async function login(page: Page) {
   await loginAccount(page, "story35_admin", "Story35!admin");
@@ -337,20 +349,73 @@ async function createCall(input: { roomId: string; status: string; startTime: st
   });
 }
 
-async function expectStatusBadge(page: Page, label: string, glyph: string) {
-  await expect(page.getByLabel(`상태: ${label}`).filter({ hasText: glyph }).first()).toBeVisible();
+/** 상태 배지를 찾을 범위. 평면도 화면은 범례(같은 배지 6개)를 빼고 층 카드 안의 방 이름표만 본다. */
+function statusBoard(page: Page, surface: StatusSurface) {
+  return surface.plan ? floors(page) : page;
 }
 
-async function expectRoomOrder(page: Page) {
+async function expectStatusBadge(page: Page, surface: StatusSurface, label: string, glyph: string) {
+  await expect(statusBoard(page, surface).getByLabel(`상태: ${label}`).filter({ hasText: glyph }).first()).toBeVisible();
+}
+
+/** 평면도의 층 카드들. 범례(aria-hidden)의 배지는 빼고 방 이름표만 본다. */
+function floors(page: Page) {
+  return page.getByTestId("room-floor-plan").locator("[data-floor]");
+}
+
+async function expectRoomOrder(page: Page, surface: StatusSurface) {
+  if (surface.plan) {
+    await expect(floors(page).getByTestId("floor-plan-room")).toHaveCount(11);
+    // TV 이름표는 버튼이 아니라 접근 이름이 없으므로 방 번호 글자로 본다.
+    for (const [floor, names] of Object.entries(expectedFloorPlan)) {
+      await expect(page.locator(`[data-floor="${floor}"] [data-testid="floor-plan-room"] .floor-plan-room-number`)).toHaveText(
+        names.map((name) => name.split(" ")[0])
+      );
+    }
+    return;
+  }
   const defaultRoomCards = page.getByTestId("room-status-card").filter({ hasText: expectedRoomNamePattern });
   await expect(defaultRoomCards).toHaveCount(11);
   await expect(defaultRoomCards.locator("h2")).toHaveText(expectedRoomOrder);
 }
 
-async function expectEndingSoonAndCompleteCheckAreDistinct(page: Page) {
-  const cards = page.getByTestId("room-status-card");
-  const endingSoonCard = cards.filter({ has: page.getByLabel("상태: 종료임박") });
-  await expect(endingSoonCard).toHaveCount(1);
+/**
+ * 그 상태인 방의 객실 카드. 평면도 화면은 그 상태의 방 이름표가 count개인지 보고 첫 방을 눌러 서랍의 카드를 연다.
+ * 서랍을 닫는 것은 부른 쪽이다(closeRoomCard).
+ */
+async function roomCardWithStatus(page: Page, surface: StatusSurface, status: string, count?: number) {
+  if (!surface.plan) {
+    const cards = page.getByTestId("room-status-card").filter({ has: page.getByLabel(`상태: ${status}`) });
+    if (count !== undefined) await expect(cards).toHaveCount(count);
+    return cards.first();
+  }
+  const rooms = floors(page).getByTestId("floor-plan-room").filter({ has: page.getByLabel(`상태: ${status}`) });
+  if (count !== undefined) await expect(rooms).toHaveCount(count);
+  await rooms.first().click();
+  return page.getByRole("dialog", { name: "선택한 객실" }).getByTestId("room-status-card");
+}
+
+async function closeRoomCard(page: Page, surface: StatusSurface) {
+  if (!surface.plan) return;
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+}
+
+async function expectEndingSoonAndCompleteCheckAreDistinct(page: Page, surface: StatusSurface) {
+  if (surface.plan) {
+    // 손이 가야 하는 두 방은 번호에 서로 다른 상태색 마커 고리가 있다.
+    const rooms = floors(page).getByTestId("floor-plan-room");
+    const endingSoonRoom = rooms.filter({ has: page.locator(".floor-plan-marker--ending-soon") });
+    const completeCheckRoom = rooms.filter({ has: page.locator(".floor-plan-marker--complete-check") });
+    await expect(endingSoonRoom).toHaveCount(1);
+    await expect(completeCheckRoom).toHaveCount(1);
+    await expect(endingSoonRoom.getByLabel("상태: 종료임박").filter({ hasText: "◴" })).toBeVisible();
+    await expect(endingSoonRoom).not.toContainText("결제·확인 필요");
+    await expect(completeCheckRoom.getByLabel("상태: 종료확인").filter({ hasText: "⚠" })).toBeVisible();
+    await expect(completeCheckRoom).toContainText("결제·확인 필요");
+    if (!surface.drawer) return;
+  }
+  const endingSoonCard = await roomCardWithStatus(page, surface, "종료임박", 1);
   await expect(endingSoonCard.getByLabel("상태: 종료임박").filter({ hasText: "◴" })).toBeVisible();
   await expect(endingSoonCard.getByLabel("상태: 종료임박")).toHaveClass(/bg-status-ending-soon/);
   await expect(endingSoonCard.getByLabel("상태: 종료임박")).toHaveClass(/text-status-ending-soon-foreground/);
@@ -359,14 +424,15 @@ async function expectEndingSoonAndCompleteCheckAreDistinct(page: Page) {
   await expect(endingSoonCard).not.toHaveClass(/border-status-complete-check/);
   await expect(endingSoonCard).toContainText("곧 종료");
   await expect(endingSoonCard).not.toContainText("결제·확인 필요");
+  await closeRoomCard(page, surface);
 
-  const completeCheckCard = cards.filter({ has: page.getByLabel("상태: 종료확인") });
-  await expect(completeCheckCard).toHaveCount(1);
+  const completeCheckCard = await roomCardWithStatus(page, surface, "종료확인", 1);
   await expect(completeCheckCard.getByLabel("상태: 종료확인").filter({ hasText: "⚠" })).toBeVisible();
   await expect(completeCheckCard).toHaveClass(/status-attention/);
   await expect(completeCheckCard).toHaveClass(/border-status-complete-check/);
   await expect(completeCheckCard).not.toHaveClass(/border-status-ending-soon/);
   await expect(completeCheckCard).toContainText("결제·확인 필요");
+  await closeRoomCard(page, surface);
 }
 
 test.describe("Story 3.5 status badge accessibility", () => {
@@ -402,17 +468,17 @@ test.describe("Story 3.5 status badge accessibility", () => {
   test("renders shared label and glyph status badges on /live, /rooms, and /tv", async ({ page }) => {
     await login(page);
 
-    for (const path of statusSurfacePaths()) {
-      await page.goto(path);
-      await expectRoomOrder(page);
-      await expectStatusBadge(page, "예약", "◷");
-      await expectStatusBadge(page, "사용중", "●");
-      await expectStatusBadge(page, "종료임박", "◴");
-      await expectStatusBadge(page, "청소중", "◐");
-      await expectStatusBadge(page, "종료확인", "⚠");
-      await expectStatusBadge(page, "빈방", "○");
+    for (const surface of statusSurfaces()) {
+      await page.goto(surface.path);
+      await expectRoomOrder(page, surface);
+      await expectStatusBadge(page, surface, "예약", "◷");
+      await expectStatusBadge(page, surface, "사용중", "●");
+      await expectStatusBadge(page, surface, "종료임박", "◴");
+      await expectStatusBadge(page, surface, "청소중", "◐");
+      await expectStatusBadge(page, surface, "종료확인", "⚠");
+      await expectStatusBadge(page, surface, "빈방", "○");
       await expect(page.getByText("결제·확인 필요")).toBeVisible();
-      await expectEndingSoonAndCompleteCheckAreDistinct(page);
+      await expectEndingSoonAndCompleteCheckAreDistinct(page, surface);
     }
   });
 
@@ -420,32 +486,41 @@ test.describe("Story 3.5 status badge accessibility", () => {
     await login(page);
     const forbiddenWhite = "text-" + "white";
 
-    for (const path of statusSurfacePaths()) {
-      await page.goto(path);
+    for (const surface of statusSurfaces()) {
+      await page.goto(surface.path);
 
-      const cleaning = page.getByLabel("상태: 청소중").first();
+      const cleaning = statusBoard(page, surface).getByLabel("상태: 청소중").first();
       await expect(cleaning).toHaveClass(/bg-status-cleaning/);
       await expect(cleaning).toHaveClass(/text-status-cleaning-foreground/);
       await expect(cleaning).not.toHaveClass(new RegExp(forbiddenWhite));
 
-      const empty = page.getByLabel("상태: 빈방").first();
+      const empty = statusBoard(page, surface).getByLabel("상태: 빈방").first();
       await expect(empty).toHaveClass(/border-status-empty/);
       await expect(empty).toHaveClass(/bg-surface/);
       await expect(empty).toHaveClass(/text-status-empty-foreground/);
 
-      const emptyCard = page.getByTestId("room-status-card").filter({ has: page.getByLabel("상태: 빈방") }).first();
-      await expect(emptyCard).toHaveClass(/border-dashed/);
-      await expect(emptyCard).toHaveClass(/border-status-empty/);
-      await expect(emptyCard).toHaveClass(/bg-surface/);
-
-      const attention = page.getByLabel("상태: 종료확인").first();
+      const attention = statusBoard(page, surface).getByLabel("상태: 종료확인").first();
       await expect(attention).toHaveClass(/bg-status-complete-check/);
       await expect(attention).not.toHaveClass(/status-attention/);
       await expect(attention).not.toHaveClass(/bg-status-complete-check-glow/);
       const attentionBadgeAnimation = await attention.evaluate((element) => getComputedStyle(element).animationName);
       expect(attentionBadgeAnimation).toBe("none");
 
-      const attentionCard = page.getByTestId("room-status-card").filter({ has: page.getByLabel("상태: 종료확인") }).first();
+      if (surface.plan && !surface.drawer) {
+        // TV 평면도에는 객실 카드가 없다. 종료확인 표시는 움직이지 않는 마커 고리와 ⚠ 배지다.
+        const marker = floors(page).locator(".floor-plan-marker--complete-check");
+        await expect(marker).toBeVisible();
+        expect(await marker.evaluate((element) => getComputedStyle(element).animationName)).toBe("none");
+        continue;
+      }
+
+      const emptyCard = await roomCardWithStatus(page, surface, "빈방");
+      await expect(emptyCard).toHaveClass(/border-dashed/);
+      await expect(emptyCard).toHaveClass(/border-status-empty/);
+      await expect(emptyCard).toHaveClass(/bg-surface/);
+      await closeRoomCard(page, surface);
+
+      const attentionCard = await roomCardWithStatus(page, surface, "종료확인");
       await expect(attentionCard).toHaveClass(/status-attention/);
       await expect(attentionCard).toHaveClass(/border-status-complete-check/);
       const { animationName, boxShadow } = await attentionCard.evaluate((element) => {
@@ -454,15 +529,32 @@ test.describe("Story 3.5 status badge accessibility", () => {
       });
       expect(animationName).toBe("status-attention-breathe");
       expect(boxShadow).not.toBe("none");
+      await closeRoomCard(page, surface);
     }
   });
 
   test("keeps status presentation surfaces read-only without mutation affordances", async ({ page }) => {
     await login(page);
 
-    for (const path of statusSurfacePaths()) {
-      await page.goto(path);
+    for (const surface of statusSurfaces()) {
+      await page.goto(surface.path);
 
+      if (surface.plan && !surface.drawer) {
+        // TV 평면도에는 누르는 것이 없다.
+        await expect(page.getByTestId("room-floor-plan").getByRole("button")).toHaveCount(0);
+        await expect(page.getByTestId("room-floor-plan").filter({ hasText: /저장|수정|삭제|자동저장|정산|마감|입력/ })).toHaveCount(0);
+        continue;
+      }
+      if (surface.plan) {
+        // 평면도의 버튼은 서랍을 여는 방 이름표와 빈방 칩뿐이다. 서랍의 객실 카드에는 버튼이 없다.
+        const plan = page.getByTestId("room-floor-plan");
+        await expect(plan.getByRole("button").filter({ hasText: /저장|수정|삭제|자동저장|정산|마감|입력/ })).toHaveCount(0);
+        const card = await roomCardWithStatus(page, surface, "사용중");
+        await expect(card.getByRole("button")).toHaveCount(0);
+        await expect(card.filter({ hasText: /저장|수정|삭제|자동저장|정산|마감|입력/ })).toHaveCount(0);
+        await closeRoomCard(page, surface);
+        continue;
+      }
       const cards = page.getByTestId("room-status-card");
       await expect(cards.first()).toBeVisible();
       await expect(cards.getByRole("button")).toHaveCount(0);
@@ -487,12 +579,16 @@ test.describe("Story 3.5 status badge accessibility", () => {
   });
 
   test("keeps TV typography large enough and status meaning larger than a swatch", async ({ page }) => {
+    // TV 큰 글자는 TV 화면(풀HD) 크기에서 쓴다.
+    await page.setViewportSize({ width: 1920, height: 1080 });
     await login(page);
     await page.goto(`/tv?operatingMonthId=${seededData.openMonthId}&serviceDate=${serviceDate}`);
 
-    await expect(page.getByTestId("room-status-card").first().locator("h2")).toHaveClass(/text-\[40px\]/);
-    await expect(page.getByLabel("상태: 사용중").first()).toHaveClass(/text-\[28px\]/);
-    await expect(page.getByTestId("room-status-card").first().locator("p").first()).toHaveClass(/text-\[22px\]/);
+    // TV 평면도 이름표 크기(.scratch/room-floor-plan D4): 방 번호 40px, 배지 22px, 값 34px.
+    const room = page.locator('[data-floor] [data-testid="floor-plan-room"]').filter({ has: page.getByLabel("상태: 사용중") }).first();
+    await expect(room.locator(".floor-plan-room-number")).toHaveCSS("font-size", "40px");
+    await expect(room.getByLabel("상태: 사용중")).toHaveCSS("font-size", "22px");
+    await expect(room.locator(".floor-plan-room-value")).toHaveCSS("font-size", "34px");
     await expect(page.getByLabel("상태: 사용중").filter({ hasText: "●" })).toBeVisible();
     await expect(page.getByLabel("상태: 빈방").filter({ hasText: "○" }).first()).toBeVisible();
   });
