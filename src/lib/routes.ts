@@ -56,6 +56,9 @@ export const screenRoutes: readonly ScreenRoute[] = [
   { path: "/rooms", labelKey: "shell.tab.rooms", zone: "floor", roles: ["administrator", "counter", "waiter", "read_only_viewer"], dateContext: "serviceDate" },
   { path: "/live", labelKey: "shell.tab.live", zone: "floor", roles: ["administrator", "counter"], dateContext: "serviceDate" },
   { path: "/tv", labelKey: "shell.tab.tv", zone: "floor", roles: ["administrator", "counter", "read_only_viewer"], dateContext: "serviceDate", notATab: true },
+  // 출근 코드 크게 띄우기(티켓 05, 스펙 D13). 날짜 맥락이 없다 — 지금 시각으로만 코드를 계산한다.
+  // TV와 같은 이유로 구역 안 탭에는 두지 않는다(/rooms의 "출근 코드" 버튼으로 연다).
+  { path: "/clock-code", labelKey: "shell.tab.clockCode", zone: "floor", roles: ["administrator", "counter"], notATab: true },
   { path: "/customers", labelKey: "shell.tab.customers", zone: "customers", roles: ["administrator", "counter"] },
   // 근무표는 운영월과 무관해 dateContext가 없다. 정산 업무의 주기 순서로 맨 앞에 둔다.
   { path: "/settlements/schedule", labelKey: "shell.tab.schedule", zone: "settlements", roles: ["administrator", "settlement_manager"] },
