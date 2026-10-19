@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login as loginAccount } from "./support/auth";
+import { quickBookingPanel } from "./support/quick-booking";
 
 
 type SeededData = {
@@ -291,14 +292,14 @@ test.describe("Story 2.6 keyboard-first call ledger type-ahead", () => {
     const note = panel(page).getByLabel("비고");
     await note.focus();
     await page.keyboard.press("n");
-    await expect(page.getByRole("dialog", { name: "빠른 예약" })).toHaveCount(0);
+    await expect(quickBookingPanel(page)).toHaveCount(0);
 
     await page.keyboard.press("Escape");
     await expect(opener(firstId!)).toBeFocused();
     await expect(panel(page)).toBeVisible();
 
     await page.keyboard.press("n");
-    await expect(page.getByRole("dialog", { name: "빠른 예약" })).toBeVisible();
+    await expect(quickBookingPanel(page)).toBeVisible();
   });
 
   test.afterAll(async () => {

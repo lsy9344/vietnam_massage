@@ -1,9 +1,10 @@
 import { testEmployees } from "./support/test-employees";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 import { openEmployeePanel } from "./support/settlement";
+import { checkInTherapist, fillBooking, goToCustomerStep, openQuickBooking, pickGuest, saveQuickBooking } from "./support/quick-booking";
 
 /**
  * 티켓 36: 전체 흐름 교차 검증. 각 티켓이 이미 확인한 검사(09–35의 `## Comments`)는 되풀이하지 않고,
@@ -133,10 +134,6 @@ async function seedTherapist(staffCode: string, displayName: string, sortOrder: 
   return employee;
 }
 
-function quickBookingDialog(page: Page) {
-  return page.getByRole("dialog", { name: "빠른 예약" });
-}
-
 /** 역할 바꿔치기 기법(티켓 27): 화면은 권한 있는 역할로 열어 둔 채, 호출 시점의 계정 역할만 바꿔 "다른 역할이
  * 이 서버 액션을 직접 호출한" 상황을 흉내낸다. 서버는 요청마다 계정의 지금 역할을 다시 조회하므로
  * 화면이 숨기는 것과는 별개로 서버 재검사가 통하는지 확인할 수 있다. */
@@ -170,6 +167,8 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
       }
       await (prisma as any).payoutConfirmationEvent.deleteMany({ where: { operatingMonthId: { in: createdOperatingMonthIds } } });
       await (prisma as any).monthlyClosing.deleteMany({ where: { operatingMonthId: { in: createdOperatingMonthIds } } });
+      // 출근 기록(checkInTherapist)이 운영월을 참조하므로 운영월을 지우기 전에 먼저 지운다(1018 스펙 D23).
+      await (prisma as any).therapistAttendance.deleteMany({ where: { operatingMonthId: { in: createdOperatingMonthIds } } });
       await (prisma as any).operatingMonth.deleteMany({ where: { id: { in: createdOperatingMonthIds } } });
     }
     await (prisma as any).customer.deleteMany({ where: { name: { startsWith: "T36 " } } });
@@ -188,6 +187,8 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
     const room = await seedRoom("T36 중심흐름 호실", "T36-CENTRAL-ROOM", 93610);
     const course = await seedCoursePolicy(monthKey, "T36 중심흐름 A", 1_500_000);
     const therapist = await seedTherapist("E2E-T36-CENTRAL-THR", "T36 중심흐름 마사지사", 93611, course.id, monthKey, 300_000);
+    // Therapist 줄은 그날 출근 기록이 있는 사람만 기본으로 보인다(1018 스펙 D23).
+    await checkInTherapist({ operatingMonthId: month.id, serviceDate, employeeId: therapist.id });
 
     // 1) 전화로 고객 검색: 고객 화면에서 먼저 등록한다.
     await login(page, counter.accountId, counter.password);
@@ -201,48 +202,39 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
     await expect(createDrawer).toHaveCount(0);
     const customer = await (prisma as any).customer.findFirstOrThrow({ where: { name: "T36 중심흐름 손님" } });
 
-    // 2) 빠른 예약: 원장에서 패널을 열고 전화번호로 그 고객을 찾아 고른다.
+    // 2) 빠른 예약: 원장 옆 패널(1018 스펙 D19)을 연다. ①에서 시각과 코스 칩으로 손님을 담고, ②에서 전화번호로
+    // 그 고객을 찾아 고른다. 객실은 더 이상 빠른 예약에서 고르지 않는다(스펙 D19) — 3)에서 원장의 객실 칸으로 고른다.
     await page.goto(`/calls?operatingMonthId=${month.id}&serviceDate=${serviceDate}`);
-    await page.getByRole("button", { name: "빠른 예약" }).click();
-    const dialog = quickBookingDialog(page);
-    await expect(dialog).toBeVisible();
+    const bookingPanel = await openQuickBooking(page);
+    // "시간" select는 <option> 텍스트가 겹쳐 helper의 getByLabel(exact)이 못 찾는다(아래 보고 참고). 느슨한 매칭으로 고른다.
+    await bookingPanel.getByLabel("시간").selectOption("15:00");
+    await pickGuest(page, bookingPanel, { therapistId: therapist.id, courseId: course.id });
+    await goToCustomerStep(bookingPanel);
 
-    await dialog.getByRole("combobox", { name: "고객 검색" }).fill(phone);
-    const customerOption = dialog.getByRole("option", { name: /T36 중심흐름 손님/ });
+    await bookingPanel.getByLabel("기존 고객 검색").fill(phone);
+    const customerOption = bookingPanel.getByRole("option", { name: /T36 중심흐름 손님/ });
     await expect(customerOption).toBeVisible({ timeout: 10_000 });
     await customerOption.click();
-    await expect(dialog.getByText(`T36 중심흐름 손님 · ${phone}`)).toBeVisible();
-    await dialog.getByRole("button", { name: "다음" }).click();
-
-    await dialog.getByLabel("시간").selectOption("15:00");
-    await dialog.getByRole("button", { name: "다음" }).click();
-
-    const therapistRow = dialog.locator("[data-availability-row]").filter({ has: page.getByText("T36 중심흐름 마사지사", { exact: true }) });
-    const courseButton = therapistRow.getByRole("button", { name: /A 60분 가능/ });
-    await expect(courseButton).toBeVisible({ timeout: 10_000 });
-    await courseButton.click();
-    await dialog.getByRole("button", { name: "다음" }).click();
-
-    await dialog.getByLabel("객실").selectOption({ label: "T36 중심흐름 호실" });
-    await dialog.getByLabel("방문별 요청").fill("조용한 자리로 부탁드립니다");
-    await dialog.getByRole("button", { name: "다음" }).click();
-    await dialog.getByRole("button", { name: "예약 저장" }).click();
-    await expect(dialog).toBeHidden();
+    await expect(bookingPanel.getByText(`T36 중심흐름 손님 · ${phone}`)).toBeVisible();
+    await fillBooking(bookingPanel, { memo: "조용한 자리로 부탁드립니다" });
+    await saveQuickBooking(page, bookingPanel);
 
     const call = await (prisma as any).serviceCall.findFirstOrThrow({ where: { customerId: customer.id } });
     expect(call.status).toBe("RESERVED"); // 빠른 예약 서버 액션은 영문 코드로 저장한다(티켓 20과 같다).
-    expect(call.roomId).toBe(room.id);
 
-    // 3) 입장·객실 확인: 줄 끝 "입장" 버튼으로 사용중이 되고, 객실 화면에 반영되는지 본다(티켓 03의 줄 끝 버튼).
-    // 운영 빌드에서는 서버 액션 뒤 원장 표 자동 갱신(revalidatePath)이 가끔 늦는다(e2e-environment 메모).
-    // 새로고침을 곁들여 다시 시도한다.
+    // 3) 입장·객실 확인: 원장의 객실 칸으로 빈 객실을 고르고, 줄 끝 "입장" 버튼으로 사용중이 되어 객실 화면에도
+    // 반영되는지 본다(1018 스펙 D19, 티켓 03의 줄 끝 버튼). 운영 빌드에서는 서버 액션 뒤 원장 표 자동 갱신
+    // (revalidatePath)이 가끔 늦는다(e2e-environment 메모). 새로고침을 곁들여 다시 시도한다.
     const row = page.locator(`[data-ledger-line][data-service-call-id="${call.id}"]`);
     await expect(async () => {
       await page.reload();
       await expect(row).toBeVisible({ timeout: 3_000 });
     }).toPass({ timeout: 30_000 });
     await row.scrollIntoViewIfNeeded();
-    // 빠른 예약에서 이미 객실을 골라 뒀으므로(roomId=room.id) 입장이 빈 객실 고르기 없이 바로 저장된다(스펙 D18).
+    await row.getByRole("button", { name: "15:00 콜 객실 고르기" }).click();
+    await page.getByRole("listbox", { name: "15:00 콜 객실 고르기" }).getByRole("option", { name: "T36 중심흐름 호실" }).click();
+    await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: call.id } })).roomId).toBe(room.id);
+    // 객실을 미리 골라 뒀으므로 입장이 빈 객실 고르기 없이 바로 저장된다(스펙 D18).
     await row.getByRole("button", { name: "15:00 콜 입장" }).click();
     await expect(row.locator("[data-line-save-state]")).toHaveAttribute("data-line-save-state", "saved");
     await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: call.id } })).status).toBe("IN_USE");

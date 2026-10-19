@@ -5,26 +5,13 @@ import { useSearchParams } from "next/navigation";
 import { SidePanel } from "@/components/ui/panel";
 import { useT } from "@/lib/i18n/client";
 import { CallLedgerList } from "@/app/(erp)/calls/call-ledger-list";
+import { firstVisible } from "@/app/(erp)/calls/first-visible";
 import type { CallPanelFocusRequest } from "@/app/(erp)/calls/call-edit-panel";
 import { ledgerListKey } from "@/app/(erp)/calls/ledger-flow";
 import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
+import { QuickBookingPanel } from "@/app/(erp)/calls/quick-booking-panel";
 import { CALL_PARAM, replaceAddressParam, THERAPIST_FILTER_PARAM } from "@/lib/ledger-address";
-import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto } from "@/modules/calls/service-call-service";
-
-/**
- * 같은 선택자에 걸리는 노드 중 실제로 보이는 것 하나를 고른다. 접힌 완료 묶음의 줄처럼 숨은 노드를
- * `querySelector`가 먼저 찾으면 스크롤·포커스 복귀가 틀린 노드를 집는다. 빠른 예약 패널이 저장 직후 새 줄을
- * 고를 때도(티켓 20) 이 함수를 그대로 가져다 쓴다.
- */
-export function firstVisible<T extends Element>(selector: string): T | null {
-  const nodes = document.querySelectorAll<T>(selector);
-  for (const node of nodes) {
-    if (node instanceof HTMLElement && node.offsetParent !== null) {
-      return node;
-    }
-  }
-  return nodes[0] ?? null;
-}
+import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
 
 /**
  * 열린 편집 패널은 주소의 call 매개변수 하나로만 들고, history.replaceState로 바꾼다(서버를 다시 부르지 않는다).
@@ -59,9 +46,10 @@ function useCallSelection() {
     firstVisible<HTMLElement>(`[data-call-open="${CSS.escape(id)}"]`)?.focus();
   }, [selected]);
 
-  function select(id: string | null, { scrollToRow = false }: { scrollToRow?: boolean } = {}) {
+  function select(id: string | null, { scrollToRow = false, restoreFocus = true }: { scrollToRow?: boolean; restoreFocus?: boolean } = {}) {
     if (id === null) {
-      closing.current = origin.current ?? selected;
+      // 빠른 예약을 열려고 닫을 때는 포커스를 줄로 돌리지 않는다. 포커스는 빠른 예약 패널로 간다.
+      closing.current = restoreFocus ? (origin.current ?? selected) : null;
     } else {
       openedHere.current = true;
       if (selected === null) origin.current = id;
@@ -76,16 +64,29 @@ function useCallSelection() {
 /** 입력칸 안에서는 원장 단축키가 글자 입력을 막지 않는다(스펙 D21). */
 const FIELD_SELECTOR = 'input, textarea, select, [contenteditable="true"], [role="combobox"]';
 
+/** 빠른 예약 옆 패널(1018 스펙 D19)이 받는 값. 원장 날짜의 운영월 범위와 처음 보일 가능 판정이다. */
+export type CallLedgerQuickBooking = {
+  initialAvailabilityRows: TherapistAvailabilityRowDto[];
+  initialAvailabilityTime: string;
+  monthEndDate: string;
+  monthStartDate: string;
+  operatingMonthId: string;
+  serviceDate: string;
+};
+
 export function CallLedgerWorkspace({
   customers,
   isLocked,
   options,
+  quickBooking,
   rows,
   showSettlementColumns
 }: {
   customers?: CustomerDto[];
   isLocked: boolean;
   options: ServiceCallFormOptions;
+  /** 주면 빠른 예약을 이 작업면의 옆 패널로 연다. */
+  quickBooking?: CallLedgerQuickBooking;
   rows: ServiceCallRowDto[];
   showSettlementColumns: boolean;
 }) {
@@ -106,6 +107,10 @@ export function CallLedgerWorkspace({
   const listRef = useRef<HTMLDivElement>(null);
   // 휴대폰 폭(600px 미만)에서 패널은 목록을 덮는 전체 화면 시트다(스펙 D23).
   const isPhoneWidth = usePhoneWidth();
+  // 빠른 예약은 편집 패널과 같은 옆 자리를 쓴다(1018 스펙 D19). 콜을 열면 편집 패널이 그 자리를 쓰고, 빠른 예약은 쓰던
+  // 값을 둔 채 숨었다가 편집 패널을 닫으면 다시 보인다.
+  const [quickBookingOpen, setQuickBookingOpen] = useState(false);
+  const sideOpen = Boolean(selected) || quickBookingOpen;
 
   // 시트가 목록을 덮으므로 열리면 포커스를 시트 안(닫기 버튼)으로 옮긴다. 닫으면 SidePanel과 useCallSelection이
   // 연 줄로 돌려준다.
@@ -191,11 +196,10 @@ export function CallLedgerWorkspace({
 
   return (
     // 원장 위에서 저장하지 않은 입력이 있는 동안 떠나기 전 안내를 받으려면(스펙 B07, 티켓 18) 이 컴포넌트는
-    // page.tsx가 CallLeaveGuard 안에서 그려야 한다 — 빠른 예약 패널은 원장 탭 머리의 주요 버튼이라 이 컴포넌트
-    // 밖(같은 탭의 형제)에 있으므로, 안내는 여기 말고 그 공통 조상에서 건다.
+    // page.tsx가 CallLeaveGuard 안에서 그려야 한다. 행 저장·콜 상세·빠른 예약이 모두 그 안내에 등록된다.
     // 목록은 패널이 열려도 같은 자리에 둔다(초안 유지). 1200px 미만에서는 패널이 목록 위에 쌓이고, 600px 미만에서는
     // 전체 화면 시트로 목록과 도크를 덮는다(스펙 D23).
-    <div className={selected ? "grid grid-cols-1 items-start gap-6 min-[1200px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "grid grid-cols-1"}>
+    <div className={sideOpen ? "grid grid-cols-1 items-start gap-6 min-[1200px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "grid grid-cols-1"}>
       <div className="min-w-0" ref={listRef}>
         {filteredName ? (
           <p className="mb-3 flex flex-wrap items-center gap-3 rounded-md bg-readonly px-3 py-2 text-sm font-semibold text-foreground" data-therapist-filter={therapistFilter ?? ""}>
@@ -222,24 +226,42 @@ export function CallLedgerWorkspace({
           therapistFilter={therapistFilter}
         />
       </div>
-      {selected ? (
-        <div className="order-first min-w-0 min-[1200px]:sticky min-[1200px]:top-4 min-[1200px]:order-none" ref={panelRef}>
-          {/* 패널 틀은 여기 하나다. 내용은 고른 줄(CallLedgerLine)이 자기 저장 상태와 함께 이 자리에 그린다. */}
-          <SidePanel
-            className="max-[599px]:fixed max-[599px]:inset-0 max-[599px]:z-50 max-[599px]:max-h-none max-[599px]:rounded-none max-[599px]:border-0"
-            onClose={() => select(null)}
-            title={title}
-          >
-            {selectedRow ? (
-              <div ref={setPanelHost} />
-            ) : (
-              <p className="text-sm text-muted" role="status">
-                {t("calls.detail.notFound")}
-              </p>
-            )}
-          </SidePanel>
-        </div>
-      ) : null}
+      {/* 빠른 예약은 닫혀 있어도 머리 버튼·현황 줄 카드·"1명 추가"의 요청을 받아야 해 늘 같은 자리에 붙여 둔다. 닫혀 있으면
+          이 칸은 자리를 차지하지 않는다(display: contents). */}
+      <div className={sideOpen ? "order-first min-w-0 min-[1200px]:sticky min-[1200px]:top-4 min-[1200px]:order-none" : "contents"}>
+        {quickBooking ? (
+          <QuickBookingPanel
+            {...quickBooking}
+            customers={customers ?? []}
+            hidden={Boolean(selected)}
+            isLocked={isLocked}
+            onOpenChange={(next) => {
+              if (next && selected) select(null, { restoreFocus: false });
+              setQuickBookingOpen(next);
+            }}
+            open={quickBookingOpen}
+            options={options}
+          />
+        ) : null}
+        {selected ? (
+          <div ref={panelRef}>
+            {/* 패널 틀은 여기 하나다. 내용은 고른 줄(CallLedgerLine)이 자기 저장 상태와 함께 이 자리에 그린다. */}
+            <SidePanel
+              className="max-[599px]:fixed max-[599px]:inset-0 max-[599px]:z-50 max-[599px]:max-h-none max-[599px]:rounded-none max-[599px]:border-0"
+              onClose={() => select(null)}
+              title={title}
+            >
+              {selectedRow ? (
+                <div ref={setPanelHost} />
+              ) : (
+                <p className="text-sm text-muted" role="status">
+                  {t("calls.detail.notFound")}
+                </p>
+              )}
+            </SidePanel>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

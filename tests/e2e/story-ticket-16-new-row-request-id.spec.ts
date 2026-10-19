@@ -4,6 +4,7 @@ import { hash } from "@/lib/password-hash";
 import { createServiceCallRow } from "@/modules/calls/service-call-service";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { checkInTherapist, chooseConditions, fillBooking as fillBookingFields, goToCustomerStep, openQuickBooking, pickGuest } from "./support/quick-booking";
 
 // 티켓 16: 새 콜 저장의 요청 id. 응답을 받지 못한 저장을 다시 보내도, 같은 요청이 동시에 들어와도 콜은 하나다.
 // 티켓 03 이후 표 아래 "새 콜 행 추가"는 없고 새 콜은 빠른 예약으로만 만든다 — 이 계약은 이제 빠른 예약
@@ -72,28 +73,23 @@ function isServerAction(request: { method(): string; headers(): Record<string, s
   return request.method() === "POST" && Boolean(request.headers()["next-action"]);
 }
 
-function quickBookingDialog(page: Page) {
-  return page.getByRole("dialog", { name: "빠른 예약" });
-}
-
 /**
- * 고객(검색해 연결) → 날짜·예약시각 → Therapist·코스까지 채우고 확인 단계로 간다(객실은 선택값이라 비워
- * 둔다). 고객을 연결해야 생성 감사가 남는다(고객 연결이 바뀌는 저장만 감사 대상이다, service-call-service.ts).
+ * 빠른 예약을 열어 ①에서 그 Therapist의 코스 칩으로 손님 1명을 담고 ②에서 고객(검색해 연결)을 잇고
+ * 예약자명에 memo를 넣어 저장 바로 전까지 채운다(1018 티켓 05). 예약자명이 customerMemo가 되므로(스펙
+ * D21) memo를 거기 넣는다. 고객을 연결해야 생성 감사가 남는다(고객 연결이 바뀌는 저장만 감사 대상이다,
+ * service-call-service.ts).
  */
 async function fillBooking(page: Page, memo: string, time: string) {
-  const dialog = quickBookingDialog(page);
-  await dialog.getByRole("combobox", { name: "고객 검색" }).fill("T16 손님");
+  const panel = await openQuickBooking(page);
+  await chooseConditions(panel, { time });
+  await pickGuest(page, panel, { therapistId, courseId });
+  await goToCustomerStep(panel);
+  await panel.getByLabel("기존 고객 검색", { exact: true }).fill("T16 손님");
   // 후보 항목의 이름은 이 스펙이 호출될수록 그 고객의 가장 최근 콜 메모로 바뀐다(searchCustomerVisitCandidates의
   // label 규칙). 전화번호는 그대로라 그걸로 고른다.
-  await dialog.getByRole("option", { name: "0900016016" }).click();
-  await dialog.getByLabel("고객/메모").fill(memo);
-  await dialog.getByRole("button", { name: "다음" }).click();
-  await dialog.getByLabel("시간").selectOption(time);
-  await dialog.getByRole("button", { name: "다음" }).click();
-  const therapistRow = dialog.locator("[data-availability-row]").filter({ has: page.getByText("T16 마사지사", { exact: true }) });
-  await therapistRow.getByRole("button", { name: /A 60분 가능/ }).click();
-  await dialog.getByRole("button", { name: "다음" }).click();
-  await dialog.getByRole("button", { name: "다음" }).click();
+  await panel.getByRole("option").filter({ hasText: "0900016016" }).click();
+  await fillBookingFields(panel, { bookerName: memo });
+  return panel;
 }
 
 test.describe("티켓 16 새 콜 요청 id로 중복 생성 막기", () => {
@@ -168,12 +164,16 @@ test.describe("티켓 16 새 콜 요청 id로 중복 생성 막기", () => {
       (await (prisma as any).customer.findFirst({ where: { name: "T16 손님" } })) ??
       (await (prisma as any).customer.create({ data: { name: "T16 손님", phone: "0900016016" } }));
     customerId = customer.id;
+    // 빠른 예약 ①의 Therapist 줄은 출근 기록이 있는 사람만 기본으로 보인다(1018 스펙 D23).
+    await checkInTherapist({ operatingMonthId: monthId, serviceDate, employeeId: therapistId });
   });
 
   test.afterAll(async () => {
     await testEmployees.deactivateAll();
     await cleanup();
     await (prisma as any).therapistCourseRate.deleteMany({ where: { therapistId, courseId } });
+    // 출근 기록이 운영월을 참조해(ON DELETE RESTRICT) 먼저 지워야 운영월을 지울 수 있다.
+    await (prisma as any).therapistAttendance.deleteMany({ where: { operatingMonthId: monthId } });
     // 코스 정책과 운영월은 다른 스펙의 화면에도 보인다. 이 스펙이 만든 것은 지운다.
     await (prisma as any).coursePolicy.deleteMany({ where: { name: "T16 A", effectiveFromMonth: monthKey } });
     // 활성 객실은 모두 객실 화면에 나온다(support/README). 이 스펙의 객실은 끈다.
@@ -186,10 +186,7 @@ test.describe("티켓 16 새 콜 요청 id로 중복 생성 막기", () => {
     const memo = `T16 응답 유실 ${Date.now().toString(36)}`;
     await login(page, account.accountId, account.password);
     await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
-    await page.getByRole("button", { name: "빠른 예약" }).click();
-    const dialog = quickBookingDialog(page);
-    await expect(dialog).toBeVisible();
-    await fillBooking(page, memo, "13:00");
+    const panel = await fillBooking(page, memo, "13:00");
 
     // 첫 저장은 서버까지 가서 콜을 만들지만, 화면은 응답을 받지 못한다.
     let dropped = false;
@@ -206,9 +203,9 @@ test.describe("티켓 16 새 콜 요청 id로 중복 생성 막기", () => {
         await route.continue();
       }
     );
-    await dialog.getByRole("button", { name: "예약 저장" }).click();
+    await panel.getByRole("button", { name: "예약 저장" }).click();
 
-    const status = dialog.locator("[data-save-state]");
+    const status = panel.locator("[data-save-state]");
     await expect(status).toHaveAttribute("data-save-state", "checking");
     await expect(status).toContainText("저장 여부 확인 중");
     const created = await (prisma as any).serviceCall.findMany({ where: { customerMemo: memo } });
@@ -216,8 +213,8 @@ test.describe("티켓 16 새 콜 요청 id로 중복 생성 막기", () => {
     expect(created[0].requestId).toBeTruthy();
 
     // 재시도는 같은 요청 id로 보낸다. 서버는 새로 만들지 않고 이미 만든 콜을 돌려준다.
-    await dialog.getByRole("button", { name: "재시도" }).click();
-    await expect(dialog).toBeHidden();
+    await panel.getByRole("button", { name: "재시도" }).click();
+    await expect(panel).toBeHidden();
     await expect(page.getByRole("status").filter({ hasText: alreadySaved })).toBeVisible();
 
     // 실제 DB에는 그 콜 하나뿐이고, 생성 감사 기록도 그 저장 하나뿐이다 — 다시 보낸 요청은 쓰기도 감사도 남기지 않는다.
@@ -232,9 +229,7 @@ test.describe("티켓 16 새 콜 요청 id로 중복 생성 막기", () => {
     const memo = `T16 서버에 닿기 전 유실 ${Date.now().toString(36)}`;
     await login(page, account.accountId, account.password);
     await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
-    await page.getByRole("button", { name: "빠른 예약" }).click();
-    const dialog = quickBookingDialog(page);
-    await fillBooking(page, memo, "14:00");
+    const panel = await fillBooking(page, memo, "14:00");
 
     let blocked = false;
     await page.route(
@@ -250,13 +245,13 @@ test.describe("티켓 16 새 콜 요청 id로 중복 생성 막기", () => {
         await route.continue();
       }
     );
-    await dialog.getByRole("button", { name: "예약 저장" }).click();
-    const status = dialog.locator("[data-save-state]");
+    await panel.getByRole("button", { name: "예약 저장" }).click();
+    const status = panel.locator("[data-save-state]");
     await expect(status).toHaveAttribute("data-save-state", "checking");
     expect(await (prisma as any).serviceCall.count({ where: { customerMemo: memo } })).toBe(0);
 
-    await dialog.getByRole("button", { name: "재시도" }).click();
-    await expect(dialog).toBeHidden();
+    await panel.getByRole("button", { name: "재시도" }).click();
+    await expect(panel).toBeHidden();
     // 이번에는 처음 저장이 서버에 닿은 적이 없어 "이미 저장된 콜입니다" 안내가 없다.
     await expect(page.getByRole("status").filter({ hasText: alreadySaved })).toBeHidden();
     const created = await (prisma as any).serviceCall.findMany({ where: { customerMemo: memo } });

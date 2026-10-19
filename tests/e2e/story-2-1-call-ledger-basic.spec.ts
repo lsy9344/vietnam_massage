@@ -3,6 +3,7 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 import { selectGridOptionByValue } from "./support/call-grid";
+import { checkInTherapist, chooseConditions, fillBooking, goToCustomerStep, openQuickBooking, pickGuest, saveQuickBooking } from "./support/quick-booking";
 
 
 const users = [
@@ -258,15 +259,6 @@ function panel(page: Page) {
   return page.getByRole("complementary", { name: /^콜 상세/ });
 }
 
-function quickBookingDialog(page: Page) {
-  return page.getByRole("dialog", { name: "빠른 예약" });
-}
-
-async function openQuickBooking(page: Page) {
-  await page.getByRole("button", { name: "빠른 예약" }).click();
-  await expect(quickBookingDialog(page)).toBeVisible();
-}
-
 test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -282,6 +274,8 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
     }
     seededData = await seedStoryData();
     await cleanupStoryCalls(seededData.openMonthId);
+    // 빠른 예약 ①의 Therapist 줄은 출근 기록이 있는 사람만 기본으로 보인다(1018 스펙 D23).
+    await checkInTherapist({ operatingMonthId: seededData.openMonthId, serviceDate: "2032-01-05", employeeId: seededData.therapist1Id });
   });
 
   test("counter는 날짜별 빈 상태를 보고, 빠른 예약으로 만든 콜에 stable ID와 담당자 row가 저장된다", async ({ page }) => {
@@ -298,48 +292,37 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
     await expect(page.getByLabel("운영월")).toHaveValue(seededData.openMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2032-01-05");
 
-    // 티켓 03: 새 콜은 표 아래 "새 콜 행 추가"가 아니라 빠른 예약으로만 만든다.
-    await openQuickBooking(page);
-    const dialog = quickBookingDialog(page);
-
-    await dialog.getByLabel("고객/메모").fill(memo);
-    await dialog.getByRole("button", { name: "다음" }).click();
-
-    await dialog.getByLabel("조회날짜").fill("2032-01-05");
-    await dialog.getByLabel("시간").selectOption("11:00");
-    await dialog.getByRole("button", { name: "다음" }).click();
-
-    const courseButton = dialog.getByRole("button", { name: /E2E21A 60분 가능/ });
-    await expect(courseButton).toBeVisible({ timeout: 10_000 });
-    await courseButton.click();
-    await dialog.getByRole("button", { name: "다음" }).click();
-
-    await dialog.getByLabel("객실").selectOption({ label: "E2E 921 호실" });
-    await dialog.getByLabel("비고").fill("E2E 비고");
-    await dialog.getByRole("button", { name: "다음" }).click();
-
-    await expect(dialog.getByText(memo)).toBeVisible();
-    await dialog.getByRole("button", { name: "예약 저장" }).click();
-    await expect(dialog).toBeHidden();
+    // 티켓 03: 새 콜은 표 아래 "새 콜 행 추가"가 아니라 빠른 예약으로만 만든다. 1018 티켓 05: 5단계 모달 대신
+    // 원장 옆의 비모달 패널에서 ① 조건(날짜·시간·코스 칩으로 손님 담기) → ② 고객(예약자명·저장) 두 단계다.
+    const booking = await openQuickBooking(page);
+    await chooseConditions(booking, { time: "11:00" });
+    await pickGuest(page, booking, { therapistId: seededData.therapist1Id, courseId: seededData.courseId });
+    await goToCustomerStep(booking);
+    await fillBooking(booking, { bookerName: memo });
+    await expect(booking.locator("[data-quick-booking-summary]")).toContainText(memo);
+    await saveQuickBooking(page, booking);
 
     const savedCall = await (prisma as any).serviceCall.findFirst({
       where: { customerMemo: memo },
       include: { assignments: true }
     });
     expect(savedCall).toBeTruthy();
-    // 저장 직후 그 줄이 선택되고 패널이 열린다(스펙 D20·티켓 20).
+    // 저장 직후 그 줄이 선택되고 패널이 열린다(1018 스펙 D19·티켓 20).
     await expect(page).toHaveURL(new RegExp(`call=${savedCall.id}$`));
     await expect(line(page, savedCall.id)).toContainText(memo);
     expect(savedCall.assignments.map((assignment: any) => assignment.assignmentRole)).toEqual(["THERAPIST_1"]);
     // 콜이 생기면 원장 목록이 보인다.
     await expect(page.getByRole("list", { name: "콜 원장 목록" })).toBeVisible();
 
-    // 마사지사2·할인구분·결제수단·확인값은 빠른 예약에 없다 — 편집 패널에서 고친다(스펙 D20).
+    // 마사지사2·객실·할인구분·결제수단·확인값·비고는 빠른 예약에 없다 — 편집 패널에서 고친다(1018 스펙 D19).
     const edit = panel(page);
     await expect(edit).toBeVisible();
     await selectGridOptionByValue(page, edit, "마사지사2", seededData.therapist2Id);
+    await selectGridOptionByValue(page, edit, "객실", seededData.roomId);
     await selectGridOptionByValue(page, edit, "할인구분", "BIRTHDAY");
     await edit.getByRole("region", { name: "결제" }).getByText("현금", { exact: true }).click();
+    await edit.getByLabel("비고").fill("E2E 비고");
+    await edit.getByLabel("비고").press("Tab");
     await edit.getByText("더 보기").click();
     await selectGridOptionByValue(page, edit, "확인값", "Y");
     await expect(edit.locator('[data-save-state="saved"]')).toContainText("저장됨");
@@ -405,6 +388,10 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
   });
 
   test.afterAll(async () => {
+    // 빠른 예약 확인용으로 넣은 출근 기록은 다른 스펙의 출근 화면·지급에 남지 않게 지운다.
+    await (prisma as any).therapistAttendance.deleteMany({
+      where: { operatingMonthId: seededData.openMonthId, employeeId: seededData.therapist1Id, attendanceDate: new Date("2032-01-05T00:00:00.000Z") }
+    });
     await prisma.$disconnect();
   });
 });

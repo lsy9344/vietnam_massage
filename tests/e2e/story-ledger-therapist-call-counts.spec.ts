@@ -180,22 +180,22 @@ test.describe("빠른 예약 카드의 한 것 +예약과 원장 현황 줄의 �
     await prisma.$disconnect();
   });
 
-  test("빠른 예약의 Therapist 카드에도 이름 옆에 같은 숫자가 붙는다", async ({ page }) => {
+  test("빠른 예약의 Therapist 줄에도 이름 옆에 같은 숫자가 붙는다", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await login(page, account.accountId, account.password);
     await openLedger(page);
     await page.getByRole("button", { name: "빠른 예약" }).click();
-    const dialog = page.getByRole("dialog", { name: /빠른 예약/ });
-    await expect(dialog).toBeVisible();
-    await dialog.getByLabel("고객/메모").fill("TCC 빠른 예약 확인");
-    await dialog.getByRole("button", { name: "다음" }).click();
-    await dialog.getByLabel("시간").selectOption("18:00");
-    await dialog.getByRole("button", { name: "다음" }).click();
+    // 빠른 예약은 원장 옆 패널이다(1018 스펙 D19). ① 조건에서 시각을 고르면 Therapist 줄이 그 시각으로 다시 그려진다.
+    const panel = page.getByRole("complementary", { name: "빠른 예약" });
+    await expect(panel).toBeVisible();
+    await panel.getByLabel("시간").selectOption("18:00");
 
-    const card = (therapistId: string) => dialog.locator(`[data-availability-row="${therapistId}"]`);
-    await expect(card(busyId).locator("[data-therapist-call-count]")).toContainText("한 것 2, 예약 1");
-    await expect(card(idleId).locator("[data-therapist-call-count][data-idle]")).toContainText("콜 없음");
-    await expect(card(outId).locator("[data-therapist-call-count]")).toContainText("한 것 1, 예약 0");
+    const line = (therapistId: string) => panel.locator(`[data-quick-booking-line="${therapistId}"]`);
+    await expect(line(busyId).locator("[data-therapist-call-count]")).toContainText("한 것 2, 예약 1");
+    await expect(line(idleId).locator("[data-therapist-call-count][data-idle]")).toContainText("콜 없음");
+    // 퇴근한 사람은 접어 둔 "이 시각에 안 되는 N명" 안에 있다.
+    await panel.getByText(/이 시각에 안 되는 \d+명/).click();
+    await expect(line(outId).locator("[data-therapist-call-count]")).toContainText("한 것 1, 예약 0");
   });
 
   test("예약을 입장시키면 남은 예약에서 빠지고, 종료해 청소중이 되면 현황 줄의 완료로 들어가 방문완료에도 남는다", async ({ page }) => {

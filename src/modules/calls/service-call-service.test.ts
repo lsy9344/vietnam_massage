@@ -315,6 +315,7 @@ function createMemoryPrisma() {
       ["CONFIRMATION", "N", "N", 20, true],
       ["BOOKING_CHANNEL", "TELEGRAM", "텔레그램", 10, true],
       ["BOOKING_CHANNEL", "ZALO", "잘로", 40, true],
+      ["BOOKING_CHANNEL", "WALK_IN", "워크인", 60, true],
       ["BOOKING_CHANNEL", "OLD_CHANNEL", "옛 경로", 90, false],
       ["PAYMENT_METHOD", "비활성", "비활성", 99, false]
     ].map(([codeType, code, displayName, sortOrder, isActive]) => [
@@ -6545,5 +6546,109 @@ describe("therapist availability current state for the ledger strip (1018 spec D
     const rows = await availabilityAt(prismaClient, "11:00");
 
     assert.deepEqual(rows.find((row) => row.therapistId === "therapist-1")?.callCounts, { done: 3, finished: 2, reserved: 1 });
+  });
+});
+
+describe("quick booking: walk-ins and unassigned guests (1018 스펙 D20·D22)", () => {
+  function booking(
+    prismaClient: ReturnType<typeof createMemoryPrisma>,
+    requestId: string,
+    changes: Partial<Parameters<typeof createQuickBookingServiceCall>[0]> = {}
+  ) {
+    return createQuickBookingServiceCall({
+      requestId,
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      courseId: "course-a",
+      therapist1Id: "therapist-1",
+      status: "예약",
+      bookingChannelCode: "WALK_IN",
+      actorId: "counter-account",
+      prismaClient,
+      ...changes
+    });
+  }
+
+  it("names a walk-in without a name 워크인 N, numbered within the day, and creates no customer", async () => {
+    const prismaClient = createMemoryPrisma();
+    const first = await booking(prismaClient, "walk-in-1");
+    const second = await booking(prismaClient, "walk-in-2", { therapist1Id: "therapist-2" });
+    const otherDay = await booking(prismaClient, "walk-in-3", { serviceDate: "2026-06-11" });
+
+    assert.equal(first.row.bookerName, "워크인 1");
+    assert.equal(first.row.customerMemo, "워크인 1");
+    assert.equal(second.row.bookerName, "워크인 2");
+    assert.equal(otherDay.row.bookerName, "워크인 1");
+    assert.equal(first.row.customerId, null);
+    assert.equal((await listCustomers({ prismaClient })).length, 0);
+  });
+
+  it("keeps the name of a named walk-in and does not number other channels", async () => {
+    const prismaClient = createMemoryPrisma();
+    const named = await booking(prismaClient, "walk-in-named", { bookerName: "Minh", customerMemo: "Minh" });
+    const telegram = await booking(prismaClient, "telegram", { bookingChannelCode: "TELEGRAM", therapist1Id: "therapist-2" });
+    assert.equal(named.row.bookerName, "Minh");
+    assert.equal(telegram.row.bookerName, null);
+  });
+
+  it("gives every guest of a walk-in party the same 워크인 N", async () => {
+    const prismaClient = createMemoryPrisma();
+    await booking(prismaClient, "walk-in-1");
+    const party = await createQuickBookingParty({
+      requestId: "walk-in-party",
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      status: "예약",
+      bookingChannelCode: "WALK_IN",
+      guests: [
+        { courseId: "course-a", therapist1Id: "therapist-2", therapist2Id: null, roomId: null },
+        { courseId: "course-a", therapist1Id: null, therapist2Id: null, roomId: null }
+      ],
+      actorId: "counter-account",
+      prismaClient
+    });
+    assert.deepEqual(
+      party.rows.map((row) => [row.bookerName, row.customerMemo]),
+      [
+        ["워크인 2", "워크인 2"],
+        ["워크인 2", "워크인 2"]
+      ]
+    );
+  });
+
+  it("does not rename the guest added to a party, which keeps the party's memo", async () => {
+    const prismaClient = createMemoryPrisma();
+    const lead = await booking(prismaClient, "party-lead", { bookerName: "정 대표", customerMemo: "정 대표", bookingChannelCode: "TELEGRAM" });
+    prismaClient.serviceCalls.set(lead.row.id, { ...prismaClient.serviceCalls.get(lead.row.id), partyId: "party-jung", partyPosition: 1 });
+    const added = await booking(prismaClient, "party-added", { partyId: "party-jung", customerMemo: "정 대표", therapist1Id: "therapist-2" });
+    assert.equal(added.row.customerMemo, "정 대표");
+    assert.equal(added.row.bookerName, null);
+  });
+
+  it("saves a D-course call without either Therapist from the ledger too", async () => {
+    const prismaClient = createMemoryPrisma();
+    const saved = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      courseId: "course-d",
+      therapist1Id: null,
+      therapist2Id: null,
+      status: "예약",
+      prismaClient
+    });
+    assert.equal(saved.therapist1, null);
+  });
+
+  it("saves an unassigned D-course guest without either Therapist, but still needs the second once the first is named", async () => {
+    const prismaClient = createMemoryPrisma();
+    const unassigned = await booking(prismaClient, "unassigned-d", { courseId: "course-d", therapist1Id: null, therapist2Id: null });
+    assert.equal(unassigned.row.therapist1, null);
+    await assert.rejects(
+      () => booking(prismaClient, "named-d", { courseId: "course-d", therapist1Id: "therapist-1", therapist2Id: null }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "D_COURSE_SECOND_THERAPIST_REQUIRED"
+    );
   });
 });

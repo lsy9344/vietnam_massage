@@ -19,7 +19,7 @@ import { AddExpensePanel, DailyExpensePanel } from "@/app/(erp)/calls/daily-expe
 import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { CallLedgerWorkspace } from "@/app/(erp)/calls/call-ledger-workspace";
 import { LedgerStatusCounts } from "@/app/(erp)/calls/ledger-status-counts";
-import { QuickBookingPanel } from "@/app/(erp)/calls/quick-booking-panel";
+import { QuickBookingTrigger } from "@/app/(erp)/calls/quick-booking-panel";
 import { TherapistStatusStrip } from "@/app/(erp)/calls/therapist-status-strip";
 import { CallLeaveGuard } from "@/app/(erp)/calls/unsaved-guard";
 import { ledgerHref, ledgerTabParams, parseLedgerTab, type LedgerTab } from "@/lib/ledger-address";
@@ -68,7 +68,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
   const isLocked = isOperatingMonthPayoutLocked(selectedMonth.status);
   const canViewSettlementAmounts = account.role === "administrator" || account.role === "settlement_manager";
 
-  // 주요 행동은 탭마다 다르다. 하루 수납·지출은 지출 추가, 원장의 빠른 예약은 티켓 20에서 붙인다.
+  // 주요 행동은 탭마다 다르다. 하루 수납·지출은 지출 추가, 원장은 빠른 예약이다.
   const toolbar = (action?: ReactNode) => (
     <ScreenToolbar
       account={account}
@@ -151,27 +151,12 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
   return (
     <div className="screen">
       {/*
-        원장 탭을 저장하지 않은 입력이 있는 동안 떠나기 전 안내로 감싼다(스펙 B07, 티켓 18). 빠른 예약
-        패널(20)은 원장 탭 머리의 주요 버튼이라 CallLedgerWorkspace 밖(이 탭의 형제)에 있으므로, 공통
-        조상인 여기서 건다 — CallLedgerWorkspace 자신의 useUnsavedGuard 등록(행 저장, 콜 상세)도 이 안에서
-        그대로 된다. 새 콜은 빠른 예약으로만 만든다(스펙 D22).
+        원장 탭을 저장하지 않은 입력이 있는 동안 떠나기 전 안내로 감싼다(스펙 B07, 티켓 18). 빠른 예약은 원장 탭 머리의
+        주요 버튼이고, 패널은 원장 옆 패널이라 CallLedgerWorkspace 안에 있다(1018 스펙 D19). 새 콜은 빠른 예약으로만
+        만든다(스펙 D22).
       */}
       <CallLeaveGuard>
-        {/* 빠른 예약(명세 F01·F08, 티켓 20): 원장 탭 머리의 주요 버튼이다. 원장 위에 항상 펼쳐 두던 가능
-            코스 영역은 없애고 패널 안으로 옮겼다. */}
-        {toolbar(
-          <QuickBookingPanel
-            customers={customers}
-            initialAvailabilityRows={availabilityRows}
-            initialAvailabilityTime={availabilityTime}
-            isLocked={isLocked}
-            monthEndDate={selectedMonth.endDate}
-            monthStartDate={selectedMonth.startDate}
-            operatingMonthId={selectedMonth.id}
-            options={options}
-            serviceDate={serviceDate}
-          />
-        )}
+        {toolbar(<QuickBookingTrigger isLocked={isLocked} />)}
         <LedgerStatusCounts
           counts={ledgerStatusCountsFromRows(rows)}
           customerHref={linkToScreen(account.role, "/customers", { operatingMonthId: selectedMonth.id, date: serviceDate })}
@@ -184,6 +169,14 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
           customers={customers}
           isLocked={isLocked}
           options={options}
+          quickBooking={{
+            initialAvailabilityRows: availabilityRows,
+            initialAvailabilityTime: availabilityTime,
+            monthEndDate: selectedMonth.endDate,
+            monthStartDate: selectedMonth.startDate,
+            operatingMonthId: selectedMonth.id,
+            serviceDate
+          }}
           rows={visibleRows}
           showSettlementColumns={canViewSettlementAmounts}
         />

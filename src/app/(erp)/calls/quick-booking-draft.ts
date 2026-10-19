@@ -9,29 +9,30 @@ import {
 import { QUICK_BOOKING_PARTY_MAX_GUESTS, type QuickBookingPartyInput } from "@/modules/calls/service-call-schema";
 
 /**
- * 빠른 예약 패널의 단계(스펙 F01, 티켓 20). 고객 → 날짜·예약시각 → Therapist·코스 → 객실·메모 → 확인(저장)
- * 순서로 진행하되, 단계를 오가도 값이 유지된다. 21(두 명 코스)은 "therapist" 단계에, 23(방문별 요청)은
- * "room" 단계에, 24(새 고객·최근 방문 가져오기)는 "customer" 단계에 더한다.
+ * 빠른 예약의 두 단계(1018 스펙 D19). ① 조건: 날짜·시각·인원을 고르고 코스 칩으로 손님을 담는다. ② 고객: 예약 경로·
+ * 예약자명·메모를 넣고 저장한다. 객실 단계와 확인 단계는 없다. 단계를 오가도 값이 유지된다.
  */
-export const QUICK_BOOKING_STEPS = ["customer", "schedule", "therapist", "room", "review"] as const;
+export const QUICK_BOOKING_STEPS = ["conditions", "customer"] as const;
 export type QuickBookingStep = (typeof QUICK_BOOKING_STEPS)[number];
 
 /** 저장 입력 필드가 속한 단계. 저장 거절의 필드별 오류를 패널 요약에서 그 단계로 바로 보낼 때 쓴다. */
 export const QUICK_BOOKING_STEP_OF_FIELD: Record<string, QuickBookingStep> = {
   customerId: "customer",
   customerMemo: "customer",
-  // 새 고객(F01, 티켓 24). zod 중첩 오류는 "newCustomer" 하나로 모인다.
+  // zod 중첩 오류는 "newCustomer" 하나로 모인다.
   newCustomer: "customer",
-  serviceDate: "schedule",
-  startTime: "schedule",
-  courseId: "therapist",
-  therapist1Id: "therapist",
-  therapist2Id: "therapist",
-  roomId: "room",
-  note: "room",
-  visitRequest: "room",
-  // 일행 손님 목록 자체가 잘못된 경우(zod의 guests 오류). 손님을 고르는 단계로 보낸다.
-  guests: "therapist"
+  bookingChannelCode: "customer",
+  bookerName: "customer",
+  note: "customer",
+  visitRequest: "customer",
+  serviceDate: "conditions",
+  startTime: "conditions",
+  courseId: "conditions",
+  therapist1Id: "conditions",
+  therapist2Id: "conditions",
+  roomId: "conditions",
+  // 일행 손님 목록 자체가 잘못된 경우(zod의 guests 오류). 손님을 담는 단계로 보낸다.
+  guests: "conditions"
 };
 
 /** 손님 한 명이 고르는 칸(스펙 D10, 티켓 02). 손님 1은 저장 초안의 같은 칸을 쓴다. */
@@ -86,100 +87,160 @@ export type QuickBookingState = {
   step: QuickBookingStep;
   /** 저장되지 않은 값이 있는지. 패널을 닫으려 할 때 안내 여부로 쓴다. 저장을 마치면 다시 false다. */
   touched: boolean;
+  /** 손님 1의 코스·Therapist는 저장 초안의 칸이기도 하다. 담은 손님이 바뀔 때마다 맞춘다. */
   save: NewCallRowSave;
-  /** 일행의 손님 2…N(티켓 02). 비어 있으면 한 명 예약이고 지금 흐름과 같다. */
-  partyGuests: QuickBookingGuest[];
+  /** 인원(1–10). 이만큼 손님을 담아야 ②로 넘어가 저장할 수 있다. */
+  partySize: number;
+  /** 코스 칩으로 담은 손님(1018 스펙 D20). Therapist가 비었으면 미지명 손님이다. 객실은 고르지 않는다. */
+  guests: QuickBookingGuest[];
   /** 이미 있는 일행에 1명을 더하는 중이면 그 일행. 이때는 한 명 저장이고 고객을 잇지 않는다(스펙 D12). */
   joinParty: QuickBookingJoinParty | null;
+  /** 원장 현황 줄 카드에서 열었으면 그 Therapist. ①의 목록 맨 위(미지명 줄 아래)에 골라 둔다. */
+  presetTherapistId: string | null;
 };
 
 export type QuickBookingEvent =
   | { type: "step"; step: QuickBookingStep }
   /** 패널을 저장 없이 닫기로 확정했을 때(떠나기 전 안내에서 "닫기"를 고름). 새 요청 id로 처음부터 시작한다. */
   | { type: "discard"; nextRequestId: string }
-  /** 인원 수(1–10). 손님 2…N을 늘리거나 줄이고, 이미 고른 손님은 남긴다. */
+  /** 인원 수(1–10). 줄면 뒤에 담은 손님부터 뺀다. */
   | { type: "partySize"; size: number }
-  /** 손님 2…N 중 한 명의 코스·Therapist·객실. 손님 1은 저장 초안을 고치는 edit·choose를 그대로 쓴다. */
-  | { type: "guest"; position: number; changes: Partial<QuickBookingGuest> }
-  /** 원장의 "1명 추가": 새 요청 id로 처음부터, 일행의 시각·고객/메모·일행 id를 채워 Therapist 단계에서 시작한다. */
+  /** 코스 칩 하나를 눌러 손님을 담는다. therapist1Id가 null이면 미지명 손님이다. */
+  | { type: "addGuest"; guest: { courseId: string; therapist1Id: string | null } }
+  | { type: "removeGuest"; index: number }
+  /** D코스 손님의 두 번째 Therapist(index는 0부터). null이면 비운다. */
+  | { type: "secondTherapist"; index: number; therapistId: string | null }
+  /** 원장의 "1명 추가": 새 요청 id로 처음부터, 일행의 시각·고객/메모·일행 id를 채워 시작한다. */
   | { type: "joinParty"; join: QuickBookingJoinParty; nextRequestId: string }
   /**
-   * 원장 Therapist 현황 줄의 카드(1018 스펙 D17): 새 요청 id로 처음부터, 원장 날짜·시각과 손님 1의 Therapist를 채워
-   * Therapist 단계에서 시작한다. 아직 고친 것이 없다.
+   * 패널을 새로 연다: 새 요청 id로 처음부터, 날짜와 기본 시각을 채운다. 원장 Therapist 현황 줄의 카드(1018 스펙 D17)에서
+   * 열면 그 Therapist를 골라 둔다. 아직 고친 것이 없다.
    */
-  | { type: "presetTherapist"; therapistId: string; serviceDate: string; startTime: string; nextRequestId: string }
+  | { type: "start"; serviceDate: string; startTime: string; presetTherapistId: string | null; nextRequestId: string }
   | NewCallRowSaveEvent;
 
 export function initialQuickBookingState(
   ledger: { operatingMonthId: string; serviceDate: string },
   requestId: string
 ): QuickBookingState {
-  return { step: "customer", touched: false, save: initialNewCallRowSave(ledger, requestId), partyGuests: [], joinParty: null };
+  return {
+    step: "conditions",
+    touched: false,
+    save: initialNewCallRowSave(ledger, requestId),
+    partySize: 1,
+    guests: [],
+    joinParty: null,
+    presetTherapistId: null
+  };
 }
 
-function blankGuest(): QuickBookingGuest {
-  return { courseId: "", therapist1Id: null, therapist2Id: null, roomId: null };
+function freshFrom(state: QuickBookingState, serviceDate: string, nextRequestId: string) {
+  return initialQuickBookingState({ operatingMonthId: state.save.draft.operatingMonthId, serviceDate }, nextRequestId);
+}
+
+/** 담은 손님을 바꾼다. 손님 1은 저장 초안의 칸에도 적는다. 고르기라서 앞 저장 결과와 오류를 내린다. */
+function withGuests(state: QuickBookingState, guests: QuickBookingGuest[], partySize = state.partySize): QuickBookingState {
+  const first = guests[0];
+  const save = newCallRowSaveReducer(state.save, {
+    type: "choose",
+    changes: {
+      courseId: first?.courseId ?? "",
+      therapist1Id: first?.therapist1Id ?? null,
+      therapist2Id: first?.therapist2Id ?? null,
+      roomId: null
+    }
+  });
+  return { ...state, save, guests, partySize, touched: true };
+}
+
+/** 담은 손님(exceptIndex는 빼고)이 이미 맡은 Therapist. 한 사람을 두 손님에게 담지 못한다. */
+export function takenTherapistIds(guests: QuickBookingGuest[], exceptIndex = -1): ReadonlySet<string> {
+  return new Set(guests.flatMap((guest, index) => (index === exceptIndex ? [] : [guest.therapist1Id, guest.therapist2Id])).filter((id): id is string => Boolean(id)));
 }
 
 /**
- * call-new-row-save.ts(티켓 16)의 저장 상태머신을 그대로 감싸 단계 이동만 더한다. edit·choose·submit·
- * failed·lost는 저장되지 않은 값을 남긴 것이라 touched를 켜고, saved는 새 초안으로 돌아가 단계도 처음(고객)
- * 으로 되돌린다(패널은 저장 성공 시 닫히므로 다음에 열 때 새로 시작한다).
+ * 저장할 초안(1018 스펙 D21–D22). 예약자명은 고객/메모 칸에도 넣어 객실·TV 같은 다른 화면이 지금처럼 이름을 보인다.
+ * 기존 고객을 고르지 않았고 예약자명이 있으면 그 이름으로 새 고객을 만든다. 일행에 더하는 손님은 고객을 잇지 않는다
+ * (스펙 D12). 이름이 빈 워크인의 임시 이름은 서버가 붙인다.
+ */
+function bookingDraft(state: QuickBookingState) {
+  const { draft } = state.save;
+  const bookerName = draft.bookerName?.trim() || null;
+  const joining = state.joinParty !== null;
+  return {
+    ...draft,
+    bookerName,
+    customerMemo: bookerName ?? draft.customerMemo ?? null,
+    customerId: joining ? null : (draft.customerId ?? null),
+    newCustomer:
+      !joining && !draft.customerId && bookerName ? { name: bookerName, phone: null, memo: null, preferenceNote: null } : null
+  };
+}
+
+/**
+ * call-new-row-save.ts(티켓 16)의 저장 상태머신을 그대로 감싸 단계와 손님 담기를 더한다. edit·choose·submit·failed·
+ * lost는 저장되지 않은 값을 남긴 것이라 touched를 켜고, saved는 새 초안으로 돌아가 단계도 처음(조건)으로 되돌린다.
  */
 export function quickBookingReducer(state: QuickBookingState, event: QuickBookingEvent): QuickBookingState {
-  if (event.type === "step") {
-    return { ...state, step: event.step };
-  }
-  if (event.type === "joinParty") {
-    const fresh = initialQuickBookingState(
-      { operatingMonthId: state.save.draft.operatingMonthId, serviceDate: event.join.serviceDate },
-      event.nextRequestId
-    );
-    const { partyId, startTime, customerMemo } = event.join;
-    return {
-      ...fresh,
-      step: "therapist",
-      joinParty: event.join,
-      save: { ...fresh.save, draft: { ...fresh.save.draft, partyId, startTime, customerMemo } }
-    };
-  }
-  if (event.type === "presetTherapist") {
-    const fresh = initialQuickBookingState(
-      { operatingMonthId: state.save.draft.operatingMonthId, serviceDate: event.serviceDate },
-      event.nextRequestId
-    );
-    const { therapistId, startTime } = event;
-    return { ...fresh, step: "therapist", save: { ...fresh.save, draft: { ...fresh.save.draft, therapist1Id: therapistId, startTime } } };
-  }
-  if (event.type === "partySize" || event.type === "guest") {
-    // 일행에 1명을 더할 때는 그 한 명만 고른다.
-    if (state.joinParty) return state;
-    // 보내는 중이거나 저장 여부를 모르는 동안에는 일행도 초안처럼 바꾸지 않는다. 다시 시도는 같은 일행을 보낸다.
-    if (isQuickBookingLocked(state)) return state;
-    // 일행을 바꾸는 것도 고르기다. 앞 저장 결과와 오류를 내린다.
-    const save = newCallRowSaveReducer(state.save, { type: "choose", changes: {} });
-    if (event.type === "partySize") {
-      const others = Math.min(Math.max(Math.trunc(event.size), 1), QUICK_BOOKING_PARTY_MAX_GUESTS) - 1;
-      const partyGuests = Array.from({ length: others }, (_, index) => state.partyGuests[index] ?? blankGuest());
-      return { ...state, save, partyGuests, touched: true };
+  switch (event.type) {
+    case "step":
+      return { ...state, step: event.step };
+    case "discard":
+      return freshFrom(state, state.save.draft.serviceDate, event.nextRequestId);
+    case "joinParty": {
+      const next = freshFrom(state, event.join.serviceDate, event.nextRequestId);
+      const { partyId, startTime, customerMemo } = event.join;
+      return { ...next, joinParty: event.join, save: { ...next.save, draft: { ...next.save.draft, partyId, startTime, customerMemo } } };
     }
-    const index = event.position - 2;
-    if (index < 0 || index >= state.partyGuests.length) return state;
-    const partyGuests = state.partyGuests.map((guest, candidate) => (candidate === index ? { ...guest, ...event.changes } : guest));
-    return { ...state, save, partyGuests, touched: true };
+    case "start": {
+      const next = freshFrom(state, event.serviceDate, event.nextRequestId);
+      return { ...next, presetTherapistId: event.presetTherapistId, save: { ...next.save, draft: { ...next.save.draft, startTime: event.startTime } } };
+    }
+    case "partySize":
+    case "addGuest":
+    case "removeGuest":
+    case "secondTherapist": {
+      // 보내는 중이거나 저장 여부를 모르는 동안에는 손님도 초안처럼 바꾸지 않는다. 다시 시도는 같은 손님을 보낸다.
+      if (isQuickBookingLocked(state)) return state;
+      if (event.type === "partySize") {
+        // 일행에 1명을 더할 때는 그 한 명만 담는다.
+        if (state.joinParty) return state;
+        const size = Math.min(Math.max(Math.trunc(event.size) || 1, 1), QUICK_BOOKING_PARTY_MAX_GUESTS);
+        return withGuests(state, state.guests.slice(0, size), size);
+      }
+      if (event.type === "addGuest") {
+        if (state.guests.length >= state.partySize) return state;
+        const { courseId, therapist1Id } = event.guest;
+        if (therapist1Id && takenTherapistIds(state.guests).has(therapist1Id)) return state;
+        return withGuests(state, [...state.guests, { courseId, therapist1Id, therapist2Id: null, roomId: null }]);
+      }
+      if (event.type === "removeGuest") {
+        if (!state.guests[event.index]) return state;
+        return withGuests(state, state.guests.filter((_, index) => index !== event.index));
+      }
+      const guest = state.guests[event.index];
+      if (!guest) return state;
+      if (event.therapistId && takenTherapistIds(state.guests, event.index).has(event.therapistId)) return state;
+      if (event.therapistId && event.therapistId === guest.therapist1Id) return state;
+      return withGuests(
+        state,
+        state.guests.map((candidate, index) => (index === event.index ? { ...candidate, therapist2Id: event.therapistId } : candidate))
+      );
+    }
+    case "submit": {
+      // 인원만큼 담아야 저장한다(1018 스펙 D20).
+      if (state.guests.length === 0 || state.guests.length !== state.partySize) return state;
+      const prepared = { ...state.save, draft: bookingDraft(state) };
+      return { ...state, save: newCallRowSaveReducer(prepared, event), touched: true };
+    }
+    case "saved": {
+      const save = newCallRowSaveReducer(state.save, event);
+      if (save === state.save) return state;
+      return { ...initialQuickBookingState({ operatingMonthId: save.draft.operatingMonthId, serviceDate: save.draft.serviceDate }, save.requestId), save };
+    }
+    default:
+      return { ...state, save: newCallRowSaveReducer(state.save, event), touched: true };
   }
-  if (event.type === "discard") {
-    return initialQuickBookingState(
-      { operatingMonthId: state.save.draft.operatingMonthId, serviceDate: state.save.draft.serviceDate },
-      event.nextRequestId
-    );
-  }
-
-  const save = newCallRowSaveReducer(state.save, event);
-  if (event.type === "saved") {
-    return { step: "customer", touched: false, save, partyGuests: [], joinParty: null };
-  }
-  return { ...state, save, touched: true };
 }
 
 export function isQuickBookingLocked(state: QuickBookingState) {
@@ -205,16 +266,4 @@ export function quickBookingPartyRequest(request: NewCallRowRequest, partyGuests
     courseId: guest.courseId || courseId
   }));
   return { ...shared, guests };
-}
-
-/** 손님 position이 아닌 다른 손님들이 이미 고른 Therapist. 한 사람을 두 손님에게 고르지 못하게 목록에서 뺀다. */
-export function otherGuestTherapistIds(guests: QuickBookingGuest[], position: number) {
-  const taken = new Set<string>();
-  guests.forEach((guest, index) => {
-    if (index + 1 === position) return;
-    for (const therapistId of [guest.therapist1Id, guest.therapist2Id]) {
-      if (therapistId) taken.add(therapistId);
-    }
-  });
-  return taken;
 }

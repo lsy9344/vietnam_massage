@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useReducer, useRef, useState, useTransition, type ReactNode } from "react";
-import { unstable_rethrow } from "next/navigation";
+import { unstable_rethrow, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { DetailRow } from "@/components/ui/detail-row";
 import { inputFieldClassName } from "@/components/ui/input-field";
-import { ModalPanel } from "@/components/ui/panel";
+import { SidePanel } from "@/components/ui/panel";
 import { ScreenState } from "@/components/ui/screen-state";
 import { CustomerCandidateCompare } from "@/components/domain/customer-candidate-compare";
 import { CustomerVisitCounts } from "@/components/domain/customer-visit-counts";
@@ -17,51 +16,56 @@ import {
   loadTherapistAvailabilityAction,
   searchCustomerLinkCandidatesAction
 } from "@/app/(erp)/calls/actions";
-import { firstVisible } from "@/app/(erp)/calls/call-ledger-workspace";
+import { firstVisible } from "@/app/(erp)/calls/first-visible";
 import type { NewRowSaveStatus } from "@/app/(erp)/calls/call-new-row-save";
 import { newRequestId } from "@/app/(erp)/calls/call-request-id";
 import { NewCallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
+import {
+  quickBookingCourseColumns,
+  quickBookingFreeTime,
+  quickBookingSummary,
+  quickBookingTherapistGroups,
+  type QuickBookingCourseColumn
+} from "@/app/(erp)/calls/quick-booking-conditions";
 import {
   QUICK_BOOKING_STEPS,
   guestFieldErrors,
   initialQuickBookingState,
   isQuickBookingLocked,
-  otherGuestTherapistIds,
   quickBookingGuestPosition,
-  quickBookingGuests,
   quickBookingPartyRequest,
   quickBookingReducer,
   quickBookingStepOfField,
+  takenTherapistIds,
   type QuickBookingGuest,
   type QuickBookingJoinParty,
   type QuickBookingState,
   type QuickBookingStep
 } from "@/app/(erp)/calls/quick-booking-draft";
 import { nowClockString, selectNowSlot } from "@/app/(erp)/calls/quick-booking-now-slot";
-import { onQuickBookingJoinParty, onQuickBookingWithTherapist } from "@/app/(erp)/calls/quick-booking-party-join";
+import { TherapistCallCount } from "@/app/(erp)/calls/therapist-call-counts";
 import {
-  AvailabilityRow,
-  availabilityRowWarnings,
-  filterByAttendance,
-  sortAvailabilityRows,
-  TherapistAvailabilityView,
-  type AvailabilityCourseChoice,
-  type AvailabilityCourseOverrideChoice,
-  type AvailabilityRowExpansion
-} from "@/app/(erp)/calls/therapist-availability-view";
+  onQuickBookingJoinParty,
+  onQuickBookingOpen,
+  onQuickBookingWithTherapist,
+  requestQuickBookingOpen
+} from "@/app/(erp)/calls/quick-booking-party-join";
 import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
-import { CUSTOMER_SEARCH_DEBOUNCE_MS, customerScreenHref } from "@/app/(erp)/customers/customer-search";
+import { CALL_PARAM } from "@/lib/ledger-address";
+import { CUSTOMER_SEARCH_DEBOUNCE_MS } from "@/app/(erp)/customers/customer-search";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { Locale } from "@/lib/i18n/config";
 import type { MessageKey } from "@/lib/i18n/types";
-import { QUICK_BOOKING_PARTY_MAX_GUESTS } from "@/modules/calls/service-call-schema";
 import { businessTodayIsoDate } from "@/lib/operating-date";
+import { cn } from "@/lib/utils";
+import { QUICK_BOOKING_PARTY_MAX_GUESTS } from "@/modules/calls/service-call-schema";
 import type {
   CustomerDto,
   CustomerVisitCandidateDto,
   CustomerVisitCountsDto,
   CustomerVisitHistoryRowDto,
   ServiceCallFormOptions,
+  ServiceCallOption,
   TherapistAvailabilityRowDto
 } from "@/modules/calls/service-call-service";
 
@@ -69,22 +73,17 @@ import type {
 const QUICK_BOOKING_SAVE_TIMEOUT_MS = 15_000;
 
 const stepLabelKey: Record<QuickBookingStep, MessageKey> = {
-  customer: "calls.quickBooking.step.customer",
-  schedule: "calls.quickBooking.step.schedule",
-  therapist: "calls.quickBooking.step.therapist",
-  room: "calls.quickBooking.step.room",
-  review: "calls.quickBooking.step.review"
+  conditions: "calls.quickBooking.step.conditions",
+  customer: "calls.quickBooking.step.customer"
 };
 
-function stepIndex(step: QuickBookingStep) {
-  return QUICK_BOOKING_STEPS.indexOf(step);
-}
-
 /**
- * 저장 직후 새 콜 줄을 골라 편집 패널을 연다(티켓 03). 서버 액션 뒤 자동 라우터 새로고침은 비동기라 줄이
- * 원장 목록에 나타날 때까지 짧게 재시도하며 찾는다. 줄의 여는 버튼을 누른 것과 같아 포커스도 그 줄에 남는다.
+ * 저장 직후 새 콜 줄을 골라 편집 패널을 연다(1018 스펙 D19). 원장을 다시 그리는 것은 비동기라 줄이 원장 목록에
+ * 나타날 때까지 재시도하며 찾는다(최대 약 30초). 줄의 여는 버튼을 누른 것과 같아 포커스도 그 줄에 남는다. 그사이
+ * 빠른 예약을 다시 열었으면(stillWanted가 false) 그만둔다. 쓰는 중인 새 예약을 늦게 찾은 줄이 가리지 않게 한다.
  */
-function focusCreatedRow(serviceCallId: string, attemptsLeft = 20) {
+function focusCreatedRow(serviceCallId: string, stillWanted: () => boolean, attemptsLeft = 120) {
+  if (!stillWanted()) return;
   const opener = firstVisible<HTMLElement>(`[data-call-open="${CSS.escape(serviceCallId)}"]`);
   if (opener) {
     opener.scrollIntoView({ block: "center" });
@@ -93,11 +92,33 @@ function focusCreatedRow(serviceCallId: string, attemptsLeft = 20) {
     return;
   }
   if (attemptsLeft <= 0) return;
-  window.setTimeout(() => focusCreatedRow(serviceCallId, attemptsLeft - 1), 150);
+  window.setTimeout(() => focusCreatedRow(serviceCallId, stillWanted, attemptsLeft - 1), 250);
 }
 
-function StepHeading({ children }: { children: ReactNode }) {
-  return <h3 className="text-[0.9375rem] font-semibold text-foreground">{children}</h3>;
+/** 오늘 원장이면 지금 시각 칸, 아니면 첫 시각으로 연다. */
+function defaultStartTime(serviceDate: string, timeSlots: ServiceCallOption[]) {
+  return serviceDate === businessTodayIsoDate() ? selectNowSlot(timeSlots, nowClockString()) : (timeSlots[0]?.value ?? "");
+}
+
+/**
+ * 담은 손님의 글자("12번 C90", Therapist가 없으면 "미지명 C90"). ①의 담은 목록과 ②의 한 줄 요약이 같이 쓴다. Therapist 이름은
+ * 가능 판정 행, 없으면 기준정보 선택지에서 찾고, 코스 글자는 칩과 같다.
+ */
+function guestTextOf(t: ReturnType<typeof useT>, rows: TherapistAvailabilityRowDto[], options: ServiceCallFormOptions) {
+  const columns = quickBookingCourseColumns(rows);
+  const therapist = (therapistId: string | null) =>
+    therapistId
+      ? (rows.find((row) => row.therapistId === therapistId)?.therapistName ??
+        options.therapists.find((option) => option.value === therapistId)?.label ??
+        therapistId)
+      : t("calls.quickBooking.unassigned");
+  const course = (courseId: string) => {
+    const column = columns.find((candidate) => candidate.courseId === courseId);
+    return column
+      ? t("calls.quickBooking.chip", { code: column.code, minutes: column.minutes })
+      : (options.courses.find((option) => option.value === courseId)?.label ?? courseId);
+  };
+  return { therapist, guest: (guest: QuickBookingGuest) => `${therapist(guest.therapist1Id)} ${course(guest.courseId)}` };
 }
 
 function Field({ label, children, error }: { label: string; children: ReactNode; error?: string | null }) {
@@ -114,12 +135,35 @@ function Field({ label, children, error }: { label: string; children: ReactNode;
   );
 }
 
+/**
+ * 원장 탭 머리의 주요 버튼(명세 F08). 패널은 원장 옆에 열린다(1018 스펙 D19). 휴대폰 폭에서는 제공하지 않는다(티켓 20).
+ * 원장 목록의 N 단축키(티켓 03)가 data-quick-booking-trigger로 이 버튼을 찾아 누른다.
+ */
+export function QuickBookingTrigger({ isLocked }: { isLocked: boolean }) {
+  const t = useT();
+  return (
+    <Button
+      aria-controls="quick-booking-panel"
+      className="hidden min-[600px]:inline-flex"
+      data-quick-booking-trigger=""
+      disabled={isLocked}
+      onClick={requestQuickBookingOpen}
+      type="button"
+    >
+      {t("calls.quickBooking.open")}
+    </Button>
+  );
+}
+
 export function StepperNav({
+  customerReady,
   disabled,
   errorSteps,
   onSelect,
   step
 }: {
+  /** 인원만큼 담아야 ② 고객으로 넘어간다. */
+  customerReady: boolean;
   disabled: boolean;
   errorSteps: ReadonlySet<QuickBookingStep>;
   onSelect: (step: QuickBookingStep) => void;
@@ -132,10 +176,10 @@ export function StepperNav({
         <li key={candidate}>
           <button
             aria-current={candidate === step ? "step" : undefined}
-            className={`flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors ${
+            className={`flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors disabled:opacity-50 ${
               candidate === step ? "border-brand bg-brand text-brand-foreground" : "border-border text-muted hover:bg-readonly"
             }`}
-            disabled={disabled}
+            disabled={disabled || (candidate === "customer" && !customerReady)}
             onClick={() => onSelect(candidate)}
             type="button"
           >
@@ -162,367 +206,243 @@ export function ErrorSummary({
 }: {
   fieldErrors: Record<string, string[]>;
   message: string | null;
-  onJump: (step: QuickBookingStep, guestPosition: number | null) => void;
+  onJump: (step: QuickBookingStep) => void;
 }) {
   const t = useT();
   const entries = Object.entries(fieldErrors).filter(([, messages]) => messages.length > 0);
-  // 일행 저장의 손님별 오류(티켓 02)는 손님 번호를 붙여 보이고, 누르면 그 손님으로 간다.
-  const guestOf = quickBookingGuestPosition;
   if (!message && entries.length === 0) return null;
 
   return (
-    <ScreenState className="mb-4" kind="error" label={t("calls.quickBooking.errorSummary.title")} title={message ?? t("calls.quickBooking.errorSummary.title")} action={entries.length > 0 ? (
-        <ul className="grid gap-1">
-          {entries.map(([field, messages]) => (
-            <li key={field}>
-              <button
-                className="text-left text-sm text-danger underline underline-offset-2"
-                onClick={() => onJump(quickBookingStepOfField(field) ?? "review", guestOf(field))}
-                type="button"
-              >
-                {guestOf(field) ? `${t("calls.quickBooking.party.guest", { position: guestOf(field)! })} · ${messages[0]}` : messages[0]}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null} />
+    <ScreenState
+      action={
+        entries.length > 0 ? (
+          <ul className="grid gap-1">
+            {entries.map(([field, messages]) => {
+              // 일행 저장의 손님별 오류(티켓 02)는 손님 번호를 붙여 보인다.
+              const position = quickBookingGuestPosition(field);
+              return (
+                <li key={field}>
+                  <button
+                    className="text-left text-sm text-danger underline underline-offset-2"
+                    onClick={() => onJump(quickBookingStepOfField(field) ?? "customer")}
+                    type="button"
+                  >
+                    {position ? `${t("calls.quickBooking.party.guest", { position })} · ${messages[0]}` : messages[0]}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null
+      }
+      className="mb-4"
+      kind="error"
+      label={t("calls.quickBooking.errorSummary.title")}
+      title={message ?? t("calls.quickBooking.errorSummary.title")}
+    />
   );
 }
 
-type StepProps = {
-  customers: CustomerDto[];
-  disabled: boolean;
-  draft: QuickBookingState["save"]["draft"];
-  fieldErrors: Record<string, string[]>;
-  monthEndDate: string;
-  monthStartDate: string;
-  onEdit: <Key extends keyof QuickBookingState["save"]["draft"]>(key: Key, value: QuickBookingState["save"]["draft"][Key]) => void;
-  options: ServiceCallFormOptions;
-};
+/** 칩 한 칸의 폭. 줄마다 같은 코스가 같은 열에 오도록 모든 칩을 같은 폭으로 둔다(1018 스펙 D20). */
+const chipClassName = "h-11 w-[4.5rem] shrink-0 justify-center gap-0.5 overflow-hidden whitespace-nowrap px-1";
+const nameColumnClassName = "grid w-36 shrink-0 gap-0.5";
 
-/** 빈 새 고객 초안(F01, 티켓 24). 이름만 비어 있고 나머지는 저장 전까지 선택이다. */
-function blankNewCustomer() {
-  return { name: "", phone: null, memo: null, preferenceNote: null };
+/** 칩 하나의 판정. 이 줄에 그 코스가 없으면 null이고 빈 칸으로 둔다. */
+type ChipVerdict = TherapistAvailabilityRowDto["courses"][number]["verdict"] | null;
+
+/** 불가 칩이나 자리가 없는 담기를 경고 확인 후 담기 전에 먼저 보여줄 경고(티켓 21과 같은 확인 창). */
+type PendingPick =
+  | { kind: "first"; courseId: string; therapistId: string; therapistName: string; verdict: "time_short" | "rate_missing" }
+  | { kind: "second"; index: number; therapistId: string; therapistName: string; verdict: "time_short" | "rate_missing" };
+
+function FreeTimeText({ row }: { row: TherapistAvailabilityRowDto }) {
+  const t = useT();
+  const free = quickBookingFreeTime(row);
+  if (!free) return null;
+  const text =
+    free.kind === "until"
+      ? t(free.minutes === null ? "calls.quickBooking.free.untilTime" : "calls.quickBooking.free.until", { time: free.time, minutes: free.minutes ?? 0 })
+      : free.kind === "untilClose"
+        ? t("calls.quickBooking.free.untilClose")
+        : t("calls.quickBooking.free.from", { time: free.time });
+  return <span className="text-xs text-muted">{text}</span>;
 }
-
-type CustomerStepProps = StepProps & {
-  /** 디바운스 검색 결과(22의 비교 정보를 그대로 받는다. kind: "memo" 후보는 이 정정 대상이 아니라 미리 뺀다). */
-  candidates: CustomerVisitCandidateDto[];
-  locale: Locale;
-  onPartySizeChange?: (size: number) => void;
-  onQueryChange: (value: string) => void;
-  onSelectCandidate: (candidate: CustomerVisitCandidateDto) => void;
-  /** 일행 인원 수(스펙 D10, 티켓 02). 1이면 한 명 예약이다. */
-  partySize?: number;
-  /** 이미 있는 일행에 1명을 더하는 중(티켓 04). 고객은 대표 콜에만 잇고(스펙 D12) 인원은 1명이라 둘 다 고르지 않는다. */
-  joiningParty?: boolean;
-  query: string;
-  /**
-   * 고른 고객의 방문완료·노쇼·취소 건수와 가장 최근 방문(B09, 스토리 71-73), 같은 연락처 경고(S5).
-   * 고른 고객이 없으면 null이다.
-   */
-  visitSummary: { counts: CustomerVisitCountsDto; recentVisit: CustomerVisitHistoryRowDto | null; sharedPhone: boolean } | null;
-};
 
 /**
- * 최근 방문에서 코스·Therapist·방문별 요청 중 체크한 것만 가져온다(B09, 스토리 71-73, 티켓 24). 자동
- * 복사는 없다 — 체크 상태는 지금 초안 값이 그 방문의 값과 같은지로만 판단한다. 지금 비활성이거나 유효하지
- * 않은 값(options에 없는 코스·Therapist)은 가져올 수 없음으로 표시하고 체크할 수 없다. 이 화면이 막더라도
- * 실제 저장 거절은 그대로 서비스(assertActiveCourse/assertActiveEmployee)가 한다 — 현재 기준 검사를
- * 우회하지 않는다.
+ * ①의 한 줄: 이름 · 비는 시간 · 코스 칩(1018 스펙 D20). 칩은 열마다 같은 자리에 오고 줄을 바꾸지 않는다. 미지명 줄은
+ * therapistId가 null이다.
  */
-function RecentVisitImport({
+function PickLine({
+  chips,
+  columns,
+  count,
   disabled,
-  draft,
-  onEdit,
-  options,
-  visit
+  name,
+  note,
+  onPick,
+  preset = false,
+  tag,
+  therapistId
 }: {
+  chips: (courseId: string) => ChipVerdict;
+  columns: QuickBookingCourseColumn[];
+  /** 그날 한 것 +예약(Therapist 줄만). */
+  count?: ReactNode;
   disabled: boolean;
-  draft: QuickBookingState["save"]["draft"];
-  onEdit: StepProps["onEdit"];
-  options: ServiceCallFormOptions;
-  visit: CustomerVisitHistoryRowDto;
+  name: string;
+  note?: ReactNode;
+  onPick: (column: QuickBookingCourseColumn, verdict: Exclude<ChipVerdict, null>) => void;
+  preset?: boolean;
+  tag?: string | null;
+  therapistId: string | null;
 }) {
   const t = useT();
-  const courseActive = options.courses.some((course) => course.value === visit.courseId);
-  const courseChecked = draft.courseId === visit.courseId;
-  const hasTherapist = Boolean(visit.therapist1Id || visit.therapist2Id);
-  const therapistActive =
-    (!visit.therapist1Id || options.therapists.some((therapist) => therapist.value === visit.therapist1Id)) &&
-    (!visit.therapist2Id || options.therapists.some((therapist) => therapist.value === visit.therapist2Id));
-  const therapistChecked = hasTherapist && draft.therapist1Id === visit.therapist1Id && (draft.therapist2Id ?? null) === (visit.therapist2Id ?? null);
-  const hasVisitRequest = Boolean(visit.visitRequest && visit.visitRequest.trim() !== "");
-  const visitRequestChecked = hasVisitRequest && draft.visitRequest === visit.visitRequest;
-
   return (
-    <div className="grid gap-2">
-      <p className="text-sm font-semibold text-foreground">
-        {t("calls.quickBooking.customer.recentVisitTitle", { date: `${visit.serviceDate} ${visit.startTime}` })}
-      </p>
-      <label className="flex min-h-11 items-center gap-2">
-        <input
-          checked={courseChecked}
-          className="h-5 w-5 accent-brand"
-          disabled={disabled || !courseActive}
-          onChange={(event) => onEdit("courseId", event.target.checked ? visit.courseId : "")}
-          type="checkbox"
-        />
-        <span className="text-sm text-foreground">{t("calls.quickBooking.customer.importCourse", { value: visit.courseLabel })}</span>
-        {!courseActive ? <span className="text-xs text-muted">{t("calls.quickBooking.customer.cannotImport")}</span> : null}
-      </label>
-      {hasTherapist ? (
-        <label className="flex min-h-11 items-center gap-2">
-          <input
-            checked={therapistChecked}
-            className="h-5 w-5 accent-brand"
-            disabled={disabled || !therapistActive}
-            onChange={(event) => {
-              onEdit("therapist1Id", event.target.checked ? visit.therapist1Id : null);
-              onEdit("therapist2Id", event.target.checked ? visit.therapist2Id : null);
-            }}
-            type="checkbox"
-          />
-          <span className="text-sm text-foreground">{t("calls.quickBooking.customer.importTherapist", { value: visit.therapistLabel })}</span>
-          {!therapistActive ? <span className="text-xs text-muted">{t("calls.quickBooking.customer.cannotImport")}</span> : null}
-        </label>
-      ) : null}
-      {hasVisitRequest ? (
-        <label className="flex min-h-11 items-center gap-2">
-          <input
-            checked={visitRequestChecked}
-            className="h-5 w-5 accent-brand"
-            disabled={disabled}
-            onChange={(event) => onEdit("visitRequest", event.target.checked ? visit.visitRequest : null)}
-            type="checkbox"
-          />
-          <span className="text-sm text-foreground">{t("calls.quickBooking.customer.importVisitRequest", { value: visit.visitRequest ?? "" })}</span>
-        </label>
-      ) : null}
-    </div>
-  );
-}
-
-export function CustomerStep({
-  candidates,
-  customers,
-  disabled,
-  draft,
-  fieldErrors,
-  locale,
-  onEdit,
-  onPartySizeChange,
-  onQueryChange,
-  onSelectCandidate,
-  options,
-  joiningParty = false,
-  partySize = 1,
-  query,
-  visitSummary
-}: CustomerStepProps) {
-  const t = useT();
-  const linked = draft.customerId ? (customers.find((customer) => customer.id === draft.customerId) ?? null) : null;
-  // 패널에서 고객 화면으로 바로 간다(스토리 91). 고른 고객이 있으면 그 고객, 없으면 고객/메모로 연다.
-  const customerScreenTarget = draft.customerId
-    ? customerScreenHref({ customerQuery: "", visitCustomer: draft.customerId })
-    : draft.customerMemo
-      ? customerScreenHref({ customerQuery: "", visitMemo: draft.customerMemo })
-      : customerScreenHref({ customerQuery: "" });
-
-  return (
-    <div className="grid gap-4">
-      <StepHeading>{t("calls.quickBooking.step.customer")}</StepHeading>
-      <a
-        className="justify-self-start text-sm font-semibold text-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary"
-        href={customerScreenTarget}
-      >
-        {t("calls.detail.customerLink.goToCustomerScreen")}
-      </a>
-
-      {joiningParty ? null : draft.customerId ? (
-        <div className="grid gap-3">
-          <Field label={t("calls.quickBooking.customer.searchLabel")}>
-            <div className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2">
-              <span className="text-sm font-semibold text-foreground">
-                {[linked?.name, linked?.phone].filter((part) => part && part.trim() !== "").join(" · ")}
-              </span>
-              <Button disabled={disabled} onClick={() => onEdit("customerId", null)} type="button" variant="secondary">
-                {t("calls.quickBooking.customer.clear")}
-              </Button>
-            </div>
-          </Field>
-          {/* S5: 검색 목록이 아니라 고른 고객 칸에서도 같은 연락처 경고를 보인다(스펙 F01 단계 1). */}
-          {visitSummary?.sharedPhone ? (
-            <ScreenState kind="warning" label={t("customers.duplicatePhone.chip")} title={t("customers.duplicatePhone.title")} />
-          ) : null}
-          {visitSummary ? (
-            <div className="grid gap-3 rounded-md border border-border bg-surface p-3">
-              <CustomerVisitCounts counts={visitSummary.counts} locale={locale} />
-              {visitSummary.recentVisit ? (
-                <RecentVisitImport disabled={disabled} draft={draft} onEdit={onEdit} options={options} visit={visitSummary.recentVisit} />
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      ) : draft.newCustomer ? (
-        <div className="grid gap-3 rounded-md border border-border bg-surface p-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="text-sm font-semibold text-foreground">{t("calls.quickBooking.customer.createNew")}</span>
-            <Button disabled={disabled} onClick={() => onEdit("newCustomer", null)} type="button" variant="secondary">
-              {t("calls.quickBooking.customer.backToSearch")}
-            </Button>
-          </div>
-          <Field error={fieldErrors.newCustomer?.[0] ?? null} label={t("calls.customer.field.name")}>
-            <input
-              className={inputFieldClassName({ className: "w-full", invalid: Boolean(fieldErrors.newCustomer?.[0]) })}
-              disabled={disabled}
-              maxLength={200}
-              onChange={(event) => onEdit("newCustomer", { ...draft.newCustomer!, name: event.target.value })}
-              type="text"
-              value={draft.newCustomer.name}
-            />
-          </Field>
-          <Field label={t("calls.customer.field.phone")}>
-            <input
-              className={inputFieldClassName({ className: "w-full" })}
-              disabled={disabled}
-              maxLength={500}
-              onChange={(event) => onEdit("newCustomer", { ...draft.newCustomer!, phone: event.target.value === "" ? null : event.target.value })}
-              type="text"
-              value={draft.newCustomer.phone ?? ""}
-            />
-          </Field>
-          <Field label={t("calls.customer.field.preferenceNote")}>
-            <textarea
-              className={inputFieldClassName({ className: "h-20 w-full py-2" })}
-              disabled={disabled}
-              maxLength={500}
-              onChange={(event) =>
-                onEdit("newCustomer", { ...draft.newCustomer!, preferenceNote: event.target.value === "" ? null : event.target.value })
-              }
-              value={draft.newCustomer.preferenceNote ?? ""}
-            />
-          </Field>
-        </div>
-      ) : (
-        <Field label={t("calls.quickBooking.customer.searchLabel")}>
-          <input
-            aria-controls={candidates.length > 0 ? "quick-booking-customer-matches" : undefined}
-            aria-expanded={candidates.length > 0}
-            autoComplete="off"
-            className={inputFieldClassName({ className: "w-full" })}
-            disabled={disabled}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder={t("calls.search.label")}
-            role="combobox"
-            type="text"
-            value={query}
-          />
-          {candidates.length > 0 ? (
-            candidates.some((candidate) => candidate.sharedPhone) ? (
-              <CustomerCandidateCompare
-                activeIndex={-1}
-                candidates={candidates}
-                label={t("calls.quickBooking.customer.searchLabel")}
-                listboxId="quick-booking-customer-matches"
-                locale={locale}
-                onSelect={onSelectCandidate}
-                selectedCustomerId={draft.customerId ?? null}
-                selectedMemo={null}
-              />
-            ) : (
-              <ul aria-label={t("calls.quickBooking.customer.searchLabel")} className="grid gap-1.5" id="quick-booking-customer-matches" role="listbox">
-                {candidates.map((candidate) => (
-                  <li key={`${candidate.kind}:${candidate.customerId ?? ""}:${candidate.label}`} role="presentation">
-                    <button
-                      className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-left text-sm hover:bg-readonly"
-                      disabled={disabled}
-                      onClick={() => onSelectCandidate(candidate)}
-                      role="option"
-                      type="button"
-                    >
-                      <span className="font-semibold text-foreground">{candidate.label}</span>
-                      <span className="text-xs text-muted">{candidate.phone ?? ""}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )
-          ) : null}
+    <li
+      aria-current={preset ? "true" : undefined}
+      className={cn("flex min-w-max items-center gap-1.5 border-b border-border py-1.5 last:border-b-0", preset && "rounded-md bg-readonly px-1")}
+      data-quick-booking-line={therapistId ?? "unassigned"}
+    >
+      <span className={nameColumnClassName}>
+        <span className="flex items-baseline gap-1.5 text-sm">
+          <span className="font-semibold text-foreground [overflow-wrap:anywhere]">{name}</span>
+          {tag ? <span className="shrink-0 text-xs text-muted">{tag}</span> : null}
+          {count}
+        </span>
+        {note}
+      </span>
+      {columns.map((column) => {
+        const verdict = chips(column.courseId);
+        if (!verdict) return <span aria-hidden="true" className="w-[4.5rem] shrink-0" key={column.courseId} />;
+        const text = t("calls.quickBooking.chip", { code: column.code, minutes: column.minutes });
+        const possible = verdict === "possible";
+        return (
           <Button
-            className="justify-self-start"
+            aria-label={t(possible ? "calls.quickBooking.pickPossible" : "calls.quickBooking.pickImpossible", { name, course: text })}
+            className={cn(chipClassName, possible ? "border-border-strong" : "border-dashed text-muted")}
+            data-course-id={column.courseId}
+            data-therapist-id={therapistId ?? ""}
             disabled={disabled}
-            onClick={() => onEdit("newCustomer", blankNewCustomer())}
-            type="button"
+            key={column.courseId}
+            onClick={() => onPick(column, verdict)}
             variant="secondary"
           >
-            {t("calls.quickBooking.customer.createNew")}
+            {possible ? null : <span aria-hidden="true">{"○︎"}</span>}
+            <span className="truncate text-sm font-semibold">{text}</span>
           </Button>
-        </Field>
-      )}
-
-      <Field error={fieldErrors.customerMemo?.[0] ?? null} label={t("calls.column.customerMemo")}>
-        <input
-          className={inputFieldClassName({ className: "w-full", invalid: Boolean(fieldErrors.customerMemo?.[0]) })}
-          disabled={disabled}
-          maxLength={500}
-          onChange={(event) => onEdit("customerMemo", event.target.value === "" ? null : event.target.value)}
-          placeholder={t("calls.quickBooking.customer.memoPlaceholder")}
-          type="text"
-          value={draft.customerMemo ?? ""}
-        />
-      </Field>
-
-      {/* 일행 인원(스펙 D10, 티켓 02). 고객은 대표 한 명이고, 2명 이상이면 다음 단계에서 손님마다 고른다. */}
-      {joiningParty ? null : (
-        <Field label={t("calls.quickBooking.customer.partySize")}>
-          <select
-            className={inputFieldClassName({ className: "w-28" })}
-            disabled={disabled}
-            onChange={(event) => onPartySizeChange?.(Number(event.target.value))}
-            value={partySize}
-          >
-            {Array.from({ length: QUICK_BOOKING_PARTY_MAX_GUESTS }, (_, index) => index + 1).map((count) => (
-              <option key={count} value={count}>
-                {t("calls.quickBooking.customer.partySizeOption", { count })}
-              </option>
-            ))}
-          </select>
-        </Field>
-      )}
-    </div>
+        );
+      })}
+    </li>
   );
 }
 
-export function ScheduleStep({
+export type QuickBookingAvailability = { rows: TherapistAvailabilityRowDto[]; pending: boolean; failed: boolean };
+
+/**
+ * ① 조건(1018 스펙 D20·D23): 날짜·시각·인원, 맨 위 "미지명" 줄과 Therapist 줄의 코스 칩, 그 시각에 안 되는 사람을 접어 둔 "N명",
+ * 담은 손님 목록. 칩을 누르면 손님이 담긴다. 불가 칩은 경고를 확인한 뒤 담긴다. D코스는 두 번째 Therapist를 고른다.
+ */
+export function ConditionsStep({
+  availability,
   disabled,
   draft,
   fieldErrors,
+  guests,
+  joining,
   monthEndDate,
   monthStartDate,
+  onAddGuest,
   onNow,
+  onNext,
+  onPartySizeChange,
+  onRemoveGuest,
   onScheduleChange,
-  options
+  onSecondTherapist,
+  options,
+  partySize,
+  presetTherapistId,
+  showBeforeCheckIn,
+  onShowBeforeCheckInChange
 }: {
+  availability: QuickBookingAvailability;
   disabled: boolean;
   draft: QuickBookingState["save"]["draft"];
   fieldErrors: Record<string, string[]>;
+  guests: QuickBookingGuest[];
+  /** 이미 있는 일행에 1명을 더하는 중(티켓 04). 인원은 1명이다. */
+  joining: boolean;
   monthEndDate: string;
   monthStartDate: string;
-  /** 날짜·시각은 바뀔 때마다 그 조합으로 가능 코스 목록을 다시 불러와야 해 일반 onEdit 대신 전용 콜백을 쓴다. */
+  onAddGuest: (guest: { courseId: string; therapist1Id: string | null }) => void;
   onNow: () => void;
+  onNext: () => void;
+  onPartySizeChange: (size: number) => void;
+  onRemoveGuest: (index: number) => void;
+  /** 날짜·시각은 바뀔 때마다 그 조합으로 가능 판정을 다시 불러와야 해 일반 편집 대신 전용 콜백을 쓴다. */
   onScheduleChange: (serviceDate: string, startTime: string) => void;
+  onSecondTherapist: (index: number, therapistId: string | null) => void;
   options: ServiceCallFormOptions;
+  partySize: number;
+  presetTherapistId: string | null;
+  /** "출근 전 보기". ②에 갔다 와도 남도록 패널이 든다. */
+  showBeforeCheckIn: boolean;
+  onShowBeforeCheckInChange: (show: boolean) => void;
 }) {
   const t = useT();
+  const locale = useLocale();
+  const [pendingPick, setPendingPick] = useState<PendingPick | null>(null);
+  const { rows, pending, failed } = availability;
+  const columns = quickBookingCourseColumns(rows);
+  const groups = quickBookingTherapistGroups(rows, { presetTherapistId, showBeforeCheckIn });
+  const taken = takenTherapistIds(guests);
+  const full = guests.length >= partySize;
+  const text = guestTextOf(t, rows, options);
+  const verdictOf = (row: TherapistAvailabilityRowDto) => (courseId: string) =>
+    row.courses.find((course) => course.courseId === courseId)?.verdict ?? null;
+
+  function pickFor(row: TherapistAvailabilityRowDto) {
+    return (column: QuickBookingCourseColumn, verdict: Exclude<ChipVerdict, null>) => {
+      if (verdict === "possible") {
+        onAddGuest({ courseId: column.courseId, therapist1Id: row.therapistId });
+        return;
+      }
+      setPendingPick({ kind: "first", courseId: column.courseId, therapistId: row.therapistId, therapistName: row.therapistName, verdict });
+    };
+  }
+
+  const therapistLine = (row: TherapistAvailabilityRowDto) => (
+    <PickLine
+      chips={verdictOf(row)}
+      columns={columns}
+      count={<TherapistCallCount locale={locale} row={row} />}
+      disabled={disabled || full || taken.has(row.therapistId)}
+      key={row.therapistId}
+      name={row.therapistName}
+      note={<FreeTimeText row={row} />}
+      onPick={pickFor(row)}
+      preset={row.therapistId === presetTherapistId}
+      tag={
+        taken.has(row.therapistId)
+          ? t("calls.quickBooking.takenTag")
+          : row.attendance === "checked_out"
+            ? t("calls.availability.checkedOutTag")
+            : row.attendance === "before_check_in"
+              ? t("calls.quickBooking.beforeCheckInTag")
+              : null
+      }
+      therapistId={row.therapistId}
+    />
+  );
+
+  const pendingVerdict = pendingPick?.verdict ?? null;
+
   return (
     <div className="grid gap-4">
-      <StepHeading>{t("calls.quickBooking.step.schedule")}</StepHeading>
       <div className="flex flex-wrap items-end gap-3">
         <Field error={fieldErrors.serviceDate?.[0] ?? null} label={t("common.queryDate")}>
           <input
             className={inputFieldClassName({ invalid: Boolean(fieldErrors.serviceDate?.[0]) })}
-            disabled={disabled}
+            disabled={disabled || joining}
             max={monthEndDate}
             min={monthStartDate}
             onChange={(event) => onScheduleChange(event.target.value, draft.startTime)}
@@ -534,6 +454,7 @@ export function ScheduleStep({
           <select
             className={inputFieldClassName({ invalid: Boolean(fieldErrors.startTime?.[0]) })}
             disabled={disabled}
+            id="quick-booking-time"
             onChange={(event) => onScheduleChange(draft.serviceDate, event.target.value)}
             value={draft.startTime}
           >
@@ -548,495 +469,450 @@ export function ScheduleStep({
         <Button disabled={disabled} onClick={onNow} type="button" variant="secondary">
           {t("calls.quickBooking.schedule.now")}
         </Button>
+        {joining ? null : (
+          <Field label={t("calls.quickBooking.customer.partySize")}>
+            <select
+              className={inputFieldClassName({ className: "w-24" })}
+              disabled={disabled}
+              onChange={(event) => onPartySizeChange(Number(event.target.value))}
+              value={partySize}
+            >
+              {Array.from({ length: QUICK_BOOKING_PARTY_MAX_GUESTS }, (_, index) => index + 1).map((count) => (
+                <option key={count} value={count}>
+                  {t("calls.quickBooking.customer.partySizeOption", { count })}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
       </div>
-    </div>
-  );
-}
 
-/**
- * 일행 손님을 차례로 고르는 줄(스펙 D10, 티켓 02). 손님마다 고른 코스·Therapist 요약이 붙고, 저장 오류가 난
- * 손님에는 "!"가 붙는다(색만으로 알리지 않는다).
- */
-export function PartyGuestNav({
-  active,
-  disabled,
-  errorPositions,
-  guests,
-  onSelect
-}: {
-  active: number;
-  disabled: boolean;
-  errorPositions: ReadonlySet<number>;
-  guests: Array<{ position: number; summary: string | null }>;
-  onSelect: (position: number) => void;
-}) {
-  const t = useT();
-  return (
-    <div aria-label={t("calls.quickBooking.party.guestsAria")} className="flex flex-wrap gap-2" role="group">
-      {guests.map((guest) => (
-        <button
-          aria-pressed={guest.position === active}
-          className={`flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-left text-xs font-semibold transition-colors ${
-            guest.position === active ? "border-brand bg-brand text-brand-foreground" : "border-border text-foreground hover:bg-readonly"
-          }`}
-          disabled={disabled}
-          key={guest.position}
-          onClick={() => onSelect(guest.position)}
-          type="button"
-        >
-          {`${t("calls.quickBooking.party.guest", { position: guest.position })} · ${guest.summary ?? t("calls.quickBooking.review.unset")}`}
-          {errorPositions.has(guest.position) ? (
-            <span aria-hidden="true" className="font-bold text-danger">
-              !
-            </span>
-          ) : null}
-        </button>
-      ))}
-    </div>
-  );
-}
+      <section aria-label={t("calls.quickBooking.pickList")} className="grid gap-2">
+        {groups.beforeCheckInCount > 0 ? (
+          <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
+            <input
+              checked={showBeforeCheckIn}
+              className="h-5 w-5 accent-brand"
+              onChange={(event) => onShowBeforeCheckInChange(event.target.checked)}
+              type="checkbox"
+            />
+            {t("calls.quickBooking.showBeforeCheckIn", { count: groups.beforeCheckInCount })}
+          </label>
+        ) : null}
+        {pending ? <p className="text-sm text-muted">{t("calls.availability.loading")}</p> : null}
+        {failed ? <p className="text-sm text-danger">{t("calls.availability.loadError")}</p> : null}
+        {!pending && !failed ? (
+          // 칩 열이 패널 폭보다 넓으면 이 목록만 옆으로 밀린다. 화면 전체는 가로로 넘치지 않는다(1018 스펙 D7).
+          <div className="overflow-x-auto">
+            <ul className="grid min-w-max">
+              <PickLine
+                chips={() => "possible"}
+                columns={columns}
+                disabled={disabled || full}
+                name={t("calls.quickBooking.unassigned")}
+                note={<span className="text-xs text-muted">{t("calls.quickBooking.unassignedNote")}</span>}
+                onPick={(column) => onAddGuest({ courseId: column.courseId, therapist1Id: null })}
+                therapistId={null}
+              />
+              {groups.listed.map(therapistLine)}
+            </ul>
+            {groups.listed.length === 0 ? <p className="py-2 text-sm text-muted">{t("calls.quickBooking.nobodyListed")}</p> : null}
+            {groups.unavailable.length > 0 ? (
+              <details className="mt-1" data-quick-booking-unavailable="">
+                <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold text-muted">
+                  {t("calls.quickBooking.unavailableCount", { count: groups.unavailable.length })}
+                </summary>
+                <ul className="grid min-w-max">{groups.unavailable.map(therapistLine)}</ul>
+              </details>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
 
-/** 시간 부족·수당 없음 코스를 "경고 확인 후 배정"으로 받기 전에 먼저 보여줄 경고(스펙 F01, 티켓 21). */
-type PendingTherapistOverride =
-  | { kind: "first"; choice: AvailabilityCourseOverrideChoice; therapistName: string }
-  | { kind: "second"; therapistId: string; therapistName: string; verdict: "time_short" | "rate_missing" };
-
-export function TherapistStep({
-  availabilityFailed,
-  availabilityPending,
-  availabilityRows,
-  availabilityTime,
-  courseId,
-  courseLabel,
-  disabled,
-  excludedTherapistIds,
-  fieldErrors,
-  guestNav,
-  locale,
-  onChoose,
-  onChooseSecond,
-  onClear,
-  onClearSecond,
-  onTimeChange,
-  options,
-  therapist1Id,
-  therapist2Label,
-  therapistLabel
-}: {
-  availabilityFailed: boolean;
-  availabilityPending: boolean;
-  availabilityRows: TherapistAvailabilityRowDto[];
-  availabilityTime: string;
-  courseId: string;
-  courseLabel: string | null;
-  disabled: boolean;
-  /** 일행의 다른 손님이 이미 고른 Therapist(티켓 02). 한 사람을 두 손님에게 고르지 못하게 목록에서 뺀다. */
-  excludedTherapistIds?: ReadonlySet<string>;
-  fieldErrors: Record<string, string[]>;
-  /** 일행이면 손님을 차례로 고르는 줄(PartyGuestNav). 한 명 예약이면 없다. */
-  guestNav?: ReactNode;
-  locale: Locale;
-  onChoose: (choice: AvailabilityCourseChoice) => void;
-  /** 두 번째 Therapist를 고른다(티켓 21). 코스·시각은 첫 번째 선택으로 이미 고정돼 있어 id만 받는다. */
-  onChooseSecond: (therapistId: string) => void;
-  onClear: () => void;
-  onClearSecond: () => void;
-  onTimeChange: (time: string) => void;
-  options: ServiceCallFormOptions;
-  therapist1Id: string | null | undefined;
-  therapist2Label: string | null;
-  therapistLabel: string | null;
-}) {
-  const t = useT();
-  // 경고 확인 후 배정은 버튼을 누른 즉시 적용하지 않고, 경고 문장을 먼저 보여준 뒤 확인을 받는다(스펙 F01).
-  const [pendingOverride, setPendingOverride] = useState<PendingTherapistOverride | null>(null);
-  // 기본은 출근 시각이 입력된 Therapist만 보인다. 출근 전 Therapist는 체크하면 함께 보인다.
-  const [showBeforeCheckIn, setShowBeforeCheckIn] = useState(false);
-  // 두 번째 후보 목록에서 펼친 줄(불가 칩의 이유, 경고 문구). 첫 목록과 따로 둔다.
-  const [secondExpanded, setSecondExpanded] = useState<{ therapistId: string; expansion: AvailabilityRowExpansion } | null>(null);
-  const choosableRows = excludedTherapistIds
-    ? availabilityRows.filter((row) => !excludedTherapistIds.has(row.therapistId))
-    : availabilityRows;
-  const attendance = filterByAttendance(choosableRows, showBeforeCheckIn);
-
-  // 코스 정책상 두 번째 Therapist가 필요한지는 가능 코스 행이 코스마다 함께 알려준다(티켓 11). 같은 코스는
-  // 어느 행에서 찾아도 같은 값이다.
-  const requiresSecondTherapist = Boolean(
-    courseId &&
-      availabilityRows
-        .flatMap((row) => row.courses)
-        .find((course) => course.courseId === courseId)?.requiresSecondTherapist
-  );
-  // 같은 사람을 Therapist 1·2로 고르는 것은 저장 오류라, 후보 목록에서 이미 고른 첫 번째 Therapist는 뺀다.
-  // 첫 번째 목록과 같은 출근 기준으로 거른다.
-  const secondCandidates = attendance.rows.filter((row) => row.therapistId !== therapist1Id);
-  const secondReserveWarningSlot = secondCandidates.some((candidate) => availabilityRowWarnings(locale, candidate).length > 0);
-
-  const overrideVerdict = pendingOverride ? (pendingOverride.kind === "first" ? pendingOverride.choice.verdict : pendingOverride.verdict) : null;
-  const overrideTherapistName = pendingOverride?.therapistName ?? "";
-
-  return (
-    <div className="grid gap-4">
-      <StepHeading>{t("calls.quickBooking.step.therapist")}</StepHeading>
-      {guestNav}
-      {courseLabel || therapistLabel ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2">
-          <span className="text-sm font-semibold text-foreground">
-            {t("calls.quickBooking.therapist.chosen", { course: courseLabel ?? "—", therapist: therapistLabel ?? "—" })}
-          </span>
-          <Button disabled={disabled} onClick={onClear} type="button" variant="secondary">
-            {t("calls.quickBooking.customer.clear")}
-          </Button>
-        </div>
-      ) : (
-        <p className="text-sm text-muted">{t("calls.quickBooking.therapist.unset")}</p>
-      )}
-      {fieldErrors.courseId?.[0] ? (
-        <span className="text-xs text-danger" role="alert">
-          {fieldErrors.courseId[0]}
-        </span>
-      ) : null}
-      {fieldErrors.therapist1Id?.[0] ? (
-        <span className="text-xs text-danger" role="alert">
-          {fieldErrors.therapist1Id[0]}
-        </span>
-      ) : null}
-      {/*
-        가능 코스 화면(TherapistAvailabilityView, 티켓 10–12)을 그대로 재사용한다. 원장 위에 늘 펼쳐 두던
-        자리(티켓 20 이전)와 달리 이 단계에서는 늘 펼친 채로 두고(open 고정, onToggle은 no-op), 시각은
-        "날짜·예약시각" 단계와 같은 값을 공유한다. 가능 버튼은 Therapist와 코스만 채운다(스펙 F01).
-        시간 부족·수당 없음 코스는 onOverride로 "경고 확인 후 배정" 경로를 더한다(티켓 21).
-      */}
-      <TherapistAvailabilityView
-        attendanceFilter={{
-          hiddenCount: attendance.hiddenCount,
-          nobodyAttended: attendance.nobodyAttended,
-          onShowAllChange: setShowBeforeCheckIn,
-          showAll: showBeforeCheckIn
-        }}
-        failed={availabilityFailed}
-        locale={locale}
-        onChoose={onChoose}
-        onOverride={(choice) => {
-          const therapistName = availabilityRows.find((row) => row.therapistId === choice.therapistId)?.therapistName ?? choice.therapistId;
-          setPendingOverride({ kind: "first", choice, therapistName });
-        }}
-        onTimeChange={onTimeChange}
-        onToggle={() => {}}
-        open
-        pending={availabilityPending}
-        rows={attendance.rows}
-        time={availabilityTime}
-        timeSlots={options.timeSlots}
-      />
-
-      {/* 두 명 코스는 두 번째 Therapist를 따로 고른다(스펙 F01, 티켓 21). 코스가 그 정책일 때만 보인다. */}
-      {requiresSecondTherapist ? (
-        <div className="grid gap-3 rounded-lg border border-border bg-surface p-4">
-          <h3 className="text-[0.9375rem] font-semibold text-foreground">{t("calls.quickBooking.therapist.secondTitle")}</h3>
-          {therapist2Label ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
-              <span className="text-sm font-semibold text-foreground">{therapist2Label}</span>
-              <Button disabled={disabled} onClick={onClearSecond} type="button" variant="secondary">
-                {t("calls.quickBooking.customer.clear")}
-              </Button>
-            </div>
-          ) : secondCandidates.length === 0 ? (
-            <p className="text-sm text-muted">{t("calls.quickBooking.therapist.secondEmpty")}</p>
-          ) : (
-            <>
-              <p className="text-sm text-muted">{t("calls.quickBooking.therapist.secondUnset")}</p>
-              <ul className="grid">
-                {sortAvailabilityRows(secondCandidates, availabilityTime).map((row) => {
-                  const course = row.courses.find((candidate) => candidate.courseId === courseId);
-                  if (!course) return null;
-                  return (
-                    <AvailabilityRow
-                      courses={[course]}
+      <section aria-label={t("calls.quickBooking.guests.aria")} className="grid gap-2 rounded-md border border-border bg-surface p-3">
+        <p className="text-sm font-semibold text-foreground" data-quick-booking-picked={`${guests.length}/${partySize}`}>
+          {t("calls.quickBooking.guests.count", { count: guests.length, size: partySize })}
+        </p>
+        {guests.length === 0 ? <p className="text-sm text-muted">{t("calls.quickBooking.guests.empty")}</p> : null}
+        <ol className="grid gap-1.5">
+          {guests.map((guest, index) => {
+            const needsSecond = Boolean(guest.therapist1Id) && columns.some((column) => column.courseId === guest.courseId && column.requiresSecondTherapist);
+            const errors = guestFieldErrors(fieldErrors, index + 1);
+            const secondCandidates = [...groups.listed, ...groups.unavailable].filter(
+              (row) => row.therapistId !== guest.therapist1Id && !takenTherapistIds(guests, index).has(row.therapistId)
+            );
+            const error = errors.therapist2Id?.[0] ?? errors.therapist1Id?.[0] ?? errors.courseId?.[0] ?? null;
+            return (
+              <li className="grid gap-1.5" data-quick-booking-guest={index + 1} key={index}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm text-foreground">
+                    {`${t("calls.quickBooking.party.guest", { position: index + 1 })} · ${text.guest(guest)}`}
+                    {guest.therapist2Id ? ` + ${text.therapist(guest.therapist2Id)}` : ""}
+                  </span>
+                  <Button disabled={disabled} onClick={() => onRemoveGuest(index)} type="button" variant="ghost">
+                    {t("calls.quickBooking.guests.remove")}
+                  </Button>
+                </div>
+                {needsSecond ? (
+                  <label className="flex flex-wrap items-center gap-2 text-sm text-foreground">
+                    {t("calls.quickBooking.therapist.secondTitle")}
+                    <select
+                      className={inputFieldClassName({ className: "min-w-40", invalid: !guest.therapist2Id })}
                       disabled={disabled}
-                      expansion={secondExpanded?.therapistId === row.therapistId ? secondExpanded.expansion : null}
-                      key={row.therapistId}
-                      locale={locale}
-                      onChoose={(choice) => onChooseSecond(choice.therapistId)}
-                      onExpansionChange={(expansion) => setSecondExpanded(expansion ? { therapistId: row.therapistId, expansion } : null)}
-                      onOverride={(choice) =>
-                        setPendingOverride({ kind: "second", therapistId: row.therapistId, therapistName: row.therapistName, verdict: choice.verdict })
-                      }
-                      reserveWarningSlot={secondReserveWarningSlot}
-                      row={row}
-                      second
-                      time={availabilityTime}
-                    />
-                  );
-                })}
-              </ul>
-            </>
-          )}
-          {fieldErrors.therapist2Id?.[0] ? (
-            <span className="text-xs text-danger" role="alert">
-              {fieldErrors.therapist2Id[0]}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
+                      onChange={(event) => {
+                        const therapistId = event.target.value || null;
+                        const candidate = secondCandidates.find((row) => row.therapistId === therapistId);
+                        const verdict = candidate?.courses.find((course) => course.courseId === guest.courseId)?.verdict ?? "possible";
+                        if (!candidate || verdict === "possible") {
+                          onSecondTherapist(index, therapistId);
+                          return;
+                        }
+                        setPendingPick({ kind: "second", index, therapistId: candidate.therapistId, therapistName: candidate.therapistName, verdict });
+                      }}
+                      value={guest.therapist2Id ?? ""}
+                    >
+                      <option value="">{t("calls.quickBooking.therapist.secondUnset")}</option>
+                      {secondCandidates.map((row) => {
+                        const verdict = row.courses.find((course) => course.courseId === guest.courseId)?.verdict ?? "possible";
+                        return (
+                          <option key={row.therapistId} value={row.therapistId}>
+                            {verdict === "possible" ? row.therapistName : `${row.therapistName} · ${t("calls.quickBooking.secondImpossible")}`}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </label>
+                ) : null}
+                {error ? (
+                  <span className="text-xs text-danger" role="alert">
+                    {error}
+                  </span>
+                ) : null}
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+
+      <div className="flex items-center justify-end gap-3 border-t border-border pt-4">
+        <Button disabled={disabled || guests.length !== partySize} onClick={onNext} type="button">
+          {t("calls.quickBooking.next")}
+        </Button>
+      </div>
 
       <ConfirmDialog
         cancelLabel={t("common.confirm.cancel")}
         confirmLabel={t("calls.quickBooking.therapist.overrideAssign")}
         description={
-          overrideVerdict
-            ? t(
-                overrideVerdict === "rate_missing" ? "calls.quickBooking.therapist.overrideRateMissing" : "calls.quickBooking.therapist.overrideTimeShort",
-                { therapist: overrideTherapistName }
-              )
+          pendingVerdict
+            ? t(pendingVerdict === "rate_missing" ? "calls.quickBooking.therapist.overrideRateMissing" : "calls.quickBooking.therapist.overrideTimeShort", {
+                therapist: pendingPick?.therapistName ?? ""
+              })
             : undefined
         }
         onConfirm={() => {
-          if (!pendingOverride) return;
-          if (pendingOverride.kind === "first") {
-            onChoose(pendingOverride.choice);
-          } else {
-            onChooseSecond(pendingOverride.therapistId);
-          }
-          setPendingOverride(null);
+          if (!pendingPick) return;
+          if (pendingPick.kind === "first") onAddGuest({ courseId: pendingPick.courseId, therapist1Id: pendingPick.therapistId });
+          else onSecondTherapist(pendingPick.index, pendingPick.therapistId);
+          setPendingPick(null);
         }}
         onOpenChange={(open) => {
-          if (!open) setPendingOverride(null);
+          if (!open) setPendingPick(null);
         }}
-        open={pendingOverride !== null}
+        open={pendingPick !== null}
         title={t("calls.quickBooking.therapist.overrideTitle")}
       />
     </div>
   );
 }
 
-function RoomSelect({
-  disabled,
-  error,
-  label,
-  onChange,
-  options,
-  value
-}: {
-  disabled: boolean;
-  error: string | null;
-  label: string;
-  onChange: (roomId: string | null) => void;
-  options: ServiceCallFormOptions;
-  value: string | null;
-}) {
-  const t = useT();
-  return (
-    <Field error={error} label={label}>
-      <select
-        className={inputFieldClassName({ invalid: Boolean(error) })}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value === "" ? null : event.target.value)}
-        value={value ?? ""}
-      >
-        <option value="">{t("calls.placeholder.roomUnassigned")}</option>
-        {options.rooms.map((room) => (
-          <option key={room.value} value={room.value}>
-            {room.label}
-          </option>
-        ))}
-      </select>
-    </Field>
-  );
-}
+type VisitSummary = { counts: CustomerVisitCountsDto; recentVisit: CustomerVisitHistoryRowDto | null; sharedPhone: boolean };
 
-export function RoomStep({
+/**
+ * ② 고객(1018 스펙 D21–D22): 예약 경로 버튼, 예약자명(같은 이름 고객 후보), 기존 고객 검색, 메모, 한 줄 요약, 저장.
+ * 고객을 고르지 않았고 예약자명이 있으면 저장할 때 새 고객이 생긴다. 일행에 더하는 손님은 고객을 잇지 않는다(스펙 D12).
+ */
+export function CustomerStep({
+  bookerCandidates,
+  customers,
   disabled,
   draft,
   fieldErrors,
-  guests,
+  joining,
+  locale,
+  message,
+  notice,
+  onClearCustomer,
   onEdit,
-  onGuestRoomChange,
-  options
-}: StepProps & {
-  /** 일행이면 손님 1…N(티켓 02). 손님마다 객실을 고르거나 비운다. 같은 객실은 원장의 객실 겹침 경고로 남는다. */
-  guests?: QuickBookingGuest[];
-  onGuestRoomChange?: (position: number, roomId: string | null) => void;
+  onPrevious,
+  onQueryChange,
+  onRetry,
+  onSave,
+  onSelectCustomer,
+  options,
+  query,
+  searchCandidates,
+  status,
+  summary,
+  visitSummary
+}: {
+  /** 예약자명과 같은 이름의 고객(최근 방문 날짜와 함께). */
+  bookerCandidates: CustomerVisitCandidateDto[];
+  customers: CustomerDto[];
+  disabled: boolean;
+  draft: QuickBookingState["save"]["draft"];
+  fieldErrors: Record<string, string[]>;
+  joining: boolean;
+  locale: Locale;
+  message: string | null;
+  notice: string | null;
+  onClearCustomer: () => void;
+  onEdit: <Key extends keyof QuickBookingState["save"]["draft"]>(key: Key, value: QuickBookingState["save"]["draft"][Key]) => void;
+  onPrevious: () => void;
+  onQueryChange: (value: string) => void;
+  onRetry: () => void;
+  onSave: () => void;
+  onSelectCustomer: (candidate: CustomerVisitCandidateDto) => void;
+  options: ServiceCallFormOptions;
+  query: string;
+  /** 기존 고객 검색 결과(22의 비교 정보를 그대로 받는다. kind: "memo" 후보는 미리 뺀다). */
+  searchCandidates: CustomerVisitCandidateDto[];
+  status: NewRowSaveStatus;
+  summary: string;
+  /** 고른 고객의 방문완료·노쇼·취소 건수(B09)와 같은 연락처 경고(S5). 고른 고객이 없으면 null이다. */
+  visitSummary: VisitSummary | null;
 }) {
   const t = useT();
+  const linked = draft.customerId ? (customers.find((customer) => customer.id === draft.customerId) ?? null) : null;
+
   return (
     <div className="grid gap-4">
-      <StepHeading>{t("calls.quickBooking.step.room")}</StepHeading>
-      {guests && guests.length > 1 ? (
-        <div className="flex flex-wrap gap-3">
-          {guests.map((guest, index) => (
-            <RoomSelect
-              disabled={disabled}
-              error={guestFieldErrors(fieldErrors, index + 1).roomId?.[0] ?? null}
-              key={index}
-              label={t("calls.quickBooking.party.guestRoom", { position: index + 1 })}
-              onChange={(roomId) => onGuestRoomChange?.(index + 1, roomId)}
-              options={options}
-              value={guest.roomId}
-            />
-          ))}
+      <div aria-label={t("calls.quickBooking.channel")} className="grid gap-1.5" role="group">
+        <span className="text-sm font-semibold text-foreground">{t("calls.quickBooking.channel")}</span>
+        <div className="flex flex-wrap gap-1.5">
+          {options.bookingChannels.map((channel) => {
+            const pressed = draft.bookingChannelCode === channel.value;
+            return (
+              <button
+                aria-pressed={pressed}
+                className={cn(
+                  "min-h-11 rounded-full border px-3 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary",
+                  pressed ? "border-brand bg-brand text-brand-foreground" : "border-border text-foreground hover:bg-readonly"
+                )}
+                data-booking-channel={channel.value}
+                disabled={disabled}
+                key={channel.value}
+                onClick={() => onEdit("bookingChannelCode", pressed ? null : channel.value)}
+                type="button"
+              >
+                {channel.label}
+              </button>
+            );
+          })}
         </div>
-      ) : (
-        <RoomSelect
+        {fieldErrors.bookingChannelCode?.[0] ? (
+          <span className="text-xs text-danger" role="alert">
+            {fieldErrors.bookingChannelCode[0]}
+          </span>
+        ) : null}
+      </div>
+
+      <Field error={fieldErrors.bookerName?.[0] ?? fieldErrors.newCustomer?.[0] ?? null} label={t("calls.quickBooking.bookerName")}>
+        <input
+          autoComplete="off"
+          className={inputFieldClassName({ className: "w-full", invalid: Boolean(fieldErrors.bookerName?.[0] ?? fieldErrors.newCustomer?.[0]) })}
           disabled={disabled}
-          error={fieldErrors.roomId?.[0] ?? null}
-          label={t("calls.column.room")}
-          onChange={(roomId) => onEdit("roomId", roomId)}
-          options={options}
-          value={draft.roomId ?? null}
-        />
-      )}
-      <Field error={fieldErrors.note?.[0] ?? null} label={t("calls.column.note")}>
-        <textarea
-          className={inputFieldClassName({ className: "h-24 py-2", invalid: Boolean(fieldErrors.note?.[0]) })}
-          disabled={disabled}
-          maxLength={500}
-          onChange={(event) => onEdit("note", event.target.value === "" ? null : event.target.value)}
-          value={draft.note ?? ""}
+          maxLength={200}
+          onChange={(event) => onEdit("bookerName", event.target.value === "" ? null : event.target.value)}
+          placeholder={t("calls.quickBooking.bookerNamePlaceholder")}
+          type="text"
+          value={draft.bookerName ?? ""}
         />
       </Field>
-      {/* 방문별 요청(F06, 티켓 23). 비고(note)와는 다른 칸이라 나란히 두되 하나로 합치지 않는다. */}
-      <Field error={fieldErrors.visitRequest?.[0] ?? null} label={t("calls.column.visitRequest")}>
+      {!joining && !linked && bookerCandidates.length > 0 ? (
+        <ul aria-label={t("calls.quickBooking.sameNameCustomers")} className="grid gap-1.5">
+          {bookerCandidates.map((candidate) => (
+            <li key={candidate.customerId ?? candidate.label}>
+              <button
+                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-left text-sm hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary"
+                data-booker-candidate={candidate.customerId ?? ""}
+                disabled={disabled}
+                onClick={() => onSelectCustomer(candidate)}
+                type="button"
+              >
+                <span className="font-semibold text-foreground">{[candidate.label, candidate.phone].filter(Boolean).join(" · ")}</span>
+                <span className="text-xs text-muted">
+                  {candidate.latestVisitDate
+                    ? t("calls.quickBooking.latestVisit", { date: candidate.latestVisitDate })
+                    : t("calls.quickBooking.noVisit")}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {joining ? null : linked ? (
+        <div className="grid gap-3">
+          <Field label={t("calls.quickBooking.customer.linked")}>
+            <div className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2">
+              <span className="text-sm font-semibold text-foreground">{[linked.name, linked.phone].filter((part) => part && part.trim() !== "").join(" · ")}</span>
+              <Button disabled={disabled} onClick={onClearCustomer} type="button" variant="secondary">
+                {t("calls.quickBooking.customer.clear")}
+              </Button>
+            </div>
+          </Field>
+          {visitSummary?.sharedPhone ? (
+            <ScreenState kind="warning" label={t("customers.duplicatePhone.chip")} title={t("customers.duplicatePhone.title")} />
+          ) : null}
+          {visitSummary ? <CustomerVisitCounts counts={visitSummary.counts} locale={locale} /> : null}
+        </div>
+      ) : (
+        <Field label={t("calls.quickBooking.customer.searchLabel")}>
+          <input
+            aria-controls={searchCandidates.length > 0 ? "quick-booking-customer-matches" : undefined}
+            aria-expanded={searchCandidates.length > 0}
+            autoComplete="off"
+            className={inputFieldClassName({ className: "w-full" })}
+            disabled={disabled}
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder={t("calls.search.label")}
+            role="combobox"
+            type="text"
+            value={query}
+          />
+          {searchCandidates.length > 0 ? (
+            searchCandidates.some((candidate) => candidate.sharedPhone) ? (
+              <CustomerCandidateCompare
+                activeIndex={-1}
+                candidates={searchCandidates}
+                label={t("calls.quickBooking.customer.searchLabel")}
+                listboxId="quick-booking-customer-matches"
+                locale={locale}
+                onSelect={onSelectCustomer}
+                selectedCustomerId={draft.customerId ?? null}
+                selectedMemo={null}
+              />
+            ) : (
+              <ul aria-label={t("calls.quickBooking.customer.searchLabel")} className="grid gap-1.5" id="quick-booking-customer-matches" role="listbox">
+                {searchCandidates.map((candidate) => (
+                  <li key={`${candidate.kind}:${candidate.customerId ?? ""}:${candidate.label}`} role="presentation">
+                    <button
+                      className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-left text-sm hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary"
+                      disabled={disabled}
+                      onClick={() => onSelectCustomer(candidate)}
+                      role="option"
+                      type="button"
+                    >
+                      <span className="font-semibold text-foreground">{candidate.label}</span>
+                      <span className="text-xs text-muted">{candidate.phone ?? ""}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : null}
+        </Field>
+      )}
+
+      {/* 메모는 이 방문의 요청(F06, 티켓 23)으로 저장한다(1018 스펙 D21). */}
+      <Field error={fieldErrors.visitRequest?.[0] ?? null} label={t("calls.quickBooking.memo")}>
         <textarea
-          className={inputFieldClassName({ className: "h-24 py-2", invalid: Boolean(fieldErrors.visitRequest?.[0]) })}
+          className={inputFieldClassName({ className: "h-20 w-full py-2", invalid: Boolean(fieldErrors.visitRequest?.[0]) })}
           disabled={disabled}
           maxLength={500}
           onChange={(event) => onEdit("visitRequest", event.target.value === "" ? null : event.target.value)}
           value={draft.visitRequest ?? ""}
         />
       </Field>
-    </div>
-  );
-}
 
-type GuestSummary = {
-  position: number;
-  courseLabel: string | null;
-  therapistLabel: string | null;
-  therapist2Label: string | null;
-  roomLabel: string | null;
-};
-
-export function ReviewStep({
-  courseLabel,
-  customerLabel,
-  disabled,
-  draft,
-  guestSummaries,
-  message,
-  notice,
-  onCancel,
-  onRetry,
-  onSave,
-  roomLabel,
-  status,
-  therapist2Label,
-  therapistLabel
-}: {
-  courseLabel: string | null;
-  customerLabel: string | null;
-  disabled: boolean;
-  draft: QuickBookingState["save"]["draft"];
-  /** 일행이면 손님별 요약(티켓 02). 두 명 이상일 때만 한 명 요약 대신 보인다. */
-  guestSummaries?: GuestSummary[];
-  message: string | null;
-  notice: string | null;
-  onCancel: () => void;
-  onRetry: () => void;
-  onSave: () => void;
-  roomLabel: string | null;
-  status: NewRowSaveStatus;
-  therapist2Label: string | null;
-  therapistLabel: string | null;
-}) {
-  const t = useT();
-  return (
-    <div className="grid gap-4">
-      <StepHeading>{t("calls.quickBooking.step.review")}</StepHeading>
-      <dl className="rounded-md border border-border bg-surface px-3">
-        <DetailRow
-          label={t("calls.quickBooking.step.customer")}
-          value={customerLabel ?? draft.customerMemo ?? t("calls.quickBooking.review.customerNone")}
-        />
-        <DetailRow label={t("calls.quickBooking.step.schedule")} value={`${draft.serviceDate} ${draft.startTime || "—"}`} />
-        {guestSummaries && guestSummaries.length > 1 ? (
-          <>
-            <DetailRow
-              label={t("calls.quickBooking.customer.partySize")}
-              value={t("calls.quickBooking.customer.partySizeOption", { count: guestSummaries.length })}
-            />
-            {guestSummaries.map((guest) => (
-              <DetailRow
-                key={guest.position}
-                label={t("calls.quickBooking.party.guest", { position: guest.position })}
-                value={[
-                  guest.courseLabel ?? t("calls.quickBooking.review.unset"),
-                  guest.therapistLabel ?? t("calls.quickBooking.review.unset"),
-                  guest.therapist2Label,
-                  guest.roomLabel ?? t("calls.placeholder.roomUnassigned")
-                ]
-                  .filter((part): part is string => Boolean(part))
-                  .join(" · ")}
-              />
-            ))}
-          </>
-        ) : (
-          <>
-            <DetailRow label={t("calls.column.course")} value={courseLabel ?? t("calls.quickBooking.review.unset")} />
-            <DetailRow label={t("calls.column.therapist1")} value={therapistLabel ?? t("calls.quickBooking.review.unset")} />
-            {therapist2Label ? <DetailRow label={t("calls.column.therapist2")} value={therapist2Label} /> : null}
-            <DetailRow label={t("calls.column.room")} value={roomLabel ?? t("calls.placeholder.roomUnassigned")} />
-          </>
-        )}
-      </dl>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button disabled={disabled} onClick={onCancel} type="button" variant="secondary">
-          {t("common.confirm.cancel")}
+      <p className="rounded-md bg-readonly px-3 py-2 text-sm font-semibold text-foreground" data-quick-booking-summary="">
+        {summary}
+      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+        <Button disabled={disabled} onClick={onPrevious} type="button" variant="secondary">
+          {t("calls.quickBooking.previous")}
         </Button>
-        <Button aria-busy={status === "saving"} disabled={disabled} onClick={onSave} type="button">
-          {t("calls.quickBooking.save")}
-        </Button>
-        <NewCallRowSaveStatus message={message} notice={notice} onRetry={onRetry} state={status} />
+        <div className="flex flex-wrap items-center gap-3">
+          <NewCallRowSaveStatus message={message} notice={notice} onRetry={onRetry} state={status} />
+          <Button aria-busy={status === "saving"} disabled={disabled} onClick={onSave} type="button">
+            {t("calls.quickBooking.save")}
+          </Button>
+        </div>
       </div>
     </div>
   );
 }
 
+/** 이름이 같은 고객 후보(1018 스펙 D21). 글자 앞뒤 공백과 대소문자는 같게 본다. */
+function sameName(candidate: CustomerVisitCandidateDto, name: string) {
+  return candidate.kind === "customer" && candidate.label.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase();
+}
+
+/** 디바운스 고객 검색(고객 화면·고객 연결 정정과 같은 상수). 연결할 customerId가 없는 메모 후보는 뺀다. */
+function useCustomerSearch(query: string, enabled = true) {
+  const [candidates, setCandidates] = useState<CustomerVisitCandidateDto[]>([]);
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed || !enabled) {
+      setCandidates([]);
+      return;
+    }
+    let active = true;
+    const timer = window.setTimeout(() => {
+      void searchCustomerLinkCandidatesAction(trimmed).then((results) => {
+        if (active) setCandidates(results.filter((candidate) => candidate.kind === "customer"));
+      });
+    }, CUSTOMER_SEARCH_DEBOUNCE_MS);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [query, enabled]);
+  return candidates;
+}
+
+/**
+ * 빠른 예약 옆 패널(1018 스펙 D19). 편집 패널과 같은 비모달 옆 패널이라 원장이 왼쪽으로 줄어든다. 휴대폰 폭에서는 전체 화면
+ * 시트다. 패널은 원장 작업면이 그리고, 열고 닫는 것도 작업면이 정한다(open, onOpenChange). 원장의 콜을 열면 그 편집 패널이
+ * 이 자리를 쓰고, 이 패널은 쓰던 값을 둔 채 숨는다(hidden). 닫으면 SidePanel이 연 자리로 포커스를 돌려준다.
+ */
 export function QuickBookingPanel({
   customers,
+  hidden = false,
   initialAvailabilityRows,
   initialAvailabilityTime,
   isLocked,
   monthEndDate,
   monthStartDate,
+  onOpenChange,
+  open,
   operatingMonthId,
   options,
   serviceDate
 }: {
   customers: CustomerDto[];
+  hidden?: boolean;
   initialAvailabilityRows: TherapistAvailabilityRowDto[];
   initialAvailabilityTime: string;
   isLocked: boolean;
   monthEndDate: string;
   monthStartDate: string;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
   operatingMonthId: string;
   options: ServiceCallFormOptions;
   serviceDate: string;
 }) {
   const t = useT();
   const locale = useLocale();
-  const [open, setOpen] = useState(false);
+  const router = useRouter();
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const ledger = useMemo(() => ({ operatingMonthId, serviceDate }), [operatingMonthId, serviceDate]);
   const [state, dispatch] = useReducer(quickBookingReducer, ledger, (initial) => initialQuickBookingState(initial, newRequestId()));
-  const { step, save, touched, partyGuests, joinParty } = state;
-  // 일행(티켓 02)에서 Therapist·코스 단계가 지금 고르는 손님. 1은 저장 초안의 칸이다.
-  const [activeGuest, setActiveGuest] = useState(1);
-  const partySize = partyGuests.length + 1;
-  const guests = quickBookingGuests(save.draft, partyGuests);
-  // 패널을 닫지 않고 다른 화면으로 옮기거나 브라우저를 닫으려 하면(티켓 18) 같은 안내를 받는다. 패널
-  // 자체를 닫을 때의 안내(스토리 51)는 아래 onOpenChange/ConfirmDialog가 따로 맡는다.
+  const { step, save, touched, guests, partySize, joinParty, presetTherapistId } = state;
+  // 패널을 닫지 않고 다른 화면으로 옮기거나 브라우저를 닫으려 하면(티켓 18) 같은 안내를 받는다.
   useUnsavedGuard(touched);
   const { draft, fieldErrors, message } = save;
   const locked = isLocked || isQuickBookingLocked(state);
@@ -1044,14 +920,14 @@ export function QuickBookingPanel({
   const request = save.inFlight;
 
   const [availabilityRows, setAvailabilityRows] = useState(initialAvailabilityRows);
-  const [availabilityTime, setAvailabilityTime] = useState(initialAvailabilityTime);
+  const [showBeforeCheckIn, setShowBeforeCheckIn] = useState(false);
   const [availabilityPending, setAvailabilityPending] = useState(false);
   const [availabilityFailed, setAvailabilityFailed] = useState(false);
   const availabilityRequestId = useRef(0);
 
   async function loadAvailability(date: string, time: string) {
+    // 열 때마다 다시 읽는다. 앞서 저장한 예약이 가능 판정에 바로 들어가야 한다.
     const id = ++availabilityRequestId.current;
-    setAvailabilityTime(time);
     setAvailabilityFailed(false);
     if (!time) {
       setAvailabilityRows([]);
@@ -1073,38 +949,20 @@ export function QuickBookingPanel({
     dispatch({ type: "edit", changes: { [key]: value } as Partial<typeof draft> });
   }
 
-  // 고객 검색(22의 비교 정보를 재사용, 티켓 24). 고객 화면·고객 연결 정정과 같은 디바운스 상수를 쓴다.
-  // 메모만 있는 후보(kind: "memo")는 연결할 customerId가 없어 미리 뺀다.
   const [customerQuery, setCustomerQuery] = useState("");
-  const [customerCandidates, setCustomerCandidates] = useState<CustomerVisitCandidateDto[]>([]);
-  useEffect(() => {
-    const trimmed = customerQuery.trim();
-    if (!trimmed) {
-      setCustomerCandidates([]);
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      void searchCustomerLinkCandidatesAction(trimmed).then((results) => {
-        setCustomerCandidates(results.filter((candidate) => candidate.kind === "customer"));
-      });
-    }, CUSTOMER_SEARCH_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
-  }, [customerQuery]);
+  const searchCandidates = useCustomerSearch(customerQuery);
+  const bookerName = draft.bookerName?.trim() ?? "";
+  const bookerMatches = useCustomerSearch(bookerName, !joinParty && !draft.customerId);
+  const bookerCandidates = bookerMatches.filter((candidate) => sameName(candidate, bookerName));
 
-  function selectCustomerCandidate(candidate: CustomerVisitCandidateDto) {
+  function selectCustomer(candidate: CustomerVisitCandidateDto) {
     if (candidate.kind !== "customer" || !candidate.customerId) return;
     edit("customerId", candidate.customerId);
-    edit("newCustomer", null);
+    if (!draft.bookerName?.trim()) edit("bookerName", candidate.label);
     setCustomerQuery("");
   }
 
-  // 고른 고객의 방문완료·노쇼·취소 건수와 가장 최근 방문(B09, 스토리 71-73, 티켓 24), 같은 연락처
-  // 경고(S5). 고른 고객이 바뀔 때마다 다시 불러온다. 고객을 고르지 않았으면(해제 포함) null이다.
-  const [visitSummary, setVisitSummary] = useState<{
-    counts: CustomerVisitCountsDto;
-    recentVisit: CustomerVisitHistoryRowDto | null;
-    sharedPhone: boolean;
-  } | null>(null);
+  const [visitSummary, setVisitSummary] = useState<VisitSummary | null>(null);
   useEffect(() => {
     const customerId = draft.customerId;
     if (!customerId) {
@@ -1125,59 +983,8 @@ export function QuickBookingPanel({
     void loadAvailability(nextDate, nextTime);
   }
 
-  function pressNow() {
-    const today = businessTodayIsoDate();
-    const slot = selectNowSlot(options.timeSlots, nowClockString());
-    setSchedule(today, slot);
-    dispatch({ type: "step", step: "therapist" });
-  }
-
-  /** 손님 position의 코스·Therapist를 고친다. 손님 1은 저장 초안을, 손님 2…N은 일행 목록을 고친다. */
-  function chooseForGuest(position: number, changes: Partial<QuickBookingGuest>) {
-    dispatch(position === 1 ? { type: "choose", changes } : { type: "guest", position, changes });
-  }
-
-  /**
-   * 일행은 손님을 차례로 고른다(티켓 02). 한 손님을 다 고르면 아직 고르지 않은 다음 손님으로 넘어간다. 이미 고른
-   * 손님을 다시 고쳤으면 그 자리에 둔다.
-   */
-  function advanceGuest(position: number) {
-    if (position < partySize && !guests[position].therapist1Id) setActiveGuest(position + 1);
-  }
-
-  function courseRequiresSecond(courseId: string) {
-    return availabilityRows.some((row) => row.courses.some((course) => course.courseId === courseId && course.requiresSecondTherapist));
-  }
-
-  function chooseCourse(choice: AvailabilityCourseChoice) {
-    // 가능 버튼은 패널의 Therapist와 코스만 채운다(스펙 F01, 티켓 20). 시각은 이미 이 단계의 예약시각과
-    // 같아(가능 목록 자체가 그 시각 기준) 다시 쓰지 않는다. 코스·첫 번째 Therapist를 새로 고르면 앞서
-    // 고른 두 번째 Therapist는 그 짝과 맞지 않을 수 있어 함께 비운다(티켓 21).
-    chooseForGuest(activeGuest, { courseId: choice.courseId, therapist1Id: choice.therapistId, therapist2Id: null });
-    if (!courseRequiresSecond(choice.courseId)) advanceGuest(activeGuest);
-  }
-
-  // 두 명 코스의 두 번째 Therapist(티켓 21). 코스·시각은 이미 고정돼 있어 id만 받는다.
-  function chooseSecondTherapist(therapistId: string) {
-    chooseForGuest(activeGuest, { therapist2Id: therapistId });
-    advanceGuest(activeGuest);
-  }
-
-  function clearSecondTherapist() {
-    chooseForGuest(activeGuest, { therapist2Id: null });
-  }
-
-  function changePartySize(size: number) {
-    dispatch({ type: "partySize", size });
-    setActiveGuest(1);
-  }
-
-  /** 저장 거절의 칸 오류로 그 단계(일행이면 그 손님)로 간다. */
-  function jumpToError(field: string | undefined) {
-    dispatch({ type: "step", step: field ? (quickBookingStepOfField(field) ?? "review") : "review" });
-    const guestPosition = field ? quickBookingGuestPosition(field) : null;
-    if (guestPosition) setActiveGuest(guestPosition);
-  }
+  // 저장한 새 줄 찾기(focusCreatedRow)의 순번. 빠른 예약을 다시 열면 올려서 앞 찾기를 멈춘다.
+  const createdRowFocus = useRef(0);
 
   // 응답을 받지 못하면(네트워크 오류, 시간 초과) 초안과 요청 id를 둔 채 "저장 여부 확인 중"이 된다(티켓 16).
   useEffect(() => {
@@ -1186,22 +993,31 @@ export function QuickBookingPanel({
       void (async () => {
         const giveUp = window.setTimeout(() => dispatch({ type: "lost", request }), QUICK_BOOKING_SAVE_TIMEOUT_MS);
         try {
-          // 일행(2명 이상)은 손님마다 콜을 한 번에 만드는 일행 저장으로 보낸다. 보내는 동안 일행은 잠겨 있어
-          // 지금 손님 목록이 이 요청을 만든 그 목록이다. 1명이면 지금까지의 한 건 저장과 같다.
+          // 일행(2명 이상)은 손님마다 콜을 한 번에 만드는 일행 저장으로 보낸다. 보내는 동안 손님은 잠겨 있어
+          // 지금 손님 목록이 이 요청을 만든 그 목록이다. 1명이면 한 건 저장이다.
           const result =
-            partyGuests.length > 0
-              ? await createQuickBookingPartyAction(quickBookingPartyRequest(request, partyGuests))
+            guests.length > 1
+              ? await createQuickBookingPartyAction(quickBookingPartyRequest(request, guests.slice(1)))
               : await createQuickBookingServiceCallAction(request);
           if (result.ok) {
             const createdId = Array.isArray(result.data) ? result.data[0]?.id : result.data.id;
             setSavedNotice(result.notice ?? null);
             dispatch({ type: "saved", request, notice: result.notice ?? null, nextRequestId: newRequestId() });
-            setOpen(false);
-            setActiveGuest(1);
-            if (createdId) focusCreatedRow(createdId);
+            onOpenChange(false);
+            // 저장한 뒤에는 새 행이 골라진다(1018 스펙 D19). 서버 액션 뒤 원장이 저절로 다시 그려지지 않을 때가 있어
+            // (router.refresh도 결과가 화면에 붙지 않는 때가 있었다), 새 콜을 고른 주소로 옮겨 원장을 다시 받는다.
+            // 주소의 call 매개변수가 그 줄의 편집 패널을 연다.
+            if (createdId) {
+              const address = new URL(window.location.href);
+              address.searchParams.set(CALL_PARAM, createdId);
+              router.replace(`${address.pathname}${address.search}`, { scroll: false });
+            }
+            const token = ++createdRowFocus.current;
+            if (createdId) focusCreatedRow(createdId, () => createdRowFocus.current === token);
           } else {
             dispatch({ type: "failed", request, message: result.formError ?? null, fieldErrors: result.fieldErrors });
-            jumpToError(Object.keys(result.fieldErrors ?? {})[0]);
+            const field = Object.keys(result.fieldErrors ?? {})[0];
+            dispatch({ type: "step", step: field ? (quickBookingStepOfField(field) ?? "customer") : "customer" });
           }
         } catch {
           dispatch({ type: "lost", request });
@@ -1213,48 +1029,66 @@ export function QuickBookingPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request]);
 
-  // 원장의 "일행에 1명 추가"(티켓 04)와 Therapist 현황 줄의 카드(1018 스펙 D17). 쓰던 초안이 있으면 버릴지 먼저
-  // 묻는다(패널을 닫을 때와 같은 안내).
+  // 머리 버튼, 원장의 "일행에 1명 추가"(티켓 04), Therapist 현황 줄의 카드(1018 스펙 D17). 쓰던 초안이 있으면 머리 버튼은
+  // 그 초안을 그대로 다시 보이고, 나머지는 버릴지 먼저 묻는다(패널을 닫을 때와 같은 안내).
   type PendingStart = { kind: "join"; join: QuickBookingJoinParty } | { kind: "therapist"; therapistId: string };
   const [pendingStart, setPendingStart] = useState<PendingStart | null>(null);
-  function start(next: PendingStart) {
-    if (next.kind === "join") {
+  function start(next: PendingStart | null) {
+    createdRowFocus.current += 1;
+    if (next?.kind === "join") {
       dispatch({ type: "joinParty", join: next.join, nextRequestId: newRequestId() });
       void loadAvailability(next.join.serviceDate, next.join.startTime);
     } else {
-      // 오늘 원장이면 지금 시각 칸, 아니면 원장의 첫 시각으로 그 Therapist의 가능 코스를 바로 본다.
-      const time = serviceDate === businessTodayIsoDate() ? selectNowSlot(options.timeSlots, nowClockString()) : initialAvailabilityTime;
-      dispatch({ type: "presetTherapist", therapistId: next.therapistId, serviceDate, startTime: time, nextRequestId: newRequestId() });
+      const time = defaultStartTime(serviceDate, options.timeSlots);
+      dispatch({ type: "start", serviceDate, startTime: time, presetTherapistId: next?.therapistId ?? null, nextRequestId: newRequestId() });
       void loadAvailability(serviceDate, time);
     }
-    setActiveGuest(1);
     setSavedNotice(null);
-    setOpen(true);
+    setCustomerQuery("");
+    setShowBeforeCheckIn(false);
+    onOpenChange(true);
   }
   const startRef = useRef(start);
   startRef.current = start;
   const touchedRef = useRef(touched);
   touchedRef.current = touched;
+  const onOpenChangeRef = useRef(onOpenChange);
+  onOpenChangeRef.current = onOpenChange;
   useEffect(() => {
-    const request = (next: PendingStart) => {
+    const request = (next: PendingStart | null) => {
       if (isLocked) return;
-      if (touchedRef.current) setPendingStart(next);
-      else startRef.current(next);
+      if (!touchedRef.current) startRef.current(next);
+      else if (next) setPendingStart(next);
+      else onOpenChangeRef.current(true);
     };
+    const stopOpen = onQuickBookingOpen(() => request(null));
     const stopJoin = onQuickBookingJoinParty((join) => request({ kind: "join", join }));
     const stopTherapist = onQuickBookingWithTherapist((therapistId) => request({ kind: "therapist", therapistId }));
     return () => {
+      stopOpen();
       stopJoin();
       stopTherapist();
     };
   }, [isLocked]);
+
+  // 열면 시각 칸으로 포커스를 옮긴다. 휴대폰 시트는 목록을 덮으므로 닫기 버튼으로 옮긴다.
+  const panelRef = useRef<HTMLDivElement>(null);
+  // 열 때만 옮긴다. 편집 패널이 닫혀 다시 보일 때는 포커스를 편집하던 줄에 둔다.
+  useEffect(() => {
+    if (!open) return;
+    const target =
+      panelRef.current?.querySelector<HTMLElement>(window.innerWidth < 600 ? "aside button" : "#quick-booking-time") ??
+      panelRef.current?.querySelector<HTMLElement>("aside button");
+    target?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   function requestClose() {
     if (touched) {
       setConfirmClose(true);
       return;
     }
-    setOpen(false);
+    onOpenChange(false);
   }
 
   const errorSteps = useMemo(() => {
@@ -1265,195 +1099,97 @@ export function QuickBookingPanel({
     }
     return steps;
   }, [fieldErrors]);
-  const errorGuests = new Set(
-    Object.keys(fieldErrors).flatMap((field) => {
-      const position = quickBookingGuestPosition(field);
-      return position ? [position] : [];
-    })
-  );
 
-  const stepProps: StepProps = { customers, disabled: locked, draft, fieldErrors, monthEndDate, monthStartDate, onEdit: edit, options };
-  const labelOf = (list: { value: string; label: string }[], value: string | null | undefined) =>
-    value ? (list.find((option) => option.value === value)?.label ?? value) : null;
-  // 코스를 고르지 않은 손님은 손님 1의 코스를 쓴다(스펙 D10). 요약과 저장 요청이 같은 규칙이다.
-  const guestSummaries = guests.map((guest, index) => ({
-    position: index + 1,
-    courseLabel: labelOf(options.courses, guest.courseId || draft.courseId),
-    therapistLabel: labelOf(options.therapists, guest.therapist1Id),
-    therapist2Label: labelOf(options.therapists, guest.therapist2Id),
-    roomLabel: labelOf(options.rooms, guest.roomId)
-  }));
-  const courseLabel = labelOf(options.courses, draft.courseId);
-  const therapistLabel = labelOf(options.therapists, draft.therapist1Id);
-  const therapist2Label = labelOf(options.therapists, draft.therapist2Id);
-  const roomLabel = labelOf(options.rooms, draft.roomId);
-  const active = guests[Math.min(activeGuest, partySize) - 1];
-  // 코스를 고르지 않은 손님은 손님 1의 코스로 저장된다. 두 번째 Therapist가 필요한지와 그 오류도 그 코스로 본다.
-  const activeCourseId = active.courseId || draft.courseId;
-  const activeSummary = guestSummaries[Math.min(activeGuest, partySize) - 1];
-  const customerLabel = draft.customerId
-    ? (customers.find((customer) => customer.id === draft.customerId)?.name ?? draft.customerId)
-    : (draft.newCustomer?.name || null);
+  const full = guests.length > 0 && guests.length === partySize;
+  const text = guestTextOf(t, availabilityRows, options);
+  const summary = quickBookingSummary({
+    startTime: draft.startTime,
+    partySizeLabel: t("calls.quickBooking.customer.partySizeOption", { count: partySize }),
+    guests: guests.map(text.guest),
+    channelLabel: options.bookingChannels.find((channel) => channel.value === draft.bookingChannelCode)?.label ?? null,
+    bookerName: draft.bookerName
+  });
 
   return (
     <>
-      <div aria-live="polite" className={savedNotice ? "text-sm text-foreground" : "sr-only"} role="status">{savedNotice}</div>
-      <ModalPanel
-        description={t("calls.quickBooking.description")}
-        onOpenChange={(next) => {
-          if (next) {
-            // 머리 버튼은 늘 빈 예약으로 연다. 고친 것 없이 닫은 "1명 추가"나 현황 줄 카드의 미리 고른 Therapist를 남기지 않는다.
-            if (!touched) dispatch({ type: "discard", nextRequestId: newRequestId() });
-            setSavedNotice(null);
-            setOpen(true);
-            return;
-          }
-          requestClose();
-        }}
-        open={open}
-        title={t("calls.quickBooking.title")}
-        trigger={
-          // 빠른 예약은 원장 탭 머리의 주요 버튼이다(명세 F08). 휴대폰 폭에서는 제공하지 않는다(티켓 20).
-          // 원장 목록의 N 단축키(티켓 03)가 data-quick-booking-trigger로 이 버튼을 찾아 누른다.
-          // ModalPanel의 trigger로 등록해야 Radix가 이 버튼을 패널의 Dialog.Trigger로 알아, 패널을
-          // 닫을 때 포커스를 여기로 돌려준다(S3, 스토리 70) — 트리거 없이 따로 둔 버튼은 그 연결이 없어
-          // 닫은 뒤 포커스가 body로 빠졌다.
-          <Button aria-haspopup="dialog" className="hidden min-[600px]:inline-flex" data-quick-booking-trigger="" disabled={isLocked} type="button">
-            {t("calls.quickBooking.open")}
-          </Button>
-        }
-      >
-        <StepperNav disabled={locked} errorSteps={errorSteps} onSelect={(next) => dispatch({ type: "step", step: next })} step={step} />
-        {joinParty ? (
-          <p className="mb-4 rounded-md bg-readonly px-3 py-2 text-sm font-semibold text-foreground" data-quick-booking-join-party={joinParty.partyId}>
-            {joinParty.customerMemo
-              ? t("calls.quickBooking.joinParty.noticeWithMemo", { memo: joinParty.customerMemo, size: joinParty.size })
-              : t("calls.quickBooking.joinParty.notice", { size: joinParty.size })}
-          </p>
-        ) : null}
-        <ErrorSummary
-          fieldErrors={fieldErrors}
-          message={message}
-          onJump={(next, guestPosition) => {
-            dispatch({ type: "step", step: next });
-            if (guestPosition) setActiveGuest(guestPosition);
-          }}
-        />
-
-        {step === "customer" ? (
-          <CustomerStep
-            {...stepProps}
-            candidates={customerCandidates}
-            locale={locale}
-            onPartySizeChange={changePartySize}
-            onQueryChange={setCustomerQuery}
-            onSelectCandidate={selectCustomerCandidate}
-            joiningParty={joinParty !== null}
-            partySize={partySize}
-            query={customerQuery}
-            visitSummary={visitSummary}
-          />
-        ) : null}
-        {step === "schedule" ? (
-          <ScheduleStep
-            disabled={locked}
-            draft={draft}
-            fieldErrors={fieldErrors}
-            monthEndDate={monthEndDate}
-            monthStartDate={monthStartDate}
-            onNow={pressNow}
-            onScheduleChange={setSchedule}
-            options={options}
-          />
-        ) : null}
-        {step === "therapist" ? (
-          <TherapistStep
-            availabilityFailed={availabilityFailed}
-            availabilityPending={availabilityPending}
-            availabilityRows={availabilityRows}
-            availabilityTime={availabilityTime}
-            courseId={activeCourseId}
-            courseLabel={labelOf(options.courses, activeCourseId)}
-            disabled={locked}
-            excludedTherapistIds={partySize > 1 ? otherGuestTherapistIds(guests, activeGuest) : undefined}
-            fieldErrors={partySize > 1 ? guestFieldErrors(fieldErrors, activeGuest) : fieldErrors}
-            guestNav={
-              partySize > 1 ? (
-                <PartyGuestNav
-                  active={activeGuest}
-                  disabled={locked}
-                  errorPositions={errorGuests}
-                  guests={guestSummaries.map((guest, index) => ({
-                    position: guest.position,
-                    // 아직 고르지 않은 손님은 "선택 안 함"이다. 손님 1의 코스는 저장할 때 기본값으로만 쓴다.
-                    summary: guests[index].therapist1Id
-                      ? [guest.courseLabel, guest.therapistLabel, guest.therapist2Label].filter(Boolean).join(" · ")
-                      : null
-                  }))}
-                  onSelect={setActiveGuest}
-                />
-              ) : undefined
-            }
-            locale={locale}
-            onChoose={chooseCourse}
-            onChooseSecond={chooseSecondTherapist}
-            onClear={() =>
-              activeGuest === 1
-                ? dispatch({ type: "edit", changes: { courseId: "", therapist1Id: null, therapist2Id: null } })
-                : chooseForGuest(activeGuest, { courseId: "", therapist1Id: null, therapist2Id: null })
-            }
-            onClearSecond={clearSecondTherapist}
-            onTimeChange={(next) => setSchedule(draft.serviceDate, next)}
-            options={options}
-            therapist1Id={active.therapist1Id}
-            therapist2Label={activeSummary.therapist2Label}
-            therapistLabel={activeSummary.therapistLabel}
-          />
-        ) : null}
-        {step === "room" ? (
-          <RoomStep
-            {...stepProps}
-            guests={guests}
-            onGuestRoomChange={(position, roomId) =>
-              position === 1 ? edit("roomId", roomId) : dispatch({ type: "guest", position, changes: { roomId } })
-            }
-          />
-        ) : null}
-        {step === "review" ? (
-          <ReviewStep
-            courseLabel={courseLabel}
-            customerLabel={customerLabel}
-            disabled={locked}
-            draft={draft}
-            guestSummaries={guestSummaries}
-            message={message}
-            notice={save.notice}
-            onCancel={requestClose}
-            onRetry={() => dispatch({ type: "submit" })}
-            onSave={() => dispatch({ type: "submit" })}
-            roomLabel={roomLabel}
-            status={save.status}
-            therapist2Label={therapist2Label}
-            therapistLabel={therapistLabel}
-          />
-        ) : null}
-
-        <div className="mt-6 flex items-center justify-between gap-3 border-t border-border pt-4">
-          <Button
-            disabled={locked || stepIndex(step) === 0}
-            onClick={() => dispatch({ type: "step", step: QUICK_BOOKING_STEPS[stepIndex(step) - 1] })}
-            type="button"
-            variant="secondary"
+      <div aria-live="polite" className={savedNotice ? "text-sm text-foreground" : "sr-only"} role="status">
+        {savedNotice}
+      </div>
+      {open ? (
+        <div hidden={hidden} id="quick-booking-panel" ref={panelRef}>
+          <SidePanel
+            className="max-[599px]:fixed max-[599px]:inset-0 max-[599px]:z-50 max-[599px]:max-h-none max-[599px]:rounded-none max-[599px]:border-0"
+            onClose={requestClose}
+            title={t("calls.quickBooking.title")}
           >
-            {t("calls.quickBooking.previous")}
-          </Button>
-          {step !== "review" ? (
-            <Button disabled={locked} onClick={() => dispatch({ type: "step", step: QUICK_BOOKING_STEPS[stepIndex(step) + 1] })} type="button">
-              {t("calls.quickBooking.next")}
-            </Button>
-          ) : null}
+            <StepperNav
+              customerReady={full}
+              disabled={locked}
+              errorSteps={errorSteps}
+              onSelect={(next) => dispatch({ type: "step", step: next })}
+              step={step}
+            />
+            {joinParty ? (
+              <p className="mb-4 rounded-md bg-readonly px-3 py-2 text-sm font-semibold text-foreground" data-quick-booking-join-party={joinParty.partyId}>
+                {joinParty.customerMemo
+                  ? t("calls.quickBooking.joinParty.noticeWithMemo", { memo: joinParty.customerMemo, size: joinParty.size })
+                  : t("calls.quickBooking.joinParty.notice", { size: joinParty.size })}
+              </p>
+            ) : null}
+            <ErrorSummary fieldErrors={fieldErrors} message={message} onJump={(next) => dispatch({ type: "step", step: next })} />
+
+            {step === "conditions" ? (
+              <ConditionsStep
+                availability={{ rows: availabilityRows, pending: availabilityPending, failed: availabilityFailed }}
+                disabled={locked}
+                draft={draft}
+                fieldErrors={fieldErrors}
+                guests={guests}
+                joining={joinParty !== null}
+                monthEndDate={monthEndDate}
+                monthStartDate={monthStartDate}
+                onAddGuest={(guest) => dispatch({ type: "addGuest", guest })}
+                onNext={() => dispatch({ type: "step", step: "customer" })}
+                onShowBeforeCheckInChange={setShowBeforeCheckIn}
+                onNow={() => setSchedule(businessTodayIsoDate(), selectNowSlot(options.timeSlots, nowClockString()))}
+                onPartySizeChange={(size) => dispatch({ type: "partySize", size })}
+                onRemoveGuest={(index) => dispatch({ type: "removeGuest", index })}
+                onScheduleChange={setSchedule}
+                onSecondTherapist={(index, therapistId) => dispatch({ type: "secondTherapist", index, therapistId })}
+                options={options}
+                partySize={partySize}
+                presetTherapistId={presetTherapistId}
+                showBeforeCheckIn={showBeforeCheckIn}
+              />
+            ) : (
+              <CustomerStep
+                bookerCandidates={bookerCandidates}
+                customers={customers}
+                disabled={locked}
+                draft={draft}
+                fieldErrors={fieldErrors}
+                joining={joinParty !== null}
+                locale={locale}
+                message={message}
+                notice={save.notice}
+                onClearCustomer={() => edit("customerId", null)}
+                onEdit={edit}
+                onPrevious={() => dispatch({ type: "step", step: "conditions" })}
+                onQueryChange={setCustomerQuery}
+                onRetry={() => dispatch({ type: "submit" })}
+                onSave={() => dispatch({ type: "submit" })}
+                onSelectCustomer={selectCustomer}
+                options={options}
+                query={customerQuery}
+                searchCandidates={searchCandidates}
+                status={save.status}
+                summary={summary}
+                visitSummary={visitSummary}
+              />
+            )}
+          </SidePanel>
         </div>
-      </ModalPanel>
+      ) : null}
 
       <ConfirmDialog
         cancelLabel={t("common.confirm.cancel")}
@@ -1461,8 +1197,9 @@ export function QuickBookingPanel({
         description={t("calls.leaveGuard.description")}
         onConfirm={() => {
           setConfirmClose(false);
-          setOpen(false);
-          setActiveGuest(1);
+          // 확인 창이 먼저 닫혀 포커스를 "닫기" 버튼에 돌려준 뒤에 패널을 닫는다. 같은 때 닫으면 두 포커스 복귀가 겹쳐
+          // 포커스가 아무 데도 남지 않는다. 패널이 닫히면 SidePanel이 연 자리로 돌려준다.
+          window.setTimeout(() => onOpenChange(false), 0);
           // 저장 없이 닫기로 확정하면 초안을 버린다. 다음에 다시 열면 새 요청 id로 처음부터 시작한다.
           dispatch({ type: "discard", nextRequestId: newRequestId() });
         }}

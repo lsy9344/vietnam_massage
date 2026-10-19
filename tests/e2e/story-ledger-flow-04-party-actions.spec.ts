@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { checkInTherapist, goToCustomerStep, pickGuest, quickBookingPanel, saveQuickBooking } from "./support/quick-booking";
 
 // 콜 원장 흐름 재구성 티켓 04: 원장에서 일행이 머리 줄 아래 붙어 보이고, 일행 전체 입장·전체 취소·1명 추가를 한다.
 // 결제·노쇼는 사람별이다(스펙 D14). 다른 스펙이 쓰지 않는 과거 운영월을 쓰고, 만든 운영월·정책은 afterAll에서 지운다.
@@ -203,6 +204,8 @@ test.describe("콜 원장 흐름 재구성 티켓 04 일행 묶음과 일행 동
   test.afterAll(async () => {
     await cleanup();
     await (prisma as any).therapistCourseRate.deleteMany({ where: { therapistId: { in: therapistIds }, courseId } });
+    // 출근 기록(checkInTherapist)이 운영월을 참조하므로 운영월을 지우기 전에 먼저 지운다(1018 스펙 D23).
+    await (prisma as any).therapistAttendance.deleteMany({ where: { employeeId: { in: therapistIds } } });
     await (prisma as any).coursePolicy.deleteMany({ where: { name: "LF04 1인" } });
     await (prisma as any).course.update({ where: { id: courseId }, data: { isActive: false } });
     await (prisma as any).room.updateMany({ where: { id: { in: roomIds } }, data: { isActive: false } });
@@ -309,22 +312,18 @@ test.describe("콜 원장 흐름 재구성 티켓 04 일행 묶음과 일행 동
   test("일행에 1명 추가는 같은 시각·메모로 빠른 예약을 열고, 저장하면 다음 순번으로 일행에 붙는다", async ({ page }) => {
     await login(page, account.accountId, account.password);
     await openLedger(page);
+    // Therapist 줄은 그날 출근 기록이 있는 사람만 기본으로 보인다(1018 스펙 D23). 일행이 쓰지 않은 마사지사4를 고른다.
+    await checkInTherapist({ operatingMonthId: monthId, serviceDate, employeeId: therapistIds[3] });
 
     await partyHead(page, "open", park.partyId).getByRole("button", { name: "LF04 박 대표 일행 3명에 1명 추가" }).click();
-    const dialog = page.getByRole("dialog", { name: "빠른 예약" });
-    await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText("LF04 박 대표 일행(3명)에 1명을 더합니다");
+    const bookingPanel = quickBookingPanel(page);
+    await expect(bookingPanel).toBeVisible();
+    // 일행에 1명을 더할 때는 인원 칸이 없고 ①에서 시작한다(1018 스펙 D19). 일행의 시각·메모가 이미 채워져 있다.
+    await expect(bookingPanel.locator(`[data-quick-booking-join-party="${park.partyId}"]`)).toContainText("LF04 박 대표 일행(3명)에 1명을 더합니다");
 
-    // Therapist·코스 단계에서 시작한다. 일행이 쓰지 않은 마사지사4를 고른다.
-    await dialog
-      .locator("[data-availability-row]")
-      .filter({ has: page.getByText(therapistNames[3], { exact: true }) })
-      .getByRole("button", { name: /LF04A 60분 가능/ })
-      .click();
-    await dialog.getByRole("button", { name: "다음" }).click();
-    await dialog.getByRole("button", { name: "다음" }).click();
-    await dialog.getByRole("button", { name: "예약 저장" }).click();
-    await expect(dialog).toBeHidden();
+    await pickGuest(page, bookingPanel, { therapistId: therapistIds[3], courseId });
+    await goToCustomerStep(bookingPanel);
+    await saveQuickBooking(page, bookingPanel);
 
     const members = await (prisma as any).serviceCall.findMany({ where: { partyId: park.partyId }, orderBy: { partyPosition: "asc" } });
     expect(members.map((member: { partyPosition: number }) => member.partyPosition)).toEqual([1, 2, 3, 4]);

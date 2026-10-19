@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { quickBookingLine, quickBookingPanel } from "./support/quick-booking";
 
 // 1018 티켓 04: 원장 머리의 상태 카드 7개, Therapist 현황 줄(대상·숫자·정렬·빠른 예약·걸러 보기·접기 기억·미지명),
 // 하루 수납의 이번 달 숫자는 관리자·정산 담당에게만. 지금 상태(지금 가능/사용 중)의 시각 계산은 단위 테스트가 보고, 여기서는
@@ -218,27 +219,25 @@ test.describe("1018 티켓 04: 상태 카드와 Therapist 현황 줄, 하루 수
     expect(await stripOrder(page)).toEqual([therapists.two, therapists.three, therapists.five, therapists.one]);
   });
 
+  // 1018 티켓 05: 5단계 모달의 "Therapist·코스" 단계 대신 2단계(조건 → 고객)다. 현황 줄 카드는
+  // ①의 Therapist 목록 맨 위에 그 Therapist를 aria-current="true"로 미리 고르고, 손님으로는 담지 않는다.
   test("카드를 누르면 그 Therapist를 미리 고른 빠른 예약이 열리고, 머리 버튼은 빈 예약으로 연다", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await login(page, accounts.counter.accountId, accounts.counter.password);
     await openLedger(page);
 
     await card(page, therapists.one).locator("[data-therapist-status-book]").click();
-    const dialog = page.getByRole("dialog", { name: /빠른 예약/ });
-    await expect(dialog).toBeVisible();
-    // Therapist 단계에서 바로 열리고, 원장의 첫 시각으로 가능 코스를 불러 둔다.
-    await expect(dialog.getByRole("button", { name: "Therapist·코스" })).toHaveAttribute("aria-current", "step");
-    await expect(dialog).toContainText("— · T04 1");
-    await expect(dialog.locator(`[data-availability-row="${therapists.one}"]`)).toBeVisible();
+    const panel = quickBookingPanel(page);
+    await expect(panel).toBeVisible();
+    // ①에서 바로 열리고, 그 Therapist 줄이 맨 위에 미리 고른 채(가능 코스를 불러 둔다) 보인다.
+    await expect(quickBookingLine(panel, therapists.one)).toHaveAttribute("aria-current", "true");
 
     // 고친 것이 없으니 묻지 않고 닫힌다. 머리 버튼으로 다시 열면 미리 고른 Therapist가 남지 않는다.
-    await page.keyboard.press("Escape");
-    await expect(dialog).toBeHidden();
+    await panel.getByRole("button", { name: "닫기" }).click();
+    await expect(panel).toBeHidden();
     await page.locator("header").getByRole("button", { name: "빠른 예약" }).click();
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: "다음" }).click();
-    await dialog.getByRole("button", { name: "다음" }).click();
-    await expect(dialog).not.toContainText("— · T04 1");
+    await expect(panel).toBeVisible();
+    await expect(quickBookingLine(panel, therapists.one)).not.toHaveAttribute("aria-current", "true");
   });
 
   test("카드의 콜만 버튼은 원장을 그 Therapist의 콜만 보이게 거르고, 모두 보기로 되돌린다", async ({ page }) => {

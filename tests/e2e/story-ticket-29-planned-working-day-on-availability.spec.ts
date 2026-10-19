@@ -1,35 +1,36 @@
 import { testEmployees } from "./support/test-employees";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
-import { businessTodayIsoDate } from "@/lib/operating-date";
 import { prisma } from "./support/db";
 import { argon2idOptions, login, setLocaleCookie } from "./support/auth";
+import {
+  checkInTherapist,
+  chooseConditions,
+  chooseSecondTherapist,
+  fillBooking,
+  goToCustomerStep,
+  openQuickBooking,
+  pickGuest,
+  quickBookingLine,
+  saveQuickBooking
+} from "./support/quick-booking";
 
 /**
- * 티켓 29: 가능 코스에 근무 예정 표시(F02, 스토리 12–13, 60, 104, V07). 가능 코스 행의 근무 예정 값
- * 자체는 service-call-service.test.ts(메모리 Prisma)가 확인했으므로, 여기서는 실제 화면(빠른 예약의
- * Therapist·코스 단계, 두 Therapist 모두)과 두 언어 문구, 그리고 휴무여도 저장이 막히지 않는 것을 확인한다.
- * 콜 원장 흐름 재구성 티켓 01(스펙 D1·D5)부터 가능 코스는 매니저 한 줄이라 근무표·출근 칸이 줄에서 빠졌다.
- * 근무 예정은 서비스 값으로만 남고, 휴무여도 칩과 저장이 막히지 않는다는 점을 그대로 확인한다.
+ * 티켓 29: 가능 코스에 근무 예정 표시(스펙 D23, 스토리 12–13, 60, 104, V07). 빠른 예약 ①의 Therapist 목록은
+ * 그날 출근 기록이 있는 사람이 기본이고, "출근 전 보기"를 켜면 근무표가 근무 예정인데 아직 출근하지 않은
+ * 사람만 더 보인다. 근무표가 없거나 휴무인 사람은 켜도 나오지 않는다. 그 사람을 담아 저장해도 막히지 않는다.
+ * 콜 원장 흐름 재구성(티켓 01)부터 가능 코스는 Therapist 한 줄이라, 줄 안에 근무표 칸은 따로 없다 —
+ * "출근 전" 꼬리표와 "출근 전 보기" 토글이 근무표 신호가 보이는 유일한 자리다.
  */
 const account = { accountId: "t29_counter", password: "Ticket29!counter", staffCode: "E2E-T29-COUNTER", sortOrder: 92901 };
-const today = businessTodayIsoDate();
-
-function currentMonthRange() {
-  const [year, month] = today.split("-").map(Number);
-  const monthKey = `${year}-${String(month).padStart(2, "0")}`;
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  return { monthKey, startDate: `${monthKey}-01`, endDate: `${monthKey}-${String(lastDay).padStart(2, "0")}` };
-}
-
-const { monthKey, startDate, endDate } = currentMonthRange();
+const monthKey = "2040-12";
+const serviceDate = "2040-12-11";
 
 let monthId = "";
-let roomId = "";
 let courseId = "";
-let therapist1Id = "";
-let therapist2Id = "";
-let createdMonth = false;
+let therapist1Id = ""; // 휴무, 출근 전
+let therapist2Id = ""; // 근무 예정, 출근 전
+let therapist3Id = ""; // 출근함
 
 async function seedAccount() {
   const employee = await testEmployees.upsert({
@@ -63,7 +64,7 @@ async function seedAccount() {
   });
 }
 
-async function cleanupCalls() {
+async function cleanup() {
   const calls = await (prisma as any).serviceCall.findMany({ where: { operatingMonthId: monthId }, select: { id: true } });
   const ids = calls.map((call: { id: string }) => call.id);
   if (ids.length > 0) {
@@ -74,7 +75,7 @@ async function cleanupCalls() {
 }
 
 async function setSchedule(employeeId: string, status: "근무 예정" | "휴무" | null) {
-  const workDate = new Date(`${today}T00:00:00.000Z`);
+  const workDate = new Date(`${serviceDate}T00:00:00.000Z`);
   if (status === null) {
     await (prisma as any).plannedWorkingDay.deleteMany({ where: { employeeId, workDate } });
     return;
@@ -86,48 +87,23 @@ async function setSchedule(employeeId: string, status: "근무 예정" | "휴무
   });
 }
 
-function panel(page: Page) {
-  return page.getByRole("dialog", { name: /빠른 예약|Đặt lịch nhanh/ });
-}
-
-async function openQuickBooking(page: Page, operatingMonthId: string, serviceDate: string) {
-  await page.goto(`/calls?operatingMonthId=${operatingMonthId}&serviceDate=${serviceDate}`);
-  await page.getByRole("button", { name: /빠른 예약|Đặt lịch nhanh/ }).click();
-  await expect(panel(page)).toBeVisible();
-}
-
-/** Therapist·코스 단계까지 진행하고 "지금"(또는 vi "Ngay bây giờ")으로 가능 목록을 연다. */
-async function goToTherapistStep(page: Page, dialog: ReturnType<typeof panel>, memo: string) {
-  await dialog.getByLabel(/고객\/메모|Khách\/Ghi chú/).fill(memo);
-  await dialog.getByRole("button", { name: /^(다음|Tiếp)$/ }).click();
-  await dialog.getByRole("button", { name: /지금|Ngay bây giờ/ }).click();
-}
-
 test.describe("티켓 29 가능 코스의 근무 예정 표시", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeAll(async () => {
     await seedAccount();
-    createdMonth = !(await (prisma as any).operatingMonth.findUnique({ where: { monthKey } }));
     const month = await (prisma as any).operatingMonth.upsert({
       where: { monthKey },
-      update: { status: "작성중", startDate: new Date(`${startDate}T00:00:00.000Z`), endDate: new Date(`${endDate}T00:00:00.000Z`) },
+      update: { status: "작성중" },
       create: {
         monthKey,
-        startDate: new Date(`${startDate}T00:00:00.000Z`),
-        endDate: new Date(`${endDate}T00:00:00.000Z`),
+        startDate: new Date(`${monthKey}-01T00:00:00.000Z`),
+        endDate: new Date(`${monthKey}-31T00:00:00.000Z`),
         status: "작성중"
       }
     });
     monthId = month.id;
-    await cleanupCalls();
-
-    const room = await (prisma as any).room.upsert({
-      where: { sortOrder: 92901 },
-      update: { displayName: "T29 호실", isActive: true },
-      create: { displayName: "T29 호실", migrationReferenceName: "T29-ROOM", sortOrder: 92901, isActive: true }
-    });
-    roomId = room.id;
+    await cleanup();
 
     const course = await (prisma as any).course.upsert({ where: { code: "T29D" }, update: { isActive: true }, create: { code: "T29D", isActive: true } });
     courseId = course.id;
@@ -175,80 +151,92 @@ test.describe("티켓 29 가능 코스의 근무 예정 표시", () => {
       return employee.id as string;
     }
 
-    // 둘 다 수당이 있고 비어 있어 서로 "가능" 짝이 된다. 근무표 상태만 다르다.
+    // 셋 다 수당이 있고 비어 있어 서로 "가능" 짝이 된다. 출근 기록·근무표 상태만 다르다.
     therapist1Id = await seedTherapist("E2E-T29-THR-1", "T29 마사지사1", 92902);
     therapist2Id = await seedTherapist("E2E-T29-THR-2", "T29 마사지사2", 92903);
-  });
-
-  test.beforeEach(async () => {
-    await cleanupCalls();
+    therapist3Id = await seedTherapist("E2E-T29-THR-3", "T29 마사지사3", 92904);
     await setSchedule(therapist1Id, "휴무");
     await setSchedule(therapist2Id, "근무 예정");
+    await checkInTherapist({ operatingMonthId: monthId, serviceDate, employeeId: therapist3Id });
   });
 
   test.afterAll(async () => {
     await testEmployees.deactivateAll();
-    await cleanupCalls();
+    await cleanup();
     await setSchedule(therapist1Id, null);
     await setSchedule(therapist2Id, null);
-    await (prisma as any).therapistCourseRate.deleteMany({ where: { therapistId: { in: [therapist1Id, therapist2Id] }, courseId } });
+    await (prisma as any).therapistCourseRate.deleteMany({ where: { therapistId: { in: [therapist1Id, therapist2Id, therapist3Id] }, courseId } });
     await (prisma as any).coursePolicy.deleteMany({ where: { name: "T29 2인", effectiveFromMonth: monthKey } });
-    await (prisma as any).room.update({ where: { id: roomId }, data: { isActive: false } });
-    if (createdMonth) await (prisma as any).operatingMonth.deleteMany({ where: { id: monthId } });
+    await (prisma as any).therapistAttendance.deleteMany({ where: { operatingMonthId: monthId } });
+    await (prisma as any).operatingMonth.deleteMany({ where: { id: monthId } });
     await prisma.$disconnect();
   });
 
-  test("휴무인 첫 Therapist도 코스 칩이 그대로 보이고, 근무 예정인 두 번째 Therapist와 함께 배정해도 저장이 막히지 않는다", async ({ page }) => {
+  test("휴무인 Therapist는 출근 전 보기를 켜도 보이지 않고, 근무 예정인 Therapist는 켜야 보이며 담아 저장해도 막히지 않는다", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
-    const memo = `T29 휴무도 저장 ${Date.now().toString(36)}`;
+    const name = `T29 출근전 ${Date.now().toString(36)}`;
     await login(page, account.accountId, account.password);
-    await openQuickBooking(page, monthId, today);
-    const dialog = panel(page);
+    await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
+    const panel = await openQuickBooking(page);
+    await chooseConditions(panel, { time: "11:00" });
 
-    await goToTherapistStep(page, dialog, memo);
+    await expect(quickBookingLine(panel, therapist3Id)).toBeVisible({ timeout: 10_000 });
+    await expect(quickBookingLine(panel, therapist1Id)).toHaveCount(0);
+    await expect(quickBookingLine(panel, therapist2Id)).toHaveCount(0);
+    // 안 되는 사람도 없어 "이 시각에 안 되는 N명" 접기 자체가 없다.
+    await expect(panel.locator("[data-quick-booking-unavailable]")).toHaveCount(0);
 
-    // 첫 Therapist 목록: 휴무인 마사지사1도 코스 칩이 꺼지지 않는다. 근무표 칸은 한 줄 목록에서 빠졌다(D1).
-    const row1 = dialog.locator("[data-availability-row]").filter({ has: page.getByText("T29 마사지사1", { exact: true }) });
-    await expect(row1.getByText("휴무", { exact: true })).toHaveCount(0);
-    await row1.getByRole("button", { name: /T29D 90분 가능/ }).click();
-    await expect(dialog.getByText("T29 2인 · T29 마사지사1")).toBeVisible();
+    const showBeforeCheckIn = panel.getByRole("checkbox", { name: "출근 전 보기 (1명)" });
+    await expect(showBeforeCheckIn).toBeVisible();
+    await showBeforeCheckIn.check();
 
-    // 두 번째 Therapist 후보 목록도 같은 한 줄 모양이다(D5). 근무 예정인 마사지사2를 고른다.
-    const secondHeading = dialog.getByRole("heading", { name: "두 번째 Therapist" });
-    await expect(secondHeading).toBeVisible();
-    const secondSection = secondHeading.locator("xpath=ancestor::div[1]");
-    const candidate2 = secondSection.getByText("T29 마사지사2").locator("xpath=ancestor::li[1]");
-    await expect(candidate2.getByText("근무 예정", { exact: false })).toHaveCount(0);
-    await candidate2.getByRole("button", { name: /T29D 90분 가능/ }).click();
-    await expect(secondSection.getByText("T29 마사지사2")).toBeVisible();
+    // 휴무인 Therapist는 토글을 켜도 여전히 나오지 않는다.
+    await expect(quickBookingLine(panel, therapist1Id)).toHaveCount(0);
+    const line2 = quickBookingLine(panel, therapist2Id);
+    await expect(line2).toBeVisible();
+    await expect(line2).toContainText("출근 전");
+    await expect(panel.locator("[data-quick-booking-unavailable]")).toHaveCount(0);
 
-    await dialog.getByRole("button", { name: "다음" }).click();
-    await dialog.getByLabel("객실").selectOption({ label: "T29 호실" });
-    await dialog.getByRole("button", { name: "다음" }).click();
-    await dialog.getByRole("button", { name: "예약 저장" }).click();
-    await expect(dialog).toBeHidden();
+    await pickGuest(page, panel, { therapistId: therapist2Id, courseId });
+    const guest = panel.locator('[data-quick-booking-guest="1"]');
+    await expect(guest).toContainText("T29 마사지사2 T29D90");
+    await chooseSecondTherapist(panel, 1, therapist3Id);
+    await expect(guest).toContainText("+ T29 마사지사3");
 
-    // 두 사람 중 한 명이 휴무라도 저장은 그대로 된다(근무표는 읽기만 한다).
-    const created = await (prisma as any).serviceCall.findMany({ where: { customerMemo: memo } });
+    await goToCustomerStep(panel);
+    await fillBooking(panel, { channel: "전화", bookerName: name });
+    await saveQuickBooking(page, panel);
+
+    // 출근 전이어도(근무표만 근무 예정) 저장은 그대로 된다.
+    const created = await (prisma as any).serviceCall.findMany({ where: { customerMemo: name } });
     expect(created).toHaveLength(1);
     const assignments = await (prisma as any).serviceCallAssignment.findMany({ where: { serviceCallId: created[0].id } });
     const roles = assignments.map((a: { assignmentRole: string; employeeId: string }) => [a.assignmentRole, a.employeeId]);
-    expect(roles).toContainEqual(["THERAPIST_1", therapist1Id]);
-    expect(roles).toContainEqual(["THERAPIST_2", therapist2Id]);
+    expect(roles).toContainEqual(["THERAPIST_1", therapist2Id]);
+    expect(roles).toContainEqual(["THERAPIST_2", therapist3Id]);
   });
 
-  test("베트남어 화면에서는 한 줄의 상태와 코스 칩이 번역되고 근무표 칸은 없다", async ({ page }) => {
+  test("베트남어 화면에서도 출근 전 보기 문구와 꼬리표가 번역되고, 휴무인 Therapist는 보이지 않는다", async ({ page }) => {
     await login(page, account.accountId, account.password);
     await setLocaleCookie(page, "vi");
-    await openQuickBooking(page, monthId, today);
-    const dialog = panel(page);
+    await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);
+    // 지원 헬퍼의 openQuickBooking/quickBookingPanel은 패널 이름을 "빠른 예약"(한국어)으로만 찾아, vi 로캘에서는
+    // 패널이 "Đặt lịch nhanh"로 보여 찾지 못한다. 트리거는 data 속성(로캘 무관)으로 누르고, 패널은 두 언어 중
+    // 하나로 찾는다.
+    await page.locator("[data-quick-booking-trigger]").click();
+    const panel = page.getByRole("complementary", { name: /빠른 예약|Đặt lịch nhanh/ });
+    await expect(panel).toBeVisible();
+    await chooseConditions(panel, { time: "13:00" });
 
-    await goToTherapistStep(page, dialog, `T29 vi ${Date.now().toString(36)}`);
+    await expect(quickBookingLine(panel, therapist1Id)).toHaveCount(0);
+    const showBeforeCheckIn = panel.getByRole("checkbox", { name: "Xem người chưa vào ca (1 người)" });
+    await expect(showBeforeCheckIn).toBeVisible();
+    await showBeforeCheckIn.check();
+    await expect(quickBookingLine(panel, therapist1Id)).toHaveCount(0);
 
-    const row1 = dialog.locator("[data-availability-row]").filter({ has: page.getByText("T29 마사지사1", { exact: true }) });
-    await expect(row1.getByRole("button", { name: "T29D 90 phút, có thể" })).toBeVisible();
-    await expect(row1).toContainText("Có thể");
-    await expect(dialog.getByText("Lịch làm việc", { exact: true })).toHaveCount(0);
-    await expect(row1.getByText("Nghỉ", { exact: true })).toHaveCount(0);
+    const line2 = quickBookingLine(panel, therapist2Id);
+    await expect(line2).toBeVisible();
+    await expect(line2).toContainText("Chưa vào ca");
+    await expect(line2.locator(`[data-course-id="${courseId}"]`)).toHaveText("T29D90");
   });
 });

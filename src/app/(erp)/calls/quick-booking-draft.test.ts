@@ -3,10 +3,8 @@ import { describe, it } from "node:test";
 import {
   guestFieldErrors,
   initialQuickBookingState,
-  otherGuestTherapistIds,
   quickBookingGuestFieldKey,
   quickBookingGuestPosition,
-  quickBookingGuests,
   quickBookingPartyIssueField,
   quickBookingPartyRequest,
   quickBookingReducer,
@@ -21,149 +19,218 @@ function run(state: QuickBookingState, ...events: QuickBookingEvent[]) {
   return events.reduce(quickBookingReducer, state);
 }
 
-describe("quick booking draft (패널 단계 + 티켓 16 저장 상태머신)", () => {
-  it("starts on the customer step, untouched, with the request id it was given", () => {
-    const state = initialQuickBookingState(ledger, "request-1");
-    assert.equal(state.step, "customer");
+function fresh() {
+  return initialQuickBookingState(ledger, "request-1");
+}
+
+const c90 = { courseId: "course-c90", therapist1Id: "therapist-12" };
+
+describe("quick booking: two steps (1018 스펙 D19)", () => {
+  it("starts on the conditions step as a party of one with nobody picked, untouched", () => {
+    const state = fresh();
+    assert.equal(state.step, "conditions");
+    assert.equal(state.partySize, 1);
+    assert.deepEqual(state.guests, []);
     assert.equal(state.touched, false);
     assert.equal(state.save.requestId, "request-1");
   });
 
-  it("moves between steps without losing the draft", () => {
-    const edited = run(
-      initialQuickBookingState(ledger, "request-1"),
-      { type: "edit", changes: { customerMemo: "지윤" } },
-      { type: "step", step: "schedule" }
-    );
-    assert.equal(edited.step, "schedule");
-    assert.equal(edited.touched, true);
-    assert.equal(edited.save.draft.customerMemo, "지윤");
-
-    const back = run(edited, { type: "step", step: "customer" });
-    assert.equal(back.step, "customer");
-    assert.equal(back.save.draft.customerMemo, "지윤");
+  it("moves between the two steps without losing what was picked", () => {
+    const state = run(fresh(), { type: "addGuest", guest: c90 }, { type: "step", step: "customer" }, { type: "step", step: "conditions" });
+    assert.equal(state.step, "conditions");
+    assert.equal(state.guests.length, 1);
   });
 
-  it("marks the draft touched on edit, choose, submit, failed, and lost", () => {
-    const base = initialQuickBookingState(ledger, "request-1");
-    for (const event of [
-      { type: "edit", changes: { courseId: "course-a" } },
-      { type: "choose", changes: { courseId: "course-a" } }
-    ] satisfies QuickBookingEvent[]) {
-      assert.equal(run(base, event).touched, true);
-    }
-
-    const submitted = run(base, { type: "edit", changes: { courseId: "course-a" } }, { type: "submit" });
-    assert.equal(submitted.touched, true);
-
-    const lost = run(submitted, { type: "lost", request: submitted.save.inFlight! });
-    assert.equal(lost.touched, true);
-    assert.equal(lost.save.status, "checking");
-
-    const failed = run(submitted, { type: "failed", request: submitted.save.inFlight!, message: "실패" });
-    assert.equal(failed.touched, true);
-  });
-
-  it("resets touched and goes back to the customer step once the call is saved", () => {
-    const submitted = run(
-      initialQuickBookingState(ledger, "request-1"),
-      { type: "step", step: "review" },
-      { type: "edit", changes: { courseId: "course-a" } },
-      { type: "submit" }
-    );
-    const saved = run(submitted, {
-      type: "saved",
-      request: submitted.save.inFlight!,
-      notice: null,
-      nextRequestId: "request-2"
-    });
-    assert.equal(saved.touched, false);
-    assert.equal(saved.step, "customer");
-    assert.equal(saved.save.requestId, "request-2");
-    assert.equal(saved.save.status, "saved");
+  it("routes save errors of the guest fields to the conditions step and the booking fields to the customer step", () => {
+    assert.equal(quickBookingStepOfField("startTime"), "conditions");
+    assert.equal(quickBookingStepOfField("therapist1Id"), "conditions");
+    assert.equal(quickBookingStepOfField(quickBookingGuestFieldKey(2, "therapist2Id")), "conditions");
+    assert.equal(quickBookingStepOfField("guests"), "conditions");
+    assert.equal(quickBookingStepOfField("bookerName"), "customer");
+    assert.equal(quickBookingStepOfField("bookingChannelCode"), "customer");
+    assert.equal(quickBookingStepOfField("visitRequest"), "customer");
+    assert.equal(quickBookingStepOfField("newCustomer"), "customer");
   });
 });
 
-describe("quick booking party draft (스펙 D10–D12, 티켓 02)", () => {
-  it("starts as a party of one, so the single-call flow is unchanged", () => {
-    assert.deepEqual(initialQuickBookingState(ledger, "request-1").partyGuests, []);
-  });
-
-  it("grows and shrinks the other guests with the party size, keeping guests already chosen", () => {
-    const three = run(
-      initialQuickBookingState(ledger, "request-1"),
-      { type: "partySize", size: 3 },
-      { type: "guest", position: 2, changes: { courseId: "course-c", therapist1Id: "therapist-2" } }
-    );
-    assert.equal(three.touched, true);
-    assert.deepEqual(three.partyGuests, [
-      { courseId: "course-c", therapist1Id: "therapist-2", therapist2Id: null, roomId: null },
-      { courseId: "", therapist1Id: null, therapist2Id: null, roomId: null }
-    ]);
-
-    const two = run(three, { type: "partySize", size: 2 });
-    assert.deepEqual(two.partyGuests, [{ courseId: "course-c", therapist1Id: "therapist-2", therapist2Id: null, roomId: null }]);
-  });
-
-  it("keeps the party size between 1 and 10", () => {
-    const base = initialQuickBookingState(ledger, "request-1");
-    assert.equal(run(base, { type: "partySize", size: 0 }).partyGuests.length, 0);
-    assert.equal(run(base, { type: "partySize", size: 25 }).partyGuests.length, 9);
-  });
-
-  it("does not change the party while a save is in flight", () => {
-    const submitted = run(initialQuickBookingState(ledger, "request-1"), { type: "partySize", size: 2 }, { type: "submit" });
-    const after = run(submitted, { type: "partySize", size: 3 }, { type: "guest", position: 2, changes: { therapist1Id: "therapist-9" } });
-    assert.deepEqual(after.partyGuests, submitted.partyGuests);
-  });
-
-  it("starts a fresh party of one after the party is saved or discarded", () => {
-    const submitted = run(initialQuickBookingState(ledger, "request-1"), { type: "partySize", size: 3 }, { type: "submit" });
-    const saved = run(submitted, { type: "saved", request: submitted.save.inFlight!, notice: null, nextRequestId: "request-2" });
-    assert.deepEqual(saved.partyGuests, []);
-    const discarded = run(initialQuickBookingState(ledger, "request-1"), { type: "partySize", size: 3 }, { type: "discard", nextRequestId: "r" });
-    assert.deepEqual(discarded.partyGuests, []);
-  });
-
-  it("builds the party save from guest 1 in the draft and the other guests, each guest's course defaulting to guest 1's", () => {
+describe("quick booking: picking guests with course chips (1018 스펙 D20)", () => {
+  it("adds a named guest from a Therapist's chip and an unassigned guest from the 미지명 chip", () => {
     const state = run(
-      initialQuickBookingState(ledger, "request-1"),
-      { type: "edit", changes: { startTime: "15:00", customerMemo: "정 대표", note: "단체" } },
-      { type: "choose", changes: { courseId: "course-a", therapist1Id: "therapist-1" } },
-      { type: "edit", changes: { roomId: "room-101" } },
+      fresh(),
+      { type: "partySize", size: 2 },
+      { type: "addGuest", guest: c90 },
+      { type: "addGuest", guest: { courseId: "course-c90", therapist1Id: null } }
+    );
+    assert.equal(state.touched, true);
+    assert.deepEqual(state.guests, [
+      { courseId: "course-c90", therapist1Id: "therapist-12", therapist2Id: null, roomId: null },
+      { courseId: "course-c90", therapist1Id: null, therapist2Id: null, roomId: null }
+    ]);
+  });
+
+  it("does not take more guests than the party size", () => {
+    const state = run(fresh(), { type: "addGuest", guest: c90 }, { type: "addGuest", guest: { courseId: "course-a", therapist1Id: "therapist-7" } });
+    assert.deepEqual(
+      state.guests.map((guest) => guest.therapist1Id),
+      ["therapist-12"]
+    );
+  });
+
+  it("does not give one Therapist to two guests, but takes any number of unassigned guests", () => {
+    const state = run(
+      fresh(),
+      { type: "partySize", size: 4 },
+      { type: "addGuest", guest: c90 },
+      { type: "addGuest", guest: { courseId: "course-a", therapist1Id: "therapist-12" } },
+      { type: "addGuest", guest: { courseId: "course-a", therapist1Id: null } },
+      { type: "addGuest", guest: { courseId: "course-a", therapist1Id: null } }
+    );
+    assert.deepEqual(
+      state.guests.map((guest) => guest.therapist1Id),
+      ["therapist-12", null, null]
+    );
+  });
+
+  it("removes a picked guest, and a guest removed frees that Therapist again", () => {
+    const state = run(
+      fresh(),
+      { type: "partySize", size: 2 },
+      { type: "addGuest", guest: c90 },
+      { type: "addGuest", guest: { courseId: "course-a", therapist1Id: "therapist-7" } },
+      { type: "removeGuest", index: 0 },
+      { type: "addGuest", guest: { courseId: "course-a", therapist1Id: "therapist-12" } }
+    );
+    assert.deepEqual(
+      state.guests.map((guest) => guest.therapist1Id),
+      ["therapist-7", "therapist-12"]
+    );
+  });
+
+  it("keeps the party size between 1 and 10 and drops the last guests when it shrinks", () => {
+    assert.equal(run(fresh(), { type: "partySize", size: 0 }).partySize, 1);
+    assert.equal(run(fresh(), { type: "partySize", size: 25 }).partySize, 10);
+    const shrunk = run(
+      fresh(),
       { type: "partySize", size: 3 },
-      { type: "guest", position: 2, changes: { therapist1Id: "therapist-2" } },
-      { type: "guest", position: 3, changes: { courseId: "course-d", therapist1Id: "therapist-3", therapist2Id: "therapist-4", roomId: "room-102" } },
+      { type: "addGuest", guest: c90 },
+      { type: "addGuest", guest: { courseId: "course-a", therapist1Id: null } },
+      { type: "partySize", size: 1 }
+    );
+    assert.deepEqual(
+      shrunk.guests.map((guest) => guest.therapist1Id),
+      ["therapist-12"]
+    );
+  });
+
+  it("sets and clears a D-course guest's second Therapist, never the guest's own first Therapist or another guest's", () => {
+    const base = run(
+      fresh(),
+      { type: "partySize", size: 2 },
+      { type: "addGuest", guest: { courseId: "course-d", therapist1Id: "therapist-12" } },
+      { type: "addGuest", guest: { courseId: "course-a", therapist1Id: "therapist-7" } }
+    );
+    assert.equal(run(base, { type: "secondTherapist", index: 0, therapistId: "therapist-3" }).guests[0].therapist2Id, "therapist-3");
+    assert.equal(run(base, { type: "secondTherapist", index: 0, therapistId: "therapist-12" }).guests[0].therapist2Id, null);
+    assert.equal(run(base, { type: "secondTherapist", index: 0, therapistId: "therapist-7" }).guests[0].therapist2Id, null);
+    const cleared = run(base, { type: "secondTherapist", index: 0, therapistId: "therapist-3" }, { type: "secondTherapist", index: 0, therapistId: null });
+    assert.equal(cleared.guests[0].therapist2Id, null);
+  });
+
+  it("does not change the guests while a save is in flight", () => {
+    const submitted = run(fresh(), { type: "addGuest", guest: c90 }, { type: "submit" });
+    const after = run(submitted, { type: "removeGuest", index: 0 }, { type: "partySize", size: 3 });
+    assert.deepEqual(after.guests, submitted.guests);
+    assert.equal(after.partySize, 1);
+  });
+});
+
+describe("quick booking: saving (1018 스펙 D21–D22)", () => {
+  it("does not save until the party size is filled", () => {
+    const state = run(fresh(), { type: "partySize", size: 2 }, { type: "addGuest", guest: c90 }, { type: "submit" });
+    assert.equal(state.save.inFlight, null);
+    assert.equal(state.save.status, "idle");
+  });
+
+  it("saves guest 1 as the call itself, with the booker name in the customer/memo column and the memo as the visit request", () => {
+    const state = run(
+      fresh(),
+      { type: "edit", changes: { startTime: "18:00", bookingChannelCode: "TELEGRAM", bookerName: " 홍길동 ", visitRequest: "창가 자리" } },
+      { type: "addGuest", guest: c90 },
       { type: "submit" }
     );
-
-    const request = quickBookingPartyRequest(state.save.inFlight!, state.partyGuests);
-
+    const request = state.save.inFlight!;
     assert.equal(request.requestId, "request-1");
-    assert.equal(request.startTime, "15:00");
-    assert.equal(request.customerMemo, "정 대표");
-    assert.equal(request.note, "단체");
-    assert.equal("courseId" in request, false);
+    assert.equal(request.courseId, "course-c90");
+    assert.equal(request.therapist1Id, "therapist-12");
+    assert.equal(request.roomId, null);
+    assert.equal(request.bookingChannelCode, "TELEGRAM");
+    assert.equal(request.bookerName, "홍길동");
+    assert.equal(request.customerMemo, "홍길동");
+    assert.equal(request.visitRequest, "창가 자리");
+  });
+
+  it("creates a new customer named after the booker when no existing customer was chosen", () => {
+    const state = run(fresh(), { type: "edit", changes: { bookerName: "홍길동" } }, { type: "addGuest", guest: c90 }, { type: "submit" });
+    assert.deepEqual(state.save.inFlight!.newCustomer, { name: "홍길동", phone: null, memo: null, preferenceNote: null });
+    assert.equal(state.save.inFlight!.customerId, null);
+  });
+
+  it("links the chosen customer instead of creating one", () => {
+    const state = run(
+      fresh(),
+      { type: "edit", changes: { bookerName: "홍길동", customerId: "customer-1" } },
+      { type: "addGuest", guest: c90 },
+      { type: "submit" }
+    );
+    assert.equal(state.save.inFlight!.customerId, "customer-1");
+    assert.equal(state.save.inFlight!.newCustomer, null);
+  });
+
+  it("creates no customer without a booker name (the server names a walk-in)", () => {
+    const state = run(fresh(), { type: "edit", changes: { bookingChannelCode: "WALK_IN" } }, { type: "addGuest", guest: c90 }, { type: "submit" });
+    assert.equal(state.save.inFlight!.newCustomer, null);
+    assert.equal(state.save.inFlight!.bookerName ?? null, null);
+  });
+
+  it("builds a party save from the picked guests, guest 1 first", () => {
+    const state = run(
+      fresh(),
+      { type: "edit", changes: { startTime: "18:00", bookerName: "홍길동" } },
+      { type: "partySize", size: 2 },
+      { type: "addGuest", guest: c90 },
+      { type: "addGuest", guest: { courseId: "course-c90", therapist1Id: null } },
+      { type: "submit" }
+    );
+    const request = quickBookingPartyRequest(state.save.inFlight!, state.guests.slice(1));
+    assert.equal(request.customerMemo, "홍길동");
     assert.deepEqual(request.guests, [
-      { courseId: "course-a", therapist1Id: "therapist-1", therapist2Id: null, roomId: "room-101" },
-      { courseId: "course-a", therapist1Id: "therapist-2", therapist2Id: null, roomId: null },
-      { courseId: "course-d", therapist1Id: "therapist-3", therapist2Id: "therapist-4", roomId: "room-102" }
+      { courseId: "course-c90", therapist1Id: "therapist-12", therapist2Id: null, roomId: null },
+      { courseId: "course-c90", therapist1Id: null, therapist2Id: null, roomId: null }
     ]);
   });
 
-  it("lists the therapists other guests already took, so one therapist is not chosen twice", () => {
-    const state = run(
-      initialQuickBookingState(ledger, "request-1"),
-      { type: "choose", changes: { courseId: "course-d", therapist1Id: "therapist-1", therapist2Id: "therapist-2" } },
-      { type: "partySize", size: 3 },
-      { type: "guest", position: 2, changes: { therapist1Id: "therapist-3" } }
-    );
-    const guests = quickBookingGuests(state.save.draft, state.partyGuests);
-    assert.deepEqual([...otherGuestTherapistIds(guests, 1)].sort(), ["therapist-3"]);
-    assert.deepEqual([...otherGuestTherapistIds(guests, 3)].sort(), ["therapist-1", "therapist-2", "therapist-3"]);
+  it("starts over on the conditions step with nobody picked once saved", () => {
+    const submitted = run(fresh(), { type: "partySize", size: 1 }, { type: "addGuest", guest: c90 }, { type: "step", step: "customer" }, { type: "submit" });
+    const saved = run(submitted, { type: "saved", request: submitted.save.inFlight!, notice: null, nextRequestId: "request-2" });
+    assert.equal(saved.step, "conditions");
+    assert.equal(saved.touched, false);
+    assert.deepEqual(saved.guests, []);
+    assert.equal(saved.partySize, 1);
+    assert.equal(saved.save.requestId, "request-2");
   });
 
-  it("routes a guest's save error to that guest's field and to the step it belongs to", () => {
+  it("keeps the picks and stays touched when the save fails or is lost", () => {
+    const submitted = run(fresh(), { type: "addGuest", guest: c90 }, { type: "submit" });
+    const failed = run(submitted, { type: "failed", request: submitted.save.inFlight!, message: "실패" });
+    assert.equal(failed.touched, true);
+    assert.equal(failed.guests.length, 1);
+    const lost = run(submitted, { type: "lost", request: submitted.save.inFlight! });
+    assert.equal(lost.save.status, "checking");
+  });
+});
+
+describe("quick booking: save error keys", () => {
+  it("routes a guest's save error to that guest's field", () => {
     const fieldErrors = {
       [quickBookingGuestFieldKey(2, "therapist1Id")]: ["두 손님"],
       [quickBookingGuestFieldKey(1, "roomId")]: ["객실"],
@@ -171,10 +238,6 @@ describe("quick booking party draft (스펙 D10–D12, 티켓 02)", () => {
     };
     assert.deepEqual(guestFieldErrors(fieldErrors, 2), { therapist1Id: ["두 손님"] });
     assert.deepEqual(guestFieldErrors(fieldErrors, 1), { roomId: ["객실"], customerMemo: ["메모"] });
-    assert.equal(quickBookingStepOfField(quickBookingGuestFieldKey(2, "therapist1Id")), "therapist");
-    assert.equal(quickBookingStepOfField(quickBookingGuestFieldKey(3, "roomId")), "room");
-    assert.equal(quickBookingStepOfField("customerMemo"), "customer");
-    assert.equal(quickBookingStepOfField("guests"), "therapist");
   });
 
   it("names the guest of a guest-field key, and nobody for a shared field", () => {
@@ -193,35 +256,38 @@ describe("quick booking party draft (스펙 D10–D12, 티켓 02)", () => {
 describe("quick booking: one more guest for a party (스펙 D14, 티켓 04)", () => {
   const join = { partyId: "party-jung", serviceDate: "2026-06-10", startTime: "11:00", customerMemo: "정 대표 일행", size: 3 };
 
-  it("starts fresh on the therapist step with the party's time, memo and party id, untouched, with a new request id", () => {
+  it("starts fresh on the conditions step with the party's time, memo and party id, untouched, with a new request id", () => {
     const state = run(
-      initialQuickBookingState(ledger, "request-1"),
-      { type: "edit", changes: { customerMemo: "다른 손님", note: "창가" } },
+      fresh(),
+      { type: "edit", changes: { bookerName: "다른 손님", note: "창가" } },
       { type: "partySize", size: 3 },
       { type: "joinParty", join, nextRequestId: "request-2" }
     );
-
-    assert.equal(state.step, "therapist");
+    assert.equal(state.step, "conditions");
     assert.equal(state.touched, false);
     assert.equal(state.save.requestId, "request-2");
-    assert.deepEqual(state.partyGuests, []);
+    assert.equal(state.partySize, 1);
     assert.deepEqual(state.joinParty, join);
-    const { serviceDate, startTime, customerMemo, partyId, note, customerId } = state.save.draft;
-    assert.deepEqual({ serviceDate, startTime, customerMemo, partyId, note, customerId }, {
-      serviceDate: "2026-06-10",
-      startTime: "11:00",
-      customerMemo: "정 대표 일행",
-      partyId: "party-jung",
-      note: null,
-      customerId: null
-    });
+    const { serviceDate, startTime, customerMemo, partyId, note, customerId, bookerName } = state.save.draft;
+    assert.deepEqual(
+      { serviceDate, startTime, customerMemo, partyId, note, customerId, bookerName },
+      { serviceDate: "2026-06-10", startTime: "11:00", customerMemo: "정 대표 일행", partyId: "party-jung", note: null, customerId: null, bookerName: null }
+    );
   });
 
-  it("keeps the one guest a party of one, and forgets the party once saved or discarded", () => {
-    const joined = run(initialQuickBookingState(ledger, "request-1"), { type: "joinParty", join, nextRequestId: "request-2" });
-    assert.deepEqual(run(joined, { type: "partySize", size: 2 }).partyGuests, []);
+  it("stays a party of one, keeps the party's memo, and never links or creates a customer for the added guest", () => {
+    const joined = run(fresh(), { type: "joinParty", join, nextRequestId: "request-2" });
+    assert.equal(run(joined, { type: "partySize", size: 2 }).partySize, 1);
+    const submitted = run(joined, { type: "edit", changes: { bookerName: "정 대표" } }, { type: "addGuest", guest: c90 }, { type: "submit" });
+    assert.equal(submitted.save.inFlight!.newCustomer, null);
+    assert.equal(submitted.save.inFlight!.customerMemo, "정 대표");
+    const unnamed = run(joined, { type: "addGuest", guest: c90 }, { type: "submit" });
+    assert.equal(unnamed.save.inFlight!.customerMemo, "정 대표 일행");
+  });
 
-    const submitted = run(joined, { type: "choose", changes: { courseId: "course-a" } }, { type: "submit" });
+  it("forgets the party once saved or discarded", () => {
+    const joined = run(fresh(), { type: "joinParty", join, nextRequestId: "request-2" });
+    const submitted = run(joined, { type: "addGuest", guest: c90 }, { type: "submit" });
     const saved = run(submitted, { type: "saved", request: submitted.save.inFlight!, notice: null, nextRequestId: "request-3" });
     assert.equal(saved.joinParty, null);
     assert.equal(saved.save.draft.partyId ?? null, null);
@@ -230,22 +296,27 @@ describe("quick booking: one more guest for a party (스펙 D14, 티켓 04)", ()
 });
 
 describe("quick booking: a Therapist chosen from the ledger status strip (1018 스펙 D17)", () => {
-  it("starts fresh and untouched on the therapist step at the given date and time, with that Therapist chosen and a new request id", () => {
+  it("starts fresh and untouched at the given date and time with that Therapist preselected and a new request id", () => {
     const state = run(
-      initialQuickBookingState(ledger, "request-1"),
-      { type: "edit", changes: { customerMemo: "다른 손님", serviceDate: "2026-06-11" } },
+      fresh(),
+      { type: "edit", changes: { bookerName: "다른 손님", serviceDate: "2026-06-11" } },
       { type: "partySize", size: 2 },
-      { type: "presetTherapist", therapistId: "therapist-12", serviceDate: "2026-06-10", startTime: "18:00", nextRequestId: "request-2" }
+      { type: "start", presetTherapistId: "therapist-12", serviceDate: "2026-06-10", startTime: "18:00", nextRequestId: "request-2" }
     );
-
-    assert.equal(state.step, "therapist");
-    assert.equal(state.save.draft.startTime, "18:00");
+    assert.equal(state.step, "conditions");
     assert.equal(state.touched, false);
     assert.equal(state.save.requestId, "request-2");
-    assert.deepEqual(state.partyGuests, []);
-    assert.equal(state.joinParty, null);
-    assert.equal(state.save.draft.therapist1Id, "therapist-12");
-    assert.equal(state.save.draft.customerMemo ?? null, null);
+    assert.equal(state.partySize, 1);
+    assert.deepEqual(state.guests, []);
+    assert.equal(state.presetTherapistId, "therapist-12");
+    assert.equal(state.save.draft.startTime, "18:00");
     assert.equal(state.save.draft.serviceDate, "2026-06-10");
+    assert.equal(state.save.draft.bookerName ?? null, null);
+  });
+
+  it("keeps the preselected Therapist on top while picking, and forgets it once the draft is discarded", () => {
+    const preset = run(fresh(), { type: "start", presetTherapistId: "therapist-12", serviceDate: "2026-06-10", startTime: "18:00", nextRequestId: "r" });
+    assert.equal(run(preset, { type: "discard", nextRequestId: "r2" }).presetTherapistId, null);
+    assert.equal(run(preset, { type: "addGuest", guest: c90 }).presetTherapistId, "therapist-12");
   });
 });

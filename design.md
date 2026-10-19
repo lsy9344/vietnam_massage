@@ -228,7 +228,7 @@ UI를 만들거나 고치기 전에 이 문서를 읽는다. 화면에 새 모�
 - 칩 사이는 6px(`gap-1.5`)다. 건수는 칩 끝의 밝은 방울(24px, `--surface` 바탕, 같은 의미색 글자)에 넣는다. 실시간 요약처럼 건수가 오른쪽 값 칸에 있으면 방울 없이 칩만 둔다.
 - 0건이면 채움을 빼고 `--border-strong` 테두리와 `--muted` 글자로 바꾼다(방울이 없는 실시간 요약도 같다). 기호는 그 상태 색으로 남겨 모양으로 알아보게 한다. 그래서 건수가 있는 상태만 튄다. 예약·취소는 원래 채우지 않으므로 0건이어도 그대로다.
 - 원장 목록 줄의 상태 칩은 `size="sm"`(높이 24px, 12px 글자, 12px 기호, 방울 없음)이다. 같은 기호와 색이라 머리의 건수와 줄을 바로 맞춰 볼 수 있다. 1280·1024px에서 가장 긴 베트남어 "Đang sử dụng"이 4px 남기고 들어간다(2026-10-17 측정). 칸이 그보다 좁아지거나 이름이 더 길면 옆 칸을 덮지 않고 말줄임으로 잘린다.
-- 빠른 예약 카드의 Therapist별 "한 것 +예약"(`TherapistCallCount`)은 칩이 아니라 글자다. 한 것은 `font-semibold`, "+예약"은 `text-muted`다. 출근 중인데 둘 다 0이면 ▲와 `bg-warning-soft text-warning` 알약으로 감싸고, 퇴근이면 흐리게 둔다.
+- 빠른 예약 Therapist 줄의 "한 것 +예약"(`TherapistCallCount`)은 칩이 아니라 글자다. 한 것은 `font-semibold`, "+예약"은 `text-muted`다. 출근 중인데 둘 다 0이면 ▲와 `bg-warning-soft text-warning` 알약으로 감싸고, 퇴근이면 흐리게 둔다.
 - 원장 Therapist 현황 줄(1018 티켓 04, `therapist-status-strip.tsx`)은 상태 카드 아래에서 가로로 넘기는 작은 카드다(`rounded-md border border-border bg-surface`). 번호(`font-semibold`) · `완료 N · 예약 N`(`text-xs`) 아래에 지금 상태 `StatusIndicator` sm(지금 가능 success, 사용 중 info, 출근 전·퇴근 neutral)과 다음 시각을 둔다. 퇴근 카드는 `text-muted`다. 카드 오른쪽의 작은 "콜만" 버튼은 걸러 보는 동안 검정으로 채우고 카드 테두리도 `border-brand`가 된다. 끝에 같은 모양의 `미지명 N`을 둔다.
 
 ### 6.9 날짜 캡슐
@@ -242,7 +242,8 @@ UI를 만들거나 고치기 전에 이 문서를 읽는다. 화면에 새 모�
 ### 6.11 패널, 서랍, 다이얼로그 — `src/components/ui/panel.tsx`, `alert-dialog.tsx`, `confirm-dialog.tsx`
 
 - `SidePanel`(비모달, 작업면 옆): `rounded-lg border border-border bg-surface`.
-- `ModalPanel`(빠른 예약 같은 생성 흐름): 600px 이상에서는 오른쪽에서 16px 떨어져 떠 있는 서랍(`--surface-float`, 24px, 폭 최대 480px), 미만에서는 전체 화면 시트.
+- `ModalPanel`(항목 추가 같은 짧은 생성 흐름): 600px 이상에서는 오른쪽에서 16px 떨어져 떠 있는 서랍(`--surface-float`, 24px, 폭 최대 480px), 미만에서는 전체 화면 시트.
+- 빠른 예약은 원장을 보면서 쓰므로 `SidePanel`이다(1018 티켓 05). 편집 패널과 같은 옆 칸에 열리고 600px 미만에서는 전체 화면 시트다. ①의 코스 칩은 같은 폭(72px)이라 줄마다 같은 코스가 같은 열에 오고, 열이 패널보다 넓으면 그 목록만 옆으로 넘긴다.
 - 다이얼로그: 가운데, `--surface-float`, 24px, 그림자 없음.
 - 닫기 버튼은 테두리 알약이다.
 

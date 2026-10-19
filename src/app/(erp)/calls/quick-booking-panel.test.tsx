@@ -2,25 +2,23 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
+  ConditionsStep,
   CustomerStep,
   ErrorSummary,
-  PartyGuestNav,
   QuickBookingPanel,
-  ReviewStep,
-  RoomStep,
-  ScheduleStep,
+  QuickBookingTrigger,
   StepperNav,
-  TherapistStep
+  type QuickBookingAvailability
 } from "@/app/(erp)/calls/quick-booking-panel";
 import { renderInShell } from "@/components/shell/test-harness";
 import type { NewCallRowDraft } from "@/app/(erp)/calls/call-new-row-save";
+import type { QuickBookingGuest } from "@/app/(erp)/calls/quick-booking-draft";
 import type { Locale } from "@/lib/i18n/config";
 import type {
   CustomerDto,
   CustomerVisitCandidateDto,
-  CustomerVisitCountsDto,
-  CustomerVisitHistoryRowDto,
   ServiceCallFormOptions,
+  TherapistAvailabilityCourseDto,
   TherapistAvailabilityRowDto
 } from "@/modules/calls/service-call-service";
 
@@ -28,55 +26,69 @@ function render(locale: Locale, node: React.ReactElement) {
   return renderToStaticMarkup(renderInShell(node, locale));
 }
 
-/** html에서 marker 문자열을 담은 <label>...</label> 한 칸을 떼어 본다(체크박스 한 줄, 티켓 24). */
-function labelRowContaining(html: string, marker: string) {
-  const markerIndex = html.indexOf(marker);
-  assert.ok(markerIndex >= 0, `marker not found: ${marker}`);
-  const start = html.lastIndexOf("<label", markerIndex);
-  const end = html.indexOf("</label>", markerIndex) + "</label>".length;
-  return html.slice(start, end);
-}
-
 const options: ServiceCallFormOptions = {
   rooms: [{ value: "room-101", label: "101 호실" }],
   timeSlots: [
-    { value: "15:00", label: "15:00" },
-    { value: "15:30", label: "15:30" }
+    { value: "18:00", label: "18:00" },
+    { value: "18:30", label: "18:30" }
   ],
-  courses: [{ value: "course-a", label: "A 60분" }],
+  courses: [
+    { value: "course-a", label: "A 60분" },
+    { value: "course-c", label: "C 90분" },
+    { value: "course-d", label: "D 90분" }
+  ],
   statuses: [{ value: "RESERVED", label: "예약" }],
   discountTypes: [],
   paymentMethods: [],
   confirmationCodes: [],
-  bookingChannels: [],
-  therapists: [{ value: "therapist-1", label: "마사지사1" }],
+  bookingChannels: [
+    { value: "TELEGRAM", label: "텔레그램" },
+    { value: "WALK_IN", label: "워크인" }
+  ],
+  therapists: [{ value: "therapist-12", label: "12번 (T12)" }],
   expenseHandlers: []
 };
 
-const customers: CustomerDto[] = [
-  { id: "customer-1", name: "지윤", phone: "010-6655-1100", memo: null, preferenceNote: null },
-  { id: "customer-2", name: "하나", phone: null, memo: null, preferenceNote: null }
-];
+const customers: CustomerDto[] = [{ id: "customer-1", name: "홍길동", phone: "010-6655-1100", memo: null, preferenceNote: null }];
 
-/** 고객 단계가 Customer검색/최근 방문 가져오기(티켓 24)를 위해 더 받는 props의 기본값. */
-function customerStepExtras(locale: Locale, overrides: Partial<Pick<Parameters<typeof CustomerStep>[0], "candidates" | "onQueryChange" | "onSelectCandidate" | "query" | "visitSummary">> = {}) {
+function course(courseId: string, code: string, minutes: number, verdict: TherapistAvailabilityCourseDto["verdict"] = "possible"): TherapistAvailabilityCourseDto {
+  return { courseId, courseCode: code, courseName: code, durationMinutes: minutes, verdict, requiresSecondTherapist: code === "D" };
+}
+
+function row(therapistId: string, name: string, changes: Partial<TherapistAvailabilityRowDto> = {}): TherapistAvailabilityRowDto {
   return {
-    candidates: [] as CustomerVisitCandidateDto[],
-    locale,
-    onQueryChange: () => undefined,
-    onSelectCandidate: () => undefined,
-    query: "",
-    visitSummary: null as { counts: CustomerVisitCountsDto; recentVisit: CustomerVisitHistoryRowDto | null; sharedPhone: boolean } | null,
-    ...overrides
+    therapistId,
+    therapistName: name,
+    attendance: "checked_in",
+    shiftCheck: false,
+    available: true,
+    freeFrom: null,
+    nextReservationTime: null,
+    freeMinutes: null,
+    plannedWorkingDayStatus: "미입력",
+    callCounts: { done: 0, finished: 0, reserved: 0 },
+    plannedStartTime: null,
+    current: { state: "available", expectedEnd: null, nextReservationTime: null, freeMinutes: null },
+    courses: [course("course-a", "A", 60), course("course-c", "C", 90), course("course-d", "D", 90)],
+    ...changes
   };
 }
+
+const rows: TherapistAvailabilityRowDto[] = [
+  row("therapist-12", "12번", { nextReservationTime: "19:00", freeMinutes: 60, courses: [course("course-a", "A", 60), course("course-c", "C", 90, "time_short"), course("course-d", "D", 90, "time_short")] }),
+  row("therapist-7", "7번"),
+  row("therapist-3", "3번", { available: false, freeFrom: "18:30", courses: [course("course-a", "A", 60, "time_short"), course("course-c", "C", 90, "time_short"), course("course-d", "D", 90, "time_short")] }),
+  row("therapist-9", "9번", { attendance: "before_check_in", plannedWorkingDayStatus: "근무 예정" }),
+  row("therapist-5", "5번", { attendance: "before_check_in", plannedWorkingDayStatus: "휴무" })
+];
 
 function draft(overrides: Partial<NewCallRowDraft> = {}): NewCallRowDraft {
   return {
     operatingMonthId: "month-2026-06",
     serviceDate: "2026-06-10",
-    startTime: "",
+    startTime: "18:00",
     actualEntryTime: null,
+    actualEndTime: null,
     roomId: null,
     courseId: "",
     customerMemo: null,
@@ -87,823 +99,273 @@ function draft(overrides: Partial<NewCallRowDraft> = {}): NewCallRowDraft {
     discountTypeCode: null,
     paymentMethodCode: null,
     note: null,
+    visitRequest: null,
+    bookingChannelCode: null,
+    bookerName: null,
     confirmationCode: null,
+    newCustomer: null,
     ...overrides
   };
 }
 
-describe("빠른 예약 패널 — 원장 탭 머리의 주요 버튼(명세 F08, 티켓 20)", () => {
-  it("닫혀 있으면 태블릿 폭 이상에서만 버튼이 보이고, 패널 내용은 그려지지 않는다", () => {
-    const html = render(
-      "ko",
-      <QuickBookingPanel
-        customers={customers}
-        initialAvailabilityRows={[]}
-        initialAvailabilityTime="15:00"
-        isLocked={false}
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        operatingMonthId="month-2026-06"
-        options={options}
-        serviceDate="2026-06-10"
-      />
-    );
-    // 버튼 자신이 ModalPanel의 trigger라 Radix가 패널을 닫을 때 포커스를 돌려줄 수 있다(S3, 스토리 70).
-    assert.match(html, /<button[^>]*class="[^"]*hidden min-\[600px\]:inline-flex[^"]*"[^>]*>빠른 예약<\/button>/);
-    // 닫힌 모달의 내용(단계 화면)은 서버에서 그리지 않는다.
-    assert.doesNotMatch(html, /날짜·예약시각/);
+const noop = () => undefined;
 
-    const vietnamese = render(
-      "vi",
-      <QuickBookingPanel
-        customers={customers}
-        initialAvailabilityRows={[]}
-        initialAvailabilityTime="15:00"
-        isLocked={false}
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        operatingMonthId="month-2026-06"
-        options={options}
-        serviceDate="2026-06-10"
-      />
-    );
-    assert.match(vietnamese, />Đặt lịch nhanh</);
-  });
+function conditions(
+  locale: Locale,
+  {
+    availability = { rows, pending: false, failed: false },
+    guests = [],
+    joining = false,
+    partySize = 1,
+    presetTherapistId = null
+  }: { availability?: QuickBookingAvailability; guests?: QuickBookingGuest[]; joining?: boolean; partySize?: number; presetTherapistId?: string | null } = {}
+) {
+  return render(
+    locale,
+    <ConditionsStep
+      availability={availability}
+      disabled={false}
+      draft={draft()}
+      fieldErrors={{}}
+      guests={guests}
+      joining={joining}
+      monthEndDate="2026-06-30"
+      monthStartDate="2026-06-01"
+      onAddGuest={noop}
+      onNext={noop}
+      onNow={noop}
+      onPartySizeChange={noop}
+      onRemoveGuest={noop}
+      onScheduleChange={noop}
+      onSecondTherapist={noop}
+      options={options}
+      partySize={partySize}
+      onShowBeforeCheckInChange={noop}
+      presetTherapistId={presetTherapistId}
+      showBeforeCheckIn={false}
+    />
+  );
+}
 
-  it("잠긴 운영월에서는 빠른 예약 버튼이 꺼진다", () => {
-    const html = render(
-      "ko",
-      <QuickBookingPanel
-        customers={customers}
-        initialAvailabilityRows={[]}
-        initialAvailabilityTime="15:00"
-        isLocked
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        operatingMonthId="month-2026-06"
-        options={options}
-        serviceDate="2026-06-10"
-      />
-    );
-    assert.match(html, /<button[^>]*disabled=""[^>]*>빠른 예약<\/button>/);
-  });
+/** html에서 한 줄(data-quick-booking-line)을 떼어 본다. */
+function line(html: string, id: string) {
+  const start = html.indexOf(`data-quick-booking-line="${id}"`);
+  assert.ok(start >= 0, `line not found: ${id}`);
+  const open = html.lastIndexOf("<li", start);
+  return html.slice(open, html.indexOf("</li>", start) + "</li>".length);
+}
+
+function lineOrder(html: string) {
+  return [...html.matchAll(/data-quick-booking-line="([^"]+)"/g)].map((match) => match[1]);
+}
+
+const guest = (courseId: string, therapist1Id: string | null, therapist2Id: string | null = null): QuickBookingGuest => ({
+  courseId,
+  therapist1Id,
+  therapist2Id,
+  roomId: null
 });
 
-describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
-  it("고객 단계: 고르지 않았으면 검색칸과 고객/메모 칸을 보여 준다", () => {
-    const html = render(
-      "ko",
-      <CustomerStep
-        {...customerStepExtras("ko")}
-        customers={customers}
-        disabled={false}
-        draft={draft()}
-        fieldErrors={{}}
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        onEdit={() => undefined}
-        options={options}
-      />
-    );
-    assert.match(html, />고객 검색</);
-    assert.match(html, />고객\/메모</);
-    assert.doesNotMatch(html, /선택 해제/);
-
-    const vietnamese = render(
-      "vi",
-      <CustomerStep
-        {...customerStepExtras("vi")}
-        customers={customers}
-        disabled={false}
-        draft={draft()}
-        fieldErrors={{}}
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        onEdit={() => undefined}
-        options={options}
-      />
-    );
-    assert.match(vietnamese, />Tìm khách hàng</);
+describe("빠른 예약 — 머리 버튼과 옆 패널(1018 스펙 D19)", () => {
+  it("머리 버튼은 태블릿 폭 이상에서만 보이고 잠긴 운영월에서는 꺼진다", () => {
+    assert.match(render("ko", <QuickBookingTrigger isLocked={false} />), /<button[^>]*class="[^"]*hidden min-\[600px\]:inline-flex[^"]*"[^>]*data-quick-booking-trigger=""[^>]*>빠른 예약<\/button>/);
+    assert.match(render("ko", <QuickBookingTrigger isLocked />), /<button[^>]*disabled=""[^>]*>빠른 예약<\/button>/);
+    assert.match(render("vi", <QuickBookingTrigger isLocked={false} />), />Đặt lịch nhanh</);
   });
 
-  it("고객 단계: 고객을 고르면 이름·연락처와 선택 해제 버튼을 보여 주고 검색칸은 숨는다", () => {
-    const html = render(
-      "ko",
-      <CustomerStep
-        {...customerStepExtras("ko")}
-        customers={customers}
-        disabled={false}
-        draft={draft({ customerId: "customer-1" })}
-        fieldErrors={{}}
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        onEdit={() => undefined}
-        options={options}
-      />
-    );
-    assert.match(html, /지윤 · 010-6655-1100/);
-    assert.match(html, />선택 해제</);
-    assert.doesNotMatch(html, /role="combobox"/);
-  });
-
-  it("고객 단계: 고객 화면으로 이동하는 링크가 늘 보인다(스토리 91, 티켓 24)", () => {
-    const html = render(
-      "ko",
-      <CustomerStep
-        {...customerStepExtras("ko")}
-        customers={customers}
-        disabled={false}
-        draft={draft({ customerId: "customer-1" })}
-        fieldErrors={{}}
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        onEdit={() => undefined}
-        options={options}
-      />
-    );
-    assert.match(html, /<a[^>]*href="\/customers\?visitCustomer=customer-1"[^>]*>고객 화면으로 이동<\/a>/);
-  });
-
-  it("고객 단계: 새 고객 만들기를 누르면 이름·연락처·공통 선호 칸이 보이고 검색칸은 숨는다(스토리 57, 티켓 24)", () => {
-    const html = render(
-      "ko",
-      <CustomerStep
-        {...customerStepExtras("ko")}
-        customers={customers}
-        disabled={false}
-        draft={draft({ newCustomer: { name: "새손님", phone: "0909999999", memo: null, preferenceNote: "조용한 방 선호" } })}
-        fieldErrors={{}}
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        onEdit={() => undefined}
-        options={options}
-      />
-    );
-    assert.match(html, />새 고객 만들기</);
-    assert.match(html, />검색으로 돌아가기</);
-    assert.match(html, /value="새손님"/);
-    assert.match(html, /value="0909999999"/);
-    assert.match(html, />조용한 방 선호</);
-    assert.doesNotMatch(html, /role="combobox"/);
-
-    const withNameError = render(
-      "ko",
-      <CustomerStep
-        {...customerStepExtras("ko")}
-        customers={customers}
-        disabled={false}
-        draft={draft({ newCustomer: { name: "", phone: null, memo: null, preferenceNote: null } })}
-        fieldErrors={{ newCustomer: ["이름을 입력하세요."] }}
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        onEdit={() => undefined}
-        options={options}
-      />
-    );
-    assert.match(withNameError, /role="alert">이름을 입력하세요\.</);
-  });
-
-  it("고객 단계: 최근 방문 가져오기는 체크한 값만 지금 값과 같게 보이고, 비활성 값은 가져올 수 없다(B09, 스토리 71-73, 티켓 24)", () => {
-    const recentVisit = {
-      serviceCallId: "call-1",
-      operatingMonthId: "month-2026-06",
-      serviceDate: "2026-06-05",
-      startTime: "15:00",
-      courseId: "course-a",
-      courseLabel: "A 60분",
-      therapist1Id: "therapist-retired",
-      therapist2Id: null,
-      therapistLabel: "그만둔 마사지사",
-      status: "방문완료",
-      customerMemo: "지윤 방문",
-      visitRequest: "조명을 어둡게"
-    };
-    const html = render(
-      "ko",
-      <CustomerStep
-        {...customerStepExtras("ko", {
-          visitSummary: { counts: { completedCount: 1, noShowCount: 0, canceledCount: 0 }, recentVisit, sharedPhone: false }
-        })}
-        customers={customers}
-        disabled={false}
-        draft={draft({ customerId: "customer-1", courseId: "course-a" })}
-        fieldErrors={{}}
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        onEdit={() => undefined}
-        options={options}
-      />
-    );
-    // 지금 코스(course-a)가 그 방문의 코스와 같고 활성이라 체크돼 있고, 가져올 수 없음 표시가 없다.
-    const courseRow = labelRowContaining(html, "코스 가져오기: A 60분");
-    assert.match(courseRow, /checked=""/);
-    assert.doesNotMatch(courseRow, /가져올 수 없음/);
-    // Therapist는 지금 활성 목록(options.therapists)에 없어 가져올 수 없고, 체크도 꺼져 있다.
-    const therapistRow = labelRowContaining(html, "Therapist 가져오기: 그만둔 마사지사");
-    assert.doesNotMatch(therapistRow, /checked=""/);
-    assert.match(therapistRow, /disabled=""/);
-    assert.match(therapistRow, /가져올 수 없음/);
-    // 방문별 요청은 아직 체크 전이라(지금 값은 null) 체크돼 있지 않다.
-    const visitRequestRow = labelRowContaining(html, "방문별 요청 가져오기: 조명을 어둡게");
-    assert.doesNotMatch(visitRequestRow, /checked=""/);
-  });
-
-  // S5: 고객을 고른 뒤에도(검색 목록이 아니라 고른 고객 칸) 같은 연락처 경고를 보인다(스펙 F01 단계 1).
-  it("고객 단계: 고른 고객이 같은 연락처를 쓰는 다른 고객과 겹치면 경고를 보인다", () => {
-    const html = render(
-      "ko",
-      <CustomerStep
-        {...customerStepExtras("ko", {
-          visitSummary: { counts: { completedCount: 0, noShowCount: 0, canceledCount: 0 }, recentVisit: null, sharedPhone: true }
-        })}
-        customers={customers}
-        disabled={false}
-        draft={draft({ customerId: "customer-1" })}
-        fieldErrors={{}}
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        onEdit={() => undefined}
-        options={options}
-      />
-    );
-    assert.match(html, /같은 연락처의 고객이 여러 명입니다/);
-
-    const withoutSharedPhone = render(
-      "ko",
-      <CustomerStep
-        {...customerStepExtras("ko", {
-          visitSummary: { counts: { completedCount: 0, noShowCount: 0, canceledCount: 0 }, recentVisit: null, sharedPhone: false }
-        })}
-        customers={customers}
-        disabled={false}
-        draft={draft({ customerId: "customer-1" })}
-        fieldErrors={{}}
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        onEdit={() => undefined}
-        options={options}
-      />
-    );
-    assert.doesNotMatch(withoutSharedPhone, /같은 연락처의 고객이 여러 명입니다/);
-  });
-
-  it("고객 단계: 필드 오류는 그 칸 옆에 보인다", () => {
-    const html = render(
-      "ko",
-      <CustomerStep
-        {...customerStepExtras("ko")}
-        customers={customers}
-        disabled={false}
-        draft={draft()}
-        fieldErrors={{ customerMemo: ["500자 이하로 입력하세요."] }}
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        onEdit={() => undefined}
-        options={options}
-      />
-    );
-    assert.match(html, /role="alert">500자 이하로 입력하세요\.</);
-  });
-
-  it("날짜·예약시각 단계: 운영월 범위로 날짜를 제한하고 '지금' 버튼이 있다", () => {
-    const html = render(
-      "ko",
-      <ScheduleStep
-        disabled={false}
-        draft={draft({ startTime: "15:00" })}
-        fieldErrors={{}}
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        onNow={() => undefined}
-        onScheduleChange={() => undefined}
-        options={options}
-      />
-    );
-    assert.match(html, /min="2026-06-01"/);
-    assert.match(html, /max="2026-06-30"/);
-    assert.match(html, /<option value="15:00" selected="">15:00<\/option>/);
-    assert.match(html, /<button[^>]*>지금<\/button>/);
-
-    const vietnamese = render(
-      "vi",
-      <ScheduleStep
-        disabled={false}
-        draft={draft()}
-        fieldErrors={{}}
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        onNow={() => undefined}
-        onScheduleChange={() => undefined}
-        options={options}
-      />
-    );
-    assert.match(vietnamese, />Ngay bây giờ</);
-  });
-
-  it("Therapist·코스 단계: 고른 것이 없으면 안내 문장을, 고르면 요약과 해제 버튼을 보여 준다", () => {
-    const row: TherapistAvailabilityRowDto = {
-      therapistId: "therapist-1",
-      therapistName: "마사지사1",
-      attendance: "before_check_in",
-      shiftCheck: false,
-      available: true,
-      freeFrom: null,
-      nextReservationTime: null,
-      freeMinutes: 60,
-      plannedWorkingDayStatus: "미입력",
-      callCounts: { done: 0, finished: 0, reserved: 0 },
-      plannedStartTime: null,
-      current: { state: "before_check_in", expectedEnd: null, nextReservationTime: null, freeMinutes: null },
-      courses: [{ courseId: "course-a", courseCode: "A", courseName: "A 60분", durationMinutes: 60, verdict: "possible", requiresSecondTherapist: false }]
-    };
-
-    const unset = render(
-      "ko",
-      <TherapistStep
-        availabilityFailed={false}
-        availabilityPending={false}
-        availabilityRows={[row]}
-        availabilityTime="15:00"
-        courseId=""
-        courseLabel={null}
-        disabled={false}
-        fieldErrors={{}}
-        locale="ko"
-        onChoose={() => undefined}
-        onChooseSecond={() => undefined}
-        onClear={() => undefined}
-        onClearSecond={() => undefined}
-        onTimeChange={() => undefined}
-        options={options}
-        therapist1Id={null}
-        therapist2Label={null}
-        therapistLabel={null}
-      />
-    );
-    assert.match(unset, /가능 코스에서 Therapist와 코스를 고르세요\./);
-    assert.doesNotMatch(unset, /선택 해제/);
-    // 가능 목록은 늘 펼친 채로 보인다(접기 버튼을 눌러도 바뀌지 않는다, onToggle no-op).
-    assert.match(unset, /A 60분 가능/);
-    // 1인 코스는 두 번째 Therapist 영역이 보이지 않는다.
-    assert.doesNotMatch(unset, /두 번째 Therapist/);
-
-    const chosen = render(
-      "ko",
-      <TherapistStep
-        availabilityFailed={false}
-        availabilityPending={false}
-        availabilityRows={[row]}
-        availabilityTime="15:00"
-        courseId="course-a"
-        courseLabel="A 60분"
-        disabled={false}
-        fieldErrors={{ courseId: ["코스를 선택하세요."] }}
-        locale="ko"
-        onChoose={() => undefined}
-        onChooseSecond={() => undefined}
-        onClear={() => undefined}
-        onClearSecond={() => undefined}
-        onTimeChange={() => undefined}
-        options={options}
-        therapist1Id="therapist-1"
-        therapist2Label={null}
-        therapistLabel="마사지사1"
-      />
-    );
-    assert.match(chosen, /A 60분 · 마사지사1/);
-    assert.match(chosen, />선택 해제</);
-    assert.match(chosen, /role="alert">코스를 선택하세요\.</);
-  });
-
-  it("Therapist·코스 단계: 두 명 코스는 두 번째 Therapist를 첫 목록과 같은 한 줄 모양으로 따로 고르고, 시간 부족·수당 없음은 불가 칩이다", () => {
-    const rows: TherapistAvailabilityRowDto[] = [
-      {
-        therapistId: "therapist-1",
-        therapistName: "마사지사1",
-        attendance: "before_check_in",
-        shiftCheck: false,
-        available: true,
-        freeFrom: null,
-        nextReservationTime: null,
-        freeMinutes: 90,
-        plannedWorkingDayStatus: "미입력",
-        callCounts: { done: 0, finished: 0, reserved: 0 },
-        plannedStartTime: null,
-        current: { state: "before_check_in", expectedEnd: null, nextReservationTime: null, freeMinutes: null },
-        courses: [{ courseId: "course-d", courseCode: "D", courseName: "D 2:1 90", durationMinutes: 90, verdict: "possible", requiresSecondTherapist: true }]
-      },
-      {
-        therapistId: "therapist-2",
-        therapistName: "마사지사2",
-        attendance: "checked_in",
-        shiftCheck: false,
-        available: true,
-        freeFrom: null,
-        nextReservationTime: null,
-        freeMinutes: 90,
-        plannedWorkingDayStatus: "근무 예정",
-        callCounts: { done: 0, finished: 0, reserved: 0 },
-        plannedStartTime: null,
-        current: { state: "before_check_in", expectedEnd: null, nextReservationTime: null, freeMinutes: null },
-        courses: [{ courseId: "course-d", courseCode: "D", courseName: "D 2:1 90", durationMinutes: 90, verdict: "time_short", requiresSecondTherapist: true }]
-      },
-      {
-        therapistId: "therapist-3",
-        therapistName: "마사지사3",
-        attendance: "checked_in",
-        shiftCheck: false,
-        available: false,
-        freeFrom: "16:00",
-        nextReservationTime: null,
-        freeMinutes: null,
-        plannedWorkingDayStatus: "휴무",
-        callCounts: { done: 0, finished: 0, reserved: 0 },
-        plannedStartTime: null,
-        current: { state: "before_check_in", expectedEnd: null, nextReservationTime: null, freeMinutes: null },
-        courses: [{ courseId: "course-d", courseCode: "D", courseName: "D 2:1 90", durationMinutes: 90, verdict: "rate_missing", requiresSecondTherapist: true }]
-      }
-    ];
-
-    const noSecondYet = render(
-      "ko",
-      <TherapistStep
-        availabilityFailed={false}
-        availabilityPending={false}
-        availabilityRows={rows}
-        availabilityTime="15:00"
-        courseId="course-d"
-        courseLabel="D 2:1 90"
-        disabled={false}
-        fieldErrors={{}}
-        locale="ko"
-        onChoose={() => undefined}
-        onChooseSecond={() => undefined}
-        onClear={() => undefined}
-        onClearSecond={() => undefined}
-        onTimeChange={() => undefined}
-        options={options}
-        therapist1Id="therapist-1"
-        therapist2Label={null}
-        therapistLabel="마사지사1"
-      />
-    );
-    assert.match(noSecondYet, /두 번째 Therapist/);
-    // 두 번째 후보 줄만 떼어 본다. 이미 고른 첫 번째 Therapist(therapist-1)는 거기서 빠진다.
-    const secondLine = (therapistId: string) => noSecondYet.split("<li").find((part) => part.includes(`data-second-therapist-row="${therapistId}"`)) ?? "";
-    assert.equal(secondLine("therapist-1"), "");
-    // 두 번째 후보도 첫 목록과 같은 한 줄 모양이다(D5): 이름 · 상태 · 고른 코스의 칩 하나. 근무표·출근 칸은 없다.
-    assert.match(secondLine("therapist-2"), />마사지사2<[\s\S]*가능[\s\S]*aria-expanded="false"[^>]*aria-label="D 90분 · 시간 부족"/);
-    assert.match(secondLine("therapist-3"), />마사지사3<[\s\S]*불가 · 16:00부터[\s\S]*aria-label="D 90분 · 이 코스 불가"/);
-    assert.doesNotMatch(secondLine("therapist-2"), /D 90분 가능/);
-    assert.doesNotMatch(secondLine("therapist-2") + secondLine("therapist-3"), /근무 예정|휴무|출근/);
-    // 칩 id가 첫 목록의 같은 Therapist 줄과 겹치지 않는다.
-    assert.doesNotMatch(noSecondYet, /data-second-therapist-row="therapist-1"/);
-
-    const secondChosen = render(
-      "ko",
-      <TherapistStep
-        availabilityFailed={false}
-        availabilityPending={false}
-        availabilityRows={rows}
-        availabilityTime="15:00"
-        courseId="course-d"
-        courseLabel="D 2:1 90"
-        disabled={false}
-        fieldErrors={{ therapist2Id: ["Therapist 1과 Therapist 2는 서로 다른 사람이어야 합니다."] }}
-        locale="ko"
-        onChoose={() => undefined}
-        onChooseSecond={() => undefined}
-        onClear={() => undefined}
-        onClearSecond={() => undefined}
-        onTimeChange={() => undefined}
-        options={options}
-        therapist1Id="therapist-1"
-        therapist2Label="마사지사2"
-        therapistLabel="마사지사1"
-      />
-    );
-    assert.match(secondChosen, />마사지사2</);
-    assert.match(secondChosen, /role="alert">Therapist 1과 Therapist 2는 서로 다른 사람이어야 합니다\.</);
-  });
-
-  it("Therapist·코스 단계: 출근 시각이 입력된 Therapist만 첫 목록과 두 번째 후보에 보이고, 출근 전은 체크하면 보인다", () => {
-    const baseRow = (id: string, name: string, attendance: TherapistAvailabilityRowDto["attendance"]): TherapistAvailabilityRowDto => ({
-      therapistId: id,
-      therapistName: name,
-      attendance,
-      shiftCheck: false,
-      available: true,
-      freeFrom: null,
-      nextReservationTime: null,
-      freeMinutes: 90,
-      plannedWorkingDayStatus: "미입력",
-      callCounts: { done: 0, finished: 0, reserved: 0 },
-      plannedStartTime: null,
-      current: { state: "before_check_in", expectedEnd: null, nextReservationTime: null, freeMinutes: null },
-      courses: [{ courseId: "course-d", courseCode: "D", courseName: "D 2:1 90", durationMinutes: 90, verdict: "possible", requiresSecondTherapist: true }]
-    });
-    const rows = [baseRow("t-1", "출근자1", "checked_in"), baseRow("t-2", "출근자2", "checked_in"), baseRow("t-3", "미출근자", "before_check_in")];
-    const html = render(
-      "ko",
-      <TherapistStep
-        availabilityFailed={false}
-        availabilityPending={false}
-        availabilityRows={rows}
-        availabilityTime="15:00"
-        courseId="course-d"
-        courseLabel="D 2:1 90"
-        disabled={false}
-        fieldErrors={{}}
-        locale="ko"
-        onChoose={() => undefined}
-        onChooseSecond={() => undefined}
-        onClear={() => undefined}
-        onClearSecond={() => undefined}
-        onTimeChange={() => undefined}
-        options={options}
-        therapist1Id="t-1"
-        therapist2Label={null}
-        therapistLabel="출근자1"
-      />
-    );
-    assert.match(html, /출근자1/);
-    assert.match(html, /출근자2/);
-    assert.doesNotMatch(html, /미출근자/);
-    assert.match(html, /<input[^>]*type="checkbox"/);
-    assert.match(html, /출근 전 Therapist 1명도 보기/);
-  });
-
-  it("객실·메모 단계: 객실은 선택이고 메모는 500자까지다", () => {
-    const html = render(
-      "ko",
-      <RoomStep
-        customers={customers}
-        disabled={false}
-        draft={draft({ note: "조용한 방 부탁" })}
-        fieldErrors={{ roomId: ["객실이 올바르지 않습니다."] }}
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        onEdit={() => undefined}
-        options={options}
-      />
-    );
-    assert.match(html, /<option value="" selected="">미배정<\/option>/);
-    assert.match(html, /maxLength="500"/);
-    assert.match(html, />조용한 방 부탁</);
-    assert.match(html, /role="alert">객실이 올바르지 않습니다\.</);
-  });
-
-  it("객실·메모 단계: 방문별 요청은 비고와 나란히 있고 서로 다른 값을 담는다(F06, 티켓 23)", () => {
-    const html = render(
-      "ko",
-      <RoomStep
-        customers={customers}
-        disabled={false}
-        draft={draft({ note: "카운터 전달용 비고", visitRequest: "조명을 어둡게 해 주세요" })}
-        fieldErrors={{ visitRequest: ["500자 이하로 입력하세요."] }}
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        onEdit={() => undefined}
-        options={options}
-      />
-    );
-    assert.match(html, />방문별 요청</);
-    assert.match(html, />카운터 전달용 비고</);
-    assert.match(html, />조명을 어둡게 해 주세요</);
-    assert.match(html, /role="alert">500자 이하로 입력하세요\.</);
-  });
-
-  it("확인 단계: 고른 값을 요약으로 보여 주고 저장·취소 버튼이 있다", () => {
-    const html = render(
-      "ko",
-      <ReviewStep
-        courseLabel="A 60분"
-        customerLabel="지윤"
-        disabled={false}
-        draft={draft({ startTime: "15:00", note: "조용한 방" })}
-        message={null}
-        notice={null}
-        onCancel={() => undefined}
-        onRetry={() => undefined}
-        onSave={() => undefined}
-        roomLabel="101 호실"
-        status="idle"
-        therapist2Label="마사지사2"
-        therapistLabel="마사지사1"
-      />
-    );
-    assert.match(html, /지윤/);
-    assert.match(html, /2026-06-10 15:00/);
-    assert.match(html, /A 60분/);
-    assert.match(html, /101 호실/);
-    assert.match(html, /마사지사1/);
-    // 두 번째 Therapist가 있으면 요약에 함께 보인다(티켓 21).
-    assert.match(html, /마사지사2/);
-    assert.match(html, /<button[^>]*>예약 저장<\/button>/);
-    assert.match(html, /<button[^>]*>취소<\/button>/);
-
-    const noCustomer = render(
-      "ko",
-      <ReviewStep
-        courseLabel={null}
-        customerLabel={null}
-        disabled={false}
-        draft={draft()}
-        message={null}
-        notice={null}
-        onCancel={() => undefined}
-        onRetry={() => undefined}
-        onSave={() => undefined}
-        roomLabel={null}
-        status="idle"
-        therapist2Label={null}
-        therapistLabel={null}
-      />
-    );
-    assert.match(noCustomer, /고객 없음/);
-    assert.match(noCustomer, /선택 안 함/);
-    assert.match(noCustomer, /미배정/);
-    // 두 번째 Therapist가 없으면 그 행을 그리지 않는다.
-    assert.doesNotMatch(noCustomer, /마사지사2/);
-  });
-
-  it("단계 이동줄: 다섯 단계가 번호로 보이고 지금 단계가 표시되며, 오류가 있는 단계에 표시가 붙는다", () => {
-    const html = render(
-      "ko",
-      <StepperNav disabled={false} errorSteps={new Set(["room"])} onSelect={() => undefined} step="schedule" />
-    );
-    for (const label of ["고객", "날짜·예약시각", "Therapist·코스", "객실·메모", "확인"]) {
-      assert.match(html, new RegExp(label));
-    }
-    assert.match(html, /aria-current="step"[^>]*>[\s\S]*?날짜·예약시각/);
-    assert.match(html, /객실·메모[\s\S]*?!/);
-  });
-
-  it("패널 요약: 필드 오류와 전체 메시지를 함께 보여 준다", () => {
-    const empty = render("ko", <ErrorSummary fieldErrors={{}} message={null} onJump={() => undefined} />);
-    assert.equal(empty, "");
-
-    const html = render(
-      "ko",
-      <ErrorSummary fieldErrors={{ courseId: ["코스를 선택하세요."] }} message="입력값이 올바르지 않습니다." onJump={() => undefined} />
-    );
-    assert.match(html, /role="alert"/);
-    assert.match(html, /입력값이 올바르지 않습니다\./);
-    assert.match(html, /코스를 선택하세요\./);
-  });
-});
-
-describe("빠른 예약 — 일행(스펙 D10–D12, 티켓 02)", () => {
-  function availability(therapistId: string, therapistName: string): TherapistAvailabilityRowDto {
-    return {
-      therapistId,
-      therapistName,
-      attendance: "checked_in",
-      shiftCheck: false,
-      available: true,
-      freeFrom: null,
-      nextReservationTime: null,
-      freeMinutes: 60,
-      plannedWorkingDayStatus: "미입력",
-      callCounts: { done: 0, finished: 0, reserved: 0 },
-      plannedStartTime: null,
-      current: { state: "before_check_in", expectedEnd: null, nextReservationTime: null, freeMinutes: null },
-      courses: [{ courseId: "course-a", courseCode: "A", courseName: "A 60분", durationMinutes: 60, verdict: "possible", requiresSecondTherapist: false }]
-    };
-  }
-
-  it("고객 단계: 인원 수를 고르며 기본은 1명이다(ko·vi)", () => {
+  it("닫혀 있으면 패널을 그리지 않고, 열면 원장 옆의 비모달 패널(휴대폰은 전체 화면 시트)로 ① 조건부터 보인다", () => {
     const props = {
-      ...customerStepExtras("ko"),
       customers,
-      disabled: false,
-      draft: draft(),
-      fieldErrors: {},
+      initialAvailabilityRows: rows,
+      initialAvailabilityTime: "18:00",
+      isLocked: false,
       monthEndDate: "2026-06-30",
       monthStartDate: "2026-06-01",
-      onEdit: () => undefined,
-      options
+      onOpenChange: noop,
+      operatingMonthId: "month-2026-06",
+      options,
+      serviceDate: "2026-06-10"
     };
-    const one = render("ko", <CustomerStep {...props} />);
-    assert.match(one, />인원</);
-    assert.match(one, /<option value="1" selected="">1명<\/option>/);
-    assert.match(one, /<option value="10">10명<\/option>/);
-
-    const three = render("vi", <CustomerStep {...props} {...customerStepExtras("vi")} onPartySizeChange={() => undefined} partySize={3} />);
-    assert.match(three, />Số khách</);
-    assert.match(three, /<option value="3" selected="">3 khách<\/option>/);
+    assert.doesNotMatch(render("ko", <QuickBookingPanel {...props} open={false} />), /<aside/);
+    const html = render("ko", <QuickBookingPanel {...props} open />);
+    assert.match(html, /<aside aria-label="빠른 예약" class="[^"]*max-\[599px\]:fixed max-\[599px\]:inset-0/);
+    assert.doesNotMatch(html, /role="dialog"/);
+    assert.match(html, /aria-current="step"[^>]*>.*조건/);
+    assert.match(html, /data-quick-booking-line="unassigned"/);
+    // 이미 담은 손님이 없으면 ② 고객으로 넘어갈 수 없다.
+    assert.match(html, /<button[^>]*disabled=""[^>]*>.*고객<\/button>/);
+    assert.match(render("ko", <QuickBookingPanel {...props} hidden open />), /<div hidden="" id="quick-booking-panel"/);
   });
 
-  it("Therapist·코스 단계: 손님을 차례로 고르는 줄이 보이고, 다른 손님이 고른 Therapist는 목록에서 빠진다", () => {
-    const html = render(
-      "ko",
-      <TherapistStep
-        availabilityFailed={false}
-        availabilityPending={false}
-        availabilityRows={[availability("therapist-1", "마사지사1"), availability("therapist-2", "마사지사2")]}
-        availabilityTime="15:00"
-        courseId=""
-        courseLabel={null}
-        disabled={false}
-        excludedTherapistIds={new Set(["therapist-1"])}
-        fieldErrors={{ therapist1Id: ["같은 Therapist를 일행의 두 손님에게 고를 수 없습니다."] }}
-        guestNav={
-          <PartyGuestNav
-            active={2}
-            disabled={false}
-            errorPositions={new Set([2])}
-            guests={[
-              { position: 1, summary: "A 60분 · 마사지사1" },
-              { position: 2, summary: null }
-            ]}
-            onSelect={() => undefined}
-          />
-        }
-        locale="ko"
-        onChoose={() => undefined}
-        onChooseSecond={() => undefined}
-        onClear={() => undefined}
-        onClearSecond={() => undefined}
-        onTimeChange={() => undefined}
-        options={options}
-        therapist1Id={null}
-        therapist2Label={null}
-        therapistLabel={null}
-      />
-    );
-    assert.match(html, /aria-label="일행 손님"/);
-    assert.match(html, /손님 1 · A 60분 · 마사지사1/);
-    assert.match(html, /aria-pressed="true"[^>]*>손님 2 · 선택 안 함/);
-    assert.match(html, /마사지사2/);
-    assert.doesNotMatch(html, />마사지사1</);
-    assert.match(html, /role="alert">같은 Therapist를 일행의 두 손님에게 고를 수 없습니다\.</);
+  it("단계 이동줄은 두 단계이고, 오류가 있는 단계에 표시가 붙는다", () => {
+    const html = render("ko", <StepperNav customerReady disabled={false} errorSteps={new Set(["customer"])} onSelect={noop} step="conditions" />);
+    assert.equal((html.match(/<li>/g) ?? []).length, 2);
+    assert.match(html, /고객<span aria-hidden="true" class="font-bold text-danger">!<\/span>/);
+    assert.doesNotMatch(html, /disabled=""/);
   });
 
-  it("객실·메모 단계: 일행이면 손님마다 객실을 고르거나 비운다", () => {
-    const html = render(
-      "ko",
-      <RoomStep
-        customers={customers}
-        disabled={false}
-        draft={draft({ roomId: "room-101" })}
-        fieldErrors={{ "guests.2.roomId": ["활성 객실을 선택하세요."] }}
-        guests={[
-          { courseId: "course-a", therapist1Id: "therapist-1", therapist2Id: null, roomId: "room-101" },
-          { courseId: "", therapist1Id: null, therapist2Id: null, roomId: null }
-        ]}
-        monthEndDate="2026-06-30"
-        monthStartDate="2026-06-01"
-        onEdit={() => undefined}
-        onGuestRoomChange={() => undefined}
-        options={options}
-      />
-    );
-    assert.match(html, />손님 1 객실</);
-    assert.match(html, />손님 2 객실</);
-    assert.match(html, /<option value="room-101" selected="">101 호실<\/option>/);
-    assert.match(html, /role="alert">활성 객실을 선택하세요\.</);
-  });
-
-  it("확인 단계: 일행이면 인원과 손님별 코스·Therapist·객실을 요약한다", () => {
-    const html = render(
-      "ko",
-      <ReviewStep
-        courseLabel="A 60분"
-        customerLabel="정 대표"
-        disabled={false}
-        draft={draft({ startTime: "15:00" })}
-        guestSummaries={[
-          { position: 1, courseLabel: "A 60분", therapistLabel: "마사지사1", therapist2Label: null, roomLabel: "101 호실" },
-          { position: 2, courseLabel: "D 90분", therapistLabel: "마사지사2", therapist2Label: "마사지사3", roomLabel: null }
-        ]}
-        message={null}
-        notice={null}
-        onCancel={() => undefined}
-        onRetry={() => undefined}
-        onSave={() => undefined}
-        roomLabel="101 호실"
-        status="idle"
-        therapist2Label={null}
-        therapistLabel="마사지사1"
-      />
-    );
-    assert.match(html, /정 대표/);
-    assert.match(html, /2026-06-10 15:00/);
-    assert.match(html, />2명</);
-    assert.match(html, />손님 1<[\s\S]*?A 60분 · 마사지사1 · 101 호실/);
-    assert.match(html, />손님 2<[\s\S]*?D 90분 · 마사지사2 · 마사지사3 · 미배정/);
-  });
-
-  it("패널 요약: 손님별 오류는 손님 번호를 붙여 보인다", () => {
-    const html = render(
-      "ko",
-      <ErrorSummary
-        fieldErrors={{ "guests.3.therapist2Id": ["D코스는 마사지사2 필수입니다."] }}
-        message="손님 3: D코스는 마사지사2 필수입니다."
-        onJump={() => undefined}
-      />
-    );
-    assert.match(html, /<button[^>]*>손님 3 · D코스는 마사지사2 필수입니다\.<\/button>/);
+  it("패널 요약은 손님별 오류에 손님 번호를 붙인다", () => {
+    const html = render("ko", <ErrorSummary fieldErrors={{ "guests.2.therapist1Id": ["같은 Therapist"] }} message="저장하지 못했습니다" onJump={noop} />);
+    assert.match(html, /저장하지 못했습니다/);
+    assert.match(html, /손님 2 · 같은 Therapist/);
   });
 });
 
+describe("빠른 예약 ① 조건(1018 스펙 D20·D23)", () => {
+  it("맨 위에 미지명 줄, 그 아래 출근한 Therapist 줄을 두고, 그 시각에 안 되는 사람은 접어 둔 N명으로 보인다", () => {
+    const html = conditions("ko");
+    assert.deepEqual(lineOrder(html), ["unassigned", "therapist-12", "therapist-7", "therapist-3"]);
+    assert.match(html, /<details[^>]*data-quick-booking-unavailable=""[^>]*><summary[^>]*>이 시각에 안 되는 1명<\/summary>/);
+    assert.match(line(html, "therapist-3"), /18:30부터/);
+  });
+
+  it("Therapist 줄은 이름 · 비는 시간 · 같은 열에 맞춘 코스 칩이다", () => {
+    const html = conditions("ko");
+    assert.match(line(html, "therapist-12"), /~19:00 60분/);
+    assert.match(line(html, "therapist-7"), /마감까지/);
+    for (const id of ["unassigned", "therapist-12", "therapist-7"]) {
+      const chips = [...line(html, id).matchAll(/data-course-id="([^"]+)"/g)].map((match) => match[1]);
+      assert.deepEqual(chips, ["course-a", "course-c", "course-d"], id);
+    }
+    assert.match(line(html, "therapist-7"), />C90</);
+    // 불가 칩은 흐린 점선과 ○ 표시로 보이고, 누르면 경고를 확인한 뒤 담긴다.
+    assert.match(line(html, "therapist-12"), /class="[^"]*border-dashed[^"]*"[^>]*aria-label="12번 C90 · 불가, 경고 확인 후 담기"/);
+    assert.match(line(html, "therapist-12"), /aria-label="12번 A60 담기"/);
+    // 그날 한 것 +예약도 이름 옆에 그대로 보인다.
+    assert.match(line(html, "therapist-12"), /data-therapist-call-count=""/);
+  });
+
+  it("출근 전 보기는 근무표가 근무 예정인 출근 전 사람만 센다(휴무·근무표 없음은 빼고)", () => {
+    const html = conditions("ko");
+    assert.match(html, /출근 전 보기 \(1명\)/);
+    assert.doesNotMatch(html, /data-quick-booking-line="therapist-9"/);
+    assert.doesNotMatch(html, /data-quick-booking-line="therapist-5"/);
+  });
+
+  it("현황 줄 카드에서 연 Therapist를 미지명 줄 아래 맨 위에 골라 둔다", () => {
+    const html = conditions("ko", { presetTherapistId: "therapist-7" });
+    assert.deepEqual(lineOrder(html).slice(0, 3), ["unassigned", "therapist-7", "therapist-12"]);
+    assert.match(line(html, "therapist-7"), /aria-current="true"/);
+  });
+
+  it("담은 손님을 하단에 보이고 뺄 수 있게 하며, 담은 Therapist 줄은 담음으로 꺼진다", () => {
+    const html = conditions("ko", { partySize: 2, guests: [guest("course-c", "therapist-7"), guest("course-c", null)] });
+    assert.match(html, /담은 손님 2 \/ 2명/);
+    assert.match(html, /손님 1 · 7번 C90/);
+    assert.match(html, /손님 2 · 미지명 C90/);
+    assert.equal((html.match(/>빼기</g) ?? []).length, 2);
+    assert.match(line(html, "therapist-7"), /담음/);
+    // 인원만큼 담았으면 칩은 꺼지고 [다음]이 켜진다.
+    assert.match(line(html, "unassigned"), /disabled=""/);
+    assert.match(html, /<button class="[^"]*"[^>]*type="button">다음<\/button>/);
+  });
+
+  it("인원만큼 담기 전에는 [다음]이 꺼져 있다", () => {
+    const html = conditions("ko", { partySize: 2, guests: [guest("course-c", "therapist-7")] });
+    assert.match(html, /<button[^>]*disabled=""[^>]*>다음<\/button>/);
+  });
+
+  it("D코스 손님은 두 번째 Therapist를 고른다. 첫 Therapist와 다른 손님이 맡은 사람은 후보에서 빠진다", () => {
+    const html = conditions("ko", { partySize: 2, guests: [guest("course-d", "therapist-7"), guest("course-a", "therapist-12")] });
+    const first = html.slice(html.indexOf('data-quick-booking-guest="1"'), html.indexOf('data-quick-booking-guest="2"'));
+    assert.match(first, /두 번째 Therapist/);
+    assert.doesNotMatch(first, /<option value="therapist-7">/);
+    assert.doesNotMatch(first, /<option value="therapist-12">/);
+    assert.match(first, /<option value="therapist-3">3번 · 불가<\/option>/);
+    // 미지명 D코스 손님은 두 번째 Therapist를 고르지 않는다.
+    assert.doesNotMatch(conditions("ko", { guests: [guest("course-d", null)] }), /두 번째 Therapist/);
+  });
+
+  it("일행에 1명 추가할 때는 인원을 고르지 않는다", () => {
+    assert.doesNotMatch(conditions("ko", { joining: true }), />인원</);
+    assert.match(conditions("ko"), />인원</);
+  });
+
+  it("베트남어로도 같은 칸을 보인다", () => {
+    const html = conditions("vi", { partySize: 1, guests: [] });
+    assert.match(html, /Chưa chỉ định/);
+    assert.match(html, /Đến khi đóng cửa/);
+    assert.match(html, /1 người không nhận được giờ này/);
+  });
+});
+
+function customerStep(
+  locale: Locale,
+  changes: Partial<NewCallRowDraft> = {},
+  extra: { bookerCandidates?: CustomerVisitCandidateDto[]; joining?: boolean; summary?: string } = {}
+) {
+  return render(
+    locale,
+    <CustomerStep
+      bookerCandidates={extra.bookerCandidates ?? []}
+      customers={customers}
+      disabled={false}
+      draft={draft(changes)}
+      fieldErrors={{}}
+      joining={extra.joining ?? false}
+      locale={locale}
+      message={null}
+      notice={null}
+      onClearCustomer={noop}
+      onEdit={noop}
+      onPrevious={noop}
+      onQueryChange={noop}
+      onRetry={noop}
+      onSave={noop}
+      onSelectCustomer={noop}
+      options={options}
+      query=""
+      searchCandidates={[]}
+      status="idle"
+      summary={extra.summary ?? "18:00 · 1명 · 7번 C90"}
+      visitSummary={null}
+    />
+  );
+}
+
+describe("빠른 예약 ② 고객(1018 스펙 D21)", () => {
+  it("경로 버튼, 예약자명, 기존 고객 검색, 메모, 한 줄 요약과 저장을 둔다", () => {
+    const html = customerStep("ko", { bookingChannelCode: "TELEGRAM", bookerName: "홍길동" }, { summary: "18:00 · 1명 · 7번 C90 · 텔레그램 홍길동" });
+    assert.match(html, /<button aria-pressed="true"[^>]*data-booking-channel="TELEGRAM"[^>]*>텔레그램<\/button>/);
+    assert.match(html, /<button aria-pressed="false"[^>]*data-booking-channel="WALK_IN"[^>]*>워크인<\/button>/);
+    assert.match(html, /예약자명/);
+    assert.match(html, /value="홍길동"/);
+    assert.match(html, /기존 고객 검색/);
+    assert.match(html, />메모</);
+    assert.match(html, /data-quick-booking-summary="">18:00 · 1명 · 7번 C90 · 텔레그램 홍길동</);
+    assert.match(html, />예약 저장</);
+    // 객실 단계와 확인 단계는 없다.
+    assert.doesNotMatch(html, /객실/);
+  });
+
+  it("예약자명과 같은 이름 고객을 최근 방문 날짜와 함께 후보로 보인다", () => {
+    const html = customerStep("ko", { bookerName: "홍길동" }, {
+      bookerCandidates: [
+        { kind: "customer", customerId: "customer-1", label: "홍길동", phone: "010-6655-1100", latestVisitDate: "2026-06-01", completedVisitCount: 3, sharedPhone: false }
+      ]
+    });
+    assert.match(html, /같은 이름 고객/);
+    assert.match(html, /data-booker-candidate="customer-1"/);
+    assert.match(html, /최근 2026-06-01/);
+  });
+
+  it("고른 고객은 이름·연락처와 선택 해제로 보이고 검색칸은 숨는다", () => {
+    const html = customerStep("ko", { customerId: "customer-1", bookerName: "홍길동" });
+    assert.match(html, /연결한 고객/);
+    assert.match(html, /홍길동 · 010-6655-1100/);
+    assert.doesNotMatch(html, /기존 고객 검색/);
+  });
+
+  it("일행에 1명 추가할 때는 고객을 고르지 않는다", () => {
+    const html = customerStep("ko", {}, { joining: true });
+    assert.doesNotMatch(html, /기존 고객 검색/);
+    assert.match(html, /예약자명/);
+  });
+
+  it("베트남어로도 같은 칸을 보인다", () => {
+    const html = customerStep("vi");
+    assert.match(html, /Kênh đặt chỗ/);
+    assert.match(html, /Tên người đặt/);
+    assert.match(html, /Lưu đặt lịch/);
+  });
+});

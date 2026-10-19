@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { quickBookingPanel } from "./support/quick-booking";
 
 // 콜 원장 흐름 재구성 티켓 03: 원장 목록, 줄 끝 입장·결제, 오른쪽 편집 패널, 키보드 동선, 보기 전환·새 행 입력 없음,
 // 1280·1024px 가로 스크롤 없음, 운영월 잠금. 1018 티켓 02에서 흐름 묶음 대신 예약시각순 두 줄 행 목록 하나가 됐다.
@@ -300,7 +301,7 @@ test.describe("콜 원장 흐름 재구성 티켓 03 흐름별 목록과 편집 
     const note = panel(page).getByLabel("비고");
     await note.focus();
     await page.keyboard.press("n");
-    await expect(page.getByRole("dialog", { name: "빠른 예약" })).toHaveCount(0);
+    await expect(quickBookingPanel(page)).toHaveCount(0);
 
     // 칸 안의 Esc는 저장하지 않은 입력을 마지막으로 저장된 값으로 되돌리고 그 줄로 돌아간다.
     const savedNote = (await (prisma as any).serviceCall.findUnique({ where: { id: firstId } })).note as string | null;
@@ -312,7 +313,7 @@ test.describe("콜 원장 흐름 재구성 티켓 03 흐름별 목록과 편집 
     expect((await (prisma as any).serviceCall.findUnique({ where: { id: firstId } })).note).toBe(savedNote);
 
     await page.keyboard.press("n");
-    await expect(page.getByRole("dialog", { name: "빠른 예약" })).toBeVisible();
+    await expect(quickBookingPanel(page)).toBeVisible();
   });
 
   for (const width of [1280, 1024]) {

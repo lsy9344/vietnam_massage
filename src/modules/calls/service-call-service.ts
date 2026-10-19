@@ -1020,8 +1020,16 @@ async function assertActiveCourse(tx: ServiceCallPrismaClient, input: { courseId
   return policy;
 }
 
-function assertSecondTherapistRequirement(input: { policy: CoursePolicyRecord; therapist2Id: string | null | undefined }) {
-  if (!input.policy.requiresSecondTherapist || input.therapist2Id) {
+/**
+ * 두 명 코스는 두 번째 Therapist가 있어야 한다. 다만 Therapist를 아직 정하지 않은 미지명 예약(1018 스펙 D20)은 두 사람 다
+ * 비어 있어도 된다. 첫 Therapist를 정하면 두 번째도 함께 정해야 저장된다.
+ */
+function assertSecondTherapistRequirement(input: {
+  policy: CoursePolicyRecord;
+  therapist1Id: string | null | undefined;
+  therapist2Id: string | null | undefined;
+}) {
+  if (!input.policy.requiresSecondTherapist || input.therapist2Id || !input.therapist1Id) {
     return;
   }
 
@@ -2139,7 +2147,37 @@ export async function createQuickBookingServiceCall(
   input: ServiceCallCreateInput & { actorId?: string; prismaClient?: ServiceCallPrismaClient }
 ): Promise<ServiceCallCreateResult> {
   assertDistinctTherapists(input);
-  return createServiceCallRow(input);
+  return createServiceCallRow({ ...input, ...(await walkInNaming(getClient(input.prismaClient), input)) });
+}
+
+const WALK_IN_CHANNEL = "WALK_IN";
+const WALK_IN_NAME = /^워크인 (\d+)$/;
+
+/**
+ * 이름이 빈 워크인(1018 스펙 D22)은 `워크인 N` 임시 이름을 예약자명과 고객/메모에 쓴다. N은 그날 이미 붙은 워크인 번호의
+ * 다음이다. 고객 기록은 만들지 않는다. 두 화면이 동시에 저장하면 같은 번호가 날 수 있다 — 표시용 이름이라 막지 않는다.
+ */
+async function walkInNaming(
+  client: ServiceCallPrismaClient,
+  input: {
+    operatingMonthId: string;
+    serviceDate: string;
+    bookingChannelCode?: string | null;
+    bookerName?: string | null;
+    customerId?: string | null;
+    newCustomer?: unknown;
+    partyId?: string | null;
+  }
+) {
+  // 일행에 더하는 손님은 일행의 고객/메모를 그대로 쓴다.
+  if (input.bookingChannelCode !== WALK_IN_CHANNEL || input.bookerName?.trim() || input.customerId || input.newCustomer || input.partyId) return {};
+  const sameDay = await client.serviceCall.findMany({
+    where: { operatingMonthId: input.operatingMonthId, serviceDate: toDateOnly(input.serviceDate) },
+    select: { bookerName: true }
+  });
+  const taken = sameDay.map((call) => Number(WALK_IN_NAME.exec(call.bookerName ?? "")?.[1] ?? 0));
+  const name = `워크인 ${Math.max(0, ...taken) + 1}`;
+  return { bookerName: name, customerMemo: name };
 }
 
 export type QuickBookingPartyResult = {
@@ -2180,7 +2218,7 @@ async function assertQuickBookingGuest(
   const policy = await checkGuest(position, "courseId", () => assertActiveCourse(tx, { courseId: guest.courseId, monthKey: context.monthKey }));
   await checkGuest(position, "therapist1Id", () => assertActiveEmployee(tx, { role: "THERAPIST_1", employeeId: guest.therapist1Id }));
   await checkGuest(position, "therapist2Id", () => assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: guest.therapist2Id }));
-  await checkGuest(position, "therapist2Id", () => assertSecondTherapistRequirement({ policy, therapist2Id: guest.therapist2Id }));
+  await checkGuest(position, "therapist2Id", () => assertSecondTherapistRequirement({ policy, therapist1Id: guest.therapist1Id, therapist2Id: guest.therapist2Id }));
   await checkGuest(position, "therapist2Id", () => assertDistinctTherapists(guest));
   for (const field of ["therapist1Id", "therapist2Id"] as const) {
     const therapistId = guest[field];
@@ -2222,8 +2260,9 @@ export async function createQuickBookingParty(
   if (!parsed.success) {
     throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "콜 원장 입력값이 올바르지 않습니다.", "INVALID_SERVICE_CALL_INPUT");
   }
-  const { requestId, newCustomer, guests, ...shared } = parsed.data;
+  const { requestId, newCustomer, guests, ...rest } = parsed.data;
   const client = getClient(input.prismaClient);
+  const shared = { ...rest, ...(await walkInNaming(client, { ...rest, newCustomer })) };
 
   try {
     return await runInTransaction(client, async (tx) => {
@@ -2323,7 +2362,7 @@ async function writeServiceCallRow(
     assertActiveEmployee(tx, { role: "THERAPIST_1", employeeId: input.therapist1Id }),
     assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: input.therapist2Id })
   ]);
-  assertSecondTherapistRequirement({ policy: coursePolicy, therapist2Id: input.therapist2Id });
+  assertSecondTherapistRequirement({ policy: coursePolicy, therapist1Id: input.therapist1Id, therapist2Id: input.therapist2Id });
 
   const beforeRecord = input.serviceCallId
     ? await tx.serviceCall.findUnique({ where: { id: input.serviceCallId } })
@@ -2443,7 +2482,7 @@ export async function autosaveServiceCallRow(
       assertActiveEmployee(tx, { role: "THERAPIST_1", employeeId: parsed.data.therapist1Id }),
       assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: parsed.data.therapist2Id })
     ]);
-    assertSecondTherapistRequirement({ policy: coursePolicy, therapist2Id: parsed.data.therapist2Id });
+    assertSecondTherapistRequirement({ policy: coursePolicy, therapist1Id: parsed.data.therapist1Id, therapist2Id: parsed.data.therapist2Id });
 
     const before = await findServiceCallWithRelations(tx, parsed.data.serviceCallId);
     await assertCustomerLinkUnchanged(tx, before, parsed.data.customerId, parsed.data.expectedUpdatedAt);
