@@ -224,12 +224,12 @@ export function QuickBookingDrawer({
     <DialogPrimitive.Root onOpenChange={(nextOpen) => !nextOpen && onClose()} open={open}>
       <DialogPrimitive.Portal>
         {/* Backdrop matching design.md 5: bg-foreground/20 backdrop-blur-[3px] */}
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-foreground/20 backdrop-blur-[3px]" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-[70] bg-foreground/20 backdrop-blur-[3px]" />
 
-        {/* Modal Drawer matching design.md 6.11 and ModalPanel */}
-        <DialogPrimitive.Content className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-surface-float text-foreground outline-none min-[600px]:inset-y-4 min-[600px]:left-auto min-[600px]:right-4 min-[600px]:w-[min(32rem,calc(100vw-2rem))] min-[600px]:rounded-xl min-[600px]:border min-[600px]:border-border">
-          {/* Drawer Header */}
-          <header className="flex items-start justify-between border-b border-border bg-surface px-5 py-3.5">
+        {/* Modal Drawer matching design.md 6.11 and ModalPanel - pinned above any dock or bottom bar */}
+        <DialogPrimitive.Content className="fixed inset-0 z-[70] flex flex-col overflow-hidden bg-surface-float text-foreground outline-none min-[600px]:inset-y-4 min-[600px]:left-auto min-[600px]:right-4 min-[600px]:w-[min(32rem,calc(100vw-2rem))] min-[600px]:rounded-xl min-[600px]:border min-[600px]:border-border">
+          {/* Drawer Header (pinned) */}
+          <header className="flex-shrink-0 flex items-start justify-between border-b border-border bg-surface px-5 py-3.5">
             <div>
               <DialogPrimitive.Title className="text-lg font-semibold text-foreground">
                 {isKo ? "빠른 예약" : "Đặt chỗ nhanh"}
@@ -265,7 +265,7 @@ export function QuickBookingDrawer({
           </header>
 
           {/* Drawer Body */}
-          <div className="flex-1 overflow-y-auto p-5">
+          <div className="flex-1 min-h-0 overflow-y-auto p-5">
             {formError ? (
               <div
                 className="mb-4 rounded-md border border-danger bg-danger-soft p-3 text-xs font-medium text-danger"
@@ -644,8 +644,8 @@ export function QuickBookingDrawer({
             )}
           </div>
 
-          {/* Drawer Footer Actions */}
-          <footer className="border-t border-border bg-surface p-4 flex items-center justify-between gap-3">
+          {/* Drawer Footer Actions (pinned, never covered) */}
+          <footer className="flex-shrink-0 border-t border-border bg-surface p-4 pb-[max(1rem,env(safe-area-inset-bottom))] flex items-center justify-between gap-3">
             {step === 1 ? (
               <>
                 <Button onClick={onClose} variant="secondary">
