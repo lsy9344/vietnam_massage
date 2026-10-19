@@ -41,6 +41,7 @@ export function LedgerCellPicker({
   onOpen,
   onPick,
   options,
+  title,
   value
 }: {
   children: ReactNode;
@@ -53,6 +54,8 @@ export function LedgerCellPicker({
   onOpen?: () => void;
   onPick: (value: string) => void;
   options: LedgerPickOption[] | null;
+  /** 칸이 좁아 말줄임으로 잘릴 때 전체를 보일 글자. */
+  title?: string;
   value: string;
 }) {
   const id = useId();
@@ -147,6 +150,7 @@ export function LedgerCellPicker({
           setOpen(true);
         }}
         ref={triggerRef}
+        title={title}
         type="button"
       >
         <span className="min-w-0 truncate">{children}</span>
