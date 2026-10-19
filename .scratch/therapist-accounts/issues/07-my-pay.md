@@ -29,3 +29,27 @@
   - 응답 전체를 문자열로 만들어 다른 Therapist의 이름과 금액이 없는지 본다.
   - 지급 확인 상태를 세 상태로 바꾸는 규칙(순수 함수)
   - E2E: 다른 Therapist의 금액이 보이지 않는다.
+
+## Comments
+
+**만든 것**
+
+- `src/modules/therapists/therapist-payout-status.ts`: 순수 함수 `therapistPayoutStatusOf(confirmation)` — `PayoutConfirmationDto`의 네 내부 상태를 Therapist가 보는 세 상태(`confirmed`/`unconfirmed`/`needsReview`)로 좁힌다(M10). `status`와 `requiresReconfirmation`만 보고, 운영월 상태 분기는 새로 하지 않는다(`derivePayoutConfirmationStatus`가 이미 반영해 둔 값을 그대로 쓴다).
+- `src/modules/therapists/therapist-payout-view-service.ts`: `getTherapistPayoutView({ employeeId, operatingMonthId, prismaClient?, dependencies? })` — `getMonthlyStatement`(마감 버전 없이)와 `listMonthlyClosingPreview`/`getMonthlyClosingSnapshotByVersion`(statement.closeVersion과 같은 버전)를 불러 이 Therapist의 행만 좁은 DTO(`TherapistPayoutViewDto`)로 옮긴다. 계산은 새로 하지 않는다 — 날짜별 금액은 `evidence.dailyEntries`(미확정) 또는 `payoutUnits`(마감, 콜 근거 없음)에서, 순위·기준선은 월마감 미리보기/스냅샷의 `therapists.rows`에서 그대로 옮긴다. `appliedPolicies[].call`·`calls[]`는 `therapistNames`를 포함하지만 그 필드는 아예 읽지 않는다(M6). `expectedPayoutAmountForDate({ employeeId, operatingMonthId, serviceDate, prismaClient? })`도 이 파일에 있다 — `listTherapistDailySettlements`의 그날 내 행 `totalCommissionAmount`만 꺼낸다(03의 "오늘" 탭 자리에 씀).
+- `src/modules/therapists/therapist-today-view-service.ts`: `TherapistTodayViewDto.today`에 `expectedPayoutAmount: number`를 더했다(03이 비워 둔 자리, M8). 오늘 담당 콜이 있으면(= `todayRecords[0].operatingMonthId`가 있으면) `expectedPayoutAmountForDate`를 부르고, 없으면 0으로 둔다(일별 정산을 다시 부르지 않는다).
+- 화면: `src/app/therapist/payout/page.tsx`(운영월 고르기 GET 폼 + 조회, 마감 버전은 고르지 않음, M8), `src/components/therapist/therapist-payout-month-picker.tsx`, `src/components/therapist/therapist-payout-view.tsx`(이번 달 요약 카드 3장 + 날짜별 코스 수당 목록). `src/app/therapist/page.tsx`의 `TherapistTodayStatus` children 자리에 오늘 예상 코스 수당 `SummaryCard`를 끼워 넣었다(03이 둔 자리, `page.tsx`의 다른 부분은 건드리지 않음).
+- i18n: `src/lib/i18n/messages/{ko,vi}.ts`에 `therapist.payout.*` 키 24개, `therapist.today.expectedPayoutLabel`·`expectedPayoutNote` 2개. "지급 확인이 송금처럼 보이지 않게" 하려고 송금 문구(지급완료 등)를 쓰지 않고 스펙의 "확인됨"/"아직"/"관리자 확인 중" 그대로 썼고, 기존 `settlements.statement.disclaimer`("이 문서는 수당 명세이며 송금 영수증이 아닙니다")를 재사용했다. 상태 칩은 작은 `StatusIndicator`(기호+글자) 하나뿐이고 금액을 체크 아이콘·굵은 초록 글자로 강조하지 않았다.
+
+**새로 한 가정**
+
+- (가정) D20 "콜킹 기준선(최소 콜 수, 지금 1–3위의 콜 수)"은 월마감 미리보기/스냅샷의 `therapists.rows` 중 `countKingRank`가 있는 행(최대 3개)에서 `{rank, callCount}`만 뽑는다. 내가 그 1–3위에 들어도(예: 2위) 내 콜 수가 기준선 목록에도 그대로 보인다 — 숫자일 뿐이라 M6 위반이 아니라고 봤다(코드베이스 지도 18절 결정과 일치).
+- (가정) 09 정정 승인과 지급 재확인의 관계(코드베이스 지도 18절 질문)는 이 티켓에서 직접 코드로 확인했다: 날짜별 지급 확인 금액(`currentAmount`)은 `listTherapistDailySettlementsForOperatingMonth`로 그날 코스 수당을 다시 계산한 값이고, 출퇴근 시각과는 무관하다(코스 수당 계산에 출퇴근 칸을 읽지 않는다). 따라서 정정 승인이 그 금액을 바꾸는 경우는 없고, ADR 0004 규칙은 계산으로 자동 적용된다.
+- "오늘" 탭의 오늘 예상 코스 수당은 "계산 중(미확정)"으로 표시한다 — 그날이 끝나기 전엔 지급 확인 자체가 생기지 않아 항상 미확정이라고 봤다.
+
+**검증**
+
+- `pnpm test:unit`: 병합 전 1097 passed(새 테스트 `therapist-payout-status.test.ts` 5개, `therapist-payout-view-service.test.ts` 4개, `therapist-today-view-service.test.ts`에 1개 추가·기존 2곳 수정 포함), 통합 브랜치(02 포함) 병합 뒤 1113 passed, 0 failed.
+- `npx tsc --noEmit`: 병합 전·후 모두 에러 없음.
+- `for f in scripts/validate-story-*.mjs; do node "$f" ...; done`: `validate-story-4-6.mjs`만 실패(기존 실패).
+- 운영 빌드 E2E(DB `vietnam_aesthetic_th07`, 포트 3207): 새 스펙 `story-ticket-07-therapist-payout.spec.ts` 4/4 통과(미확정 날짜별 코스 수당·금액 확인 중·짝꿍·다른 Therapist 이름 비노출, 확인/재확인 필요 전환, 마감확정 달의 확정 금액·순위·기준선 숫자만·1·3위 이름 비노출, 390px). 직접 관련 기존 스펙도 같은 DB로 돌려 회귀가 없는지 봤다: `story-ticket-03-today-my-calls.spec.ts` 3/3(오늘 탭에 내 수당 카드가 더해졌지만 기존 단언은 그대로 통과), `story-ticket-01-therapist-role-shell.spec.ts` 7/7, `story-ticket-10-therapist-notices.spec.ts` 3/3. 끝나고 서버 종료, DB 삭제.
+- 통합 브랜치 tip(47cfa27, 티켓 02 포함)을 병합했다. 충돌 없음(i18n 두 파일만 자동 병합). 병합 뒤 단위 테스트·tsc 재확인 완료.
