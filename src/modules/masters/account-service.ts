@@ -32,6 +32,7 @@ type UserAccountRecord = {
   isActive: boolean;
   lockedUntil: Date | null;
   failedLoginCount: number;
+  passwordChangeRequired: boolean;
   employee?: {
     displayName: string;
   } | null;
@@ -39,7 +40,7 @@ type UserAccountRecord = {
 
 type AccountPrismaClient = {
   employee: {
-    findUnique(args: unknown): Promise<{ id: string; displayName: string; staffCode: string } | null>;
+    findUnique(args: unknown): Promise<{ id: string; displayName: string; staffCode: string; employeeGroup: string } | null>;
   };
   userAccount: {
     create(args: unknown): Promise<UserAccountRecord>;
@@ -70,6 +71,8 @@ export type CurrentAccountAuthorization = {
   lockedUntil: Date | null;
   /** "나" 메뉴에 보이는 이름. 연결된 직원의 표시명, 없으면 계정 ID. */
   displayName: string;
+  /** 티켓 02(M17 뒷부분): 켜져 있으면 Therapist 검사가 비밀번호 변경 화면과 로그아웃 말고는 막는다. */
+  passwordChangeRequired: boolean;
 };
 
 export type CreateUserAccountInput = {
@@ -130,7 +133,10 @@ function accountAuditSnapshot(account: UserAccountRecord): AuditJsonSnapshot {
     employeeId: account.employeeId,
     isActive: account.isActive,
     lockedUntil: account.lockedUntil ? account.lockedUntil.toISOString() : null,
-    failedLoginCount: account.failedLoginCount
+    failedLoginCount: account.failedLoginCount,
+    // 메모리 테스트 더미 계정은 이 칸을 채우지 않을 수 있어(실제 DB는 NOT NULL 기본값 false), undefined가
+    // 감사 JSON 검사에서 거절되지 않도록 Boolean으로 좁힌다.
+    passwordChangeRequired: Boolean(account.passwordChangeRequired)
   };
 }
 
@@ -308,6 +314,7 @@ export async function getCurrentAccountAuthorization(
       employeeId: true,
       isActive: true,
       lockedUntil: true,
+      passwordChangeRequired: true,
       employee: { select: { displayName: true } }
     }
   })) as (Omit<CurrentAccountAuthorization, "role" | "displayName"> & {
@@ -331,7 +338,8 @@ export async function getCurrentAccountAuthorization(
     employeeId: account.employeeId,
     isActive: account.isActive,
     lockedUntil: account.lockedUntil,
-    displayName: account.employee?.displayName ?? account.accountId
+    displayName: account.employee?.displayName ?? account.accountId,
+    passwordChangeRequired: Boolean(account.passwordChangeRequired)
   };
 }
 
@@ -348,16 +356,45 @@ export async function createUserAccount(input: CreateUserAccountInput) {
   });
 }
 
-export async function changePassword(accountId: string, nextSecret: string) {
+/** 비밀번호를 바꾸고 잠금을 푼다. 성공하면 비밀번호 변경 필요 표시도 지운다(M21). */
+export async function changePassword(accountId: string, nextSecret: string, options: { prismaClient?: AccountPrismaClient } = {}) {
+  const client = getAccountClient(options.prismaClient);
   const passwordHash = await hashPassword(nextSecret);
-  return (prisma as any).userAccount.update({
+  return client.userAccount.update({
     where: { id: accountId },
     data: {
       passwordHash,
       failedLoginCount: 0,
-      lockedUntil: null
+      lockedUntil: null,
+      passwordChangeRequired: false
     }
   });
+}
+
+export type ChangeOwnPasswordInput = {
+  accountId: string;
+  currentSecret: string;
+  nextSecret: string;
+  prismaClient?: AccountPrismaClient;
+};
+
+/**
+ * 본인이 지금 비밀번호를 확인시키고 새 비밀번호로 바꾼다(티켓 02, 02 가정: 지금 비밀번호도 받는다).
+ * 관리자가 임시 비밀번호를 다시 주는 초기화와 달리, 본인 확인이 먼저다.
+ */
+export async function changeOwnPassword(input: ChangeOwnPasswordInput) {
+  const client = getAccountClient(input.prismaClient);
+  const account = await client.userAccount.findUnique({ where: { id: input.accountId } });
+  if (!account) {
+    throw new AccountDomainError("계정을 찾을 수 없습니다.", "ACCOUNT_NOT_FOUND");
+  }
+
+  const matches = await verifyPassword(account.passwordHash, input.currentSecret);
+  if (!matches) {
+    throw new AccountDomainError("지금 비밀번호가 올바르지 않습니다.", "CURRENT_PASSWORD_INCORRECT");
+  }
+
+  return changePassword(input.accountId, input.nextSecret, { prismaClient: input.prismaClient });
 }
 
 export async function linkUserAccountToEmployee(input: LinkUserAccountToEmployeeInput) {
@@ -372,6 +409,15 @@ export async function linkUserAccountToEmployee(input: LinkUserAccountToEmployee
     const employee = await tx.employee.findUnique({ where: { id: parsed.data.employeeId } });
     if (!employee) {
       throw new AccountDomainError("직원을 찾을 수 없습니다.", "EMPLOYEE_NOT_FOUND");
+    }
+    // D26: Therapist 구분 직원은 이 화면이 아니라 전용 발급 화면(issueTherapistAccount)에서만 계정을 연결한다.
+    // 그 화면의 유일한 역할(therapist)은 이 폼의 accountRoles 선택지에 없으므로, 거꾸로 이 경로로 들어온
+    // Therapist 직원 요청은 여기서 서버가 거절한다(티켓 01 메모, 티켓 02 구현).
+    if (employee.employeeGroup === "THERAPIST") {
+      throw new AccountDomainError(
+        "Therapist 구분 직원은 Therapist 패널의 전용 발급 화면에서만 계정을 연결합니다.",
+        "THERAPIST_EMPLOYEE_REQUIRES_DEDICATED_ACCOUNT_FLOW"
+      );
     }
 
     const normalizedEmail = normalizeIdentity(parsed.data.email);
@@ -512,4 +558,129 @@ export async function resetUserAccountLock(input: { actorId: string; userAccount
     });
     return updated;
   });
+}
+
+// 안내 쪽지에 한 번만 보이는 임시 비밀번호(스펙 D5). 종이에서 헷갈리는 0/O, 1/l/I을 뺀 글자만 쓴다.
+const TEMPORARY_PASSWORD_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz";
+const TEMPORARY_PASSWORD_LENGTH = 10;
+
+/** Cloudflare Workers·브라우저·Node에서 모두 되는 Web Crypto로 임시 비밀번호를 만든다(M11과 같은 방식). */
+export function generateTemporaryPassword() {
+  const bytes = new Uint8Array(TEMPORARY_PASSWORD_LENGTH);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => TEMPORARY_PASSWORD_ALPHABET[byte % TEMPORARY_PASSWORD_ALPHABET.length]).join("");
+}
+
+export type IssueTherapistAccountInput = {
+  actorId: string;
+  employeeId: string;
+  /** 비워 두면 직원 코드를 기본값으로 쓴다(스펙 D5). */
+  accountId?: string;
+  prismaClient?: AccountPrismaClient;
+};
+
+/**
+ * Therapist 패널의 전용 발급(스펙 D2, D5, D26, M5). 역할은 항상 therapist로 고정하고, Therapist 구분
+ * 직원에게만 발급하며, 이메일이 없는 Therapist를 위해 겹치지 않는 내부용 이메일을 만들어 넣는다(티켓 02
+ * 가정). 안내 쪽지에 한 번만 쓸 임시 비밀번호를 평문으로 돌려주고, 해시만 저장한다.
+ */
+export async function issueTherapistAccount(input: IssueTherapistAccountInput) {
+  const oneTimeSecret = generateTemporaryPassword();
+  const client = getAccountClient(input.prismaClient);
+
+  const account = await runAccountTransaction(client, async (tx) => {
+    const employee = await tx.employee.findUnique({ where: { id: input.employeeId } });
+    if (!employee) {
+      throw new AccountDomainError("직원을 찾을 수 없습니다.", "EMPLOYEE_NOT_FOUND");
+    }
+    if (employee.employeeGroup !== "THERAPIST") {
+      throw new AccountDomainError(
+        "Therapist 구분 직원에게만 Therapist 계정을 발급할 수 있습니다.",
+        "THERAPIST_ACCOUNT_REQUIRES_THERAPIST_EMPLOYEE"
+      );
+    }
+
+    const existing = await tx.userAccount.findUnique({ where: { employeeId: input.employeeId } });
+    if (existing) {
+      throw new AccountDomainError("이미 계정이 있는 직원입니다. 비밀번호 초기화를 쓰세요.", "THERAPIST_ACCOUNT_ALREADY_ISSUED");
+    }
+
+    const accountId = normalizeIdentity(input.accountId?.trim() ? input.accountId : employee.staffCode);
+    const conflict = await tx.userAccount.findUnique({ where: { accountId } });
+    if (conflict) {
+      throw new AccountDomainError("이미 사용 중인 계정 ID입니다.", "ACCOUNT_ID_ALREADY_LINKED");
+    }
+    // D5 가정: Therapist에게는 이메일이 없다 — 겹치지 않는 내부용 주소를 만들고 로그인은 계정 ID로 한다.
+    const email = `${accountId}@therapist.internal`;
+
+    const passwordHash = await hashPassword(oneTimeSecret);
+    const created = await tx.userAccount.create({
+      data: {
+        email,
+        accountId,
+        passwordHash,
+        role: "therapist",
+        employeeId: input.employeeId,
+        isActive: true,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        passwordChangeRequired: true
+      }
+    });
+
+    await recordAccountAudit(tx, {
+      actorId: input.actorId,
+      action: "user_account.therapist_issued",
+      targetId: created.id,
+      beforeValue: null,
+      afterValue: accountAuditSnapshot(created)
+    });
+
+    return created;
+  });
+
+  return { account, oneTimeSecret };
+}
+
+export type ResetTherapistAccountPasswordInput = {
+  actorId: string;
+  userAccountId: string;
+  prismaClient?: AccountPrismaClient;
+};
+
+/** 비밀번호 초기화(스펙 D5, M5): 새 임시 비밀번호로 바꾸고, 변경 필요 표시를 다시 켜고, 잠금도 푼다. */
+export async function resetTherapistAccountPassword(input: ResetTherapistAccountPasswordInput) {
+  const oneTimeSecret = generateTemporaryPassword();
+  const client = getAccountClient(input.prismaClient);
+
+  const account = await runAccountTransaction(client, async (tx) => {
+    const current = await tx.userAccount.findUnique({ where: { id: input.userAccountId } });
+    if (!current) {
+      throw new AccountDomainError("계정을 찾을 수 없습니다.", "ACCOUNT_NOT_FOUND");
+    }
+    if (current.role !== "therapist") {
+      throw new AccountDomainError(
+        "Therapist 계정만 이 방법으로 비밀번호를 초기화할 수 있습니다.",
+        "THERAPIST_ACCOUNT_RESET_REQUIRES_THERAPIST_ROLE"
+      );
+    }
+
+    const passwordHash = await hashPassword(oneTimeSecret);
+    const updated = await tx.userAccount.update({
+      where: { id: input.userAccountId },
+      data: { passwordHash, passwordChangeRequired: true, failedLoginCount: 0, lockedUntil: null }
+    });
+
+    await recordAccountAudit(tx, {
+      actorId: input.actorId,
+      action: "user_account.password_reset",
+      targetId: updated.id,
+      beforeValue: accountAuditSnapshot(current),
+      afterValue: accountAuditSnapshot(updated)
+    });
+
+    return updated;
+  });
+
+  return { account, oneTimeSecret };
 }

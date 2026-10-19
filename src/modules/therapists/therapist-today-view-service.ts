@@ -1,8 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { addDaysToIsoDate, businessClockString, businessTodayServiceDate } from "@/lib/operating-date";
 import { isDoneServiceCallStatus, roomFloorFactsForDate } from "@/modules/calls/service-call-service";
+import {
+  listTherapistClockOutMissingDates,
+  type TherapistClockOutMissingPrismaClient
+} from "@/modules/therapists/therapist-attendance-calendar-service";
 import { callGuestName, minutesUntilNextCall, sortByBusinessStartTime } from "@/modules/therapists/therapist-today-rules";
 import { redactLongDigitSequences } from "@/modules/therapists/therapist-text-redaction";
+import { expectedPayoutAmountForDate } from "@/modules/therapists/therapist-payout-view-service";
 
 /** 오늘 운영일 다음으로 보여줄 날수(스펙 D10: "오늘 운영일과 앞으로 7일"). */
 const UPCOMING_DAYS = 7;
@@ -35,10 +40,8 @@ export type TherapistTodayDayDto = {
 export type TherapistTodayAttendanceStatus = "check_in_available" | "check_out_available" | "both_recorded";
 
 /**
- * "오늘" 탭(M4)의 응답. 06(퇴근 미입력 안내)·07(오늘 예상 코스 수당)이 이 타입에 필드를 더한다 —
- * M4가 그 두 가지도 이 화면의 일부로 정의한다(퇴근 미입력 안내 여부, today.expectedPayoutAmount).
- * 이 티켓은 그 필드를 만들지 않는다: 값을 모르면서 모양만 미리 정하면 추측이 섞이기 때문이다.
- * 일반 객체 타입이라 나중에 속성을 더해도 기존 필드는 그대로다.
+ * "오늘" 탭(M4)의 응답. 05(출근·퇴근 상태)·06(퇴근 미입력 안내)·07(오늘 예상 코스 수당)이 각자
+ * 필드를 더했다 — 일반 객체 타입이라 속성을 더해도 기존 필드는 그대로다.
  */
 export type TherapistTodayViewDto = {
   /** 오늘 운영일부터 7일, 날짜별로 묶음(스펙 D10). 그날 내 콜이 없어도 날짜는 들어간다. */
@@ -53,6 +56,17 @@ export type TherapistTodayViewDto = {
     /** 오늘 출퇴근 상태(티켓 05, M4). 그날의 운영월이 아직 없으면 출근 가능으로 본다(눌러보면 05의
      * 서비스가 OPERATING_MONTH_NOT_FOUND를 낸다 — 이 화면은 그 드문 경우를 미리 판단하지 않는다). */
     attendanceStatus: TherapistTodayAttendanceStatus;
+    /**
+     * 운영일이 끝났는데 퇴근 미입력인 날짜(스펙 D17, 티켓 06). 오래된 날부터 온다. 비어 있으면
+     * 안내를 안 보인다. 요청 버튼은 09가 단다.
+     */
+    clockOutMissingDates: string[];
+    /**
+     * 오늘 예상 코스 수당(M8, 티켓 07): 그날 일별 정산 결과에서 이 Therapist 행의
+     * totalCommissionAmount다. 지급 확인과는 무관하고, 마감 전까지는 계산 중(미확정) 값이다(ADR 0010).
+     * 오늘 담당 콜이 없으면(operatingMonthId를 못 구해도) 0이다.
+     */
+    expectedPayoutAmount: number;
   };
 };
 
@@ -73,8 +87,10 @@ type TherapistTodayServiceCallRecord = {
   assignments: Array<{ employeeId: string; isActive: boolean; employee: { displayName: string } }>;
 };
 
-type TherapistTodayPrismaClient = {
-  timeSlot: { findMany(args?: unknown): Promise<Array<{ value: string; sortOrder: number; createdAt: Date; isActive: boolean }>> };
+// employee·therapistAttendance·operatingMonth는 이 파일 자체가 쓰지 않고, 퇴근 미입력 안내(06,
+// listTherapistClockOutMissingDates)에 그대로 건네주기만 한다(TherapistClockOutMissingPrismaClient와
+// 같은 모양이어야 한다).
+type TherapistTodayPrismaClient = TherapistClockOutMissingPrismaClient & {
   serviceCall: { findMany(args: unknown): Promise<TherapistTodayServiceCallRecord[]> };
   /** 오늘 출퇴근 상태(티켓 05)를 정하는 데만 쓴다. */
   operatingMonth: { findUnique(args: unknown): Promise<{ id: string; monthKey: string } | null> };
@@ -210,8 +226,23 @@ export async function getTherapistTodayView(input: {
     calls: todayRecords.map((record) => ({ startTime: record.startTime, status: record.status }))
   });
   const attendanceStatus = await todayAttendanceStatus(client, today, input.employeeId);
+  const clockOutMissingDates = await listTherapistClockOutMissingDates({ employeeId: input.employeeId, now, prismaClient: client });
 
-  return { days, today: { serviceDate: today, nextCallInMinutes, doneCount, attendanceStatus } };
+  // 담당 콜이 없으면 오늘 몫 수당도 없다 — 일별 정산을 다시 부르지 않고 0으로 둔다(M8).
+  const todayOperatingMonthId = todayRecords[0]?.operatingMonthId ?? null;
+  const expectedPayoutAmount = todayOperatingMonthId
+    ? await expectedPayoutAmountForDate({
+        employeeId: input.employeeId,
+        operatingMonthId: todayOperatingMonthId,
+        serviceDate: today,
+        prismaClient: client
+      })
+    : 0;
+
+  return {
+    days,
+    today: { serviceDate: today, nextCallInMinutes, doneCount, attendanceStatus, clockOutMissingDates, expectedPayoutAmount }
+  };
 }
 
 /**

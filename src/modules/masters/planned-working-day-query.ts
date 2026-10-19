@@ -28,8 +28,21 @@ const statusQuerySchema = z.object({
   date: isoDateFieldSchema
 });
 
+const rangeQuerySchema = z.object({
+  employeeId: z.string().trim().min(1),
+  startDate: isoDateFieldSchema,
+  endDate: isoDateFieldSchema
+});
+
 export type PlannedWorkingDayStatusDto = {
   employeeId: string;
+  status: PlannedWorkingDayCellStatus;
+  /** 근무표의 출근 예정 시각(HH:MM, 1018 스펙 D1). 적지 않았으면 null. */
+  plannedStartTime: string | null;
+};
+
+export type PlannedWorkingDayDayStatusDto = {
+  date: string;
   status: PlannedWorkingDayCellStatus;
   /** 근무표의 출근 예정 시각(HH:MM, 1018 스펙 D1). 적지 않았으면 null. */
   plannedStartTime: string | null;
@@ -92,6 +105,55 @@ export async function listPlannedWorkingDayStatusesForDate(input: {
     const row = rowByEmployeeId.get(employeeId);
     return {
       employeeId,
+      status: row ? (row.planStatus as WorkPlanStatus) : unsetPlanStatus,
+      plannedStartTime: row?.plannedStartTime ?? null
+    };
+  });
+}
+
+// listPlannedWorkingDayStatusesForEmployeeInRange(아래)만 요구하는 좁은 타입이다. 위 타입과 달리
+// workDate를 받아 날짜별로 묶는다(PlannedWorkingDayReadClient와 같은 선례).
+type PlannedWorkingDayRangeReadClient = {
+  plannedWorkingDay: { findMany(args?: unknown): Promise<Array<{ workDate: Date; planStatus: string; plannedStartTime: string | null }>> };
+};
+
+function enumerateIsoDates(startDate: string, endDate: string): string[] {
+  const dates: string[] = [];
+  for (let cursor = toDate(startDate); cursor <= toDate(endDate); cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000)) {
+    dates.push(toIsoDate(cursor));
+  }
+  return dates;
+}
+
+/**
+ * 직원 하나·기간 하나의 근무표 상태를 돌려준다(06 근태 달력, 11 관리자 현황). 날짜마다
+ * listPlannedWorkingDayStatusesForDate를 부르는 대신 한 번에 읽는다. 행이 없는 날은 미입력으로
+ * 채운다(listPlannedWorkingDayStatusesForDate와 같은 규칙).
+ */
+export async function listPlannedWorkingDayStatusesForEmployeeInRange(input: {
+  employeeId: string;
+  startDate: string;
+  endDate: string;
+  prismaClient?: PlannedWorkingDayRangeReadClient;
+}): Promise<PlannedWorkingDayDayStatusDto[]> {
+  const parsed = rangeQuerySchema.safeParse(input);
+  if (!parsed.success) throw toFieldError(parsed.error);
+  assertValidParsedDate(parsed.data.startDate);
+  assertValidParsedDate(parsed.data.endDate);
+  if (parsed.data.startDate > parsed.data.endDate) {
+    throw invalidInput("조회 기간의 시작일이 종료일보다 늦습니다.", "date");
+  }
+
+  const client = input.prismaClient ?? (prisma as unknown as PlannedWorkingDayRangeReadClient);
+  const rows = await client.plannedWorkingDay.findMany({
+    where: { employeeId: parsed.data.employeeId, workDate: { gte: toDate(parsed.data.startDate), lte: toDate(parsed.data.endDate) } }
+  });
+  const rowByDate = new Map(rows.map((row) => [toIsoDate(row.workDate), row]));
+
+  return enumerateIsoDates(parsed.data.startDate, parsed.data.endDate).map((date) => {
+    const row = rowByDate.get(date);
+    return {
+      date,
       status: row ? (row.planStatus as WorkPlanStatus) : unsetPlanStatus,
       plannedStartTime: row?.plannedStartTime ?? null
     };

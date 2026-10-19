@@ -164,6 +164,12 @@ const recognitionQuerySchema = z.object({
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "종료일은 YYYY-MM-DD 형식이어야 합니다.")
 });
 
+const attendanceRangeQuerySchema = z.object({
+  employeeId: z.string().trim().min(1, "마사지사를 선택하세요."),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "시작일은 YYYY-MM-DD 형식이어야 합니다."),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "종료일은 YYYY-MM-DD 형식이어야 합니다.")
+});
+
 function getClient(client?: TherapistAttendancePrismaClient) {
   return client ?? (prisma as unknown as TherapistAttendancePrismaClient);
 }
@@ -662,4 +668,72 @@ export async function listTherapistFullAttendanceRecognitions(input: {
       .map(([employeeId, fullAttendanceDays]) => ({ employeeId, fullAttendanceDays }))
       .sort((a, b) => a.employeeId.localeCompare(b.employeeId))
   };
+}
+
+// listTherapistAttendanceForEmployeeInRange(아래)만 요구하는 읽기 전용 좁은 타입이다
+// (service-call-service.ts의 DisplayEndReadClient와 같은 방식). 이 파일의 다른 export와 달리
+// 쓰기 메서드가 있는 전체 TherapistAttendancePrismaClient를 요구하지 않는다.
+type TherapistAttendanceRangeReadClient = {
+  employee: { findUnique(args: unknown): Promise<EmployeeRecord | null> };
+  therapistAttendance: { findMany(args?: unknown): Promise<TherapistAttendanceRecord[]> };
+  operatingMonth: { findUnique(args: unknown): Promise<OperatingMonthRecord | null> };
+};
+
+/**
+ * 직원 하나·기간 하나의 출퇴근(06 근태 달력, 11 관리자 현황). listTherapistAttendanceForDate(그날
+ * 전체 활성 Therapist)를 날짜마다 부르면 31번 × 전원이 되는 것을 피한다(코드베이스 지도 6절 함정).
+ * toDto로 분→HH:mm 변환을 다시 쓴다. 비활성 줄은 뺀다.
+ */
+export async function listTherapistAttendanceForEmployeeInRange(input: {
+  employeeId: string;
+  startDate: string;
+  endDate: string;
+  prismaClient?: TherapistAttendanceRangeReadClient;
+}): Promise<TherapistAttendanceDto[]> {
+  const parsed = attendanceRangeQuerySchema.safeParse(input);
+  if (!parsed.success) throw toFieldError(parsed.error);
+  assertValidParsedDate(parsed.data.startDate);
+  assertValidParsedDate(parsed.data.endDate);
+  if (parsed.data.startDate > parsed.data.endDate) {
+    throw invalidInput("조회 기간의 시작일이 종료일보다 늦습니다.");
+  }
+
+  const client = input.prismaClient ?? (prisma as unknown as TherapistAttendanceRangeReadClient);
+  const employee = await client.employee.findUnique({ where: { id: parsed.data.employeeId } });
+  if (!employee || employee.employeeGroup !== "THERAPIST" || !employee.isActive) {
+    throw new TherapistAttendanceDomainError("활성 마사지사를 찾을 수 없습니다.", "THERAPIST_EMPLOYEE_NOT_FOUND");
+  }
+
+  const attendances = await client.therapistAttendance.findMany({
+    where: {
+      employeeId: parsed.data.employeeId,
+      attendanceDate: { gte: toDate(parsed.data.startDate), lte: toDate(parsed.data.endDate) },
+      isActive: true
+    }
+  });
+
+  // 이 범위의 줄은 보통 운영월 하나에 속하지만(달력 월 = 운영월), 범위가 걸치는 경우에도 각 줄이
+  // 가진 operatingMonthId로 그 운영월의 잠금 상태를 따로 찾는다.
+  const operatingMonthIds = [...new Set(attendances.map((attendance) => attendance.operatingMonthId))];
+  const operatingMonths = await Promise.all(
+    operatingMonthIds.map(async (id) => {
+      const month = await client.operatingMonth.findUnique({ where: { id } });
+      if (!month) throw new TherapistAttendanceDomainError("운영월을 찾을 수 없습니다.", "OPERATING_MONTH_NOT_FOUND");
+      return month;
+    })
+  );
+  const isLockedByOperatingMonthId = new Map(operatingMonths.map((month) => [month.id, isOperatingMonthPayoutLocked(month.status)]));
+
+  return attendances
+    .sort((a, b) => toIsoDate(a.attendanceDate).localeCompare(toIsoDate(b.attendanceDate)))
+    .map((attendance) =>
+      toDto({
+        operatingMonthId: attendance.operatingMonthId,
+        attendanceDate: toIsoDate(attendance.attendanceDate),
+        employee,
+        attendance,
+        isLocked: isLockedByOperatingMonthId.get(attendance.operatingMonthId) ?? false,
+        inServiceCallIds: []
+      })
+    );
 }

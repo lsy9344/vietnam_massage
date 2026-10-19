@@ -4,6 +4,7 @@ import {
   TherapistAttendanceDomainError,
   deactivateTherapistAttendance,
   listTherapistAttendanceForDate,
+  listTherapistAttendanceForEmployeeInRange,
   listTherapistFullAttendanceRecognitions,
   upsertTherapistAttendance
 } from "@/modules/settlements/therapist-attendance-service";
@@ -927,5 +928,87 @@ describe("therapist attendance service", () => {
       }),
       (error) => error instanceof TherapistAttendanceDomainError && error.code === "OPERATING_MONTH_DATE_OUT_OF_RANGE"
     );
+  });
+
+  describe("listTherapistAttendanceForEmployeeInRange", () => {
+    it("returns one employee's rows across a date range in ascending order, with HH:mm display and methods", async () => {
+      const prismaClient = createMemoryPrisma({
+        seedAttendances: [
+          { id: "a1", employeeId: "thr-1", attendanceDate: "2026-06-12", checkInMinute: 600, checkInMethod: "직접", checkOutMinute: 1200, checkOutMethod: "직접", standbyMinutes: 600, isFullAttendanceRecognized: true },
+          { id: "a2", employeeId: "thr-1", attendanceDate: "2026-06-10", checkInMinute: 601, checkInMethod: "대리 입력", checkOutMinute: null, checkOutMethod: null, standbyMinutes: null, isFullAttendanceRecognized: false },
+          // different employee, must be excluded
+          { id: "a3", employeeId: "thr-2", attendanceDate: "2026-06-11", checkInMinute: 600, checkOutMinute: 1200, standbyMinutes: 600, isFullAttendanceRecognized: true },
+          // inactive row, must be excluded
+          { id: "a4", employeeId: "thr-1", attendanceDate: "2026-06-11", checkInMinute: 600, checkOutMinute: 1200, standbyMinutes: 600, isFullAttendanceRecognized: true, isActive: false }
+        ]
+      });
+
+      const rows = await listTherapistAttendanceForEmployeeInRange({
+        employeeId: "thr-1",
+        startDate: "2026-06-01",
+        endDate: "2026-06-30",
+        prismaClient
+      });
+
+      assert.deepEqual(rows.map((row) => row.attendanceDate), ["2026-06-10", "2026-06-12"]);
+      assert.equal(rows[0].checkInTime, "10:01");
+      assert.equal(rows[0].checkInMethod, "대리 입력");
+      assert.equal(rows[0].checkOutTime, null);
+      assert.equal(rows[0].incompleteReason, "퇴근 미입력");
+      assert.equal(rows[1].checkInTime, "10:00");
+      assert.equal(rows[1].checkOutTime, "20:00");
+      assert.equal(rows[1].checkOutMethod, "직접");
+      assert.equal(rows[1].isFullAttendanceRecognized, true);
+    });
+
+    it("returns an empty array when the employee has no attendance in range", async () => {
+      const prismaClient = createMemoryPrisma();
+      const rows = await listTherapistAttendanceForEmployeeInRange({
+        employeeId: "thr-1",
+        startDate: "2026-06-01",
+        endDate: "2026-06-30",
+        prismaClient
+      });
+      assert.deepEqual(rows, []);
+    });
+
+    it("rejects an unknown or inactive employee id", async () => {
+      const prismaClient = createMemoryPrisma();
+      await assert.rejects(
+        listTherapistAttendanceForEmployeeInRange({ employeeId: "thr-inactive", startDate: "2026-06-01", endDate: "2026-06-30", prismaClient }),
+        (error) => error instanceof TherapistAttendanceDomainError && error.code === "THERAPIST_EMPLOYEE_NOT_FOUND"
+      );
+      await assert.rejects(
+        listTherapistAttendanceForEmployeeInRange({ employeeId: "no-such-id", startDate: "2026-06-01", endDate: "2026-06-30", prismaClient }),
+        (error) => error instanceof TherapistAttendanceDomainError && error.code === "THERAPIST_EMPLOYEE_NOT_FOUND"
+      );
+    });
+
+    it("rejects a reversed date range", async () => {
+      const prismaClient = createMemoryPrisma();
+      await assert.rejects(
+        listTherapistAttendanceForEmployeeInRange({ employeeId: "thr-1", startDate: "2026-06-30", endDate: "2026-06-01", prismaClient }),
+        (error) => error instanceof TherapistAttendanceDomainError && error.code === "INVALID_THERAPIST_ATTENDANCE_INPUT"
+      );
+    });
+
+    it("marks rows as locked when the owning operating month is locked", async () => {
+      const prismaClient = createMemoryPrisma({
+        locked: true,
+        seedAttendances: [
+          { id: "a1", employeeId: "thr-1", attendanceDate: "2026-06-12", checkInMinute: 600, checkOutMinute: 1200, standbyMinutes: 600, isFullAttendanceRecognized: true }
+        ]
+      });
+
+      const rows = await listTherapistAttendanceForEmployeeInRange({
+        employeeId: "thr-1",
+        startDate: "2026-06-01",
+        endDate: "2026-06-30",
+        prismaClient
+      });
+
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].isLocked, true);
+    });
   });
 });

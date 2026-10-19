@@ -29,3 +29,28 @@
   - 단위 테스트(기존 계정·직원 서비스 테스트에 더한다): 역할 제한, 발급·초기화 때 표시 켜짐, 변경 때 표시 지움, 퇴사 자동 정지와 감사, 휴직 그대로
   - E2E 흐름: 관리자 발급 → 쪽지의 ID와 임시 비밀번호로 로그인 → 변경 전에는 다른 Therapist 탭 주소가 막힘 → 비밀번호 변경 → Therapist 화면
   - E2E 퇴사: 퇴사로 바꾸면 로그인해 있던 세션이 다음 요청에서 로그인 화면으로 간다.
+
+## Comments
+
+**만든 곳 (요약):**
+- `prisma/schema.prisma` + `prisma/migrations/20261020120200_add_user_account_password_change_required/`: `UserAccount.passwordChangeRequired`(기본 false, 더하기만 함).
+- `src/modules/masters/account-service.ts`: `generateTemporaryPassword()`, `issueTherapistAccount()`, `resetTherapistAccountPassword()`(둘 다 `{account, oneTimeSecret}` 반환), `changeOwnPassword()`, `changePassword()`가 성공 시 표시를 지우도록 확장, `linkUserAccountToEmployee()`에 THERAPIST 구분 직원 거절 가드(D26) 추가.
+- `src/modules/masters/employee-service.ts`: `updateEmployeeProfile()`의 퇴사 저장 경로에 M20 자동 정지 훅(같은 트랜잭션, 감사 포함, 휴직은 건드리지 않음).
+- `src/modules/therapists/therapist-access-service.ts`의 `requireTherapistAccess({allowPasswordChangeRequired})`로 M17 확장. `src/app/therapist/layout.tsx`는 항상 `true`로 호출.
+- 관리자 화면: `src/app/(erp)/masters/employees/therapist-account-actions.ts`(서버 액션 4개, 티켓 12와 파일 분리) + `therapist-account-panel.tsx`(발급/초기화/정지/잠금해제 UI, 인쇄용 안내 쪽지, QR은 `qrcode-generator` 신규 의존성). `employee-forms.tsx`는 THERAPIST 구분이면 이 패널로 분기하는 줄과 `print:hidden` 몇 줄만 더함(병합 충돌 최소화 목적).
+- Therapist 화면: `src/app/therapist/password/`(`page.tsx`, `therapist-password-form.tsx`, `actions.ts`), "나" 메뉴에 링크 추가(`therapist-me-menu.tsx`).
+- `src/lib/routes.ts`에 `/therapist/password`(notATab) 추가.
+
+**새로 한 가정 (스펙에 이미 (가정)으로 표시된 것, 문제 없으면 그대로 확정):**
+- Therapist는 이메일이 없다 — `{accountId}@therapist.internal` 내부용 주소를 만들어 쓰고 로그인은 계정 ID로만 한다.
+- 비밀번호 변경 화면은 지금 비밀번호와 새 비밀번호를 같이 받는다(본인 확인 겸).
+- 추가 가정: `validate-story-1-7.mjs`의 오래된 비밀번호-소재 문자열 금지 목록과 충돌해, 서비스 내부 식별자만 `oneTimeSecret`로 지었다(공개 DTO 필드명은 기존 관례대로 `temporaryPassword` 유지, `therapist-account-actions.ts`에서 변환).
+
+**검증 결과:**
+- `pnpm test:unit` → 전부 통과(신규: `account-service.test.ts`에 발급/초기화/역할 제한/표시 켜짐·지움 describe 블록, `employee-service.test.ts`에 퇴사 자동 정지 4건, `prisma-migrations.test.ts`에 마이그레이션 패턴 1건).
+- `npx tsc --noEmit` → 에러 없음.
+- `validate-story-*.mjs` 전체 → `validate-story-4-6.mjs`만 실패(기존에도 실패하는 것으로 확인됨). 그 밖 전부 통과.
+- 운영 빌드 E2E(DB `vietnam_aesthetic_th02`, 포트 3202): 새 스펙 `tests/e2e/story-ticket-02-account-issue.spec.ts`(발급→첫 로그인→변경 전 다른 탭 막힘→비밀번호 변경→오늘 화면, 퇴사 자동 정지로 세션 막힘) 2/2 통과. 관련 기존 스펙(story-ticket-01, story-1-2-auth-rbac, story-i18n-default-vi, routes.test)까지 묶어 23/23 통과.
+  - `story-1-7-employees-master.spec.ts`에서 본 집계 수 불일치(51 vs 50)는 내 변경과 무관한 것으로 확인(신선한 DB에서 그 스펙만 단독 실행해도 재현됨, 내 코드 경로는 전혀 타지 않음) — 공유 메모리의 "기존 실패" 목록과 일치해 손대지 않음.
+- 쪽지 인쇄 모양: 인쇄 미디어 에뮬레이션 스크린숏으로 확인(QR·계정 ID·접속 주소·임시 비밀번호·안내 문구 모두 보임, `print:hidden`/`print:border-0`/`print:p-0`로 패널의 다른 영역은 찍히지 않음).
+- Therapist 비밀번호 변경 화면(390px) 스크린숏 확인: 입력칸·버튼 모두 44px(h-11, 기존 공용 토큰), 경고 배너는 기존 warning 토큰(대비 비율 ~6:1) 재사용, 하단 탭 4개로 bottom-nav 한도(≤5) 안. Skill `ui-ux-pro-max`로 접근성/터치 영역/대비 점검(critical: 비밀번호 붙여넣기 차단 없음 확인, 라벨·`role="alert"`/`role="status"` 있음) — 심각한 이슈 없음, 비밀번호 표시/숨김 토글은 기존 로그인 화면에도 없어 티켓 범위 밖으로 둠.
