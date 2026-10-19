@@ -106,6 +106,8 @@ export async function saveTherapistAttendanceAction(
       employeeId: formValue(formData, "employeeId"),
       checkInTime: formValue(formData, "checkInTime"),
       checkOutTime: formValue(formData, "checkOutTime"),
+      // 기존 출퇴근 화면(운영팀)에서 저장한 시각은 "대리 입력"이다(스펙 D16, 티켓 04).
+      method: "대리 입력",
       actorId: account.id
     });
     revalidatePath("/settlements");
