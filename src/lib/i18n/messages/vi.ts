@@ -1658,4 +1658,15 @@ export const vi: Messages = {
   "therapist.notices.unread": "Chưa đọc",
   "therapist.notices.detail.title": "Thông báo",
   "therapist.notices.detail.sentAt": "Gửi lúc {time}",
+
+  // Tab Hôm nay (ticket 03, spec D10–D12): thẻ tình trạng hôm nay, danh sách ca theo ngày.
+  "therapist.today.statusAria": "Tình trạng hôm nay",
+  "therapist.today.nextCallLabel": "Còn tới ca tiếp theo",
+  "therapist.today.minutesUnit": "phút",
+  "therapist.today.noMoreCallsToday": "Hôm nay không còn ca nào",
+  "therapist.today.doneCountLabel": "Đã làm hôm nay",
+  "therapist.today.callUnit": "ca",
+  "therapist.today.todayMarker": "Hôm nay",
+  "therapist.today.noCallsThatDay": "Ngày này không có ca được phân.",
+  "therapist.today.withPartner": "Cùng với {name}",
 };

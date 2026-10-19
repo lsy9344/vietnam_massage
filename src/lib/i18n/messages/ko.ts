@@ -1664,4 +1664,15 @@ export const ko = {
   "therapist.notices.unread": "안읽음",
   "therapist.notices.detail.title": "공지",
   "therapist.notices.detail.sentAt": "{time} 보냄",
+
+  // 오늘 탭(티켓 03, 스펙 D10–D12): 오늘 현황 카드, 날짜별 내 콜 목록.
+  "therapist.today.statusAria": "오늘 현황",
+  "therapist.today.nextCallLabel": "다음 콜까지",
+  "therapist.today.minutesUnit": "분",
+  "therapist.today.noMoreCallsToday": "오늘 남은 콜 없음",
+  "therapist.today.doneCountLabel": "오늘 한 것",
+  "therapist.today.callUnit": "건",
+  "therapist.today.todayMarker": "오늘",
+  "therapist.today.noCallsThatDay": "이 날은 배정된 콜이 없습니다.",
+  "therapist.today.withPartner": "{name}님과 함께",
 } as const;

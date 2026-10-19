@@ -542,6 +542,15 @@ function isCleaningStatus(status: string) {
   return status === "청소중" || status === "CLEANING";
 }
 
+/**
+ * 오늘 한 것(M7, 티켓 03): 사용중·청소중·방문완료. 원장 Therapist 현황 줄의 callCounts.done과 같은
+ * 판정이다(아래 listTherapistAvailabilityWithSeats의 루프가 이 함수로 센다). Therapist 모듈이 이
+ * 함수를 그대로 가져다 쓴다 — 상태 목록을 다시 적지 않는다.
+ */
+export function isDoneServiceCallStatus(status: string) {
+  return isInUseStatus(status) || isCleaningStatus(status) || isCompletedServiceCallStatus(status);
+}
+
 function isNoShowStatus(status: string) {
   return status === "노쇼" || status === "NO_SHOW";
 }
@@ -1910,7 +1919,7 @@ export async function listTherapistAvailabilityWithSeats(
   const callCountsByTherapist = new Map<string, { done: number; finished: number; reserved: number }>();
   for (const call of calls) {
     const finished = isCleaningStatus(call.status) || isCompletedServiceCallStatus(call.status);
-    const done = finished || isInUseStatus(call.status);
+    const done = isDoneServiceCallStatus(call.status);
     if (!done && !isReservationStatus(call.status)) continue;
     for (const therapistId of new Set(assignedTherapistIds(call))) {
       const counts = callCountsByTherapist.get(therapistId) ?? { done: 0, finished: 0, reserved: 0 };
