@@ -108,7 +108,8 @@ describe("WorkflowDockView", () => {
         ["Therapist", false],
         ["운영팀 일일", true],
         ["운영팀 월", false],
-        ["공지", false]
+        ["공지", false],
+        ["승인함", false]
       ]
     );
   });

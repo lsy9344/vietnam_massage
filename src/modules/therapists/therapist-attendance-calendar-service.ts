@@ -11,6 +11,7 @@ import {
   type TherapistAttendanceMethod
 } from "@/modules/settlements/therapist-attendance-service";
 import { judgeTherapistAttendanceDay, type TherapistAttendanceDayJudgment } from "@/modules/therapists/therapist-attendance-judgment";
+import { listTherapistRequestsForEmployeeInRange, type TherapistRequestRangeReadClient } from "@/modules/therapists/therapist-request-service";
 
 /** 그날 휴무 신청·정정 요청의 상태(08·09가 채운다). 06은 자리 모양만 정하고 항상 null을 돌려준다. */
 export type TherapistAttendanceDayRequestStatus = {
@@ -73,11 +74,13 @@ export type TherapistClockOutMissingPrismaClient = {
   operatingMonth: { findUnique(args: unknown): Promise<CalendarOperatingMonthRecord | null> };
 };
 
-// listPlannedWorkingDayStatusesForEmployeeInRange·listTherapistAttendanceForEmployeeInRange가 저마다
-// 요구하는 좁은 타입을 한 클라이언트로 함께 만족시킨다(각 레코드 모양은 그 모듈의 비공개 타입과 같다).
-type TherapistAttendanceCalendarPrismaClient = TherapistClockOutMissingPrismaClient & {
-  plannedWorkingDay: { findMany(args?: unknown): Promise<CalendarPlannedWorkingDayRecord[]> };
-};
+// listPlannedWorkingDayStatusesForEmployeeInRange·listTherapistAttendanceForEmployeeInRange·
+// listTherapistRequestsForEmployeeInRange(08)가 저마다 요구하는 좁은 타입을 한 클라이언트로 함께
+// 만족시킨다(각 레코드 모양은 그 모듈의 비공개 타입과 같다).
+type TherapistAttendanceCalendarPrismaClient = TherapistClockOutMissingPrismaClient &
+  TherapistRequestRangeReadClient & {
+    plannedWorkingDay: { findMany(args?: unknown): Promise<CalendarPlannedWorkingDayRecord[]> };
+  };
 
 function getClient(client?: TherapistAttendanceCalendarPrismaClient) {
   return client ?? (prisma as unknown as TherapistAttendanceCalendarPrismaClient);
@@ -104,7 +107,7 @@ export async function getTherapistAttendanceCalendar(input: {
   const monthKey = input.monthKey ?? todayServiceDate.slice(0, 7);
   const range = calculateOperatingMonthRange(monthKey);
 
-  const [plannedDays, attendances] = await Promise.all([
+  const [plannedDays, attendances, requestDays] = await Promise.all([
     listPlannedWorkingDayStatusesForEmployeeInRange({
       employeeId: input.employeeId,
       startDate: range.startDate,
@@ -116,14 +119,24 @@ export async function getTherapistAttendanceCalendar(input: {
       startDate: range.startDate,
       endDate: range.endDate,
       prismaClient: client
+    }),
+    // 08·09가 채운 자리(휴무 신청·정정 요청 상태). 값만 메운다 — 타입은 06이 정한 그대로다.
+    listTherapistRequestsForEmployeeInRange({
+      employeeId: input.employeeId,
+      startDate: range.startDate,
+      endDate: range.endDate,
+      now,
+      prismaClient: client
     })
   ]);
 
   const plannedByDate = new Map(plannedDays.map((day) => [day.date, day]));
   const attendanceByDate = new Map(attendances.map((attendance) => [attendance.attendanceDate, attendance]));
+  const requestByDate = new Map(requestDays.map((request) => [request.targetDate, request]));
 
   const days: TherapistAttendanceCalendarDayDto[] = plannedDays.map((planned) => {
     const attendance = attendanceByDate.get(planned.date) ?? null;
+    const request = requestByDate.get(planned.date) ?? null;
     const judgment = judgeTherapistAttendanceDay({
       planStatus: planned.status,
       plannedStartTime: planned.plannedStartTime,
@@ -143,7 +156,7 @@ export async function getTherapistAttendanceCalendar(input: {
       checkOutMethod: attendance?.checkOutMethod ?? null,
       isFullAttendanceRecognized: attendance?.isFullAttendanceRecognized ?? false,
       judgment,
-      requestStatus: null
+      requestStatus: request ? { kind: request.kind, status: request.status, rejectionReason: request.rejectionReason } : null
     };
   });
 

@@ -31,6 +31,7 @@ model UserAccount {
   authoredTherapistNotices TherapistNotice[] @relation("TherapistNoticeAuthor")
   withdrawnTherapistNotices TherapistNotice[] @relation("TherapistNoticeWithdrawnBy")
   authoredTherapistInternalMemos TherapistInternalMemo[]
+  resolvedTherapistRequests TherapistRequest[]
 
   @@map("user_accounts")
 }
@@ -63,6 +64,7 @@ model Employee {
   targetedTherapistNotices TherapistNotice[]
   therapistNoticeRecipients TherapistNoticeRecipient[]
   therapistInternalMemos TherapistInternalMemo[]
+  therapistRequests      TherapistRequest[]
 
   @@unique([employeeGroup, sortOrder], map: "uq_employees_employee_group_sort_order")
   @@map("employees")
@@ -586,4 +588,32 @@ model TherapistNoticeRecipient {
   @@unique([noticeId, employeeId], map: "uq_therapist_notice_recipients_notice_employee")
   @@index([employeeId, readAt], map: "idx_therapist_notice_recipients_employee_read")
   @@map("therapist_notice_recipients")
+}
+
+// 티켓 08: 휴무 신청과 정정 요청을 한 표에 담는다(스펙 D22–D24, M24). 09가 kind="정정"으로 이 표를
+// 그대로 쓴다. "기한 지남"은 저장하지 않고 읽을 때 정한다(status는 대기/승인/거절/취소만 가진다).
+// 더하기만 하는 새 표(D29), 운영 DB 적용은 사용자 확인 뒤에 한다.
+model TherapistRequest {
+  id         String   @id @default(cuid())
+  employeeId String   @map("employee_id")
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  // "휴무" | "정정"
+  kind       String
+  targetDate DateTime @map("target_date") @db.Date
+  // 정정 요청만 쓴다(HH:mm). 휴무 신청은 항상 null이다.
+  requestedCheckInTime  String? @map("requested_check_in_time")
+  requestedCheckOutTime String? @map("requested_check_out_time")
+  reason     String?
+  // "대기" | "승인" | "거절" | "취소"
+  status           String    @default("대기")
+  resolutionReason String?   @map("resolution_reason")
+  resolvedByAccountId String? @map("resolved_by_account_id")
+  resolvedByAccount   UserAccount? @relation(fields: [resolvedByAccountId], references: [id])
+  resolvedAt       DateTime? @map("resolved_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([employeeId, targetDate], map: "idx_therapist_requests_employee_target_date")
+  @@index([status, targetDate], map: "idx_therapist_requests_status_target_date")
+  @@map("therapist_requests")
 }

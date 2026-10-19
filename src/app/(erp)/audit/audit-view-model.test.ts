@@ -181,6 +181,10 @@ describe("auditSourcePath", () => {
     assert.equal(auditSourcePath(entry("monthly_close", null)), "/closing");
   });
 
+  it("opens the day-off/correction approval inbox for a therapist_request entry (티켓 08)", () => {
+    assert.equal(auditSourcePath(entry("therapist_request", { kind: "휴무", status: "승인" })), "/settlements/requests");
+  });
+
   it("has no source screen for an unknown target", () => {
     assert.equal(auditSourcePath(entry("missing_story13_target", {})), null);
   });
