@@ -78,6 +78,9 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   PAYOUT_CONFIRMATION_ALREADY_CONFIRMED: "Đã xác nhận chi trả. Nếu số tiền thay đổi, hãy xác nhận lại.",
   PAYOUT_CONFIRMATION_NOT_CONFIRMED: "Chưa có xác nhận chi trả nên không thể xác nhận lại hoặc hủy xác nhận.",
 
+  // Therapist 내부 메모(티켓 12, 스펙 D27)
+  THERAPIST_MEMO_EMPLOYEE_NOT_THERAPIST: "Chỉ có thể thêm ghi chú nội bộ cho nhân viên KTV.",
+
   // 월 명세서(티켓 32)
   INVALID_MONTHLY_STATEMENT_INPUT: "Dữ liệu tra cứu phiếu lương tháng không hợp lệ.",
   UNSUPPORTED_EMPLOYEE_GROUP: "Không hỗ trợ phiếu lương tháng cho nhân viên này.",

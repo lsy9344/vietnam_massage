@@ -1,5 +1,6 @@
-import { requireRouteAccess } from "@/lib/authorization";
+import { canPerform, requireRouteAccess } from "@/lib/authorization";
 import { listEmployees } from "@/modules/masters/employee-service";
+import { listTherapistMemosByEmployeeIds } from "@/modules/therapists/therapist-memo-service";
 import { CreateEmployeePanel, EmployeeManager } from "@/app/(erp)/masters/employees/employee-forms";
 import { ActiveCounts } from "@/app/(erp)/masters/master-parts";
 import { MASTER_ITEM_PARAM, countActive, readMasterItem } from "@/app/(erp)/masters/master-view-model";
@@ -12,6 +13,10 @@ export default async function EmployeeMasterPage({ searchParams }: { searchParam
   const employees = await listEmployees();
   const params = await searchParams;
   const counts = countActive(employees);
+  // 티켓 12(D27): 메모는 therapist:manage가 있을 때만 읽는다 — 권한이 없으면 서버가 조회조차 하지 않는다.
+  const therapistMemosByEmployeeId = canPerform(account.role, "therapist:manage")
+    ? await listTherapistMemosByEmployeeIds(employees.filter((employee) => employee.employeeGroup === "THERAPIST").map((employee) => employee.id))
+    : null;
 
   return (
     <div className="screen">
@@ -22,7 +27,11 @@ export default async function EmployeeMasterPage({ searchParams }: { searchParam
           <span>{t("masters.employees.meta.totalEmployees", { count: employees.length })}</span>
         </div>
       </div>
-      <EmployeeManager employees={employees} initialItem={readMasterItem(params[MASTER_ITEM_PARAM])} />
+      <EmployeeManager
+        employees={employees}
+        initialItem={readMasterItem(params[MASTER_ITEM_PARAM])}
+        therapistMemosByEmployeeId={therapistMemosByEmployeeId}
+      />
     </div>
   );
 }
