@@ -277,6 +277,11 @@ select {
   margin-left: 1rem;
 }
 
+/* 맨 앞의 로고 심볼(첫 화면 링크). 심볼 폭 1.75rem + 여백이 누르는 영역 44px이 된다. */
+.shell-dock-brand {
+  padding: 0 0.5rem;
+}
+
 /* 떠 있는 층이라 그림자 한 단계를 쓴다(모서리 1.125rem = --radius-lg). */
 .shell-popover {
   position: fixed;
@@ -523,6 +528,48 @@ select {
   }
 }
 
+/* 로그인 로고의 빛 훑기(design.md 5절·6.15). 로고 모양으로 가린 옅은 빛줄기가 5초마다 한 번 심볼에서
+   글자 쪽으로 이어서 지나간다. 로고는 제자리에 그대로 있다. */
+.brand-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 42%,
+    color-mix(in srgb, var(--brand-foreground) 55%, transparent) 50%,
+    transparent 58%
+  );
+  background-position: 100% 0;
+  background-size: 260% 100%;
+  -webkit-mask: var(--brand-sheen-mask) center / 100% 100% no-repeat;
+  mask: var(--brand-sheen-mask) center / 100% 100% no-repeat;
+  animation: brand-sheen 5s ease-in-out 0.6s infinite;
+}
+
+.brand-sheen-late {
+  animation-delay: 1.3s;
+}
+
+@keyframes brand-sheen {
+  0% {
+    opacity: 1;
+    background-position: 100% 0;
+  }
+
+  30% {
+    opacity: 1;
+    background-position: 0% 0;
+  }
+
+  31%,
+  100% {
+    opacity: 0;
+    background-position: 0% 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -531,6 +578,10 @@ select {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .brand-sheen {
+    display: none;
   }
 
   .status-attention::after {

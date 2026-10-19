@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { RoomStatusCard } from "@/components/domain/room-status-card";
 import { RoomStatusRefresh, RoomStatusRefreshController } from "@/components/domain/room-status-refresh-controller";
+import { BRAND_NAME, BrandMark } from "@/components/ui/brand-logo";
 import { canAccessRoute, requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
@@ -58,9 +59,9 @@ export default async function TvPage({ searchParams }: { searchParams: Promise<T
     <RoomStatusRefresh lastUpdatedAt={lastUpdatedAt} locale={locale}>
       <main className="fullscreen min-h-screen bg-background px-5 py-5 text-foreground lg:px-8 lg:py-6">
         <header className="mb-5 flex flex-wrap items-end justify-between gap-5 border-b border-border pb-4">
-          <div className="flex items-stretch gap-4">
-            {/* 골드 브랜드 표식은 TV에서 머리말에만 둔다(design.md 6.15). */}
-            <span aria-hidden="true" className="w-1.5 shrink-0 rounded-full bg-brand-secondary" />
+          <div className="flex items-center gap-5">
+            {/* 로고 심볼은 TV에서 머리말에만, 멈춘 채로 둔다(design.md 6.15). */}
+            <BrandMark className="w-20 shrink-0" label={BRAND_NAME} />
             <div>
               <p className="text-lg font-bold text-muted">{t("tv.eyebrowFull")}</p>
               <h1 className="mt-1 text-[40px] font-black leading-none">{t("nav.item.tv")}</h1>

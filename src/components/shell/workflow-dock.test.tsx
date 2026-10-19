@@ -150,6 +150,29 @@ describe("WorkflowDockView", () => {
     assert.equal(renderDock("waiter", "/rooms"), "");
   });
 
+  it("starts with the shop logo, which takes each role to its first screen with the chosen day, on wide screens only", () => {
+    const brandLink = (html: string) => html.match(/<nav[^>]*>.*?(<a [^>]*>)/)?.[1] ?? "";
+    const firstScreens: Array<[Role, string]> = [
+      ["administrator", "/live"],
+      ["counter", "/calls"],
+      ["settlement_manager", "/settlements"],
+      ["read_only_viewer", "/rooms"]
+    ];
+
+    for (const [role, firstScreen] of firstScreens) {
+      assert.equal(
+        attribute(brandLink(renderDock(role, "/dashboard/monthly")), "href"),
+        `${firstScreen}?operatingMonthId=m-2026-10&serviceDate=2026-10-14`,
+        role
+      );
+    }
+
+    const administrator = brandLink(renderDock("administrator", "/settlements"));
+    assert.equal(attribute(administrator, "aria-label"), "GANGNAM SPA 첫 화면");
+    assert.match(attribute(administrator, "class") ?? "", /\bshell-dock-wide-only\b/);
+    assert.equal(attribute(brandLink(renderDock("counter", "/calls", "vi")), "aria-label"), "GANGNAM SPA – Màn hình đầu");
+  });
+
   it("ends with the Me menu: display name, role, language switch and sign-out", () => {
     const html = renderDock("counter", "/calls");
 
@@ -158,6 +181,14 @@ describe("WorkflowDockView", () => {
     assert.match(html, />카운터</);
     assert.match(html, /aria-label="화면 언어 전환"/);
     assert.match(html, />로그아웃</);
+  });
+
+  it("names the shop with its logo above the account in the Me menu", () => {
+    const meMenu = renderDock("counter", "/calls").split('aria-label="내 계정"')[1] ?? "";
+    const logo = meMenu.search(/<img [^>]*alt="GANGNAM SPA"/);
+
+    assert.ok(logo >= 0, "the Me menu shows the logo");
+    assert.ok(logo < meMenu.indexOf(">Lan<"), "the logo comes before the display name");
   });
 
   it("uses Vietnamese labels by default language", () => {

@@ -7,7 +7,7 @@
  */
 export const ko = {
   // 공통 메타데이터
-  "app.title": "Vietnam Aesthetic ERP",
+  "app.title": "GANGNAM SPA",
   "app.description": "운영 원장, 객실 현황, 정산, 월마감을 위한 ERP 앱 쉘",
 
   // 탐색 셸: 업무 흐름 도크, "나" 메뉴, 건너뛰기 링크
@@ -16,6 +16,7 @@ export const ko = {
   "shell.dock.aria": "업무 이동",
   "shell.dock.more": "더보기",
   "shell.dock.backToMore": "더보기 목록",
+  "shell.dock.home": "{brand} 첫 화면",
   "shell.zone.ledger": "원장",
   "shell.zone.floor": "현장",
   "shell.zone.customers": "고객",
@@ -98,7 +99,6 @@ export const ko = {
   "nav.item.tv": "TV 현황판",
 
   // 로그인
-  "auth.signIn.eyebrow": "Vietnam Aesthetic ERP",
   "auth.signIn.title": "직원 계정 로그인",
   "auth.signIn.description": "관리자에게 발급받은 이메일 또는 계정 ID로 로그인한다.",
   "auth.signIn.identityLabel": "이메일 또는 계정 ID",

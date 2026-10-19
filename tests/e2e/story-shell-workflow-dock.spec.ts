@@ -146,6 +146,19 @@ test.describe("티켓 02 업무 흐름 셸", () => {
     await expect(page).toHaveURL(/\/sign-in/);
   });
 
+  test("도크 맨 앞 로고는 첫 화면으로 가고, 840px 미만에서는 로고가 나 메뉴에서만 보인다", async ({ page }) => {
+    await login(page, accounts.counter.accountId, accounts.counter.password);
+    await page.goto("/customers");
+    const brand = dock(page).getByRole("link", { name: "GANGNAM SPA 첫 화면" });
+    await brand.click();
+    await expect(page).toHaveURL(expectedDock.counter.landing);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(brand).toBeHidden();
+    await dock(page).getByRole("button", { name: "나", exact: true }).click();
+    await expect(page.getByRole("group", { name: "내 계정" }).getByRole("img", { name: "GANGNAM SPA" })).toBeVisible();
+  });
+
   test("웨이터는 도크 없이 객실 도구줄의 나 메뉴로 로그아웃한다", async ({ page }) => {
     await login(page, accounts.waiter.accountId, accounts.waiter.password);
     await page.getByRole("button", { name: "나", exact: true }).click();
@@ -301,6 +314,8 @@ test.describe("티켓 02 업무 흐름 셸", () => {
     const viDock = page.getByRole("navigation", { name: "Chuyển khu vực nghiệp vụ" });
     const viZones = viDock.locator("[data-dock-zone]:visible");
     await expect(viZones).toHaveText(["Sổ gọi", "Vận hành", "Khách", "Đối soát", "Chốt tháng", "Báo cáo", "Thiết lập"]);
+    // 맨 앞 로고까지 함께 들어가야 한다.
+    await expect(viDock.getByRole("link", { name: "GANGNAM SPA – Màn hình đầu" })).toBeVisible();
     const overflow = await viDock.evaluate((element) => element.scrollWidth - element.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
     for (const box of await Promise.all((await viZones.all()).map((zone) => zone.boundingBox()))) {

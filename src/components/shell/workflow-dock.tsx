@@ -5,15 +5,19 @@ import { Fragment, useEffect, useId, useRef, useState, type MouseEvent } from "r
 import { usePathname, useSearchParams } from "next/navigation";
 import { MeMenu, type ShellAccount } from "@/components/shell/me-menu";
 import { WORKFLOW_DOCK_ID } from "@/components/shell/skip-links";
+import { BRAND_NAME, BrandMark } from "@/components/ui/brand-logo";
 import { createTranslator } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
 import { useLocale } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 import {
+  findScreenRoute,
   getCompactDock,
   getDockZones,
+  getRoleLandingPath,
   getZoneMenu,
   readScreenContext,
+  screenHref,
   zoneForPath,
   type Zone,
   type ZoneMenuItem
@@ -30,6 +34,7 @@ function closeMenu(event: MouseEvent<HTMLElement>) {
 /**
  * 업무 흐름 도크. 화면이 하나인 구역은 누르면 바로 가고, 화면이 둘 이상인 구역은 누르면
  * 그 구역 위에 화면 메뉴가 뜬다(구역 안 탭과 같은 목록, 원장은 보기 탭까지).
+ * 840px 이상에서는 맨 앞의 로고 심볼이 그 역할의 첫 화면으로 간다.
  */
 export function WorkflowDockView({
   account,
@@ -64,6 +69,10 @@ export function WorkflowDockView({
   }
 
   const context = readScreenContext(searchParams);
+  // 로고는 그 역할의 첫 화면으로 가되, 구역을 옮길 때처럼 고른 운영월·날짜를 넘긴다.
+  const landingPath = getRoleLandingPath(account.role);
+  const landingRoute = findScreenRoute(landingPath);
+  const homeHref = landingRoute ? screenHref(landingRoute, context) : landingPath;
   const menuOf = (zone: Zone) => getZoneMenu(account.role, zone, context, { path: currentPath, params: searchParams });
   const { overflow } = getCompactDock(account.role);
   const currentZone = zoneForPath(currentPath);
@@ -139,6 +148,14 @@ export function WorkflowDockView({
   return (
     // print:hidden: 월 명세서(티켓 32) 같은 인쇄 화면에서 업무 흐름 도크가 인쇄물에 찍히지 않게 한다.
     <nav aria-label={t("shell.dock.aria")} className="shell-dock print:hidden" id={WORKFLOW_DOCK_ID} tabIndex={-1}>
+      {/* 840px 미만에서는 구역 라벨이 한 줄에 들어갈 자리가 없어 빼고, 로고는 나 메뉴에서 보인다. */}
+      <Link
+        aria-label={t("shell.dock.home", { brand: BRAND_NAME })}
+        className="shell-dock-item shell-dock-brand shell-dock-wide-only"
+        href={homeHref}
+      >
+        <BrandMark className="w-7" />
+      </Link>
       <div className="shell-dock-zones">
         {dockZones.map((zone, index) =>
           zoneItem(
