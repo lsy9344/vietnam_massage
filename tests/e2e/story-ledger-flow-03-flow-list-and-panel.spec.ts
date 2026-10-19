@@ -7,10 +7,11 @@ import { argon2idOptions, login } from "./support/auth";
 // 콜 원장 흐름 재구성 티켓 03: 원장 목록, 줄 끝 입장·결제, 오른쪽 편집 패널, 키보드 동선, 보기 전환·새 행 입력 없음,
 // 1280·1024px 가로 스크롤 없음, 운영월 잠금. 1018 티켓 02에서 흐름 묶음 대신 예약시각순 두 줄 행 목록 하나가 됐다.
 const account = { accountId: "lf03_counter", password: "LedgerFlow03!counter" };
-const monthKey = "2025-03";
-const lockedMonthKey = "2025-02";
-const serviceDate = "2025-03-12";
-const lockedDate = "2025-02-12";
+// 1018 티켓 03: 지난 날짜의 사용중 콜은 읽을 때 자동 청소 중이 끝내므로, 원장 동작은 먼 뒤 날짜에서 본다.
+const monthKey = "2040-03";
+const lockedMonthKey = "2040-02";
+const serviceDate = "2040-03-12";
+const lockedDate = "2040-02-12";
 
 let monthId = "";
 let lockedMonthId = "";
@@ -227,7 +228,8 @@ test.describe("콜 원장 흐름 재구성 티켓 03 흐름별 목록과 편집 
     await line(page, reservedWithRoomId).getByRole("button", { name: "17:00 콜 입장" }).click();
     await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: reservedWithRoomId } })).status).toBe("IN_USE");
     const entered = await (prisma as any).serviceCall.findUnique({ where: { id: reservedWithRoomId } });
-    expect(entered.actualEntryTime).toMatch(/^\d{2}:\d0$/);
+    // 1018 티켓 03: 입장은 분 단위 지금 시각이다(10분 맞춤 없음).
+    expect(entered.actualEntryTime).toMatch(/^\d{2}:\d{2}$/);
 
     await line(page, reservedNoRoomId).getByRole("button", { name: "16:00 콜 입장" }).click();
     const picker = page.getByRole("group", { name: "16:00 콜 입장 객실 고르기" });
@@ -242,23 +244,18 @@ test.describe("콜 원장 흐름 재구성 티켓 03 흐름별 목록과 편집 
     await expect(line(page, reservedWithRoomId)).toContainText("사용중");
   });
 
-  test("결제: 줄의 결제가 패널의 결제 묶음을 열고, 결제수단 알약과 결제 완료로 방문완료가 된다", async ({ page }) => {
+  // 1018 스펙 D12: 결제수단을 고르는 것은 상태를 바꾸지 않는다. "결제 완료 → 방문완료" 버튼은 없다.
+  test("결제: 패널의 결제수단 알약은 결제수단만 저장하고 상태는 그대로 둔다", async ({ page }) => {
     await login(page, account.accountId, account.password);
-    await openLedger(page);
+    await openLedger(page, `&call=${paidCallId}`);
 
-    await line(page, paidCallId).getByRole("button", { name: "15:00 콜 결제" }).click();
-    await expect(page).toHaveURL(new RegExp(`call=${paidCallId}$`));
     const payment = panel(page).getByRole("region", { name: "결제" });
     await expect(payment).toBeVisible();
-    // 결제수단 알약(라디오)이 아니라 결제 묶음에 포커스가 간다 — 화살표 한 번에 결제수단이 저장되지 않게.
-    await expect(payment).toBeFocused();
-    await page.keyboard.press("ArrowDown");
-    expect((await (prisma as any).serviceCall.findUnique({ where: { id: paidCallId } })).paymentMethodCode).toBeNull();
-
+    const before = (await (prisma as any).serviceCall.findUnique({ where: { id: paidCallId } })).status;
     await payment.getByText("카드", { exact: true }).click();
     await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: paidCallId } })).paymentMethodCode).toBe("CARD");
-    await payment.getByRole("button", { name: "결제 완료" }).click();
-    await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: paidCallId } })).status).toBe("VISIT_COMPLETE");
+    expect((await (prisma as any).serviceCall.findUnique({ where: { id: paidCallId } })).status).toBe(before);
+    await expect(payment.getByRole("button", { name: "결제 완료" })).toHaveCount(0);
     await expect(panel(page).locator('[data-save-state="saved"]')).toContainText("저장됨");
   });
 
@@ -332,12 +329,12 @@ test.describe("콜 원장 흐름 재구성 티켓 03 흐름별 목록과 편집 
     });
   }
 
-  test("운영월 잠금이면 입장·결제 버튼과 패널 칸이 잠긴다", async ({ page }) => {
+  test("운영월 잠금이면 입장 버튼·상태 칩과 패널 칸이 잠긴다", async ({ page }) => {
     await login(page, account.accountId, account.password);
     await page.goto(`/calls?operatingMonthId=${lockedMonthId}&serviceDate=${lockedDate}&call=${lockedCallId}`);
     await expect(page.getByText("잠긴 운영월입니다.")).toBeVisible();
     await expect(line(page, lockedCallId).getByRole("button", { name: "16:00 콜 입장" })).toBeDisabled();
     await expect(panel(page).getByRole("combobox", { name: "시간" })).toBeDisabled();
-    await expect(panel(page).getByRole("button", { name: "결제 완료" })).toBeDisabled();
+    await expect(line(page, lockedCallId).getByRole("button", { name: "16:00 콜 상태 고르기" })).toBeDisabled();
   });
 });

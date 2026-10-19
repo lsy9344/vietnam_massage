@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { DetailRow } from "@/components/ui/detail-row";
 import { WarningList } from "@/components/ui/warning-summary";
 import { PanelSection } from "@/app/(erp)/settlements/settlement-parts";
@@ -12,14 +11,13 @@ import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto } from "@/m
 import { calculationErrorMessageKey } from "@/app/(erp)/calls/calculation-status-message";
 import { CallConflictCompare, type CallConflictCompareData } from "@/app/(erp)/calls/call-conflict-compare";
 import { CallCustomerLinkCorrection } from "@/app/(erp)/calls/call-customer-link-correction";
-import { ActualEntryField, firstFieldError, nullableValue, optionLabel, SelectField, TextField } from "@/app/(erp)/calls/call-ledger-fields";
+import { ActualEntryField, ClockTimeField, firstFieldError, nullableValue, optionLabel, SelectField, TextField } from "@/app/(erp)/calls/call-ledger-fields";
 import { isSaveHeld, type CallRowDraft, type CallRowSave } from "@/app/(erp)/calls/call-row-save";
 import { CallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
 import { callWarningLabel } from "@/app/(erp)/calls/call-warning-label";
-import { statusCodeFor } from "@/app/(erp)/calls/ledger-flow";
 
-/** 패널을 열며 옮길 자리. 줄의 "결제"는 결제 묶음, 목록의 Enter는 첫 칸이다. token이 바뀔 때마다 다시 옮긴다. */
-export type CallPanelFocusRequest = { target: "first" | "payment"; token: number };
+/** 패널을 열며 옮길 자리. 목록의 Enter는 첫 칸이다. token이 바뀔 때마다 다시 옮긴다. */
+export type CallPanelFocusRequest = { target: "first"; token: number };
 
 function relatedCallIds(row: ServiceCallRowDto) {
   const ids: string[] = [];
@@ -51,6 +49,7 @@ export function CallEditPanel({
   onReload,
   onRetry,
   onSelectCall,
+  onStatusChange,
   options,
   readOnly,
   row,
@@ -71,6 +70,8 @@ export function CallEditPanel({
   onReload: () => void;
   onRetry: () => void;
   onSelectCall: (callId: string) => void;
+  /** 상태를 고르면 원장 줄의 상태 칩과 같은 규칙(1018 스펙 D11)으로 입장·종료 시각을 함께 저장한다. */
+  onStatusChange: (status: string) => void;
   options: ServiceCallFormOptions;
   readOnly: boolean;
   /** 이 화면이 마지막으로 받은 저장 결과(계산값, 표시 종료). */
@@ -88,18 +89,13 @@ export function CallEditPanel({
   // 고객 연결 정정은 원장 저장과 별개의 작업이라 성공한 행을 이 구역에만 바로 반영한다(원장은 새로고침으로 받는다).
   const [linkRow, setLinkRow] = useState<ServiceCallRowDto | null>(null);
   const disabled = isLocked;
-  const visitComplete = statusCodeFor(options.statuses, "visitComplete");
 
   useEffect(() => {
     if (!focusRequest) return;
     const frame = window.requestAnimationFrame(() => {
       const root = panelRef.current;
       if (!root) return;
-      // 결제는 결제 묶음 자체로 간다. 결제수단 알약(라디오)에 바로 두면 화살표 한 번에 고르지 않은 결제수단이 저장된다.
-      const target =
-        focusRequest.target === "payment"
-          ? root.querySelector<HTMLElement>('[data-panel-section="payment"]')
-          : root.querySelector<HTMLElement>("[data-call-field]:not(:disabled)");
+      const target = root.querySelector<HTMLElement>("[data-call-field]:not(:disabled)");
       target?.scrollIntoView({ block: "nearest" });
       target?.focus();
     });
@@ -242,9 +238,17 @@ export function CallEditPanel({
           errorMessage={firstFieldError(fieldErrors, "actualEntryTime")}
           onBlur={() => onCommit()}
           onChange={(value) => onEdit({ actualEntryTime: nullableValue(value) })}
-          onCommitValue={(value) => onCommit({ actualEntryTime: nullableValue(value) })}
           value={draft.actualEntryTime ?? ""}
           warningTime={row.warningTime}
+        />
+        <ClockTimeField
+          disabled={disabled}
+          errorMessage={firstFieldError(fieldErrors, "actualEndTime")}
+          field="actualEndTime"
+          label={t("calls.column.actualEnd")}
+          onBlur={() => onCommit()}
+          onChange={(value) => onEdit({ actualEndTime: nullableValue(value) })}
+          value={draft.actualEndTime ?? ""}
         />
         <div className="grid gap-3 min-[480px]:grid-cols-2">
           <SelectField
@@ -256,6 +260,7 @@ export function CallEditPanel({
           />
           <SelectField
             {...selectProps("status", false)}
+            onCommitValue={onStatusChange}
             errorMessage={firstFieldError(fieldErrors, "status")}
             label={t("calls.column.status")}
             options={options.statuses}
@@ -293,14 +298,6 @@ export function CallEditPanel({
         </fieldset>
         <SelectField {...selectProps("discountTypeCode")} label={t("calls.column.discountType")} options={options.discountTypes} />
         <PaymentAmounts row={row} saveHeld={isSaveHeld(status)} showSettlementAmounts={showSettlementAmounts} t={t} locale={locale} />
-        <Button
-          className="justify-self-start"
-          disabled={disabled || !visitComplete || draft.status === visitComplete}
-          onClick={() => visitComplete && onCommit({ status: visitComplete })}
-          type="button"
-        >
-          {t("calls.panel.payComplete")}
-        </Button>
       </section>
 
       <PanelSection title={t("calls.panel.section.memo")}>

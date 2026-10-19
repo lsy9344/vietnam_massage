@@ -21,11 +21,9 @@ import { CallEditPanel, type CallPanelFocusRequest } from "@/app/(erp)/calls/cal
 import { nullableValue, optionLabel } from "@/app/(erp)/calls/call-ledger-fields";
 import { LedgerCellPicker, type LedgerPickOption } from "@/app/(erp)/calls/ledger-cell-picker";
 import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
-import { nowClockString } from "@/app/(erp)/calls/quick-booking-now-slot";
 import { requestQuickBookingJoinParty } from "@/app/(erp)/calls/quick-booking-party-join";
 import { callWarningLabel } from "@/app/(erp)/calls/call-warning-label";
 import {
-  entryClock,
   freeRoomOptions,
   lateMinutes,
   ledgerEndView,
@@ -37,6 +35,7 @@ import {
   nowDividerIndex,
   partyEntryTargets,
   roomPickList,
+  statusChangeTimes,
   statusCodeFor,
   therapistPickList,
   type TherapistPickVerdict
@@ -94,6 +93,65 @@ const selectedBarClass = "data-[selected=true]:[box-shadow:inset_3px_0_0_var(--b
 const selectedPartyBarClass = "data-[selected=true]:[box-shadow:inset_4px_0_0_var(--border-strong),inset_7px_0_0_var(--brand)]";
 
 /**
+ * 윗줄의 입장·종료 시각(1018 스펙 D11): 누르면 그 자리에서 분 단위 시각 칸이 되고, Enter나 칸을 떠나면 저장한다.
+ * Esc는 고치지 않고 닫는다(원장 키보드에 넘기지 않는다). 비우거나 같은 값이면 저장하지 않는다.
+ */
+function LedgerTimeEdit({
+  children,
+  disabled,
+  label,
+  onCommit,
+  readOnly,
+  value
+}: {
+  children: ReactNode;
+  disabled: boolean;
+  label: string;
+  onCommit: (value: string) => void;
+  readOnly: boolean;
+  value: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  if (readOnly) return <>{children}</>;
+  if (!editing) {
+    return (
+      <button
+        aria-label={label}
+        className="inline-flex min-h-11 items-center rounded-sm underline decoration-dotted underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-secondary disabled:no-underline"
+        disabled={disabled}
+        onClick={() => setEditing(true)}
+        type="button"
+      >
+        {children}
+      </button>
+    );
+  }
+  const finish = (next: string | null) => {
+    setEditing(false);
+    if (next && /^([01]\d|2[0-3]):[0-5]\d$/.test(next) && next !== value) onCommit(next);
+  };
+  return (
+    <input
+      aria-label={label}
+      autoFocus
+      className={inputFieldClassName({ className: "h-8 w-28 px-2" })}
+      defaultValue={value}
+      onBlur={(event) => finish(event.currentTarget.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          finish(event.currentTarget.value);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          finish(null);
+        }
+      }}
+      type="time"
+    />
+  );
+}
+
+/**
  * 원장 한 줄(1018 스펙 D3): 예약 하나를 두 줄로 보인다. 윗줄은 예약시각 · 입장 → 종료 · 상태 · 주 버튼, 아랫줄은
  * 경로·예약자 · 코스 · Therapist ▾ · 객실 ▾ · 결제다. 저장은 줄마다 하나씩 보내고(callRowSaveReducer), 주 버튼과
  * 칸 안 목록과 편집 패널이 같은 저장 상태를 쓴다. 패널은 이 줄이 골라졌을 때 작업면의 패널 자리(panelHost)에
@@ -102,6 +160,7 @@ const selectedPartyBarClass = "data-[selected=true]:[box-shadow:inset_4px_0_0_va
 function CallLedgerLine({
   clock,
   customers,
+  dayStart,
   hidden,
   isLocked,
   onOpen,
@@ -121,6 +180,8 @@ function CallLedgerLine({
   /** 오늘 원장이면 지금 시각과 영업일 시작(첫 슬롯). 늦음 표시에 쓴다. */
   clock: { time: string; dayStart: string } | null;
   customers: CustomerDto[];
+  /** 영업일 시작(첫 슬롯). 상태를 고를 때 시각 비교에 쓴다. */
+  dayStart: string;
   hidden: boolean;
   isLocked: boolean;
   onOpen: OpenCall;
@@ -187,6 +248,11 @@ function CallLedgerLine({
     if (pickingRoom) pickerRef.current?.querySelector<HTMLElement>("button")?.focus();
   }, [pickingRoom]);
 
+  // 원장이 이 콜의 새 행을 받으면(자동 청소 중, 다른 화면의 저장) 고치는 중이 아닐 때 그 행을 따른다.
+  useEffect(() => {
+    dispatch({ type: "refreshed", row });
+  }, [row]);
+
   function commit(changes?: Partial<CallRowDraft>) {
     if (isLocked) {
       if (changes) dispatch({ type: "edit", changes });
@@ -221,6 +287,8 @@ function CallLedgerLine({
   }, [saveStatus, latestRow, draft, message, row.id]);
 
   const inUse = statusCodeFor(options.statuses, "inUse");
+  const cleaning = statusCodeFor(options.statuses, "cleaning");
+  const visitComplete = statusCodeFor(options.statuses, "visitComplete");
   const canceled = statusCodeFor(options.statuses, "canceled");
   const action = nextLedgerAction(draft.status);
 
@@ -242,9 +310,10 @@ function CallLedgerLine({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appliedCommand, saveStatus, message]);
 
+  // 입장 → 종료 → 청소 끝(스펙 D11). 입장·종료는 지금(분 단위), 종료 취소는 사용중으로 되돌리고 실제 종료를 지운다(D13).
   function enter(roomId?: string) {
     if (isLocked || !inUse) return;
-    const changes: Partial<CallRowDraft> = { actualEntryTime: entryClock(nowClockString()), status: inUse };
+    const changes: Partial<CallRowDraft> = { actualEntryTime: businessClockString(), status: inUse };
     if (roomId) {
       setPickingRoom(false);
       commit({ ...changes, roomId });
@@ -256,6 +325,26 @@ function CallLedgerLine({
       return;
     }
     commit(changes);
+  }
+
+  function finish() {
+    if (cleaning) commit({ status: cleaning, actualEndTime: businessClockString() });
+  }
+
+  function cancelFinish() {
+    if (inUse) commit({ status: inUse, actualEndTime: null });
+  }
+
+  // 상태 칩으로 고르면 행 버튼과 같은 규칙으로 입장·종료 시각을 채우거나 지운다(스펙 D11). 지금은 오늘 원장에서만 쓴다.
+  function changeStatus(status: string) {
+    if (status === draft.status) return;
+    const times = statusChangeTimes(
+      status,
+      { startTime: draft.startTime, actualEntryTime: draft.actualEntryTime ?? null, actualEndTime: draft.actualEndTime ?? null, displayEnd: freshestRow.displayEnd },
+      clock?.time ?? null,
+      dayStart
+    );
+    commit({ status, ...times });
   }
 
   async function loadTherapistChoices() {
@@ -347,6 +436,12 @@ function CallLedgerLine({
   const therapistText = therapists || t("calls.cell.unassigned");
   const roomText = roomLabel ?? t("calls.placeholder.roomUnassigned");
   const paid = Boolean(draft.paymentMethodCode);
+  const paymentBadge = <StatusIndicator label={paid ? t("calls.line.paid") : t("calls.line.unpaid")} size="sm" tone={paid ? "success" : "neutral"} />;
+  const statusChip = statusKey ? (
+    <CallStatusChip label={statusLabel} size="sm" status={statusKey} />
+  ) : (
+    <StatusIndicator label={statusLabel} size="sm" tone="neutral" />
+  );
 
   return (
     // 편집 패널이 열린 줄은 선택된 줄 모양이다(design.md 6.6). 버튼이 아닌 자리를 눌러도 패널이 열린다.
@@ -380,21 +475,50 @@ function CallLedgerLine({
             <span className="text-muted">{t("calls.line.notEntered")}</span>
           ) : (
             <>
-              {draft.actualEntryTime ? t("calls.line.entry", { time: draft.actualEntryTime }) : null}
+              {draft.actualEntryTime ? (
+                <LedgerTimeEdit
+                  disabled={isLocked}
+                  label={t("calls.line.entryEditAria", { time })}
+                  onCommit={(value) => commit({ actualEntryTime: value })}
+                  readOnly={readOnly}
+                  value={draft.actualEntryTime}
+                >
+                  {t("calls.line.entry", { time: draft.actualEntryTime })}
+                </LedgerTimeEdit>
+              ) : null}
               {" → "}
               {end.kind === "expected" ? (
                 <span className="text-faint">{t("calls.line.expectedEnd", { time: end.time })}</span>
               ) : (
-                <span className="font-semibold">{end.time}</span>
+                <LedgerTimeEdit
+                  disabled={isLocked}
+                  label={t("calls.line.endEditAria", { time })}
+                  onCommit={(value) => commit({ actualEndTime: value })}
+                  readOnly={readOnly}
+                  value={end.time}
+                >
+                  <span className="font-semibold">{end.time}</span>
+                </LedgerTimeEdit>
               )}
             </>
           )}
         </span>
         {late ? <StatusIndicator label={t("calls.line.late", { minutes: late })} size="sm" tone="warning" /> : null}
-        {statusKey ? (
-          <CallStatusChip label={statusLabel} size="sm" status={statusKey} />
+        {readOnly ? (
+          statusChip
         ) : (
-          <StatusIndicator label={statusLabel} size="sm" tone="neutral" />
+          <LedgerCellPicker
+            disabled={isLocked}
+            emptyText={t("calls.cell.empty")}
+            field="status"
+            label={t("calls.cell.statusAria", { time })}
+            loadingText={t("calls.cell.loading")}
+            onPick={changeStatus}
+            options={options.statuses}
+            value={draft.status}
+          >
+            {statusChip}
+          </LedgerCellPicker>
         )}
         {warnings.length > 0 ? (
           // 누르는 영역은 44px(design.md 4.3)이고, 보이는 칩은 그 안의 작은 경고 칩이다.
@@ -428,17 +552,40 @@ function CallLedgerLine({
               >
                 {t("calls.list.enter")}
               </Button>
-            ) : (
+            ) : action === "finish" ? (
               <Button
-                aria-label={t("calls.list.payAria", { time })}
+                aria-label={t("calls.list.finishAria", { time })}
                 className="h-11 px-4"
-                disabled={isLocked}
-                onClick={() => onOpen(row.id, "payment")}
+                disabled={isLocked || !cleaning}
+                onClick={finish}
                 type="button"
                 variant="secondary"
               >
-                {t("calls.list.pay")}
+                {t("calls.list.finish")}
               </Button>
+            ) : (
+              <span className="flex items-center gap-1">
+                <Button
+                  aria-label={t("calls.list.cancelFinishAria", { time })}
+                  className="h-11 px-2 text-xs text-muted"
+                  disabled={isLocked || !inUse}
+                  onClick={cancelFinish}
+                  type="button"
+                  variant="ghost"
+                >
+                  {t("calls.list.cancelFinish")}
+                </Button>
+                <Button
+                  aria-label={t("calls.list.cleanDoneAria", { time })}
+                  className="h-11 px-4"
+                  disabled={isLocked || !visitComplete}
+                  onClick={() => visitComplete && commit({ status: visitComplete })}
+                  type="button"
+                  variant="secondary"
+                >
+                  {t("calls.list.cleanDone")}
+                </Button>
+              </span>
             )}
           </span>
         )}
@@ -485,7 +632,23 @@ function CallLedgerLine({
             </LedgerCellPicker>
           </>
         )}
-        <StatusIndicator label={paid ? t("calls.line.paid") : t("calls.line.unpaid")} size="sm" tone={paid ? "success" : "neutral"} />
+        {readOnly ? (
+          paymentBadge
+        ) : (
+          // 결제 배지(스펙 D12): 고르는 즉시 결제수단만 저장한다. 상태는 바꾸지 않는다.
+          <LedgerCellPicker
+            disabled={isLocked}
+            emptyText={t("calls.cell.empty")}
+            field="paymentMethodCode"
+            label={t("calls.cell.paymentAria", { time })}
+            loadingText={t("calls.cell.loading")}
+            onPick={(value) => commit({ paymentMethodCode: nullableValue(value) })}
+            options={[...options.paymentMethods, { value: "", label: t("calls.line.unpaid") }]}
+            value={draft.paymentMethodCode ?? ""}
+          >
+            {paymentBadge}
+          </LedgerCellPicker>
+        )}
       </div>
       {pickingRoom ? (
         <div
@@ -545,6 +708,7 @@ function CallLedgerLine({
               onReload={() => void reloadLatest()}
               onRetry={() => commit()}
               onSelectCall={onSelectRelated}
+              onStatusChange={changeStatus}
               options={options}
               readOnly={readOnly}
               row={serverRow}
@@ -847,6 +1011,7 @@ export function CallLedgerList({
     <CallLedgerLine
       clock={lineClock}
       customers={customers}
+      dayStart={dayStart}
       hidden={hidden}
       isLocked={isLocked}
       key={row.id}

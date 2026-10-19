@@ -92,16 +92,10 @@ function RowStatus({ locale, row }: { locale: Locale; row: TherapistAvailability
   );
 }
 
-// 근무 확인 필요, 시술 중 종료 확인, 앞 시술 종료 확인 필요. 앞 시술 종료 확인은 가능 코스가 있을 때만 붙인다.
+// 줄 끝 경고: 근무 확인 필요. 표시 종료를 지난 사용중 콜은 자동 청소 중(1018 스펙 D14)이 끝내므로 종료 확인 안내는 없다.
 export function availabilityRowWarnings(locale: Locale, row: TherapistAvailabilityRowDto) {
   const warnings: string[] = [];
   if (row.shiftCheck) warnings.push(t(locale, "calls.availability.shiftCheck"));
-  if (!row.available && row.unavailableReason === "in_service_past_display_end" && row.inServiceDisplayEnd) {
-    warnings.push(t(locale, "calls.availability.inServiceEndCheck", { time: row.inServiceDisplayEnd }));
-  }
-  if (row.priorServiceEndCheck && row.courses.some((course) => course.verdict === "possible")) {
-    warnings.push(t(locale, "calls.availability.priorServiceEndCheck"));
-  }
   return warnings;
 }
 

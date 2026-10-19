@@ -12,6 +12,7 @@ import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import { latestRoomStatusUpdatedAt } from "@/modules/rooms/room-status-refresh";
 import { roomFloorGroups } from "@/modules/rooms/room-floor-groups";
 import { listRoomStatuses } from "@/modules/rooms/room-status-service";
+import { autoFinishOverdueCalls } from "@/modules/calls/service-call-service";
 
 type RoomsPageSearchParams = {
   operatingMonthId?: string;
@@ -39,6 +40,8 @@ export default async function RoomsPage({ searchParams }: { searchParams: Promis
   }
 
   const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
+  // 자동 청소 중(1018 스펙 D14): 그 영업일을 읽기 전에 표시 종료를 지난 사용중 콜을 정리한다.
+  await autoFinishOverdueCalls({ operatingMonthId: selectedMonth.id, serviceDate, actorId: account.id });
   const [roomStatuses] = await Promise.all([listRoomStatuses({ operatingMonthId: selectedMonth.id, serviceDate, includeOverlaps: true })]);
   const lastUpdatedAt = latestRoomStatusUpdatedAt(roomStatuses, new Date().toISOString());
 

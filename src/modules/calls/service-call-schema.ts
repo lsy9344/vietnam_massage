@@ -13,25 +13,18 @@ function emptyToNull(value: unknown) {
 const optionalText = z.preprocess(emptyToNull, z.string().trim().max(500, "500자 이하로 입력하세요.").nullable().optional());
 const optionalId = z.preprocess(emptyToNull, z.string().trim().min(1, "선택값이 올바르지 않습니다.").nullable().optional());
 const optionalCode = z.preprocess(emptyToNull, z.string().trim().max(40, "코드값이 올바르지 않습니다.").nullable().optional());
-const optionalTenMinuteTime = z.preprocess(
-  emptyToNull,
-  z
-    .string()
-    .trim()
-    .regex(/^([01]\d|2[0-3]):(00|10|20|30|40|50)$/, "실제입장은 10분 단위이거나 비어 있어야 합니다.")
-    .nullable()
-    .optional()
-);
-// 실제 종료(1018 스펙 D1)는 분 단위 시각이다. 10분 단위로 맞추지 않는다.
-const optionalClockTime = z.preprocess(
-  emptyToNull,
-  z
-    .string()
-    .trim()
-    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "실제 종료는 HH:mm 형식이거나 비어 있어야 합니다.")
-    .nullable()
-    .optional()
-);
+// 실제입장·실제 종료(1018 스펙 D1·D11)는 분 단위 시각이다. 10분 단위로 맞추지 않는다.
+function optionalClockTime(message: string) {
+  return z.preprocess(
+    emptyToNull,
+    z
+      .string()
+      .trim()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/, message)
+      .nullable()
+      .optional()
+  );
+}
 // 화면이 마지막으로 받은 행의 updatedAt(toISOString 형식). 기존 행 저장은 이 버전일 때만 갱신된다.
 export const savedVersionMessage = "저장 기준 시각이 올바르지 않습니다. 다시 불러온 뒤에 저장하세요.";
 const savedVersion = z
@@ -55,8 +48,8 @@ export const serviceCallInputSchema = z.object({
   operatingMonthId: z.string().trim().min(1, "운영월을 선택하세요."),
   serviceDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, isoDateMessage),
   startTime: z.string().trim().regex(/^\d{2}:\d{2}$/, timeMessage),
-  actualEntryTime: optionalTenMinuteTime,
-  actualEndTime: optionalClockTime,
+  actualEntryTime: optionalClockTime("실제입장은 HH:mm 형식이거나 비어 있어야 합니다."),
+  actualEndTime: optionalClockTime("실제 종료는 HH:mm 형식이거나 비어 있어야 합니다."),
   roomId: optionalId,
   courseId: z.string().trim().min(1, "코스를 선택하세요."),
   customerMemo: optionalText,

@@ -21,6 +21,7 @@ const options: ServiceCallFormOptions = {
   statuses: [
     { value: "RESERVED", label: "예약" },
     { value: "IN_USE", label: "사용중" },
+    { value: "CLEANING", label: "청소중" },
     { value: "VISIT_COMPLETE", label: "방문완료" },
     { value: "CANCELED", label: "취소" }
   ],
@@ -229,14 +230,17 @@ describe("two-line ledger (1018 ticket 02)", () => {
     assert.match(line(html, "done-11"), /data-selected="true"/);
   });
 
-  it("shows the booking time, entry and end, status and the next thing to do on the top line", () => {
-    const html = renderList(rows);
+  it("shows the booking time, entry and end, status and the next thing to do on the top line (1018 ticket 03)", () => {
+    const html = renderList([...rows, ledgerRow({ id: "cleaning-14", startTime: "14:00", status: "CLEANING", actualEntryTime: "14:02", actualEndTime: "14:58" })]);
     const inUse = top(line(html, "in-use-13"));
     assert.match(inUse, /data-call-open="in-use-13"[^>]*>13:00</);
     assert.match(text(inUse), /입장 13:10 → 예상 14:10/);
     assert.match(inUse, /text-faint[^>]*>예상 14:10</);
     assert.match(inUse, /<span[^>]*>사용중<\/span>/);
-    assert.deepEqual(buttons(inUse).slice(-1), ["결제"]);
+    assert.deepEqual(buttons(inUse).slice(-1), ["종료"]);
+    // 청소중은 청소 끝이 주 버튼이고, 옆에 작은 종료 취소가 있다(스펙 D11·D13).
+    assert.deepEqual(buttons(top(line(html, "cleaning-14"))).slice(-2), ["종료 취소", "청소 끝"]);
+    assert.match(text(top(line(html, "cleaning-14"))), /입장 14:02 → 14:58/);
 
     assert.match(text(top(line(html, "reserved-12"))), /미입장/);
     assert.deepEqual(buttons(top(line(html, "reserved-12"))).slice(-1), ["입장"]);
@@ -255,14 +259,26 @@ describe("two-line ledger (1018 ticket 02)", () => {
     assert.match(unassigned, /미배정/);
   });
 
-  it("opens the therapist and room lists in place from the bottom line, and locks them in a locked month", () => {
+  it("opens the status, therapist, room and payment lists in place, and locks them in a locked month (1018 spec D6·D12)", () => {
     const pickers = (markup: string) => markup.match(/<button[^>]*aria-haspopup="listbox"[^>]*>/g) ?? [];
+    const statusPicker = pickers(top(line(renderList(rows), "reserved-12")));
+    assert.equal(statusPicker.length, 1);
+    assert.match(statusPicker[0], /aria-label="12:00 콜 상태 고르기"/);
     const open = pickers(bottom(line(renderList(rows), "reserved-12")));
-    assert.equal(open.length, 2);
+    assert.equal(open.length, 3);
     assert.match(open[0], /aria-label="12:00 콜 Therapist 고르기"/);
     assert.match(open[1], /aria-label="12:00 콜 객실 고르기"/);
+    assert.match(open[2], /aria-label="12:00 콜 결제수단 고르기"/);
     assert.ok(open.every((picker) => /aria-expanded="false"/.test(picker) && !/disabled=""/.test(picker)));
-    assert.ok(pickers(bottom(line(renderList(rows, { isLocked: true }), "reserved-12"))).every((picker) => /disabled=""/.test(picker)));
+    assert.ok(pickers(line(renderList(rows, { isLocked: true }), "reserved-12")).every((picker) => /disabled=""/.test(picker)));
+  });
+
+  it("lets the entry and end times be corrected in place, and locks them in a locked month (1018 spec D11)", () => {
+    const html = renderList([ledgerRow({ id: "ended", status: "CLEANING", actualEntryTime: "14:02", actualEndTime: "14:58" })]);
+    assert.match(top(line(html, "ended")), /<button[^>]*aria-label="16:00 콜 실제입장 고치기"[^>]*>[\s\S]*?14:02/);
+    assert.match(top(line(html, "ended")), /<button[^>]*aria-label="16:00 콜 실제 종료 고치기"[^>]*>[\s\S]*?14:58/);
+    const locked = renderList([ledgerRow({ id: "ended", status: "CLEANING", actualEntryTime: "14:02", actualEndTime: "14:58" })], { isLocked: true });
+    assert.match(top(line(locked, "ended")), /<button[^>]*aria-label="16:00 콜 실제입장 고치기"[^>]*disabled=""/);
   });
 
   it("draws a now line between the calls and says how late a reservation is, only for today", () => {
@@ -313,14 +329,14 @@ describe("two-line ledger (1018 ticket 02)", () => {
     const html = renderList(rows, { isLocked: true });
     assert.match(html, /잠긴 운영월입니다/);
     assert.match(line(html, "reserved-12"), /<button[^>]*disabled=""[^>]*>입장<\/button>/);
-    assert.match(line(html, "in-use-13"), /<button[^>]*disabled=""[^>]*>결제<\/button>/);
+    assert.match(line(html, "in-use-13"), /<button[^>]*disabled=""[^>]*>종료<\/button>/);
   });
 
   it("speaks Vietnamese", () => {
     const html = renderList(rows, { locale: "vi", clock: { today: "2026-06-10", time: "12:30" } });
     assert.match(html, /Hoàn tất · Hủy · Không đến 1 ca/);
     assert.match(line(html, "reserved-12"), />Vào phòng</);
-    assert.match(line(html, "in-use-13"), />Thanh toán</);
+    assert.match(line(html, "in-use-13"), />Kết thúc</);
     for (const part of ["Chưa vào", "Dự kiến 14:10", "Bây giờ 12:30", "Trễ 30 phút", "Chưa chỉ định", "Đã thanh toán", "Chưa xác nhận thanh toán"]) {
       assert.ok(text(html).includes(part), part);
     }
@@ -395,7 +411,7 @@ describe("phone width (ticket 26, 1018 ticket 02)", () => {
     assert.match(text(line(phone, "in-use-13")), /Therapist 1/);
 
     const wide = withWindowWidth(true, () => renderList(rows));
-    assert.deepEqual(buttons(top(line(wide, "in-use-13"))).slice(-1), ["결제"]);
+    assert.deepEqual(buttons(top(line(wide, "in-use-13"))).slice(-1), ["종료"]);
     assert.match(wide, /일행 입장/);
   });
 
@@ -434,6 +450,7 @@ function renderPanel(
       onReload: () => {},
       onRetry: () => {},
       onSelectCall: () => {},
+      onStatusChange: () => {},
       options,
       readOnly,
       row,
@@ -464,6 +481,7 @@ describe("call edit panel (ticket 03)", () => {
       "therapist1Id",
       "therapist2Id",
       "actualEntryTime",
+      "actualEndTime",
       "roomId",
       "status",
       "discountTypeCode",
@@ -473,14 +491,14 @@ describe("call edit panel (ticket 03)", () => {
     ]);
   });
 
-  it("chooses the payment method with pills and completes payment with one button", () => {
+  // 1018 스펙 D12: 결제는 결제수단만 고르고 상태는 바꾸지 않는다. "결제 완료 → 방문완료" 버튼은 없다.
+  it("chooses the payment method with pills, without a button that completes the visit", () => {
     const html = renderPanel(ledgerRow({ status: "IN_USE", paymentMethodCode: "CARD" }));
     const payment = html.slice(html.indexOf('data-panel-section="payment"'));
     assert.match(payment, /<input[^>]*data-payment-method="CARD"[^>]*type="radio"[^>]*checked=""/);
     assert.match(payment, /data-payment-method="CASH"/);
     assert.match(payment, />미선택</);
-    assert.match(payment, /<button[^>]*>결제 완료<\/button>/);
-    assert.doesNotMatch(payment, /<button[^>]*disabled=""[^>]*>결제 완료/);
+    assert.doesNotMatch(html, /결제 완료/);
   });
 
   it("shows the calculated payment, and the therapist commission only to roles that may see settlement amounts", () => {
@@ -492,7 +510,6 @@ describe("call edit panel (ticket 03)", () => {
     const admin = renderPanel(row, { showSettlementAmounts: true });
     assert.match(admin, /마사지사1수당/);
     assert.match(admin, /300,000/);
-    assert.match(admin, /<button[^>]*disabled=""[^>]*>결제 완료/);
   });
 
   it("waits on the calculation while the draft is not saved", () => {
@@ -512,6 +529,10 @@ describe("call edit panel (ticket 03)", () => {
     const entry = html.match(/<input[^>]*data-call-field="actualEntryTime"[^>]*>/)?.[0] ?? "";
     assert.match(entry, /aria-describedby="[^"]*actual-entry-warning/);
     assert.match(html, /id="[^"]*actual-entry-warning"[^>]*>4:00 예약이 있습니다/);
+    // 분 단위 시각 칸이다(스펙 D11). 10분 목록이 아니다.
+    assert.match(entry, /type="time"/);
+    assert.match(entry, /value="15:20"/);
+    assert.match(renderPanel(ledgerRow({ actualEndTime: "16:47" })), /<input[^>]*data-call-field="actualEndTime"[^>]*type="time"[^>]*value="16:47"/);
     assert.match(renderPanel(ledgerRow({ warningTime: "16:00" }), { locale: "vi" }), /Có lịch lúc 4:00\./);
   });
 
@@ -554,11 +575,10 @@ describe("call edit panel (ticket 03)", () => {
     assert.match(renderPanel(ledgerRow()), /관련 콜이 없습니다/);
   });
 
-  it("locks every field and the payment button in a locked month", () => {
+  it("locks every field in a locked month", () => {
     const html = renderPanel(ledgerRow({ status: "IN_USE" }), { isLocked: true });
     const fields = [...html.matchAll(/<input[^>]*data-call-field="[^"]+"[^>]*>/g)].map((match) => match[0]);
     assert.ok(fields.length > 0 && fields.every((field) => /disabled=""/.test(field)));
-    assert.match(html, /<button[^>]*disabled=""[^>]*>결제 완료/);
   });
 
   it("only reads at phone width: no input at all", () => {
@@ -569,7 +589,7 @@ describe("call edit panel (ticket 03)", () => {
 
   it("speaks Vietnamese", () => {
     const html = renderPanel(ledgerRow({ warnings: [unfinished] }), { locale: "vi" });
-    for (const text of ["Đặt lịch", "Vào phòng", "Thanh toán", "Ghi chú", "Xem thêm", "Hoàn tất thanh toán", "Dịch vụ trước vẫn chưa kết thúc"]) {
+    for (const text of ["Đặt lịch", "Vào phòng", "Thanh toán", "Ghi chú", "Xem thêm", "Dịch vụ trước vẫn chưa kết thúc"]) {
       assert.ok(html.includes(text), text);
     }
   });

@@ -27,6 +27,7 @@ import {
   updateCustomer,
   updateDailyExpense,
   redactServiceCallSettlementAmounts,
+  autoFinishOverdueCalls,
   listTherapistAvailability,
   QuickBookingGuestError,
   ServiceCallDomainError,
@@ -479,7 +480,11 @@ export async function updateCustomerAction(
 }
 
 export async function loadTherapistAvailabilityAction(input: { operatingMonthId: string; serviceDate: string; time: string; excludeCallId?: string }) {
-  await requireRouteAccess("/calls");
+  const account = await requireRouteAccess("/calls");
+  // 자동 청소 중(1018 스펙 D14): 가능 판정도 그 영업일을 읽기 전에 정리한다. 끝낸 콜이 있으면 원장을 다시 그려
+  // 열린 줄이 새 행을 따르게 한다(낡은 저장 거절이 그 줄을 막지 않게).
+  const finished = await autoFinishOverdueCalls({ operatingMonthId: input.operatingMonthId, serviceDate: input.serviceDate, actorId: account.id });
+  if (finished.length > 0) revalidatePath("/calls");
   return listTherapistAvailability(input);
 }
 

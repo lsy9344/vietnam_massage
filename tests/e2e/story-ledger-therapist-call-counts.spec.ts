@@ -7,8 +7,9 @@ import { argon2idOptions, login } from "./support/auth";
 // 원장 띠와 빠른 예약 카드의 Therapist별 "한 것 +예약": 한 것은 사용중·청소중·방문완료, 예약은 예약 상태다.
 // 출근 중이면 0개여도, 퇴근했으면 콜이 있을 때만, 출근 전이면 띠에 없다. 끝에는 Therapist 없는 예약의 "미배정 N".
 const account = { accountId: "tcc_counter", password: "TherapistCount!counter" };
-const monthKey = "2025-09";
-const serviceDate = "2025-09-16";
+// 1018 티켓 03: 지난 날짜의 사용중 콜은 읽을 때 자동 청소 중이 끝내므로, 원장 동작은 먼 뒤 날짜에서 본다.
+const monthKey = "2040-09";
+const serviceDate = "2040-09-16";
 const policyName = "TCC A";
 
 let monthId = "";
@@ -227,12 +228,12 @@ test.describe("원장 띠와 빠른 예약 카드의 Therapist별 한 것 +예�
     await openLedger(page);
     await expect(stripItem(page, busyId)).toContainText("한 것 3, 예약 0");
 
-    await reservedLine.getByRole("button", { name: "16:00 콜 결제" }).click();
-    const payment = page.getByRole("complementary", { name: /^콜 상세/ }).getByRole("region", { name: "결제" });
-    await expect(payment).toBeVisible();
-    await payment.getByText("카드", { exact: true }).click();
+    await reservedLine.getByRole("button", { name: "16:00 콜 결제수단 고르기" }).click();
+    await page.getByRole("listbox", { name: "16:00 콜 결제수단 고르기" }).getByRole("option", { name: "카드" }).click();
     await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: reservedCallId } })).paymentMethodCode).toBe("CARD");
-    await payment.getByRole("button", { name: "결제 완료" }).click();
+    await reservedLine.getByRole("button", { name: "16:00 콜 종료" }).click();
+    await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: reservedCallId } })).status).toBe("CLEANING");
+    await reservedLine.getByRole("button", { name: "16:00 콜 청소 끝" }).click();
     await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: reservedCallId } })).status).toBe("VISIT_COMPLETE");
     await openLedger(page);
     await expect(stripItem(page, busyId)).toContainText("한 것 3, 예약 0");

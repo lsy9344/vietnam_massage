@@ -255,15 +255,15 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
     }).toPass({ timeout: 30_000 });
     await expect(roomCard).toContainText("T36 중심흐름 A");
 
-    // 4) 완료·수납: 줄 끝 "결제" 버튼이 편집 패널의 결제 묶음을 연다. 결제수단 알약을 고르고 "결제 완료"로
-    // 방문완료가 되면, 같은 날짜의 "하루 수납·지출" 탭 합계에 반영된다.
+    // 4) 완료·수납(1018 티켓 03): 줄의 결제 배지로 결제수단을 고르고, 종료 → 청소 끝으로 방문완료가 되면 같은 날짜의
+    // "하루 수납·지출" 탭 합계에 반영된다. 패널의 결제 묶음은 수당을 카운터에게 보이지 않는다.
     await page.goto(`/calls?operatingMonthId=${month.id}&serviceDate=${serviceDate}`);
     await expect(async () => {
       await page.reload();
       await expect(row).toBeVisible({ timeout: 3_000 });
     }).toPass({ timeout: 30_000 });
     await row.scrollIntoViewIfNeeded();
-    await row.getByRole("button", { name: "15:00 콜 결제" }).click();
+    await row.locator("[data-call-open]").click();
     await expect(page).toHaveURL(new RegExp(`call=${call.id}$`));
     const panel = page.getByRole("complementary", { name: /^콜 상세/ });
     const payment = panel.getByRole("region", { name: "결제" });
@@ -272,9 +272,12 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
     // 보기 전환(옛 F02, 티켓 19)이 사라져도 권한은 그대로다: 카운터는 패널의 결제 묶음에서도 수당을 볼 수 없다.
     await expect(payment.locator("[data-calculation-status]")).not.toContainText("마사지사1수당");
 
-    await payment.getByText("현금", { exact: true }).click();
+    await row.getByRole("button", { name: "15:00 콜 결제수단 고르기" }).click();
+    await page.getByRole("listbox", { name: "15:00 콜 결제수단 고르기" }).getByRole("option", { name: "현금" }).click();
     await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: call.id } })).paymentMethodCode).toBe("CASH");
-    await payment.getByRole("button", { name: "결제 완료" }).click();
+    await row.getByRole("button", { name: "15:00 콜 종료" }).click();
+    await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: call.id } })).status).toBe("CLEANING");
+    await row.getByRole("button", { name: "15:00 콜 청소 끝" }).click();
     await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: call.id } })).status).toBe("VISIT_COMPLETE");
 
     const cashCards = page.getByLabel("하루 수납 요약");

@@ -351,13 +351,56 @@ export function TextField({
   );
 }
 
-/** 실제입장 선택지: 하루 24시간의 10분 단위. "입장" 버튼이 넣는 값(entryClock)도 이 중 하나다. */
-export const TEN_MINUTE_ENTRY_OPTIONS: ServiceCallOption[] = Array.from({ length: 24 * 6 }, (_, index) => {
-  const hour = Math.floor(index / 6);
-  const minute = (index % 6) * 10;
-  const value = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-  return { value, label: value };
-});
+/**
+ * 분 단위 시각 칸(1018 스펙 D11). 실제입장·실제 종료가 쓴다. 고치는 동안은 초안만 바꾸고 칸을 떠나면 저장한다.
+ */
+export function ClockTimeField({
+  describedBy,
+  disabled,
+  errorMessage,
+  field,
+  hint,
+  label,
+  onBlur,
+  onChange,
+  value
+}: {
+  describedBy?: string;
+  disabled: boolean;
+  errorMessage?: string | null;
+  field: string;
+  hint?: ReactNode;
+  label: string;
+  onBlur?: () => void;
+  onChange?: (value: string) => void;
+  value: string;
+}) {
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const invalid = Boolean(errorMessage);
+  const describedByIds = [describedBy, invalid ? errorId : null].filter(Boolean).join(" ");
+  return (
+    <div className="grid gap-1.5">
+      <label className="text-xs font-semibold text-muted" htmlFor={reactId}>
+        {label}
+      </label>
+      <input
+        aria-describedby={describedByIds || undefined}
+        aria-invalid={invalid ? "true" : undefined}
+        className={`${fieldClass} ${invalid ? "border-danger ring-1 ring-danger" : "border-border-strong"}`}
+        data-call-field={field}
+        disabled={disabled}
+        id={reactId}
+        onBlur={onBlur}
+        onChange={(event) => onChange?.(event.target.value)}
+        type="time"
+        value={value}
+      />
+      {hint}
+      <FieldErrorMessage id={errorId} message={errorMessage ?? null} />
+    </div>
+  );
+}
 
 /** 실제입장 칸. 예약시각은 그대로라는 안내, 표시 종료, 다음 예약에 양보해야 하는 시각 경고를 칸 아래에 둔다. */
 export function ActualEntryField({
@@ -366,7 +409,6 @@ export function ActualEntryField({
   errorMessage,
   onBlur,
   onChange,
-  onCommitValue,
   value,
   warningTime
 }: {
@@ -375,7 +417,6 @@ export function ActualEntryField({
   errorMessage?: string | null;
   onBlur?: () => void;
   onChange?: (value: string) => void;
-  onCommitValue?: (value: string) => void;
   value: string;
   warningTime?: string | null;
 }) {
@@ -386,7 +427,7 @@ export function ActualEntryField({
   const warning = warningTime ? t("calls.actualEntry.warning", { time: spokenClock(warningTime) }) : null;
 
   return (
-    <SelectField
+    <ClockTimeField
       describedBy={[helpId, warning ? warningId : null].filter(Boolean).join(" ")}
       disabled={disabled}
       errorMessage={errorMessage}
@@ -407,8 +448,6 @@ export function ActualEntryField({
       label={t("calls.column.actualEntry")}
       onBlur={onBlur}
       onChange={onChange}
-      onCommitValue={onCommitValue}
-      options={TEN_MINUTE_ENTRY_OPTIONS}
       value={value}
     />
   );

@@ -120,6 +120,7 @@ describe("client revision visual regression guards", () => {
           onReload: () => {},
           onRetry: () => {},
           onSelectCall: () => {},
+      onStatusChange: () => {},
           options: callGridOptions,
           readOnly: false,
           row: discountedCallRow,

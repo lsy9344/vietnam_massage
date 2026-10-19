@@ -8,7 +8,7 @@ import { LiveSummaryCards, LiveSummaryDetails } from "@/app/(erp)/live/live-summ
 import { canAccessRoute, requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
-import { getDailyCallLedgerSummary } from "@/modules/calls/service-call-service";
+import { autoFinishOverdueCalls, getDailyCallLedgerSummary } from "@/modules/calls/service-call-service";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import { latestRoomStatusUpdatedAt } from "@/modules/rooms/room-status-refresh";
 import { roomFloorGroups } from "@/modules/rooms/room-floor-groups";
@@ -40,6 +40,8 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
   }
 
   const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
+  // 자동 청소 중(1018 스펙 D14): 그 영업일을 읽기 전에 표시 종료를 지난 사용중 콜을 정리한다.
+  await autoFinishOverdueCalls({ operatingMonthId: selectedMonth.id, serviceDate, actorId: account.id });
   const [roomStatuses, summary] = await Promise.all([
     listRoomStatuses({ operatingMonthId: selectedMonth.id, serviceDate }),
     getDailyCallLedgerSummary({ operatingMonthId: selectedMonth.id, serviceDate, includeMonthTill: false })

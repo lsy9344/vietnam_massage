@@ -212,3 +212,34 @@ describe("call row save order", () => {
     assert.equal(restoredToSending.status, "saving");
   });
 });
+
+// 1018 티켓 03: 자동 청소 중이나 다른 화면이 콜을 바꿔 원장이 새 행을 받으면, 보내지 않은 수정이 없는 줄은 그 행을 따른다.
+describe("following a newer row the ledger received", () => {
+  const autoFinished = savedRow({ status: "청소중", actualEntryTime: "16:00", actualEndTime: "17:00", updatedAt: "2026-06-10T08:00:00.000Z" });
+
+  it("takes the newer row as its saved row and draft, so the next save is checked against it", () => {
+    const followed = play([{ type: "refreshed", row: autoFinished }]);
+    assert.equal(followed.draft.status, "청소중");
+    assert.equal(followed.draft.actualEndTime, "17:00");
+    const next = callRowSaveReducer(followed, { type: "commit", changes: { status: "방문완료" } });
+    assert.equal(next.inFlight?.expectedUpdatedAt, autoFinished.updatedAt);
+  });
+
+  it("ignores an older or the same row", () => {
+    const newer = play([{ type: "refreshed", row: autoFinished }]);
+    assert.equal(callRowSaveReducer(newer, { type: "refreshed", row: v1 }), newer);
+    const same = initialCallRowSave(v1);
+    assert.equal(callRowSaveReducer(same, { type: "refreshed", row: v1 }), same);
+  });
+
+  it("keeps an unsent edit, a save on the way, a failure and a conflict as they are", () => {
+    const edited = play([{ type: "edit", changes: { customerMemo: "고치는 중" } }]);
+    assert.equal(callRowSaveReducer(edited, { type: "refreshed", row: autoFinished }), edited);
+    const saving = play([{ type: "commit", changes: { customerMemo: "보내는 중" } }]);
+    assert.equal(callRowSaveReducer(saving, { type: "refreshed", row: autoFinished }), saving);
+    const failed = play([{ type: "commit", changes: { customerMemo: "실패" } }, { type: "failed", message: null }]);
+    assert.equal(callRowSaveReducer(failed, { type: "refreshed", row: autoFinished }), failed);
+    const conflict = play([{ type: "commit", changes: { customerMemo: "충돌" } }, { type: "stale", row: autoFinished, message: staleMessage }]);
+    assert.equal(callRowSaveReducer(conflict, { type: "refreshed", row: autoFinished }), conflict);
+  });
+});

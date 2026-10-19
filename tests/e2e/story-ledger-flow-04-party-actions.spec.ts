@@ -7,8 +7,9 @@ import { argon2idOptions, login } from "./support/auth";
 // 콜 원장 흐름 재구성 티켓 04: 원장에서 일행이 머리 줄 아래 붙어 보이고, 일행 전체 입장·전체 취소·1명 추가를 한다.
 // 결제·노쇼는 사람별이다(스펙 D14). 다른 스펙이 쓰지 않는 과거 운영월을 쓰고, 만든 운영월·정책은 afterAll에서 지운다.
 const account = { accountId: "lf04_counter", password: "LedgerFlow04!counter", staffCode: "E2E-LF04-COUNTER" };
-const monthKey = "2025-07";
-const serviceDate = "2025-07-15";
+// 1018 티켓 03: 지난 날짜의 사용중 콜은 읽을 때 자동 청소 중이 끝내므로, 원장 동작은 먼 뒤 날짜에서 본다.
+const monthKey = "2040-07";
+const serviceDate = "2040-07-15";
 const therapistNames = ["LF04 마사지사1", "LF04 마사지사2", "LF04 마사지사3", "LF04 마사지사4"];
 
 let monthId = "";
@@ -232,18 +233,20 @@ test.describe("콜 원장 흐름 재구성 티켓 04 일행 묶음과 일행 동
       await expect.poll(async () => (await call(id)).status).toBe("IN_USE");
       const entered = await call(id);
       expect(entered.roomId).toBe(roomIds[index]);
-      expect(entered.actualEntryTime).toMatch(/^\d{2}:\d0$/);
+      expect(entered.actualEntryTime).toMatch(/^\d{2}:\d{2}$/);
     }
 
     // 결제는 사람별이다: 손님 1만 결제한다.
     await page.reload();
     await expect(partyHead(page, "open", jung.partyId)).toContainText("LF04 정 대표 일행 3명");
-    await line(page, jung.ids[0]).getByRole("button", { name: "13:00 콜 결제" }).click();
-    const payment = panel(page).getByRole("region", { name: "결제" });
-    await expect(payment).toBeVisible();
-    await payment.getByText("현금", { exact: true }).click();
+    // 1018 티켓 03: 결제 배지는 결제수단만 저장하고, 방문완료는 종료 → 청소 끝으로 간다.
+    await line(page, jung.ids[0]).getByRole("button", { name: "13:00 콜 결제수단 고르기" }).click();
+    await page.getByRole("listbox", { name: "13:00 콜 결제수단 고르기" }).getByRole("option", { name: "현금" }).click();
     await expect.poll(async () => (await call(jung.ids[0])).paymentMethodCode).toBe("CASH");
-    await payment.getByRole("button", { name: "결제 완료" }).click();
+    expect((await call(jung.ids[0])).status).toBe("IN_USE");
+    await line(page, jung.ids[0]).getByRole("button", { name: "13:00 콜 종료" }).click();
+    await expect.poll(async () => (await call(jung.ids[0])).status).toBe("CLEANING");
+    await line(page, jung.ids[0]).getByRole("button", { name: "13:00 콜 청소 끝" }).click();
     await expect.poll(async () => (await call(jung.ids[0])).status).toBe("VISIT_COMPLETE");
 
     // 노쇼도 사람별이다: 손님 2의 상태만 바꾼다.

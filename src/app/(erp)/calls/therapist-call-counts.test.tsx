@@ -16,12 +16,9 @@ function row(
     attendance,
     shiftCheck: false,
     available: true,
-    unavailableReason: null,
-    inServiceDisplayEnd: null,
     freeFrom: null,
     nextReservationTime: null,
     freeMinutes: 60,
-    priorServiceEndCheck: false,
     plannedWorkingDayStatus: "미입력",
     callCounts: { done, reserved },
     courses: []

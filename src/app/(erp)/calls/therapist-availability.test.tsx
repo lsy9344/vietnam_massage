@@ -13,12 +13,9 @@ function row(overrides: Partial<TherapistAvailabilityRowDto> = {}): TherapistAva
     attendance: "before_check_in",
     shiftCheck: false,
     available: true,
-    unavailableReason: null,
-    inServiceDisplayEnd: null,
     freeFrom: null,
     nextReservationTime: "16:00",
     freeMinutes: 60,
-    priorServiceEndCheck: false,
     plannedWorkingDayStatus: "미입력",
     callCounts: { done: 0, reserved: 0 },
     courses: [
@@ -107,7 +104,6 @@ describe("therapist availability panel", () => {
           therapistName: "마사지사2",
           attendance: "checked_in",
           available: false,
-          unavailableReason: "booked",
           freeFrom: "15:30",
           nextReservationTime: null,
           freeMinutes: null
@@ -137,7 +133,7 @@ describe("therapist availability panel", () => {
     const vietnamese = renderView({
       locale: "vi",
       open: true,
-      rows: [row(), row({ therapistId: "t-2", available: false, unavailableReason: "booked", freeFrom: "15:30", nextReservationTime: null, freeMinutes: null })]
+      rows: [row(), row({ therapistId: "t-2", available: false, freeFrom: "15:30", nextReservationTime: null, freeMinutes: null })]
     });
     assert.match(vietnamese, /Gói có thể/);
     assert.match(vietnamese, /Có thể/);
@@ -207,25 +203,15 @@ describe("therapist availability panel", () => {
   });
 
   // 경고는 줄 끝 아이콘 하나이고, 누르면 문구가 펼쳐진다(D4). 닫힌 동안에도 문구는 숨긴 채 있어 칩이 설명으로 가리킨다.
-  it("folds the shift and earlier-service warnings into one icon at the end of the line", () => {
-    const html = renderView({ open: true, rows: [row({ shiftCheck: true, priorServiceEndCheck: true })] });
-    const toggle = html.match(/<button[^>]*aria-controls="([^"]+)"[^>]*aria-expanded="false"[^>]*aria-label="경고 2건 보기"[^>]*>/);
+  it("folds the shift warning into one icon at the end of the line", () => {
+    const html = renderView({ open: true, rows: [row({ shiftCheck: true })] });
+    const toggle = html.match(/<button[^>]*aria-controls="([^"]+)"[^>]*aria-expanded="false"[^>]*aria-label="경고 1건 보기"[^>]*>/);
     assert.ok(toggle, html);
     const regionId = toggle[1];
-    assert.match(html, new RegExp(`<div[^>]*hidden=""[^>]*id="${regionId}"[^>]*>[\\s\\S]*근무 확인 필요[\\s\\S]*시간표상 가능 · 앞 시술 종료 확인 필요`));
+    assert.match(html, new RegExp(`<div[^>]*hidden=""[^>]*id="${regionId}"[^>]*>[\\s\\S]*근무 확인 필요`));
     assert.match(html, new RegExp(`<button[^>]*aria-describedby="${regionId}"[^>]*aria-label="A 60분 가능"`));
     // 아이콘은 색만이 아니라 기호로도 경고다.
-    assert.match(html, /aria-label="경고 2건 보기"[^>]*>[\s\S]*?▲︎/);
-
-    const inService = renderView({
-      open: true,
-      rows: [row({ available: false, unavailableReason: "in_service_past_display_end", inServiceDisplayEnd: "15:00", freeFrom: "15:20", priorServiceEndCheck: true, courses: [row().courses[1]] })]
-    });
-    assert.match(inService, /불가 · 15:20부터/);
-    assert.match(inService, /aria-label="경고 1건 보기"/);
-    assert.match(inService, /시술 중 · 15:00 종료 확인/);
-    // 가능 코스가 없으면 앞 시술 종료 확인은 붙이지 않는다.
-    assert.doesNotMatch(inService, /앞 시술 종료 확인 필요/);
+    assert.match(html, /aria-label="경고 1건 보기"[^>]*>[\s\S]*?▲︎/);
 
     const plain = renderView({ open: true, rows: [row()] });
     assert.doesNotMatch(plain, /경고 \d+건 보기|aria-describedby/);

@@ -7,8 +7,9 @@ import { argon2idOptions, login } from "./support/auth";
 // 1018 티켓 02: 두 줄 원장. 칸 안 Therapist·객실 목록(가능한 사람·빈 객실이 위, 불가한 사람은 경고 후 배정, 키보드),
 // 옛 콜의 고객 이름 대체, 편집 패널의 상세 시각 여섯 개, 휴대폰 폭 읽기 전용.
 const account = { accountId: "t1018_02_counter", password: "Ticket1018-02!counter" };
-const monthKey = "2025-10";
-const serviceDate = "2025-10-14";
+// 1018 티켓 03: 지난 날짜의 사용중 콜은 읽을 때 자동 청소 중이 끝내므로, 원장 동작은 먼 뒤 날짜에서 본다.
+const monthKey = "2040-10";
+const serviceDate = "2040-10-14";
 
 let monthId = "";
 let courseId = "";
@@ -195,7 +196,7 @@ test.describe("1018 티켓 02 두 줄 원장", () => {
     await expect(inUse.locator("[data-line-top]")).toContainText("15:30");
     await expect(inUse.locator("[data-line-top]")).toContainText("입장 15:30 → 예상 16:30");
     await expect(inUse.locator("[data-line-top]")).toContainText("사용중");
-    await expect(inUse.locator("[data-line-top]").getByRole("button", { name: "15:30 콜 결제" })).toBeVisible();
+    await expect(inUse.locator("[data-line-top]").getByRole("button", { name: "15:30 콜 종료" })).toBeVisible();
     await expect(inUse.locator("[data-line-bottom]")).toContainText("T1018 사용 손님");
     await expect(inUse.locator("[data-line-bottom]")).toContainText("T1018 바쁜 사람");
     await expect(inUse.locator("[data-line-bottom]")).toContainText("T1018 사용 객실");
@@ -291,7 +292,8 @@ test.describe("1018 티켓 02 두 줄 원장", () => {
       ["실제 종료", "-"],
       ["다음 가능 시각", "16:30"]
     ]) {
-      await expect(entry.locator("div", { has: page.getByText(label, { exact: true }) }).last()).toContainText(value);
+      // 시각 여섯 개는 입장 묶음의 정의 목록(dl)에 있다. 그 아래 실제입장·실제 종료 시각 칸(1018 티켓 03)과 이름이 겹친다.
+      await expect(entry.locator("dl div", { has: page.getByText(label, { exact: true }) }).last()).toContainText(value);
     }
   });
 

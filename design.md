@@ -206,7 +206,7 @@ UI를 만들거나 고치기 전에 이 문서를 읽는다. 화면에 새 모�
 - 선택된 행: `bg-readonly`와 왼쪽 3px 검정 막대(`[box-shadow:inset_3px_0_0_var(--brand)]`).
 - 숫자 열은 오른쪽 정렬이다. 날짜·시각은 표 안에서 글자 그대로 둔다(캡슐 없음).
 - 행 안의 상태는 `StatusIndicator`(콜 상태는 `CallStatusChip` `size="sm"`, 6.8), 경고는 `WarningSummary`, 저장 상태는 `SaveStatus`로 서로 다른 자리에 둔다.
-- **콜 원장 두 줄 행(1018 티켓 02, `call-ledger-list.tsx`).** 원장은 표가 아니라 `ol` 목록이다. 행은 표의 행 규칙(아래 1px 선, hover·선택 모양)을 따르고, 윗줄은 예약시각(`text-lg font-semibold`) · `입장 → 종료`(종료 전 예상은 `text-faint`, 실제 종료는 `font-semibold`) · `N분 늦음`(`StatusIndicator` warning sm) · 상태 칩 · 주 버튼, 아랫줄은 경로(`text-xs text-muted` 글자)·예약자 · 코스 · `▾` 칸 · 결제 배지(`StatusIndicator` sm)다. `▾` 칸은 표 안 편집 칸처럼 `h-8 rounded-sm border-border-strong`이고, 목록은 6.12 팝오버 모양으로 body에 뜬다. 일행은 왼쪽 4px `--border-strong` 막대로 묶고, 고른 일행 줄은 그 안쪽에 3px 검정 선택 막대를 더한다. 칸을 줄바꿈으로 감싸 열 너비가 없으므로 패널을 열어도 가로 스크롤이 없다.
+- **콜 원장 두 줄 행(1018 티켓 02, `call-ledger-list.tsx`).** 원장은 표가 아니라 `ol` 목록이다. 행은 표의 행 규칙(아래 1px 선, hover·선택 모양)을 따르고, 윗줄은 예약시각(`text-lg font-semibold`) · `입장 → 종료`(종료 전 예상은 `text-faint`, 실제 종료는 `font-semibold`) · `N분 늦음`(`StatusIndicator` warning sm) · 상태 칩 · 주 버튼, 아랫줄은 경로(`text-xs text-muted` 글자)·예약자 · 코스 · `▾` 칸 · 결제 배지(`StatusIndicator` sm)다. `▾` 칸은 표 안 편집 칸처럼 `h-8 rounded-sm border-border-strong`이고, 목록은 6.12 팝오버 모양으로 body에 뜬다. 일행은 왼쪽 4px `--border-strong` 막대로 묶고, 고른 일행 줄은 그 안쪽에 3px 검정 선택 막대를 더한다. 칸을 줄바꿈으로 감싸 열 너비가 없으므로 패널을 열어도 가로 스크롤이 없다. 주 버튼은 `입장 → 종료 → 청소 끝`(secondary)이고, 청소 끝 왼쪽에 작은 ghost `종료 취소`(`text-xs text-muted`)를 둔다(1018 티켓 03). 상태 칩과 결제 배지도 `▾` 칸이고, 입장·종료 시각은 점선 밑줄 글자라 누르면 그 자리에서 시각 칸이 된다.
 
 ### 6.7 요약 카드 (파스텔)
 

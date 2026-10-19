@@ -36,6 +36,7 @@ export type CallRowSaveEvent =
   | { type: "failed"; message: string | null; fieldErrors?: Record<string, string[]> }
   | { type: "stale"; row: ServiceCallRowDto; message: string | null }
   | { type: "reload"; row: ServiceCallRowDto }
+  | { type: "refreshed"; row: ServiceCallRowDto }
   | { type: "reapply"; row: ServiceCallRowDto; changes: Partial<CallRowDraft> }
   | { type: "cancel" };
 
@@ -145,6 +146,13 @@ export function callRowSaveReducer(state: CallRowSave, event: CallRowSaveEvent):
       // "최신 내용으로 다시 불러오기": 초안을 지금 저장된 행으로 바꾸고, 다음 저장은 그 행의 updatedAt으로 검사받는다.
       if (state.status !== "conflict") return state;
       return initialCallRowSave(event.row);
+    case "refreshed":
+      // 원장이 이 콜의 더 새 행을 받았다(자동 청소 중, 다른 화면의 저장). 이 줄에 보내지 않은 수정이 없을 때만 따라간다.
+      // 저장 중·실패·충돌이거나 고치는 중이면 그대로 두고, 그 저장이 지금처럼 버전 검사를 받는다.
+      if (state.inFlight || isSaveHeld(state.status)) return state;
+      if (event.row.updatedAt <= state.savedRow.updatedAt) return state;
+      if (!sameDraft(state.draft, draftFromRow(state.savedRow))) return state;
+      return { ...state, savedRow: event.row, draft: draftFromRow(event.row) };
     case "reapply": {
       // 비교 화면의 "다시 반영하고 저장": 최신 행을 기준으로 고른 필드만 내 값으로 얹어 바로 다시 보낸다.
       // 다시 버전 검사를 받으므로(expectedUpdatedAt은 이 최신 행의 updatedAt), 비교하는 동안 또 바뀌었으면

@@ -9,7 +9,7 @@ import { defaultLocale, type Locale } from "@/lib/i18n/config";
 import { codeLabel } from "@/lib/i18n/codes";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
 import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
-import { assertOperatingMonthPayoutWritable } from "@/modules/closing/month-lock-guard";
+import { assertOperatingMonthPayoutWritable, isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import { listActiveCodeItems, listActiveTimeSlots } from "@/modules/masters/code-service";
 import { listActiveCourses } from "@/modules/masters/course-service";
 import { listActiveEmployees } from "@/modules/masters/employee-service";
@@ -483,14 +483,9 @@ export type TherapistAvailabilityRowDto = {
   // 고른 날짜가 오늘이고 고른 시각이 지금보다 30분을 넘겨 뒤인데 출근 상태가 아니다.
   shiftCheck: boolean;
   available: boolean;
-  // 불가 사유. in_service_past_display_end는 예약 점유가 아니라 추가 점유만으로 불가가 된 경우다.
-  unavailableReason: "booked" | "in_service_past_display_end" | null;
-  inServiceDisplayEnd: string | null;
   freeFrom: string | null;
   nextReservationTime: string | null;
   freeMinutes: number | null;
-  // 오늘 표시 종료를 넘긴 사용중 콜이 있다: 가능 후보는 시간표상 가능일 뿐 앞 시술 종료 확인이 필요하다.
-  priorServiceEndCheck: boolean;
   // 근무표(27)에 적힌 그날의 근무 예정. 실제 출근(attendance)과는 다른 테이블이라 서로 다른 값일 수 있고,
   // 가능 판정·코스 버튼을 바꾸지 않는 안내일 뿐이다(스토리 12–13, 60, 104, V07).
   plannedWorkingDayStatus: PlannedWorkingDayCellStatus;
@@ -1344,7 +1339,7 @@ function formatBusinessMinute(value: number) {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
-const TEN_MINUTE_TIME = /^([01]\d|2[0-3]):(00|10|20|30|40|50)$/;
+const CLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 type DisplayEndContext = {
   dayCalls: ServiceCallRecord[];
@@ -1358,7 +1353,7 @@ function dayStartFromSlots(slots: TimeSlotRecord[]) {
 
 function storedActualEntryTime(record: { actualEntryTime?: string | null }) {
   const value = record.actualEntryTime?.trim() ?? "";
-  return TEN_MINUTE_TIME.test(value) ? value : null;
+  return CLOCK_TIME.test(value) ? value : null;
 }
 
 function actualEntryForWrite(requested: string | null | undefined, existing: string | null | undefined) {
@@ -1421,8 +1416,6 @@ function displayEndChoice(record: ServiceCallRecord, context: DisplayEndContext)
   }
   return { actualEntryTime, minute: proposed, yielded: false, yieldedToIds: [] as string[] };
 }
-
-const CLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function storedActualEndTime(record: { actualEndTime?: string | null }) {
   const value = record.actualEndTime?.trim() ?? "";
@@ -1620,6 +1613,102 @@ export async function roomFloorFactsForDate(
   return { displayEnds, roomOverlaps };
 }
 
+const AUTO_FINISH_REASON = "자동 종료";
+
+// 저장된 사용중 상태와 같은 갈래(한국어 값 또는 코드)의 청소중이다. 그 값이 활성 상태 코드가 아니면 다른 갈래를 쓴다.
+function cleaningStatusFor(inUseStatus: string, activeStatuses: string[]) {
+  const preferred = inUseStatus === "사용중" ? ["청소중", "CLEANING"] : ["CLEANING", "청소중"];
+  return preferred.find((status) => activeStatuses.includes(status)) ?? null;
+}
+
+/**
+ * 자동 청소 중(1018 스펙 D14, ADR 0008): 원장·객실·실시간·TV 화면과 가능 판정이 그 영업일을 읽기 전에 부른다.
+ * 실제입장이 있고 실제 종료가 없는 사용중 콜이 표시 종료를 지났으면 청소중으로 바꾸고 실제 종료 = 표시 종료로 저장한다.
+ * 상태 이력과 감사("자동 종료")를 남기며, 행위자는 그 화면을 연 계정이다.
+ * - 운영월이 잠겼거나, 입장이 없거나, 코스 길이를 모르면 건드리지 않는다.
+ * - 종료 취소(청소중 → 사용중)한 적이 있는 콜은 손님이 아직 있다는 뜻이라 다시 끝내지 않는다.
+ * - 읽은 버전(updatedAt)일 때만 고쳐서, 같은 요청이 동시에 와도 한 번만 쓴다.
+ * 바꾼 콜 id를 돌려준다.
+ */
+export async function autoFinishOverdueCalls(input: {
+  operatingMonthId: string;
+  serviceDate: string;
+  actorId: string;
+  now?: Date;
+  prismaClient?: ServiceCallPrismaClient;
+}): Promise<string[]> {
+  const parsed = serviceCallInputSchema.pick({ operatingMonthId: true, serviceDate: true }).safeParse(input);
+  if (!parsed.success) {
+    throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "조회 조건이 올바르지 않습니다.", "INVALID_SERVICE_CALL_QUERY");
+  }
+  const actorId = requireActor(input.actorId);
+  const client = getClient(input.prismaClient);
+  const where = { operatingMonthId: parsed.data.operatingMonthId, serviceDate: toDateOnly(parsed.data.serviceDate) };
+  // 대부분의 읽기는 끝낼 콜이 없다. 먼저 좁게 물어서 없으면 바로 돌아간다.
+  const open = await client.serviceCall.findMany({
+    where: { ...where, status: { in: [...IN_USE_SERVICE_CALL_STATUSES] }, actualEndTime: null, actualEntryTime: { not: null } },
+    select: { id: true }
+  });
+  if (open.length === 0) return [];
+  const month = await client.operatingMonth.findUnique({ where: { id: parsed.data.operatingMonthId } });
+  if (!month || isOperatingMonthPayoutLocked(month.status)) return [];
+
+  const now = input.now ?? new Date();
+  const context = await loadDisplayEndContext(client, where);
+  const overdue = context.dayCalls.filter((record) => {
+    if (!isInUseStatus(record.status) || storedActualEndTime(record) || !storedActualEntryTime(record)) return false;
+    if (courseDurationMinutes(record) <= 0) return false;
+    const end = displayEndChoice(record, context).minute;
+    return now.getTime() > instantFromBusinessMinute(parsed.data.serviceDate, end).getTime();
+  });
+  if (overdue.length === 0) return [];
+
+  const [histories, statusCodes] = await Promise.all([
+    client.serviceCallStatusHistory.findMany({ where: { serviceCallId: { in: overdue.map((record) => record.id) } } }),
+    client.codeItem.findMany({ where: { codeType: "SERVICE_STATUS", isActive: true } })
+  ]);
+  const reopened = new Set(
+    histories
+      .filter((history) => isCleaningStatus(history.previousStatus) && isInUseStatus(history.newStatus))
+      .map((history) => history.serviceCallId)
+  );
+  const activeStatuses = statusCodes.map((code) => code.code);
+
+  const finished: string[] = [];
+  for (const record of overdue) {
+    if (reopened.has(record.id)) continue;
+    const cleaning = cleaningStatusFor(record.status, activeStatuses);
+    if (!cleaning) continue;
+    const actualEndTime = formatBusinessMinute(displayEndChoice(record, context).minute);
+    const wrote = await runInTransaction(client, async (tx) => {
+      const result = await tx.serviceCall.updateMany({
+        where: { id: record.id, updatedAt: record.updatedAt, status: record.status, actualEndTime: null },
+        data: { status: cleaning, actualEndTime }
+      });
+      if (result.count !== 1) return false;
+      const after = await findServiceCallWithRelations(tx, record.id);
+      await tx.serviceCallStatusHistory.create({
+        data: { serviceCallId: record.id, previousStatus: record.status, newStatus: cleaning, changedByAccountId: actorId }
+      });
+      await recordAuditEvent(
+        {
+          actorId,
+          action: "service_call.auto_finished",
+          targetType: "service_call",
+          targetId: record.id,
+          beforeValue: toAuditSnapshot(record),
+          afterValue: toAuditSnapshot(after),
+          reason: AUTO_FINISH_REASON
+        },
+        { prismaClient: tx as any }
+      );
+      return true;
+    });
+    if (wrote) finished.push(record.id);
+  }
+  return finished;
+}
+
 async function displayEndContextFor(tx: ServiceCallPrismaClient, record: ServiceCallRecord): Promise<DisplayEndContext> {
   return loadDisplayEndContext(tx, {
     operatingMonthId: record.operatingMonthId,
@@ -1756,29 +1845,12 @@ export async function listTherapistAvailability(input: {
     }
   }
 
-  // 지금이 고른 날짜의 영업일(첫 슬롯부터 다음 날 첫 슬롯 전까지, Asia/Ho_Chi_Minh) 안이고 사용중인 콜이 표시 종료를 넘겼으면
-  // [표시 종료, 지금)이 그 Therapist의 추가 점유다. 표시 종료, 뒤 콜, 코스, 금액은 그대로 두고 가능 판정에만 쓴다.
+  // 근무 확인 필요(shiftCheck)는 고른 날짜가 영업일 오늘(첫 슬롯부터 다음 날 첫 슬롯 전까지, Asia/Ho_Chi_Minh)일 때만 본다.
+  // 표시 종료를 지난 사용중 콜은 자동 청소 중(스펙 D14)이 끝내므로 표시 종료 뒤를 더 잡지 않는다.
   const now = input.now ?? new Date();
   const nowMinute = Math.floor((now.getTime() - instantFromBusinessMinute(parsed.data.serviceDate, 0).getTime()) / 60_000);
-  const overrunsByTherapist = new Map<string, Array<AvailabilityInterval & { displayEnd: string }>>();
   const isToday = nowMinute >= dayStart && nowMinute < dayStart + AVAILABILITY_DAY_MINUTES;
   const pastShiftCheckWindow = isToday && at - nowMinute > AVAILABILITY_SHIFT_CHECK_MINUTES;
-  if (isToday) {
-    for (const call of calls) {
-      if (!isInUseStatus(call.status) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(call.startTime)) continue;
-      if (call.id === input.excludeCallId) continue;
-      // 실제 종료가 있으면 Therapist는 그때 풀렸다(스펙 D2). 표시 종료 뒤를 다시 잡지 않는다.
-      if (storedActualEndTime(call)) continue;
-      const displayEnd = displayEndChoice(call, releaseContext).minute;
-      if (nowMinute <= displayEnd) continue;
-      const overrun = { start: displayEnd, end: nowMinute, displayEnd: formatBusinessMinute(displayEnd) };
-      for (const therapistId of assignedTherapistIds(call)) {
-        const current = overrunsByTherapist.get(therapistId) ?? [];
-        current.push(overrun);
-        overrunsByTherapist.set(therapistId, current);
-      }
-    }
-  }
   const callCountsByTherapist = new Map<string, { done: number; reserved: number }>();
   for (const call of calls) {
     const done = isInUseStatus(call.status) || isCleaningStatus(call.status) || isCompletedServiceCallStatus(call.status);
@@ -1790,10 +1862,7 @@ export async function listTherapistAvailability(input: {
       callCountsByTherapist.set(therapistId, counts);
     }
   }
-  const occupancyOf = (therapistId: string) => [
-    ...(intervalsByTherapist.get(therapistId) ?? []),
-    ...(overrunsByTherapist.get(therapistId) ?? [])
-  ];
+  const occupancyOf = (therapistId: string) => intervalsByTherapist.get(therapistId) ?? [];
 
   const activeTherapists = [...therapists]
     .filter((therapist) => therapist.isActive && therapist.employeeGroup === "THERAPIST")
@@ -1818,18 +1887,9 @@ export async function listTherapistAvailability(input: {
   );
 
   return activeTherapists.map((therapist) => {
-    const booked = intervalsByTherapist.get(therapist.id) ?? [];
-    const overruns = overrunsByTherapist.get(therapist.id) ?? [];
-    const intervals = [...booked, ...overruns];
+    const intervals = occupancyOf(therapist.id);
     const occupiedUntil = coveringEnd(intervals, at);
     const available = occupiedUntil === null;
-    // 예약 점유가 덮지 않는데 불가라면 추가 점유가 덮은 것이다. 겹치면 가장 이른 표시 종료를 말한다.
-    const overrunAt = !available && coveringEnd(booked, at) === null
-      ? overruns
-          .filter((overrun) => overrun.start <= at && at < overrun.end)
-          .sort((left, right) => left.start - right.start)[0] ?? null
-      : null;
-    const nextReservation = nextIntervalStart(booked, at);
     const nextStart = nextIntervalStart(intervals, at);
     const freeMinutes = available ? Math.max((nextStart ?? dayEnd ?? at) - at, 0) : null;
     const attendance = attendanceByTherapist.get(therapist.id) ?? "before_check_in";
@@ -1839,12 +1899,9 @@ export async function listTherapistAvailability(input: {
       attendance,
       shiftCheck: pastShiftCheckWindow && attendance !== "checked_in",
       available,
-      unavailableReason: available ? null : overrunAt ? "in_service_past_display_end" as const : "booked" as const,
-      inServiceDisplayEnd: overrunAt?.displayEnd ?? null,
       freeFrom: occupiedUntil === null ? null : formatBusinessMinute(occupiedUntil),
-      nextReservationTime: nextReservation === null ? null : formatBusinessMinute(nextReservation),
+      nextReservationTime: nextStart === null ? null : formatBusinessMinute(nextStart),
       freeMinutes,
-      priorServiceEndCheck: overruns.length > 0,
       plannedWorkingDayStatus: plannedWorkingDayStatusByTherapist.get(therapist.id) ?? "미입력",
       callCounts: callCountsByTherapist.get(therapist.id) ?? { done: 0, reserved: 0 },
       courses: offeredCourses.map((course) => {

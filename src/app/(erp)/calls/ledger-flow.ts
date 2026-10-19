@@ -7,7 +7,7 @@ export type LedgerFlow = "active" | "reserved" | "done";
 const ACTIVE_STATUSES = ["IN_USE", "USING", "사용중", "CLEANING", "청소중"];
 const RESERVED_STATUSES = ["RESERVED", "예약"];
 
-/** 지금 이용 중(사용중·청소중, 종료 확인은 사용중이 표시 종료를 넘긴 것) → 예약 → 완료·취소·노쇼. */
+/** 지금 이용 중(사용중·청소중) → 예약 → 완료·취소·노쇼. */
 export function ledgerFlowOf(status: string): LedgerFlow {
   if (ACTIVE_STATUSES.includes(status)) return "active";
   if (RESERVED_STATUSES.includes(status)) return "reserved";
@@ -115,25 +115,41 @@ export function partyEntryTargets(members: ReadonlyArray<{ id: string; status: s
   return members.filter((member) => ledgerFlowOf(member.status) === "reserved").map((member) => ({ callId: member.id, needsRoom: !member.roomId }));
 }
 
-export type LedgerAction = "enter" | "pay";
+export type LedgerAction = "enter" | "finish" | "cleanDone";
 
-/** 줄 끝 "다음 할 일" 버튼. 예약은 입장, 이용 중(사용중·청소중)은 결제, 끝난 콜은 없다. */
+/** 줄 끝 주 버튼(1018 스펙 D11): 예약은 입장, 사용중은 종료, 청소중은 청소 끝이다. 끝난 콜은 없다. */
 export function nextLedgerAction(status: string): LedgerAction | null {
-  const flow = ledgerFlowOf(status);
-  if (flow === "reserved") return "enter";
-  if (flow === "active") return "pay";
+  if (RESERVED_STATUSES.includes(status)) return "enter";
+  if (isStatusKind(status, "inUse")) return "finish";
+  if (isStatusKind(status, "cleaning")) return "cleanDone";
   return null;
 }
 
 /**
- * "입장"이 넣는 실제입장 시각(스펙 D18): 지금 시계(HH:mm)를 가장 가까운 10분으로 맞춘다. 실제입장 선택지가
- * 10분 단위라 그 목록의 값 하나가 된다. 자정 넘김은 00:00으로 돈다.
+ * 상태를 고를 때 입장·종료 시각(1018 스펙 D11). `now`는 오늘 원장일 때 지금 시계이고, 다른 날이면 null이다.
+ * - 사용중: 입장이 비었으면 지금(다른 날이면 예약시각)으로 채우고 종료는 지운다.
+ * - 청소중·방문완료: 입장이 비었으면 예약시각, 종료가 비었으면 지금과 표시 종료 중 이른 시각(다른 날이면 표시 종료)이다.
+ *   종료는 입장보다 이르지 않다.
+ * - 예약: 둘 다 지운다. 노쇼·취소와 그 밖의 상태는 그대로 둔다.
  */
-export function entryClock(now: string): string {
-  const [hour, minute] = now.split(":").map(Number);
-  const rounded = Math.round(((hour ?? 0) * 60 + (minute ?? 0)) / 10) * 10;
-  const minutes = rounded % (24 * 60);
-  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+export function statusChangeTimes(
+  status: string,
+  call: { startTime: string; actualEntryTime: string | null; actualEndTime: string | null; displayEnd: string },
+  now: string | null,
+  dayStart: string
+): { actualEntryTime: string | null; actualEndTime: string | null } {
+  if (RESERVED_STATUSES.includes(status)) return { actualEntryTime: null, actualEndTime: null };
+  if (isStatusKind(status, "inUse")) {
+    return { actualEntryTime: call.actualEntryTime ?? now ?? call.startTime, actualEndTime: null };
+  }
+  if (isStatusKind(status, "cleaning") || isStatusKind(status, "visitComplete")) {
+    const entry = call.actualEntryTime ?? call.startTime;
+    if (call.actualEndTime) return { actualEntryTime: entry, actualEndTime: call.actualEndTime };
+    const minute = (clock: string) => businessMinuteOf(clock, dayStart);
+    const end = now !== null && minute(now) < minute(call.displayEnd) ? now : call.displayEnd;
+    return { actualEntryTime: entry, actualEndTime: minute(end) < minute(entry) ? entry : end };
+  }
+  return { actualEntryTime: call.actualEntryTime, actualEndTime: call.actualEndTime };
 }
 
 /**
@@ -193,11 +209,16 @@ export function therapistPickList<Row extends TherapistPickSource>(rows: readonl
 
 const STATUS_CODES = {
   inUse: ["IN_USE", "USING", "사용중"],
+  cleaning: ["CLEANING", "청소중"],
   visitComplete: ["VISIT_COMPLETE", "방문완료"],
   canceled: ["CANCELED", "CANCELLED", "취소"]
 } as const;
 
-/** 입장(사용중)·결제 완료(방문완료)·일행 전체 취소(취소)가 저장할 상태 코드. 활성 상태 코드 목록에서 찾고, 없으면 null이다. */
+function isStatusKind(status: string, kind: keyof typeof STATUS_CODES) {
+  return (STATUS_CODES[kind] as readonly string[]).includes(status);
+}
+
+/** 입장(사용중)·종료(청소중)·청소 끝(방문완료)·일행 전체 취소(취소)가 저장할 상태 코드. 활성 상태 코드 목록에서 찾고, 없으면 null이다. */
 export function statusCodeFor<Status extends { value: string }>(statuses: readonly Status[], kind: keyof typeof STATUS_CODES): string | null {
   const codes: readonly string[] = STATUS_CODES[kind];
   return statuses.find((status) => codes.includes(status.value))?.value ?? null;

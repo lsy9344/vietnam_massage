@@ -3,6 +3,7 @@ import { requireRouteAccess } from "@/lib/authorization";
 import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import {
+  autoFinishOverdueCalls,
   calculationWarningCallsFromRows,
   getDailyCallLedgerSummary,
   ledgerStatusCountsFromRows,
@@ -62,6 +63,8 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
   const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
   const tab = parseLedgerTab(params.tab);
   const ledgerDate = { operatingMonthId: selectedMonth.id, serviceDate };
+  // 자동 청소 중(1018 스펙 D14): 그 영업일을 읽기 전에 표시 종료를 지난 사용중 콜을 정리한다.
+  await autoFinishOverdueCalls({ ...ledgerDate, actorId: account.id });
   const isLocked = isOperatingMonthPayoutLocked(selectedMonth.status);
   const canViewSettlementAmounts = account.role === "administrator" || account.role === "settlement_manager";
 

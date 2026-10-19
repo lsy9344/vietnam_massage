@@ -145,6 +145,16 @@ test.describe("티켓 13 원장 행 경고와 콜 상세 패널", () => {
 
     // 15:00 사용중 콜은 16:00 예약에 양보해 표시 종료가 16:00이고 끝나지 않았다.
     frontCallId = await createCall({ therapistId: therapist.id, roomId: room.id, courseId: course.id, memo: "T13 앞 콜", status: "IN_USE", startTime: "15:00", actualEntryTime: "15:20" });
+    // 1018 티켓 03: 지난 날짜의 사용중 콜은 읽을 때 자동 청소 중이 끝낸다. 앞 시술 미완료는 종료 취소한 앞 콜에서만 남으므로
+    // 앞 콜을 청소중 → 사용중으로 되돌린 이력을 둔다.
+    await (prisma as any).serviceCallStatusHistory.create({
+      data: {
+        serviceCallId: frontCallId,
+        previousStatus: "CLEANING",
+        newStatus: "IN_USE",
+        changedByAccountId: (await (prisma as any).userAccount.findFirstOrThrow({ select: { id: true } })).id
+      }
+    });
     backCallId = await createCall({ therapistId: therapist.id, roomId: room.id, courseId: course.id, memo: "T13 뒤 콜", status: "RESERVED", startTime: "16:00" });
     thirdCallId = await createCall({
       therapistId: therapist.id,

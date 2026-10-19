@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  entryClock,
   freeRoomOptions,
   ledgerFlowItems,
   ledgerTimeline,
@@ -14,6 +13,7 @@ import {
   ledgerListKey,
   nextLedgerAction,
   partyEntryTargets,
+  statusChangeTimes,
   statusCodeFor
 } from "@/app/(erp)/calls/ledger-flow";
 
@@ -200,24 +200,55 @@ describe("parties inside a flow section", () => {
   });
 });
 
-describe("next action on a ledger line", () => {
-  it("offers entry for a reservation, payment while the guest is in, and nothing once the call is finished", () => {
+describe("next action on a ledger line (1018 ticket 03)", () => {
+  it("offers entry for a reservation, finish while the guest is in, cleaning done while cleaning, and nothing once the call is finished", () => {
     assert.equal(nextLedgerAction("RESERVED"), "enter");
-    assert.equal(nextLedgerAction("IN_USE"), "pay");
-    assert.equal(nextLedgerAction("CLEANING"), "pay");
+    assert.equal(nextLedgerAction("IN_USE"), "finish");
+    assert.equal(nextLedgerAction("사용중"), "finish");
+    assert.equal(nextLedgerAction("CLEANING"), "cleanDone");
+    assert.equal(nextLedgerAction("청소중"), "cleanDone");
     assert.equal(nextLedgerAction("VISIT_COMPLETE"), null);
     assert.equal(nextLedgerAction("CANCELED"), null);
     assert.equal(nextLedgerAction("NO_SHOW"), null);
   });
 });
 
-describe("entry time for the entry button", () => {
-  it("rounds the clock to the nearest ten minutes, as the actual-entry choices are", () => {
-    assert.equal(entryClock("14:00"), "14:00");
-    assert.equal(entryClock("14:04"), "14:00");
-    assert.equal(entryClock("14:05"), "14:10");
-    assert.equal(entryClock("14:56"), "15:00");
-    assert.equal(entryClock("23:57"), "00:00");
+describe("entry and end times a status change fills (1018 spec D11)", () => {
+  const reserved = { startTime: "18:00", actualEntryTime: null, actualEndTime: null, displayEnd: "19:30" };
+  const inUse = { startTime: "18:00", actualEntryTime: "18:07", actualEndTime: null, displayEnd: "19:37" };
+  const cleaned = { startTime: "18:00", actualEntryTime: "18:07", actualEndTime: "19:20", displayEnd: "19:37" };
+
+  it("fills an empty entry with now and clears the end when in use is picked", () => {
+    assert.deepEqual(statusChangeTimes("IN_USE", reserved, "18:12", "11:00"), { actualEntryTime: "18:12", actualEndTime: null });
+    assert.deepEqual(statusChangeTimes("사용중", cleaned, "19:25", "11:00"), { actualEntryTime: "18:07", actualEndTime: null });
+  });
+
+  it("uses the reservation time as the entry for in use on a day that is not today", () => {
+    assert.deepEqual(statusChangeTimes("IN_USE", reserved, null, "11:00"), { actualEntryTime: "18:00", actualEndTime: null });
+  });
+
+  it("fills an empty entry with the reservation time and an empty end with the earlier of now and the display end for cleaning or visit complete", () => {
+    assert.deepEqual(statusChangeTimes("CLEANING", inUse, "19:00", "11:00"), { actualEntryTime: "18:07", actualEndTime: "19:00" });
+    assert.deepEqual(statusChangeTimes("CLEANING", inUse, "20:15", "11:00"), { actualEntryTime: "18:07", actualEndTime: "19:37" });
+    assert.deepEqual(statusChangeTimes("VISIT_COMPLETE", reserved, "21:00", "11:00"), { actualEntryTime: "18:00", actualEndTime: "19:30" });
+    assert.deepEqual(statusChangeTimes("방문완료", cleaned, "21:00", "11:00"), { actualEntryTime: "18:07", actualEndTime: "19:20" });
+  });
+
+  it("uses the display end on a day that is not today, and never ends before the entry", () => {
+    assert.deepEqual(statusChangeTimes("VISIT_COMPLETE", reserved, null, "11:00"), { actualEntryTime: "18:00", actualEndTime: "19:30" });
+    assert.deepEqual(statusChangeTimes("CLEANING", reserved, "17:40", "11:00"), { actualEntryTime: "18:00", actualEndTime: "18:00" });
+  });
+
+  it("compares times across midnight within the business day", () => {
+    const late = { startTime: "23:30", actualEntryTime: "23:30", actualEndTime: null, displayEnd: "01:00" };
+    assert.deepEqual(statusChangeTimes("CLEANING", late, "00:20", "11:00"), { actualEntryTime: "23:30", actualEndTime: "00:20" });
+    assert.deepEqual(statusChangeTimes("CLEANING", late, "01:40", "11:00"), { actualEntryTime: "23:30", actualEndTime: "01:00" });
+  });
+
+  it("clears both times when the call goes back to a reservation, and keeps them for no-show and cancel", () => {
+    assert.deepEqual(statusChangeTimes("RESERVED", cleaned, "21:00", "11:00"), { actualEntryTime: null, actualEndTime: null });
+    assert.deepEqual(statusChangeTimes("NO_SHOW", cleaned, "21:00", "11:00"), { actualEntryTime: "18:07", actualEndTime: "19:20" });
+    assert.deepEqual(statusChangeTimes("취소", inUse, "21:00", "11:00"), { actualEntryTime: "18:07", actualEndTime: null });
   });
 });
 

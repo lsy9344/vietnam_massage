@@ -106,6 +106,7 @@ describe("call row save status", () => {
         onReload: () => {},
         onRetry: () => {},
         onSelectCall: () => {},
+      onStatusChange: () => {},
         options,
         readOnly: false,
         row,
