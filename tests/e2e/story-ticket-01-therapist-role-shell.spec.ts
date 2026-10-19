@@ -162,11 +162,12 @@ test.describe("티켓 01 therapist 역할과 빈 Therapist 화면", () => {
     // 아래 탭 네 개가 베트남어로 보인다. 공지 탭에는 지금 읽지 않은 수가 없어 자리만 비어 있다.
     const tabBar = page.getByRole("navigation", { name: "Di chuyển màn hình KTV" });
     await expect(tabBar.locator("[data-therapist-tab]")).toHaveText(["Hôm nay", "Chấm công", "Thu nhập", "Thông báo"]);
-    // "나" 메뉴에 이름·직원 코드·전화번호가 보이고(D9), 비어 있는 탭 안내가 보인다.
+    // "나" 메뉴에 이름·직원 코드·전화번호가 보인다(D9).
     await page.getByRole("button", { name: "Tôi" }).click();
     await expect(page.getByText("Mã nhân viên E2E-T01-THR-1")).toBeVisible();
     await expect(page.getByText("Số điện thoại 0901112222")).toBeVisible();
-    await expect(page.getByText("Đang chuẩn bị")).toBeVisible();
+    // 오늘 탭 내용은 티켓 03이 채웠다 — 오늘 현황 카드가 보인다("준비 중" 빈 자리는 근태·수당·공지만 남았다).
+    await expect(page.getByText("Đã làm hôm nay")).toBeVisible();
   });
 
   const opsUrls = ["/live", "/calls", "/tv", "/masters/employees"];

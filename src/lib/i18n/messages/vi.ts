@@ -1617,4 +1617,15 @@ export const vi: Messages = {
   "therapist.refresh.lastUpdated": "Cập nhật gần nhất",
   "therapist.refresh.refreshing": "Đang cập nhật",
   "therapist.refresh.refresh": "Làm mới",
+
+  // Tab Hôm nay (ticket 03, spec D10–D12): thẻ tình trạng hôm nay, danh sách ca theo ngày.
+  "therapist.today.statusAria": "Tình trạng hôm nay",
+  "therapist.today.nextCallLabel": "Còn tới ca tiếp theo",
+  "therapist.today.minutesUnit": "phút",
+  "therapist.today.noMoreCallsToday": "Hôm nay không còn ca nào",
+  "therapist.today.doneCountLabel": "Đã làm hôm nay",
+  "therapist.today.callUnit": "ca",
+  "therapist.today.todayMarker": "Hôm nay",
+  "therapist.today.noCallsThatDay": "Ngày này không có ca được phân.",
+  "therapist.today.withPartner": "Cùng với {name}",
 };
