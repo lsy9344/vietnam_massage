@@ -304,12 +304,17 @@ test.describe("1018 티켓 05: 빠른 예약 옆 패널과 2단계", () => {
     expect(await (prisma as any).customer.count({ where: { name: { in: ["워크인 1", "워크인 2"] } } })).toBe(0);
   });
 
-  test("담은 손님이 있는 채로 닫으려 하면 안내하고, 취소하면 남고 확정하면 닫히며 포커스가 빠른 예약 버튼으로 돌아온다", async ({ page }) => {
+  test("담은 손님이 있는 채로 닫으려 하면 안내하고, 취소하면 남고 확정하면 닫히며 포커스가 빠른 예약 버튼으로 돌아온다(열린 동안 머리 버튼은 테두리 버튼)", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await login(page, account.accountId, account.password);
     await openLedger(page, DATE_CLOSE);
     const trigger = page.locator("[data-quick-booking-trigger]");
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await expect(trigger).toHaveClass(/bg-brand/);
     const panel = await openQuickBooking(page);
+    // 화면의 주 버튼은 하나다(design.md). 패널이 보이는 동안 머리 버튼은 테두리 버튼이다.
+    await expect(trigger).toHaveAttribute("aria-expanded", "true");
+    await expect(trigger).not.toHaveClass(/bg-brand/);
 
     await pickGuest(page, panel, { therapistId: null, courseId });
     await expect(panel.locator("[data-quick-booking-picked]")).toHaveAttribute("data-quick-booking-picked", "1/1");
@@ -327,6 +332,8 @@ test.describe("1018 티켓 05: 빠른 예약 옆 패널과 2단계", () => {
     await confirmDialog.getByRole("button", { name: "나가기" }).click();
     await expect(quickBookingPanel(page)).toBeHidden();
     await expect(trigger).toBeFocused();
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await expect(trigger).toHaveClass(/bg-brand/);
   });
 
   test("vi 로캘 쿠키에서는 미지명과 ② 예약 경로 그룹 이름이 베트남어로 보인다", async ({ page }) => {

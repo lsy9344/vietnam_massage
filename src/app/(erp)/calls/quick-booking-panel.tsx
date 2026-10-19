@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useReducer, useRef, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
 import { unstable_rethrow, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -45,10 +45,13 @@ import {
 import { nowClockString, selectNowSlot } from "@/app/(erp)/calls/quick-booking-now-slot";
 import { TherapistCallCount } from "@/app/(erp)/calls/therapist-call-counts";
 import {
+  announceQuickBookingShown,
+  isQuickBookingShown,
   onQuickBookingJoinParty,
   onQuickBookingOpen,
   onQuickBookingWithTherapist,
-  requestQuickBookingOpen
+  requestQuickBookingOpen,
+  subscribeQuickBookingShown
 } from "@/app/(erp)/calls/quick-booking-party-join";
 import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
 import { CALL_PARAM } from "@/lib/ledger-address";
@@ -141,14 +144,18 @@ function Field({ label, children, error }: { label: string; children: ReactNode;
  */
 export function QuickBookingTrigger({ isLocked }: { isLocked: boolean }) {
   const t = useT();
+  // 화면의 주 버튼은 하나다(design.md). 패널이 보이는 동안은 패널의 "다음"·"예약 저장"이 주 버튼이라 테두리 버튼이 된다.
+  const shown = useSyncExternalStore(subscribeQuickBookingShown, isQuickBookingShown, () => false);
   return (
     <Button
       aria-controls="quick-booking-panel"
+      aria-expanded={shown}
       className="hidden min-[600px]:inline-flex"
       data-quick-booking-trigger=""
       disabled={isLocked}
       onClick={requestQuickBookingOpen}
       type="button"
+      variant={shown ? "secondary" : "default"}
     >
       {t("calls.quickBooking.open")}
     </Button>
@@ -1070,6 +1077,12 @@ export function QuickBookingPanel({
       stopTherapist();
     };
   }, [isLocked]);
+
+  // 머리 버튼이 주 버튼일지 정하도록 패널이 보이는지 알린다. 콜을 열어 편집 패널이 이 자리를 쓰면(hidden) 보이지 않는다.
+  useEffect(() => {
+    announceQuickBookingShown(open && !hidden);
+  }, [open, hidden]);
+  useEffect(() => () => announceQuickBookingShown(false), []);
 
   // 열면 시각 칸으로 포커스를 옮긴다. 휴대폰 시트는 목록을 덮으므로 닫기 버튼으로 옮긴다.
   const panelRef = useRef<HTMLDivElement>(null);

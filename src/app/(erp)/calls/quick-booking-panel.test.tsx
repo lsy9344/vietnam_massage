@@ -169,6 +169,8 @@ const guest = (courseId: string, therapist1Id: string | null, therapist2Id: stri
 describe("빠른 예약 — 머리 버튼과 옆 패널(1018 스펙 D19)", () => {
   it("머리 버튼은 태블릿 폭 이상에서만 보이고 잠긴 운영월에서는 꺼진다", () => {
     assert.match(render("ko", <QuickBookingTrigger isLocked={false} />), /<button[^>]*class="[^"]*hidden min-\[600px\]:inline-flex[^"]*"[^>]*data-quick-booking-trigger=""[^>]*>빠른 예약<\/button>/);
+    // 패널이 닫혀 있으면 원장 화면의 주 버튼(검정)이다. 열려 있는 동안은 패널의 "다음"·"예약 저장"이 주 버튼이라 테두리 버튼이 된다.
+    assert.match(render("ko", <QuickBookingTrigger isLocked={false} />), /<button[^>]*class="[^"]*bg-brand[^"]*"[^>]*aria-expanded="false"/);
     assert.match(render("ko", <QuickBookingTrigger isLocked />), /<button[^>]*disabled=""[^>]*>빠른 예약<\/button>/);
     assert.match(render("vi", <QuickBookingTrigger isLocked={false} />), />Đặt lịch nhanh</);
   });

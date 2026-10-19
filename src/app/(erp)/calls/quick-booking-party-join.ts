@@ -49,3 +49,29 @@ export function onQuickBookingOpen(handler: () => void) {
   window.addEventListener(OPEN_EVENT, handler);
   return () => window.removeEventListener(OPEN_EVENT, handler);
 }
+
+/**
+ * 패널이 지금 보이는지. 화면의 주 버튼은 하나라(design.md), 패널이 보이는 동안 머리 버튼은 테두리 버튼이 되고 주 버튼은
+ * 패널의 "다음"·"예약 저장"이다. 콜을 열어 편집 패널이 그 자리를 쓰면 빠른 예약은 숨으므로 보이지 않는 것으로 본다.
+ * 머리 버튼이 `useSyncExternalStore`로 읽는다.
+ */
+let quickBookingShown = false;
+const shownListeners = new Set<() => void>();
+
+export function announceQuickBookingShown(shown: boolean) {
+  if (quickBookingShown === shown) return;
+  quickBookingShown = shown;
+  for (const listener of shownListeners) listener();
+}
+
+export function isQuickBookingShown() {
+  return quickBookingShown;
+}
+
+/** 보임이 바뀔 때마다 부른다. 돌려준 함수로 그만 받는다. */
+export function subscribeQuickBookingShown(listener: () => void) {
+  shownListeners.add(listener);
+  return () => {
+    shownListeners.delete(listener);
+  };
+}
