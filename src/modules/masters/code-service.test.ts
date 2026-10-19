@@ -150,9 +150,9 @@ describe("code/time slot service", () => {
     const created = await ensureDefaultCodeItems({ actorId: "admin-1", prismaClient });
     const secondRun = await ensureDefaultCodeItems({ actorId: "admin-1", prismaClient });
 
-    assert.equal(created.length, 20);
+    assert.equal(created.length, 27);
     assert.equal(secondRun.length, 0);
-    assert.equal(prismaClient.auditEvents.length, 20);
+    assert.equal(prismaClient.auditEvents.length, 27);
     assert.deepEqual((await listCodeItems({ codeType: "SERVICE_STATUS", prismaClient })).map((item) => item.displayName), [
       "예약",
       "사용중",
@@ -180,6 +180,16 @@ describe("code/time slot service", () => {
       "결근"
     ]);
     assert.deepEqual((await listCodeItems({ codeType: "CONFIRMATION", prismaClient })).map((item) => item.displayName), ["Y", "N"]);
+    // 예약 경로(1018 스펙 D1). 메신저 넷이 먼저다.
+    assert.deepEqual((await listCodeItems({ codeType: "BOOKING_CHANNEL", prismaClient })).map((item) => item.displayName), [
+      "텔레그램",
+      "카카오톡",
+      "왓츠앱",
+      "잘로",
+      "전화",
+      "워크인",
+      "기타"
+    ]);
     assert.equal(prismaClient.auditEvents[0].action, "code_item.created");
     assert.equal(prismaClient.auditEvents[0].targetType, "code_item");
   });
@@ -341,6 +351,22 @@ describe("code/time slot service", () => {
     await deactivateCodeItem({ actorId: "admin-1", codeItemId: code.id, prismaClient });
     await deactivateTimeSlot({ actorId: "admin-1", timeSlotId: slot.id, prismaClient });
     assert.equal(prismaClient.auditEvents.length, afterFirstDeactivateAuditCount);
+  });
+
+  it("lets an administrator add a booking channel of their own (1018 스펙 D1)", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const code = await createCodeItem({
+      actorId: "admin-1",
+      codeType: "BOOKING_CHANNEL",
+      code: "LINE",
+      displayName: "라인",
+      sortOrder: 80,
+      prismaClient
+    });
+
+    assert.equal(code.codeType, "BOOKING_CHANNEL");
+    assert.deepEqual((await listActiveCodeItems({ codeType: "BOOKING_CHANNEL", prismaClient })).map((item) => item.code), ["LINE"]);
   });
 
   it("creates custom code items and time slots with audit logs", async () => {

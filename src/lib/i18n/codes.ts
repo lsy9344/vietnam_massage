@@ -40,6 +40,15 @@ const SYSTEM_CODE_LABELS: Record<CodeType, Record<string, Record<Locale, string>
   CONFIRMATION: {
     Y: { ko: "Y", vi: "Y" },
     N: { ko: "N", vi: "N" }
+  },
+  BOOKING_CHANNEL: {
+    TELEGRAM: { ko: "텔레그램", vi: "Telegram" },
+    KAKAOTALK: { ko: "카카오톡", vi: "KakaoTalk" },
+    WHATSAPP: { ko: "왓츠앱", vi: "WhatsApp" },
+    ZALO: { ko: "잘로", vi: "Zalo" },
+    PHONE: { ko: "전화", vi: "Điện thoại" },
+    WALK_IN: { ko: "워크인", vi: "Khách vãng lai" },
+    OTHER: { ko: "기타", vi: "Khác" }
   }
 };
 

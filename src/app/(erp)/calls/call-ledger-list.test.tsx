@@ -27,6 +27,7 @@ const options: ServiceCallFormOptions = {
     { value: "CARD", label: "카드" }
   ],
   confirmationCodes: [{ value: "Y", label: "Y" }],
+  bookingChannels: [],
   therapists: [{ value: "therapist-1", label: "Therapist 1 (THR-001)" }],
   expenseHandlers: []
 };
@@ -38,6 +39,7 @@ function ledgerRow(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDt
     serviceDate: "2026-06-10",
     startTime: "16:00",
     actualEntryTime: null,
+    actualEndTime: null,
     displayEnd: "17:00",
     warningTime: null,
     warnings: [],
@@ -55,6 +57,8 @@ function ledgerRow(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDt
     paymentMethodCode: null,
     note: null,
     visitRequest: null,
+    bookingChannelCode: null,
+    bookerName: null,
     confirmationCode: null,
     partyId: null,
     partyPosition: null,

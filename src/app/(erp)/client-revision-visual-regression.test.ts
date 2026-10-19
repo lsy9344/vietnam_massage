@@ -28,6 +28,7 @@ const callGridOptions: ServiceCallFormOptions = {
   discountTypes: singleOption("BIRTHDAY", "생일자"),
   paymentMethods: singleOption("CASH", "현금"),
   confirmationCodes: singleOption("Y"),
+  bookingChannels: [],
   therapists: singleOption("therapist-1", "마사지사1"),
   expenseHandlers: singleOption("handler-1", "담당자1")
 };
@@ -38,6 +39,7 @@ const discountedCallRow: ServiceCallRowDto = {
   serviceDate: "2026-06-20",
   startTime: "12:00",
   actualEntryTime: null,
+  actualEndTime: null,
   displayEnd: "13:00",
   warningTime: null,
   warnings: [],
@@ -55,6 +57,8 @@ const discountedCallRow: ServiceCallRowDto = {
   paymentMethodCode: "CASH",
   note: null,
   visitRequest: null,
+  bookingChannelCode: null,
+  bookerName: null,
   confirmationCode: "Y",
   partyId: null,
   partyPosition: null,

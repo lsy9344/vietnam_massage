@@ -162,6 +162,7 @@ type ServiceCallRecord = {
   serviceDate: Date;
   startTime: string;
   actualEntryTime?: string | null;
+  actualEndTime?: string | null;
   roomId: string | null;
   room?: RoomRecord | null;
   courseId: string;
@@ -173,6 +174,8 @@ type ServiceCallRecord = {
   paymentMethodCode: string | null;
   note: string | null;
   visitRequest: string | null;
+  bookingChannelCode?: string | null;
+  bookerName?: string | null;
   confirmationCode: string | null;
   partyId?: string | null;
   partyPosition?: number | null;
@@ -309,6 +312,8 @@ export type ServiceCallRowDto = {
   serviceDate: string;
   startTime: string;
   actualEntryTime: string | null;
+  /** 실제 종료(1018 스펙 D1·D2). 있으면 Therapist가 이 콜에 묶이는 끝이다. */
+  actualEndTime: string | null;
   displayEnd: string;
   warningTime: string | null;
   /** 우선순위 순서의 경고 목록. 비어 있으면 경고가 없다. */
@@ -328,6 +333,9 @@ export type ServiceCallRowDto = {
   note: string | null;
   /** 이번 콜의 방문별 요청(F06, 티켓 23). note(비고)와는 다른 칸이다. */
   visitRequest: string | null;
+  /** 예약 경로(BOOKING_CHANNEL 코드)와 메신저의 예약자명(1018 스펙 D1). */
+  bookingChannelCode: string | null;
+  bookerName: string | null;
   confirmationCode: string | null;
   /** 일행(스펙 D13, 티켓 02·04). 일행이 아닌 콜은 둘 다 null이다. */
   partyId: string | null;
@@ -445,6 +453,8 @@ export type ServiceCallFormOptions = {
   discountTypes: ServiceCallOption[];
   paymentMethods: ServiceCallOption[];
   confirmationCodes: ServiceCallOption[];
+  /** 예약 경로(BOOKING_CHANNEL, 1018 스펙 D1). */
+  bookingChannels: ServiceCallOption[];
   therapists: ServiceCallOption[];
   expenseHandlers: ServiceCallOption[];
 };
@@ -886,6 +896,7 @@ async function toRowDto(
     serviceDate: toIsoDateOnly(record.serviceDate),
     startTime: record.startTime,
     actualEntryTime: display.actualEntryTime,
+    actualEndTime: storedActualEndTime(record),
     displayEnd: display.displayEnd,
     warningTime: display.warningTime,
     warnings: deriveRowWarnings(record, context, display, calculation.calculationStatus, now),
@@ -903,6 +914,8 @@ async function toRowDto(
     paymentMethodCode: record.paymentMethodCode,
     note: record.note,
     visitRequest: record.visitRequest,
+    bookingChannelCode: record.bookingChannelCode ?? null,
+    bookerName: record.bookerName ?? null,
     confirmationCode: record.confirmationCode,
     partyId: record.partyId ?? null,
     partyPosition: record.partyId ? (record.partyPosition ?? null) : null,
@@ -1131,6 +1144,7 @@ function toAuditSnapshot(record: ServiceCallRecord): AuditJsonSnapshot {
     serviceDate: toIsoDateOnly(record.serviceDate),
     startTime: record.startTime,
     actualEntryTime: storedActualEntryTime(record),
+    actualEndTime: storedActualEndTime(record),
     roomId: record.roomId,
     courseId: record.courseId,
     customerId: linkedCustomerId(record),
@@ -1140,6 +1154,8 @@ function toAuditSnapshot(record: ServiceCallRecord): AuditJsonSnapshot {
     paymentMethodCode: record.paymentMethodCode,
     note: record.note,
     visitRequest: record.visitRequest,
+    bookingChannelCode: record.bookingChannelCode ?? null,
+    bookerName: record.bookerName ?? null,
     confirmationCode: record.confirmationCode,
     assignments: {
       therapist1Id: assignmentEmployeeId(record, "THERAPIST_1"),
@@ -1199,7 +1215,8 @@ function hasSensitiveRowChange(before: ServiceCallRecord, after: ServiceCallReco
     assignmentEmployeeId(before, "THERAPIST_1") !== assignmentEmployeeId(after, "THERAPIST_1") ||
     assignmentEmployeeId(before, "THERAPIST_2") !== assignmentEmployeeId(after, "THERAPIST_2") ||
     linkedCustomerId(before) !== linkedCustomerId(after) ||
-    storedActualEntryTime(before) !== storedActualEntryTime(after)
+    storedActualEntryTime(before) !== storedActualEntryTime(after) ||
+    storedActualEndTime(before) !== storedActualEndTime(after)
   );
 }
 
@@ -1344,6 +1361,11 @@ function actualEntryForWrite(requested: string | null | undefined, existing: str
   return requested;
 }
 
+// 저장 입력이 칸을 보내지 않았으면(undefined) 저장된 값을 지킨다. null은 지운다는 뜻이다.
+function keptWhenOmitted(requested: string | null | undefined, existing: string | null | undefined) {
+  return requested === undefined ? existing ?? null : requested;
+}
+
 function assignedTherapistIds(record: ServiceCallRecord) {
   const ids: string[] = [];
   for (const assignment of record.assignments ?? []) {
@@ -1396,6 +1418,18 @@ function displayEndChoice(record: ServiceCallRecord, context: DisplayEndContext)
 }
 
 const CLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function storedActualEndTime(record: { actualEndTime?: string | null }) {
+  const value = record.actualEndTime?.trim() ?? "";
+  return CLOCK_TIME.test(value) ? value : null;
+}
+
+// 스펙 D2: Therapist가 콜에 묶이는 끝은 실제 종료가 있으면 실제 종료, 없으면 표시 종료(ADR 0001)다.
+// 청소와는 관계없고, 서비스 종료와 다음 예약 가능 사이에 버퍼는 없다.
+function therapistReleaseMinute(record: ServiceCallRecord, context: DisplayEndContext) {
+  const actualEndTime = storedActualEndTime(record);
+  return actualEndTime ? businessMinute(actualEndTime, context.dayStart) : displayEndChoice(record, context).minute;
+}
 
 // 같은 날 같은 Therapist(두 배정 역할 모두)의 사용중 콜이 이 콜의 예약시각까지 끝났어야 하는데
 // 지금이 그 표시 종료를 넘겼으면 앞 시술 미완료다. 이 콜의 표시 종료와 예약시각은 바꾸지 않는다.
@@ -1596,7 +1630,7 @@ function currentPolicyForCourse(policies: CoursePolicyRecord[], courseId: string
 
 type AvailabilityInterval = { start: number; end: number };
 
-// 점유는 [예약시각, 예약시각 + 코스 길이)다. 끝나는 시각과 같은 시작은 비어 있다.
+// 점유는 [예약시각, 실제 종료 또는 표시 종료)다(스펙 D2). 끝나는 시각과 같은 시작은 비어 있다.
 function coveringEnd(intervals: AvailabilityInterval[], at: number) {
   const sorted = [...intervals].sort((left, right) => left.start - right.start || left.end - right.end);
   let cursor = at;
@@ -1698,12 +1732,13 @@ export async function listTherapistAvailability(input: {
     });
 
   const intervalsByTherapist = new Map<string, AvailabilityInterval[]>();
+  const releaseContext = { dayCalls: calls, dayStart };
   for (const call of calls) {
     if (!occupiesAvailability(call.status) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(call.startTime)) continue;
     const policy = currentPolicyForCourse(policies, call.courseId, month.monthKey);
     if (!policy) continue;
     const start = businessMinute(call.startTime, dayStart);
-    const interval = { start, end: start + policy.durationMinutes };
+    const interval = { start, end: therapistReleaseMinute(call, releaseContext) };
     for (const assignment of call.assignments ?? []) {
       if (assignment.isActive === false) continue;
       if (assignment.assignmentRole !== "THERAPIST_1" && assignment.assignmentRole !== "THERAPIST_2") continue;
@@ -1721,10 +1756,11 @@ export async function listTherapistAvailability(input: {
   const isToday = nowMinute >= dayStart && nowMinute < dayStart + AVAILABILITY_DAY_MINUTES;
   const pastShiftCheckWindow = isToday && at - nowMinute > AVAILABILITY_SHIFT_CHECK_MINUTES;
   if (isToday) {
-    const displayContext = { dayCalls: calls, dayStart };
     for (const call of calls) {
       if (!isInUseStatus(call.status) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(call.startTime)) continue;
-      const displayEnd = displayEndChoice(call, displayContext).minute;
+      // 실제 종료가 있으면 Therapist는 그때 풀렸다(스펙 D2). 표시 종료 뒤를 다시 잡지 않는다.
+      if (storedActualEndTime(call)) continue;
+      const displayEnd = displayEndChoice(call, releaseContext).minute;
       if (nowMinute <= displayEnd) continue;
       const overrun = { start: displayEnd, end: nowMinute, displayEnd: formatBusinessMinute(displayEnd) };
       for (const therapistId of assignedTherapistIds(call)) {
@@ -2187,6 +2223,7 @@ async function writeServiceCallRow(
     assertActiveCode(tx, { codeType: "DISCOUNT_TYPE", code: input.discountTypeCode }),
     assertActiveCode(tx, { codeType: "PAYMENT_METHOD", code: input.paymentMethodCode }),
     assertActiveCode(tx, { codeType: "CONFIRMATION", code: input.confirmationCode }),
+    assertActiveCode(tx, { codeType: "BOOKING_CHANNEL", code: input.bookingChannelCode }),
     assertActiveEmployee(tx, { role: "THERAPIST_1", employeeId: input.therapist1Id }),
     assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: input.therapist2Id })
   ]);
@@ -2208,6 +2245,7 @@ async function writeServiceCallRow(
     serviceDate,
     startTime: input.startTime,
     actualEntryTime: actualEntryForWrite(input.actualEntryTime, beforeLinked?.actualEntryTime),
+    actualEndTime: keptWhenOmitted(input.actualEndTime, beforeLinked?.actualEndTime),
     roomId: input.roomId ?? null,
     courseId: input.courseId,
     customerId,
@@ -2217,6 +2255,8 @@ async function writeServiceCallRow(
     paymentMethodCode: input.paymentMethodCode ?? null,
     note: input.note ?? null,
     visitRequest: input.visitRequest ?? null,
+    bookingChannelCode: keptWhenOmitted(input.bookingChannelCode, beforeLinked?.bookingChannelCode),
+    bookerName: keptWhenOmitted(input.bookerName, beforeLinked?.bookerName),
     confirmationCode: input.confirmationCode ?? null
   };
 
@@ -2303,6 +2343,7 @@ export async function autosaveServiceCallRow(
       assertActiveCode(tx, { codeType: "DISCOUNT_TYPE", code: parsed.data.discountTypeCode }),
       assertActiveCode(tx, { codeType: "PAYMENT_METHOD", code: parsed.data.paymentMethodCode }),
       assertActiveCode(tx, { codeType: "CONFIRMATION", code: parsed.data.confirmationCode }),
+      assertActiveCode(tx, { codeType: "BOOKING_CHANNEL", code: parsed.data.bookingChannelCode }),
       assertActiveEmployee(tx, { role: "THERAPIST_1", employeeId: parsed.data.therapist1Id }),
       assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: parsed.data.therapist2Id })
     ]);
@@ -2316,6 +2357,7 @@ export async function autosaveServiceCallRow(
       serviceDate,
       startTime: parsed.data.startTime,
       actualEntryTime: actualEntryForWrite(parsed.data.actualEntryTime, before.actualEntryTime),
+      actualEndTime: keptWhenOmitted(parsed.data.actualEndTime, before.actualEndTime),
       roomId: parsed.data.roomId ?? null,
       courseId: parsed.data.courseId,
       customerId,
@@ -2325,6 +2367,8 @@ export async function autosaveServiceCallRow(
       paymentMethodCode: parsed.data.paymentMethodCode ?? null,
       note: parsed.data.note ?? null,
       visitRequest: parsed.data.visitRequest ?? null,
+      bookingChannelCode: keptWhenOmitted(parsed.data.bookingChannelCode, before.bookingChannelCode),
+      bookerName: keptWhenOmitted(parsed.data.bookerName, before.bookerName),
       confirmationCode: parsed.data.confirmationCode ?? null
     };
 
@@ -3381,7 +3425,7 @@ export async function listServiceCallFormOptions(
     : operatingMonths[0];
   const monthKey = selectedMonth?.monthKey;
 
-  const [rooms, timeSlots, courses, statuses, discountTypes, paymentMethods, confirmationCodes, therapists, expenseHandlers] = await Promise.all([
+  const [rooms, timeSlots, courses, statuses, discountTypes, paymentMethods, confirmationCodes, bookingChannels, therapists, expenseHandlers] = await Promise.all([
     listActiveRooms({ prismaClient: client as any }),
     listActiveTimeSlots({ prismaClient: client as any }),
     monthKey ? listActiveCourses({ monthKey, prismaClient: client as any }) : Promise.resolve([]),
@@ -3389,6 +3433,7 @@ export async function listServiceCallFormOptions(
     listActiveCodeItems({ codeType: "DISCOUNT_TYPE", prismaClient: client as any }),
     listActiveCodeItems({ codeType: "PAYMENT_METHOD", prismaClient: client as any }),
     listActiveCodeItems({ codeType: "CONFIRMATION", prismaClient: client as any }),
+    listActiveCodeItems({ codeType: "BOOKING_CHANNEL", prismaClient: client as any }),
     listActiveEmployees({ employeeGroup: "THERAPIST", prismaClient: client as any }),
     listActiveEmployees({ prismaClient: client as any })
   ]);
@@ -3401,6 +3446,7 @@ export async function listServiceCallFormOptions(
     discountTypes: discountTypes.map((code) => option(code.code, codeLabel(locale, code.codeType, code.code, code.isSystemDefault, code.displayName))),
     paymentMethods: paymentMethods.map((code) => option(code.code, codeLabel(locale, code.codeType, code.code, code.isSystemDefault, code.displayName))),
     confirmationCodes: confirmationCodes.map((code) => option(code.code, codeLabel(locale, code.codeType, code.code, code.isSystemDefault, code.displayName))),
+    bookingChannels: bookingChannels.map((code) => option(code.code, codeLabel(locale, code.codeType, code.code, code.isSystemDefault, code.displayName))),
     therapists: therapists.map((employee) => option(employee.id, `${employee.displayName} (${employee.staffCode})`)),
     expenseHandlers: expenseHandlers.map((employee) => option(employee.id, `${employee.displayName} (${employee.staffCode})`))
   } satisfies ServiceCallFormOptions;

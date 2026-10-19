@@ -312,6 +312,9 @@ function createMemoryPrisma() {
       ["PAYMENT_METHOD", "OTHER", "기타", 140, true],
       ["CONFIRMATION", "Y", "Y", 10, true],
       ["CONFIRMATION", "N", "N", 20, true],
+      ["BOOKING_CHANNEL", "TELEGRAM", "텔레그램", 10, true],
+      ["BOOKING_CHANNEL", "ZALO", "잘로", 40, true],
+      ["BOOKING_CHANNEL", "OLD_CHANNEL", "옛 경로", 90, false],
       ["PAYMENT_METHOD", "비활성", "비활성", 99, false]
     ].map(([codeType, code, displayName, sortOrder, isActive]) => [
       `${codeType}:${code}`,
@@ -853,6 +856,148 @@ describe("service call service", () => {
         }),
       (error: unknown) => error instanceof ServiceCallDomainError && error.code === "OPERATING_MONTH_LOCKED"
     );
+  });
+
+  describe("actual end, booking channel, and booker name (1018 스펙 D1, 티켓 01)", () => {
+    const base = {
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1"
+    };
+
+    it("saves and reloads the three fields, and autosave changes them", async () => {
+      const prismaClient = createMemoryPrisma();
+      const row = await saveBasicServiceCallRow({
+        ...base,
+        status: "청소중",
+        actualEntryTime: "11:00",
+        actualEndTime: "11:47",
+        bookingChannelCode: "TELEGRAM",
+        bookerName: "Minh",
+        prismaClient
+      });
+
+      assert.equal(row.actualEndTime, "11:47");
+      assert.equal(row.bookingChannelCode, "TELEGRAM");
+      assert.equal(row.bookerName, "Minh");
+      const reloaded = await getServiceCallRow({ serviceCallId: row.id, prismaClient });
+      assert.deepEqual(
+        { actualEndTime: reloaded.actualEndTime, bookingChannelCode: reloaded.bookingChannelCode, bookerName: reloaded.bookerName },
+        { actualEndTime: "11:47", bookingChannelCode: "TELEGRAM", bookerName: "Minh" }
+      );
+
+      const saved = await autosaveServiceCallRow({
+        ...base,
+        serviceCallId: row.id,
+        expectedUpdatedAt: row.updatedAt,
+        status: "사용중",
+        actualEntryTime: "11:00",
+        actualEndTime: null,
+        bookingChannelCode: "ZALO",
+        bookerName: "Lan",
+        actorId: "counter-account",
+        prismaClient
+      });
+      assert.equal(saved.actualEndTime, null);
+      assert.equal(saved.bookingChannelCode, "ZALO");
+      assert.equal(saved.bookerName, "Lan");
+    });
+
+    it("keeps the stored values when a save leaves the three fields out", async () => {
+      const prismaClient = createMemoryPrisma();
+      const row = await saveBasicServiceCallRow({
+        ...base,
+        status: "청소중",
+        actualEntryTime: "11:00",
+        actualEndTime: "11:50",
+        bookingChannelCode: "TELEGRAM",
+        bookerName: "Minh",
+        prismaClient
+      });
+
+      const saved = await autosaveServiceCallRow({
+        ...base,
+        serviceCallId: row.id,
+        expectedUpdatedAt: row.updatedAt,
+        status: "청소중",
+        note: "다른 칸만 고친다",
+        actorId: "counter-account",
+        prismaClient
+      });
+      assert.equal(saved.note, "다른 칸만 고친다");
+      assert.equal(saved.actualEndTime, "11:50");
+      assert.equal(saved.bookingChannelCode, "TELEGRAM");
+      assert.equal(saved.bookerName, "Minh");
+    });
+
+    it("rejects an actual end that is not a clock time and an unknown or inactive booking channel before writing", async () => {
+      const prismaClient = createMemoryPrisma();
+      for (const input of [
+        { actualEndTime: "25:00" },
+        { actualEndTime: "11:5" },
+        { bookingChannelCode: "FAX" },
+        { bookingChannelCode: "OLD_CHANNEL" }
+      ]) {
+        await assert.rejects(
+          () => saveBasicServiceCallRow({ ...base, status: "예약", ...input, prismaClient }),
+          (error: unknown) => error instanceof ServiceCallDomainError,
+          JSON.stringify(input)
+        );
+      }
+      assert.equal(prismaClient.serviceCalls.size, 0);
+    });
+
+    it("rejects an edit of the three fields from an older read with STALE_CALL", async () => {
+      const prismaClient = createMemoryPrisma();
+      const row = await saveBasicServiceCallRow({ ...base, status: "예약", bookerName: "Minh", prismaClient });
+
+      await assert.rejects(
+        () =>
+          autosaveServiceCallRow({
+            ...base,
+            serviceCallId: row.id,
+            expectedUpdatedAt: "2000-01-01T00:00:00.000Z",
+            status: "예약",
+            bookerName: "다른 화면",
+            actorId: "counter-account",
+            prismaClient
+          }),
+        (error: unknown) => error instanceof ServiceCallDomainError && error.code === "STALE_CALL"
+      );
+      assert.equal((await getServiceCallRow({ serviceCallId: row.id, prismaClient })).bookerName, "Minh");
+    });
+
+    it("audits a changed actual end as a row change, with the three fields in the snapshot", async () => {
+      const prismaClient = createMemoryPrisma();
+      const row = await saveBasicServiceCallRow({
+        ...base,
+        status: "청소중",
+        actualEntryTime: "11:00",
+        bookingChannelCode: "TELEGRAM",
+        bookerName: "Minh",
+        prismaClient
+      });
+
+      await autosaveServiceCallRow({
+        ...base,
+        serviceCallId: row.id,
+        expectedUpdatedAt: row.updatedAt,
+        status: "청소중",
+        actualEntryTime: "11:00",
+        actualEndTime: "11:58",
+        actorId: "counter-account",
+        prismaClient
+      });
+
+      const rowChanged = prismaClient.auditEvents.find((event: { action: string }) => event.action === "service_call.row_changed");
+      assert.equal(rowChanged.beforeValue.actualEndTime, null);
+      assert.equal(rowChanged.afterValue.actualEndTime, "11:58");
+      assert.equal(rowChanged.afterValue.bookingChannelCode, "TELEGRAM");
+      assert.equal(rowChanged.afterValue.bookerName, "Minh");
+    });
   });
 
   it("allows reservation rows to be saved without assigning a room yet", async () => {
@@ -3362,6 +3507,7 @@ function addAvailabilityCall(
     status: string;
     serviceDate?: string;
     actualEntryTime?: string | null;
+    actualEndTime?: string | null;
     paymentMethodCode?: string | null;
     roomId?: string | null;
     createdAt?: Date;
@@ -3377,6 +3523,7 @@ function addAvailabilityCall(
     serviceDate: dbDate(input.serviceDate ?? availabilityDate),
     startTime: input.startTime,
     actualEntryTime: input.actualEntryTime ?? null,
+    actualEndTime: input.actualEndTime ?? null,
     roomId: input.roomId === undefined ? "room-101" : input.roomId,
     courseId: input.courseId,
     customerId: null,
@@ -3605,6 +3752,61 @@ describe("therapist availability", () => {
       const later = (await availabilityAt(prismaClient, "15:30")).find((item) => item.therapistId === "therapist-1");
       assert.equal(later?.available, true, status);
     }
+  });
+
+  // 스펙 D2: Therapist가 콜에 묶이는 끝은 실제 종료가 있으면 실제 종료, 없으면 표시 종료다. 청소와는 관계없다.
+  it("frees a therapist at the actual end of a call that finished before its course length", async () => {
+    for (const status of ["청소중", "방문완료"]) {
+      const prismaClient = createMemoryPrisma();
+      addAvailabilityCall(prismaClient, {
+        id: `call-1400-90-${status}`,
+        startTime: "14:00",
+        actualEntryTime: "14:00",
+        actualEndTime: "14:40",
+        courseId: "course-missing-rate",
+        status,
+        assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+      });
+
+      const at1430 = (await availabilityAt(prismaClient, "14:30")).find((row) => row.therapistId === "therapist-1");
+      assert.equal(at1430?.available, false, status);
+      assert.equal(at1430?.freeFrom, "14:40", status);
+      const at1440 = (await availabilityAt(prismaClient, "14:40")).find((row) => row.therapistId === "therapist-1");
+      assert.equal(at1440?.available, true, status);
+    }
+  });
+
+  it("holds a therapist until the actual end even when it runs past the course length", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "call-1400-60-late",
+      startTime: "14:00",
+      actualEntryTime: "14:00",
+      actualEndTime: "15:25",
+      courseId: "course-a",
+      status: "청소중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const row = (await availabilityAt(prismaClient, "15:10")).find((item) => item.therapistId === "therapist-1");
+    assert.equal(row?.available, false);
+    assert.equal(row?.freeFrom, "15:25");
+  });
+
+  it("holds a therapist until the display end after a late entry when there is no actual end yet", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "call-1400-60-entered-1420",
+      startTime: "14:00",
+      actualEntryTime: "14:20",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const row = (await availabilityAt(prismaClient, "15:00")).find((item) => item.therapistId === "therapist-1");
+    assert.equal(row?.available, false);
+    assert.equal(row?.freeFrom, "15:20");
   });
 
   it("occupies the second therapist assignment", async () => {
@@ -3947,6 +4149,26 @@ describe("therapist availability with an in-use call past its display end", () =
     assert.equal(at0030?.priorServiceEndCheck, true);
   });
 
+  // 스펙 D2: 실제 종료가 있으면 그 시각이 끝이다. 사용중으로 남아 있어도 표시 종료 뒤를 다시 잡지 않는다.
+  it("adds no hold after the display end when the in-use call already has an actual end", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityCall(prismaClient, {
+      id: "call-1400-in-use-ended",
+      startTime: "14:00",
+      actualEntryTime: "14:00",
+      actualEndTime: "14:30",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    for (const time of ["14:30", "15:10"]) {
+      const row = (await overrunAvailabilityAt(prismaClient, time)).find((item) => item.therapistId === "therapist-1");
+      assert.equal(row?.available, true, time);
+      assert.equal(row?.priorServiceEndCheck, false, time);
+    }
+  });
+
   it("names the earliest display end when two in-use calls of one therapist have both run over", async () => {
     const prismaClient = createMemoryPrisma();
     addAvailabilityCall(prismaClient, {
@@ -3993,8 +4215,9 @@ describe("therapist availability with an in-use call past its display end", () =
     assert.equal(row?.freeFrom, "16:20");
   });
 
-  it("counts free minutes only up to a hold that starts later than the chosen time", async () => {
+  it("holds a late entry through its display end and chains the hold after it", async () => {
     // 14:00 예약, 15:00 실제입장, 60분: 표시 종료 16:00. 지금 16:40이면 추가 점유는 16:00–16:40이다.
+    // 스펙 D2: 실제 종료가 없으면 표시 종료까지 묶이므로, 15:30은 예약 점유로 불가이고 추가 점유 끝까지 이어진다.
     const prismaClient = createMemoryPrisma();
     addAvailabilityCall(prismaClient, {
       id: "call-1400-late",
@@ -4006,9 +4229,9 @@ describe("therapist availability with an in-use call past its display end", () =
     });
 
     const row = (await overrunAvailabilityAt(prismaClient, "15:30", new Date("2026-06-10T09:40:00.000Z"))).find((item) => item.therapistId === "therapist-1");
-    assert.equal(row?.available, true);
-    assert.equal(row?.nextReservationTime, null);
-    assert.equal(row?.freeMinutes, 30);
+    assert.equal(row?.available, false);
+    assert.equal(row?.unavailableReason, "booked");
+    assert.equal(row?.freeFrom, "16:40");
     assert.equal(courseVerdict([row!], "therapist-1", "course-a"), "time_short");
   });
 
@@ -4663,6 +4886,7 @@ function ledgerRow(overrides: Partial<ServiceCallRowDto>): ServiceCallRowDto {
     serviceDate: "2026-06-10",
     startTime: "11:00",
     actualEntryTime: null,
+    actualEndTime: null,
     displayEnd: "12:00",
     warningTime: null,
     warnings: [],
@@ -4680,6 +4904,8 @@ function ledgerRow(overrides: Partial<ServiceCallRowDto>): ServiceCallRowDto {
     paymentMethodCode: null,
     note: null,
     visitRequest: null,
+    bookingChannelCode: null,
+    bookerName: null,
     confirmationCode: null,
     partyId: null,
     partyPosition: null,

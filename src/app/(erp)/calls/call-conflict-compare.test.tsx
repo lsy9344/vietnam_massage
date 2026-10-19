@@ -24,6 +24,7 @@ const options: ServiceCallFormOptions = {
   discountTypes: [{ value: "discount-vip", label: "VIP 할인" }],
   paymentMethods: [{ value: "카드", label: "카드" }],
   confirmationCodes: [{ value: "code-1", label: "확인1" }],
+  bookingChannels: [{ value: "TELEGRAM", label: "텔레그램" }],
   therapists: [
     { value: "therapist-1", label: "Therapist 1" },
     { value: "therapist-2", label: "Therapist 2" }
@@ -40,6 +41,7 @@ function savedRow(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDto
     serviceDate: "2026-06-10",
     startTime: "16:00",
     actualEntryTime: null,
+    actualEndTime: null,
     displayEnd: "17:00",
     warningTime: null,
     warnings: [],
@@ -57,6 +59,8 @@ function savedRow(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDto
     paymentMethodCode: null,
     note: null,
     visitRequest: null,
+    bookingChannelCode: null,
+    bookerName: null,
     confirmationCode: null,
     partyId: null,
     partyPosition: null,
@@ -86,6 +90,7 @@ describe("callConflictFieldRows", () => {
       [
         "startTime",
         "actualEntryTime",
+        "actualEndTime",
         "roomId",
         "courseId",
         "customerMemo",
@@ -97,6 +102,8 @@ describe("callConflictFieldRows", () => {
         "paymentMethodCode",
         "note",
         "visitRequest",
+        "bookingChannelCode",
+        "bookerName",
         "confirmationCode"
       ]
     );
@@ -115,6 +122,24 @@ describe("callConflictFieldRows", () => {
     // 안 바꾼 필드는 같다.
     assert.equal(byField.get("roomId")?.differs, false);
     assert.equal(byField.get("status")?.differs, false);
+  });
+
+  it("compares the actual end, booking channel, and booker name (1018 스펙 D1)", () => {
+    const mine = draftFromRow(savedRow({ actualEndTime: "16:52", bookingChannelCode: "TELEGRAM", bookerName: "Minh" }));
+    const latest = draftFromRow(savedRow());
+    const byField = new Map(callConflictFieldRows(mine, latest, options, customers, t).map((row) => [row.field, row]));
+
+    assert.deepEqual(
+      ["actualEndTime", "bookingChannelCode", "bookerName"].map((field) => {
+        const row = byField.get(field as never);
+        return row && { label: row.label, mine: row.mine, latest: row.latest, differs: row.differs };
+      }),
+      [
+        { label: "실제 종료", mine: "16:52", latest: "-", differs: true },
+        { label: "예약 경로", mine: "텔레그램", latest: "-", differs: true },
+        { label: "예약자명", mine: "Minh", latest: "-", differs: true }
+      ]
+    );
   });
 
   it("looks up option and customer labels instead of raw codes, and falls back to a dash when empty", () => {

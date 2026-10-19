@@ -46,6 +46,7 @@ export function draftFromRow(row: ServiceCallRowDto): CallRowDraft {
     serviceDate: row.serviceDate,
     startTime: row.startTime,
     actualEntryTime: row.actualEntryTime,
+    actualEndTime: row.actualEndTime ?? null,
     roomId: row.roomId,
     courseId: row.courseId,
     customerMemo: row.customerMemo ?? null,
@@ -57,6 +58,8 @@ export function draftFromRow(row: ServiceCallRowDto): CallRowDraft {
     paymentMethodCode: row.paymentMethodCode ?? null,
     note: row.note ?? null,
     visitRequest: row.visitRequest ?? null,
+    bookingChannelCode: row.bookingChannelCode ?? null,
+    bookerName: row.bookerName ?? null,
     confirmationCode: row.confirmationCode ?? null
   };
 }

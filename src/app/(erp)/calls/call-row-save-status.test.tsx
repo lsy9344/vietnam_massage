@@ -17,6 +17,7 @@ const options: ServiceCallFormOptions = {
   discountTypes: [],
   paymentMethods: [],
   confirmationCodes: [],
+  bookingChannels: [],
   therapists: [{ value: "therapist-1", label: "Therapist 1" }],
   expenseHandlers: []
 };
@@ -27,6 +28,7 @@ const row: ServiceCallRowDto = {
   serviceDate: "2026-06-10",
   startTime: "16:00",
   actualEntryTime: null,
+  actualEndTime: null,
   displayEnd: "17:00",
   warningTime: "17:00",
   warnings: [{ code: "yield_to_reservation", relatedTime: "17:00", relatedCallIds: ["after"] }],
@@ -44,6 +46,8 @@ const row: ServiceCallRowDto = {
   paymentMethodCode: null,
   note: null,
   visitRequest: null,
+  bookingChannelCode: null,
+  bookerName: null,
   confirmationCode: null,
   partyId: null,
   partyPosition: null,

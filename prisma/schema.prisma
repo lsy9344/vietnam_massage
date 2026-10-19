@@ -239,6 +239,8 @@ model ServiceCall {
   serviceDate       DateTime                   @map("service_date") @db.Date
   startTime         String                     @map("start_time")
   actualEntryTime   String?                    @map("actual_entry_time")
+  // 실제 종료(1018 스펙 D1·D2, HH:mm). 있으면 Therapist가 이 콜에 묶이는 끝이고, 없으면 표시 종료가 끝이다.
+  actualEndTime     String?                    @map("actual_end_time")
   roomId            String?                    @map("room_id")
   room              Room?                      @relation(fields: [roomId], references: [id])
   courseId          String                     @map("course_id")
@@ -252,6 +254,9 @@ model ServiceCall {
   note              String?
   // 이번 콜의 방문별 요청(F06, 티켓 23). note(비고)와는 다른 칸이다.
   visitRequest      String?                    @map("visit_request")
+  // 예약 경로(BOOKING_CHANNEL 코드)와 메신저의 예약자명(1018 스펙 D1). 둘 다 비어도 된다.
+  bookingChannelCode String?                   @map("booking_channel_code")
+  bookerName        String?                    @map("booker_name")
   confirmationCode  String?                    @map("confirmation_code")
   requestId         String?                    @unique @map("request_id")
   // 빠른 예약 일행(스펙 D13, ADR 0007). 일행이 아닌 콜은 둘 다 비어 있다. 순번은 1부터이고 1번이 대표 콜이다.
@@ -373,6 +378,8 @@ model PlannedWorkingDay {
   employee   Employee @relation(fields: [employeeId], references: [id])
   workDate   DateTime @map("work_date") @db.Date
   planStatus String   @map("plan_status")
+  // 출근 예정 시각(1018 스펙 D1·D28, HH:mm). 비어 있으면 종일 근무로 본다.
+  plannedStartTime String? @map("planned_start_time")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 

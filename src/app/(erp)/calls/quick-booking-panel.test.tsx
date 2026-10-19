@@ -48,6 +48,7 @@ const options: ServiceCallFormOptions = {
   discountTypes: [],
   paymentMethods: [],
   confirmationCodes: [],
+  bookingChannels: [],
   therapists: [{ value: "therapist-1", label: "마사지사1" }],
   expenseHandlers: []
 };

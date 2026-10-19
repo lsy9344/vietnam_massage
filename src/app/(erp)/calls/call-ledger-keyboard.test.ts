@@ -6,6 +6,7 @@ test("Esc cancel restores the last server draft without changing object identity
   const serverDraft: Record<EditableCallField, string | null> = {
     startTime: "11:00",
     actualEntryTime: null,
+    actualEndTime: null,
     roomId: "room-1",
     courseId: "course-a",
     customerMemo: null,
@@ -17,6 +18,8 @@ test("Esc cancel restores the last server draft without changing object identity
     paymentMethodCode: null,
     note: "서버 값",
     visitRequest: null,
+    bookingChannelCode: null,
+    bookerName: null,
     confirmationCode: null
   };
   const editedDraft: Record<EditableCallField, string | null> = {

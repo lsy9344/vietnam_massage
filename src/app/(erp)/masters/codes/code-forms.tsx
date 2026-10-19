@@ -35,7 +35,8 @@ const codeTypeLabelKeys: Record<CodeType, MessageKey> = {
   PAYMENT_METHOD: "masters.codes.type.PAYMENT_METHOD",
   DISCOUNT_TYPE: "masters.codes.type.DISCOUNT_TYPE",
   ATTENDANCE_STATUS: "masters.codes.type.ATTENDANCE_STATUS",
-  CONFIRMATION: "masters.codes.type.CONFIRMATION"
+  CONFIRMATION: "masters.codes.type.CONFIRMATION",
+  BOOKING_CHANNEL: "masters.codes.type.BOOKING_CHANNEL"
 };
 
 function CodeCreatePanel({ codeType, onCreated }: { codeType: CodeType; onCreated: (id: string) => void }) {

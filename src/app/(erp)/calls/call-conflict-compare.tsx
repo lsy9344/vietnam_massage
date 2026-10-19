@@ -15,6 +15,7 @@ type Translate = (key: MessageKey, values?: Record<string, string | number>) => 
 const FIELD_LABEL_KEY: Record<EditableCallField, MessageKey> = {
   startTime: "calls.column.time",
   actualEntryTime: "calls.column.actualEntry",
+  actualEndTime: "calls.column.actualEnd",
   roomId: "calls.column.room",
   courseId: "calls.column.course",
   customerMemo: "calls.column.customerMemo",
@@ -26,6 +27,8 @@ const FIELD_LABEL_KEY: Record<EditableCallField, MessageKey> = {
   paymentMethodCode: "calls.column.paymentMethod",
   note: "calls.column.note",
   visitRequest: "calls.column.visitRequest",
+  bookingChannelCode: "calls.column.bookingChannel",
+  bookerName: "calls.column.bookerName",
   confirmationCode: "calls.column.confirmation"
 };
 
@@ -53,6 +56,8 @@ function fieldValue(
       return draft.startTime;
     case "actualEntryTime":
       return draft.actualEntryTime ?? "-";
+    case "actualEndTime":
+      return draft.actualEndTime ?? "-";
     case "roomId":
       return optionLabel(options.rooms, draft.roomId) ?? "-";
     case "courseId":
@@ -75,6 +80,10 @@ function fieldValue(
       return draft.note ?? "-";
     case "visitRequest":
       return draft.visitRequest ?? "-";
+    case "bookingChannelCode":
+      return optionLabel(options.bookingChannels, draft.bookingChannelCode) ?? "-";
+    case "bookerName":
+      return draft.bookerName ?? "-";
     case "confirmationCode":
       return optionLabel(options.confirmationCodes, draft.confirmationCode) ?? "-";
   }

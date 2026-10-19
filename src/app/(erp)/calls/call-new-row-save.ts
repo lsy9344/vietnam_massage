@@ -41,6 +41,7 @@ function blankDraft(ledger: { operatingMonthId: string; serviceDate: string }): 
     serviceDate: ledger.serviceDate,
     startTime: "",
     actualEntryTime: null,
+    actualEndTime: null,
     roomId: null,
     courseId: "",
     customerMemo: null,
@@ -52,6 +53,8 @@ function blankDraft(ledger: { operatingMonthId: string; serviceDate: string }): 
     paymentMethodCode: null,
     note: null,
     visitRequest: null,
+    bookingChannelCode: null,
+    bookerName: null,
     confirmationCode: null,
     newCustomer: null
   };

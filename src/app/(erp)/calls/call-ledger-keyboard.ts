@@ -1,6 +1,7 @@
 export const EDITABLE_CALL_FIELDS = [
   "startTime",
   "actualEntryTime",
+  "actualEndTime",
   "roomId",
   "courseId",
   "customerMemo",
@@ -12,6 +13,8 @@ export const EDITABLE_CALL_FIELDS = [
   "paymentMethodCode",
   "note",
   "visitRequest",
+  "bookingChannelCode",
+  "bookerName",
   "confirmationCode"
 ] as const;
 

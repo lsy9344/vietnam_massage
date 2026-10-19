@@ -135,3 +135,9 @@ This replaces the Story 2.6 grid, the Ticket 19 view switch, and the Ticket 16 a
 - Row buttons: "입장" saves `actualEntryTime` = now rounded to ten minutes and `status` = in use; with no room it first offers only rooms not taken by in-use or cleaning calls. "결제" opens the panel at the payment group.
 - Keyboard (`ledgerListKey`): ↑↓ between rows, Enter opens the panel at its first field, Esc returns focus to the row, N opens quick booking (`data-quick-booking-trigger`). Shortcuts are off inside fields and dialogs.
 - New calls come only from quick booking; after it saves, the new row is selected and its panel opens. The old `view` address parameter is ignored. Phone width (<600px) still shows the Ticket 26 card list and a read-only panel until ledger-flow Ticket 05.
+
+## 1018 Ticket 01 (실제 종료·예약 경로·예약자명)
+
+- `ServiceCallRowDto`, the save input, and the audit snapshot carry `actualEndTime` (HH:mm, any minute), `bookingChannelCode` (an active `BOOKING_CHANNEL` code), and `bookerName`. Like `actualEntryTime`, a save that leaves one of them out keeps the stored value; `null` clears it. Stale-save rejection and request ids are unchanged. A changed actual end is a sensitive row change (`service_call.row_changed`).
+- Availability holds a Therapist over [reservation time, actual end) when the call has an actual end, and over [reservation time, display end) when it does not (spec D2, ADR 0001). An in-use call with an actual end adds no hold past its display end.
+- `listServiceCallFormOptions()` returns `bookingChannels`.

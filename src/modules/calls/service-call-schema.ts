@@ -22,6 +22,16 @@ const optionalTenMinuteTime = z.preprocess(
     .nullable()
     .optional()
 );
+// 실제 종료(1018 스펙 D1)는 분 단위 시각이다. 10분 단위로 맞추지 않는다.
+const optionalClockTime = z.preprocess(
+  emptyToNull,
+  z
+    .string()
+    .trim()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "실제 종료는 HH:mm 형식이거나 비어 있어야 합니다.")
+    .nullable()
+    .optional()
+);
 // 화면이 마지막으로 받은 행의 updatedAt(toISOString 형식). 기존 행 저장은 이 버전일 때만 갱신된다.
 export const savedVersionMessage = "저장 기준 시각이 올바르지 않습니다. 다시 불러온 뒤에 저장하세요.";
 const savedVersion = z
@@ -46,6 +56,7 @@ export const serviceCallInputSchema = z.object({
   serviceDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, isoDateMessage),
   startTime: z.string().trim().regex(/^\d{2}:\d{2}$/, timeMessage),
   actualEntryTime: optionalTenMinuteTime,
+  actualEndTime: optionalClockTime,
   roomId: optionalId,
   courseId: z.string().trim().min(1, "코스를 선택하세요."),
   customerMemo: optionalText,
@@ -58,6 +69,9 @@ export const serviceCallInputSchema = z.object({
   note: optionalText,
   // 이번 콜의 방문별 요청(F06, 티켓 23). 고객 공통 선호·주의사항(customerInputSchema.preferenceNote)과는 다른 칸이다.
   visitRequest: optionalText,
+  // 예약 경로(BOOKING_CHANNEL 코드)와 메신저의 예약자명(1018 스펙 D1).
+  bookingChannelCode: optionalCode,
+  bookerName: optionalText,
   confirmationCode: optionalCode,
   /** serviceCallId가 있으면(기존 행 저장) 서비스가 필수로 요구한다. */
   expectedUpdatedAt: z.preprocess(emptyToNull, savedVersion.nullable().optional())
