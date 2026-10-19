@@ -178,3 +178,27 @@ export const linkUserAccountToEmployeeSchema = z.object({
     z.string().min(8, "비밀번호는 8자 이상이어야 합니다.").optional()
   )
 });
+
+const userAccountIdSchema = z.string().trim().min(1, "계정을 찾을 수 없습니다.");
+
+// 티켓 02: Therapist 패널의 전용 발급·초기화·정지·잠금 해제 폼. 역할은 항상 therapist로 고정이라 입력에
+// 역할 칸이 없다(D26) — accountRoles에 "therapist"를 넣지 않는 이유와 같다.
+export const issueTherapistAccountSchema = z.object({
+  employeeId: employeeIdSchema,
+  accountId: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().min(1, "계정 ID를 입력하세요.").max(80, "계정 ID는 80자 이하여야 합니다.").optional()
+  )
+});
+
+export const resetTherapistAccountPasswordSchema = z.object({
+  userAccountId: userAccountIdSchema
+});
+
+export const suspendTherapistAccountSchema = z.object({
+  userAccountId: userAccountIdSchema
+});
+
+export const unlockTherapistAccountSchema = z.object({
+  userAccountId: userAccountIdSchema
+});

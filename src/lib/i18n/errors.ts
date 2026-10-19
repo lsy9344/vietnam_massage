@@ -59,6 +59,14 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   ACCOUNT_ID_ALREADY_LINKED: "ID tài khoản đã được liên kết với nhân viên khác.",
   EMAIL_ALREADY_LINKED: "Email đã được liên kết với nhân viên khác.",
   EMPLOYEE_NOT_FOUND: "Không tìm thấy nhân viên.",
+  ACCOUNT_NOT_FOUND: "Không tìm thấy tài khoản.",
+
+  // Therapist 계정 발급·초기화(티켓 02, 스펙 D2, D5, D26)
+  THERAPIST_EMPLOYEE_REQUIRES_DEDICATED_ACCOUNT_FLOW: "Nhân viên KTV chỉ được liên kết tài khoản ở màn hình cấp tài khoản KTV riêng.",
+  THERAPIST_ACCOUNT_REQUIRES_THERAPIST_EMPLOYEE: "Chỉ có thể cấp tài khoản KTV cho nhân viên nhóm KTV.",
+  THERAPIST_ACCOUNT_ALREADY_ISSUED: "Nhân viên này đã có tài khoản. Hãy dùng chức năng đặt lại mật khẩu.",
+  THERAPIST_ACCOUNT_RESET_REQUIRES_THERAPIST_ROLE: "Chỉ có thể đặt lại mật khẩu KTV bằng cách này cho tài khoản KTV.",
+  CURRENT_PASSWORD_INCORRECT: "Mật khẩu hiện tại không đúng.",
 
   // 직원/계정 마스터 입력 (직원정보·계정 연결 폼)
   INVALID_EMPLOYEE_INPUT: "Dữ liệu nhân viên không hợp lệ.",

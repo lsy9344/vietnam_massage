@@ -81,7 +81,9 @@ export const screenRoutes: readonly ScreenRoute[] = [
   { path: "/therapist", labelKey: "therapist.nav.today", zone: "therapist", roles: ["therapist"] },
   { path: "/therapist/attendance", labelKey: "therapist.nav.attendance", zone: "therapist", roles: ["therapist"] },
   { path: "/therapist/payout", labelKey: "therapist.nav.payout", zone: "therapist", roles: ["therapist"] },
-  { path: "/therapist/notices", labelKey: "therapist.nav.notices", zone: "therapist", roles: ["therapist"] }
+  { path: "/therapist/notices", labelKey: "therapist.nav.notices", zone: "therapist", roles: ["therapist"] },
+  // 티켓 02: 첫 비밀번호 변경·"나" 메뉴의 비밀번호 변경. 탭 네 개와 같은 자리를 다투지 않는 별도 화면이다.
+  { path: "/therapist/password", labelKey: "therapist.nav.password", zone: "therapist", roles: ["therapist"], notATab: true }
 ];
 
 const roleLandingPath: Record<Role, string> = {

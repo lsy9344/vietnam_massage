@@ -15,6 +15,7 @@ import {
 } from "@/modules/masters/employee-schema";
 
 export { linkUserAccountToEmployee } from "@/modules/masters/account-service";
+import { deactivateUserAccount } from "@/modules/masters/account-service";
 
 type AccountSummary = {
   id: string;
@@ -23,6 +24,7 @@ type AccountSummary = {
   role: string;
   isActive: boolean;
   lockedUntil: Date | null;
+  passwordChangeRequired: boolean;
 };
 
 type EmployeeRecord = {
@@ -51,6 +53,11 @@ type EmployeePrismaClient = {
     findUnique(args: unknown): Promise<EmployeeRecord | null>;
     findFirst(args: unknown): Promise<EmployeeRecord | null>;
     updateMany(args: unknown): Promise<{ count: number }>;
+  };
+  // 티켓 02(M20): 퇴사 저장과 같은 트랜잭션에서 연결된 계정을 찾아 정지하는 데만 쓴다.
+  userAccount: {
+    findUnique(args: unknown): Promise<{ id: string } | null>;
+    update(args: unknown): Promise<unknown>;
   };
   serviceCall: {
     findMany(args: unknown): Promise<{ id: string; serviceDate: Date; startTime: string }[]>;
@@ -87,6 +94,7 @@ export type EmployeeDto = {
     role: string;
     isActive: boolean;
     lockedUntil: string | null;
+    passwordChangeRequired: boolean;
   } | null;
 };
 
@@ -254,7 +262,9 @@ function toDto(record: EmployeeRecord, options: { tolerateInvalidEnums?: boolean
           email: record.account.email,
           role: record.account.role,
           isActive: record.account.isActive,
-          lockedUntil: record.account.lockedUntil ? record.account.lockedUntil.toISOString() : null
+          lockedUntil: record.account.lockedUntil ? record.account.lockedUntil.toISOString() : null,
+          // 기존 메모리 테스트 더미 계정은 이 칸을 채우지 않으므로, 없으면 false로 본다.
+          passwordChangeRequired: Boolean(record.account.passwordChangeRequired)
         }
       : null
   };
@@ -545,6 +555,20 @@ export async function updateEmployeeProfile(input: UpdateEmployeeProfileInput) {
       beforeValue: toAuditSnapshot(before),
       afterValue: toAuditSnapshot(after)
     });
+
+    // M20(D4, 티켓 02): 재직상태가 퇴사로 바뀌면, 연결된 계정을(있으면) 같은 트랜잭션에서 정지하고
+    // 감사에 남긴다. 휴직은 건드리지 않는다. deactivateUserAccount는 이미 정지된 계정이면 조용히
+    // 그대로 둔다(멱등) — 관리자가 먼저 수동으로 정지해 둔 경우에도 중복 감사가 남지 않는다.
+    if (before.employmentStatus !== "퇴사" && after.employmentStatus === "퇴사") {
+      const linkedAccount = await tx.userAccount.findUnique({ where: { employeeId: after.id } });
+      if (linkedAccount) {
+        await deactivateUserAccount({
+          actorId: input.actorId,
+          userAccountId: linkedAccount.id,
+          prismaClient: tx as unknown as Parameters<typeof deactivateUserAccount>[0]["prismaClient"]
+        });
+      }
+    }
 
     return after;
   });

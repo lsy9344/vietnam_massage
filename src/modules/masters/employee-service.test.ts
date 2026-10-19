@@ -652,3 +652,81 @@ describe("employee deactivation with future calls", () => {
     );
   });
 });
+
+describe("retirement auto-suspends the linked account in the same transaction (M20, 티켓 02)", () => {
+  // Therapist 계정은 전용 발급(issueTherapistAccount, account-service.ts)만 만들 수 있어, 여기서는 그
+  // 결과 모양을 메모리에 직접 흉내 낸다(linkUserAccountToEmployee는 D26로 THERAPIST 직원을 거절한다).
+  async function seededTherapistWithAccount() {
+    const prismaClient = createMemoryPrisma();
+    await ensureDefaultEmployees({ actorId: "admin-1", prismaClient });
+    const target = (await listEmployees({ prismaClient })).find((employee) => employee.staffCode === "THR-001");
+    assert.ok(target);
+    const account = await prismaClient.userAccount.create({
+      data: { email: "thr-001@therapist.internal", accountId: "thr-001", passwordHash: "hash", role: "therapist", employeeId: target.id, isActive: true }
+    });
+    return { prismaClient, target, account };
+  }
+
+  function profilePayload(employee: any, overrides: Record<string, unknown>) {
+    return {
+      actorId: "admin-1",
+      employeeId: employee.id,
+      displayName: employee.displayName,
+      staffCode: employee.staffCode,
+      employeeGroup: employee.employeeGroup,
+      position: employee.position,
+      shiftType: employee.shiftType,
+      baseSalary: employee.baseSalary,
+      phone: employee.phone,
+      birthday: employee.birthday,
+      hireDate: employee.hireDate,
+      employmentStatus: employee.employmentStatus,
+      sortOrder: employee.sortOrder,
+      ...overrides
+    };
+  }
+
+  it("suspends the linked account and audits user_account.deactivated when employmentStatus moves to 퇴사", async () => {
+    const { prismaClient, target, account } = await seededTherapistWithAccount();
+
+    const after = await updateEmployeeProfile({ ...profilePayload(target, { employmentStatus: "퇴사" }), prismaClient });
+
+    assert.equal(after.employmentStatus, "퇴사");
+    assert.equal(prismaClient.accounts.get(account.id).isActive, false);
+    assert.equal(prismaClient.auditEvents.at(-1).action, "user_account.deactivated");
+    assert.equal(prismaClient.auditEvents.at(-1).targetType, "user_account");
+  });
+
+  it("leaves the linked account alone when employmentStatus moves to 휴직 (D4: 휴직은 그대로 둔다)", async () => {
+    const { prismaClient, target, account } = await seededTherapistWithAccount();
+
+    await updateEmployeeProfile({ ...profilePayload(target, { employmentStatus: "휴직" }), prismaClient });
+
+    assert.equal(prismaClient.accounts.get(account.id).isActive, true);
+    assert.equal(prismaClient.auditEvents.at(-1).action, "employee.profile_changed");
+  });
+
+  it("does not throw when a retiring employee has no linked account", async () => {
+    const prismaClient = createMemoryPrisma();
+    await ensureDefaultEmployees({ actorId: "admin-1", prismaClient });
+    const target = (await listEmployees({ prismaClient })).find((employee) => employee.staffCode === "THR-002");
+    assert.ok(target);
+
+    const after = await updateEmployeeProfile({ ...profilePayload(target, { employmentStatus: "퇴사" }), prismaClient });
+
+    assert.equal(after.employmentStatus, "퇴사");
+    assert.equal(prismaClient.auditEvents.at(-1).action, "employee.profile_changed");
+  });
+
+  it("stays idempotent (no duplicate account audit) when the account was already suspended", async () => {
+    const { prismaClient, target, account } = await seededTherapistWithAccount();
+    prismaClient.accounts.set(account.id, { ...prismaClient.accounts.get(account.id), isActive: false });
+    const auditCountBefore = prismaClient.auditEvents.length;
+
+    await updateEmployeeProfile({ ...profilePayload(target, { employmentStatus: "퇴사" }), prismaClient });
+
+    // 직원 프로필 변경 감사 하나만 늘고, 이미 정지된 계정이라 계정 쪽 감사는 늘지 않는다.
+    assert.equal(prismaClient.auditEvents.length, auditCountBefore + 1);
+    assert.equal(prismaClient.auditEvents.at(-1).action, "employee.profile_changed");
+  });
+});
