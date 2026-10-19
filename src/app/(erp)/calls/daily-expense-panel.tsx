@@ -37,16 +37,19 @@ function InlineError({ state, field }: { state: DailyExpenseActionState; field?:
 export function ExpenseMethodControl({
   defaultMethod = "cash",
   disabled,
-  error
+  error,
+  labelHidden = false
 }: {
   defaultMethod?: ExpenseMethod;
   disabled: boolean;
   error: string | null;
+  /** 목록 행처럼 다른 칸도 라벨을 숨기는 곳에서는 수단 라벨도 숨겨 칸들이 한 줄에 선다. */
+  labelHidden?: boolean;
 }) {
   const t = useT();
   return (
     <label className="grid gap-1.5">
-      <span className="text-sm font-semibold text-foreground">{t("calls.expense.field.method")}</span>
+      <span className={labelHidden ? "sr-only" : "text-sm font-semibold text-foreground"}>{t("calls.expense.field.method")}</span>
       <select
         aria-label={t("calls.expense.field.method")}
         className={inputFieldClassName({ className: "min-w-28" })}
@@ -175,7 +178,7 @@ function ExpenseRow({
             <InlineError field="description" state={updateState} />
           </label>
           <HandlerSelect defaultValue={expense.handledByEmployee.id} disabled={disabled} handlers={handlers} label={t("calls.expense.field.handler")} name="handledByEmployeeId" />
-          <ExpenseMethodControl defaultMethod={expense.method} disabled={disabled} error={fieldError(updateState, "method")} />
+          <ExpenseMethodControl defaultMethod={expense.method} disabled={disabled} error={fieldError(updateState, "method")} labelHidden />
           <label className="grid gap-1">
             <span className="sr-only">{t("calls.expense.field.note")}</span>
             <input

@@ -75,5 +75,29 @@ describe("지출 추가", () => {
     assert.doesNotMatch(html, /지출 추가/);
     assert.match(html, /이 날짜에 등록된 지출이 없습니다\./);
   });
+
+  // 목록 행의 칸은 한 줄로 나란히 선다. 수단만 글자 라벨이 보이면 수단 칸만 아래로 밀린다.
+  it("hides every field label in a list row, the method included, so the row's fields line up", () => {
+    const expense = {
+      id: "expense-1",
+      operatingMonthId: "m-2026-10",
+      expenseDate: "2026-10-14",
+      amount: 100000,
+      method: "cash" as const,
+      description: "김부장 커피",
+      handledByEmployee: { id: "handler-1", displayName: "카운터", staffCode: "CNT-001" },
+      note: null,
+      isActive: true,
+      createdAt: "2026-10-14T03:00:00.000Z",
+      updatedAt: "2026-10-14T03:00:00.000Z"
+    };
+    const html = render("ko", <DailyExpensePanel {...target} expenses={[expense]} isLocked={false} />);
+    const row = html.match(/<tbody[\s\S]*?<\/tbody>/)?.[0] ?? "";
+
+    for (const label of ["지출금액", "내용", "수단", "비고"]) {
+      assert.match(row, new RegExp(`<span class="sr-only">${label}</span>`));
+    }
+    assert.doesNotMatch(row, /<span class="text-sm font-semibold text-foreground">/);
+  });
 });
 
