@@ -12,10 +12,9 @@ import { getTherapistProfile } from "@/modules/therapists/therapist-profile-serv
 import { getTherapistTodayView } from "@/modules/therapists/therapist-today-view-service";
 
 /**
- * 오늘 탭(Therapist 첫 화면, 스펙 D10–D12, 티켓 03). 순서는 D12 그대로다: 출근·퇴근 버튼(05, 자리만)
- * → 오늘 현황(다음 콜까지 남은 시간·오늘 한 것·오늘 예상 코스 수당 자리) → 퇴근 미입력 안내(06, 자리만)
- * → 날짜별 내 콜 목록. 05·06·07은 각자의 자리 컴포넌트/children만 채우면 되고 이 페이지를 건드리지
- * 않아도 된다 — 자리 이름은 티켓 Comments에 적는다.
+ * 오늘 탭(Therapist 첫 화면, 스펙 D10–D12, 티켓 03). 순서는 D12 그대로다: 출근·퇴근 버튼(05) →
+ * 오늘 현황(다음 콜까지 남은 시간·오늘 한 것·오늘 예상 코스 수당) → 퇴근 미입력 안내(06) →
+ * 날짜별 내 콜 목록. 05는 todayView.today.attendanceStatus를 자리에 넘기는 한 줄만 더했다.
  */
 export default async function TherapistTodayPage() {
   const { employeeId } = await requireTherapistAccess();
@@ -29,7 +28,7 @@ export default async function TherapistTodayPage() {
       <TherapistTopBar profile={profile} title={t("therapist.nav.today")} />
       <TherapistRefresh lastUpdatedAt={lastUpdatedAt} locale={locale}>
         <TherapistRefreshController />
-        <TherapistAttendanceActionsSlot />
+        <TherapistAttendanceActionsSlot attendanceStatus={todayView.today.attendanceStatus} />
         <TherapistTodayStatus doneCount={todayView.today.doneCount} locale={locale} nextCallInMinutes={todayView.today.nextCallInMinutes}>
           <SummaryCard
             accent="butter"

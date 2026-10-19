@@ -33,6 +33,7 @@ export const ko = {
   "shell.tab.rooms": "객실",
   "shell.tab.live": "실시간",
   "shell.tab.tv": "TV 화면",
+  "shell.tab.clockCode": "출근 코드",
   "shell.tab.schedule": "근무표",
   "shell.tab.therapist": "Therapist",
   "shell.tab.opsDaily": "운영팀 일일",
@@ -55,6 +56,7 @@ export const ko = {
   "shell.date.next": "다음 날",
   "shell.date.today": "오늘",
   "shell.openTv": "TV 화면 열기",
+  "shell.openClockCode": "출근 코드 보기",
   "shell.me.trigger": "나",
   "shell.me.aria": "내 계정",
   "shell.me.signOut": "로그아웃",
@@ -105,6 +107,7 @@ export const ko = {
   "nav.item.live": "첫화면 실시간 현황",
   "nav.item.rooms": "객실 현황",
   "nav.item.tv": "TV 현황판",
+  "nav.item.clockCode": "출근 코드 안내판",
 
   // 로그인
   "auth.signIn.title": "직원 계정 로그인",
@@ -1749,6 +1752,26 @@ export const ko = {
   "therapist.today.todayMarker": "오늘",
   "therapist.today.noCallsThatDay": "이 날은 배정된 콜이 없습니다.",
   "therapist.today.withPartner": "{name}님과 함께",
+
+  // 출근·퇴근 버튼(티켓 05, 스펙 D13–D15): 오늘 탭 맨 위 자리(TherapistAttendanceActionsSlot).
+  "therapist.attendance.checkInButton": "출근",
+  "therapist.attendance.checkOutButton": "퇴근",
+  "therapist.attendance.alreadyClockedNotice": "이미 찍음 — 정정 요청",
+  "therapist.attendance.dialog.checkInTitle": "출근 코드 입력",
+  "therapist.attendance.dialog.checkOutTitle": "퇴근 코드 입력",
+  "therapist.attendance.dialog.description": "매장 화면에 보이는 4자리 코드를 입력하세요.",
+  "therapist.attendance.dialog.codeAria": "입력한 코드",
+  "therapist.attendance.dialog.backspace": "지우기",
+  "therapist.attendance.dialog.submit": "확인",
+  "therapist.attendance.dialog.submitting": "확인 중",
+  "therapist.attendance.error.invalid": "코드가 올바르지 않습니다. 남은 시도 {remaining}회",
+  "therapist.attendance.error.locked": "코드를 너무 많이 틀려 {until}까지 잠겼습니다.",
+  "therapist.attendance.error.generic": "출퇴근을 저장하지 못했습니다. 다시 시도하세요.",
+
+  // 출근 코드 화면(티켓 05, 스펙 D13): TV 구석과 "출근 코드" 버튼 화면이 함께 쓴다.
+  "clockCode.label": "출근 코드",
+  "clockCode.aria": "출근 코드, 1분마다 바뀝니다",
+  "clockCode.pageDescription": "1분마다 바뀝니다. Therapist가 '오늘' 탭에서 이 코드를 입력해 출퇴근을 찍습니다.",
 
   // 근태 탭(티켓 06, 스펙 D17–D18): 퇴근 미입력 안내(오늘 탭과 공용), 월 달력, 날짜 상세 패널.
   "therapist.attendance.clockOutMissingNotice.label": "확인 필요",

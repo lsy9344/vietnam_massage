@@ -69,4 +69,12 @@ describe("Prisma migration chain", () => {
     assert.match(sql, /FOREIGN KEY \("employee_id"\) REFERENCES "employees"\("id"\)/);
     assert.match(sql, /FOREIGN KEY \("resolved_by_account_id"\) REFERENCES "user_accounts"\("id"\)/);
   });
+
+  it("출근 코드 실패 잠금 칸은 더하기만 한다(스펙 D14, D29, 티켓 05)", () => {
+    const sql = migrationSql("20261020120500_add_therapist_clock_in_code_lockout");
+
+    assert.match(sql, /ADD COLUMN "clock_in_code_failed_count" INTEGER NOT NULL DEFAULT 0/);
+    assert.match(sql, /ADD COLUMN "clock_in_code_locked_until" TIMESTAMP\(3\)/);
+    assert.doesNotMatch(sql, /DROP COLUMN|DROP TABLE/);
+  });
 });

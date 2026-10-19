@@ -17,6 +17,9 @@ model UserAccount {
   isActive       Boolean    @default(true) @map("is_active")
   lockedUntil                                DateTime?                           @map("locked_until")
   failedLoginCount                           Int                                 @default(0) @map("failed_login_count")
+  // 출근 코드 실패 잠금(스펙 D14, M11, 티켓 05). 로그인 잠금과 같은 기준(5회, 15분)이고 칸 모양도 같다.
+  clockInCodeFailedCount                     Int                                 @default(0) @map("clock_in_code_failed_count")
+  clockInCodeLockedUntil                     DateTime?                           @map("clock_in_code_locked_until")
   // 티켓 02(D29): 발급·초기화가 켜고, 본인 비밀번호 변경이 지운다(M21). 더하기만 하는 칸이라 기본값 false다.
   passwordChangeRequired                     Boolean                             @default(false) @map("password_change_required")
   createdAt                                  DateTime                            @default(now()) @map("created_at")
