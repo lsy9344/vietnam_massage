@@ -35,3 +35,4 @@
   - `npx tsc --noEmit`: 에러 없음. `TherapistAttendanceDto`에 필드가 늘어 그 타입을 직접 만들던 기존 테스트 fixture 3곳(`settlement-view-model.test.ts`, `therapist-settlement-view.test.tsx`, `monthly-statement-service.test.ts`)에 checkInMethod/checkOutMethod: null(또는 "대리 입력")을 추가해 맞췄다(동작은 그대로).
   - 검증 스크립트: `validate-story-4-6.mjs`만 기존 실패(메모리 `e2e-prod-known-failures.md`와 일치). 그 밖은 통과.
   - E2E: DB `vietnam_aesthetic_th04`·포트 3204, `pnpm build` + `next start` 운영 빌드. `story-4-1-therapist-attendance` 5개 전부 통과(저장·밤샘·만근·잘못된 입력·잠긴 운영월·카운터 접근 거절). 티켓 범위상 이 스펙만 돌렸다(README의 "04는 story-4-1" 예시를 따름).
+- 2026-10-20 운영 DB 적용 호환 조치: 새 코드 배포 전 구 Worker는 `check_out_method`를 모른 채 퇴근 시각만 저장하므로, `(check_out_minute IS NULL) = (check_out_method IS NULL)` CHECK에 걸릴 수 있었다. 운영 DB에만 BEFORE INSERT/UPDATE 트리거 `trg_therapist_attendance_checkout_method`를 걸어, 퇴근 시각이 있는데 방식이 비면 "이전 기록"으로 채우고 퇴근 시각이 없으면 방식을 비운다. 새 코드를 운영에 배포한 뒤 제거해도 된다.
