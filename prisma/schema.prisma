@@ -17,6 +17,8 @@ model UserAccount {
   isActive       Boolean    @default(true) @map("is_active")
   lockedUntil                                DateTime?                           @map("locked_until")
   failedLoginCount                           Int                                 @default(0) @map("failed_login_count")
+  // 티켓 02(D29): 발급·초기화가 켜고, 본인 비밀번호 변경이 지운다(M21). 더하기만 하는 칸이라 기본값 false다.
+  passwordChangeRequired                     Boolean                             @default(false) @map("password_change_required")
   createdAt                                  DateTime                            @default(now()) @map("created_at")
   updatedAt                                  DateTime                            @updatedAt @map("updated_at")
   loginAttempts                              LoginAttempt[]

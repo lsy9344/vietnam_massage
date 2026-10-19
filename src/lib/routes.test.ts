@@ -120,6 +120,15 @@ const accessMatrix: Record<
     waiter: false,
     read_only_viewer: false,
     therapist: true
+  },
+  // 티켓 02: 탭이 아닌 Therapist 전용 화면(비밀번호 변경)도 다른 운영팀 역할은 모두 거절된다.
+  "/therapist/password": {
+    administrator: false,
+    counter: false,
+    settlement_manager: false,
+    waiter: false,
+    read_only_viewer: false,
+    therapist: true
   }
 };
 

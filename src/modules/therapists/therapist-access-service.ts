@@ -41,8 +41,13 @@ export async function isTherapistEmployee(employeeId: string, options: { prismaC
  * 주소를 직접 열었을 때) 그 역할의 첫 화면으로 보낸다. 역할은 therapist인데 연결된 직원 검사에서
  * 막히면(예: 계정은 아직 활성인데 직원 연결이 깨진 드문 상태) /sign-in으로 보낸다 — Therapist 첫 화면으로
  * 보내면 같은 검사가 다시 막혀 되돌이가 생기기 때문이다.
+ *
+ * 티켓 02(M17 뒷부분): 계정에 비밀번호 변경 필요 표시가 켜져 있으면 비밀번호 변경 화면과 로그아웃
+ * 말고는 막는다(기본값). `allowPasswordChangeRequired`를 준 호출(비밀번호 변경 화면 자신, 그리고 이
+ * 함수를 모든 하위 주소 앞에서 한 번 더 부르는 레이아웃)만 이 표시를 통과시킨다 — 레이아웃이 기본값으로
+ * 부르면 비밀번호 변경 화면으로 가는 중에도 같은 자리로 다시 보내 되돌이가 생긴다.
  */
-export async function requireTherapistAccess(): Promise<TherapistAccess> {
+export async function requireTherapistAccess(options: { allowPasswordChangeRequired?: boolean } = {}): Promise<TherapistAccess> {
   const account = await getAuthorizedAccount();
   if (!account) {
     redirect("/sign-in");
@@ -52,6 +57,9 @@ export async function requireTherapistAccess(): Promise<TherapistAccess> {
   }
   if (!account.employeeId || !(await isTherapistEmployee(account.employeeId))) {
     redirect("/sign-in");
+  }
+  if (account.passwordChangeRequired && !options.allowPasswordChangeRequired) {
+    redirect("/therapist/password");
   }
 
   return { accountId: account.id, employeeId: account.employeeId };

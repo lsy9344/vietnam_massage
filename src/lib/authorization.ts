@@ -56,7 +56,8 @@ function getDevBypassAccount() {
     role: devBypassRole,
     employeeId: null,
     isActive: true,
-    lockedUntil: null
+    lockedUntil: null,
+    passwordChangeRequired: false
   };
 }
 
