@@ -52,6 +52,13 @@ Owns room-status views for waiters and TV display.
 - 항목에는 예약시각, 코스, Therapist, 상태, 표시 종료만 있다. 고객/메모, 연락처, 금액, 수당은 담지 않는다.
 - 객실 카드는 겹침이 있으면 "겹친 콜 N건"과 펼침 목록을 보인다. 원장의 콜 상세 링크는 `/calls`에 들어갈 수 있는 역할(관리자·카운터)에게만 있다. 실시간 카드에는 목록 대신 대표 콜의 원장 상세 링크가 있다. TV에는 둘 다 없다.
 
+## 객실 평면도 Contract (.scratch/room-floor-plan)
+
+- `/live`와 `/tv`의 객실판은 층별 평면도다(`RoomFloorPlan`). 이 절이 위 Story 3.2·3.4의 "카드를 그린다"는 문장보다 앞선다. `/rooms`는 그대로 `RoomStatusCard` 목록이다.
+- 배치 좌표, 방→칸(방 이름 앞 숫자, 배치에 없는 방은 기타), 이름표의 한 줄, "지금 빈방 / 곧 비는 방", 손그림 선 경로는 `floor-plan.ts`가 정한다. 서버 페이지와 클라이언트가 함께 쓰므로 "use client"를 붙이지 않는다.
+- 값은 `RoomStatusDto` 그대로다. 남은 분·상태·시작 시각을 다시 계산하지 않는다(UI 계산 재구현 금지). 남은 분이 0 미만이면 0으로 보일 뿐이다.
+- `/live`는 방이나 빈방 칩을 누르면 서랍(`ModalPanel`)에 서버가 그린 `RoomStatusCard`를 띄운다. 원장 링크 권한은 카드 그대로다. `/tv`는 읽기 전용이라 누르는 것이 없다.
+
 ## Includes
 
 - room status view
