@@ -403,16 +403,22 @@ function applyFullAttendanceAllowances(rows: MonthlyClosingTherapistRowDto[], re
   }
 }
 
+/**
+ * 콜킹 순위 정렬·동점 규칙(완료 콜 수 desc → 월 정산액 desc → staffCode asc → id asc). 40콜 미달도
+ * 포함해 전체를 정렬할 때 쓴다 — 11(관리자 Therapist 현황)이 완료 콜 수 기준 전체 순위를 매길 때
+ * 이 비교자를 그대로 쓴다(스펙 해석 결정 2026-10-20, 새로 만들지 않는다).
+ */
+export function compareTherapistRowsByCountKingOrder(a: MonthlyClosingTherapistRowDto, b: MonthlyClosingTherapistRowDto): number {
+  return (
+    b.totalCallCount - a.totalCallCount ||
+    b.monthlySettlementAmount - a.monthlySettlementAmount ||
+    a.staffCode.localeCompare(b.staffCode) ||
+    a.employeeId.localeCompare(b.employeeId)
+  );
+}
+
 function applyCountKingBonuses(rows: MonthlyClosingTherapistRowDto[]) {
-  const eligibleRows = rows
-    .filter((row) => row.totalCallCount >= COUNT_KING_MIN_CALLS)
-    .sort(
-      (a, b) =>
-        b.totalCallCount - a.totalCallCount ||
-        b.monthlySettlementAmount - a.monthlySettlementAmount ||
-        a.staffCode.localeCompare(b.staffCode) ||
-        a.employeeId.localeCompare(b.employeeId)
-    );
+  const eligibleRows = rows.filter((row) => row.totalCallCount >= COUNT_KING_MIN_CALLS).sort(compareTherapistRowsByCountKingOrder);
   const topRows = eligibleRows.slice(0, 3);
   const rankByEmployeeId = new Map(topRows.map((row, index) => [row.employeeId, (index + 1) as keyof typeof COUNT_KING_BONUS_BY_RANK]));
 

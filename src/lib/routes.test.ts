@@ -51,6 +51,15 @@ const accessMatrix: Record<
     read_only_viewer: false,
     therapist: false
   },
+  // 관리자 Therapist 현황(티켓 11): 관리자 전용. settlement_manager는 therapist:manage가 없어 거절된다(M18).
+  "/settlements/therapist-overview": {
+    administrator: true,
+    counter: false,
+    settlement_manager: false,
+    waiter: false,
+    read_only_viewer: false,
+    therapist: false
+  },
   "/closing": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false, therapist: false },
   "/dashboard/today": { administrator: true, counter: true, settlement_manager: true, waiter: false, read_only_viewer: true, therapist: false },
   "/dashboard/monthly": {
@@ -276,7 +285,8 @@ describe("zone tabs", () => {
       "/settlements",
       "/settlements/operations",
       "/settlements/operations/monthly",
-      "/settlements/notices"
+      "/settlements/notices",
+      "/settlements/therapist-overview"
     ]);
     assert.deepEqual(tabPaths("administrator", "settings"), [
       "/masters/operating-months",
@@ -314,7 +324,8 @@ describe("zone menu in the dock", () => {
       { labelKey: "shell.tab.therapist", href: "/settlements?operatingMonthId=m-2026-10&serviceDate=2026-10-14", current: false },
       { labelKey: "shell.tab.opsDaily", href: "/settlements/operations?operatingMonthId=m-2026-10&attendanceDate=2026-10-14", current: true },
       { labelKey: "shell.tab.opsMonthly", href: "/settlements/operations/monthly?operatingMonthId=m-2026-10", current: false },
-      { labelKey: "shell.tab.therapistNotices", href: "/settlements/notices", current: false }
+      { labelKey: "shell.tab.therapistNotices", href: "/settlements/notices", current: false },
+      { labelKey: "shell.tab.therapistOverview", href: "/settlements/therapist-overview?operatingMonthId=m-2026-10", current: false }
     ]);
   });
 
