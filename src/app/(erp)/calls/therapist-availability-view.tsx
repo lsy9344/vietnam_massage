@@ -54,7 +54,7 @@ export function TherapistAvailabilityView({
   const title = t(locale, "calls.availability.title");
 
   return (
-    <section aria-label={title} className="mb-4 border border-border bg-surface">
+    <section aria-label={title} className="mb-4 rounded-lg border border-border bg-surface overflow-hidden">
       <div className="flex flex-wrap items-end gap-3 px-3 py-3">
         <h2 className="pb-2 text-sm font-semibold text-foreground">{title}</h2>
         <label className="grid gap-1 text-xs font-medium text-muted" htmlFor="therapist-availability-time">

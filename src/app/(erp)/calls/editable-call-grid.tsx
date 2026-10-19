@@ -636,16 +636,16 @@ function ActualEntryCell({
         tall
         {...(value === undefined ? {} : { value })}
       />
-      <p className="text-[11px] text-muted" id={helpId}>
+      <p className="text-xs text-muted" id={helpId}>
         {t("calls.actualEntry.helper")}
       </p>
       {displayEnd ? (
-        <p className="text-[11px] text-foreground [font-variant-numeric:tabular-nums]">
+        <p className="text-xs text-foreground [font-variant-numeric:tabular-nums]">
           {t("calls.actualEntry.displayEnd", { time: displayEnd })}
         </p>
       ) : null}
       {warning ? (
-        <p className="text-[11px] text-danger [font-variant-numeric:tabular-nums]" id={warningId}>{warning}</p>
+        <p className="text-xs text-danger [font-variant-numeric:tabular-nums]" id={warningId}>{warning}</p>
       ) : null}
     </>
   );
@@ -1370,27 +1370,27 @@ function EditableCallRow({
           />
           {draft.status === "예약" ? (
             <button
-              className="h-7 rounded-full bg-brand px-3 text-xs font-bold text-brand-foreground hover:bg-brand-strong self-start"
+              className="inline-flex min-h-7 items-center justify-center rounded-full bg-brand px-3 text-xs font-semibold text-brand-foreground hover:bg-brand-strong transition-colors self-start"
               onClick={handleEnterService}
               type="button"
             >
-              입장
+              {locale !== "vi" ? "입장" : "Vào"}
             </button>
           ) : draft.status === "사용중" ? (
             <button
-              className="h-7 rounded-full border border-danger bg-danger-soft px-3 text-xs font-bold text-danger hover:bg-danger hover:text-brand-foreground self-start"
+              className="inline-flex min-h-7 items-center justify-center rounded-full border border-danger bg-danger-soft px-3 text-xs font-semibold text-danger hover:bg-danger hover:text-brand-foreground transition-colors self-start"
               onClick={handleEarlyFinish}
               type="button"
             >
-              종료
+              {locale !== "vi" ? "종료" : "Kết thúc"}
             </button>
           ) : draft.status === "청소중" && (draft.note?.includes("[종료") || serverRow.note?.includes("[종료")) ? (
             <button
-              className="h-7 rounded-full border border-border bg-readonly px-3 text-xs font-medium text-muted hover:text-foreground self-start"
+              className="inline-flex min-h-7 items-center justify-center rounded-full border border-border bg-readonly px-3 text-xs font-semibold text-muted hover:text-foreground transition-colors self-start"
               onClick={handleUndoFinish}
               type="button"
             >
-              종료 취소
+              {locale !== "vi" ? "종료 취소" : "Hủy kết thúc"}
             </button>
           ) : null}
         </div>
@@ -1442,15 +1442,17 @@ function EditableCallRow({
       <td className="border-b border-border px-2 py-2">
         <div className="flex flex-col gap-1">
           <button
-            className={`h-7 px-2.5 rounded-full text-xs font-semibold self-start transition-colors ${
+            className={`inline-flex min-h-7 items-center justify-center px-2.5 rounded-full text-xs font-semibold self-start transition-colors ${
               draft.confirmationCode === "Y"
                 ? "bg-success-soft text-success border border-success"
-                : "bg-readonly text-muted border border-border hover:border-border-strong"
+                : "bg-surface-float text-muted border border-border hover:border-border-strong hover:text-foreground"
             }`}
             onClick={handleTogglePayment}
             type="button"
           >
-            {draft.confirmationCode === "Y" ? "✓ 결제완료" : "결제 미확인"}
+            {draft.confirmationCode === "Y"
+              ? (locale !== "vi" ? "✓ 결제완료" : "✓ Đã thanh toán")
+              : (locale !== "vi" ? "결제 미확인" : "Chưa thanh toán")}
           </button>
           <SelectCell
             columnId="confirmationCode"
@@ -1577,9 +1579,10 @@ export function EditableCallGrid({
   showSettlementColumns: boolean;
 }) {
   const t = useT();
+  const locale = useLocale();
   // TanStack column defs back the row model only; visible header text is rendered
   // by <CallGridHead> from the localized CALL_GRID_COLUMNS catalog, so these
-  // `header` values are never shown — accessorKey stays the stable field name.
+  // `header` values are never shown: accessorKey stays the stable field name.
   const columns = useMemo<ColumnDef<ServiceCallRowDto>[]>(
     () => [
       { accessorKey: "serviceDate", header: "serviceDate" },
@@ -1603,6 +1606,11 @@ export function EditableCallGrid({
     data: rows,
     getCoreRowModel: getCoreRowModel()
   });
+
+  const isCompletedStatus = (status: string) =>
+    ["방문완료", "VISIT_COMPLETE", "노쇼", "NO_SHOW", "취소", "CANCELED"].includes(status);
+  const activeRows = table.getRowModel().rows.filter((r) => !isCompletedStatus(r.original.status));
+  const completedRows = table.getRowModel().rows.filter((r) => isCompletedStatus(r.original.status));
 
   return (
     <section className="overflow-hidden rounded-md border border-border bg-surface">
@@ -1633,10 +1641,7 @@ export function EditableCallGrid({
               <CallGridColgroup showSettlementColumns={showSettlementColumns} />
               <CallGridHead showSettlementColumns={showSettlementColumns} />
               <tbody>
-                {(table.getRowModel().rows.filter((r) => !["방문완료", "VISIT_COMPLETE", "노쇼", "NO_SHOW", "취소", "CANCELED"].includes(r.original.status)).length > 0
-                  ? table.getRowModel().rows.filter((r) => !["방문완료", "VISIT_COMPLETE", "노쇼", "NO_SHOW", "취소", "CANCELED"].includes(r.original.status))
-                  : table.getRowModel().rows
-                ).map((tableRow, index) => (
+                {(activeRows.length > 0 ? activeRows : table.getRowModel().rows).map((tableRow) => (
                   <EditableCallRow
                     customers={customers}
                     isLocked={isLocked}
@@ -1644,7 +1649,7 @@ export function EditableCallGrid({
                     options={options}
                     row={tableRow.original}
                     rowCount={table.getRowModel().rows.length + 1}
-                    rowIndex={index}
+                    rowIndex={tableRow.index}
                     showSettlementColumns={showSettlementColumns}
                   />
                 ))}
@@ -1652,31 +1657,28 @@ export function EditableCallGrid({
             </table>
           </div>
 
-          {table.getRowModel().rows.filter((r) => ["방문완료", "VISIT_COMPLETE", "노쇼", "NO_SHOW", "취소", "CANCELED"].includes(r.original.status)).length > 0 &&
-           table.getRowModel().rows.some((r) => !["방문완료", "VISIT_COMPLETE", "노쇼", "NO_SHOW", "취소", "CANCELED"].includes(r.original.status)) ? (
-            <details className="border-t border-border bg-surface-float" open>
-              <summary className="cursor-pointer px-4 py-3 text-xs font-semibold text-muted hover:text-foreground focus:outline-none">
-                완료 / 취소 / 노쇼 내역 ({table.getRowModel().rows.filter((r) => ["방문완료", "VISIT_COMPLETE", "노쇼", "NO_SHOW", "취소", "CANCELED"].includes(r.original.status)).length}건)
+          {activeRows.length > 0 && completedRows.length > 0 ? (
+            <details className="border-t border-border bg-surface" open>
+              <summary className="cursor-pointer px-4 py-3 text-xs font-semibold text-muted hover:text-foreground hover:bg-readonly transition-colors focus:outline-none">
+                {locale !== "vi" ? "완료 · 취소 · 노쇼 내역" : "Lịch sử Đã xong · Hủy · No-show"} ({completedRows.length}건)
               </summary>
               <div className="relative overflow-x-auto border-t border-border">
                 <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(showSettlementColumns) }}>
                   <CallGridColgroup showSettlementColumns={showSettlementColumns} />
                   <CallGridHead showSettlementColumns={showSettlementColumns} />
                   <tbody>
-                    {table.getRowModel().rows
-                      .filter((r) => ["방문완료", "VISIT_COMPLETE", "노쇼", "NO_SHOW", "취소", "CANCELED"].includes(r.original.status))
-                      .map((tableRow, index) => (
-                        <EditableCallRow
-                          customers={customers}
-                          isLocked={isLocked}
-                          key={tableRow.original.id}
-                          options={options}
-                          row={tableRow.original}
-                          rowCount={table.getRowModel().rows.length + 1}
-                          rowIndex={index}
-                          showSettlementColumns={showSettlementColumns}
-                        />
-                      ))}
+                    {completedRows.map((tableRow) => (
+                      <EditableCallRow
+                        customers={customers}
+                        isLocked={isLocked}
+                        key={tableRow.original.id}
+                        options={options}
+                        row={tableRow.original}
+                        rowCount={table.getRowModel().rows.length + 1}
+                        rowIndex={tableRow.index}
+                        showSettlementColumns={showSettlementColumns}
+                      />
+                    ))}
                   </tbody>
                 </table>
               </div>
