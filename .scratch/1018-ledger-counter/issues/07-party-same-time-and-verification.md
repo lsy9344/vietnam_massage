@@ -4,12 +4,12 @@
 
 **Blocked by:** 06
 
-**Status:** ready-for-human
+**Status:** done
 
 - [x] 1명 추가에서 시각을 바꾸면 partyId 없이 저장하고, 경로와 예약자명만 이어받는다. 서버의 `nextPartyPlace`는 시각이 다른 일행 추가를 받지 않는다.
 - [x] 원장은 같은 시각의 같은 partyId만 일행으로 묶는다.
 - [x] 조각 2 전체 검증을 한다. tsc, 단위 테스트, 운영 빌드 E2E 직렬 실행(알려진 실패와 비교), 1280·1024·390px 화면 확인.
-- [ ] 운영 DB 마이그레이션(아직 안 했으면)과 프리뷰 배포는 사용자 확인 뒤에 한다. 결과를 이 파일 Comments에 남긴다.
+- [x] 운영 DB 마이그레이션(아직 안 했으면)과 프리뷰 배포는 사용자 확인 뒤에 한다. 결과를 이 파일 Comments에 남긴다.
 
 ## Comments
 
@@ -23,3 +23,6 @@
   - 전체 E2E(운영 빌드, 새 DB `vietnam_aesthetic_t1807`, 포트 3117, 직렬, 369개): 리뷰 반영 전 358 통과·7 실패, 리뷰 반영 뒤 356 통과·8 실패. 실패는 기존 pending 고착 목록(2-5:268, 5-3:173·243, 5-5:211·250, 5-6:176, ticket-36:408)과, 반영 뒤 실행에만 나온 ticket-26:202(휴대폰 폭에서 `goto` 직후 줄을 눌러도 주소가 안 바뀜)다. ticket-26은 일행과 무관한 스펙이고 같은 빌드에서 단독 `--repeat-each=3`으로 9/9 통과, 반영 전 전체 실행에서도 통과해 흔들림으로 본다. 5-6:176도 단독 재실행에서 같은 증상(확정 뒤 "확정 기록" 미반영)으로 실패한다.
   - 화면: 1280·1024·390px에서 원장(일행 2명 + 시각이 다른 옛 일행 손님 + 별도 예약)과 1280·1024px의 별도 예약 안내를 봤다. 세 폭 모두 문서 가로 넘침 0.
   - 남은 일: 조각 2(05–07)에는 `prisma/` 변경이 없어 운영 DB에 적용할 마이그레이션이 없다(티켓 01의 두 마이그레이션은 이미 운영 DB에 있다). 프리뷰 배포는 사용자 확인 뒤에 한다.
+- 2026-10-19 사용자 지시로 push·병합·배포했다. `origin/feat/1018-ledger-rework` = a1f614e. `preview/dock-zone-menu`를 a1f614e로 fast-forward하고 `--force-with-lease`로 push해 origin도 a1f614e다(다른 작업이 덮어 둔 f8aea48은 main·`origin/feature/1018-ledger-counter-ux`·`origin/preview/1018-ledger-counter-ux`에 남아 있다). main 병합은 하지 않았다(main push는 운영 배포를 돌린다).
+  - 조각 2 프리뷰: a1f614e → Cloudflare 버전 `dcafe055-10ae-44d9-b40b-1a4ed1348cc8`(태그 `1018-slice2-a1f614e`, 별칭 `app-expansion`). 커밋에서 따로 만든 워크트리에서 단위 1008개 통과 뒤 `pnpm cf:build`로 올렸다. 운영 DB 마이그레이션은 없다. 확인: 비밀값 이름 3개(MAINTENANCE_MODE·NEXTAUTH_SECRET·NEXTAUTH_URL), Hyperdrive `275fdce2…`, 프리뷰 `/sign-in` 200, `/api/auth/providers`의 callbackUrl이 프리뷰 도메인, 운영 트래픽은 bff7cf91 100% 그대로.
+  - 06의 D25 가정 2는 사용자가 승인했다(티켓 06 Comments).
