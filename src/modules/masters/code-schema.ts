@@ -39,7 +39,7 @@ export const defaultCodeItems: DefaultCodeItem[] = [
   { codeType: "ATTENDANCE_STATUS", code: "ABSENT", displayName: "결근", sortOrder: 50 },
   { codeType: "CONFIRMATION", code: "Y", displayName: "Y", sortOrder: 10 },
   { codeType: "CONFIRMATION", code: "N", displayName: "N", sortOrder: 20 },
-  // 예약 경로(1018 스펙 D1).
+  // 예약 경로(1018 스펙 D1). 기존 DB에는 마이그레이션 20261019120100이 같은 값과 감사를 넣는다.
   { codeType: "BOOKING_CHANNEL", code: "TELEGRAM", displayName: "텔레그램", sortOrder: 10 },
   { codeType: "BOOKING_CHANNEL", code: "KAKAOTALK", displayName: "카카오톡", sortOrder: 20 },
   { codeType: "BOOKING_CHANNEL", code: "WHATSAPP", displayName: "왓츠앱", sortOrder: 30 },

@@ -51,7 +51,7 @@ None. This module is the source of reference data for other modules.
 
 코드와 시간 슬롯은 콜 원장, 정산, 객실 현황이 공유하는 드롭다운 기준 데이터다.
 
-- `ensureDefaultCodeItems()` prepares `SERVICE_STATUS`, `PAYMENT_METHOD`, `DISCOUNT_TYPE`, `ATTENDANCE_STATUS`, `CONFIRMATION`, and `BOOKING_CHANNEL` (예약 경로, 1018 스펙 D1) defaults. It runs when an administrator opens the code screen, so a new default appears in an existing database only after that. Empty discount/confirmation choices are represented by downstream `null`, not blank code rows.
+- `ensureDefaultCodeItems()` prepares `SERVICE_STATUS`, `PAYMENT_METHOD`, `DISCOUNT_TYPE`, `ATTENDANCE_STATUS`, `CONFIRMATION`, and `BOOKING_CHANNEL` (예약 경로, 1018 스펙 D1) defaults. It runs when an administrator opens the code screen. Booking channel defaults also arrive in existing databases through migration `20261019120100_add_booking_channel_codes`, which writes the same `code_item.created` audit (actor `migration:20261019120100_add_booking_channel_codes`). Empty discount/confirmation choices are represented by downstream `null`, not blank code rows.
 - `ensureDefaultTimeSlots()` prepares exactly 29 input slots from `11:00` through `01:00`; workbook-only later values such as `01:30`, `02:00`, and `02:30` are not seeded for Story 1.6.
 - `listCodeItems()` and `listTimeSlots()` return active and inactive rows for administrator management; `listActiveCodeItems()` and `listActiveTimeSlots()` return active-only dropdown DTOs for downstream modules.
 - `CodeItem.codeType + code` and `TimeSlot.id`/`CodeItem.id` are stable references. `displayName` and `value` are operational labels that can change.
