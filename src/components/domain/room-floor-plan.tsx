@@ -48,10 +48,11 @@ function roomNumber(status: RoomStatusDto) {
   return String(roomLeadingNumber(status.roomDisplayName) ?? status.roomDisplayName);
 }
 
-function lineText(t: Translator, line: FloorPlanRoomLine) {
-  if (line.kind === "remaining") return t("floorPlan.remaining", { minutes: line.minutes });
-  if (line.kind === "start") return `${t("roomCard.field.start")} ${line.time}`;
-  return t("roomCard.guidance.completeCheck");
+/** 한 줄의 흐린 라벨과 값. 보이는 글자와 접근 이름이 같은 문구를 쓴다. */
+function lineParts(t: Translator, line: FloorPlanRoomLine): { label: string | null; value: string; isText: boolean } {
+  if (line.kind === "remaining") return { label: null, value: t("floorPlan.remaining", { minutes: line.minutes }), isText: false };
+  if (line.kind === "start") return { label: t("roomCard.field.start"), value: line.time, isText: false };
+  return { label: null, value: t("roomCard.guidance.completeCheck"), isText: true };
 }
 
 function assigneeLine(status: RoomStatusDto) {
@@ -69,30 +70,34 @@ function MarkerLoop({ tone }: { tone: "ending-soon" | "complete-check" }) {
 
 function RoomTag({
   status,
+  name,
   locale,
   tv,
-  style,
+  position,
   selected,
   onOpenRoom
 }: {
   status: RoomStatusDto;
+  /** 이름표에 크게 쓸 이름(평면 칸은 앞 숫자, 기타 줄은 전체 이름). */
+  name: string;
   locale: Locale;
   tv: boolean;
-  style?: CSSProperties;
+  /** 평면 칸에 놓인 방의 자리. 없으면 기타 줄에 흘려 놓는다. */
+  position?: CSSProperties;
   selected: boolean;
   onOpenRoom?: OpenRoom;
 }) {
   const t = createTranslator(locale);
   const statusLabel = roomStatusLabel(locale, status.displayStatus);
   const line = floorPlanRoomLine(status);
+  const parts = line ? lineParts(t, line) : null;
   const marker = status.displayStatus === "종료임박" ? "ending-soon" : status.displayStatus === "종료확인" ? "complete-check" : null;
   const who = tv ? assigneeLine(status) : "";
 
   const body = (
     <>
-      {/* 평면 칸의 방은 앞 숫자로 부르고, 기타 줄의 방(style 없음)은 칸의 방과 헷갈리지 않게 전체 이름이다. */}
       <span className="floor-plan-room-number">
-        {style ? roomNumber(status) : status.roomDisplayName}
+        {name}
         {marker ? <MarkerLoop tone={marker} /> : null}
       </span>
       <StatusBadge
@@ -102,22 +107,20 @@ function RoomTag({
         labelClassName="floor-plan-badge-label"
         state={status.displayStatus}
       />
-      {line ? (
+      {parts ? (
         <span className="floor-plan-room-line">
-          {line.kind === "start" ? <span className="floor-plan-room-label">{t("roomCard.field.start")}</span> : null}
-          <span className={cn("floor-plan-room-value", line.kind === "completeCheck" && "floor-plan-room-value--text")}>
-            {line.kind === "start" ? line.time : lineText(t, line)}
-          </span>
+          {parts.label ? <span className="floor-plan-room-label">{parts.label}</span> : null}
+          <span className={cn("floor-plan-room-value", parts.isText && "floor-plan-room-value--text")}>{parts.value}</span>
         </span>
       ) : null}
       {who ? <span className="floor-plan-room-who">{who}</span> : null}
     </>
   );
 
-  const className = cn("floor-plan-room", style && "floor-plan-room--placed");
+  const className = cn("floor-plan-room", position && "floor-plan-room--placed");
   if (!onOpenRoom) {
     return (
-      <div className={className} data-room-id={status.roomId} data-testid="floor-plan-room" style={style}>
+      <div className={className} data-room-id={status.roomId} data-testid="floor-plan-room" style={position}>
         {body}
       </div>
     );
@@ -126,12 +129,14 @@ function RoomTag({
     <button
       aria-expanded={selected}
       aria-haspopup="dialog"
-      aria-label={[status.roomDisplayName, statusLabel, line ? lineText(t, line) : null].filter(Boolean).join(", ")}
+      aria-label={[status.roomDisplayName, statusLabel, parts ? [parts.label, parts.value].filter(Boolean).join(" ") : null]
+        .filter(Boolean)
+        .join(", ")}
       className={className}
       data-room-id={status.roomId}
       data-testid="floor-plan-room"
       onClick={(event: MouseEvent<HTMLButtonElement>) => onOpenRoom(status.roomId, event.currentTarget)}
-      style={style}
+      style={position}
       type="button"
     >
       {body}
@@ -178,10 +183,11 @@ function FloorCard({
             <RoomTag
               key={cell.slot}
               locale={locale}
+              name={roomNumber(cell.status)}
               onOpenRoom={onOpenRoom}
+              position={planBox(cell.rect, 10)}
               selected={cell.status.roomId === selectedRoomId}
               status={cell.status}
-              style={planBox(cell.rect, 10)}
               tv={tv}
             />
           ) : null
@@ -191,7 +197,18 @@ function FloorCard({
   );
 }
 
-function FreeRooms({ statuses, locale, onOpenRoom }: { statuses: RoomStatusDto[]; locale: Locale; onOpenRoom?: OpenRoom }) {
+function FreeRooms({
+  statuses,
+  nameOf,
+  locale,
+  onOpenRoom
+}: {
+  statuses: RoomStatusDto[];
+  /** 칩에 쓸 이름. 이름표와 같다(기타 줄의 방은 전체 이름). */
+  nameOf: (status: RoomStatusDto) => string;
+  locale: Locale;
+  onOpenRoom?: OpenRoom;
+}) {
   const t = createTranslator(locale);
   const { freeNow, freeSoon } = floorPlanFreeRooms(statuses);
   const none = <span className="floor-plan-free-none">{t("floorPlan.none")}</span>;
@@ -200,7 +217,7 @@ function FreeRooms({ statuses, locale, onOpenRoom }: { statuses: RoomStatusDto[]
     const extra = minutes === null ? null : t("roomCard.minutes", { value: Math.max(0, minutes) });
     const body = (
       <>
-        {roomNumber(status)}
+        {nameOf(status)}
         {extra ? <span className="floor-plan-free-chip-extra">{extra}</span> : null}
       </>
     );
@@ -253,7 +270,10 @@ export function RoomFloorPlan({
   const t = createTranslator(locale);
   const tv = variant === "tv";
   const { floors, others } = floorPlanFloors(statuses);
-  const free = <FreeRooms locale={locale} onOpenRoom={onOpenRoom} statuses={statuses} />;
+  // 기타 줄의 방은 앞 숫자가 칸의 방과 같을 수 있어(예: 301-B) 전체 이름으로 부른다.
+  const otherIds = new Set(others.map((status) => status.roomId));
+  const nameOf = (status: RoomStatusDto) => (otherIds.has(status.roomId) ? status.roomDisplayName : roomNumber(status));
+  const free = <FreeRooms locale={locale} nameOf={nameOf} onOpenRoom={onOpenRoom} statuses={statuses} />;
 
   return (
     <section aria-label={t("common.roomStatusAria")} className={cn("floor-plan", tv && "floor-plan--tv")} data-testid="room-floor-plan">
@@ -270,6 +290,7 @@ export function RoomFloorPlan({
             <RoomTag
               key={status.roomId}
               locale={locale}
+              name={status.roomDisplayName}
               onOpenRoom={onOpenRoom}
               selected={status.roomId === selectedRoomId}
               status={status}

@@ -68,6 +68,8 @@
 | `--status-complete-check-foreground` | `--status-complete-check` | 4.59 | 통과 |
 | `--status-empty-foreground` | `--surface` | 11.64 | 통과 |
 | `--status-empty`(빈방 배지 테두리) | `--surface` | 2.27 | 배지 글자(11.64)와 기호(○)로 상태를 알리므로 테두리는 보조 |
+| `--status-ending-soon`(객실 평면도 마커 고리) | `--surface` / `--background` | 4.20 / 3.78 | 글자가 아닌 표시 3:1 통과(design.md 6.16) |
+| `--status-complete-check`(객실 평면도 마커 고리) | `--surface` / `--background` | 4.19 / 3.77 | 글자가 아닌 표시 3:1 통과(design.md 6.16) |
 
 `--muted`는 파스텔 위에서 3.85–4.43:1이라 기준에 못 미친다. 파스텔 요약 카드 안의 글자는 모두 `--text`로 쓴다(design.md 6.7절).
 

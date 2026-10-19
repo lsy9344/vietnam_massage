@@ -641,7 +641,7 @@ button.floor-plan-free-chip:hover {
   min-width: 0;
   padding: 10px 12px;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text);
   text-align: left;
@@ -825,7 +825,7 @@ button.floor-plan-room:hover {
   .floor-plan-room {
     gap: 3px;
     padding: 5px 6px;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
   }
 
   .floor-plan-zone-text {
@@ -931,6 +931,10 @@ button.floor-plan-room:hover {
 /* TV 한 화면(1920×1080 등)에 세로 스크롤 없이 들어가게, 층 도면은 남은 높이에 맞춰 줄어든다.
    늘어날 때는 도면 비율(1165:400)까지만 늘어난다(100cqw = 층 카드 안쪽 폭). 더 작은 창은 세로로 스크롤한다. */
 @media (min-width: 1600px) and (min-height: 900px) {
+  .floor-plan-tv-screen {
+    height: 100vh;
+  }
+
   .floor-plan--tv {
     flex: 1;
     min-height: 0;

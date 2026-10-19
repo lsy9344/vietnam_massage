@@ -51,7 +51,7 @@ export default async function TvPage({ searchParams }: { searchParams: Promise<T
 
   return (
     <RoomStatusRefresh lastUpdatedAt={lastUpdatedAt} locale={locale}>
-      <main className="fullscreen flex min-h-screen flex-col bg-background px-5 py-5 text-foreground lg:px-8 lg:py-6 min-[1600px]:[@media(min-height:900px)]:h-screen">
+      <main className="fullscreen floor-plan-tv-screen flex min-h-screen flex-col bg-background px-5 py-5 text-foreground lg:px-8 lg:py-6">
         <header className="mb-5 flex flex-wrap items-end justify-between gap-5 border-b border-border pb-4">
           <div className="flex items-stretch gap-4">
             {/* 골드 브랜드 표식은 TV에서 머리말에만 둔다(design.md 6.15). */}

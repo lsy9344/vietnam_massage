@@ -159,6 +159,14 @@ describe("RoomFloorPlan 기타와 빈 칸", () => {
     assert.equal([...html.matchAll(/<section aria-labelledby="floor-plan-floor-\d"/g)].length, 4);
     assert.ok(html.indexOf("floor-plan-others") > html.indexOf("floor-plan-floors"));
   });
+
+  it("기타 줄의 빈방은 빈방 칩에서도 전체 이름이라 같은 앞 숫자의 칸 방과 헷갈리지 않는다", () => {
+    const html = renderToStaticMarkup(
+      <RoomFloorPlan locale="ko" onOpenRoom={noop} statuses={[roomStatus("301 호실"), roomStatus("301-B", { roomId: "room-301b" })]} />
+    );
+    const chips = [...html.matchAll(/data-testid="floor-plan-free-chip"[^>]*>([^<]*)</g)].map((match) => match[1]);
+    assert.deepEqual(chips, ["301", "301-B"]);
+  });
 });
 
 describe("RoomFloorPlan TV", () => {

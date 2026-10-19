@@ -54,7 +54,9 @@ Owns room-status views for waiters and TV display.
 
 ## 객실 평면도 Contract (.scratch/room-floor-plan)
 
-- `/live`와 `/tv`의 객실판은 층별 평면도다(`RoomFloorPlan`). 이 절이 위 Story 3.2·3.4의 "카드를 그린다"는 문장보다 앞선다. `/rooms`는 그대로 `RoomStatusCard` 목록이다.
+- `/live`와 `/tv`의 객실판은 층별 평면도다(`RoomFloorPlan`). 이 절이 위 Story 3.2·3.4·3.5의 "카드를 그린다", "TV typography keeps `text-[40px]`…" 문장보다 앞선다. `/rooms`는 그대로 `RoomStatusCard` 목록이고 Story 3.5의 카드 계약이 그대로 적용된다.
+- 평면도 이름표도 `StatusBadge`로 색·글자·기호를 함께 그린다. 예외는 폭 140px 이하의 좁은 칸뿐으로, 배지 글자를 숨기고 기호와 색만 둔다. 그 뜻은 같은 화면의 범례(상태 배지 6개)가 주고, 방 버튼의 접근 이름에는 상태 글자가 늘 들어 있다(스펙 D2).
+- TV 이름표 크기는 방 번호 40px, 배지 22px, 값 34px다(폭 1600px 이상, 스펙 D4).
 - 배치 좌표, 방→칸(방 이름 앞 숫자, 배치에 없는 방은 기타), 이름표의 한 줄, "지금 빈방 / 곧 비는 방", 손그림 선 경로는 `floor-plan.ts`가 정한다. 서버 페이지와 클라이언트가 함께 쓰므로 "use client"를 붙이지 않는다.
 - 값은 `RoomStatusDto` 그대로다. 남은 분·상태·시작 시각을 다시 계산하지 않는다(UI 계산 재구현 금지). 남은 분이 0 미만이면 0으로 보일 뿐이다.
 - `/live`는 방이나 빈방 칩을 누르면 서랍(`ModalPanel`)에 서버가 그린 `RoomStatusCard`를 띄운다. 원장 링크 권한은 카드 그대로다. `/tv`는 읽기 전용이라 누르는 것이 없다.

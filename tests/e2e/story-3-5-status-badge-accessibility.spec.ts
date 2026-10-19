@@ -349,8 +349,13 @@ async function createCall(input: { roomId: string; status: string; startTime: st
   });
 }
 
-async function expectStatusBadge(page: Page, label: string, glyph: string) {
-  await expect(page.getByLabel(`상태: ${label}`).filter({ hasText: glyph }).first()).toBeVisible();
+/** 상태 배지를 찾을 범위. 평면도 화면은 범례(같은 배지 6개)를 빼고 층 카드 안의 방 이름표만 본다. */
+function statusBoard(page: Page, surface: StatusSurface) {
+  return surface.plan ? floors(page) : page;
+}
+
+async function expectStatusBadge(page: Page, surface: StatusSurface, label: string, glyph: string) {
+  await expect(statusBoard(page, surface).getByLabel(`상태: ${label}`).filter({ hasText: glyph }).first()).toBeVisible();
 }
 
 /** 평면도의 층 카드들. 범례(aria-hidden)의 배지는 빼고 방 이름표만 본다. */
@@ -466,12 +471,12 @@ test.describe("Story 3.5 status badge accessibility", () => {
     for (const surface of statusSurfaces()) {
       await page.goto(surface.path);
       await expectRoomOrder(page, surface);
-      await expectStatusBadge(page, "예약", "◷");
-      await expectStatusBadge(page, "사용중", "●");
-      await expectStatusBadge(page, "종료임박", "◴");
-      await expectStatusBadge(page, "청소중", "◐");
-      await expectStatusBadge(page, "종료확인", "⚠");
-      await expectStatusBadge(page, "빈방", "○");
+      await expectStatusBadge(page, surface, "예약", "◷");
+      await expectStatusBadge(page, surface, "사용중", "●");
+      await expectStatusBadge(page, surface, "종료임박", "◴");
+      await expectStatusBadge(page, surface, "청소중", "◐");
+      await expectStatusBadge(page, surface, "종료확인", "⚠");
+      await expectStatusBadge(page, surface, "빈방", "○");
       await expect(page.getByText("결제·확인 필요")).toBeVisible();
       await expectEndingSoonAndCompleteCheckAreDistinct(page, surface);
     }
@@ -484,17 +489,17 @@ test.describe("Story 3.5 status badge accessibility", () => {
     for (const surface of statusSurfaces()) {
       await page.goto(surface.path);
 
-      const cleaning = page.getByLabel("상태: 청소중").first();
+      const cleaning = statusBoard(page, surface).getByLabel("상태: 청소중").first();
       await expect(cleaning).toHaveClass(/bg-status-cleaning/);
       await expect(cleaning).toHaveClass(/text-status-cleaning-foreground/);
       await expect(cleaning).not.toHaveClass(new RegExp(forbiddenWhite));
 
-      const empty = page.getByLabel("상태: 빈방").first();
+      const empty = statusBoard(page, surface).getByLabel("상태: 빈방").first();
       await expect(empty).toHaveClass(/border-status-empty/);
       await expect(empty).toHaveClass(/bg-surface/);
       await expect(empty).toHaveClass(/text-status-empty-foreground/);
 
-      const attention = page.getByLabel("상태: 종료확인").first();
+      const attention = statusBoard(page, surface).getByLabel("상태: 종료확인").first();
       await expect(attention).toHaveClass(/bg-status-complete-check/);
       await expect(attention).not.toHaveClass(/status-attention/);
       await expect(attention).not.toHaveClass(/bg-status-complete-check-glow/);

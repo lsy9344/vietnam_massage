@@ -76,6 +76,10 @@ for (const required of [
 ]) {
   if (!tvPage.includes(required)) errors.push(`src/app/tv/page.tsx missing ${required}`);
 }
+// 객실판의 접근 이름(객실 상태)은 평면도 컴포넌트가 단다.
+if (!read("src/components/domain/room-floor-plan.tsx").includes("common.roomStatusAria")) {
+  errors.push("src/components/domain/room-floor-plan.tsx missing common.roomStatusAria");
+}
 for (const label of ["TV 현황판", "읽기 전용", "객실 상태"]) {
   if (!koMessagesTv.includes(label)) errors.push(`messages/ko.ts missing tv label: ${label}`);
 }
