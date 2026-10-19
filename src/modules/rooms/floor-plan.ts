@@ -200,7 +200,7 @@ export function floorPlanPencilPaths(floor: number, layoutKey: FloorPlanLayoutKe
   const rand = seededRandom(floor * 7919);
   const lines = (segments: readonly FloorPlanSegment[], amp: number) => segments.map((segment) => wobble(segment, rand, amp)).join("");
 
-  const [ex, ey, ew, eh] = layout.elevator;
+  const [ex, ey, ew] = layout.elevator;
   const cx = ex + ew / 2;
   const chevrons: FloorPlanSegment[] = [
     [cx - 9, ey + 24, cx, ey + 14],

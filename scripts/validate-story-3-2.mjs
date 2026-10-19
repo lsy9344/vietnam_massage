@@ -59,7 +59,8 @@ for (const required of [
   // i18n 전환: 한국어 UI 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
   // 운영월이 없을 때 안내는 공용 NoOperatingMonthNotice(그 안에 common.goToOperatingMonths)로 옮겨졌다.
   "NoOperatingMonthNotice",
-  "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4",
+  // 객실 평면도(.scratch/room-floor-plan): 객실판은 층별 평면도이고 방을 누르면 서랍에 RoomStatusCard가 뜬다.
+  "LiveRoomFloorPlan",
   "live.summary.aria",
   "summary.inUseCount",
   "summary.cleaningCount",

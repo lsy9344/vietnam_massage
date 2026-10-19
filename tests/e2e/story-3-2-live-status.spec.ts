@@ -7,8 +7,13 @@ import { defaultRooms } from "@/modules/masters/room-schema";
 const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000;
 const OPERATING_DAY_START_MINUTES = 11 * 60;
 
-const expectedRoomOrder = ["401 호실", "402 호실", "301 호실", "302 호실", "303 호실", "201 호실", "202 호실", "203 호실", "101 호실", "102 호실", "103 호실"];
-const expectedRoomNamePattern = new RegExp(expectedRoomOrder.join("|"));
+// 객실 평면도: 층 카드(4→1층)마다 방이 실제 자리 순서(엘리베이터 쪽 → 창 쪽)로 놓인다.
+const expectedFloorPlan: Record<number, string[]> = {
+  4: ["402 호실", "401 호실"],
+  3: ["303 호실", "302 호실", "301 호실"],
+  2: ["203 호실", "202 호실", "201 호실"],
+  1: ["103 호실", "102 호실", "101 호실"]
+};
 
 function isoDateFromVietnamTime(date: Date) {
   const vietnamTime = new Date(date.getTime() + VIETNAM_OFFSET_MS);
@@ -78,23 +83,46 @@ function kpiTile(region: Locator, label: string, value: string) {
   return region.locator(":scope > div").filter({ hasText: new RegExp(`${label}\\s*${value}`) });
 }
 
+/** 평면도의 층 카드들. 범례(aria-hidden)의 배지는 빼고 방 이름표만 본다. */
+function floors(page: Page) {
+  return page.getByTestId("room-floor-plan").locator("[data-floor]");
+}
+
 async function expectRoomOrder(page: Page) {
-  const defaultRoomCards = page.getByTestId("room-status-card").filter({ hasText: expectedRoomNamePattern });
-  await expect(defaultRoomCards).toHaveCount(11);
-  await expect(defaultRoomCards.locator("h2")).toHaveText(expectedRoomOrder);
+  await expect(floors(page).locator("h2")).toHaveText(["4층", "3층", "2층", "1층"]);
+  await expect(floors(page).getByTestId("floor-plan-room")).toHaveCount(11);
+  for (const [floor, names] of Object.entries(expectedFloorPlan)) {
+    const labels = await page
+      .locator(`[data-floor="${floor}"] [data-testid="floor-plan-room"]`)
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute("aria-label")?.split(", ")[0]));
+    expect(labels).toEqual(names);
+  }
+}
+
+/** 방 이름표를 눌러 서랍의 객실 카드를 연다. 닫을 때는 Esc. */
+async function openRoomCard(room: Locator) {
+  await room.click();
+  return room.page().getByRole("dialog", { name: "선택한 객실" }).getByTestId("room-status-card");
 }
 
 async function expectEndingSoonCard(page: Page) {
-  const endingSoonCard = page.getByTestId("room-status-card").filter({ hasText: "종료임박" }).first();
-  await expect(page.getByLabel("상태: 종료임박").filter({ hasText: "◴" })).toBeVisible();
+  // 손이 가야 하는 방은 번호에 상태색 마커 고리가 있고, 서랍의 객실 카드는 지금처럼 강조된다.
+  const endingSoonRoom = floors(page).getByTestId("floor-plan-room").filter({ has: page.locator(".floor-plan-marker--ending-soon") }).first();
+  await expect(floors(page).getByLabel("상태: 종료임박").filter({ hasText: "◴" })).toBeVisible();
+  await expect(endingSoonRoom).toContainText(/\d+분 남음/);
+  const endingSoonCard = await openRoomCard(endingSoonRoom);
   await expect(endingSoonCard).toHaveClass(/status-attention/);
   await expect(endingSoonCard).toHaveClass(/border-status-ending-soon/);
   await expect(endingSoonCard).toContainText("곧 종료");
   await expect(endingSoonCard).not.toContainText("결제·확인 필요");
+  await page.keyboard.press("Escape");
 
-  const completeCheckCard = page.getByTestId("room-status-card").filter({ hasText: "종료확인" }).first();
+  const completeCheckRoom = floors(page).getByTestId("floor-plan-room").filter({ has: page.locator(".floor-plan-marker--complete-check") }).first();
+  await expect(completeCheckRoom).toContainText("결제·확인 필요");
+  const completeCheckCard = await openRoomCard(completeCheckRoom);
   await expect(completeCheckCard).toHaveClass(/border-status-complete-check/);
   await expect(completeCheckCard).toContainText("결제·확인 필요");
+  await page.keyboard.press("Escape");
 }
 
 async function seedAdmin() {
@@ -426,15 +454,18 @@ test.describe("Story 3.2 live room and call status", () => {
 
     await expect(page.getByRole("heading", { name: "첫화면 실시간 현황" })).toBeVisible();
     await expectRoomOrder(page);
-    await expect(page.getByLabel("상태: 예약").filter({ hasText: "◷" })).toBeVisible();
-    await expect(page.getByLabel("상태: 사용중").filter({ hasText: "●" })).toBeVisible();
+    await expect(floors(page).getByLabel("상태: 예약").filter({ hasText: "◷" })).toBeVisible();
+    await expect(floors(page).getByLabel("상태: 사용중").filter({ hasText: "●" })).toBeVisible();
     await expectEndingSoonCard(page);
-    await expect(page.getByLabel("상태: 종료확인").filter({ hasText: "⚠" })).toBeVisible();
-    await expect(page.getByText("결제·확인 필요")).toBeVisible();
-    await expect(page.getByLabel("상태: 청소중").filter({ hasText: "◐" })).toBeVisible();
-    await expect(page.getByLabel("상태: 빈방").filter({ hasText: "○" }).first()).toBeVisible();
-    await expect(page.getByText("S32 A60").first()).toBeVisible();
-    await expect(page.getByText("E2E32 마사지사").first()).toBeVisible();
+    await expect(floors(page).getByLabel("상태: 종료확인").filter({ hasText: "⚠" })).toBeVisible();
+    await expect(floors(page).getByText("결제·확인 필요")).toBeVisible();
+    await expect(floors(page).getByLabel("상태: 청소중").filter({ hasText: "◐" })).toBeVisible();
+    await expect(floors(page).getByLabel("상태: 빈방").filter({ hasText: "○" }).first()).toBeVisible();
+    // 코스와 담당자는 방을 눌러 연 서랍의 객실 카드에 있다.
+    const inUseCard = await openRoomCard(page.locator(`[data-testid="floor-plan-room"][data-room-id="${seededData.roomIds[1]}"]`));
+    await expect(inUseCard.getByText("S32 A60")).toBeVisible();
+    await expect(inUseCard.getByText("E2E32 마사지사")).toBeVisible();
+    await page.keyboard.press("Escape");
 
     const statusSummary = page.getByRole("region", { name: "오늘 상태 요약" });
     await expect(summaryRow(statusSummary, "예약건수", 8)).toBeVisible();
