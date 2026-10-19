@@ -32,6 +32,7 @@ export const vi: Messages = {
   "shell.tab.rooms": "Phòng",
   "shell.tab.live": "Thời gian thực",
   "shell.tab.tv": "Màn hình TV",
+  "shell.tab.clockCode": "Mã chấm công",
   "shell.tab.schedule": "Lịch làm việc",
   "shell.tab.therapist": "KTV",
   "shell.tab.opsDaily": "Vận hành ngày",
@@ -54,6 +55,7 @@ export const vi: Messages = {
   "shell.date.next": "Ngày sau",
   "shell.date.today": "Hôm nay",
   "shell.openTv": "Mở màn hình TV",
+  "shell.openClockCode": "Xem mã chấm công",
   "shell.me.trigger": "Tôi",
   "shell.me.aria": "Tài khoản của tôi",
   "shell.me.signOut": "Đăng xuất",
@@ -102,6 +104,7 @@ export const vi: Messages = {
   "nav.item.live": "Trạng thái thời gian thực",
   "nav.item.rooms": "Tình trạng phòng",
   "nav.item.tv": "Bảng trạng thái TV",
+  "nav.item.clockCode": "Bảng mã chấm công",
 
   // 로그인
   "auth.signIn.title": "Đăng nhập tài khoản nhân viên",
@@ -1746,6 +1749,26 @@ export const vi: Messages = {
   "therapist.today.todayMarker": "Hôm nay",
   "therapist.today.noCallsThatDay": "Ngày này không có ca được phân.",
   "therapist.today.withPartner": "Cùng với {name}",
+
+  // Nút chấm công vào/ra (ticket 05, spec D13–D15): ô trên cùng tab Hôm nay.
+  "therapist.attendance.checkInButton": "Chấm công vào",
+  "therapist.attendance.checkOutButton": "Chấm công ra",
+  "therapist.attendance.alreadyClockedNotice": "Đã chấm công — Yêu cầu chỉnh sửa",
+  "therapist.attendance.dialog.checkInTitle": "Nhập mã chấm công vào",
+  "therapist.attendance.dialog.checkOutTitle": "Nhập mã chấm công ra",
+  "therapist.attendance.dialog.description": "Nhập mã 4 số hiển thị trên màn hình tại quầy.",
+  "therapist.attendance.dialog.codeAria": "Mã đã nhập",
+  "therapist.attendance.dialog.backspace": "Xóa",
+  "therapist.attendance.dialog.submit": "Xác nhận",
+  "therapist.attendance.dialog.submitting": "Đang xác nhận",
+  "therapist.attendance.error.invalid": "Mã không đúng. Còn {remaining} lần thử",
+  "therapist.attendance.error.locked": "Nhập sai quá nhiều lần, mã bị khóa đến {until}.",
+  "therapist.attendance.error.generic": "Không lưu được giờ chấm công. Vui lòng thử lại.",
+
+  // Màn hình mã chấm công (ticket 05, spec D13): dùng chung ở góc màn hình TV và màn hình nút "Mã chấm công".
+  "clockCode.label": "Mã chấm công",
+  "clockCode.aria": "Mã chấm công, thay đổi mỗi phút",
+  "clockCode.pageDescription": "Thay đổi mỗi phút. KTV nhập mã này ở tab 'Hôm nay' để chấm công.",
 
   // Tab Chấm công (ticket 06): thông báo thiếu giờ ra (dùng chung với tab Hôm nay), lịch tháng, bảng chi tiết ngày.
   "therapist.attendance.clockOutMissingNotice.label": "Cần kiểm tra",

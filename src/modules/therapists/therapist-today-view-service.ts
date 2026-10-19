@@ -36,10 +36,12 @@ export type TherapistTodayDayDto = {
   calls: TherapistTodayCallDto[];
 };
 
+/** 오늘 출퇴근 상태(M4). 05의 출근·퇴근 버튼 자리가 이 값으로 어느 버튼을 보일지 정한다. */
+export type TherapistTodayAttendanceStatus = "check_in_available" | "check_out_available" | "both_recorded";
+
 /**
- * "오늘" 탭(M4)의 응답. 05(출근·퇴근 버튼)·06(퇴근 미입력 안내)이 이 타입에 필드를 더한다(출퇴근
- * 상태, 퇴근 미입력 안내 여부) — 일반 객체 타입이라 속성을 더해도 기존 필드는 그대로다.
- * expectedPayoutAmount(오늘 예상 코스 수당, M8)는 07이 이 자리에 더한다.
+ * "오늘" 탭(M4)의 응답. 05(출근·퇴근 상태)·06(퇴근 미입력 안내)·07(오늘 예상 코스 수당)이 각자
+ * 필드를 더했다 — 일반 객체 타입이라 속성을 더해도 기존 필드는 그대로다.
  */
 export type TherapistTodayViewDto = {
   /** 오늘 운영일부터 7일, 날짜별로 묶음(스펙 D10). 그날 내 콜이 없어도 날짜는 들어간다. */
@@ -51,6 +53,9 @@ export type TherapistTodayViewDto = {
     nextCallInMinutes: number | null;
     /** 오늘 한 것(사용중·청소중·방문완료, M7). 원장 Therapist 현황 줄의 callCounts.done과 같은 판정이다. */
     doneCount: number;
+    /** 오늘 출퇴근 상태(티켓 05, M4). 그날의 운영월이 아직 없으면 출근 가능으로 본다(눌러보면 05의
+     * 서비스가 OPERATING_MONTH_NOT_FOUND를 낸다 — 이 화면은 그 드문 경우를 미리 판단하지 않는다). */
+    attendanceStatus: TherapistTodayAttendanceStatus;
     /**
      * 운영일이 끝났는데 퇴근 미입력인 날짜(스펙 D17, 티켓 06). 오래된 날부터 온다. 비어 있으면
      * 안내를 안 보인다. 요청 버튼은 09가 단다.
@@ -87,6 +92,11 @@ type TherapistTodayServiceCallRecord = {
 // 같은 모양이어야 한다).
 type TherapistTodayPrismaClient = TherapistClockOutMissingPrismaClient & {
   serviceCall: { findMany(args: unknown): Promise<TherapistTodayServiceCallRecord[]> };
+  /** 오늘 출퇴근 상태(티켓 05)를 정하는 데만 쓴다. */
+  operatingMonth: { findUnique(args: unknown): Promise<{ id: string; monthKey: string } | null> };
+  therapistAttendance: {
+    findUnique(args: unknown): Promise<{ isActive: boolean; checkOutMinute: number | null } | null>;
+  };
 };
 
 function getClient(client?: TherapistTodayPrismaClient) {
@@ -215,6 +225,7 @@ export async function getTherapistTodayView(input: {
     dayStart,
     calls: todayRecords.map((record) => ({ startTime: record.startTime, status: record.status }))
   });
+  const attendanceStatus = await todayAttendanceStatus(client, today, input.employeeId);
   const clockOutMissingDates = await listTherapistClockOutMissingDates({ employeeId: input.employeeId, now, prismaClient: client });
 
   // 담당 콜이 없으면 오늘 몫 수당도 없다 — 일별 정산을 다시 부르지 않고 0으로 둔다(M8).
@@ -228,5 +239,27 @@ export async function getTherapistTodayView(input: {
       })
     : 0;
 
-  return { days, today: { serviceDate: today, nextCallInMinutes, doneCount, clockOutMissingDates, expectedPayoutAmount } };
+  return {
+    days,
+    today: { serviceDate: today, nextCallInMinutes, doneCount, attendanceStatus, clockOutMissingDates, expectedPayoutAmount }
+  };
+}
+
+/**
+ * 오늘 출퇴근 상태(티켓 05). 그날의 운영월이 아직 없으면(드문 경우) 출근 가능으로 본다 — 05의 출근
+ * 코드 서비스가 직접 운영월·퇴근월 상태를 다시 확인하므로 여기서는 보수적인 기본값만 돌려준다.
+ */
+async function todayAttendanceStatus(
+  client: TherapistTodayPrismaClient,
+  today: string,
+  employeeId: string
+): Promise<TherapistTodayAttendanceStatus> {
+  const operatingMonth = await client.operatingMonth.findUnique({ where: { monthKey: today.slice(0, 7) } });
+  if (!operatingMonth) return "check_in_available";
+
+  const attendance = await client.therapistAttendance.findUnique({
+    where: { operatingMonthId_attendanceDate_employeeId: { operatingMonthId: operatingMonth.id, attendanceDate: toDateOnly(today), employeeId } }
+  });
+  if (!attendance?.isActive) return "check_in_available";
+  return attendance.checkOutMinute === null ? "check_out_available" : "both_recorded";
 }

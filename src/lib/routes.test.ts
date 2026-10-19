@@ -22,6 +22,8 @@ const accessMatrix: Record<
   "/live": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: false, therapist: false },
   "/rooms": { administrator: true, counter: true, settlement_manager: false, waiter: true, read_only_viewer: true, therapist: false },
   "/tv": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: true, therapist: false },
+  // 출근 코드 크게 띄우기(티켓 05, 스펙 D13): 카운터와 관리자만 연다.
+  "/clock-code": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: false, therapist: false },
   "/calls": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: false, therapist: false },
   // 티켓 03: 고객 화면은 지금 콜 원장에 들어가는 역할에게만 연다(명세 F08 기준 6).
   "/customers": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: false, therapist: false },

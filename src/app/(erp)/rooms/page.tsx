@@ -2,6 +2,7 @@ import { RoomStatusCard } from "@/components/domain/room-status-card";
 import { RoomStatusCounts } from "@/components/domain/room-status-counts";
 import { DateContextControls } from "@/components/shell/date-context-controls";
 import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-notice";
+import { OpenClockCodeLink } from "@/components/shell/open-clock-code-link";
 import { OpenTvLink } from "@/components/shell/open-tv-link";
 import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 import { RoomStatusRefresh, RoomStatusRefreshController, RoomStatusStaleNotice } from "@/components/domain/room-status-refresh-controller";
@@ -54,7 +55,12 @@ export default async function RoomsPage({ searchParams }: { searchParams: Promis
       <div className="screen">
         <ScreenToolbar
           account={account}
-          action={<OpenTvLink context={context} locale={locale} role={account.role} />}
+          action={
+            <div className="flex items-center gap-2">
+              <OpenTvLink context={context} locale={locale} role={account.role} />
+              <OpenClockCodeLink locale={locale} role={account.role} />
+            </div>
+          }
           context={context}
           dateControls={
             <DateContextControls date={serviceDate} locale={locale} months={operatingMonths} path="/rooms" selectedMonth={selectedMonth} />

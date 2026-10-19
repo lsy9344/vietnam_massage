@@ -25,8 +25,9 @@ function businessMinuteOf(clock: string, dayStartClock: string) {
  * (원장 Therapist 현황 줄, "오늘 한 것" 같은 숫자인지 비교용)를 같은 DB로 함께 돌린다. createMemoryPrisma는
  * 공용 모듈이 아니므로(코드베이스 지도 14절) 이 파일에 필요한 모델만 둔다. include/select는 보지 않고
 // 항상 같은 모양의 "꽉 찬" 레코드를 돌려준다 — 실제 Prisma의 선택 동작을 흉내 내지 않는다.
+ * options.seedAttendance는 티켓 05가 더한 오늘 출퇴근 상태(attendanceStatus) 테스트용이다.
  */
-function createMemoryPrisma() {
+function createMemoryPrisma(options: { seedAttendance?: { isActive?: boolean; checkOutMinute: number | null } } = {}) {
   const operatingMonth = {
     id: "month-1",
     monthKey: "2042-03",
@@ -316,7 +317,9 @@ function createMemoryPrisma() {
   return {
     operatingMonth: {
       async findUnique({ where }: any) {
-        return where.id === operatingMonth.id ? operatingMonth : null;
+        if (where.id !== undefined) return where.id === operatingMonth.id ? operatingMonth : null;
+        if (where.monthKey !== undefined) return where.monthKey === operatingMonth.monthKey ? operatingMonth : null;
+        return null;
       }
     },
     employee: {
@@ -349,6 +352,11 @@ function createMemoryPrisma() {
     therapistAttendance: {
       async findMany() {
         return [] as any[];
+      },
+      async findUnique({ where }: any) {
+        const composite = where?.operatingMonthId_attendanceDate_employeeId;
+        if (!options.seedAttendance || !composite || composite.employeeId !== "emp-me") return null;
+        return { isActive: options.seedAttendance.isActive ?? true, checkOutMinute: options.seedAttendance.checkOutMinute };
       }
     },
     plannedWorkingDay: {
@@ -469,6 +477,27 @@ describe("getTherapistTodayView", () => {
 
     // now=14:00, 다음 콜은 15:00(call-party)이다. 10:00에 시작한 call-inuse는 이미 시작했으니 "다음"이 아니다.
     assert.equal(view.today.nextCallInMinutes, businessMinuteOf("15:00", "09:00") - businessMinuteOf("14:00", "09:00"));
+  });
+
+  it("오늘 출퇴근 상태(티켓 05): 기록이 없으면 출근 가능이다", async () => {
+    const client = createMemoryPrisma();
+    const view = await getTherapistTodayView({ employeeId: "emp-me", now, prismaClient: client as any });
+
+    assert.equal(view.today.attendanceStatus, "check_in_available");
+  });
+
+  it("오늘 출퇴근 상태(티켓 05): 출근만 있으면 퇴근 가능이다", async () => {
+    const client = createMemoryPrisma({ seedAttendance: { checkOutMinute: null } });
+    const view = await getTherapistTodayView({ employeeId: "emp-me", now, prismaClient: client as any });
+
+    assert.equal(view.today.attendanceStatus, "check_out_available");
+  });
+
+  it("오늘 출퇴근 상태(티켓 05): 출근·퇴근이 모두 있으면 둘 다 찍음이다", async () => {
+    const client = createMemoryPrisma({ seedAttendance: { checkOutMinute: 900 } });
+    const view = await getTherapistTodayView({ employeeId: "emp-me", now, prismaClient: client as any });
+
+    assert.equal(view.today.attendanceStatus, "both_recorded");
   });
 
   it("오늘 예상 코스 수당은 0이 아니고, 일별 정산 서비스의 그날 내 행 totalCommissionAmount와 같다(티켓 07, M8)", async () => {
