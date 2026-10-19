@@ -4353,7 +4353,7 @@ describe("therapist availability call counts", () => {
 const autoFinishNow = new Date("2026-06-10T08:20:00.000Z");
 
 function autoFinishAt(prismaClient: ReturnType<typeof createMemoryPrisma>, now = autoFinishNow) {
-  return autoFinishOverdueCalls({ operatingMonthId: "month-2026-06", serviceDate: availabilityDate, actorId: "counter-account", now, prismaClient });
+  return autoFinishOverdueCalls({ operatingMonthId: "month-2026-06", serviceDate: availabilityDate, now, prismaClient });
 }
 
 function inUseCall(prismaClient: ReturnType<typeof createMemoryPrisma>, input: Partial<Parameters<typeof addAvailabilityCall>[1]> & { id: string }) {
@@ -4368,7 +4368,8 @@ function inUseCall(prismaClient: ReturnType<typeof createMemoryPrisma>, input: P
 }
 
 describe("auto cleaning (1018 spec D14)", () => {
-  it("turns an in-use call past its display end into cleaning, with the display end as its actual end, a status history and an auto-finish audit", async () => {
+  // 사람이 한 일이 아니므로 행위자는 시스템이다. 상태 이력은 계정이 필요해 남기지 않고, 감사가 이전·이후 상태를 남긴다.
+  it("turns an in-use call past its display end into cleaning, with the display end as its actual end and a system auto-finish audit", async () => {
     const prismaClient = createMemoryPrisma();
     inUseCall(prismaClient, { id: "over" });
 
@@ -4377,12 +4378,10 @@ describe("auto cleaning (1018 spec D14)", () => {
     const [row] = await listServiceCallsForDate({ operatingMonthId: "month-2026-06", serviceDate: availabilityDate, prismaClient });
     assert.equal(row.status, "청소중");
     assert.equal(row.actualEndTime, "15:00");
-    assert.deepEqual(
-      prismaClient.statusHistories.map((history: any) => [history.serviceCallId, history.previousStatus, history.newStatus, history.changedByAccountId]),
-      [["over", "사용중", "청소중", "counter-account"]]
-    );
+    assert.equal(prismaClient.statusHistories.length, 0);
     assert.equal(prismaClient.auditEvents.length, 1);
     const audit = prismaClient.auditEvents[0];
+    assert.equal(audit.actorId, "system");
     assert.equal(audit.action, "service_call.auto_finished");
     assert.equal(audit.reason, "자동 종료");
     assert.equal(audit.beforeValue.status, "사용중");
@@ -4473,7 +4472,6 @@ describe("auto cleaning (1018 spec D14)", () => {
     const results = await Promise.all([autoFinishAt(prismaClient), autoFinishAt(prismaClient)]);
 
     assert.deepEqual(results.flat(), ["raced"]);
-    assert.equal(prismaClient.statusHistories.length, 1);
     assert.equal(prismaClient.auditEvents.length, 1);
   });
 });

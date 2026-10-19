@@ -41,7 +41,7 @@ export default async function RoomsPage({ searchParams }: { searchParams: Promis
 
   const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
   // 자동 청소 중(1018 스펙 D14): 그 영업일을 읽기 전에 표시 종료를 지난 사용중 콜을 정리한다.
-  await autoFinishOverdueCalls({ operatingMonthId: selectedMonth.id, serviceDate, actorId: account.id });
+  await autoFinishOverdueCalls({ operatingMonthId: selectedMonth.id, serviceDate });
   const [roomStatuses] = await Promise.all([listRoomStatuses({ operatingMonthId: selectedMonth.id, serviceDate, includeOverlaps: true })]);
   const lastUpdatedAt = latestRoomStatusUpdatedAt(roomStatuses, new Date().toISOString());
 

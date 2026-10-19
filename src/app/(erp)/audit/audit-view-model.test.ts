@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  auditActorName,
   auditChangeSummary,
   auditFieldChanges,
   auditReason,
@@ -200,5 +201,14 @@ describe("auditTargetLabel", () => {
     assert.equal(auditTargetLabel("ko", "service_call"), "콜");
     assert.equal(auditTargetLabel("vi", "monthly_close"), "Chốt tháng");
     assert.equal(auditTargetLabel("ko", "missing_story13_target"), "missing_story13_target");
+  });
+});
+
+describe("auditActorName", () => {
+  it("names the system actor of automatic changes, and otherwise the account's name or its raw id", () => {
+    assert.equal(auditActorName("ko", "system", undefined), "시스템(자동)");
+    assert.equal(auditActorName("vi", "system", undefined), "Hệ thống (tự động)");
+    assert.equal(auditActorName("ko", "acc-1", { name: "카운터" }), "카운터");
+    assert.equal(auditActorName("ko", "legacy-id", undefined), "legacy-id");
   });
 });

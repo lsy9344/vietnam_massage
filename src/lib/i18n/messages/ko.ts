@@ -1531,6 +1531,7 @@ export const ko = {
   "audit.title": "변경 이력 조회",
   "audit.meta.recent": "최근 100건",
   "audit.meta.noDelete": "삭제 불가 이력",
+  "audit.actor.system": "시스템(자동)",
   "audit.field.targetType": "대상 유형",
   "audit.field.targetTypePlaceholder": "service_call",
   "audit.field.startDate": "시작일",

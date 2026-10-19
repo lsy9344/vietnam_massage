@@ -8,7 +8,7 @@ import { BUSINESS_TIME_ZONE_OFFSET_MINUTES } from "@/lib/business-time";
 import { defaultLocale, type Locale } from "@/lib/i18n/config";
 import { codeLabel } from "@/lib/i18n/codes";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
-import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
+import { SYSTEM_AUDIT_ACTOR_ID, type AuditJsonSnapshot } from "@/modules/audit/audit-event";
 import { assertOperatingMonthPayoutWritable, isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import { listActiveCodeItems, listActiveTimeSlots } from "@/modules/masters/code-service";
 import { listActiveCourses } from "@/modules/masters/course-service";
@@ -1624,7 +1624,8 @@ function cleaningStatusFor(inUseStatus: string, activeStatuses: string[]) {
 /**
  * 자동 청소 중(1018 스펙 D14, ADR 0008): 원장·객실·실시간·TV 화면과 가능 판정이 그 영업일을 읽기 전에 부른다.
  * 실제입장이 있고 실제 종료가 없는 사용중 콜이 표시 종료를 지났으면 청소중으로 바꾸고 실제 종료 = 표시 종료로 저장한다.
- * 상태 이력과 감사("자동 종료")를 남기며, 행위자는 그 화면을 연 계정이다.
+ * 사람이 한 일이 아니므로 감사("자동 종료")의 행위자는 시스템이다. 상태 이력은 계정이 있어야 해서 남기지 않고,
+ * 감사가 이전·이후 상태를 남긴다. 그 화면을 연 계정(읽기 전용 역할일 수도 있다)의 이름으로 쓰지 않는다.
  * - 운영월이 잠겼거나, 입장이 없거나, 코스 길이를 모르면 건드리지 않는다.
  * - 종료 취소(청소중 → 사용중)한 적이 있는 콜은 손님이 아직 있다는 뜻이라 다시 끝내지 않는다.
  * - 읽은 버전(updatedAt)일 때만 고쳐서, 같은 요청이 동시에 와도 한 번만 쓴다.
@@ -1633,7 +1634,6 @@ function cleaningStatusFor(inUseStatus: string, activeStatuses: string[]) {
 export async function autoFinishOverdueCalls(input: {
   operatingMonthId: string;
   serviceDate: string;
-  actorId: string;
   now?: Date;
   prismaClient?: ServiceCallPrismaClient;
 }): Promise<string[]> {
@@ -1641,7 +1641,6 @@ export async function autoFinishOverdueCalls(input: {
   if (!parsed.success) {
     throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "조회 조건이 올바르지 않습니다.", "INVALID_SERVICE_CALL_QUERY");
   }
-  const actorId = requireActor(input.actorId);
   const client = getClient(input.prismaClient);
   const where = { operatingMonthId: parsed.data.operatingMonthId, serviceDate: toDateOnly(parsed.data.serviceDate) };
   // 대부분의 읽기는 끝낼 콜이 없다. 먼저 좁게 물어서 없으면 바로 돌아간다.
@@ -1687,12 +1686,9 @@ export async function autoFinishOverdueCalls(input: {
       });
       if (result.count !== 1) return false;
       const after = await findServiceCallWithRelations(tx, record.id);
-      await tx.serviceCallStatusHistory.create({
-        data: { serviceCallId: record.id, previousStatus: record.status, newStatus: cleaning, changedByAccountId: actorId }
-      });
       await recordAuditEvent(
         {
-          actorId,
+          actorId: SYSTEM_AUDIT_ACTOR_ID,
           action: "service_call.auto_finished",
           targetType: "service_call",
           targetId: record.id,

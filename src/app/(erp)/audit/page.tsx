@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   AUDIT_TARGET_TYPES,
+  auditActorName,
   auditChangeSummary,
   auditFieldChanges,
   auditReason,
@@ -81,7 +82,7 @@ function toEntryView(
   return {
     id: log.id,
     time: auditDateTime(locale, log.createdAt),
-    actorName: actor?.name ?? log.actorId,
+    actorName: auditActorName(locale, log.actorId, actor),
     actorAccountId: actor && actor.accountId !== actor.name ? actor.accountId : null,
     targetLabel: auditTargetLabel(locale, log.targetType),
     targetId: log.targetId,

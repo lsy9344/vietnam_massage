@@ -64,7 +64,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
   const tab = parseLedgerTab(params.tab);
   const ledgerDate = { operatingMonthId: selectedMonth.id, serviceDate };
   // 자동 청소 중(1018 스펙 D14): 그 영업일을 읽기 전에 표시 종료를 지난 사용중 콜을 정리한다.
-  await autoFinishOverdueCalls({ ...ledgerDate, actorId: account.id });
+  await autoFinishOverdueCalls(ledgerDate);
   const isLocked = isOperatingMonthPayoutLocked(selectedMonth.status);
   const canViewSettlementAmounts = account.role === "administrator" || account.role === "settlement_manager";
 

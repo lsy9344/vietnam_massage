@@ -1,3 +1,6 @@
+/** 사람이 아니라 서버가 한 일(자동 청소 중, ADR 0008)의 감사 행위자. 계정 id가 아니므로 감사 화면이 따로 이름을 붙인다. */
+export const SYSTEM_AUDIT_ACTOR_ID = "system";
+
 export const auditActionPattern = /^[a-z]+(_[a-z]+)*\.[a-z]+(_[a-z]+)*$/;
 
 export class AuditDomainError extends Error {

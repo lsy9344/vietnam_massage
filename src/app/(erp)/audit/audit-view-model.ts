@@ -5,11 +5,18 @@ import type { Role } from "@/lib/authorization";
 import { t, type MessageKey } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
 import { canAccessRoute } from "@/lib/routes";
+import { SYSTEM_AUDIT_ACTOR_ID } from "@/modules/audit/audit-event";
 
 /**
  * 감사 화면이 서버 페이지와 클라이언트 작업면에서 함께 쓰는 값과 규칙. "use client" 모듈에 두면
  * 서버 페이지에서 값이 아니라 클라이언트 참조가 되므로 여기에 둔다.
  */
+
+/** 처리자 이름: 서버가 한 일(자동 종료)은 시스템, 계정이면 그 이름, 풀 수 없는 옛 기록은 저장된 id 그대로다. */
+export function auditActorName(locale: Locale, actorId: string, actor: { name: string } | undefined) {
+  if (actorId === SYSTEM_AUDIT_ACTOR_ID) return t(locale, "audit.actor.system");
+  return actor?.name ?? actorId;
+}
 
 /** 고른 감사 기록의 id. 주소에 남아 새로고침과 링크로 같은 상세 패널이 열린다. */
 export const AUDIT_LOG_PARAM = "log";

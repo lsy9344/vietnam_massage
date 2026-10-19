@@ -1529,6 +1529,7 @@ export const vi: Messages = {
   "audit.title": "Tra cứu lịch sử thay đổi",
   "audit.meta.recent": "100 mục gần nhất",
   "audit.meta.noDelete": "Lịch sử không thể xóa",
+  "audit.actor.system": "Hệ thống (tự động)",
   "audit.field.targetType": "Loại đối tượng",
   "audit.field.targetTypePlaceholder": "service_call",
   "audit.field.startDate": "Ngày bắt đầu",
