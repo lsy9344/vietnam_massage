@@ -24,6 +24,9 @@ export const ko = {
   "shell.zone.closing": "마감",
   "shell.zone.reports": "보고",
   "shell.zone.settings": "설정",
+  // therapist 역할은 이 구역을 쓰지 않아 운영팀 도크·도구줄에는 실제로 나오지 않지만, Zone 전체에 걸친
+  // template literal key 타입(shell.zone.${zone})을 만족하려면 키가 있어야 한다.
+  "shell.zone.therapist": "Therapist",
   "shell.tabs.aria": "{zone} 화면",
   "shell.tab.calls": "원장",
   "shell.tab.customers": "고객",
@@ -58,6 +61,9 @@ export const ko = {
   "shell.role.waiter": "웨이터",
   "shell.role.settlement_manager": "정산 담당",
   "shell.role.read_only_viewer": "조회 전용",
+  // 운영팀 MeMenu는 therapist 세션에서 쓰이지 않지만(Therapist는 TherapistMeMenu를 쓴다), Role 전체에
+  // 걸친 template literal key 타입(shell.role.${role})을 만족하려면 키가 있어야 한다.
+  "shell.role.therapist": "Therapist",
 
   // 언어 전환
   "locale.switch.aria": "화면 언어 전환",
@@ -1601,4 +1607,20 @@ export const ko = {
   "audit.target.therapistCourseRate": "Therapist 코스 수당",
   "audit.target.opsDailyIncentiveRule": "운영팀 일일 인센티브 규칙",
   "audit.target.opsMonthlyIncentiveRule": "운영팀 월 인센티브 규칙",
+
+  // Therapist 전용 화면(티켓 01): 아래 탭 네 개, "나" 메뉴, 새로고침 공통 조각. vi에서 Therapist는 "KTV"다.
+  "therapist.nav.aria": "Therapist 화면 이동",
+  "therapist.nav.today": "오늘",
+  "therapist.nav.attendance": "근태",
+  "therapist.nav.payout": "수당",
+  "therapist.nav.notices": "공지",
+  "therapist.me.staffCodeLabel": "직원 코드 {code}",
+  "therapist.me.phoneLabel": "전화번호 {phone}",
+  "therapist.me.phoneEmpty": "등록된 전화번호가 없습니다",
+  "therapist.emptyTab.title": "준비 중",
+  "therapist.emptyTab.description": "이 화면은 다음 업데이트에서 채워집니다.",
+  "therapist.refresh.aria": "갱신 상태",
+  "therapist.refresh.lastUpdated": "마지막 갱신",
+  "therapist.refresh.refreshing": "갱신 중",
+  "therapist.refresh.refresh": "새로고침",
 } as const;

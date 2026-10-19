@@ -413,6 +413,40 @@ select {
   }
 }
 
+/* Therapist 전용 화면(티켓 01). 아래 탭 네 개는 업무 흐름 도크와 같은 떠 있는 섬 모양(.shell-dock*)을
+   그대로 쓰고, 넷을 늘 고르게 벌린다(도크의 840px 미만 전용 규칙은 폭과 무관하게 적용한다). */
+.therapist-main {
+  display: block;
+  min-height: 100vh;
+  padding-bottom: calc(var(--dock-space) + 1rem);
+}
+
+.therapist-main:focus,
+.therapist-tab-bar:focus {
+  outline: none;
+}
+
+.therapist-tab-bar .shell-dock-zones {
+  justify-content: space-around;
+}
+
+/* 공지 탭의 읽지 않은 수 자리(스펙 D7). 숫자가 없으면 그리지 않는다. */
+.therapist-tab-badge {
+  display: inline-flex;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  margin-left: 0.375rem;
+  padding: 0 0.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--danger);
+  color: var(--danger-foreground);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 .screen {
   padding: 1rem;
 }

@@ -6,7 +6,9 @@ import type { MessageKey } from "@/lib/i18n/types";
  * 도크, 구역 안 탭, 서버의 화면 접근 검사가 모두 이 목록에서 나온다
  * (docs/design/2026-10-14-workflow-information-architecture.md 7.2절).
  */
-export const zones = ["ledger", "floor", "customers", "settlements", "closing", "reports", "settings"] as const;
+// "therapist"는 Therapist 전용 구역이다(티켓 01). therapist 역할만 roles에 들어가므로
+// 운영팀 도크의 구역 계산(getDockZones 등을 ops 역할로 부르는 WorkflowDock)에는 섞이지 않는다.
+export const zones = ["ledger", "floor", "customers", "settlements", "closing", "reports", "settings", "therapist"] as const;
 
 export type Zone = (typeof zones)[number];
 
@@ -72,7 +74,12 @@ export const screenRoutes: readonly ScreenRoute[] = [
   { path: "/masters/employees", labelKey: "shell.tab.employees", zone: "settings", roles: ["administrator"] },
   { path: "/masters/courses", labelKey: "shell.tab.courses", zone: "settings", roles: ["administrator"] },
   { path: "/masters/sheet-mapping", labelKey: "shell.tab.sheetMapping", zone: "settings", roles: ["administrator", "read_only_viewer"] },
-  { path: "/audit", labelKey: "shell.tab.audit", zone: "settings", roles: ["administrator"] }
+  { path: "/audit", labelKey: "shell.tab.audit", zone: "settings", roles: ["administrator"] },
+  // Therapist 전용 화면(티켓 01, 스펙 M15). 운영월·날짜 맥락을 공유하지 않아 dateContext가 없다.
+  { path: "/therapist", labelKey: "therapist.nav.today", zone: "therapist", roles: ["therapist"] },
+  { path: "/therapist/attendance", labelKey: "therapist.nav.attendance", zone: "therapist", roles: ["therapist"] },
+  { path: "/therapist/payout", labelKey: "therapist.nav.payout", zone: "therapist", roles: ["therapist"] },
+  { path: "/therapist/notices", labelKey: "therapist.nav.notices", zone: "therapist", roles: ["therapist"] }
 ];
 
 const roleLandingPath: Record<Role, string> = {
@@ -80,7 +87,8 @@ const roleLandingPath: Record<Role, string> = {
   counter: "/calls",
   settlement_manager: "/settlements",
   waiter: "/rooms",
-  read_only_viewer: "/rooms"
+  read_only_viewer: "/rooms",
+  therapist: "/therapist"
 };
 
 export function getRoleLandingPath(role: Role) {

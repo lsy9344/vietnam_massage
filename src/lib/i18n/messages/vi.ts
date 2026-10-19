@@ -25,6 +25,7 @@ export const vi: Messages = {
   "shell.zone.closing": "Chốt tháng",
   "shell.zone.reports": "Báo cáo",
   "shell.zone.settings": "Thiết lập",
+  "shell.zone.therapist": "KTV",
   "shell.tabs.aria": "Màn hình {zone}",
   "shell.tab.calls": "Sổ gọi",
   "shell.tab.customers": "Khách",
@@ -59,6 +60,7 @@ export const vi: Messages = {
   "shell.role.waiter": "Phục vụ",
   "shell.role.settlement_manager": "Quản lý đối soát",
   "shell.role.read_only_viewer": "Chỉ xem",
+  "shell.role.therapist": "KTV",
 
   // 언어 전환
   "locale.switch.aria": "Chuyển ngôn ngữ hiển thị",
@@ -1599,4 +1601,20 @@ export const vi: Messages = {
   "audit.target.therapistCourseRate": "Hoa hồng liệu trình KTV",
   "audit.target.opsDailyIncentiveRule": "Quy tắc thưởng ngày nhóm vận hành",
   "audit.target.opsMonthlyIncentiveRule": "Quy tắc thưởng tháng nhóm vận hành",
+
+  // Màn hình dành riêng cho KTV (ticket 01): 4 tab dưới, menu "Tôi", cơ chế làm mới chung.
+  "therapist.nav.aria": "Di chuyển màn hình KTV",
+  "therapist.nav.today": "Hôm nay",
+  "therapist.nav.attendance": "Chấm công",
+  "therapist.nav.payout": "Thu nhập",
+  "therapist.nav.notices": "Thông báo",
+  "therapist.me.staffCodeLabel": "Mã nhân viên {code}",
+  "therapist.me.phoneLabel": "Số điện thoại {phone}",
+  "therapist.me.phoneEmpty": "Chưa có số điện thoại",
+  "therapist.emptyTab.title": "Đang chuẩn bị",
+  "therapist.emptyTab.description": "Màn hình này sẽ có nội dung ở bản cập nhật sau.",
+  "therapist.refresh.aria": "Trạng thái cập nhật",
+  "therapist.refresh.lastUpdated": "Cập nhật gần nhất",
+  "therapist.refresh.refreshing": "Đang cập nhật",
+  "therapist.refresh.refresh": "Làm mới",
 };

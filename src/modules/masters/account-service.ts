@@ -16,7 +16,10 @@ const validRoles = [
   "counter",
   "waiter",
   "settlement_manager",
-  "read_only_viewer"
+  "read_only_viewer",
+  // 티켓 01: 로그인·세션이 therapist 역할을 인식하게 한다. 발급 화면(02)의 employee-schema accountRoles는
+  // 아직 therapist를 넣지 않는다 — 그 화면은 THERAPIST 구분 직원에게만 이 역할을 주는 제약을 따로 구현한다.
+  "therapist"
 ] as const;
 
 type UserAccountRecord = {
