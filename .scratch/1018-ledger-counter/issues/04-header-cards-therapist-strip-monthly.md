@@ -24,5 +24,5 @@
   - 하루 수납: 관리자·정산 담당일 때만 `includeMonthTill`로 운영월 시재를 읽고, `DailySummaryStrip`도 그때만 "이번 달" 설명과 시재 행을 그린다. 카운터의 HTML(RSC 데이터 포함)에는 그 달 숫자가 없다(E2E가 그 달 다른 날의 고유 지출 123,457로 확인).
   - 검증: tsc 통과, 단위 971개 통과, 검증 스크립트는 기준에서도 실패하는 4-6만 실패. 새 E2E `story-1018-04-header-cards-therapist-strip.spec.ts`(7개)와 고친 `story-ledger-therapist-call-counts.spec.ts`(3개) 통과. 1280·1024·390px 화면 확인.
   - 전체 E2E(운영 빌드, 새 DB, 직렬, 356개): 341 통과, 9 실패. 실패는 기존 목록(2-5:268, 5-3:173·242, 5-5:211·250, 5-6:176, shell-workflow-dock:157)과 ticket-21:198·ticket-29:201이다. 21·29(두 명 코스 "D 90분 가능" 버튼을 못 찾음)는 기준 커밋 4cf5c3f를 같은 조건으로 전체 실행해도 똑같이 실패했고(기준은 그 밖에 2-1:287), 두 스펙만 새 DB에서 돌리면 2회 모두 통과한다. 앞 스펙이 남긴 상태에 따른 기존 순서 의존 실패다. 이 티켓이 만든 새 실패는 없다.
-  - 남은 일: 조각 1(01–04) 프리뷰 배포는 사용자 확인 뒤에 한다. 04는 새 마이그레이션이 없다(근무표 출근 예정 시각 칸은 01에서 운영 DB에 들어갔다).
+  - 2026-10-19 조각 1(01–04) 프리뷰 배포(사용자 확인): 85b7ff7을 깨끗한 워크트리에서 `cf:build` → `wrangler versions upload --preview-alias app-expansion`, 버전 086fb963(태그 `1018-slice1-85b7ff7`). 비밀값 3개(MAINTENANCE_MODE·NEXTAUTH_SECRET·NEXTAUTH_URL)와 Hyperdrive 운영 ID, 프리뷰 `/sign-in` 200, `/api/auth/providers` callbackUrl이 프리뷰 도메인임을 확인했다. 운영 트래픽은 bff7cf91 100% 그대로다. 02–04에는 새 마이그레이션이 없고 01의 두 마이그레이션은 운영 DB에 적용돼 있다(배포 전 `_prisma_migrations`로 확인). 프리뷰는 운영 DB에 붙어 있어, 프리뷰 화면을 열면 자동 청소 중(ADR 0008)이 운영 데이터의 지난 사용중 콜을 청소중으로 바꾼다.
 
