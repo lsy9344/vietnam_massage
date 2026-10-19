@@ -82,7 +82,7 @@ function summaryCards(html: string) {
 
 describe("하루 수납·지출 탭 요약", () => {
   it("puts payment total, net sales, cash balance and bank balance on separate pastel cards with the service values", () => {
-    const html = render();
+    const html = render({ showSettlementAmounts: true });
     assert.match(html, /<dl aria-label="하루 수납 요약"/);
     const cards = summaryCards(html);
 
@@ -130,6 +130,7 @@ describe("하루 수납·지출 탭 요약", () => {
 
   it("shows the day and month till receipts, expenses and balances, marking a shortage in the table", () => {
     const html = render({
+      showSettlementAmounts: true,
       summary: summary({
         till: {
           day: { cashReceipts: 1000, cashExpenses: 51000, cashBalance: -50000, bankReceipts: 0, bankExpenses: 0, bankBalance: 0 },
@@ -144,6 +145,17 @@ describe("하루 수납·지출 탭 요약", () => {
     assert.match(text(till), /이번 달 현금 9,000,000 VND 300,000 VND 8,700,000 VND/);
     assert.match(text(till), /계좌 2,000,000 VND 100,000 VND 1,900,000 VND/);
     assert.match(till, /text-danger[^"]*">부족 50,000 VND/);
+  });
+
+  // 1018 스펙 D18: 이번 달 숫자는 관리자·정산 담당에게만 보낸다. 카운터에게는 오늘 숫자만 남는다.
+  it("leaves this month's balances and till out for viewers without settlement amounts", () => {
+    const counter = render();
+    const cards = text(summaryCards(counter));
+
+    assert.match(cards, /현금 잔액 1,450,000 VND/);
+    assert.match(cards, /계좌 잔액 400,000 VND/);
+    assert.doesNotMatch(counter, /이번 달|8,700,000|9,000,000|1,900,000/);
+    assert.match(text(counter.match(/<table[^>]*aria-label="시재"[\s\S]*?<\/table>/)?.[0] ?? ""), /오늘 현금/);
   });
 
   it("keeps settlement amounts and the therapist assignment column for settlement viewers only", () => {

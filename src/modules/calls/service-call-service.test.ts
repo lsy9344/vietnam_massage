@@ -3662,7 +3662,7 @@ describe("therapist availability", () => {
     const therapist1 = own.find((row) => row.therapistId === "therapist-1");
     assert.equal(therapist1?.available, true);
     // 오늘 콜 수는 그대로 센다.
-    assert.deepEqual(therapist1?.callCounts, { done: 0, reserved: 1 });
+    assert.deepEqual(therapist1?.callCounts, { done: 0, finished: 0, reserved: 1 });
   });
 
   it("keeps 15:00 free when the earlier call ends at 15:00, and chains occupancy through a call that starts then", async () => {
@@ -4195,13 +4195,14 @@ function addAvailabilityAttendance(
 // 별개의 테이블이라, 근무 예정·휴무와 실제 출근이 서로 다른 값으로 함께 나올 수 있다(티켓 29).
 function addPlannedWorkingDay(
   prismaClient: ReturnType<typeof createMemoryPrisma>,
-  input: { employeeId: string; status: "근무 예정" | "휴무"; date?: string }
+  input: { employeeId: string; status: "근무 예정" | "휴무"; date?: string; plannedStartTime?: string | null }
 ) {
   const date = input.date ?? availabilityDate;
   prismaClient.plannedWorkingDays.set(`${input.employeeId}::${date}`, {
     employeeId: input.employeeId,
     workDate: dbDate(date),
-    planStatus: input.status
+    planStatus: input.status,
+    plannedStartTime: input.plannedStartTime ?? null
   });
 }
 
@@ -4337,15 +4338,15 @@ describe("therapist availability call counts", () => {
     assert.deepEqual(
       rows.map((row) => ({ therapistId: row.therapistId, callCounts: row.callCounts })),
       [
-        { therapistId: "therapist-1", callCounts: { done: 3, reserved: 2 } },
-        { therapistId: "therapist-2", callCounts: { done: 0, reserved: 2 } }
+        { therapistId: "therapist-1", callCounts: { done: 3, finished: 2, reserved: 2 } },
+        { therapistId: "therapist-2", callCounts: { done: 0, finished: 0, reserved: 2 } }
       ]
     );
   });
 
   it("gives zero counts to a Therapist without calls that day", async () => {
     const rows = await availabilityAt(createMemoryPrisma(), "15:00");
-    assert.deepEqual(rows.map((row) => row.callCounts), [{ done: 0, reserved: 0 }, { done: 0, reserved: 0 }]);
+    assert.deepEqual(rows.map((row) => row.callCounts), [{ done: 0, finished: 0, reserved: 0 }, { done: 0, finished: 0, reserved: 0 }]);
   });
 });
 
@@ -6465,5 +6466,84 @@ describe("customer link correction", () => {
         }),
       (error: unknown) => error instanceof ServiceCallDomainError && error.code === "CUSTOMER_NOT_FOUND"
     );
+  });
+});
+
+// 1018 스펙 D17: 원장 Therapist 현황 줄. 고른 시각(빠른 예약의 첫 시각)과 따로, 오늘이면 지금 기준의 상태를 함께 준다.
+describe("therapist availability current state for the ledger strip (1018 spec D17)", () => {
+  const currentOf = (rows: Awaited<ReturnType<typeof listTherapistAvailability>>, therapistId: string) =>
+    rows.find((row) => row.therapistId === therapistId)?.current;
+
+  it("reads in use with the expected end, and free now with the next reservation and minutes until it, at the current time", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-1", checkOutMinute: null });
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-2", checkOutMinute: null });
+    addAvailabilityCall(prismaClient, {
+      id: "call-1500-in-use",
+      startTime: "15:00",
+      actualEntryTime: "15:00",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+    addAvailabilityCall(prismaClient, {
+      id: "call-1700-reserved",
+      startTime: "17:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-2" }]
+    });
+
+    // 고른 시각은 11:00이지만 현황은 지금(15:20) 기준이다.
+    const rows = await availabilityAtNow(prismaClient, "11:00");
+
+    assert.deepEqual(currentOf(rows, "therapist-1"), { state: "in_use", expectedEnd: "16:00", nextReservationTime: null, freeMinutes: null });
+    assert.deepEqual(currentOf(rows, "therapist-2"), { state: "available", expectedEnd: null, nextReservationTime: "17:00", freeMinutes: 100 });
+    assert.equal(rows.find((row) => row.therapistId === "therapist-1")?.available, true);
+  });
+
+  it("reads before check-in with the planned start time from the schedule, and checked out after check-out", async () => {
+    const prismaClient = createMemoryPrisma();
+    addPlannedWorkingDay(prismaClient, { employeeId: "therapist-1", status: "근무 예정", plannedStartTime: "18:00" });
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-2", checkOutMinute: 900 });
+
+    const rows = await availabilityAtNow(prismaClient, "11:00");
+    const therapist1 = rows.find((row) => row.therapistId === "therapist-1");
+
+    assert.equal(therapist1?.plannedStartTime, "18:00");
+    assert.deepEqual(therapist1?.current, { state: "before_check_in", expectedEnd: null, nextReservationTime: null, freeMinutes: null });
+    assert.equal(currentOf(rows, "therapist-2")?.state, "checked_out");
+    assert.equal(rows.find((row) => row.therapistId === "therapist-2")?.plannedStartTime, null);
+  });
+
+  it("uses the chosen time instead of now on a day that is not today", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-1", checkOutMinute: null });
+    addAvailabilityCall(prismaClient, {
+      id: "call-1100-in-use",
+      startTime: "11:00",
+      actualEntryTime: "11:00",
+      courseId: "course-a",
+      status: "사용중",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const rows = await availabilityAtNow(prismaClient, "11:30", new Date("2026-06-12T08:20:00.000Z"));
+
+    assert.deepEqual(currentOf(rows, "therapist-1"), { state: "in_use", expectedEnd: "12:00", nextReservationTime: null, freeMinutes: null });
+  });
+
+  it("counts finished calls as cleaning and visit complete only, apart from done which also has calls in use", async () => {
+    const prismaClient = createMemoryPrisma();
+    const assignments = [{ role: "THERAPIST_1", employeeId: "therapist-1" }];
+    addAvailabilityCall(prismaClient, { id: "in-use", startTime: "11:00", actualEntryTime: "11:00", courseId: "course-a", status: "사용중", assignments });
+    addAvailabilityCall(prismaClient, { id: "cleaning", startTime: "12:00", actualEntryTime: "12:00", actualEndTime: "13:00", courseId: "course-a", status: "청소중", assignments });
+    addAvailabilityCall(prismaClient, { id: "complete", startTime: "13:00", actualEntryTime: "13:00", courseId: "course-a", status: "방문완료", assignments });
+    addAvailabilityCall(prismaClient, { id: "reserved", startTime: "18:00", courseId: "course-a", status: "예약", assignments });
+    addAvailabilityCall(prismaClient, { id: "no-show", startTime: "19:00", courseId: "course-a", status: "노쇼", assignments });
+
+    const rows = await availabilityAt(prismaClient, "11:00");
+
+    assert.deepEqual(rows.find((row) => row.therapistId === "therapist-1")?.callCounts, { done: 3, finished: 2, reserved: 1 });
   });
 });

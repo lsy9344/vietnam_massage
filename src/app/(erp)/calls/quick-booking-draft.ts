@@ -103,6 +103,11 @@ export type QuickBookingEvent =
   | { type: "guest"; position: number; changes: Partial<QuickBookingGuest> }
   /** 원장의 "1명 추가": 새 요청 id로 처음부터, 일행의 시각·고객/메모·일행 id를 채워 Therapist 단계에서 시작한다. */
   | { type: "joinParty"; join: QuickBookingJoinParty; nextRequestId: string }
+  /**
+   * 원장 Therapist 현황 줄의 카드(1018 스펙 D17): 새 요청 id로 처음부터, 원장 날짜·시각과 손님 1의 Therapist를 채워
+   * Therapist 단계에서 시작한다. 아직 고친 것이 없다.
+   */
+  | { type: "presetTherapist"; therapistId: string; serviceDate: string; startTime: string; nextRequestId: string }
   | NewCallRowSaveEvent;
 
 export function initialQuickBookingState(
@@ -137,6 +142,14 @@ export function quickBookingReducer(state: QuickBookingState, event: QuickBookin
       joinParty: event.join,
       save: { ...fresh.save, draft: { ...fresh.save.draft, partyId, startTime, customerMemo } }
     };
+  }
+  if (event.type === "presetTherapist") {
+    const fresh = initialQuickBookingState(
+      { operatingMonthId: state.save.draft.operatingMonthId, serviceDate: event.serviceDate },
+      event.nextRequestId
+    );
+    const { therapistId, startTime } = event;
+    return { ...fresh, step: "therapist", save: { ...fresh.save, draft: { ...fresh.save.draft, therapist1Id: therapistId, startTime } } };
   }
   if (event.type === "partySize" || event.type === "guest") {
     // 일행에 1명을 더할 때는 그 한 명만 고른다.

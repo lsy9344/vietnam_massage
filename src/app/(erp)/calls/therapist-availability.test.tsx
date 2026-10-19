@@ -17,7 +17,9 @@ function row(overrides: Partial<TherapistAvailabilityRowDto> = {}): TherapistAva
     nextReservationTime: "16:00",
     freeMinutes: 60,
     plannedWorkingDayStatus: "미입력",
-    callCounts: { done: 0, reserved: 0 },
+    callCounts: { done: 0, finished: 0, reserved: 0 },
+    plannedStartTime: null,
+    current: { state: "before_check_in", expectedEnd: null, nextReservationTime: null, freeMinutes: null },
     courses: [
       { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "possible", requiresSecondTherapist: false },
       { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, verdict: "time_short", requiresSecondTherapist: false }
@@ -175,7 +177,7 @@ describe("therapist availability panel", () => {
     const html = renderView({
       open: true,
       rows: [
-        row({ therapistId: "t-busy", therapistName: "린", attendance: "checked_in", callCounts: { done: 3, reserved: 2 } }),
+        row({ therapistId: "t-busy", therapistName: "린", attendance: "checked_in", callCounts: { done: 3, finished: 3, reserved: 2 } }),
         row({ therapistId: "t-idle", therapistName: "마이", attendance: "checked_in" }),
         row({ therapistId: "t-before", therapistName: "전", attendance: "before_check_in" })
       ]

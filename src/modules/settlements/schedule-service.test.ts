@@ -426,11 +426,11 @@ describe("schedule service", () => {
     assert.equal(result.length, 2);
     assert.deepEqual(
       result.find((row) => row.employeeId === "thr-1"),
-      { employeeId: "thr-1", status: "휴무" }
+      { employeeId: "thr-1", status: "휴무", plannedStartTime: null }
     );
     assert.deepEqual(
       result.find((row) => row.employeeId === "thr-2"),
-      { employeeId: "thr-2", status: "미입력" }
+      { employeeId: "thr-2", status: "미입력", plannedStartTime: null }
     );
   });
 

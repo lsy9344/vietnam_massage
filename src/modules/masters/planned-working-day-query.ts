@@ -31,6 +31,8 @@ const statusQuerySchema = z.object({
 export type PlannedWorkingDayStatusDto = {
   employeeId: string;
   status: PlannedWorkingDayCellStatus;
+  /** 근무표의 출근 예정 시각(HH:MM, 1018 스펙 D1). 적지 않았으면 null. */
+  plannedStartTime: string | null;
 };
 
 const errorFields: readonly ScheduleErrorField[] = ["employeeId", "date", "status"];
@@ -61,7 +63,7 @@ function toIsoDate(value: Date) { return value.toISOString().slice(0, 10); }
 // 재사용할 수 있도록 plannedWorkingDay.findMany만 요구하는 좁은 타입이다. calls 쪽의
 // AssignedCallReadClient(listAssignedServiceCallsForEmployeeOnDate)와 같은 방식.
 type PlannedWorkingDayReadClient = {
-  plannedWorkingDay: { findMany(args?: unknown): Promise<Array<{ employeeId: string; planStatus: string }>> };
+  plannedWorkingDay: { findMany(args?: unknown): Promise<Array<{ employeeId: string; planStatus: string; plannedStartTime?: string | null }>> };
 };
 
 /**
@@ -84,10 +86,14 @@ export async function listPlannedWorkingDayStatusesForDate(input: {
   const rows = await client.plannedWorkingDay.findMany({
     where: { employeeId: { in: uniqueEmployeeIds }, workDate: toDate(parsed.data.date) }
   });
-  const statusByEmployeeId = new Map(rows.map((row) => [row.employeeId, row.planStatus as WorkPlanStatus]));
+  const rowByEmployeeId = new Map(rows.map((row) => [row.employeeId, row]));
 
-  return uniqueEmployeeIds.map((employeeId) => ({
-    employeeId,
-    status: statusByEmployeeId.get(employeeId) ?? unsetPlanStatus
-  }));
+  return uniqueEmployeeIds.map((employeeId) => {
+    const row = rowByEmployeeId.get(employeeId);
+    return {
+      employeeId,
+      status: row ? (row.planStatus as WorkPlanStatus) : unsetPlanStatus,
+      plannedStartTime: row?.plannedStartTime ?? null
+    };
+  });
 }

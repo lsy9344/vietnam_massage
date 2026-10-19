@@ -489,9 +489,21 @@ export type TherapistAvailabilityRowDto = {
   // 근무표(27)에 적힌 그날의 근무 예정. 실제 출근(attendance)과는 다른 테이블이라 서로 다른 값일 수 있고,
   // 가능 판정·코스 버튼을 바꾸지 않는 안내일 뿐이다(스토리 12–13, 60, 104, V07).
   plannedWorkingDayStatus: PlannedWorkingDayCellStatus;
-  // 그날 이 Therapist가 맡은 콜 수(원장 띠, 빠른 예약 카드). done은 사용중·청소중·방문완료, reserved는 예약이다.
-  // 노쇼·취소는 세지 않는다. Therapist가 둘인 콜은 두 사람에게 각자 1개다(정산과 같은 방식). 가능 판정과는 무관하다.
-  callCounts: { done: number; reserved: number };
+  // 그날 이 Therapist가 맡은 콜 수(원장 현황 줄, 빠른 예약 카드). done은 사용중·청소중·방문완료, finished는 서비스가 끝난
+  // 청소중·방문완료(현황 줄의 "완료", 1018 스펙 D17), reserved는 예약이다. 노쇼·취소는 세지 않는다. Therapist가 둘인 콜은
+  // 두 사람에게 각자 1개다(정산과 같은 방식). 가능 판정과는 무관하다.
+  callCounts: { done: number; finished: number; reserved: number };
+  /** 근무표의 출근 예정 시각(HH:MM). 적지 않았으면 null. */
+  plannedStartTime: string | null;
+  // 원장 현황 줄의 지금 상태(1018 스펙 D17). 고른 날짜가 영업일 오늘이면 지금, 아니면 고른 시각 기준이다. 출근 기록이 먼저이고,
+  // 출근 중이면 점유(예약 포함)로 사용 중과 지금 가능을 나눈다. 사용 중이면 expectedEnd(점유 끝), 지금 가능이면 다음 예약과
+  // 그때까지 남은 분을 준다. 판정·코스 버튼과는 무관하다.
+  current: {
+    state: "available" | "in_use" | "before_check_in" | "checked_out";
+    expectedEnd: string | null;
+    nextReservationTime: string | null;
+    freeMinutes: number | null;
+  };
   courses: TherapistAvailabilityCourseDto[];
 };
 
@@ -1747,6 +1759,24 @@ function intervalOverlaps(intervals: AvailabilityInterval[], start: number, end:
   return intervals.some((interval) => interval.start < end && interval.end > start);
 }
 
+function currentTherapistState(
+  attendance: TherapistAvailabilityRowDto["attendance"],
+  intervals: AvailabilityInterval[],
+  at: number
+): TherapistAvailabilityRowDto["current"] {
+  const none = { expectedEnd: null, nextReservationTime: null, freeMinutes: null };
+  if (attendance !== "checked_in") return { state: attendance, ...none };
+  const occupiedUntil = coveringEnd(intervals, at);
+  if (occupiedUntil !== null) return { ...none, state: "in_use", expectedEnd: formatBusinessMinute(occupiedUntil) };
+  const nextStart = nextIntervalStart(intervals, at);
+  return {
+    ...none,
+    state: "available",
+    nextReservationTime: nextStart === null ? null : formatBusinessMinute(nextStart),
+    freeMinutes: nextStart === null ? null : nextStart - at
+  };
+}
+
 export async function listTherapistAvailability(input: {
   operatingMonthId: string;
   serviceDate: string;
@@ -1847,14 +1877,17 @@ export async function listTherapistAvailability(input: {
   const nowMinute = Math.floor((now.getTime() - instantFromBusinessMinute(parsed.data.serviceDate, 0).getTime()) / 60_000);
   const isToday = nowMinute >= dayStart && nowMinute < dayStart + AVAILABILITY_DAY_MINUTES;
   const pastShiftCheckWindow = isToday && at - nowMinute > AVAILABILITY_SHIFT_CHECK_MINUTES;
-  const callCountsByTherapist = new Map<string, { done: number; reserved: number }>();
+  const currentAt = isToday ? nowMinute : at;
+  const callCountsByTherapist = new Map<string, { done: number; finished: number; reserved: number }>();
   for (const call of calls) {
-    const done = isInUseStatus(call.status) || isCleaningStatus(call.status) || isCompletedServiceCallStatus(call.status);
+    const finished = isCleaningStatus(call.status) || isCompletedServiceCallStatus(call.status);
+    const done = finished || isInUseStatus(call.status);
     if (!done && !isReservationStatus(call.status)) continue;
     for (const therapistId of new Set(assignedTherapistIds(call))) {
-      const counts = callCountsByTherapist.get(therapistId) ?? { done: 0, reserved: 0 };
+      const counts = callCountsByTherapist.get(therapistId) ?? { done: 0, finished: 0, reserved: 0 };
       if (done) counts.done += 1;
       else counts.reserved += 1;
+      if (finished) counts.finished += 1;
       callCountsByTherapist.set(therapistId, counts);
     }
   }
@@ -1870,9 +1903,7 @@ export async function listTherapistAvailability(input: {
     date: parsed.data.serviceDate,
     prismaClient: client
   });
-  const plannedWorkingDayStatusByTherapist = new Map(
-    plannedWorkingDayStatuses.map((status) => [status.employeeId, status.status])
-  );
+  const plannedWorkingDayByTherapist = new Map(plannedWorkingDayStatuses.map((status) => [status.employeeId, status]));
 
   // 방문완료 금액 계산과 같은 firstCurrentRate로 고른다. 0 VND도 수당이다.
   const ratesByTherapistCourse = groupRatesByTherapistCourse(rates);
@@ -1889,6 +1920,7 @@ export async function listTherapistAvailability(input: {
     const nextStart = nextIntervalStart(intervals, at);
     const freeMinutes = available ? Math.max((nextStart ?? dayEnd ?? at) - at, 0) : null;
     const attendance = attendanceByTherapist.get(therapist.id) ?? "before_check_in";
+    const plannedWorkingDay = plannedWorkingDayByTherapist.get(therapist.id);
     return {
       therapistId: therapist.id,
       therapistName: therapist.displayName,
@@ -1898,8 +1930,10 @@ export async function listTherapistAvailability(input: {
       freeFrom: occupiedUntil === null ? null : formatBusinessMinute(occupiedUntil),
       nextReservationTime: nextStart === null ? null : formatBusinessMinute(nextStart),
       freeMinutes,
-      plannedWorkingDayStatus: plannedWorkingDayStatusByTherapist.get(therapist.id) ?? "미입력",
-      callCounts: callCountsByTherapist.get(therapist.id) ?? { done: 0, reserved: 0 },
+      plannedWorkingDayStatus: plannedWorkingDay?.status ?? "미입력",
+      callCounts: callCountsByTherapist.get(therapist.id) ?? { done: 0, finished: 0, reserved: 0 },
+      plannedStartTime: plannedWorkingDay?.plannedStartTime ?? null,
+      current: currentTherapistState(attendance, intervals, currentAt),
       courses: offeredCourses.map((course) => {
         const fits = available && freeMinutes !== null && course.durationMinutes <= freeMinutes;
         const rateHolders = rateHoldersByCourse.get(course.courseId) ?? [];
@@ -3390,7 +3424,7 @@ export function ledgerStatusCountsFromRows(rows: ServiceCallRowDto[]): LedgerSta
   };
 }
 
-// 원장 띠 끝의 "미배정 N": 예약 상태인데 첫 번째 Therapist가 비어 있는 콜 수.
+// 원장 현황 줄 끝의 "미지명 N"(1018 스펙 D17): 예약 상태인데 첫 번째 Therapist가 비어 있는 콜 수.
 export function unassignedReservedCallCountFromRows(rows: ServiceCallRowDto[]) {
   return rows.filter((row) => isReservationStatus(row.status) && row.therapist1 === null).length;
 }

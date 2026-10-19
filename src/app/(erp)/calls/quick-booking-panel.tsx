@@ -38,7 +38,7 @@ import {
   type QuickBookingStep
 } from "@/app/(erp)/calls/quick-booking-draft";
 import { nowClockString, selectNowSlot } from "@/app/(erp)/calls/quick-booking-now-slot";
-import { onQuickBookingJoinParty } from "@/app/(erp)/calls/quick-booking-party-join";
+import { onQuickBookingJoinParty, onQuickBookingWithTherapist } from "@/app/(erp)/calls/quick-booking-party-join";
 import {
   AvailabilityRow,
   availabilityRowWarnings,
@@ -1213,28 +1213,41 @@ export function QuickBookingPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request]);
 
-  // 원장의 "일행에 1명 추가"(티켓 04). 쓰던 초안이 있으면 버릴지 먼저 묻는다(패널을 닫을 때와 같은 안내).
-  const [pendingJoin, setPendingJoin] = useState<QuickBookingJoinParty | null>(null);
-  function startJoin(join: QuickBookingJoinParty) {
-    dispatch({ type: "joinParty", join, nextRequestId: newRequestId() });
+  // 원장의 "일행에 1명 추가"(티켓 04)와 Therapist 현황 줄의 카드(1018 스펙 D17). 쓰던 초안이 있으면 버릴지 먼저
+  // 묻는다(패널을 닫을 때와 같은 안내).
+  type PendingStart = { kind: "join"; join: QuickBookingJoinParty } | { kind: "therapist"; therapistId: string };
+  const [pendingStart, setPendingStart] = useState<PendingStart | null>(null);
+  function start(next: PendingStart) {
+    if (next.kind === "join") {
+      dispatch({ type: "joinParty", join: next.join, nextRequestId: newRequestId() });
+      void loadAvailability(next.join.serviceDate, next.join.startTime);
+    } else {
+      // 오늘 원장이면 지금 시각 칸, 아니면 원장의 첫 시각으로 그 Therapist의 가능 코스를 바로 본다.
+      const time = serviceDate === businessTodayIsoDate() ? selectNowSlot(options.timeSlots, nowClockString()) : initialAvailabilityTime;
+      dispatch({ type: "presetTherapist", therapistId: next.therapistId, serviceDate, startTime: time, nextRequestId: newRequestId() });
+      void loadAvailability(serviceDate, time);
+    }
     setActiveGuest(1);
     setSavedNotice(null);
     setOpen(true);
-    void loadAvailability(join.serviceDate, join.startTime);
   }
-  const startJoinRef = useRef(startJoin);
-  startJoinRef.current = startJoin;
+  const startRef = useRef(start);
+  startRef.current = start;
   const touchedRef = useRef(touched);
   touchedRef.current = touched;
-  useEffect(
-    () =>
-      onQuickBookingJoinParty((join) => {
-        if (isLocked) return;
-        if (touchedRef.current) setPendingJoin(join);
-        else startJoinRef.current(join);
-      }),
-    [isLocked]
-  );
+  useEffect(() => {
+    const request = (next: PendingStart) => {
+      if (isLocked) return;
+      if (touchedRef.current) setPendingStart(next);
+      else startRef.current(next);
+    };
+    const stopJoin = onQuickBookingJoinParty((join) => request({ kind: "join", join }));
+    const stopTherapist = onQuickBookingWithTherapist((therapistId) => request({ kind: "therapist", therapistId }));
+    return () => {
+      stopJoin();
+      stopTherapist();
+    };
+  }, [isLocked]);
 
   function requestClose() {
     if (touched) {
@@ -1289,6 +1302,8 @@ export function QuickBookingPanel({
         description={t("calls.quickBooking.description")}
         onOpenChange={(next) => {
           if (next) {
+            // 머리 버튼은 늘 빈 예약으로 연다. 고친 것 없이 닫은 "1명 추가"나 현황 줄 카드의 미리 고른 Therapist를 남기지 않는다.
+            if (!touched) dispatch({ type: "discard", nextRequestId: newRequestId() });
             setSavedNotice(null);
             setOpen(true);
             return;
@@ -1457,17 +1472,17 @@ export function QuickBookingPanel({
       />
       <ConfirmDialog
         cancelLabel={t("common.confirm.cancel")}
-        confirmLabel={t("calls.quickBooking.joinParty.discardConfirm")}
+        confirmLabel={t(pendingStart?.kind === "therapist" ? "calls.quickBooking.presetTherapist.discardConfirm" : "calls.quickBooking.joinParty.discardConfirm")}
         description={t("calls.leaveGuard.description")}
         onConfirm={() => {
-          const join = pendingJoin;
-          setPendingJoin(null);
-          if (join) startJoin(join);
+          const next = pendingStart;
+          setPendingStart(null);
+          if (next) start(next);
         }}
         onOpenChange={(next) => {
-          if (!next) setPendingJoin(null);
+          if (!next) setPendingStart(null);
         }}
-        open={pendingJoin !== null}
+        open={pendingStart !== null}
         title={t("calls.leaveGuard.title")}
       />
     </>

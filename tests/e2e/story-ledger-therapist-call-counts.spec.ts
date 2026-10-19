@@ -4,8 +4,9 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 
-// 원장 띠와 빠른 예약 카드의 Therapist별 "한 것 +예약": 한 것은 사용중·청소중·방문완료, 예약은 예약 상태다.
-// 출근 중이면 0개여도, 퇴근했으면 콜이 있을 때만, 출근 전이면 띠에 없다. 끝에는 Therapist 없는 예약의 "미배정 N".
+// 빠른 예약 카드의 Therapist별 "한 것 +예약"(한 것은 사용중·청소중·방문완료, 예약은 예약 상태)과, 같은 콜 수로 그리는
+// 원장 Therapist 현황 줄(1018 티켓 04, "완료"는 청소중·방문완료). 현황 줄 자체의 대상·정렬·동작은
+// story-1018-04-header-cards-therapist-strip.spec.ts가 본다.
 const account = { accountId: "tcc_counter", password: "TherapistCount!counter" };
 // 1018 티켓 03: 지난 날짜의 사용중 콜은 읽을 때 자동 청소 중이 끝내므로, 원장 동작은 먼 뒤 날짜에서 본다.
 const monthKey = "2040-09";
@@ -100,11 +101,11 @@ async function cleanup() {
 }
 
 function strip(page: Page) {
-  return page.getByRole("list", { name: "Therapist별 콜 수" });
+  return page.getByRole("region", { name: "Therapist 현황" });
 }
 
 function stripItem(page: Page, therapistId: string) {
-  return strip(page).locator(`[data-therapist-call-strip="${therapistId}"]`);
+  return strip(page).locator(`[data-therapist-status="${therapistId}"]`);
 }
 
 async function openLedger(page: Page) {
@@ -112,7 +113,7 @@ async function openLedger(page: Page) {
   await expect(page.getByRole("list", { name: "콜 원장 목록" })).toBeVisible();
 }
 
-test.describe("원장 띠와 빠른 예약 카드의 Therapist별 한 것 +예약", () => {
+test.describe("빠른 예약 카드의 한 것 +예약과 원장 현황 줄의 콜 수", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeAll(async () => {
@@ -179,26 +180,6 @@ test.describe("원장 띠와 빠른 예약 카드의 Therapist별 한 것 +예�
     await prisma.$disconnect();
   });
 
-  test("띠는 출근한 Therapist를 기본 순서로 보이고, 콜 없는 출근자만 ▲로 강조하며, 끝에 미배정 예약 수를 붙인다", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await login(page, account.accountId, account.password);
-    await openLedger(page);
-
-    await expect(strip(page)).toBeVisible();
-    const order = await strip(page).locator("[data-therapist-call-strip]").evaluateAll((items) => items.map((item) => item.getAttribute("data-therapist-call-strip")));
-    expect(order).toEqual([busyId, idleId, outId]);
-
-    // 이용 중 1 + 방문완료 1 = 한 것 2, 예약 1. 노쇼는 세지 않는다.
-    await expect(stripItem(page, busyId)).toContainText("한 것 2, 예약 1");
-    await expect(stripItem(page, idleId)).toContainText("한 것 0, 예약 0, 콜 없음");
-    await expect(stripItem(page, idleId).locator("[data-idle]")).toBeVisible();
-    await expect(stripItem(page, outId)).toContainText("퇴근");
-    await expect(stripItem(page, outId)).toContainText("한 것 1, 예약 0");
-    await expect(strip(page).locator("[data-idle]")).toHaveCount(1);
-    await expect(strip(page)).not.toContainText("TCC 미출근");
-    await expect(strip(page).locator("[data-unassigned-call-count]")).toHaveText("미배정 1");
-  });
-
   test("빠른 예약의 Therapist 카드에도 이름 옆에 같은 숫자가 붙는다", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await login(page, account.accountId, account.password);
@@ -217,7 +198,7 @@ test.describe("원장 띠와 빠른 예약 카드의 Therapist별 한 것 +예�
     await expect(card(outId).locator("[data-therapist-call-count]")).toContainText("한 것 1, 예약 0");
   });
 
-  test("예약을 입장시키면 예약에서 한 것으로 옮겨 가고, 방문완료가 되어도 한 것에 남는다", async ({ page }) => {
+  test("예약을 입장시키면 남은 예약에서 빠지고, 종료해 청소중이 되면 현황 줄의 완료로 들어가 방문완료에도 남는다", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await login(page, account.accountId, account.password);
     await openLedger(page);
@@ -226,20 +207,23 @@ test.describe("원장 띠와 빠른 예약 카드의 Therapist별 한 것 +예�
     await reservedLine.getByRole("button", { name: "16:00 콜 입장" }).click();
     await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: reservedCallId } })).status).toBe("IN_USE");
     await openLedger(page);
-    await expect(stripItem(page, busyId)).toContainText("한 것 3, 예약 0");
+    // 사용중은 완료가 아니다. 이용 중 1 + 방문완료 1 중 완료는 방문완료 1이다.
+    await expect(stripItem(page, busyId)).toContainText("완료 1 · 예약 0");
 
     await reservedLine.getByRole("button", { name: "16:00 콜 결제수단 고르기" }).click();
     await page.getByRole("listbox", { name: "16:00 콜 결제수단 고르기" }).getByRole("option", { name: "카드" }).click();
     await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: reservedCallId } })).paymentMethodCode).toBe("CARD");
     await reservedLine.getByRole("button", { name: "16:00 콜 종료" }).click();
     await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: reservedCallId } })).status).toBe("CLEANING");
+    await openLedger(page);
+    await expect(stripItem(page, busyId)).toContainText("완료 2 · 예약 0");
     await reservedLine.getByRole("button", { name: "16:00 콜 청소 끝" }).click();
     await expect.poll(async () => (await (prisma as any).serviceCall.findUnique({ where: { id: reservedCallId } })).status).toBe("VISIT_COMPLETE");
     await openLedger(page);
-    await expect(stripItem(page, busyId)).toContainText("한 것 3, 예약 0");
+    await expect(stripItem(page, busyId)).toContainText("완료 2 · 예약 0");
   });
 
-  test("휴대폰 폭에서도 띠가 보이고 여러 줄로 나뉘어 화면을 옆으로 밀지 않는다", async ({ page }) => {
+  test("휴대폰 폭에서도 현황 줄이 보이고, 줄 안에서만 옆으로 넘겨 화면을 옆으로 밀지 않는다", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, account.accountId, account.password);
     await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}`);

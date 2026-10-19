@@ -53,3 +53,17 @@ export function ledgerCallHref(target: LedgerDate & { serviceCallId: string }) {
   });
   return `/calls?${params.toString()}`;
 }
+
+/** 원장을 한 Therapist의 콜만 보이게 거르는 주소 매개변수(1018 스펙 D17). 값은 Therapist id다. */
+export const THERAPIST_FILTER_PARAM = "therapist";
+
+/**
+ * 서버를 다시 부르지 않고 지금 주소의 매개변수 하나를 바꾼다(history.replaceState). 앱 라우터의 useSearchParams가
+ * 따라 바뀐다. 브라우저에서만 부른다.
+ */
+export function replaceAddressParam(name: string, value: string | null) {
+  const url = new URL(window.location.href);
+  if (value) url.searchParams.set(name, value);
+  else url.searchParams.delete(name);
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}

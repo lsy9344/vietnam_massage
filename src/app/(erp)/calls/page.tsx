@@ -20,7 +20,7 @@ import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { CallLedgerWorkspace } from "@/app/(erp)/calls/call-ledger-workspace";
 import { LedgerStatusCounts } from "@/app/(erp)/calls/ledger-status-counts";
 import { QuickBookingPanel } from "@/app/(erp)/calls/quick-booking-panel";
-import { TherapistCallStrip } from "@/app/(erp)/calls/therapist-call-counts";
+import { TherapistStatusStrip } from "@/app/(erp)/calls/therapist-status-strip";
 import { CallLeaveGuard } from "@/app/(erp)/calls/unsaved-guard";
 import { ledgerHref, ledgerTabParams, parseLedgerTab, type LedgerTab } from "@/lib/ledger-address";
 import { DateContextControls } from "@/components/shell/date-context-controls";
@@ -104,7 +104,8 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
       listServiceCallsForDate(ledgerDate),
       listServiceCallFormOptions({ operatingMonthId: selectedMonth.id, locale }),
       listDailyExpensesForDate({ operatingMonthId: selectedMonth.id, expenseDate: serviceDate }),
-      getDailyCallLedgerSummary(ledgerDate)
+      // 이번 달 시재는 관리자·정산 담당에게만 읽어 보낸다(1018 스펙 D18). 카운터의 HTML에는 그 숫자가 없다.
+      getDailyCallLedgerSummary({ ...ledgerDate, includeMonthTill: canViewSettlementAmounts })
     ]);
 
     return (
@@ -176,8 +177,8 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
           customerHref={linkToScreen(account.role, "/customers", { operatingMonthId: selectedMonth.id, date: serviceDate })}
           locale={locale}
         />
-        {/* Therapist별 한 것·예약 수. 출근 상태와 콜 수는 빠른 예약에 넘기는 가능 판정 행에 이미 있다. */}
-        <TherapistCallStrip locale={locale} rows={availabilityRows} unassignedCount={unassignedReservedCallCountFromRows(rows)} />
+        {/* Therapist 현황 줄(1018 스펙 D17). 출근 상태·콜 수·지금 상태는 빠른 예약에 넘기는 가능 판정 행에 이미 있다. */}
+        <TherapistStatusStrip canBook={!isLocked} rows={availabilityRows} unassignedCount={unassignedReservedCallCountFromRows(rows)} />
         <CallLedgerWorkspace
           key={`${selectedMonth.id}:${serviceDate}`}
           customers={customers}

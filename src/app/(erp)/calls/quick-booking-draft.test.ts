@@ -228,3 +228,24 @@ describe("quick booking: one more guest for a party (스펙 D14, 티켓 04)", ()
     assert.equal(run(joined, { type: "discard", nextRequestId: "request-4" }).joinParty, null);
   });
 });
+
+describe("quick booking: a Therapist chosen from the ledger status strip (1018 스펙 D17)", () => {
+  it("starts fresh and untouched on the therapist step at the given date and time, with that Therapist chosen and a new request id", () => {
+    const state = run(
+      initialQuickBookingState(ledger, "request-1"),
+      { type: "edit", changes: { customerMemo: "다른 손님", serviceDate: "2026-06-11" } },
+      { type: "partySize", size: 2 },
+      { type: "presetTherapist", therapistId: "therapist-12", serviceDate: "2026-06-10", startTime: "18:00", nextRequestId: "request-2" }
+    );
+
+    assert.equal(state.step, "therapist");
+    assert.equal(state.save.draft.startTime, "18:00");
+    assert.equal(state.touched, false);
+    assert.equal(state.save.requestId, "request-2");
+    assert.deepEqual(state.partyGuests, []);
+    assert.equal(state.joinParty, null);
+    assert.equal(state.save.draft.therapist1Id, "therapist-12");
+    assert.equal(state.save.draft.customerMemo ?? null, null);
+    assert.equal(state.save.draft.serviceDate, "2026-06-10");
+  });
+});

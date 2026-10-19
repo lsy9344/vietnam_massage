@@ -215,6 +215,7 @@ UI를 만들거나 고치기 전에 이 문서를 읽는다. 화면에 새 모�
 - 카드 안 글자는 모두 `text-foreground`다.
 - 계산 근거가 없으면 0 대신 "계산 근거 없음"을 쓴다.
 - 600px 미만에서는 한 열로 쌓는다.
+- 예외: 원장 머리의 상태 카드 7개(1018 티켓 04, `LedgerStatusCounts`)는 건수 계열이지만 파스텔 대신 베이지 면(`bg-surface`)에 같은 모양을 쓴다. 한 줄에 7장을 두고 좁으면 감싸며(600px 미만은 옆 여백 12px), 전체만 요약 숫자 크기이고 상태 카드는 `text-2xl`이다. 상태 이름은 `CallStatusChip` sm이라 원장 줄의 칩과 같은 기호·색이다.
 - 원본의 검정 원 아이콘 배지는 아이콘 패키지가 없어 지금은 쓰지 않는다. 넣게 되면 그 티켓에서 `lucide-react`(`components.json`의 아이콘 설정)를 더한다.
 
 ### 6.8 상태 칩 — `StatusIndicator`, `CallStatusChip`, `SaveStatus`, `WarningSummary`
@@ -227,7 +228,8 @@ UI를 만들거나 고치기 전에 이 문서를 읽는다. 화면에 새 모�
 - 칩 사이는 6px(`gap-1.5`)다. 건수는 칩 끝의 밝은 방울(24px, `--surface` 바탕, 같은 의미색 글자)에 넣는다. 실시간 요약처럼 건수가 오른쪽 값 칸에 있으면 방울 없이 칩만 둔다.
 - 0건이면 채움을 빼고 `--border-strong` 테두리와 `--muted` 글자로 바꾼다(방울이 없는 실시간 요약도 같다). 기호는 그 상태 색으로 남겨 모양으로 알아보게 한다. 그래서 건수가 있는 상태만 튄다. 예약·취소는 원래 채우지 않으므로 0건이어도 그대로다.
 - 원장 목록 줄의 상태 칩은 `size="sm"`(높이 24px, 12px 글자, 12px 기호, 방울 없음)이다. 같은 기호와 색이라 머리의 건수와 줄을 바로 맞춰 볼 수 있다. 1280·1024px에서 가장 긴 베트남어 "Đang sử dụng"이 4px 남기고 들어간다(2026-10-17 측정). 칸이 그보다 좁아지거나 이름이 더 길면 옆 칸을 덮지 않고 말줄임으로 잘린다.
-- 원장 띠와 빠른 예약 카드의 Therapist별 "한 것 +예약"(`TherapistCallCount`)은 칩이 아니라 글자다. 한 것은 `font-semibold`, "+예약"은 `text-muted`다. 출근 중인데 둘 다 0이면 ▲와 `bg-warning-soft text-warning` 알약으로 감싸고, 퇴근이면 흐리게 둔다.
+- 빠른 예약 카드의 Therapist별 "한 것 +예약"(`TherapistCallCount`)은 칩이 아니라 글자다. 한 것은 `font-semibold`, "+예약"은 `text-muted`다. 출근 중인데 둘 다 0이면 ▲와 `bg-warning-soft text-warning` 알약으로 감싸고, 퇴근이면 흐리게 둔다.
+- 원장 Therapist 현황 줄(1018 티켓 04, `therapist-status-strip.tsx`)은 상태 카드 아래에서 가로로 넘기는 작은 카드다(`rounded-md border border-border bg-surface`). 번호(`font-semibold`) · `완료 N · 예약 N`(`text-xs`) 아래에 지금 상태 `StatusIndicator` sm(지금 가능 success, 사용 중 info, 출근 전·퇴근 neutral)과 다음 시각을 둔다. 퇴근 카드는 `text-muted`다. 카드 오른쪽의 작은 "콜만" 버튼은 걸러 보는 동안 검정으로 채우고 카드 테두리도 `border-brand`가 된다. 끝에 같은 모양의 `미지명 N`을 둔다.
 
 ### 6.9 날짜 캡슐
 

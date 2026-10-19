@@ -411,7 +411,9 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
       nextReservationTime: null,
       freeMinutes: 60,
       plannedWorkingDayStatus: "미입력",
-      callCounts: { done: 0, reserved: 0 },
+      callCounts: { done: 0, finished: 0, reserved: 0 },
+      plannedStartTime: null,
+      current: { state: "before_check_in", expectedEnd: null, nextReservationTime: null, freeMinutes: null },
       courses: [{ courseId: "course-a", courseCode: "A", courseName: "A 60분", durationMinutes: 60, verdict: "possible", requiresSecondTherapist: false }]
     };
 
@@ -485,7 +487,9 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
         nextReservationTime: null,
         freeMinutes: 90,
         plannedWorkingDayStatus: "미입력",
-        callCounts: { done: 0, reserved: 0 },
+        callCounts: { done: 0, finished: 0, reserved: 0 },
+        plannedStartTime: null,
+        current: { state: "before_check_in", expectedEnd: null, nextReservationTime: null, freeMinutes: null },
         courses: [{ courseId: "course-d", courseCode: "D", courseName: "D 2:1 90", durationMinutes: 90, verdict: "possible", requiresSecondTherapist: true }]
       },
       {
@@ -498,7 +502,9 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
         nextReservationTime: null,
         freeMinutes: 90,
         plannedWorkingDayStatus: "근무 예정",
-        callCounts: { done: 0, reserved: 0 },
+        callCounts: { done: 0, finished: 0, reserved: 0 },
+        plannedStartTime: null,
+        current: { state: "before_check_in", expectedEnd: null, nextReservationTime: null, freeMinutes: null },
         courses: [{ courseId: "course-d", courseCode: "D", courseName: "D 2:1 90", durationMinutes: 90, verdict: "time_short", requiresSecondTherapist: true }]
       },
       {
@@ -511,7 +517,9 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
         nextReservationTime: null,
         freeMinutes: null,
         plannedWorkingDayStatus: "휴무",
-        callCounts: { done: 0, reserved: 0 },
+        callCounts: { done: 0, finished: 0, reserved: 0 },
+        plannedStartTime: null,
+        current: { state: "before_check_in", expectedEnd: null, nextReservationTime: null, freeMinutes: null },
         courses: [{ courseId: "course-d", courseCode: "D", courseName: "D 2:1 90", durationMinutes: 90, verdict: "rate_missing", requiresSecondTherapist: true }]
       }
     ];
@@ -589,7 +597,9 @@ describe("빠른 예약 — 단계 화면(정적 렌더)", () => {
       nextReservationTime: null,
       freeMinutes: 90,
       plannedWorkingDayStatus: "미입력",
-      callCounts: { done: 0, reserved: 0 },
+      callCounts: { done: 0, finished: 0, reserved: 0 },
+      plannedStartTime: null,
+      current: { state: "before_check_in", expectedEnd: null, nextReservationTime: null, freeMinutes: null },
       courses: [{ courseId: "course-d", courseCode: "D", courseName: "D 2:1 90", durationMinutes: 90, verdict: "possible", requiresSecondTherapist: true }]
     });
     const rows = [baseRow("t-1", "출근자1", "checked_in"), baseRow("t-2", "출근자2", "checked_in"), baseRow("t-3", "미출근자", "before_check_in")];
@@ -755,7 +765,9 @@ describe("빠른 예약 — 일행(스펙 D10–D12, 티켓 02)", () => {
       nextReservationTime: null,
       freeMinutes: 60,
       plannedWorkingDayStatus: "미입력",
-      callCounts: { done: 0, reserved: 0 },
+      callCounts: { done: 0, finished: 0, reserved: 0 },
+      plannedStartTime: null,
+      current: { state: "before_check_in", expectedEnd: null, nextReservationTime: null, freeMinutes: null },
       courses: [{ courseId: "course-a", courseCode: "A", courseName: "A 60분", durationMinutes: 60, verdict: "possible", requiresSecondTherapist: false }]
     };
   }

@@ -97,12 +97,19 @@ function renderList(
     locale = "ko",
     isLocked = false,
     selectedCallId = null,
-    clock = null
-  }: { locale?: "ko" | "vi"; isLocked?: boolean; selectedCallId?: string | null; clock?: { today: string; time: string } | null } = {}
+    clock = null,
+    therapistFilter = null
+  }: {
+    locale?: "ko" | "vi";
+    isLocked?: boolean;
+    selectedCallId?: string | null;
+    clock?: { today: string; time: string } | null;
+    therapistFilter?: string | null;
+  } = {}
 ) {
   return render(
     locale,
-    createElement(CallLedgerList, { clock, customers: [], isLocked, options, rows, selectedCallId, showSettlementAmounts: false })
+    createElement(CallLedgerList, { clock, customers: [], isLocked, options, rows, selectedCallId, showSettlementAmounts: false, therapistFilter })
   );
 }
 
@@ -175,6 +182,28 @@ describe("parties on the two-line ledger (ticket 04, 1018 ticket 02)", () => {
     const html = renderList(rows);
     assert.deepEqual(buttons(head(html, "open")), ["일행 입장", "일행 취소", "1명 추가"]);
     assert.deepEqual(buttons(head(html, "done")), []);
+  });
+
+  // 1018 스펙 D17: 현황 줄의 "콜만" 거르기는 줄을 숨길 뿐 빼지 않는다. 숨은 줄의 저장 상태와 일행 인원이 그대로다.
+  it("hides the calls of other Therapists when filtered, keeping the party's full size and the open call", () => {
+    const other = { id: "therapist-2", displayName: "Therapist 2", staffCode: "THR-002" };
+    const filteredRows = [
+      ledgerRow({ id: "jung-1", startTime: "11:00", customerMemo: "정 대표", partyId: "party-jung", partyPosition: 1 }),
+      ledgerRow({ id: "jung-2", startTime: "11:00", customerMemo: "정 대표", partyId: "party-jung", partyPosition: 2, therapist1: other }),
+      ledgerRow({ id: "solo-other", startTime: "12:00", therapist1: other }),
+      ledgerRow({ id: "solo-open", startTime: "13:00", therapist1: other }),
+      ledgerRow({ id: "only-other-party", startTime: "14:00", partyId: "party-other", partyPosition: 1, therapist1: other }),
+      ledgerRow({ id: "only-other-party-2", startTime: "14:00", partyId: "party-other", partyPosition: 2, therapist1: other })
+    ];
+    const html = renderList(filteredRows, { therapistFilter: "therapist-1", selectedCallId: "solo-open" });
+
+    assert.match(line(html, "jung-1"), /^<li(?![^>]*hidden)/);
+    assert.match(line(html, "jung-2"), /^<li[^>]*hidden/);
+    assert.match(line(html, "solo-other"), /^<li[^>]*hidden/);
+    assert.match(line(html, "solo-open"), /^<li(?![^>]*hidden)/);
+    // 일행 머리는 보이는 손님이 있으면 남고, 인원은 하루 전체로 센다. 보이는 손님이 없는 일행은 머리도 숨는다.
+    assert.match(head(html, "open"), /^<li(?![^>]*hidden)[\s\S]*정 대표 일행 2명/);
+    assert.match(html, /<li[^>]*data-ledger-party="party-other"[^>]*hidden/);
   });
 
   it("locks the party actions in a locked month", () => {

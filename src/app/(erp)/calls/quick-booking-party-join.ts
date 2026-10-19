@@ -16,3 +16,20 @@ export function onQuickBookingJoinParty(handler: (join: QuickBookingJoinParty) =
   window.addEventListener(JOIN_PARTY_EVENT, listener);
   return () => window.removeEventListener(JOIN_PARTY_EVENT, listener);
 }
+
+/**
+ * 원장 Therapist 현황 줄의 카드(1018 스펙 D17)가 그 Therapist를 미리 고른 빠른 예약을 연다. "1명 추가"와 같은 까닭으로
+ * 같은 창 안의 이벤트로 잇는다.
+ */
+const PRESET_THERAPIST_EVENT = "calls:quick-booking-therapist";
+
+export function requestQuickBookingWithTherapist(therapistId: string) {
+  window.dispatchEvent(new CustomEvent<string>(PRESET_THERAPIST_EVENT, { detail: therapistId }));
+}
+
+/** 패널이 "이 Therapist로 빠른 예약" 요청을 받는다. 돌려준 함수로 그만 받는다. */
+export function onQuickBookingWithTherapist(handler: (therapistId: string) => void) {
+  const listener = (event: Event) => handler((event as CustomEvent<string>).detail);
+  window.addEventListener(PRESET_THERAPIST_EVENT, listener);
+  return () => window.removeEventListener(PRESET_THERAPIST_EVENT, listener);
+}

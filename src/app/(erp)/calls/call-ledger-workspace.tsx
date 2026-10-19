@@ -8,7 +8,7 @@ import { CallLedgerList } from "@/app/(erp)/calls/call-ledger-list";
 import type { CallPanelFocusRequest } from "@/app/(erp)/calls/call-edit-panel";
 import { ledgerListKey } from "@/app/(erp)/calls/ledger-flow";
 import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
-import { CALL_PARAM } from "@/lib/ledger-address";
+import { CALL_PARAM, replaceAddressParam, THERAPIST_FILTER_PARAM } from "@/lib/ledger-address";
 import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 
 /**
@@ -67,10 +67,7 @@ function useCallSelection() {
       if (selected === null) origin.current = id;
       if (scrollToRow) reveal.current = id;
     }
-    const url = new URL(window.location.href);
-    if (id) url.searchParams.set(CALL_PARAM, id);
-    else url.searchParams.delete(CALL_PARAM);
-    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    replaceAddressParam(CALL_PARAM, id);
   }
 
   return { selected, select };
@@ -95,6 +92,14 @@ export function CallLedgerWorkspace({
   const t = useT();
   const { selected, select } = useCallSelection();
   const selectedRow = selected ? (rows.find((row) => row.id === selected) ?? null) : null;
+  // 현황 줄 카드의 "콜만" 버튼(1018 스펙 D17)이 주소에 남긴 Therapist. 목록은 그 Therapist가 맡은 콜과 열린 콜만 보인다.
+  const therapistFilter = useSearchParams()?.get(THERAPIST_FILTER_PARAM) ?? null;
+  // 현황 줄 카드와 같은 표시 이름이다(기준정보 선택지 이름에는 직원 코드가 붙는다).
+  const filteredName = therapistFilter
+    ? (rows.flatMap((row) => [row.therapist1, row.therapist2]).find((therapist) => therapist?.id === therapistFilter)?.displayName ??
+      options.therapists.find((option) => option.value === therapistFilter)?.label ??
+      therapistFilter)
+    : null;
   const [panelHost, setPanelHost] = useState<HTMLElement | null>(null);
   const [panelFocus, setPanelFocus] = useState<CallPanelFocusRequest | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -192,6 +197,14 @@ export function CallLedgerWorkspace({
     // 전체 화면 시트로 목록과 도크를 덮는다(스펙 D23).
     <div className={selected ? "grid grid-cols-1 items-start gap-6 min-[1200px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "grid grid-cols-1"}>
       <div className="min-w-0" ref={listRef}>
+        {filteredName ? (
+          <p className="mb-3 flex flex-wrap items-center gap-3 rounded-md bg-readonly px-3 py-2 text-sm font-semibold text-foreground" data-therapist-filter={therapistFilter ?? ""}>
+            {t("calls.therapistStatus.filtered", { name: filteredName })}
+            <button className="screen-step" onClick={() => replaceAddressParam(THERAPIST_FILTER_PARAM, null)} type="button">
+              {t("calls.therapistStatus.showAll")}
+            </button>
+          </p>
+        ) : null}
         <CallLedgerList
           customers={customers}
           isLocked={isLocked}
@@ -206,6 +219,7 @@ export function CallLedgerWorkspace({
           rows={rows}
           selectedCallId={selected}
           showSettlementAmounts={showSettlementColumns}
+          therapistFilter={therapistFilter}
         />
       </div>
       {selected ? (

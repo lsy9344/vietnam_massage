@@ -957,7 +957,8 @@ export function CallLedgerList({
   panelHost = null,
   rows,
   selectedCallId = null,
-  showSettlementAmounts
+  showSettlementAmounts,
+  therapistFilter = null
 }: {
   /** 시계를 정해 줄 때(테스트). 없으면 이 기기의 시계를 영업 시간대로 읽는다. */
   clock?: LedgerClock | null;
@@ -972,8 +973,15 @@ export function CallLedgerList({
   rows: ServiceCallRowDto[];
   selectedCallId?: string | null;
   showSettlementAmounts: boolean;
+  /**
+   * 현황 줄의 "콜만"으로 고른 Therapist(1018 스펙 D17). 다른 Therapist의 콜은 빼지 않고 숨긴다. 숨은 줄도 저장 상태와
+   * 떠나기 전 안내를 그대로 들고 있고, 일행 인원은 하루 전체로 센다. 열린 콜은 늘 보인다.
+   */
+  therapistFilter?: string | null;
 }) {
   const t = useT();
+  const filteredOut = (row: ServiceCallRowDto) =>
+    therapistFilter !== null && row.id !== selectedCallId && row.therapist1?.id !== therapistFilter && row.therapist2?.id !== therapistFilter;
   // 휴대폰 폭(600px 미만)은 같은 목록을 읽기 전용으로 쓴다(스펙 D23, 티켓 26의 규칙).
   const isPhoneWidth = usePhoneWidth();
   const liveClock = useLedgerClock(options.timeSlots, clockOverride === undefined);
@@ -1012,7 +1020,7 @@ export function CallLedgerList({
       clock={lineClock}
       customers={customers}
       dayStart={dayStart}
-      hidden={hidden}
+      hidden={hidden || filteredOut(row)}
       isLocked={isLocked}
       key={row.id}
       onOpen={onOpen}
@@ -1052,7 +1060,7 @@ export function CallLedgerList({
           <CallPartyHead
             failures={failures}
             first={first}
-            hidden={hidden}
+            hidden={hidden || item.rows.every(filteredOut)}
             isLocked={isLocked}
             key={`party-${part}-${partyId}`}
             lead={lead}
@@ -1091,9 +1099,10 @@ export function CallLedgerList({
       </li>
     );
   }
+  const doneCount = timeline.done.filter((row) => !filteredOut(row)).length;
   if (timeline.done.length > 0) {
     body.push(
-      <li className="border-b border-border px-3 pb-2 pt-4" data-ledger-done-toggle="" key="done-toggle">
+      <li className="border-b border-border px-3 pb-2 pt-4" data-ledger-done-toggle="" hidden={doneCount === 0} key="done-toggle">
         <button
           aria-expanded={showDone}
           className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm font-semibold text-foreground transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary"
@@ -1101,7 +1110,7 @@ export function CallLedgerList({
           type="button"
         >
           <span aria-hidden="true">{showDone ? "▾" : "▸"}</span>
-          {t("calls.flow.doneToggle", { count: timeline.done.length })}
+          {t("calls.flow.doneToggle", { count: doneCount })}
         </button>
       </li>,
       ...partNodes("done", timeline.done, !showDone).flatMap((item) => item.nodes)
