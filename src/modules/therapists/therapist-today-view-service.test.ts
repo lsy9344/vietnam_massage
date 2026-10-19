@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { listTherapistAvailability } from "@/modules/calls/service-call-service";
+import { listTherapistDailySettlements } from "@/modules/settlements/therapist-daily-settlement-service";
 import { getTherapistTodayView } from "@/modules/therapists/therapist-today-view-service";
 
 const createdAt = new Date("2042-01-01T00:00:00.000Z");
@@ -54,6 +55,19 @@ function createMemoryPrisma() {
   const course = { id: "course-a", code: "A", isActive: true, createdAt, updatedAt, policies: [coursePolicy] };
   const room = { id: "room-1", displayName: "101호", migrationReferenceName: "1번방", sortOrder: 10, isActive: true, createdAt, updatedAt };
 
+  // 티켓 07: emp-me의 course-a 코스 수당(오늘 예상 코스 수당이 0이 아닌지 보는 테스트용).
+  const therapistCourseRate = {
+    id: "rate-1",
+    therapistId: "emp-me",
+    courseId: "course-a",
+    amount: 150000,
+    effectiveFromMonth: "2042-01",
+    effectiveToMonth: null as string | null,
+    isActive: true,
+    createdAt,
+    updatedAt
+  };
+
   const employees = new Map([
     ["emp-me", { id: "emp-me", displayName: "민호", staffCode: "THR-911", employeeGroup: "THERAPIST", employmentStatus: "재직", isActive: true, sortOrder: 9801 }],
     ["emp-partner", { id: "emp-partner", displayName: "수진", staffCode: "THR-912", employeeGroup: "THERAPIST", employmentStatus: "재직", isActive: true, sortOrder: 9802 }],
@@ -75,6 +89,8 @@ function createMemoryPrisma() {
       {
         id: "call-inuse",
         operatingMonthId: "month-1",
+        createdAt,
+        updatedAt,
         serviceDate: dbDate("2042-03-10"),
         startTime: "10:00",
         actualEntryTime: "10:05",
@@ -98,6 +114,8 @@ function createMemoryPrisma() {
       {
         id: "call-party",
         operatingMonthId: "month-1",
+        createdAt,
+        updatedAt,
         serviceDate: dbDate("2042-03-10"),
         startTime: "15:00",
         actualEntryTime: null,
@@ -121,6 +139,8 @@ function createMemoryPrisma() {
       {
         id: "call-canceled",
         operatingMonthId: "month-1",
+        createdAt,
+        updatedAt,
         serviceDate: dbDate("2042-03-10"),
         startTime: "16:00",
         actualEntryTime: null,
@@ -144,6 +164,8 @@ function createMemoryPrisma() {
       {
         id: "call-other",
         operatingMonthId: "month-1",
+        createdAt,
+        updatedAt,
         serviceDate: dbDate("2042-03-10"),
         startTime: "09:30",
         actualEntryTime: "09:30",
@@ -162,11 +184,39 @@ function createMemoryPrisma() {
         assignments: [assignment("emp-other", "THERAPIST_1")]
       }
     ],
+    // 티켓 07: 오늘 예상 코스 수당이 0이 아닌 실제 숫자를 계산하는지 보는 완료 콜(therapistCourseRate 참고).
+    [
+      "call-mine-complete",
+      {
+        id: "call-mine-complete",
+        operatingMonthId: "month-1",
+        createdAt,
+        updatedAt,
+        serviceDate: dbDate("2042-03-10"),
+        startTime: "09:15",
+        actualEntryTime: "09:15",
+        actualEndTime: "10:15",
+        status: "방문완료",
+        courseId: "course-a",
+        course,
+        operatingMonth,
+        roomId: "room-1",
+        room,
+        customerId: null,
+        customer: null,
+        customerMemo: "테스트완료콜",
+        bookerName: null,
+        visitRequest: null,
+        assignments: [assignment("emp-me", "THERAPIST_1")]
+      }
+    ],
     [
       "call-future",
       {
         id: "call-future",
         operatingMonthId: "month-1",
+        createdAt,
+        updatedAt,
         serviceDate: dbDate("2042-03-12"),
         startTime: "11:00",
         actualEntryTime: null,
@@ -190,6 +240,8 @@ function createMemoryPrisma() {
       {
         id: "call-boundary",
         operatingMonthId: "month-1",
+        createdAt,
+        updatedAt,
         serviceDate: dbDate("2042-03-17"),
         startTime: "09:00",
         actualEntryTime: null,
@@ -213,6 +265,8 @@ function createMemoryPrisma() {
       {
         id: "call-after-boundary",
         operatingMonthId: "month-1",
+        createdAt,
+        updatedAt,
         serviceDate: dbDate("2042-03-18"),
         startTime: "09:00",
         actualEntryTime: null,
@@ -286,7 +340,7 @@ function createMemoryPrisma() {
     },
     therapistCourseRate: {
       async findMany() {
-        return [] as any[];
+        return [therapistCourseRate];
       }
     },
     therapistAttendance: {
@@ -327,7 +381,7 @@ describe("getTherapistTodayView", () => {
     assert.equal(view.today.serviceDate, "2042-03-10");
 
     const todayCallIds = view.days[0]!.calls.map((call) => call.id);
-    assert.deepEqual(todayCallIds, ["call-inuse", "call-party", "call-canceled"]);
+    assert.deepEqual(todayCallIds, ["call-mine-complete", "call-inuse", "call-party", "call-canceled"]);
 
     const day12 = view.days.find((day) => day.serviceDate === "2042-03-12");
     assert.equal(day12?.calls.length, 1);
@@ -401,7 +455,8 @@ describe("getTherapistTodayView", () => {
     });
     const ledgerRow = availability.find((row) => row.therapistId === "emp-me");
 
-    assert.equal(view.today.doneCount, 1);
+    // call-mine-complete(방문완료) + call-inuse(사용중) = 2건(티켓 07이 완료 콜 하나를 더해 2가 됐다).
+    assert.equal(view.today.doneCount, 2);
     assert.equal(view.today.doneCount, ledgerRow?.callCounts.done);
   });
 
@@ -411,5 +466,20 @@ describe("getTherapistTodayView", () => {
 
     // now=14:00, 다음 콜은 15:00(call-party)이다. 10:00에 시작한 call-inuse는 이미 시작했으니 "다음"이 아니다.
     assert.equal(view.today.nextCallInMinutes, businessMinuteOf("15:00", "09:00") - businessMinuteOf("14:00", "09:00"));
+  });
+
+  it("오늘 예상 코스 수당은 0이 아니고, 일별 정산 서비스의 그날 내 행 totalCommissionAmount와 같다(티켓 07, M8)", async () => {
+    const client = createMemoryPrisma();
+    const view = await getTherapistTodayView({ employeeId: "emp-me", now, prismaClient: client as any });
+
+    const { settlements } = await listTherapistDailySettlements({
+      operatingMonthId: "month-1",
+      serviceDate: "2042-03-10",
+      prismaClient: client as any
+    });
+    const mySettlement = settlements.find((settlement) => settlement.employeeId === "emp-me");
+
+    assert.ok(view.today.expectedPayoutAmount > 0, "완료 콜(call-mine-complete)에 코스 수당이 있어 0보다 커야 한다");
+    assert.equal(view.today.expectedPayoutAmount, mySettlement?.totalCommissionAmount);
   });
 });
