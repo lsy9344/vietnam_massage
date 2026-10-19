@@ -272,6 +272,9 @@ function createMemoryPrisma() {
             (where?.isActive === undefined || employee.isActive === where.isActive) &&
             (where?.employeeGroup === undefined || employee.employeeGroup === where.employeeGroup)
         );
+      },
+      async findUnique({ where }: any) {
+        return employees.get(where.id) ?? null;
       }
     },
     course: {

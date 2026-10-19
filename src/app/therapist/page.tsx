@@ -29,7 +29,7 @@ export default async function TherapistTodayPage() {
         <TherapistRefreshController />
         <TherapistAttendanceActionsSlot />
         <TherapistTodayStatus doneCount={todayView.today.doneCount} locale={locale} nextCallInMinutes={todayView.today.nextCallInMinutes} />
-        <TherapistClockOutNoticeSlot />
+        <TherapistClockOutNoticeSlot dates={todayView.today.clockOutMissingDates} locale={locale} />
         <TherapistTodayCallList days={todayView.days} locale={locale} todayDate={todayView.today.serviceDate} />
       </TherapistRefresh>
     </div>

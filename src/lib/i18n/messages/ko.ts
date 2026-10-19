@@ -178,6 +178,13 @@ export const ko = {
   "scheduleStatus.휴무": "휴무",
   "scheduleStatus.미입력": "미입력",
 
+  // 출퇴근에 찍힌 방식(TherapistAttendance.checkInMethod/checkOutMethod 한국어 key → 라벨, 스펙 D16).
+  // 06의 근태 달력과 11의 관리자 현황이 함께 쓴다.
+  "attendanceMethod.직접": "직접",
+  "attendanceMethod.대리 입력": "대리 입력",
+  "attendanceMethod.정정 승인": "정정 승인",
+  "attendanceMethod.이전 기록": "이전 기록",
+
   // /live /rooms /tv 화면
   // 첫화면(실시간 현황)
   "live.empty.description": "첫 화면은 운영월 날짜 범위 안의 객실 상태와 콜 요약을 조회한다.",
@@ -1712,4 +1719,32 @@ export const ko = {
   "therapist.today.todayMarker": "오늘",
   "therapist.today.noCallsThatDay": "이 날은 배정된 콜이 없습니다.",
   "therapist.today.withPartner": "{name}님과 함께",
+
+  // 근태 탭(티켓 06, 스펙 D17–D18): 퇴근 미입력 안내(오늘 탭과 공용), 월 달력, 날짜 상세 패널.
+  "therapist.attendance.clockOutMissingNotice.label": "확인 필요",
+  "therapist.attendance.clockOutMissingNotice.title": "퇴근 미입력 — 정정 요청",
+  "therapist.attendance.clockOutMissingNotice.description": "{dates}의 퇴근 기록이 없습니다.",
+  "therapist.attendance.monthNav.aria": "근태 달력 달 이동",
+  "therapist.attendance.monthNav.previous": "이전 달",
+  "therapist.attendance.monthNav.next": "다음 달",
+  "therapist.attendance.monthNav.thisMonth": "이번 달",
+  "therapist.attendance.calendar.aria": "{month} 근태 달력",
+  "therapist.attendance.calendar.empty.title": "근무표가 없습니다",
+  "therapist.attendance.calendar.empty.description": "이 달은 아직 근무표가 입력되지 않았습니다.",
+  "therapist.attendance.dayDetail.scheduleLabel": "근무표",
+  "therapist.attendance.dayDetail.plannedStartTimeLabel": "출근 예정",
+  "therapist.attendance.dayDetail.checkInLabel": "출근",
+  "therapist.attendance.dayDetail.checkOutLabel": "퇴근",
+  "therapist.attendance.dayDetail.judgmentLabel": "판정",
+  "therapist.attendance.dayDetail.requestLabel": "신청",
+  "therapist.attendance.dayDetail.noRecordValue": "기록 없음",
+  "therapist.attendance.dayDetail.noValue": "없음",
+  "therapist.attendance.dayDetail.noJudgmentValue": "특이사항 없음",
+  "therapist.attendance.dayDetail.lateBadge": "지각 {minutes}분",
+  "therapist.attendance.dayDetail.absentBadge": "결근",
+  "therapist.attendance.dayDetail.clockOutMissingBadge": "퇴근 미입력",
+  "therapist.attendance.dayDetail.unscheduledBadge": "예정 없는 출근",
+  "therapist.attendance.dayDetail.fullAttendanceBadge": "만근 인정",
+  "therapist.attendance.cell.aria": "{date} 근태 상세",
+  "therapist.attendance.cell.todayMarker": "오늘",
 } as const;

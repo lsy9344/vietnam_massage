@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { addDaysToIsoDate, businessClockString, businessTodayServiceDate } from "@/lib/operating-date";
 import { isDoneServiceCallStatus, roomFloorFactsForDate } from "@/modules/calls/service-call-service";
+import {
+  listTherapistClockOutMissingDates,
+  type TherapistClockOutMissingPrismaClient
+} from "@/modules/therapists/therapist-attendance-calendar-service";
 import { callGuestName, minutesUntilNextCall, sortByBusinessStartTime } from "@/modules/therapists/therapist-today-rules";
 import { redactLongDigitSequences } from "@/modules/therapists/therapist-text-redaction";
 
@@ -47,6 +51,11 @@ export type TherapistTodayViewDto = {
     nextCallInMinutes: number | null;
     /** 오늘 한 것(사용중·청소중·방문완료, M7). 원장 Therapist 현황 줄의 callCounts.done과 같은 판정이다. */
     doneCount: number;
+    /**
+     * 운영일이 끝났는데 퇴근 미입력인 날짜(스펙 D17, 티켓 06). 오래된 날부터 온다. 비어 있으면
+     * 안내를 안 보인다. 요청 버튼은 09가 단다.
+     */
+    clockOutMissingDates: string[];
   };
 };
 
@@ -67,8 +76,10 @@ type TherapistTodayServiceCallRecord = {
   assignments: Array<{ employeeId: string; isActive: boolean; employee: { displayName: string } }>;
 };
 
-type TherapistTodayPrismaClient = {
-  timeSlot: { findMany(args?: unknown): Promise<Array<{ value: string; sortOrder: number; createdAt: Date; isActive: boolean }>> };
+// employee·therapistAttendance·operatingMonth는 이 파일 자체가 쓰지 않고, 퇴근 미입력 안내(06,
+// listTherapistClockOutMissingDates)에 그대로 건네주기만 한다(TherapistClockOutMissingPrismaClient와
+// 같은 모양이어야 한다).
+type TherapistTodayPrismaClient = TherapistClockOutMissingPrismaClient & {
   serviceCall: { findMany(args: unknown): Promise<TherapistTodayServiceCallRecord[]> };
 };
 
@@ -198,6 +209,7 @@ export async function getTherapistTodayView(input: {
     dayStart,
     calls: todayRecords.map((record) => ({ startTime: record.startTime, status: record.status }))
   });
+  const clockOutMissingDates = await listTherapistClockOutMissingDates({ employeeId: input.employeeId, now, prismaClient: client });
 
-  return { days, today: { serviceDate: today, nextCallInMinutes, doneCount } };
+  return { days, today: { serviceDate: today, nextCallInMinutes, doneCount, clockOutMissingDates } };
 }

@@ -25,3 +25,24 @@
   - 판정 규칙(순수 함수): 예정 시각과 같은 분(지각 아님)과 1분 늦음, 예정 시각 없음, 휴무 날 출근, 미입력 날 출근, 밤샘 근무, 오늘 운영일(결근 아님), 끝난 운영일의 퇴근 미입력
   - Therapist 모듈 서비스(메모리 Prisma): 근태 달력의 한 달 결과와 방식 표시
   - E2E: 근태 달력이 보이고, 퇴근 미입력 안내가 뜬다.
+
+## Comments
+
+**판정 순수 함수(11도 그대로 쓴다):** `judgeTherapistAttendanceDay(input: TherapistAttendanceDayJudgmentInput): TherapistAttendanceDayJudgment`
+(`src/modules/therapists/therapist-attendance-judgment.ts`).
+- 입력: `{ planStatus: PlannedWorkingDayCellStatus, plannedStartTime: string|null, checkInTime: string|null, checkOutTime: string|null, dayStart: string, isOperatingDayEnded: boolean }`.
+- 출력: `{ lateMinutes: number|null, isAbsent: boolean, isClockOutMissing: boolean, isUnscheduledAttendance: boolean }`.
+- 지각 비교는 밤샘용 `computeStandbyMinutes`류(+1440, 퇴근<출근일 때만 보정)를 쓰지 않는다. 대신 03이 이미 만들어 둔 `businessMinuteOf(clock, dayStart)`(`therapist-today-rules.ts`)로 예정 시각·출근 시각을 **각자** 영업일 분으로 바꿔 비교한다 — 서로를 비교해 보정하면 밤샘 근무에서 일찍 온 출근이 큰 지각으로 오판된다(단위 테스트 "without the +1440 standby bug"로 고정). `isAbsent`·`isClockOutMissing`은 `isOperatingDayEnded`가 true일 때만 켜진다(오늘 운영일은 결근·퇴근미입력 모두 아니다).
+- `isOperatingDayEnded`는 함수가 계산하지 않는다. 호출하는 쪽이 `날짜 < businessTodayServiceDate(...)`로 정한다(코드베이스 지도 규칙 그대로).
+
+**좁은 DB 조회(새로 더함, toDto·minuteToTime 변환을 다시 쓴다):**
+- `listTherapistAttendanceForEmployeeInRange({ employeeId, startDate, endDate, prismaClient? })` → `TherapistAttendanceDto[]` (`src/modules/settlements/therapist-attendance-service.ts`). 직원 하나·기간 하나. `listTherapistAttendanceForDate`를 날짜마다 부르면 31×전원이 되는 것을 피한다. 비활성 줄은 뺀다. (가정) 이 파일의 다른 export와 달리, 쓰기 메서드가 있는 전체 클라이언트 타입을 요구하지 않는 읽기 전용 좁은 타입(`TherapistAttendanceRangeReadClient`)을 새로 둔다 — service-call-service.ts의 `DisplayEndReadClient` 선례와 같은 방식.
+- `listPlannedWorkingDayStatusesForEmployeeInRange({ employeeId, startDate, endDate, prismaClient? })` → `PlannedWorkingDayDayStatusDto[]`(`src/modules/masters/planned-working-day-query.ts`). 행 없는 날은 미입력으로 채운다.
+
+**근태 달력 합치기(11도 쓸 수 있게 공개):** `getTherapistAttendanceCalendar({ employeeId, monthKey?, now?, prismaClient? })` → `TherapistAttendanceCalendarMonthDto`(`src/modules/therapists/therapist-attendance-calendar-service.ts`). `monthKey` 없으면 오늘이 속한 달. 달 경계는 DB 없이 `calculateOperatingMonthRange`(순수)로만 정해, 운영월 레코드가 아직 없는 지난 달도 빈 달력으로 열린다. 날마다 `requestStatus: TherapistAttendanceDayRequestStatus`(`{kind:"day_off"|"correction", status:"pending"|"approved"|"rejected"|"canceled"|"expired", rejectionReason}|null`) 자리를 두고 06은 항상 `null`을 돌린다 — 08·09는 이 타입에 맞춰 실제 값을 채우면 된다(모양만 정해 둠).
+
+**퇴근 미입력 안내(오늘 탭·근태 탭 공용):** `listTherapistClockOutMissingDates({ employeeId, now?, prismaClient? })` → `string[]`(같은 파일). (가정) 운영월 경계와 무관하게 최근 31일만 돌아본다. `TherapistTodayViewDto.today`에 `clockOutMissingDates: string[]` 필드를 더했다(05·07이 넓히는 것과 별개로 이 필드만). `TherapistClockOutNoticeSlot`(03이 둔 자리)을 채워 오늘 탭·근태 탭 양쪽에서 쓴다. 요청 버튼은 비워 두고 09가 `action` prop으로 더하면 된다.
+
+**화면(가정, 선례 없음):** 월 달력은 월요일 시작 7열 그리드이고, 칸은 날짜 숫자 + 가장 급한 배지 기호 하나만 보인다. 누르면 `ModalPanel`(600px 미만 전체 화면 시트)에 근무표·출퇴근·방식·판정·신청 자리를 `DetailRow`로 모두 보인다 — 390px 칸에 모든 정보를 바로 적으면 못 읽기 때문. 달 이동은 `?month=YYYY-MM` 서버 Link(자바스크립트 없이 동작). 근무표 상태 라벨은 기존 `scheduleStatusLabel`/`scheduleStatusTone`(`src/lib/i18n/codes.ts`, 27·29와 공유)를 그대로 쓴다. 출퇴근 방식 라벨은 새로 만든 `therapistAttendanceMethodLabel`(같은 파일, `attendanceMethod.*` 키)을 09·11도 재사용할 수 있다.
+
+**검증:** `pnpm test:unit` 1124 passed / 0 failed. `npx tsc --noEmit` 에러 없음. `pnpm lint`(검증 스크립트 전체)는 `validate-story-4-6.mjs`만 실패(기존 실패, README 확인). 운영 빌드 E2E(DB `vietnam_aesthetic_th06`, 포트 3206): 새 스펙(`story-ticket-06-attendance-judgment-calendar.spec.ts`) 4/4 통과 + 직접 관련 기존 스펙(`story-ticket-03-today-my-calls`, `story-ticket-27-schedule`, `story-4-1-therapist-attendance`, `story-i18n-default-vi`, `story-i18n-switch-ko`, `story-i18n-vi-screens`) 18/18 통과, 새 실패 없음.

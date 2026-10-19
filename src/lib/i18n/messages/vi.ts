@@ -174,6 +174,12 @@ export const vi: Messages = {
   "scheduleStatus.휴무": "Nghỉ",
   "scheduleStatus.미입력": "Chưa nhập",
 
+  // 출퇴근에 찍힌 방식
+  "attendanceMethod.직접": "Trực tiếp",
+  "attendanceMethod.대리 입력": "Nhập hộ",
+  "attendanceMethod.정정 승인": "Đã duyệt chỉnh sửa",
+  "attendanceMethod.이전 기록": "Bản ghi cũ",
+
   // /live /rooms /tv 화면
   // 첫화면(실시간 현황)
   "live.empty.description": "Màn hình đầu tra cứu tình trạng phòng và tóm tắt cuộc gọi trong khoảng ngày của tháng vận hành.",
@@ -1706,4 +1712,32 @@ export const vi: Messages = {
   "therapist.today.todayMarker": "Hôm nay",
   "therapist.today.noCallsThatDay": "Ngày này không có ca được phân.",
   "therapist.today.withPartner": "Cùng với {name}",
+
+  // Tab Chấm công (ticket 06): thông báo thiếu giờ ra (dùng chung với tab Hôm nay), lịch tháng, bảng chi tiết ngày.
+  "therapist.attendance.clockOutMissingNotice.label": "Cần kiểm tra",
+  "therapist.attendance.clockOutMissingNotice.title": "Thiếu giờ ra — Yêu cầu chỉnh sửa",
+  "therapist.attendance.clockOutMissingNotice.description": "Chưa có giờ ra cho {dates}.",
+  "therapist.attendance.monthNav.aria": "Chuyển tháng lịch chấm công",
+  "therapist.attendance.monthNav.previous": "Tháng trước",
+  "therapist.attendance.monthNav.next": "Tháng sau",
+  "therapist.attendance.monthNav.thisMonth": "Tháng này",
+  "therapist.attendance.calendar.aria": "Lịch chấm công {month}",
+  "therapist.attendance.calendar.empty.title": "Chưa có lịch làm việc",
+  "therapist.attendance.calendar.empty.description": "Tháng này chưa có lịch làm việc được nhập.",
+  "therapist.attendance.dayDetail.scheduleLabel": "Lịch làm việc",
+  "therapist.attendance.dayDetail.plannedStartTimeLabel": "Giờ vào dự kiến",
+  "therapist.attendance.dayDetail.checkInLabel": "Giờ vào",
+  "therapist.attendance.dayDetail.checkOutLabel": "Giờ ra",
+  "therapist.attendance.dayDetail.judgmentLabel": "Đánh giá",
+  "therapist.attendance.dayDetail.requestLabel": "Yêu cầu",
+  "therapist.attendance.dayDetail.noRecordValue": "Chưa có bản ghi",
+  "therapist.attendance.dayDetail.noValue": "Không có",
+  "therapist.attendance.dayDetail.noJudgmentValue": "Không có vấn đề",
+  "therapist.attendance.dayDetail.lateBadge": "Đi muộn {minutes} phút",
+  "therapist.attendance.dayDetail.absentBadge": "Vắng",
+  "therapist.attendance.dayDetail.clockOutMissingBadge": "Thiếu giờ ra",
+  "therapist.attendance.dayDetail.unscheduledBadge": "Đi làm ngoài lịch",
+  "therapist.attendance.dayDetail.fullAttendanceBadge": "Đạt chuyên cần",
+  "therapist.attendance.cell.aria": "Chi tiết chấm công {date}",
+  "therapist.attendance.cell.todayMarker": "Hôm nay",
 };

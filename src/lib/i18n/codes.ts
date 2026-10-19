@@ -120,3 +120,11 @@ export function serviceStatusLabel(locale: Locale, status: string): string {
 export function scheduleStatusLabel(locale: Locale, status: "근무 예정" | "휴무" | "미입력"): string {
   return t(locale, `scheduleStatus.${status}`);
 }
+
+/**
+ * 출퇴근에 찍힌 방식(직접/대리 입력/정정 승인/이전 기록, 스펙 D16)을 화면 라벨로 번역한다.
+ * 근태 달력(06)과 관리자 현황(11)이 함께 쓴다.
+ */
+export function therapistAttendanceMethodLabel(locale: Locale, method: "직접" | "대리 입력" | "정정 승인" | "이전 기록"): string {
+  return t(locale, `attendanceMethod.${method}`);
+}
