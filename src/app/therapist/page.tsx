@@ -4,7 +4,9 @@ import { TherapistRefresh, TherapistRefreshController } from "@/components/thera
 import { TherapistTodayCallList } from "@/components/therapist/therapist-today-call-list";
 import { TherapistTodayStatus } from "@/components/therapist/therapist-today-status";
 import { TherapistTopBar } from "@/components/therapist/therapist-top-bar";
+import { SummaryCard } from "@/components/ui/summary-card";
 import { getServerTranslator } from "@/lib/i18n/server";
+import { formatCurrencyVnd } from "@/lib/i18n/format";
 import { requireTherapistAccess } from "@/modules/therapists/therapist-access-service";
 import { getTherapistProfile } from "@/modules/therapists/therapist-profile-service";
 import { getTherapistTodayView } from "@/modules/therapists/therapist-today-view-service";
@@ -28,7 +30,15 @@ export default async function TherapistTodayPage() {
       <TherapistRefresh lastUpdatedAt={lastUpdatedAt} locale={locale}>
         <TherapistRefreshController />
         <TherapistAttendanceActionsSlot />
-        <TherapistTodayStatus doneCount={todayView.today.doneCount} locale={locale} nextCallInMinutes={todayView.today.nextCallInMinutes} />
+        <TherapistTodayStatus doneCount={todayView.today.doneCount} locale={locale} nextCallInMinutes={todayView.today.nextCallInMinutes}>
+          <SummaryCard
+            accent="butter"
+            label={t("therapist.today.expectedPayoutLabel")}
+            note={t("therapist.today.expectedPayoutNote")}
+            unit={t("settlements.vndSuffix")}
+            value={formatCurrencyVnd(locale, todayView.today.expectedPayoutAmount)}
+          />
+        </TherapistTodayStatus>
         <TherapistClockOutNoticeSlot dates={todayView.today.clockOutMissingDates} locale={locale} />
         <TherapistTodayCallList days={todayView.days} locale={locale} todayDate={todayView.today.serviceDate} />
       </TherapistRefresh>
