@@ -370,6 +370,7 @@ export const ko = {
   "calls.quickBooking.joinParty.noticeWithMemo": "{memo} 일행({size}명)에 1명을 더합니다",
   "calls.quickBooking.joinParty.notice": "일행({size}명)에 1명을 더합니다",
   "calls.quickBooking.joinParty.discardConfirm": "버리고 일행에 추가",
+  "calls.quickBooking.joinParty.separate": "시각이 일행과 달라 별도 예약으로 저장합니다. 예약 경로와 예약자명만 이어받습니다",
   "calls.quickBooking.presetTherapist.discardConfirm": "버리고 새로 시작",
   "calls.panel.section.booking": "예약",
   "calls.panel.section.entry": "입장",

@@ -35,6 +35,7 @@ import {
   guestFieldErrors,
   initialQuickBookingState,
   isQuickBookingLocked,
+  joinsParty,
   quickBookingGuestPosition,
   quickBookingPartyRequest,
   quickBookingReducer,
@@ -394,7 +395,7 @@ export function ConditionsStep({
   draft: QuickBookingState["save"]["draft"];
   fieldErrors: Record<string, string[]>;
   guests: QuickBookingGuest[];
-  /** 이미 있는 일행에 1명을 더하는 중(티켓 04). 인원은 1명이다. */
+  /** 원장의 "1명 추가"로 열었다(티켓 04). 인원은 1명이고 날짜는 일행의 날이다. 시각을 바꾸면 별도 예약이 된다(1018 스펙 D29). */
   joining: boolean;
   monthEndDate: string;
   monthStartDate: string;
@@ -704,6 +705,7 @@ export function CustomerStep({
   disabled: boolean;
   draft: QuickBookingState["save"]["draft"];
   fieldErrors: Record<string, string[]>;
+  /** 일행에 붙는 손님이라 고객을 잇지 않는다(스펙 D12). "1명 추가"에서 시각을 바꿨으면 false다. */
   joining: boolean;
   locale: Locale;
   message: string | null;
@@ -1001,7 +1003,9 @@ export function QuickBookingPanel({
   const [customerQuery, setCustomerQuery] = useState("");
   const searchCandidates = useCustomerSearch(customerQuery);
   const bookerName = draft.bookerName?.trim() ?? "";
-  const bookerMatches = useCustomerSearch(bookerName, !joinParty && !draft.customerId);
+  // "1명 추가"에서 시각을 바꾸면 일행이 아닌 별도 예약이라(1018 스펙 D29) 고객 단계가 보통 예약과 같다.
+  const joining = joinsParty(state);
+  const bookerMatches = useCustomerSearch(bookerName, !joining && !draft.customerId);
   const bookerCandidates = bookerMatches.filter((candidate) => sameName(candidate, bookerName));
 
   function selectCustomer(candidate: CustomerVisitCandidateDto) {
@@ -1194,11 +1198,19 @@ export function QuickBookingPanel({
               onSelect={goToStep}
               step={step}
             />
+            {/* 시각을 바꿔 일행에서 별도 예약으로 넘어가는 것을 읽어 주도록 상태 영역으로 둔다. */}
             {joinParty ? (
-              <p className="mb-4 rounded-md bg-readonly px-3 py-2 text-sm font-semibold text-foreground" data-quick-booking-join-party={joinParty.partyId}>
-                {joinParty.customerMemo
-                  ? t("calls.quickBooking.joinParty.noticeWithMemo", { memo: joinParty.customerMemo, size: joinParty.size })
-                  : t("calls.quickBooking.joinParty.notice", { size: joinParty.size })}
+              <p
+                className="mb-4 rounded-md bg-readonly px-3 py-2 text-sm font-semibold text-foreground"
+                data-quick-booking-join-party={joining ? joinParty.partyId : undefined}
+                data-quick-booking-separate-booking={joining ? undefined : ""}
+                role="status"
+              >
+                {!joining
+                  ? t("calls.quickBooking.joinParty.separate")
+                  : joinParty.customerMemo
+                    ? t("calls.quickBooking.joinParty.noticeWithMemo", { memo: joinParty.customerMemo, size: joinParty.size })
+                    : t("calls.quickBooking.joinParty.notice", { size: joinParty.size })}
               </p>
             ) : null}
             <ErrorSummary fieldErrors={fieldErrors} message={message} onJump={(next) => dispatch({ type: "step", step: next })} />
@@ -1233,7 +1245,7 @@ export function QuickBookingPanel({
                 disabled={locked}
                 draft={draft}
                 fieldErrors={fieldErrors}
-                joining={joinParty !== null}
+                joining={joining}
                 locale={locale}
                 message={message}
                 notice={save.notice}

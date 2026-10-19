@@ -30,6 +30,7 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   D_QUICK_BOOKING_PARTY_DUPLICATE_THERAPIST: "Không thể chọn cùng một Therapist cho hai khách trong nhóm.",
   SERVICE_CALL_PARTY_NOT_FOUND: "Không tìm thấy nhóm để thêm khách. Hãy tải lại sổ rồi thử lại.",
   SERVICE_CALL_PARTY_CUSTOMER_LINK: "Khách thêm vào nhóm không liên kết với khách hàng. Chỉ cuộc gọi đại diện mới liên kết khách hàng.",
+  SERVICE_CALL_PARTY_TIME_MISMATCH: "Giờ đặt khác với nhóm. Khác giờ thì hãy lưu thành đặt chỗ riêng.",
   SERVICE_CALL_NOT_FOUND: "Không tìm thấy dòng sổ cuộc gọi.",
   STALE_CALL: "Cuộc gọi này đã được thay đổi ở màn hình khác. Hãy tải lại rồi mới lưu.",
   CUSTOMER_NOT_FOUND: "Không tìm thấy khách.",

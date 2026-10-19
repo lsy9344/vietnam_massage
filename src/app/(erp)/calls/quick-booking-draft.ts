@@ -81,7 +81,15 @@ export function guestFieldErrors(fieldErrors: Record<string, string[]>, position
 }
 
 /** 원장의 "1명 추가"(스펙 D14, 티켓 04)가 빠른 예약에 넘기는 일행. size는 지금 일행 인원이다. */
-export type QuickBookingJoinParty = { partyId: string; serviceDate: string; startTime: string; customerMemo: string | null; size: number };
+export type QuickBookingJoinParty = {
+  partyId: string;
+  serviceDate: string;
+  startTime: string;
+  customerMemo: string | null;
+  bookingChannelCode: string | null;
+  bookerName: string | null;
+  size: number;
+};
 
 export type QuickBookingState = {
   step: QuickBookingStep;
@@ -93,7 +101,10 @@ export type QuickBookingState = {
   partySize: number;
   /** 코스 칩으로 담은 손님(1018 스펙 D20). Therapist가 비었으면 미지명 손님이다. 객실은 고르지 않는다. */
   guests: QuickBookingGuest[];
-  /** 이미 있는 일행에 1명을 더하는 중이면 그 일행. 이때는 한 명 저장이고 고객을 잇지 않는다(스펙 D12). */
+  /**
+   * 원장의 "1명 추가"로 열었으면 그 일행. 이때는 한 명 저장이고 고객을 잇지 않는다(스펙 D12). 시각을 바꾸면 일행이 아닌
+   * 별도 예약이라 고객은 보통 예약과 같다(1018 스펙 D29, joinsParty).
+   */
   joinParty: QuickBookingJoinParty | null;
   /** 원장 현황 줄 카드에서 열었으면 그 Therapist. ①의 목록 맨 위(미지명 줄 아래)에 골라 둔다. */
   presetTherapistId: string | null;
@@ -110,7 +121,7 @@ export type QuickBookingEvent =
   | { type: "removeGuest"; index: number }
   /** D코스 손님의 두 번째 Therapist(index는 0부터). null이면 비운다. */
   | { type: "secondTherapist"; index: number; therapistId: string | null }
-  /** 원장의 "1명 추가": 새 요청 id로 처음부터, 일행의 시각·고객/메모·일행 id를 채워 시작한다. */
+  /** 원장의 "1명 추가": 새 요청 id로 처음부터, 일행의 시각·고객/메모·예약 경로·예약자명·일행 id를 채워 시작한다. */
   | { type: "joinParty"; join: QuickBookingJoinParty; nextRequestId: string }
   /**
    * 패널을 새로 연다: 새 요청 id로 처음부터, 날짜와 기본 시각을 채운다. 원장 Therapist 현황 줄의 카드(1018 스펙 D17)에서
@@ -153,6 +164,12 @@ function withGuests(state: QuickBookingState, guests: QuickBookingGuest[], party
   return { ...state, save, guests, partySize, touched: true };
 }
 
+/** "1명 추가"로 연 손님이 그 일행에 붙는지. 일행은 같은 날·같은 예약 시각인 콜만이다(1018 스펙 D29). */
+export function joinsParty(state: Pick<QuickBookingState, "joinParty" | "save">) {
+  const { joinParty, save } = state;
+  return joinParty !== null && save.draft.serviceDate === joinParty.serviceDate && save.draft.startTime === joinParty.startTime;
+}
+
 /** 담은 손님(exceptIndex는 빼고)이 이미 맡은 Therapist. 한 사람을 두 손님에게 담지 못한다. */
 export function takenTherapistIds(guests: QuickBookingGuest[], exceptIndex = -1): ReadonlySet<string> {
   return new Set(guests.flatMap((guest, index) => (index === exceptIndex ? [] : [guest.therapist1Id, guest.therapist2Id])).filter((id): id is string => Boolean(id)));
@@ -161,16 +178,20 @@ export function takenTherapistIds(guests: QuickBookingGuest[], exceptIndex = -1)
 /**
  * 저장할 초안(1018 스펙 D21–D22). 예약자명은 고객/메모 칸에도 넣어 객실·TV 같은 다른 화면이 지금처럼 이름을 보인다.
  * 기존 고객을 고르지 않았고 예약자명이 있으면 그 이름으로 새 고객을 만든다. 일행에 더하는 손님은 고객을 잇지 않는다
- * (스펙 D12). 이름이 빈 워크인의 임시 이름은 서버가 붙인다.
+ * (스펙 D12). "1명 추가"에서 시각을 바꾼 손님은 일행 id 없이 보통 예약과 같이 저장하고, 일행에서는 경로·예약자명만
+ * 이어받는다(D29). 이름이 빈 워크인의 임시 이름은 서버가 붙인다.
  */
 function bookingDraft(state: QuickBookingState) {
   const { draft } = state.save;
   const bookerName = draft.bookerName?.trim() || null;
-  const joining = state.joinParty !== null;
+  const joining = joinsParty(state);
+  // 별도 예약은 일행의 고객/메모(join 때 채운 값)를 쓰지 않는다.
+  const separate = state.joinParty !== null && !joining;
   return {
     ...draft,
     bookerName,
-    customerMemo: bookerName ?? draft.customerMemo ?? null,
+    customerMemo: bookerName ?? (separate ? null : (draft.customerMemo ?? null)),
+    partyId: joining ? state.joinParty!.partyId : null,
     customerId: joining ? null : (draft.customerId ?? null),
     newCustomer:
       !joining && !draft.customerId && bookerName ? { name: bookerName, phone: null, memo: null, preferenceNote: null } : null
@@ -189,8 +210,12 @@ export function quickBookingReducer(state: QuickBookingState, event: QuickBookin
       return freshFrom(state, state.save.draft.serviceDate, event.nextRequestId);
     case "joinParty": {
       const next = freshFrom(state, event.join.serviceDate, event.nextRequestId);
-      const { partyId, startTime, customerMemo } = event.join;
-      return { ...next, joinParty: event.join, save: { ...next.save, draft: { ...next.save.draft, partyId, startTime, customerMemo } } };
+      const { partyId, startTime, customerMemo, bookingChannelCode, bookerName } = event.join;
+      return {
+        ...next,
+        joinParty: event.join,
+        save: { ...next.save, draft: { ...next.save.draft, partyId, startTime, customerMemo, bookingChannelCode, bookerName } }
+      };
     }
     case "start": {
       const next = freshFrom(state, event.serviceDate, event.nextRequestId);

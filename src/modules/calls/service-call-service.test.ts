@@ -6346,6 +6346,28 @@ describe("quick booking party (스펙 D10–D13, 티켓 02)", () => {
     assert.deepEqual((await listCustomers({ prismaClient })).map((row) => row.name), ["정 대표"]);
   });
 
+  it("refuses to add a guest to a party at a different booking time (1018 spec D29)", async () => {
+    const prismaClient = partyClient();
+    const { partyId } = await party(prismaClient, "party-join-other-time");
+
+    await assert.rejects(
+      () =>
+        createQuickBookingServiceCall({
+          requestId: "party-join-0100",
+          operatingMonthId: "month-2026-06",
+          serviceDate: "2026-06-10",
+          startTime: "01:00",
+          courseId: "course-a",
+          status: "예약",
+          partyId,
+          actorId: "counter-account",
+          prismaClient
+        }),
+      (error: unknown) => error instanceof ServiceCallDomainError && error.code === "SERVICE_CALL_PARTY_TIME_MISMATCH"
+    );
+    assert.equal((await callsOnDate(prismaClient)).length, 3);
+  });
+
   it("allows two guests in the same room; the overlap stays a ledger warning", async () => {
     const prismaClient = partyClient();
 

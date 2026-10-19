@@ -2161,13 +2161,17 @@ export async function createServiceCallRow(
 }
 
 /**
- * 일행에 1명 추가(스펙 D14, 티켓 04)의 자리: 그 일행의 마지막 순번 다음이다. 일행은 같은 운영월·같은 날의 콜이어야
- * 하고, 고객 연결은 대표 콜(1번)에만 하므로(스펙 D12) 더하는 손님에게는 고객을 잇거나 새로 만들지 않는다.
- * 같은 일행에 두 화면이 동시에 더하면 같은 순번이 나올 수 있다 — 순번은 표시 순서일 뿐이라 막지 않는다.
+ * 일행에 1명 추가(스펙 D14, 티켓 04)의 자리: 그 일행의 마지막 순번 다음이다. 일행은 같은 운영월·같은 날·같은 예약 시각의
+ * 콜이어야 하고(1018 스펙 D29), 고객 연결은 대표 콜(1번)에만 하므로(스펙 D12) 더하는 손님에게는 고객을 잇거나 새로 만들지
+ * 않는다. 같은 일행에 두 화면이 동시에 더하면 같은 순번이 나올 수 있다 — 순번은 표시 순서일 뿐이라 막지 않는다.
  */
 async function nextPartyPlace(
   tx: ServiceCallPrismaClient,
-  input: { partyId: string; row: { operatingMonthId: string; serviceDate: string; customerId?: string | null }; newCustomer?: unknown }
+  input: {
+    partyId: string;
+    row: { operatingMonthId: string; serviceDate: string; startTime: string; customerId?: string | null };
+    newCustomer?: unknown;
+  }
 ) {
   if (input.row.customerId || input.newCustomer) {
     throw new ServiceCallDomainError("일행에 더하는 손님에게는 고객을 연결하지 않습니다. 고객은 대표 콜에만 연결합니다.", "SERVICE_CALL_PARTY_CUSTOMER_LINK");
@@ -2177,6 +2181,10 @@ async function nextPartyPlace(
   );
   if (members.length === 0) {
     throw new ServiceCallDomainError("더할 일행을 찾을 수 없습니다. 원장을 다시 불러온 뒤에 하세요.", "SERVICE_CALL_PARTY_NOT_FOUND");
+  }
+  // 시각이 다르면 일행이 아니라 별도 예약이다. 화면은 시각을 바꾸면 일행 id 없이 보낸다.
+  if (!members.some((member) => member.startTime === input.row.startTime)) {
+    throw new ServiceCallDomainError("일행과 예약 시각이 다릅니다. 시각이 다르면 별도 예약으로 저장하세요.", "SERVICE_CALL_PARTY_TIME_MISMATCH");
   }
   return { partyId: input.partyId, partyPosition: Math.max(...members.map((member) => member.partyPosition ?? 0)) + 1 };
 }

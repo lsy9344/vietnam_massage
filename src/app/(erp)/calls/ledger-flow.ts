@@ -74,37 +74,45 @@ export function ledgerWhoLabel(
   return { channel, name: call.bookerName?.trim() || customerName || memoLine || null };
 }
 
-type PartyMember = { id: string; partyId: string | null; partyPosition: number | null };
+type PartyMember = { id: string; startTime: string; partyId: string | null; partyPosition: number | null };
 
 export type LedgerFlowItem<Row> =
   | { kind: "call"; row: Row }
-  /** 이 묶음 안의 일행 콜(일행 순번 순). size·lead는 하루 전체에서 본 일행 인원과 대표(가장 앞 순번) 콜이다. */
-  | { kind: "party"; partyId: string; size: number; lead: Row; rows: Row[] };
+  /**
+   * 이 묶음 안의 일행 콜(일행 순번 순). key는 일행 하나(같은 일행 id·같은 예약 시각)를 가리킨다. size·lead는 하루 전체에서
+   * 본 그 일행의 인원과 대표(가장 앞 순번) 콜이고, positionOf는 콜이 그 일행에서 몇 번째 손님인지(1부터)다.
+   */
+  | { kind: "party"; key: string; partyId: string; size: number; lead: Row; rows: Row[]; positionOf: (callId: string) => number };
 
 const byPartyPosition = (left: PartyMember, right: PartyMember) => (left.partyPosition ?? 0) - (right.partyPosition ?? 0);
+const partyKey = (row: PartyMember) => (row.partyId ? `${row.partyId} ${row.startTime}` : null);
 
 /**
- * 흐름 묶음 하나의 줄 순서(스펙 D14, 티켓 04). 같은 일행은 그 묶음에서 처음 나오는 일행 콜 자리에 일행 순번 순으로
- * 붙는다. 일행 콜이 다른 흐름에 흩어지면(1명만 완료 등) 묶음마다 따로 붙고, 인원은 하루 전체(allRows)로 센다.
+ * 흐름 묶음 하나의 줄 순서(스펙 D14, 티켓 04). 일행은 같은 일행 id이면서 같은 예약 시각인 콜만이다(1018 스펙 D29). 시각이
+ * 다른 옛 "1명 추가"나 시각을 고친 손님은 그 시각끼리 따로 묶이고, 혼자 남으면 일행이 아닌 줄로 보인다. 같은 일행은 그
+ * 묶음에서 처음 나오는 일행 콜 자리에 일행 순번 순으로 붙는다. 일행 콜이 다른 흐름에 흩어지면(1명만 완료 등) 묶음마다
+ * 따로 붙고, 인원은 하루 전체(allRows)로 센다.
  */
 export function ledgerFlowItems<Row extends PartyMember>(sectionRows: readonly Row[], allRows: readonly Row[]): LedgerFlowItem<Row>[] {
   const items: LedgerFlowItem<Row>[] = [];
   const placed = new Set<string>();
   for (const row of sectionRows) {
-    const partyId = row.partyId;
-    if (!partyId) {
+    const key = partyKey(row);
+    if (key && placed.has(key)) continue;
+    const party = key ? allRows.filter((member) => partyKey(member) === key).sort(byPartyPosition) : [];
+    if (!key || !row.partyId || party.length < 2) {
       items.push({ kind: "call", row });
       continue;
     }
-    if (placed.has(partyId)) continue;
-    placed.add(partyId);
-    const party = allRows.filter((member) => member.partyId === partyId).sort(byPartyPosition);
+    placed.add(key);
     items.push({
       kind: "party",
-      partyId,
+      key,
+      partyId: row.partyId,
       size: party.length,
       lead: party[0] ?? row,
-      rows: sectionRows.filter((member) => member.partyId === partyId).sort(byPartyPosition)
+      rows: sectionRows.filter((member) => partyKey(member) === key).sort(byPartyPosition),
+      positionOf: (callId) => party.findIndex((member) => member.id === callId) + 1
     });
   }
   return items;

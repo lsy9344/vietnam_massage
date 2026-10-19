@@ -370,6 +370,7 @@ export const vi: Messages = {
   "calls.quickBooking.joinParty.noticeWithMemo": "Thêm 1 người vào nhóm {memo} ({size} người)",
   "calls.quickBooking.joinParty.notice": "Thêm 1 người vào nhóm ({size} người)",
   "calls.quickBooking.joinParty.discardConfirm": "Bỏ và thêm vào nhóm",
+  "calls.quickBooking.joinParty.separate": "Khác giờ với nhóm nên sẽ lưu thành đặt chỗ riêng. Chỉ giữ kênh đặt và tên người đặt",
   "calls.quickBooking.presetTherapist.discardConfirm": "Bỏ và bắt đầu lại",
   "calls.panel.section.booking": "Đặt lịch",
   "calls.panel.section.entry": "Vào phòng",

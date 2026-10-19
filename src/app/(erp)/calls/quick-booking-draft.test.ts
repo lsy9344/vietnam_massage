@@ -254,7 +254,15 @@ describe("quick booking: save error keys", () => {
 });
 
 describe("quick booking: one more guest for a party (스펙 D14, 티켓 04)", () => {
-  const join = { partyId: "party-jung", serviceDate: "2026-06-10", startTime: "11:00", customerMemo: "정 대표 일행", size: 3 };
+  const join = {
+    partyId: "party-jung",
+    serviceDate: "2026-06-10",
+    startTime: "11:00",
+    customerMemo: "정 대표 일행",
+    bookingChannelCode: null,
+    bookerName: null,
+    size: 3
+  };
 
   it("starts fresh on the conditions step with the party's time, memo and party id, untouched, with a new request id", () => {
     const state = run(
@@ -283,6 +291,62 @@ describe("quick booking: one more guest for a party (스펙 D14, 티켓 04)", ()
     assert.equal(submitted.save.inFlight!.customerMemo, "정 대표");
     const unnamed = run(joined, { type: "addGuest", guest: c90 }, { type: "submit" });
     assert.equal(unnamed.save.inFlight!.customerMemo, "정 대표 일행");
+  });
+
+  describe("only at the party's time (1018 스펙 D29)", () => {
+    const telegram = { ...join, bookingChannelCode: "TELEGRAM", bookerName: "정 대표" };
+
+    it("carries the party's channel and booker name, and joins the party at the party's time", () => {
+      const joined = run(fresh(), { type: "joinParty", join: telegram, nextRequestId: "request-2" });
+      assert.deepEqual([joined.save.draft.bookingChannelCode, joined.save.draft.bookerName], ["TELEGRAM", "정 대표"]);
+      const submitted = run(joined, { type: "addGuest", guest: c90 }, { type: "submit" });
+      assert.equal(submitted.save.inFlight!.partyId, "party-jung");
+    });
+
+    it("saves a guest moved to another time as a separate booking that keeps only the channel and booker name", () => {
+      const moved = run(
+        fresh(),
+        { type: "joinParty", join: telegram, nextRequestId: "request-2" },
+        { type: "edit", changes: { startTime: "12:00" } },
+        { type: "addGuest", guest: c90 },
+        { type: "submit" }
+      );
+      const { partyId, startTime, bookingChannelCode, bookerName, customerMemo } = moved.save.inFlight!;
+      assert.deepEqual(
+        { partyId: partyId ?? null, startTime, bookingChannelCode, bookerName, customerMemo },
+        { partyId: null, startTime: "12:00", bookingChannelCode: "TELEGRAM", bookerName: "정 대표", customerMemo: "정 대표" }
+      );
+    });
+
+    it("treats the separate booking's customer like any booking: a picked customer is linked, otherwise the booker name makes a new one", () => {
+      const moved = run(fresh(), { type: "joinParty", join: telegram, nextRequestId: "request-2" }, { type: "edit", changes: { startTime: "12:00" } }, { type: "addGuest", guest: c90 });
+      assert.deepEqual(run(moved, { type: "submit" }).save.inFlight!.newCustomer, { name: "정 대표", phone: null, memo: null, preferenceNote: null });
+      const picked = run(moved, { type: "edit", changes: { customerId: "customer-jung" } }, { type: "submit" }).save.inFlight!;
+      assert.deepEqual([picked.customerId, picked.newCustomer], ["customer-jung", null]);
+    });
+
+    it("does not carry the party's memo into a separate booking without a booker name", () => {
+      const moved = run(
+        fresh(),
+        { type: "joinParty", join, nextRequestId: "request-2" },
+        { type: "edit", changes: { startTime: "12:00" } },
+        { type: "addGuest", guest: c90 },
+        { type: "submit" }
+      );
+      assert.deepEqual([moved.save.inFlight!.bookerName, moved.save.inFlight!.customerMemo], [null, null]);
+    });
+
+    it("joins the party again when the time is moved back", () => {
+      const back = run(
+        fresh(),
+        { type: "joinParty", join: telegram, nextRequestId: "request-2" },
+        { type: "edit", changes: { startTime: "12:00" } },
+        { type: "edit", changes: { startTime: "11:00" } },
+        { type: "addGuest", guest: c90 },
+        { type: "submit" }
+      );
+      assert.equal(back.save.inFlight!.partyId, "party-jung");
+    });
   });
 
   it("forgets the party once saved or discarded", () => {

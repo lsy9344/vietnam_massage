@@ -168,15 +168,15 @@ describe("room cell list (1018 ticket 02)", () => {
 
 describe("parties inside a flow section", () => {
   function member(id: string, status: string, partyPosition: number, roomId: string | null = null) {
-    return { id, status, partyId: "party-jung", partyPosition, roomId };
+    return { id, status, startTime: "11:00", partyId: "party-jung", partyPosition, roomId };
   }
 
   it("keeps a party together at its first member's place, in party order, and splits it where the flow differs", () => {
     const rows = [
-      { id: "solo-10", status: "RESERVED", partyId: null, partyPosition: null },
+      { id: "solo-10", status: "RESERVED", startTime: "10:00", partyId: null, partyPosition: null },
       member("jung-2", "RESERVED", 2),
       member("jung-1", "RESERVED", 1),
-      { id: "solo-11", status: "RESERVED", partyId: null, partyPosition: null },
+      { id: "solo-11", status: "RESERVED", startTime: "11:00", partyId: null, partyPosition: null },
       member("jung-3", "NO_SHOW", 3)
     ];
     const { open, done } = ledgerTimeline(rows);
@@ -187,6 +187,30 @@ describe("parties inside a flow section", () => {
       );
     assert.deepEqual(summary(open), ["solo-10", ["party-jung", 3, "jung-1", ["jung-1", "jung-2"]], "solo-11"]);
     assert.deepEqual(summary(done), [["party-jung", 3, "jung-1", ["jung-3"]]]);
+  });
+
+  it("groups only the party's calls booked at the same time (1018 스펙 D29), numbering each group on its own", () => {
+    const rows = [
+      member("jung-1", "RESERVED", 1),
+      member("jung-2", "RESERVED", 2),
+      { ...member("kim-1", "RESERVED", 1), partyId: "party-kim" },
+      { ...member("jung-3", "RESERVED", 3), startTime: "12:00" },
+      { ...member("jung-4", "RESERVED", 4), startTime: "12:00" },
+      { ...member("kim-2", "RESERVED", 2), partyId: "party-kim", startTime: "13:00" }
+    ];
+
+    const items = ledgerFlowItems(rows, rows);
+    assert.deepEqual(
+      items.map((item) => (item.kind === "call" ? item.row.id : [item.partyId, item.size, item.lead.id, item.rows.map((row) => row.id)])),
+      [["party-jung", 2, "jung-1", ["jung-1", "jung-2"]], "kim-1", ["party-jung", 2, "jung-3", ["jung-3", "jung-4"]], "kim-2"]
+    );
+    const [eleven, , twelve] = items;
+    assert.ok(eleven?.kind === "party" && twelve?.kind === "party");
+    assert.notEqual(eleven.key, twelve.key);
+    assert.deepEqual(
+      twelve.rows.map((row) => twelve.positionOf(row.id)),
+      [1, 2]
+    );
   });
 
   it("enters only the party's reservations, and asks for a room only for those without one", () => {

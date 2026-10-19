@@ -447,7 +447,7 @@ function CallLedgerLine({
     <li
       className={`grid cursor-pointer gap-1 border-b border-border px-3 py-2 transition-colors hover:bg-readonly data-[selected=true]:bg-readonly ${party ? `${partyBarClass} ${selectedPartyBarClass}` : selectedBarClass}`}
       data-ledger-line=""
-      data-ledger-party-member={row.partyId ?? undefined}
+      data-ledger-party-member={party ? (row.partyId ?? undefined) : undefined}
       data-selected={selected}
       data-service-call-id={row.id}
       hidden={hidden}
@@ -739,6 +739,7 @@ function CallPartyHead({
   onEnter,
   options,
   part,
+  positionOf,
   readOnly,
   rows,
   sectionRows,
@@ -755,6 +756,8 @@ function CallPartyHead({
   options: ServiceCallFormOptions;
   /** 위 목록(open)의 머리 줄인지 하단 완료 영역(done)의 머리 줄인지. */
   part: "open" | "done";
+  /** 콜이 이 일행(같은 시각)에서 몇 번째 손님인지. */
+  positionOf: (callId: string) => number;
   readOnly: boolean;
   rows: ServiceCallRowDto[];
   sectionRows: ServiceCallRowDto[];
@@ -792,8 +795,6 @@ function CallPartyHead({
     ]);
     return freeRoomOptions(options.rooms, rows, callId).filter((room) => !taken.has(room.value));
   }
-
-  const positionOf = (callId: string) => sectionRows.find((member) => member.id === callId)?.partyPosition ?? 0;
 
   return (
     <>
@@ -995,11 +996,11 @@ export function CallLedgerList({
     setDoneExpanded(readDoneExpanded());
   }, []);
   const timeline = ledgerTimeline(rows);
-  // 일행 동작(티켓 04): 일행마다 마지막으로 보낸 일과, 일행 콜 줄들이 알려 온 저장 상태.
+  // 일행 동작(티켓 04): 일행(ledgerFlowItems의 key)마다 마지막으로 보낸 일과, 일행 콜 줄들이 알려 온 저장 상태.
   const [partyCommands, setPartyCommands] = useState<Record<string, PartyCommand>>({});
   const [partyOutcomes, setPartyOutcomes] = useState<Record<string, PartyCommandOutcome>>({});
-  function sendPartyCommand(partyId: string, action: PartyAction) {
-    setPartyCommands((current) => ({ ...current, [partyId]: { ...action, token: (current[partyId]?.token ?? 0) + 1 } }));
+  function sendPartyCommand(key: string, action: PartyAction) {
+    setPartyCommands((current) => ({ ...current, [key]: { ...action, token: (current[key]?.token ?? 0) + 1 } }));
   }
   const reportPartyOutcome = (callId: string, outcome: PartyCommandOutcome) => setPartyOutcomes((current) => ({ ...current, [callId]: outcome }));
   // 주소나 관련 콜로 접힌 완료 영역의 콜을 고르면 그 영역을 펼친다(기기에 남기지는 않는다).
@@ -1014,7 +1015,7 @@ export function CallLedgerList({
   }
 
   const headedParties = new Set<string>();
-  const line = (row: ServiceCallRowDto, party: { position: number; size: number } | null, hidden: boolean) => (
+  const line = (row: ServiceCallRowDto, party: { key: string; position: number; size: number } | null, hidden: boolean) => (
     <CallLedgerLine
       clock={lineClock}
       customers={customers}
@@ -1028,8 +1029,8 @@ export function CallLedgerList({
       options={options}
       panelFocus={row.id === selectedCallId ? panelFocus : null}
       panelHost={panelHost}
-      party={party}
-      partyCommand={row.partyId ? (partyCommands[row.partyId] ?? null) : null}
+      party={party ? { position: party.position, size: party.size } : null}
+      partyCommand={party ? (partyCommands[party.key] ?? null) : null}
       readOnly={isPhoneWidth}
       row={row}
       rows={rows}
@@ -1041,16 +1042,16 @@ export function CallLedgerList({
   const partNodes = (part: "open" | "done", partRows: ServiceCallRowDto[], hidden: boolean) =>
     ledgerFlowItems(partRows, rows).map((item) => {
       if (item.kind === "call") return { startTime: item.row.startTime, nodes: [line(item.row, null, hidden)] };
-      const { partyId, size, lead } = item;
-      const first = !headedParties.has(partyId);
-      headedParties.add(partyId);
-      const command = partyCommands[partyId];
+      const { key, partyId, size, lead, positionOf } = item;
+      const first = !headedParties.has(key);
+      headedParties.add(key);
+      const command = partyCommands[key];
       const failures =
         first && command
           ? command.callIds.flatMap((callId) => {
               const outcome = partyOutcomes[callId];
               if (outcome?.token !== command.token || !isSaveHeld(outcome.status)) return [];
-              return [{ position: rows.find((row) => row.id === callId)?.partyPosition ?? 0, message: outcome.message }];
+              return [{ position: positionOf(callId), message: outcome.message }];
             })
           : [];
       return {
@@ -1061,21 +1062,30 @@ export function CallLedgerList({
             first={first}
             hidden={hidden || item.rows.every(filteredOut)}
             isLocked={isLocked}
-            key={`party-${part}-${partyId}`}
+            key={`party-${part}-${key}`}
             lead={lead}
             onAdd={() =>
-              requestQuickBookingJoinParty({ partyId, serviceDate: lead.serviceDate, startTime: lead.startTime, customerMemo: lead.customerMemo, size })
+              requestQuickBookingJoinParty({
+                partyId,
+                serviceDate: lead.serviceDate,
+                startTime: lead.startTime,
+                customerMemo: lead.customerMemo,
+                bookingChannelCode: lead.bookingChannelCode,
+                bookerName: lead.bookerName,
+                size
+              })
             }
-            onCancel={(callIds) => sendPartyCommand(partyId, { kind: "cancel", callIds })}
-            onEnter={(callIds, rooms) => sendPartyCommand(partyId, { kind: "enter", callIds, rooms })}
+            onCancel={(callIds) => sendPartyCommand(key, { kind: "cancel", callIds })}
+            onEnter={(callIds, rooms) => sendPartyCommand(key, { kind: "enter", callIds, rooms })}
             options={options}
             part={part}
+            positionOf={positionOf}
             readOnly={isPhoneWidth}
             rows={rows}
             sectionRows={item.rows}
             size={size}
           />,
-          ...item.rows.map((row) => line(row, { position: row.partyPosition ?? 0, size }, hidden))
+          ...item.rows.map((row) => line(row, { key, position: positionOf(row.id), size }, hidden))
         ]
       };
     });
