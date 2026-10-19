@@ -43,4 +43,10 @@
 
 - Standards: 모서리 12/8px → 토큰, 대비 측정값을 대비 문서에 기록, README의 Story 3.5 문장과의 충돌을 평면도 계약에 명시, TV 화면 높이 조건을 페이지 클래스에서 CSS(`.floor-plan-tv-screen`)로 모음, 이름표 자리 prop을 `style` → `position`으로 바꾸고 이름은 `name`으로 따로 받음, 한 줄의 라벨·값을 `lineParts` 하나에서 만들어 보이는 글자와 접근 이름이 같은 문구를 쓰게 함. `locale`·`tv` 등이 컴포넌트를 타고 내려가는 것(Data Clumps)은 규모상 그대로 둠.
 - Spec: 3-5 E2E의 배지 단언이 범례 배지로 자동 충족되던 것을 평면도 화면에서는 층 카드 안으로 좁힘, `validate-story-3-4`에 객실판 접근 이름(`common.roomStatusAria`)을 평면도 컴포넌트에서 요구하는 조건을 되살림, 기타 줄 방의 빈방 칩도 전체 이름(단위 테스트 추가).
-- 남긴 것: TV 큰 글자의 1600px 기준(작은 TV 화면 지원 여부는 사용자 확인 필요), 로딩 골격.
+- 남긴 것: 로딩 골격. TV 큰 글자의 1600px 기준은 2026-10-20 사용자가 승인했다.
+
+### 2026-10-20 프리뷰 배포
+
+- `origin/feat/room-floor-plan` push, `preview/dock-zone-menu`에 병합 c5b25b8(로고 b6967dc 위)·push. design.md 충돌은 로고가 6.16을 쓰므로 프리뷰 쪽에서 객실 평면도 절을 6.17로 옮겨 풀었다.
+- 병합본 검증(새 DB, 운영 빌드): 단위 1038/1038, tsc 통과, 검증기는 기존 4-6만 실패, 실시간·TV 영향 E2E 27/27, 로고 머리말 포함 TV 1920×1080 한 화면.
+- Cloudflare 프리뷰 버전 a73f011e(태그 `floor-plan-c5b25b8`, 별칭 app-expansion). 운영 트래픽 bff7cf91 100% 그대로, DB 마이그레이션 없음.
