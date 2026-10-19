@@ -215,7 +215,7 @@ test.describe("티켓 02 업무 흐름 셸", () => {
     await expect(zoneMenu(page, "보고")).toBeHidden();
 
     await dockZone(page, "정산").click();
-    await expect(zoneMenu(page, "정산").getByRole("link")).toHaveText(["근무표", "Therapist", "운영팀 일일", "운영팀 월"]);
+    await expect(zoneMenu(page, "정산").getByRole("link")).toHaveText(["근무표", "Therapist", "운영팀 일일", "운영팀 월", "공지"]);
     await zoneMenu(page, "정산").getByRole("link", { name: "운영팀 월" }).click();
     await expect(page).toHaveURL(/\/settlements\/operations\/monthly/);
     await expect(zoneMenu(page, "정산")).toBeHidden();

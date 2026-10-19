@@ -37,6 +37,7 @@ export const vi: Messages = {
   "shell.tab.opsDaily": "Vận hành ngày",
   "shell.tab.opsMonthly": "Vận hành tháng",
   "shell.tab.statement": "Phiếu lương tháng",
+  "shell.tab.therapistNotices": "Thông báo",
   "shell.tab.closing": "Chốt tháng",
   "shell.tab.dashboardToday": "Hôm nay",
   "shell.tab.dashboardMonthly": "Theo tháng",
@@ -891,6 +892,33 @@ export const vi: Messages = {
   "settlements.statement.payout.monthlyLabel": "Thưởng tháng",
   "settlements.statement.payout.empty.title": "Không có đơn vị cần xác nhận chi trả.",
 
+  // /settlements/notices 화면(티켓 10, 관리자 전용 Therapist 공지). vi에서 Therapist는 "KTV"다.
+  "settlements.notices.title": "Thông báo KTV",
+  "settlements.notices.form.bodyLabel": "Nội dung",
+  "settlements.notices.form.bodyPlaceholder": "Nhập nội dung gửi cho KTV.",
+  "settlements.notices.form.targetLabel": "Đối tượng",
+  "settlements.notices.form.targetAll": "Toàn bộ KTV",
+  "settlements.notices.form.targetOne": "Một KTV cụ thể",
+  "settlements.notices.form.targetEmployeeLabel": "KTV nhận",
+  "settlements.notices.form.targetEmployeePlaceholder": "Chọn KTV",
+  "settlements.notices.form.submit": "Gửi",
+  "settlements.notices.form.submitting": "Đang gửi",
+  "settlements.notices.form.sentNotice": "Đã gửi.",
+  "settlements.notices.list.title": "Thông báo đã gửi",
+  "settlements.notices.list.empty.title": "Chưa có thông báo nào được gửi",
+  "settlements.notices.list.empty.description": "Thông báo gửi bằng form phía trên sẽ hiển thị ở đây.",
+  "settlements.notices.list.target.all": "Toàn bộ",
+  "settlements.notices.list.recipients": "Đối tượng {total} · Đã đọc {read} · Chưa đọc {unread}",
+  "settlements.notices.list.withdrawn": "Đã gỡ",
+  "settlements.notices.list.withdrawnAt": "Đã gỡ lúc {time}",
+  "settlements.notices.list.showRecipients": "Xem tình trạng đọc",
+  "settlements.notices.list.hideRecipients": "Đóng tình trạng đọc",
+  "settlements.notices.recipient.read": "Đã đọc",
+  "settlements.notices.recipient.unread": "Chưa đọc",
+  "settlements.notices.action.withdraw": "Gỡ thông báo",
+  "settlements.notices.action.withdrawing": "Đang gỡ",
+  "settlements.notices.error.generic": "Không xử lý được. Vui lòng thử lại.",
+
   // /closing 화면
   "closing.title": "Xem trước chốt tháng",
   "closing.emptyMonthDescription": "Xem trước chốt tháng chỉ tra cứu được theo ngày bắt đầu và ngày kết thúc của tháng vận hành.",
@@ -1617,4 +1645,11 @@ export const vi: Messages = {
   "therapist.refresh.lastUpdated": "Cập nhật gần nhất",
   "therapist.refresh.refreshing": "Đang cập nhật",
   "therapist.refresh.refresh": "Làm mới",
+
+  // 공지 탭(티켓 10, 스펙 D25)
+  "therapist.notices.empty.title": "Chưa có thông báo nào",
+  "therapist.notices.empty.description": "Thông báo từ quản trị viên sẽ hiển thị ở đây theo thứ tự mới nhất.",
+  "therapist.notices.unread": "Chưa đọc",
+  "therapist.notices.detail.title": "Thông báo",
+  "therapist.notices.detail.sentAt": "Gửi lúc {time}",
 };

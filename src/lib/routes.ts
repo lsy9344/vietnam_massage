@@ -64,6 +64,8 @@ export const screenRoutes: readonly ScreenRoute[] = [
   { path: "/settlements/operations/monthly", labelKey: "shell.tab.opsMonthly", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "month" },
   // 월 명세서(티켓 32)는 각 정산 화면의 직원 패널에서 직원을 고르고 연다. TV와 같은 이유로 구역 안 탭에는 두지 않는다.
   { path: "/settlements/statement", labelKey: "shell.tab.statement", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "month", notATab: true },
+  // Therapist 공지(티켓 10, 스펙 D25, M18). therapist:manage는 관리자 전용이라 settlement_manager는 들어가지 못한다.
+  { path: "/settlements/notices", labelKey: "shell.tab.therapistNotices", zone: "settlements", roles: ["administrator"] },
   { path: "/closing", labelKey: "shell.tab.closing", zone: "closing", roles: ["administrator", "settlement_manager"], dateContext: "month" },
   { path: "/dashboard/today", labelKey: "shell.tab.dashboardToday", zone: "reports", roles: reportRoles, dateContext: "serviceDate" },
   { path: "/dashboard/monthly", labelKey: "shell.tab.dashboardMonthly", zone: "reports", roles: reportRoles, dateContext: "month" },

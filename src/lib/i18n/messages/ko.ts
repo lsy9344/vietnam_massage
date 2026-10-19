@@ -38,6 +38,7 @@ export const ko = {
   "shell.tab.opsDaily": "운영팀 일일",
   "shell.tab.opsMonthly": "운영팀 월",
   "shell.tab.statement": "월 명세서",
+  "shell.tab.therapistNotices": "공지",
   "shell.tab.closing": "월마감",
   "shell.tab.dashboardToday": "오늘",
   "shell.tab.dashboardMonthly": "월간",
@@ -897,6 +898,33 @@ export const ko = {
   "settlements.statement.payout.monthlyLabel": "월 인센티브",
   "settlements.statement.payout.empty.title": "지급 확인 대상 단위가 없습니다.",
 
+  // /settlements/notices 화면(티켓 10, 관리자 전용 Therapist 공지)
+  "settlements.notices.title": "Therapist 공지",
+  "settlements.notices.form.bodyLabel": "본문",
+  "settlements.notices.form.bodyPlaceholder": "Therapist에게 보낼 내용을 적으세요.",
+  "settlements.notices.form.targetLabel": "대상",
+  "settlements.notices.form.targetAll": "Therapist 전체",
+  "settlements.notices.form.targetOne": "특정 Therapist 한 명",
+  "settlements.notices.form.targetEmployeeLabel": "대상 Therapist",
+  "settlements.notices.form.targetEmployeePlaceholder": "Therapist 선택",
+  "settlements.notices.form.submit": "보내기",
+  "settlements.notices.form.submitting": "보내는 중",
+  "settlements.notices.form.sentNotice": "보냈습니다.",
+  "settlements.notices.list.title": "보낸 공지",
+  "settlements.notices.list.empty.title": "보낸 공지가 없습니다",
+  "settlements.notices.list.empty.description": "위 폼으로 공지를 보내면 여기에 쌓입니다.",
+  "settlements.notices.list.target.all": "전체",
+  "settlements.notices.list.recipients": "대상 {total}명 · 읽음 {read} · 안읽음 {unread}",
+  "settlements.notices.list.withdrawn": "내림",
+  "settlements.notices.list.withdrawnAt": "{time} 내림",
+  "settlements.notices.list.showRecipients": "읽음 현황 보기",
+  "settlements.notices.list.hideRecipients": "읽음 현황 닫기",
+  "settlements.notices.recipient.read": "읽음",
+  "settlements.notices.recipient.unread": "안읽음",
+  "settlements.notices.action.withdraw": "내리기",
+  "settlements.notices.action.withdrawing": "내리는 중",
+  "settlements.notices.error.generic": "처리하지 못했습니다. 다시 시도하세요.",
+
   // /closing 화면
   "closing.title": "월마감 미리보기",
   "closing.emptyMonthDescription": "월마감 미리보기는 운영월 시작일과 종료일 기준으로만 조회할 수 있다.",
@@ -1623,4 +1651,11 @@ export const ko = {
   "therapist.refresh.lastUpdated": "마지막 갱신",
   "therapist.refresh.refreshing": "갱신 중",
   "therapist.refresh.refresh": "새로고침",
+
+  // 공지 탭(티켓 10, 스펙 D25)
+  "therapist.notices.empty.title": "받은 공지가 없습니다",
+  "therapist.notices.empty.description": "관리자가 보낸 공지가 여기에 최신순으로 쌓입니다.",
+  "therapist.notices.unread": "안읽음",
+  "therapist.notices.detail.title": "공지",
+  "therapist.notices.detail.sentAt": "{time} 보냄",
 } as const;

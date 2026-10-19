@@ -94,7 +94,13 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
 
   // 코스 기준정보: 다시 사용, 새 코스 추가(콜 원장 흐름 재구성 D9)
   COURSE_POLICY_REQUIRED: "Cần nhập chính sách áp dụng cho tháng này để dùng lại gói.",
-  COURSE_CODE_DUPLICATE: "Mã gói đã tồn tại. Gói đã ngừng thì bật lại bằng Dùng lại."
+  COURSE_CODE_DUPLICATE: "Mã gói đã tồn tại. Gói đã ngừng thì bật lại bằng Dùng lại.",
+
+  // Therapist 공지(스펙 D25, 티켓 10)
+  INVALID_NOTICE_INPUT: "Vui lòng nhập nội dung thông báo.",
+  TARGET_EMPLOYEE_REQUIRED: "Vui lòng chọn KTV nhận thông báo.",
+  THERAPIST_ACCOUNT_NOT_FOUND: "Không tìm thấy tài khoản KTV đang hoạt động.",
+  NOTICE_NOT_FOUND: "Không tìm thấy thông báo."
 };
 
 /**
