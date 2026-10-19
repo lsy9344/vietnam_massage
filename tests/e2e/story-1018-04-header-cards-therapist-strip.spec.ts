@@ -79,6 +79,8 @@ async function checkIn(employeeId: string, checkOutMinute: number | null) {
       employeeId,
       checkInMinute: 600,
       checkOutMinute,
+      // 퇴근 방식 CHECK 제약(check_out_minute IS NULL = check_out_method IS NULL, 티켓 04)을 맞춘다.
+      checkOutMethod: checkOutMinute === null ? null : "대리 입력",
       isFullAttendanceRecognized: false
     }
   });

@@ -96,7 +96,9 @@ export async function checkInTherapist(input: { operatingMonthId: string; servic
   if (existing) {
     await (prisma as any).therapistAttendance.update({
       where: { id: existing.id },
-      data: { checkInMinute: existing.checkInMinute ?? input.checkInMinute ?? 600, checkOutMinute: null }
+      // checkOutMinute를 지울 때 checkOutMethod도 같이 지운다 — 안 그러면 CHECK 제약
+      // (check_out_minute IS NULL = check_out_method IS NULL, 티켓 04)을 어긴다.
+      data: { checkInMinute: existing.checkInMinute ?? input.checkInMinute ?? 600, checkOutMinute: null, checkOutMethod: null }
     });
     return;
   }
