@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { RoomStatusCard } from "@/components/domain/room-status-card";
+import { RoomFloorPlan } from "@/components/domain/room-floor-plan";
 import { RoomStatusRefresh, RoomStatusRefreshController } from "@/components/domain/room-status-refresh-controller";
 import { canAccessRoute, requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
@@ -7,7 +7,6 @@ import { getServerTranslator } from "@/lib/i18n/server";
 import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import { latestRoomStatusUpdatedAt } from "@/modules/rooms/room-status-refresh";
-import { roomFloorGroups } from "@/modules/rooms/room-floor-groups";
 import { listRoomStatuses } from "@/modules/rooms/room-status-service";
 import { autoFinishOverdueCalls } from "@/modules/calls/service-call-service";
 
@@ -15,10 +14,6 @@ type TvPageSearchParams = {
   operatingMonthId?: string;
   serviceDate?: string;
 };
-
-function floorGridClass(count: number) {
-  return count === 2 ? "grid grid-cols-1 gap-4 md:grid-cols-2" : "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3";
-}
 
 export default async function TvPage({ searchParams }: { searchParams: Promise<TvPageSearchParams> }) {
   const account = await requireRouteAccess("/tv");
@@ -56,7 +51,7 @@ export default async function TvPage({ searchParams }: { searchParams: Promise<T
 
   return (
     <RoomStatusRefresh lastUpdatedAt={lastUpdatedAt} locale={locale}>
-      <main className="fullscreen min-h-screen bg-background px-5 py-5 text-foreground lg:px-8 lg:py-6">
+      <main className="fullscreen flex min-h-screen flex-col bg-background px-5 py-5 text-foreground lg:px-8 lg:py-6 min-[1600px]:[@media(min-height:900px)]:h-screen">
         <header className="mb-5 flex flex-wrap items-end justify-between gap-5 border-b border-border pb-4">
           <div className="flex items-stretch gap-4">
             {/* 골드 브랜드 표식은 TV에서 머리말에만 둔다(design.md 6.15). */}
@@ -72,15 +67,8 @@ export default async function TvPage({ searchParams }: { searchParams: Promise<T
           <RoomStatusRefreshController variant="tv" />
         </header>
 
-        <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label={t("common.roomStatusAria")}>
-          {roomFloorGroups(roomStatuses).map((group) => (
-            <div className={`col-span-full ${floorGridClass(group.statuses.length)}`} key={group.floor}>
-              {group.statuses.map((status) => (
-                <RoomStatusCard key={status.roomId} status={status} variant="tv" locale={locale} />
-              ))}
-            </div>
-          ))}
-        </section>
+        {/* 객실판은 층별 평면도 2×2와 그 아래 "지금 빈방 / 곧 비는 방"이다. 읽기 전용이라 누르는 것이 없다(.scratch/room-floor-plan/spec.md D4). */}
+        <RoomFloorPlan locale={locale} statuses={roomStatuses} variant="tv" />
       </main>
     </RoomStatusRefresh>
   );

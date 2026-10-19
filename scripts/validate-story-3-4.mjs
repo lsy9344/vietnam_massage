@@ -61,7 +61,8 @@ for (const required of [
   "selectedOperatingMonthFor",
   "clampDateToOperatingMonth",
   "listRoomStatuses",
-  "RoomStatusCard",
+  // 객실 평면도(.scratch/room-floor-plan D4): TV 객실판은 층별 평면도 2×2다.
+  "RoomFloorPlan",
   "variant=\"tv\"",
   "RoomStatusRefreshController",
   "variant=\"tv\"",
@@ -71,9 +72,7 @@ for (const required of [
   // i18n 전환: 한국어 UI 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
   "nav.item.tv",
   "fullscreen",
-  "tv.eyebrowFull",
-  "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4",
-  "common.roomStatusAria"
+  "tv.eyebrowFull"
 ]) {
   if (!tvPage.includes(required)) errors.push(`src/app/tv/page.tsx missing ${required}`);
 }
@@ -205,7 +204,7 @@ for (const required of [
   "settlement_manager",
   "/settlements",
   "/tv?operatingMonthId",
-  "room-status-card",
+  "floor-plan-room",
   "toHaveCount(11)",
   "상태: 예약",
   "상태: 사용중",

@@ -338,7 +338,8 @@ test.describe("Client revision browser verification", () => {
 
     await login(page, seededData.accounts.read_only_viewer.accountId, seededData.accounts.read_only_viewer.password);
     await page.goto(`/tv?operatingMonthId=${seededData.openMonthId}&serviceDate=${unassignedDate}`);
-    await expect(page.getByTestId("room-status-card").filter({ hasText: "WO 미배정60" })).toHaveCount(0);
+    await expect(page.getByTestId("floor-plan-room").first()).toBeVisible();
+    await expect(page.getByTestId("floor-plan-room").filter({ has: page.getByLabel("상태: 예약") })).toHaveCount(0);
 
     await login(page, seededData.accounts.counter.accountId, seededData.accounts.counter.password);
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=${unassignedDate}`);

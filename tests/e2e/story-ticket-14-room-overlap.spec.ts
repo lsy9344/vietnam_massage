@@ -225,9 +225,10 @@ test.describe("티켓 14 객실 겹침", () => {
     await login(page, accounts.counter.accountId, accounts.counter.password);
     await page.goto(`/tv?${dateQuery()}`);
 
-    const card = roomCard(page);
-    await expect(card).toBeVisible();
-    await expect(card.getByText(/겹친 콜|이 객실에/)).toHaveCount(0);
-    await expect(card.locator("a")).toHaveCount(0);
+    // TV 객실판은 평면도이고, 번호가 없는 이 객실은 기타 줄의 이름표다.
+    const tag = page.getByRole("group", { name: "기타" }).getByTestId("floor-plan-room").filter({ hasText: roomName });
+    await expect(tag).toBeVisible();
+    await expect(page.getByText(/겹친 콜|이 객실에/)).toHaveCount(0);
+    await expect(page.getByTestId("room-floor-plan").locator("a")).toHaveCount(0);
   });
 });

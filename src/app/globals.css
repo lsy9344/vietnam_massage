@@ -652,6 +652,11 @@ button.floor-plan-free-chip:hover {
   position: absolute;
 }
 
+/* 칸이 줄어도(TV 한 화면 맞춤) 글자를 깎지 않고 넘쳐 보이게 한다. */
+.floor-plan-room > * {
+  flex-shrink: 0;
+}
+
 .floor-plan-others .floor-plan-room {
   width: 10.5rem;
   border: 1px solid var(--border);
@@ -828,97 +833,128 @@ button.floor-plan-room:hover {
   }
 }
 
-/* TV: 2×2, 큰 글자, 범례 없음(D4). */
-.floor-plan--tv .floor-plan-floors {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+/* TV: 2×2, 큰 글자, 범례 없음(D4). 풀HD급 TV 폭(1600px 이상)에서 쓰고, 그보다 좁은 창은 실시간과 같은 크기다. */
+@media (min-width: 1600px) {
+  .floor-plan--tv .floor-plan-floors {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .floor-plan--tv .floor-plan-floor-title {
+    font-size: 1.875rem;
+    font-weight: 900;
+  }
+
+  .floor-plan--tv .floor-plan-pencil {
+    stroke-width: 2.2;
+  }
+
+  .floor-plan--tv .floor-plan-pencil--soft {
+    stroke-width: 1.6;
+  }
+
+  .floor-plan--tv .floor-plan-zone {
+    font-size: 1rem;
+  }
+
+  .floor-plan--tv .floor-plan-room {
+    gap: 8px;
+    padding: 14px 18px;
+  }
+
+  .floor-plan--tv .floor-plan-room-number {
+    font-size: 2.5rem;
+    font-weight: 900;
+  }
+
+  .floor-plan--tv .floor-plan-marker path {
+    stroke-width: 4;
+  }
+
+  .floor-plan--tv .floor-plan-badge {
+    min-height: 36px;
+    gap: 6px;
+    padding: 4px 12px;
+    font-size: 1.375rem;
+    font-weight: 800;
+  }
+
+  .floor-plan--tv .floor-plan-room-who {
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .floor-plan--tv .floor-plan-room-label {
+    font-size: 1.125rem;
+    font-weight: 700;
+  }
+
+  .floor-plan--tv .floor-plan-room-value {
+    font-size: 2.125rem;
+    font-weight: 900;
+  }
+
+  .floor-plan--tv .floor-plan-room-value--text {
+    font-size: 1.5rem;
+    font-weight: 800;
+  }
+
+  .floor-plan--tv .floor-plan-others .floor-plan-room {
+    width: 16rem;
+  }
+
+  .floor-plan--tv .floor-plan-free {
+    gap: 10px;
+  }
+
+  .floor-plan--tv .floor-plan-free-label {
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .floor-plan--tv .floor-plan-free-label:not(:first-child) {
+    margin-left: 24px;
+  }
+
+  .floor-plan--tv .floor-plan-free-chip {
+    min-height: 52px;
+    padding: 0 20px;
+    font-size: 1.625rem;
+    font-weight: 900;
+  }
+
+  .floor-plan--tv .floor-plan-free-chip-extra {
+    font-size: 1.375rem;
+    font-weight: 700;
+  }
 }
 
-.floor-plan--tv .floor-plan-floor-title {
-  font-size: 1.875rem;
-  font-weight: 900;
-}
+/* TV 한 화면(1920×1080 등)에 세로 스크롤 없이 들어가게, 층 도면은 남은 높이에 맞춰 줄어든다.
+   늘어날 때는 도면 비율(1165:400)까지만 늘어난다(100cqw = 층 카드 안쪽 폭). 더 작은 창은 세로로 스크롤한다. */
+@media (min-width: 1600px) and (min-height: 900px) {
+  .floor-plan--tv {
+    flex: 1;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+    grid-auto-rows: auto;
+  }
 
-.floor-plan--tv .floor-plan-pencil {
-  stroke-width: 2.2;
-}
+  .floor-plan--tv .floor-plan-floors {
+    min-height: 0;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
 
-.floor-plan--tv .floor-plan-pencil--soft {
-  stroke-width: 1.6;
-}
+  .floor-plan--tv .floor-plan-floor {
+    container-type: inline-size;
+    min-height: 0;
+    grid-template-rows: auto minmax(0, 1fr);
+    align-content: start;
+  }
 
-.floor-plan--tv .floor-plan-zone {
-  font-size: 1rem;
-}
-
-.floor-plan--tv .floor-plan-room {
-  gap: 8px;
-  padding: 14px 18px;
-}
-
-.floor-plan--tv .floor-plan-room-number {
-  font-size: 2.5rem;
-  font-weight: 900;
-}
-
-.floor-plan--tv .floor-plan-marker path {
-  stroke-width: 4;
-}
-
-.floor-plan--tv .floor-plan-badge {
-  min-height: 36px;
-  gap: 6px;
-  padding: 4px 12px;
-  font-size: 1.375rem;
-  font-weight: 800;
-}
-
-.floor-plan--tv .floor-plan-room-who {
-  font-size: 1.25rem;
-  font-weight: 700;
-}
-
-.floor-plan--tv .floor-plan-room-label {
-  font-size: 1.125rem;
-  font-weight: 700;
-}
-
-.floor-plan--tv .floor-plan-room-value {
-  font-size: 2.125rem;
-  font-weight: 900;
-}
-
-.floor-plan--tv .floor-plan-room-value--text {
-  font-size: 1.5rem;
-  font-weight: 800;
-}
-
-.floor-plan--tv .floor-plan-others .floor-plan-room {
-  width: 16rem;
-}
-
-.floor-plan--tv .floor-plan-free {
-  gap: 10px;
-}
-
-.floor-plan--tv .floor-plan-free-label {
-  font-size: 1.25rem;
-  font-weight: 700;
-}
-
-.floor-plan--tv .floor-plan-free-label:not(:first-child) {
-  margin-left: 24px;
-}
-
-.floor-plan--tv .floor-plan-free-chip {
-  min-height: 52px;
-  padding: 0 20px;
-  font-size: 1.625rem;
-  font-weight: 900;
-}
-
-.floor-plan--tv .floor-plan-free-chip-extra {
-  font-size: 1.375rem;
-  font-weight: 700;
+  .floor-plan--tv .floor-plan-canvas {
+    aspect-ratio: auto;
+    min-height: 0;
+    max-height: calc(100cqw * 400 / 1165);
+  }
 }
 
 .status-attention {
