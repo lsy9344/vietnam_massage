@@ -13,7 +13,9 @@ export const roles = [
   "counter",
   "waiter",
   "settlement_manager",
-  "read_only_viewer"
+  "read_only_viewer",
+  // 티켓 01: Therapist 전용 역할. 민감 권한이 없고 Therapist 화면에만 들어간다(스펙 D2).
+  "therapist"
 ] as const;
 
 export type Role = (typeof roles)[number];
@@ -25,14 +27,17 @@ export type SensitivePermission =
   | "closing:reopen"
   | "employee:write"
   | "audit:read"
-  | "migration:write";
+  | "migration:write"
+  // 티켓 01: 공지·Therapist 현황·내부 메모(10, 11, 12)가 쓰는 관리자 전용 권한(스펙 M18).
+  | "therapist:manage";
 
 const rolePermissions: Record<Role, SensitivePermission[]> = {
-  administrator: ["call:write", "payout:write", "closing:write", "closing:reopen", "employee:write", "audit:read", "migration:write"],
+  administrator: ["call:write", "payout:write", "closing:write", "closing:reopen", "employee:write", "audit:read", "migration:write", "therapist:manage"],
   counter: ["call:write"],
   settlement_manager: ["payout:write", "closing:write"],
   waiter: [],
-  read_only_viewer: []
+  read_only_viewer: [],
+  therapist: []
 };
 
 const isDevAuthBypassEnabled = () =>
@@ -51,7 +56,8 @@ function getDevBypassAccount() {
     role: devBypassRole,
     employeeId: null,
     isActive: true,
-    lockedUntil: null
+    lockedUntil: null,
+    passwordChangeRequired: false
   };
 }
 

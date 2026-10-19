@@ -30,4 +30,39 @@ describe("Prisma migration chain", () => {
     assert.match(historySql, /uq_tdsp_id_month_date_employee/);
     assert.match(historySql, /FOREIGN KEY \("payment_id", "operating_month_id", "service_date", "employee_id"\)/);
   });
+
+  it("출퇴근 방식 칸은 더하기만 하고, 기존 줄은 이전 기록으로, 퇴근이 없는 줄은 퇴근 방식을 비운다(스펙 D16, D29)", () => {
+    const sql = migrationSql("20261020120400_add_therapist_attendance_methods");
+
+    assert.match(sql, /ADD COLUMN "check_in_method" TEXT NOT NULL DEFAULT '이전 기록'/);
+    assert.match(sql, /ADD COLUMN "check_out_method" TEXT/);
+    assert.doesNotMatch(sql, /DROP COLUMN|DROP TABLE/);
+    assert.match(sql, /UPDATE "therapist_attendances" SET "check_out_method" = '이전 기록' WHERE "check_out_minute" IS NOT NULL/);
+    assert.match(sql, /CHECK \("check_in_method" IN \('직접', '대리 입력', '정정 승인', '이전 기록'\)\)/);
+    assert.match(sql, /CHECK \(\("check_out_minute" IS NULL\) = \("check_out_method" IS NULL\)\)/);
+  });
+
+  it("계정 비밀번호 변경 필요 표시 칸은 더하기만 한다(스펙 D29, 티켓 02)", () => {
+    const sql = migrationSql("20261020120200_add_user_account_password_change_required");
+
+    assert.match(sql, /ADD COLUMN "password_change_required" BOOLEAN NOT NULL DEFAULT false/);
+    assert.doesNotMatch(sql, /DROP COLUMN|DROP TABLE/);
+  });
+
+  it("Therapist 내부 메모 표는 더하기만 하고, 직원·작성 계정을 FK로 묶는다(스펙 D27, D29)", () => {
+    const sql = migrationSql("20261020121200_add_therapist_internal_memos");
+
+    assert.match(sql, /CREATE TABLE "therapist_internal_memos"/);
+    assert.doesNotMatch(sql, /DROP COLUMN|DROP TABLE/);
+    assert.match(sql, /FOREIGN KEY \("employee_id"\) REFERENCES "employees"\("id"\)/);
+    assert.match(sql, /FOREIGN KEY \("author_account_id"\) REFERENCES "user_accounts"\("id"\)/);
+  });
+
+  it("출근 코드 실패 잠금 칸은 더하기만 한다(스펙 D14, D29, 티켓 05)", () => {
+    const sql = migrationSql("20261020120500_add_therapist_clock_in_code_lockout");
+
+    assert.match(sql, /ADD COLUMN "clock_in_code_failed_count" INTEGER NOT NULL DEFAULT 0/);
+    assert.match(sql, /ADD COLUMN "clock_in_code_locked_until" TIMESTAMP\(3\)/);
+    assert.doesNotMatch(sql, /DROP COLUMN|DROP TABLE/);
+  });
 });

@@ -4,6 +4,7 @@ import {
   TherapistAttendanceDomainError,
   deactivateTherapistAttendance,
   listTherapistAttendanceForDate,
+  listTherapistAttendanceForEmployeeInRange,
   listTherapistFullAttendanceRecognitions,
   upsertTherapistAttendance
 } from "@/modules/settlements/therapist-attendance-service";
@@ -32,7 +33,9 @@ function createMemoryPrisma(
       employeeId: string;
       attendanceDate: string;
       checkInMinute: number;
+      checkInMethod?: string;
       checkOutMinute: number | null;
+      checkOutMethod?: string | null;
       standbyMinutes: number | null;
       isFullAttendanceRecognized: boolean;
       isActive?: boolean;
@@ -75,13 +78,16 @@ function createMemoryPrisma(
 
   const attendances = new Map<string, any>();
   for (const seed of options.seedAttendances ?? []) {
+    // 메모리 시드는 기본적으로 이 칸이 생기기 전 기존 줄("이전 기록")을 흉내낸다(스펙 D16).
     attendances.set(attendanceKey(operatingMonth.id, seed.attendanceDate, seed.employeeId), {
       id: seed.id,
       operatingMonthId: operatingMonth.id,
       attendanceDate: dbDate(seed.attendanceDate),
       employeeId: seed.employeeId,
       checkInMinute: seed.checkInMinute,
+      checkInMethod: seed.checkInMethod ?? "이전 기록",
       checkOutMinute: seed.checkOutMinute,
+      checkOutMethod: seed.checkOutMinute === null ? null : seed.checkOutMethod ?? "이전 기록",
       standbyMinutes: seed.standbyMinutes,
       isFullAttendanceRecognized: seed.isFullAttendanceRecognized,
       isActive: seed.isActive ?? true,
@@ -319,6 +325,7 @@ describe("therapist attendance service", () => {
       employeeId: "thr-1",
       checkInTime: "10:00",
       checkOutTime: "20:00",
+      method: "대리 입력",
       actorId: "account-1",
       prismaClient
     });
@@ -338,7 +345,9 @@ describe("therapist attendance service", () => {
       attendanceDate: "2026-06-10",
       employeeId: "thr-1",
       checkInMinute: 600,
+      checkInMethod: "대리 입력",
       checkOutMinute: 1200,
+      checkOutMethod: "대리 입력",
       standbyMinutes: 600,
       isFullAttendanceRecognized: true,
       isActive: true,
@@ -368,6 +377,7 @@ describe("therapist attendance service", () => {
       employeeId: "thr-1",
       checkInTime: "10:00",
       checkOutTime: "20:00",
+      method: "대리 입력",
       actorId: "account-1",
       prismaClient
     });
@@ -381,6 +391,75 @@ describe("therapist attendance service", () => {
     assert.equal(prismaClient.auditEvents[0].afterValue.isFullAttendanceRecognized, true);
   });
 
+  it("changes only the side whose time actually changed, leaving the other side's method as-is (스펙 M23)", async () => {
+    const prismaClient = createMemoryPrisma({
+      seedAttendances: [
+        {
+          id: "att-seed-1",
+          employeeId: "thr-1",
+          attendanceDate: "2026-06-10",
+          checkInMinute: 600,
+          checkInMethod: "직접",
+          checkOutMinute: 1200,
+          checkOutMethod: "직접",
+          standbyMinutes: 600,
+          isFullAttendanceRecognized: true
+        }
+      ]
+    });
+
+    // checkInTime만 바뀐다. checkOutTime은 저장된 값과 같다.
+    const dto = await upsertTherapistAttendance({
+      operatingMonthId: "month-2026-06",
+      attendanceDate: "2026-06-10",
+      employeeId: "thr-1",
+      checkInTime: "09:00",
+      checkOutTime: "20:00",
+      method: "정정 승인",
+      actorId: "account-1",
+      prismaClient
+    });
+
+    assert.equal(dto.checkInMethod, "정정 승인");
+    assert.equal(dto.checkOutMethod, "직접");
+  });
+
+  it("clears the checkout method when the checkout is removed, instead of assigning this call's method", async () => {
+    const prismaClient = createMemoryPrisma({
+      seedAttendances: [
+        {
+          id: "att-seed-1",
+          employeeId: "thr-1",
+          attendanceDate: "2026-06-10",
+          checkInMinute: 600,
+          checkInMethod: "직접",
+          checkOutMinute: 1200,
+          checkOutMethod: "직접",
+          standbyMinutes: 600,
+          isFullAttendanceRecognized: true
+        }
+      ]
+    });
+
+    const dto = await upsertTherapistAttendance({
+      operatingMonthId: "month-2026-06",
+      attendanceDate: "2026-06-10",
+      employeeId: "thr-1",
+      checkInTime: "10:00",
+      checkOutTime: "",
+      method: "대리 입력",
+      actorId: "account-1",
+      prismaClient
+    });
+
+    assert.equal(dto.checkOutTime, null);
+    assert.equal(dto.checkOutMethod, null);
+    // checkInTime은 그대로이니 출근 방식도 바뀌지 않는다(바뀐 쪽만 바뀐다).
+    assert.equal(dto.checkInMethod, "직접");
+    const stored = prismaClient.attendances.get("month-2026-06::2026-06-10::thr-1");
+    assert.equal(stored.checkOutMethod, null);
+  });
+
   it("stores a check-in-only row when the checkout is missing and defers the full-attendance judgment", async () => {
     const prismaClient = createMemoryPrisma();
 
@@ -390,6 +469,7 @@ describe("therapist attendance service", () => {
       employeeId: "thr-1",
       checkInTime: "10:00",
       checkOutTime: "",
+      method: "대리 입력",
       actorId: "account-1",
       prismaClient
     });
@@ -431,6 +511,7 @@ describe("therapist attendance service", () => {
       employeeId: "thr-1",
       checkInTime: "10:00",
       checkOutTime: "20:00",
+      method: "대리 입력",
       actorId: "account-1",
       prismaClient
     });
@@ -464,6 +545,7 @@ describe("therapist attendance service", () => {
       employeeId: "thr-1",
       checkInTime: "10:00",
       checkOutTime: "",
+      method: "대리 입력",
       actorId: "account-1",
       prismaClient
     });
@@ -482,6 +564,7 @@ describe("therapist attendance service", () => {
         employeeId: "thr-1",
         checkInTime: "10:00",
         checkOutTime: "25:00",
+        method: "대리 입력",
         actorId: "account-1",
         prismaClient
       }),
@@ -508,6 +591,7 @@ describe("therapist attendance service", () => {
         employeeId: "thr-1",
         checkInTime,
         checkOutTime,
+        method: "대리 입력",
         actorId: "account-1",
         prismaClient
       });
@@ -526,6 +610,7 @@ describe("therapist attendance service", () => {
           employeeId: "thr-1",
           checkInTime: badTime,
           checkOutTime: "18:00",
+        method: "대리 입력",
           actorId: "account-1",
           prismaClient
         }),
@@ -545,6 +630,7 @@ describe("therapist attendance service", () => {
         employeeId: "thr-1",
         checkInTime: "10:00",
         checkOutTime: "18:00",
+        method: "대리 입력",
         actorId: "account-1",
         prismaClient
       }),
@@ -563,6 +649,7 @@ describe("therapist attendance service", () => {
         employeeId: "thr-1",
         checkInTime: "10:00",
         checkOutTime: "18:00",
+        method: "대리 입력",
         actorId: "account-1",
         prismaClient
       }),
@@ -590,6 +677,7 @@ describe("therapist attendance service", () => {
         employeeId: "thr-1",
         checkInTime: "10:00",
         checkOutTime: "18:00",
+        method: "대리 입력",
         actorId: "account-1",
         prismaClient
       }),
@@ -607,6 +695,7 @@ describe("therapist attendance service", () => {
         employeeId: "thr-1",
         checkInTime: "10:00",
         checkOutTime: "18:00",
+        method: "대리 입력",
         actorId: "account-1",
         prismaClient
       }),
@@ -625,6 +714,7 @@ describe("therapist attendance service", () => {
         employeeId: "thr-1",
         checkInTime: "10:00",
         checkOutTime: "18:00",
+        method: "대리 입력",
         actorId: "account-1",
         prismaClient
       }),
@@ -643,6 +733,7 @@ describe("therapist attendance service", () => {
         employeeId: "thr-1",
         checkInTime: "10:00",
         checkOutTime: "18:00",
+        method: "대리 입력",
         actorId: "account-1",
         prismaClient
       }),
@@ -669,6 +760,7 @@ describe("therapist attendance service", () => {
         employeeId,
         checkInTime: "10:00",
         checkOutTime,
+        method: "대리 입력",
         actorId: "account-1",
         prismaClient
       });
@@ -836,5 +928,87 @@ describe("therapist attendance service", () => {
       }),
       (error) => error instanceof TherapistAttendanceDomainError && error.code === "OPERATING_MONTH_DATE_OUT_OF_RANGE"
     );
+  });
+
+  describe("listTherapistAttendanceForEmployeeInRange", () => {
+    it("returns one employee's rows across a date range in ascending order, with HH:mm display and methods", async () => {
+      const prismaClient = createMemoryPrisma({
+        seedAttendances: [
+          { id: "a1", employeeId: "thr-1", attendanceDate: "2026-06-12", checkInMinute: 600, checkInMethod: "직접", checkOutMinute: 1200, checkOutMethod: "직접", standbyMinutes: 600, isFullAttendanceRecognized: true },
+          { id: "a2", employeeId: "thr-1", attendanceDate: "2026-06-10", checkInMinute: 601, checkInMethod: "대리 입력", checkOutMinute: null, checkOutMethod: null, standbyMinutes: null, isFullAttendanceRecognized: false },
+          // different employee, must be excluded
+          { id: "a3", employeeId: "thr-2", attendanceDate: "2026-06-11", checkInMinute: 600, checkOutMinute: 1200, standbyMinutes: 600, isFullAttendanceRecognized: true },
+          // inactive row, must be excluded
+          { id: "a4", employeeId: "thr-1", attendanceDate: "2026-06-11", checkInMinute: 600, checkOutMinute: 1200, standbyMinutes: 600, isFullAttendanceRecognized: true, isActive: false }
+        ]
+      });
+
+      const rows = await listTherapistAttendanceForEmployeeInRange({
+        employeeId: "thr-1",
+        startDate: "2026-06-01",
+        endDate: "2026-06-30",
+        prismaClient
+      });
+
+      assert.deepEqual(rows.map((row) => row.attendanceDate), ["2026-06-10", "2026-06-12"]);
+      assert.equal(rows[0].checkInTime, "10:01");
+      assert.equal(rows[0].checkInMethod, "대리 입력");
+      assert.equal(rows[0].checkOutTime, null);
+      assert.equal(rows[0].incompleteReason, "퇴근 미입력");
+      assert.equal(rows[1].checkInTime, "10:00");
+      assert.equal(rows[1].checkOutTime, "20:00");
+      assert.equal(rows[1].checkOutMethod, "직접");
+      assert.equal(rows[1].isFullAttendanceRecognized, true);
+    });
+
+    it("returns an empty array when the employee has no attendance in range", async () => {
+      const prismaClient = createMemoryPrisma();
+      const rows = await listTherapistAttendanceForEmployeeInRange({
+        employeeId: "thr-1",
+        startDate: "2026-06-01",
+        endDate: "2026-06-30",
+        prismaClient
+      });
+      assert.deepEqual(rows, []);
+    });
+
+    it("rejects an unknown or inactive employee id", async () => {
+      const prismaClient = createMemoryPrisma();
+      await assert.rejects(
+        listTherapistAttendanceForEmployeeInRange({ employeeId: "thr-inactive", startDate: "2026-06-01", endDate: "2026-06-30", prismaClient }),
+        (error) => error instanceof TherapistAttendanceDomainError && error.code === "THERAPIST_EMPLOYEE_NOT_FOUND"
+      );
+      await assert.rejects(
+        listTherapistAttendanceForEmployeeInRange({ employeeId: "no-such-id", startDate: "2026-06-01", endDate: "2026-06-30", prismaClient }),
+        (error) => error instanceof TherapistAttendanceDomainError && error.code === "THERAPIST_EMPLOYEE_NOT_FOUND"
+      );
+    });
+
+    it("rejects a reversed date range", async () => {
+      const prismaClient = createMemoryPrisma();
+      await assert.rejects(
+        listTherapistAttendanceForEmployeeInRange({ employeeId: "thr-1", startDate: "2026-06-30", endDate: "2026-06-01", prismaClient }),
+        (error) => error instanceof TherapistAttendanceDomainError && error.code === "INVALID_THERAPIST_ATTENDANCE_INPUT"
+      );
+    });
+
+    it("marks rows as locked when the owning operating month is locked", async () => {
+      const prismaClient = createMemoryPrisma({
+        locked: true,
+        seedAttendances: [
+          { id: "a1", employeeId: "thr-1", attendanceDate: "2026-06-12", checkInMinute: 600, checkOutMinute: 1200, standbyMinutes: 600, isFullAttendanceRecognized: true }
+        ]
+      });
+
+      const rows = await listTherapistAttendanceForEmployeeInRange({
+        employeeId: "thr-1",
+        startDate: "2026-06-01",
+        endDate: "2026-06-30",
+        prismaClient
+      });
+
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].isLocked, true);
+    });
   });
 });

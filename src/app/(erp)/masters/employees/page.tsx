@@ -1,5 +1,6 @@
-import { requireRouteAccess } from "@/lib/authorization";
+import { canPerform, requireRouteAccess } from "@/lib/authorization";
 import { listEmployees } from "@/modules/masters/employee-service";
+import { listTherapistMemosByEmployeeIds } from "@/modules/therapists/therapist-memo-service";
 import { CreateEmployeePanel, EmployeeManager } from "@/app/(erp)/masters/employees/employee-forms";
 import { ActiveCounts } from "@/app/(erp)/masters/master-parts";
 import { MASTER_ITEM_PARAM, countActive, readMasterItem } from "@/app/(erp)/masters/master-view-model";
@@ -12,17 +13,28 @@ export default async function EmployeeMasterPage({ searchParams }: { searchParam
   const employees = await listEmployees();
   const params = await searchParams;
   const counts = countActive(employees);
+  // 티켓 12(D27): 메모는 therapist:manage가 있을 때만 읽는다 — 권한이 없으면 서버가 조회조차 하지 않는다.
+  const therapistMemosByEmployeeId = canPerform(account.role, "therapist:manage")
+    ? await listTherapistMemosByEmployeeIds(employees.filter((employee) => employee.employeeGroup === "THERAPIST").map((employee) => employee.id))
+    : null;
 
   return (
     <div className="screen">
-      <ScreenToolbar account={account} action={<CreateEmployeePanel />} locale={locale} path="/masters/employees" title={t("masters.employees.title")} />
-      <div className="mb-6 grid gap-2">
-        <ActiveCounts active={counts.active} inactive={counts.inactive} locale={locale} unit={(count) => `${count}${t("masters.employees.peopleSuffix")}`} />
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-          <span>{t("masters.employees.meta.totalEmployees", { count: employees.length })}</span>
+      {/* print:hidden: Therapist 안내 쪽지 인쇄(티켓 02)가 패널 밖 도구줄·요약까지 찍지 않게 한다. */}
+      <div className="grid gap-6 print:hidden">
+        <ScreenToolbar account={account} action={<CreateEmployeePanel />} locale={locale} path="/masters/employees" title={t("masters.employees.title")} />
+        <div className="mb-6 grid gap-2">
+          <ActiveCounts active={counts.active} inactive={counts.inactive} locale={locale} unit={(count) => `${count}${t("masters.employees.peopleSuffix")}`} />
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+            <span>{t("masters.employees.meta.totalEmployees", { count: employees.length })}</span>
+          </div>
         </div>
       </div>
-      <EmployeeManager employees={employees} initialItem={readMasterItem(params[MASTER_ITEM_PARAM])} />
+      <EmployeeManager
+        employees={employees}
+        initialItem={readMasterItem(params[MASTER_ITEM_PARAM])}
+        therapistMemosByEmployeeId={therapistMemosByEmployeeId}
+      />
     </div>
   );
 }

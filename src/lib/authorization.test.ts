@@ -53,3 +53,24 @@ describe("authorization TV board route access", () => {
     assert.equal(canPerform("counter", "employee:write"), false);
   });
 });
+
+describe("authorization ticket 01 therapist role and therapist:manage permission", () => {
+  it("gives the therapist role no sensitive permission", () => {
+    for (const permission of ["call:write", "payout:write", "closing:write", "closing:reopen", "employee:write", "audit:read", "migration:write", "therapist:manage"] as const) {
+      assert.equal(canPerform("therapist", permission), false);
+    }
+  });
+
+  it("keeps the new therapist:manage permission (notices, overview, internal memo) administrator-only (spec M18)", () => {
+    assert.equal(canPerform("administrator", "therapist:manage"), true);
+    for (const role of ["counter", "waiter", "settlement_manager", "read_only_viewer", "therapist"] as const) {
+      assert.equal(canPerform(role, "therapist:manage"), false);
+    }
+  });
+
+  it("denies the therapist role every ops screen (spec D2, M16)", () => {
+    for (const path of ["/live", "/calls", "/rooms", "/tv", "/customers", "/settlements", "/closing", "/dashboard/today", "/masters/employees", "/audit"]) {
+      assert.equal(canAccessRoute("therapist", path), false);
+    }
+  });
+});

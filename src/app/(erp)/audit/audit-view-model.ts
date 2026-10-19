@@ -129,6 +129,8 @@ const masterSources: Record<string, { path: string; item: (entry: AuditEntry) =>
   employee: { path: "/masters/employees", item: (entry) => entry.targetId },
   // 계정은 연결된 직원의 패널에서 다룬다.
   user_account: { path: "/masters/employees", item: (entry) => snapshotText(entry, "employeeId") },
+  // 내부 메모(티켓 12)도 그 Therapist의 패널에서 다룬다.
+  therapist_internal_memo: { path: "/masters/employees", item: (entry) => snapshotText(entry, "employeeId") },
   course: { path: "/masters/courses", item: (entry) => courseItem(entry.targetId) },
   course_policy: { path: "/masters/courses", item: (entry) => courseItem(snapshotText(entry, "courseId")) },
   therapist_course_rate: {
@@ -196,7 +198,8 @@ const targetLabelKeys: Record<string, MessageKey> = {
   course_policy: "audit.target.coursePolicy",
   therapist_course_rate: "audit.target.therapistCourseRate",
   ops_daily_incentive_rule: "audit.target.opsDailyIncentiveRule",
-  ops_monthly_incentive_rule: "audit.target.opsMonthlyIncentiveRule"
+  ops_monthly_incentive_rule: "audit.target.opsMonthlyIncentiveRule",
+  therapist_internal_memo: "audit.target.therapistInternalMemo"
 };
 
 /** 화면이 이름을 아는 대상 종류. 필터 칸의 제안 목록에 쓴다. */

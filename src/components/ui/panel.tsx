@@ -40,7 +40,8 @@ export function SidePanel({
         className
       )}
     >
-      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+      {/* print:hidden: Therapist 안내 쪽지 인쇄(티켓 02)처럼 패널 안 내용만 찍히게 머리글은 뺀다. */}
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 print:hidden">
         <h2 className="text-base font-semibold text-foreground">{title}</h2>
         <button className={closeButtonClass} onClick={onClose} type="button">
           {t("common.panel.close")}

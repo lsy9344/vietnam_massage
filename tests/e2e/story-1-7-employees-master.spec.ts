@@ -129,7 +129,9 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await expect(page.getByText("OPS-LEAD-001").first()).toBeVisible();
     await expect(page.getByText("THR-050").first()).toBeVisible();
     await expect.poll(async () => (prisma as any).employee.count({ where: { employeeGroup: "OPERATIONS", staffCode: { startsWith: "OPS-" } } })).toBe(5);
-    await expect.poll(async () => (prisma as any).employee.count({ where: { employeeGroup: "THERAPIST", staffCode: { startsWith: "THR-" } } })).toBe(50);
+    // THR-E2E-001(티켓 01 시드 Therapist 계정)은 "THR-"로 시작해 기본 데이터 50명 집계에 섞이므로,
+    // 기본 데이터 번호 접두사(THR-0NN)로 좁혀 센다.
+    await expect.poll(async () => (prisma as any).employee.count({ where: { employeeGroup: "THERAPIST", staffCode: { startsWith: "THR-0" } } })).toBe(50);
 
     // 티켓 07: 직원 생성은 도구줄의 서랍이다. 범위를 서랍 안으로 좁힌다.
     await page.getByRole("button", { name: "직원 생성" }).click();

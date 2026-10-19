@@ -27,7 +27,10 @@ import {
 } from "@/app/(erp)/masters/employees/actions";
 import { SaveRow, SelectField, TextField } from "@/app/(erp)/masters/master-fields";
 import { ActiveStatus, Cell, HeadCell, ImpactNotice, MasterSectionHeading, MasterTable, PanelSection, masterDateTime } from "@/app/(erp)/masters/master-parts";
+import { TherapistAccountPanel } from "@/app/(erp)/masters/employees/therapist-account-panel";
 import { MasterSplit, SelectableRow, useMasterSelection, useSelectCreatedItem } from "@/app/(erp)/masters/master-workspace";
+import { TherapistMemoPanel } from "@/app/(erp)/masters/employees/therapist-memo-panel";
+import type { TherapistMemoDto } from "@/modules/therapists/therapist-memo-service";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { Translator } from "@/lib/i18n";
 import { formatNumber } from "@/lib/i18n/format";
@@ -229,47 +232,78 @@ function DeactivateForm({ employee }: { employee: EmployeeDto }) {
   );
 }
 
-function EmployeePanel({ employee, onClose }: { employee: EmployeeDto; onClose: () => void }) {
+function EmployeePanel({
+  employee,
+  onClose,
+  therapistMemos
+}: {
+  employee: EmployeeDto;
+  onClose: () => void;
+  /** 티켓 12: null이면 이 계정에는 메모가 아예 안 보내진 것이고(therapist:manage 없음), 섹션도 그리지 않는다. */
+  therapistMemos: TherapistMemoDto[] | null;
+}) {
   const t = useT();
   const locale = useLocale();
   return (
     <SidePanel onClose={onClose} title={`${employee.displayName} (${employee.staffCode})`}>
       <div className="grid gap-6" key={employee.id}>
-        <ActiveStatus inactiveNote={t("masters.employees.inactiveNote")} isActive={employee.isActive} locale={locale} />
-        <ImpactNotice
-          items={[t("masters.employees.impact.name"), t("masters.employees.impact.inactive"), t("masters.employees.impact.account")]}
-          locale={locale}
-        />
-        <PanelSection title={t("masters.employees.column.profile")}>
-          <ProfileForm employee={employee} />
-        </PanelSection>
-        <SortOrderForm employee={employee} />
-        <PanelSection title={t("masters.employees.column.linkedAccount")}>
-          {employee.account ? (
-            <p className="text-sm text-foreground">{t("masters.employees.currentRole", { role: roleDisplayName(t, employee.account.role) })}</p>
-          ) : (
-            <p className="text-sm text-muted">{t("masters.employees.accountNotLinked")}</p>
-          )}
-          <AccountLinkForm employee={employee} />
-        </PanelSection>
-        <PanelSection title={t("masters.common.details")}>
-          <dl>
-            <DetailRow label={t("masters.employees.employeeId")} value={employee.id} />
-            <DetailRow label={t("masters.employees.field.staffCode")} value={employee.staffCode} />
-            <DetailRow label={t("masters.common.createdAt")} value={masterDateTime(locale, employee.createdAt)} />
-            <DetailRow label={t("masters.common.updatedAt")} value={masterDateTime(locale, employee.updatedAt)} />
-          </dl>
-        </PanelSection>
-        <PanelSection title={t("masters.common.deactivateTitle")}>
-          <DeactivateForm employee={employee} />
-        </PanelSection>
+        {/* 티켓 02: Therapist 계정 섹션(아래)은 발급 직후 인쇄용 안내 쪽지를 그 자리에 보이므로,
+            그 쪽지만 인쇄되도록 패널의 다른 내용은 print:hidden으로 뺀다. */}
+        <div className="grid gap-6 print:hidden">
+          <ActiveStatus inactiveNote={t("masters.employees.inactiveNote")} isActive={employee.isActive} locale={locale} />
+          <ImpactNotice
+            items={[t("masters.employees.impact.name"), t("masters.employees.impact.inactive"), t("masters.employees.impact.account")]}
+            locale={locale}
+          />
+          <PanelSection title={t("masters.employees.column.profile")}>
+            <ProfileForm employee={employee} />
+          </PanelSection>
+          <SortOrderForm employee={employee} />
+        </div>
+        {employee.employeeGroup === "THERAPIST" ? (
+          <TherapistAccountPanel employee={employee} />
+        ) : (
+          <PanelSection title={t("masters.employees.column.linkedAccount")}>
+            {employee.account ? (
+              <p className="text-sm text-foreground">{t("masters.employees.currentRole", { role: roleDisplayName(t, employee.account.role) })}</p>
+            ) : (
+              <p className="text-sm text-muted">{t("masters.employees.accountNotLinked")}</p>
+            )}
+            <AccountLinkForm employee={employee} />
+          </PanelSection>
+        )}
+        <div className="grid gap-6 print:hidden">
+          {employee.employeeGroup === "THERAPIST" && therapistMemos ? (
+            <TherapistMemoPanel employeeId={employee.id} memos={therapistMemos} />
+          ) : null}
+          <PanelSection title={t("masters.common.details")}>
+            <dl>
+              <DetailRow label={t("masters.employees.employeeId")} value={employee.id} />
+              <DetailRow label={t("masters.employees.field.staffCode")} value={employee.staffCode} />
+              <DetailRow label={t("masters.common.createdAt")} value={masterDateTime(locale, employee.createdAt)} />
+              <DetailRow label={t("masters.common.updatedAt")} value={masterDateTime(locale, employee.updatedAt)} />
+            </dl>
+          </PanelSection>
+          <PanelSection title={t("masters.common.deactivateTitle")}>
+            <DeactivateForm employee={employee} />
+          </PanelSection>
+        </div>
       </div>
     </SidePanel>
   );
 }
 
 /** 직원 마스터: 직군별 직원 목록과, 고른 직원의 변경 영향·프로필·계정 연결·비활성 처리 패널. */
-export function EmployeeManager({ employees, initialItem }: { employees: EmployeeDto[]; initialItem: string | null }) {
+export function EmployeeManager({
+  employees,
+  initialItem,
+  therapistMemosByEmployeeId = null
+}: {
+  employees: EmployeeDto[];
+  initialItem: string | null;
+  /** 티켓 12: therapist:manage가 없는 계정에는 page.tsx가 이 prop 자체를 null로 보낸다. */
+  therapistMemosByEmployeeId?: Record<string, TherapistMemoDto[]> | null;
+}) {
   const t = useT();
   const locale = useLocale();
   const { selected, select, panelRef } = useMasterSelection(initialItem);
@@ -278,7 +312,15 @@ export function EmployeeManager({ employees, initialItem }: { employees: Employe
   return (
     <MasterSplit
       hint={t("masters.common.panelHint")}
-      panel={selectedEmployee ? <EmployeePanel employee={selectedEmployee} onClose={() => select(null)} /> : null}
+      panel={
+        selectedEmployee ? (
+          <EmployeePanel
+            employee={selectedEmployee}
+            onClose={() => select(null)}
+            therapistMemos={therapistMemosByEmployeeId?.[selectedEmployee.id] ?? null}
+          />
+        ) : null
+      }
       panelRef={panelRef}
     >
       {employeeGroups.map((group) => {
@@ -286,7 +328,8 @@ export function EmployeeManager({ employees, initialItem }: { employees: Employe
         const title = t(groupLabelKeys[group]);
         const headingId = `employee-group-${group}`;
         return (
-          <section aria-labelledby={headingId} className="grid gap-3" key={group}>
+          // print:hidden: 선택한 직원의 Therapist 안내 쪽지를 인쇄할 때(티켓 02) 목록이 같이 찍히지 않게 한다.
+          <section aria-labelledby={headingId} className="grid gap-3 print:hidden" key={group}>
             <MasterSectionHeading count={`${formatNumber(locale, groupEmployees.length)}${t("masters.employees.peopleSuffix")}`} id={headingId} title={title} />
             <MasterTable
               head={

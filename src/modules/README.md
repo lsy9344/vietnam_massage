@@ -8,6 +8,7 @@ This folder contains the ERP domain modules used by the Next.js App Router appli
 masters -> calls -> rooms
                  -> settlements -> closing
                  -> dashboard
+                 -> therapists (assembles attendance/settlements/closing/calls for the Therapist role)
 audit observes important changes across the flow
 ```
 
@@ -19,6 +20,7 @@ audit observes important changes across the flow
 - `settlements`: daily settlement calculations
 - `closing`: monthly closing and payout snapshots
 - `dashboard`: read-only KPI summaries
+- `therapists`: Therapist self-service and the admin-side Therapist work (access gate, profile, later: attendance/payout/requests/notices)
 - `audit`: immutable change history
 
 Use `src/shared` only for cross-module primitives that do not belong to one domain.

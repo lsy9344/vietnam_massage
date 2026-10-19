@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ClockCodeDisplay } from "@/components/domain/clock-code-display";
 import { RoomFloorPlan } from "@/components/domain/room-floor-plan";
 import { RoomStatusRefresh, RoomStatusRefreshController } from "@/components/domain/room-status-refresh-controller";
 import { BRAND_NAME, BrandMark } from "@/components/ui/brand-logo";
@@ -10,6 +11,7 @@ import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import { latestRoomStatusUpdatedAt } from "@/modules/rooms/room-status-refresh";
 import { listRoomStatuses } from "@/modules/rooms/room-status-service";
 import { autoFinishOverdueCalls } from "@/modules/calls/service-call-service";
+import { getTherapistClockCodeDisplayKeys } from "@/modules/therapists/therapist-clock-code-service";
 
 type TvPageSearchParams = {
   operatingMonthId?: string;
@@ -22,11 +24,17 @@ export default async function TvPage({ searchParams }: { searchParams: Promise<T
   const params = await searchParams;
   const operatingMonths = await listOperatingMonths();
   const selectedMonth = selectedOperatingMonthFor(operatingMonths, params.operatingMonthId);
+  // 출근 코드(D13): 운영월이 있는지와 무관하게 항상 구석에 보인다. 지금 시각으로만 계산해서
+  // DB를 깨우지 않는다.
+  const clockCodeKeys = await getTherapistClockCodeDisplayKeys({ now: new Date() });
 
   if (!selectedMonth) {
     return (
       <main className="fullscreen min-h-screen bg-background px-6 py-6 text-foreground lg:px-10">
-        <section className="grid min-h-[calc(100vh-3rem)] place-items-center rounded-lg border border-border bg-surface p-8 text-center">
+        <div className="mb-3 flex justify-end">
+          <ClockCodeDisplay keys={clockCodeKeys} locale={locale} />
+        </div>
+        <section className="grid min-h-[calc(100vh-4.5rem)] place-items-center rounded-lg border border-border bg-surface p-8 text-center">
           <div>
             <p className="text-lg font-bold text-muted">{t("tv.eyebrow")}</p>
             <h1 className="mt-3 text-[40px] font-black leading-none">{t("nav.item.tv")}</h1>
@@ -65,7 +73,11 @@ export default async function TvPage({ searchParams }: { searchParams: Promise<T
               </p>
             </div>
           </div>
-          <RoomStatusRefreshController variant="tv" />
+          {/* 출근 코드(D13)는 영업시간 안팎 모두 구석에 항상 보인다. 자동 갱신 상태와 나란히 둔다. */}
+          <div className="flex items-center gap-3">
+            <ClockCodeDisplay keys={clockCodeKeys} locale={locale} />
+            <RoomStatusRefreshController variant="tv" />
+          </div>
         </header>
 
         {/* 객실판은 층별 평면도 2×2와 그 아래 "지금 빈방 / 곧 비는 방"이다. 읽기 전용이라 누르는 것이 없다(.scratch/room-floor-plan/spec.md D4). */}

@@ -136,6 +136,8 @@ async function seedStoryData() {
       employeeId: therapist.id,
       checkInMinute: 9 * 60,
       checkOutMinute: 19 * 60,
+      // 퇴근 방식 CHECK 제약(check_out_minute IS NULL = check_out_method IS NULL, 티켓 04)을 맞춘다.
+      checkOutMethod: "대리 입력",
       standbyMinutes: 600,
       isFullAttendanceRecognized: true,
       isActive: true

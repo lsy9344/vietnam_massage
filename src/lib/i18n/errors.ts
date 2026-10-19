@@ -59,6 +59,14 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   ACCOUNT_ID_ALREADY_LINKED: "ID tài khoản đã được liên kết với nhân viên khác.",
   EMAIL_ALREADY_LINKED: "Email đã được liên kết với nhân viên khác.",
   EMPLOYEE_NOT_FOUND: "Không tìm thấy nhân viên.",
+  ACCOUNT_NOT_FOUND: "Không tìm thấy tài khoản.",
+
+  // Therapist 계정 발급·초기화(티켓 02, 스펙 D2, D5, D26)
+  THERAPIST_EMPLOYEE_REQUIRES_DEDICATED_ACCOUNT_FLOW: "Nhân viên KTV chỉ được liên kết tài khoản ở màn hình cấp tài khoản KTV riêng.",
+  THERAPIST_ACCOUNT_REQUIRES_THERAPIST_EMPLOYEE: "Chỉ có thể cấp tài khoản KTV cho nhân viên nhóm KTV.",
+  THERAPIST_ACCOUNT_ALREADY_ISSUED: "Nhân viên này đã có tài khoản. Hãy dùng chức năng đặt lại mật khẩu.",
+  THERAPIST_ACCOUNT_RESET_REQUIRES_THERAPIST_ROLE: "Chỉ có thể đặt lại mật khẩu KTV bằng cách này cho tài khoản KTV.",
+  CURRENT_PASSWORD_INCORRECT: "Mật khẩu hiện tại không đúng.",
 
   // 직원/계정 마스터 입력 (직원정보·계정 연결 폼)
   INVALID_EMPLOYEE_INPUT: "Dữ liệu nhân viên không hợp lệ.",
@@ -78,6 +86,9 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   PAYOUT_CONFIRMATION_ALREADY_CONFIRMED: "Đã xác nhận chi trả. Nếu số tiền thay đổi, hãy xác nhận lại.",
   PAYOUT_CONFIRMATION_NOT_CONFIRMED: "Chưa có xác nhận chi trả nên không thể xác nhận lại hoặc hủy xác nhận.",
 
+  // Therapist 내부 메모(티켓 12, 스펙 D27)
+  THERAPIST_MEMO_EMPLOYEE_NOT_THERAPIST: "Chỉ có thể thêm ghi chú nội bộ cho nhân viên KTV.",
+
   // 월 명세서(티켓 32)
   INVALID_MONTHLY_STATEMENT_INPUT: "Dữ liệu tra cứu phiếu lương tháng không hợp lệ.",
   UNSUPPORTED_EMPLOYEE_GROUP: "Không hỗ trợ phiếu lương tháng cho nhân viên này.",
@@ -94,7 +105,13 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
 
   // 코스 기준정보: 다시 사용, 새 코스 추가(콜 원장 흐름 재구성 D9)
   COURSE_POLICY_REQUIRED: "Cần nhập chính sách áp dụng cho tháng này để dùng lại gói.",
-  COURSE_CODE_DUPLICATE: "Mã gói đã tồn tại. Gói đã ngừng thì bật lại bằng Dùng lại."
+  COURSE_CODE_DUPLICATE: "Mã gói đã tồn tại. Gói đã ngừng thì bật lại bằng Dùng lại.",
+
+  // Therapist 공지(스펙 D25, 티켓 10)
+  INVALID_NOTICE_INPUT: "Vui lòng nhập nội dung thông báo.",
+  TARGET_EMPLOYEE_REQUIRED: "Vui lòng chọn KTV nhận thông báo.",
+  THERAPIST_ACCOUNT_NOT_FOUND: "Không tìm thấy tài khoản KTV đang hoạt động.",
+  NOTICE_NOT_FOUND: "Không tìm thấy thông báo."
 };
 
 /**
