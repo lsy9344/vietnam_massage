@@ -8,7 +8,7 @@ import type { Messages } from "@/lib/i18n/types";
  */
 export const vi: Messages = {
   // 공통 메타데이터
-  "app.title": "Vietnam Aesthetic ERP",
+  "app.title": "GANGNAM SPA",
   "app.description": "Vỏ ứng dụng ERP cho sổ vận hành, tình trạng phòng, đối soát và chốt tháng",
 
   // 탐색 셸: 업무 흐름 도크, "나" 메뉴, 건너뛰기 링크
@@ -17,6 +17,7 @@ export const vi: Messages = {
   "shell.dock.aria": "Chuyển khu vực nghiệp vụ",
   "shell.dock.more": "Thêm",
   "shell.dock.backToMore": "Danh sách Thêm",
+  "shell.dock.home": "{brand} – Màn hình đầu",
   "shell.zone.ledger": "Sổ gọi",
   "shell.zone.floor": "Vận hành",
   "shell.zone.customers": "Khách",
@@ -98,7 +99,6 @@ export const vi: Messages = {
   "nav.item.tv": "Bảng trạng thái TV",
 
   // 로그인
-  "auth.signIn.eyebrow": "Vietnam Aesthetic ERP",
   "auth.signIn.title": "Đăng nhập tài khoản nhân viên",
   "auth.signIn.description": "Đăng nhập bằng email hoặc ID tài khoản do quản trị viên cấp.",
   "auth.signIn.identityLabel": "Email hoặc ID tài khoản",

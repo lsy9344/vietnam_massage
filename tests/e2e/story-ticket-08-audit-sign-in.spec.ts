@@ -233,6 +233,20 @@ test.describe("티켓 08 감사 화면", () => {
 });
 
 test.describe("티켓 08 로그인 화면", () => {
+  test("카드 위에 가게 로고가 보이고 탭 제목이 GANGNAM SPA다", async ({ page }) => {
+    await openSignIn(page, "vi");
+    await expect(page).toHaveTitle("GANGNAM SPA");
+    await expect(page.getByRole("img", { name: "GANGNAM SPA" })).toBeVisible();
+    // 심볼과 글자 그림 파일이 모두 실제로 불러와졌다.
+    await expect
+      .poll(() =>
+        page
+          .locator('main img[src^="/brand/"]')
+          .evaluateAll((images) => images.map((image) => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))
+      )
+      .toEqual([true, true]);
+  });
+
   test("권한은 계정으로만 정해지고 역할을 고르는 칸이 없다", async ({ page }) => {
     await openSignIn(page, "ko");
     const form = page.locator("form");

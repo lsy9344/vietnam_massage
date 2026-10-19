@@ -13,7 +13,7 @@ test.describe("Story 1.1 ERP 앱 쉘", () => {
   });
 
   test("업무 흐름 도크와 현장 구역의 도구줄을 렌더링한다", async ({ page }) => {
-    await expect(page).toHaveTitle("Vietnam Aesthetic ERP");
+    await expect(page).toHaveTitle("GANGNAM SPA");
 
     const dock = page.getByRole("navigation", { name: "업무 이동" });
     await expect(dock).toBeVisible();
