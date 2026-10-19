@@ -2,7 +2,7 @@ import { canPerform, requireRouteAccess } from "@/lib/authorization";
 import { ClosingActionPanel, type ConfirmDialogSummary } from "@/app/(erp)/closing/closing-action-panel";
 import { selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
-import { formatCurrencyVnd, formatNumber } from "@/lib/i18n/format";
+import { formatBusinessDateTime, formatCurrencyVnd, formatNumber } from "@/lib/i18n/format";
 import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
 import { resolveDomainErrorMessage, resolveKoreanMessage } from "@/lib/i18n/errors";
 import { settlementBasisText } from "@/lib/i18n/settlement-basis";
@@ -31,13 +31,56 @@ function formatVnd(locale: Locale, t: Translator, amount: number) {
   return `${formatCurrencyVnd(locale, amount)} ${t("settlements.vndSuffix")}`;
 }
 
-// The count-king tie-breaker literal mirrors the closing service constant. It stays English
-// (audit-stable) and is appended verbatim to the reconstructed basis, exactly like the service does.
-const COUNT_KING_TIE_BREAKER_BASIS =
-  "tie-breaker: totalCallCount desc, monthlySettlementAmount desc, staffCode asc, Employee.id asc";
+function labeledBusinessDateTime(t: Translator, value: string | null) {
+  if (!value) return "";
+  const formatted = formatBusinessDateTime(value);
+  if (!formatted) return value;
+  return t("closing.timeZone.labeled", { time: formatted });
+}
+
+function therapistEvidenceText(t: Translator, row: MonthlyClosingTherapistRowDto) {
+  const parts = [t("closing.therapist.assignmentCount", { count: row.assignmentEvidenceCount })];
+  if (row.warningCounts.zeroPolicy > 0) {
+    parts.push(t("closing.therapist.zeroRate", { count: row.warningCounts.zeroPolicy }));
+  }
+  if (row.warningCounts.missingPolicy > 0) {
+    parts.push(t("closing.therapist.missingRate", { count: row.warningCounts.missingPolicy }));
+  }
+  return parts.join(" ");
+}
+
+function sumWarningCounts(counts: { notCompleted: number; coursePolicyMissing: number; therapistRateMissing: number; secondTherapistRequired: number }) {
+  return counts.notCompleted + counts.coursePolicyMissing + counts.therapistRateMissing + counts.secondTherapistRequired;
+}
+
+function closingWarningLines(t: Translator, result: MonthlyClosingPreviewDto) {
+  const lines: string[] = [];
+  if (result.evidence.policyWarningCount > 0) {
+    lines.push(t("closing.evidence.warning.coursePolicy", { count: result.evidence.policyWarningCount }));
+  }
+  const opsDaily = sumWarningCounts(result.warningCounts.opsDaily);
+  if (opsDaily > 0) {
+    lines.push(t("closing.evidence.warning.opsDaily", { count: opsDaily }));
+  }
+  const opsMonthly = sumWarningCounts(result.warningCounts.opsMonthly);
+  if (opsMonthly > 0) {
+    lines.push(t("closing.evidence.warning.opsMonthly", { count: opsMonthly }));
+  }
+  if (result.warningCounts.earcareNormalStaffZeroDays > 0) {
+    lines.push(t("closing.evidence.warning.earcareNoNormalStaff", { count: result.warningCounts.earcareNormalStaffZeroDays }));
+  }
+  if (result.warningCounts.earcareUndistributedDays > 0) {
+    lines.push(t("closing.evidence.warning.earcareUndistributed", { count: result.warningCounts.earcareUndistributedDays }));
+  }
+  return lines;
+}
 
 // Count-king eligibility threshold; matches COUNT_KING_MIN_CALLS in monthly-closing-preview-service.
 const COUNT_KING_MIN_CALLS = 40;
+
+// Service warning kept for snapshots. The screen shows the localized sentence instead.
+const FULL_ATTENDANCE_SOURCE_MISSING_WARNING =
+  "Story 4.1 마사지사 출퇴근/만근 인정 source가 없어 만근수당을 계산하지 않았습니다.";
 
 /**
  * Reconstructs the localized full-attendance basis text from the row's structured fields,
@@ -57,23 +100,32 @@ function fullAttendanceBasisText(locale: Locale, t: Translator, row: MonthlyClos
 }
 
 /**
- * Reconstructs the localized count-king basis text from the row's structured fields, appending
- * the English tie-breaker literal where the service does (ranked / eligible-no-rank branches).
+ * Reconstructs the localized count-king basis from the row's structured fields.
+ * Ranked rows name the tie rule in the viewer's language. The service keeps the
+ * English sort-key literal for snapshots and does not render it here.
  */
 function countKingBasisText(locale: Locale, t: Translator, row: MonthlyClosingTherapistRowDto) {
+  const tieBreaker = t("closing.therapist.basis.countKing.tieBreaker");
   if (row.countKingRank) {
     const text = t("closing.therapist.basis.countKing.ranked", {
       count: row.totalCallCount,
       rank: row.countKingRank,
       amount: formatNumber(locale, row.countKingBonusAmount)
     });
-    return `${text} / ${COUNT_KING_TIE_BREAKER_BASIS}`;
+    return `${text} / ${tieBreaker}`;
   }
   if (row.totalCallCount >= COUNT_KING_MIN_CALLS) {
     const text = t("closing.therapist.basis.countKing.eligibleNoRank", { count: row.totalCallCount });
-    return `${text} / ${COUNT_KING_TIE_BREAKER_BASIS}`;
+    return `${text} / ${tieBreaker}`;
   }
   return t("closing.therapist.basis.countKing.excluded", { count: row.totalCallCount });
+}
+
+function bonusWarningText(locale: Locale, t: Translator, message: string) {
+  if (message === FULL_ATTENDANCE_SOURCE_MISSING_WARNING) {
+    return t("closing.therapist.basis.fullAttendance.sourceMissing");
+  }
+  return resolveKoreanMessage(locale, message);
 }
 
 // Dynamic-threshold ops warning ("{n}콜 미만으로 운영팀 월 인센이 없습니다.") cannot be matched by the
@@ -168,15 +220,17 @@ function SnapshotSummary({ locale, t, closing, currentStatus }: { locale: Locale
           <h2 className="mt-2 text-base font-semibold text-foreground">{heading}</h2>
           <p className="mt-1 text-sm text-muted">
             {t("closing.snapshot.meta", {
-              id: closing.snapshot.id,
               version: closing.closeVersion,
               confirmedBy: closing.confirmedByAccountId,
-              confirmedAt: closing.confirmedAt
+              confirmedAt: labeledBusinessDateTime(t, closing.confirmedAt)
             })}
           </p>
           {isHistoricalAfterReopen ? (
             <p className="mt-1 text-sm text-muted">
-              {t("closing.snapshot.reopenMeta", { reason: closing.reopenReason ?? "", reopenedAt: closing.reopenedAt ?? "" })}
+              {t("closing.snapshot.reopenMeta", {
+                reason: closing.reopenReason ?? "",
+                reopenedAt: labeledBusinessDateTime(t, closing.reopenedAt)
+              })}
             </p>
           ) : null}
         </div>
@@ -295,12 +349,10 @@ function TherapistTable({ locale, t, result }: { locale: Locale; t: Translator; 
               <td className="px-3 py-2 text-muted">
                 <div>{fullAttendanceBasisText(locale, t, row)}</div>
                 <div>{countKingBasisText(locale, t, row)}</div>
-                <div>
-                  {t("closing.therapist.evidenceLine", { evidence: row.assignmentEvidenceCount, zero: row.warningCounts.zeroPolicy, missing: row.warningCounts.missingPolicy })}
-                </div>
+                <div>{therapistEvidenceText(t, row)}</div>
                 {row.bonusWarningMessages.length > 0 ? (
                   <div className="mt-1 font-medium text-danger">
-                    {row.bonusWarningMessages.map((message) => resolveKoreanMessage(locale, message)).join(" / ")}
+                    {row.bonusWarningMessages.map((message) => bonusWarningText(locale, t, message)).join(" / ")}
                   </div>
                 ) : null}
               </td>
@@ -388,67 +440,56 @@ function EarcareTable({ locale, t, result }: { locale: Locale; t: Translator; re
 }
 
 function EvidenceSection({ locale, t, result }: { locale: Locale; t: Translator; result: MonthlyClosingPreviewDto }) {
+  const fullAttendanceSourceStatus = result.evidence.fullAttendanceSourceStatus;
+  const countKingTieBreaker = t("closing.therapist.basis.countKing.tieBreaker");
+  // includedCallCount는 마사지사 담당, 운영팀 완료 콜, 귀케어 완료 콜의 합이다.
+  const opsCallCount = result.evidence.includedCallCount - result.therapists.totalCallCount - result.earcare.sourceCallCount;
+  const warnings = closingWarningLines(t, result);
+
   return (
     <section className="mb-4 border border-border bg-surface">
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-base font-semibold text-foreground">{t("closing.evidence.title")}</h2>
         <p className="mt-1 text-sm text-muted">
-          {t("closing.evidence.line1", {
+          {t("closing.evidence.period", {
             period: result.evidence.period,
-            sourceDayCount: result.evidence.sourceDayCount,
-            includedCallCount: result.evidence.includedCallCount,
-            excludedCallCount: result.evidence.excludedCallCount
+            dayCount: result.evidence.sourceDayCount
           })}
         </p>
         <p className="mt-1 text-sm text-muted">
-          {t("closing.evidence.line2", {
-            fullAttendanceSourceStatus: result.evidence.fullAttendanceSourceStatus,
-            fullAttendanceSourceDayCount: result.evidence.fullAttendanceSourceDayCount,
-            countKingEligibleCount: result.evidence.countKingEligibleCount,
-            countKingExcludedCount: result.evidence.countKingExcludedCount,
-            countKingTieBreaker: result.evidence.countKingTieBreaker
+          {t("closing.evidence.callCounts", {
+            therapistCallCount: result.therapists.totalCallCount,
+            opsCallCount,
+            earcareCallCount: result.earcare.sourceCallCount
           })}
         </p>
+        <p className="mt-1 text-sm text-muted">
+          {t("closing.evidence.excludedCalls", { count: result.evidence.excludedCallCount })}
+        </p>
+        <p className="mt-1 text-sm text-muted">
+          {fullAttendanceSourceStatus === "available"
+            ? t("closing.evidence.attendanceAvailable", { dayCount: result.evidence.fullAttendanceSourceDayCount })
+            : t("closing.evidence.attendanceMissing")}
+        </p>
+        <p className="mt-1 text-sm text-muted">
+          {t("closing.evidence.countKing", {
+            eligible: result.evidence.countKingEligibleCount,
+            excluded: result.evidence.countKingExcludedCount
+          })}
+        </p>
+        <p className="mt-1 text-sm text-muted">{countKingTieBreaker}</p>
       </div>
-      <div className="grid gap-0 md:grid-cols-2">
-        <div className="border-b border-border px-4 py-3 md:border-r">
-          <div className="text-xs font-medium text-muted">{t("closing.evidence.warningCounts")}</div>
-          <div className="mt-1 text-sm text-foreground">
-            {t("closing.evidence.warningCountsLine", {
-              total: result.warningCounts.total,
-              policy: result.evidence.policyWarningCount,
-              therapistExcluded: result.warningCounts.therapistExcludedCallCount,
-              fullAttendanceSourceMissing: result.warningCounts.fullAttendanceSourceMissing,
-              fullAttendanceSourceDay: result.warningCounts.fullAttendanceSourceDayCount,
-              countKingEligible: result.warningCounts.countKingEligibleCount,
-              countKingExcluded: result.warningCounts.countKingExcludedCount,
-              opsDaily:
-                result.warningCounts.opsDaily.notCompleted +
-                result.warningCounts.opsDaily.coursePolicyMissing +
-                result.warningCounts.opsDaily.therapistRateMissing +
-                result.warningCounts.opsDaily.secondTherapistRequired,
-              opsMonthly:
-                result.warningCounts.opsMonthly.notCompleted +
-                result.warningCounts.opsMonthly.coursePolicyMissing +
-                result.warningCounts.opsMonthly.therapistRateMissing +
-                result.warningCounts.opsMonthly.secondTherapistRequired,
-              opsMessage: result.warningCounts.opsWarningMessageCount,
-              earcareNormalStaffZeroDays: result.warningCounts.earcareNormalStaffZeroDays,
-              earcareUndistributed: result.warningCounts.earcareUndistributedDays
-            })}
-          </div>
-        </div>
-        <div className="border-b border-border px-4 py-3">
-          <div className="text-xs font-medium text-muted">{t("closing.evidence.representative")}</div>
-          <div className="mt-1 break-all text-sm text-foreground">
-            {[
-              ...result.evidence.representativeEvidence.therapist,
-              ...result.evidence.representativeEvidence.operationsDaily,
-              ...result.evidence.representativeEvidence.operationsMonthly,
-              ...result.evidence.representativeEvidence.earcare
-            ].join(", ") || t("closing.evidence.noEvidence")}
-          </div>
-        </div>
+      <div className="border-b border-border px-4 py-3">
+        <div className="text-xs font-medium text-muted">{t("closing.evidence.warningsTitle")}</div>
+        {warnings.length === 0 ? (
+          <p className="mt-1 text-sm text-foreground">{t("closing.evidence.noWarnings")}</p>
+        ) : (
+          <ul className="mt-1 list-inside list-disc text-sm text-foreground">
+            {warnings.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        )}
       </div>
       {result.operations.warningMessages.length > 0 ? (
         <div className="px-4 py-3">

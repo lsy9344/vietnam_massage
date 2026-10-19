@@ -33,15 +33,15 @@ export function LedgerStatusCounts({
   const countLabel = (value: number) => `${formatNumber(locale, value)}${t(locale, "calls.summary.countSuffix")}`;
 
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <ul aria-label={t(locale, "calls.statusCounts.aria")} className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <li className="text-sm font-semibold text-foreground">
-          {t(locale, "calls.statusCounts.total")} {countLabel(counts.totalCount)}
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface p-3">
+      <ul aria-label={t(locale, "calls.statusCounts.aria")} className="flex flex-wrap items-center gap-2">
+        <li className="flex items-center gap-1.5 rounded-md border border-border-strong bg-surface-float px-3 py-1.5 text-base font-bold text-foreground">
+          <span>{t(locale, "calls.statusCounts.total")}</span> <span>{countLabel(counts.totalCount)}</span>
         </li>
         {statuses.map((status) => (
-          <li className="inline-flex items-center gap-1.5" key={status.key}>
+          <li className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface-float px-2.5 py-1 text-xs font-semibold text-foreground" key={status.key}>
             <StatusIndicator label={t(locale, status.labelKey)} tone={status.tone} />{" "}
-            <span className="text-sm font-semibold text-foreground">{countLabel(counts[status.key])}</span>
+            <span className="tabular-nums">{countLabel(counts[status.key])}</span>
           </li>
         ))}
       </ul>

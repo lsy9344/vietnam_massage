@@ -2,10 +2,16 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import {
+  completedServiceCallCalculationsFromRows,
   listCompletedServiceCallCalculationsForDate,
-  listServiceCallsForDate
+  listServiceCallsForDate,
+  type ServiceCallRowDto
 } from "@/modules/calls/service-call-service";
-import { listOpsAttendanceForDate, type OpsAttendanceDto } from "@/modules/settlements/ops-attendance-service";
+import {
+  listOpsAttendanceForDate,
+  type OpsAttendanceDto,
+  type OpsAttendanceForDateDto
+} from "@/modules/settlements/ops-attendance-service";
 import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/modules/settlements/settlement-evidence-call";
 
 type OperatingMonthRecord = {
@@ -194,6 +200,8 @@ export async function listOpsDailyIncentives(input: {
   operatingMonthId: string;
   serviceDate: string;
   prismaClient?: OpsDailyIncentivePrismaClient;
+  serviceCallRows?: ServiceCallRowDto[];
+  attendance?: OpsAttendanceForDateDto;
 }): Promise<OpsDailyIncentiveResultDto> {
   const parsed = incentiveQuerySchema.safeParse(input);
   if (!parsed.success) throw toFieldError(parsed.error);
@@ -207,21 +215,26 @@ export async function listOpsDailyIncentives(input: {
   assertDateInOperatingMonth(operatingMonth, parsed.data.serviceDate);
 
   const [attendance, completedCalculations, callRows, rules] = await Promise.all([
-    listOpsAttendanceForDate({
-      operatingMonthId: parsed.data.operatingMonthId,
-      attendanceDate: parsed.data.serviceDate,
-      prismaClient: client as unknown as Parameters<typeof listOpsAttendanceForDate>[0]["prismaClient"]
-    }),
-    listCompletedServiceCallCalculationsForDate({
-      operatingMonthId: parsed.data.operatingMonthId,
-      serviceDate: parsed.data.serviceDate,
-      prismaClient: client as unknown as Parameters<typeof listCompletedServiceCallCalculationsForDate>[0]["prismaClient"]
-    }),
-    listServiceCallsForDate({
-      operatingMonthId: parsed.data.operatingMonthId,
-      serviceDate: parsed.data.serviceDate,
-      prismaClient: client as unknown as Parameters<typeof listServiceCallsForDate>[0]["prismaClient"]
-    }),
+    input.attendance ??
+      listOpsAttendanceForDate({
+        operatingMonthId: parsed.data.operatingMonthId,
+        attendanceDate: parsed.data.serviceDate,
+        prismaClient: client as unknown as Parameters<typeof listOpsAttendanceForDate>[0]["prismaClient"]
+      }),
+    input.serviceCallRows
+      ? completedServiceCallCalculationsFromRows(input.serviceCallRows)
+      : listCompletedServiceCallCalculationsForDate({
+          operatingMonthId: parsed.data.operatingMonthId,
+          serviceDate: parsed.data.serviceDate,
+          prismaClient: client as unknown as Parameters<typeof listCompletedServiceCallCalculationsForDate>[0]["prismaClient"]
+        }),
+    input.serviceCallRows
+      ? input.serviceCallRows
+      : listServiceCallsForDate({
+          operatingMonthId: parsed.data.operatingMonthId,
+          serviceDate: parsed.data.serviceDate,
+          prismaClient: client as unknown as Parameters<typeof listServiceCallsForDate>[0]["prismaClient"]
+        }),
     client.opsDailyIncentiveRule.findMany({
       where: { isActive: true },
       orderBy: [{ thresholdCallCount: "desc" }, { effectiveFromMonth: "desc" }]

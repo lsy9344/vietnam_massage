@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { formatBusinessTime, formatDateTime } from "@/lib/i18n/format";
+import { formatBusinessDateTime, formatBusinessTime, formatDateTime } from "@/lib/i18n/format";
 
 const sample = "2026-09-04T12:42:00.000Z";
 
@@ -24,5 +24,18 @@ describe("formatDateTime", () => {
   it("formatBusinessTime은 24시간제 HH:mm과 빈 값 처리를 유지한다", () => {
     assert.equal(formatBusinessTime("ko", sample), "19:42");
     assert.equal(formatBusinessTime("vi", null), "-");
+  });
+});
+
+describe("formatBusinessDateTime", () => {
+  it("베트남 시간으로 YYYY-MM-DD HH:mm을 만든다", () => {
+    assert.equal(formatBusinessDateTime("2026-09-04T12:42:00.000Z"), "2026-09-04 19:42");
+    assert.equal(formatBusinessDateTime("2026-10-16T17:00:00.000Z"), "2026-10-17 00:00");
+  });
+
+  it("빈 값과 해석할 수 없는 값은 null이다", () => {
+    assert.equal(formatBusinessDateTime(null), null);
+    assert.equal(formatBusinessDateTime(""), null);
+    assert.equal(formatBusinessDateTime("not-a-date"), null);
   });
 });

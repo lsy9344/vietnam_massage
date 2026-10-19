@@ -262,25 +262,98 @@ export async function listOpsAttendanceForDate(input: {
   ]);
   assertDateInOperatingMonth(operatingMonth, parsed.data.attendanceDate);
 
-  const defaultStatus = normalStatus(statuses);
-  const attendanceByEmployeeId = new Map(attendances.map((attendance) => [attendance.employeeId, attendance]));
-  return {
-    operatingMonthId: parsed.data.operatingMonthId,
+  return buildOpsAttendanceForDate({
+    operatingMonth,
     attendanceDate: parsed.data.attendanceDate,
-    isLocked: isOperatingMonthPayoutLocked(operatingMonth.status),
-    statusOptions: statuses.map((status) => ({ code: status.code, displayName: status.displayName })),
-    rows: employees.map((employee) => {
+    employees,
+    statuses,
+    attendances
+  });
+}
+
+function eachIsoDate(startDate: string, endDate: string) {
+  const dates: string[] = [];
+  let cursor = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+  while (cursor <= end) {
+    dates.push(toIsoDate(cursor));
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return dates;
+}
+
+function buildOpsAttendanceForDate(input: {
+  operatingMonth: OperatingMonthRecord;
+  attendanceDate: string;
+  employees: EmployeeRecord[];
+  statuses: CodeItemRecord[];
+  attendances: OpsAttendanceRecord[];
+}): OpsAttendanceForDateDto {
+  const defaultStatus = normalStatus(input.statuses);
+  const attendanceByEmployeeId = new Map(input.attendances.map((attendance) => [attendance.employeeId, attendance]));
+  return {
+    operatingMonthId: input.operatingMonth.id,
+    attendanceDate: input.attendanceDate,
+    isLocked: isOperatingMonthPayoutLocked(input.operatingMonth.status),
+    statusOptions: input.statuses.map((status) => ({ code: status.code, displayName: status.displayName })),
+    rows: input.employees.map((employee) => {
       const attendance = attendanceByEmployeeId.get(employee.id) ?? null;
-      const status = attendance ? statusByCode(statuses, attendance.statusCode) ?? defaultStatus : defaultStatus;
+      const status = attendance ? statusByCode(input.statuses, attendance.statusCode) ?? defaultStatus : defaultStatus;
       return toDto({
-        operatingMonthId: parsed.data.operatingMonthId,
-        attendanceDate: parsed.data.attendanceDate,
+        operatingMonthId: input.operatingMonth.id,
+        attendanceDate: input.attendanceDate,
         employee,
         status,
         attendance
       });
     })
   };
+}
+
+export async function listOpsAttendanceByDateForOperatingMonth(input: {
+  operatingMonthId: string;
+  startDate: string;
+  endDate: string;
+  prismaClient?: OpsAttendancePrismaClient;
+}): Promise<Map<string, OpsAttendanceForDateDto>> {
+  const client = getClient(input.prismaClient);
+  const [operatingMonth, employees, statuses, attendances] = await Promise.all([
+    loadOperatingMonth(client, input.operatingMonthId),
+    client.employee.findMany({
+      where: { employeeGroup: "OPERATIONS", isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { staffCode: "asc" }]
+    }),
+    loadAttendanceStatuses(client),
+    client.opsAttendance.findMany({
+      where: {
+        operatingMonthId: input.operatingMonthId,
+        attendanceDate: { gte: toDate(input.startDate), lte: toDate(input.endDate) },
+        isActive: true
+      }
+    })
+  ]);
+  const byDate = new Map<string, OpsAttendanceRecord[]>();
+  for (const attendance of attendances) {
+    const key = toIsoDate(attendance.attendanceDate);
+    const bucket = byDate.get(key) ?? [];
+    bucket.push(attendance);
+    byDate.set(key, bucket);
+  }
+  const result = new Map<string, OpsAttendanceForDateDto>();
+  for (const attendanceDate of eachIsoDate(input.startDate, input.endDate)) {
+    assertDateInOperatingMonth(operatingMonth, attendanceDate);
+    result.set(
+      attendanceDate,
+      buildOpsAttendanceForDate({
+        operatingMonth,
+        attendanceDate,
+        employees,
+        statuses,
+        attendances: byDate.get(attendanceDate) ?? []
+      })
+    );
+  }
+  return result;
 }
 
 export async function upsertOpsAttendance(input: {

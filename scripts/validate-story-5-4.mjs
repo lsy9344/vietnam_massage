@@ -95,7 +95,7 @@ for (const required of [
   if (!actionPanel.includes(required)) errors.push(`closing-action-panel.tsx missing ${required}`);
 }
 requireMoved(actionPanel, "closing-action-panel.tsx", "closing.disabled.needConfirmFirst", "잠금은 먼저 마감확정이 필요합니다.");
-requireMoved(actionPanel, "closing-action-panel.tsx", "closing.disabled.locked", "잠금 상태입니다. 확정 스냅샷 조회는 계속 가능합니다.");
+requireMoved(actionPanel, "closing-action-panel.tsx", "closing.disabled.locked", "잠금 상태입니다. 확정 기록 조회는 계속 가능합니다.");
 
 const opsMonthlyPage = read("src/app/(erp)/settlements/operations/monthly/page.tsx");
 for (const required of [
@@ -189,7 +189,7 @@ for (const required of [
   "/closing?operatingMonthId",
   "/calls?operatingMonthId",
   "/settlements/operations/monthly?operatingMonthId",
-  "확정 스냅샷",
+  "확정 기록",
   "monthly_close.locked",
   "OPERATING_MONTH_LOCKED"
 ]) {

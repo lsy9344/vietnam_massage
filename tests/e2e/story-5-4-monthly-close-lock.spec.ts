@@ -202,11 +202,11 @@ test.describe("Story 5.4 monthly close lock", () => {
     await login(page, seededData.accounts.admin, "Story54!admin");
 
     await page.goto(`/closing?operatingMonthId=${seededData.adminConfirmedMonth.id}`);
-    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("확정 기록", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "잠금" })).toBeEnabled();
     await page.getByRole("button", { name: "잠금" }).click();
     await expect(page.getByText("운영월 상태: 잠금").first()).toBeVisible();
-    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("확정 기록", { exact: true }).first()).toBeVisible();
     await page.goto(`/settlements/operations/monthly?operatingMonthId=${seededData.adminConfirmedMonth.id}`);
     await expect(page.getByText("운영팀 확정 지급값")).toBeVisible();
     await expect(page.getByText("현재 기준 미리보기")).toBeVisible();
@@ -257,7 +257,7 @@ test.describe("Story 5.4 monthly close lock", () => {
     await login(page, seededData.accounts.settlement, "Story54!settlement");
 
     await page.goto(`/closing?operatingMonthId=${seededData.settlementConfirmedMonth.id}`);
-    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("확정 기록", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "잠금" })).toBeEnabled();
     await page.getByRole("button", { name: "잠금" }).click();
     await expect(page.getByText("운영월 상태: 잠금").first()).toBeVisible();

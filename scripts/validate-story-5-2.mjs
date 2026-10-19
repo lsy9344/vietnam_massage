@@ -91,7 +91,7 @@ requireMoved(page, "closing page.tsx", "closing.therapist.column.fullAttendanceA
 requireMoved(page, "closing page.tsx", "closing.therapist.column.countKing", "갯수왕");
 requireMoved(page, "closing page.tsx", "closing.therapist.column.countKingBonus", "갯수왕 수당");
 requireMoved(page, "closing page.tsx", "closing.therapist.column.finalPayout", "최종지급액");
-requireMoved(page, "closing page.tsx", "closing.therapist.noSource", "source 없음");
+requireMoved(page, "closing page.tsx", "closing.therapist.noSource", "기록 없음");
 requireMoved(page, "closing page.tsx", "closing.summary.therapistBasis", "보너스 포함");
 for (const forbidden of ["use server", "action=", "recordAuditEvent", "revalidatePath", "MonthlyClose", "createMonthlyClose"]) {
   if (page.includes(forbidden)) errors.push(`closing page.tsx must not add write/snapshot behavior: ${forbidden}`);

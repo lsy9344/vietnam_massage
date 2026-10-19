@@ -147,6 +147,16 @@ describe("하루 수납·지출 탭 요약", () => {
     assert.match(till, /text-danger[^"]*">부족 50,000 VND/);
   });
 
+  it("hides monthly figures from the till table when showMonthlyTotals is false", () => {
+    const counterHtml = render({ showMonthlyTotals: false });
+    const till = counterHtml.match(/<table[^>]*aria-label="시재"[\s\S]*?<\/table>/)?.[0] ?? "";
+    assert.doesNotMatch(text(till), /이번 달/);
+
+    const fullHtml = render({ showMonthlyTotals: true });
+    const fullTill = fullHtml.match(/<table[^>]*aria-label="시재"[\s\S]*?<\/table>/)?.[0] ?? "";
+    assert.match(text(fullTill), /이번 달/);
+  });
+
   it("keeps settlement amounts and the therapist assignment column for settlement viewers only", () => {
     const counter = render();
     assert.doesNotMatch(counter, /마사지사정산/);

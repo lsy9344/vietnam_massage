@@ -11,11 +11,13 @@ import {
   listServiceCallFormOptions,
   listServiceCallsForDate,
   listTherapistAvailability,
+  listTherapistStatusOverview,
   redactServiceCallSettlementAmounts
 } from "@/modules/calls/service-call-service";
 import { AddExpensePanel, DailyExpensePanel } from "@/app/(erp)/calls/daily-expense-panel";
 import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { CallLedgerWorkspace } from "@/app/(erp)/calls/call-ledger-workspace";
+import { QuickBookingTrigger } from "@/app/(erp)/calls/quick-booking-drawer";
 import { LedgerStatusCounts } from "@/app/(erp)/calls/ledger-status-counts";
 import { ledgerHref, ledgerTabParams, parseLedgerTab, type LedgerTab } from "@/app/(erp)/calls/ledger-address";
 import { DateContextControls } from "@/components/shell/date-context-controls";
@@ -107,6 +109,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
         <div className="grid grid-cols-1 gap-10">
           <DailySummaryStrip
             locale={locale}
+            showMonthlyTotals={account.role !== "counter"}
             showSettlementAmounts={canViewSettlementAmounts}
             summary={summary}
             warningCalls={calculationWarningCallsFromRows(rows)}
@@ -123,10 +126,11 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
     );
   }
 
-  const [rows, options, customers] = await Promise.all([
+  const [rows, options, customers, therapistStatusOverview] = await Promise.all([
     listServiceCallsForDate(ledgerDate),
     listServiceCallFormOptions({ operatingMonthId: selectedMonth.id, locale }),
-    listCustomers()
+    listCustomers(),
+    listTherapistStatusOverview({ operatingMonthId: selectedMonth.id, serviceDate })
   ]);
   const availabilityTime = options.timeSlots[0]?.value ?? "";
   const availabilityRows = availabilityTime
@@ -136,7 +140,16 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="screen">
-      {toolbar()}
+      {toolbar(
+        <QuickBookingTrigger
+          courses={options.courses}
+          customers={customers}
+          isLocked={isLocked}
+          operatingMonthId={selectedMonth.id}
+          serviceDate={serviceDate}
+          timeSlots={options.timeSlots}
+        />
+      )}
       <LedgerStatusCounts
         counts={ledgerStatusCountsFromRows(rows)}
         customerHref={linkToScreen(account.role, "/customers", { operatingMonthId: selectedMonth.id, date: serviceDate })}
@@ -154,6 +167,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
         rows={visibleRows}
         serviceDate={serviceDate}
         showSettlementColumns={canViewSettlementAmounts}
+        therapistStatusOverview={therapistStatusOverview}
       />
     </div>
   );

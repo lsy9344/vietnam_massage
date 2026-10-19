@@ -126,7 +126,7 @@ const KOREAN_MESSAGE_VI: Record<string, string> = {
   "팀장 대상자가 2명 이상이라 deterministic order의 첫 번째 직원에게 팀장 몫을 배정했습니다.": "Có từ 2 đối tượng trưởng nhóm trở lên nên phần của trưởng nhóm được phân cho nhân viên đầu tiên theo deterministic order.",
   "카운터팀 대상자가 없어 카운터팀 몫을 미배분으로 남겼습니다.": "Không có đối tượng nhóm quầy nên phần của nhóm quầy được để chưa phân bổ.",
   "웨이터팀 대상자가 없어 웨이터팀 몫을 미배분으로 남겼습니다.": "Không có đối tượng nhóm phục vụ nên phần của nhóm phục vụ được để chưa phân bổ.",
-  "Story 4.1 마사지사 출퇴근/만근 인정 source가 없어 만근수당을 계산하지 않았습니다.": "Không có source chấm công/công nhận đủ công của KTV massage Story 4.1 nên không tính phụ cấp đủ công.",
+  "Story 4.1 마사지사 출퇴근/만근 인정 source가 없어 만근수당을 계산하지 않았습니다.": "Không có bản ghi chấm công nên không tính phụ cấp đủ công.",
   // 운영팀 월 인센 calculationBasis 고정 문구 (표시 직전 번역)
   "월 인센 지급 조건 미충족": "Chưa đạt điều kiện chi thưởng tháng",
   "팀장 중복 대상 / deterministic order 후순위": "Trùng đối tượng trưởng nhóm / xếp sau theo deterministic order",

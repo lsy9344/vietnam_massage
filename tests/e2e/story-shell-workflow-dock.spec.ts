@@ -216,8 +216,10 @@ test.describe("티켓 02 업무 흐름 셸", () => {
 
     await page.getByRole("link", { name: "다음 날" }).click();
     await expect(page).toHaveURL(`/rooms?operatingMonthId=${monthId}&serviceDate=2081-03-15`);
+    await expect(page.getByLabel("조회날짜")).toHaveValue("2081-03-15");
     await page.getByRole("link", { name: "이전 날" }).click();
     await expect(page).toHaveURL(`/rooms?operatingMonthId=${monthId}&serviceDate=${chosenDate}`);
+    await expect(page.getByLabel("조회날짜")).toHaveValue(chosenDate);
     await expect(page.getByRole("link", { name: "TV 화면 열기" })).toHaveAttribute(
       "href",
       `/tv?operatingMonthId=${monthId}&serviceDate=${chosenDate}`

@@ -201,6 +201,7 @@ type ServiceCallPrismaClient = {
     create(args: unknown): Promise<ServiceCallRecord>;
     findMany(args?: unknown): Promise<ServiceCallRecord[]>;
     findUnique(args: unknown): Promise<ServiceCallRecord | null>;
+    update(args: unknown): Promise<ServiceCallRecord>;
     updateMany(args: unknown): Promise<{ count: number }>;
   };
   serviceCallAssignment: {
@@ -238,6 +239,8 @@ type TherapistAttendanceRecord = {
   employeeId: string;
   operatingMonthId: string;
   attendanceDate: Date;
+  checkInMinute?: number | null;
+  checkOutMinute?: number | null;
   isActive: boolean;
 };
 
@@ -1273,6 +1276,11 @@ function courseDurationMinutes(record: ServiceCallRecord) {
 // 그 예약시각이 제안 종료보다 먼저일 때만 양보하고, 맞닿으면 경고가 없다.
 function displayEndChoice(record: ServiceCallRecord, context: DisplayEndContext) {
   const actualEntryTime = storedActualEntryTime(record);
+  const earlyFinishMatch = record.note ? /\[종료\s*(([01]\d|2[0-3]):[0-5]\d)\]/.exec(record.note) : null;
+  if (earlyFinishMatch) {
+    const earlyMinute = businessMinute(earlyFinishMatch[1], context.dayStart);
+    return { actualEntryTime, minute: earlyMinute, yielded: false };
+  }
   const reference = actualEntryTime ?? record.startTime;
   const proposed = businessMinute(reference, context.dayStart) + courseDurationMinutes(record);
   const therapists = new Set(assignedTherapistIds(record));
@@ -1471,7 +1479,9 @@ export async function listTherapistAvailability(input: {
     const policy = currentPolicyForCourse(policies, call.courseId, month.monthKey);
     if (!policy) continue;
     const start = businessMinute(call.startTime, dayStart);
-    const interval = { start, end: start + policy.durationMinutes };
+    const earlyMatch = call.note ? /\[종료\s*(([01]\d|2[0-3]):[0-5]\d)\]/.exec(call.note) : null;
+    const end = earlyMatch ? businessMinute(earlyMatch[1], dayStart) : start + policy.durationMinutes;
+    const interval = { start, end };
     for (const assignment of call.assignments ?? []) {
       if (assignment.isActive === false) continue;
       if (assignment.assignmentRole !== "THERAPIST_1" && assignment.assignmentRole !== "THERAPIST_2") continue;
@@ -1526,7 +1536,7 @@ async function listServiceCallsInOperatingMonth(
     client.serviceCall.findMany({
       where: {
         operatingMonthId,
-        ...(serviceDate ? { serviceDate } : {})
+        ...(serviceDate ? { serviceDate: { gte: serviceDate.gte, lte: serviceDate.lte } } : {})
       },
       include: {
         operatingMonth: true,
@@ -2326,19 +2336,18 @@ function emptyCourseSummaries(): DailyCourseSummaryDto[] {
   }));
 }
 
-export async function getDailyCallLedgerSummary(input: {
-  operatingMonthId: string;
-  serviceDate: string;
-  includeMonthTill?: boolean;
-  prismaClient?: ServiceCallPrismaClient;
-}): Promise<DailyCallLedgerSummaryDto> {
-  const client = getClient(input.prismaClient);
-  const rows = await listServiceCallsForDate({ ...input, prismaClient: client });
-  const expenses = await listDailyExpensesForDate({
-    operatingMonthId: input.operatingMonthId,
-    expenseDate: input.serviceDate,
-    prismaClient: client
-  });
+function eachIsoDate(startDate: string, endDate: string) {
+  const dates: string[] = [];
+  let cursor = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+  while (cursor <= end) {
+    dates.push(toIsoDateOnly(cursor));
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return dates;
+}
+
+function summarizeCallLedgerDay(rows: ServiceCallRowDto[], expenses: DailyExpenseDto[]): DailyCallLedgerSummaryDto {
   const courseSummaries = emptyCourseSummaries();
   const courseSummaryByCode = new Map(courseSummaries.map((summary) => [summary.courseCode, summary]));
   const paymentMethodTotals: DailyCallLedgerSummaryDto["paymentMethodTotals"] = {
@@ -2390,8 +2399,6 @@ export async function getDailyCallLedgerSummary(input: {
 
   const expenseTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0);
   const dayTill = tillFromReceipts({ cash: paymentMethodTotals.cash, bank: paymentMethodTotals.bank }, expenses);
-  // 시재를 그리지 않는 화면은 날짜마다 운영월 전체를 다시 읽지 않는다.
-  const monthTill = input.includeMonthTill === false ? emptyTill() : await monthTillFor(client, input.operatingMonthId);
   return {
     reservationCount: rows.length,
     inUseCount: rows.filter((row) => isInUseStatus(row.status)).length,
@@ -2406,10 +2413,71 @@ export async function getDailyCallLedgerSummary(input: {
     expenseTotal,
     netSales: paymentTotal - expenseTotal,
     paymentMethodTotals,
-    till: { day: dayTill, month: monthTill },
+    till: { day: dayTill, month: emptyTill() },
     courseSummaries,
     warningCounts
   };
+}
+
+export async function getDailyCallLedgerSummary(input: {
+  operatingMonthId: string;
+  serviceDate: string;
+  includeMonthTill?: boolean;
+  prismaClient?: ServiceCallPrismaClient;
+}): Promise<DailyCallLedgerSummaryDto> {
+  const client = getClient(input.prismaClient);
+  const rows = await listServiceCallsForDate({ ...input, prismaClient: client });
+  const expenses = await listDailyExpensesForDate({
+    operatingMonthId: input.operatingMonthId,
+    expenseDate: input.serviceDate,
+    prismaClient: client
+  });
+  const summary = summarizeCallLedgerDay(rows, expenses);
+  // 시재를 그리지 않는 화면은 날짜마다 운영월 전체를 다시 읽지 않는다.
+  if (input.includeMonthTill === false) return summary;
+  return {
+    ...summary,
+    till: { day: summary.till.day, month: await monthTillFor(client, input.operatingMonthId) }
+  };
+}
+
+// 월간 대시보드와 그래프 리포트는 하루 함수를 날짜 수만큼 호출하면 원격 DB 왕복이 페이지를 수 초로 늘린다.
+// 콜과 지출을 한 번씩 읽고, 없는 날짜도 하루 요약과 같은 0값으로 채운다.
+export async function listDailyCallLedgerSummariesForOperatingMonth(input: {
+  operatingMonthId: string;
+  startDate: string;
+  endDate: string;
+  prismaClient?: ServiceCallPrismaClient;
+}): Promise<DailyCallLedgerSummaryDto[]> {
+  const client = getClient(input.prismaClient);
+  const [rows, expenses] = await Promise.all([
+    listServiceCallsForOperatingMonth({
+      operatingMonthId: input.operatingMonthId,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      prismaClient: client
+    }),
+    findActiveExpenses(client, {
+      operatingMonthId: input.operatingMonthId,
+      expenseDate: { gte: toDateOnly(input.startDate), lte: toDateOnly(input.endDate) }
+    })
+  ]);
+  const rowsByDate = new Map<string, ServiceCallRowDto[]>();
+  for (const row of rows) {
+    const bucket = rowsByDate.get(row.serviceDate) ?? [];
+    bucket.push(row);
+    rowsByDate.set(row.serviceDate, bucket);
+  }
+  const expensesByDate = new Map<string, DailyExpenseDto[]>();
+  for (const expense of expenses) {
+    const bucket = expensesByDate.get(expense.expenseDate) ?? [];
+    bucket.push(expense);
+    expensesByDate.set(expense.expenseDate, bucket);
+  }
+
+  return eachIsoDate(input.startDate, input.endDate).map((serviceDate) =>
+    summarizeCallLedgerDay(rowsByDate.get(serviceDate) ?? [], expensesByDate.get(serviceDate) ?? [])
+  );
 }
 
 export function completedServiceCallCalculationsFromRows(rows: ServiceCallRowDto[]): CompletedServiceCallCalculationDto[] {
@@ -2592,3 +2660,485 @@ export async function listServiceCallFormOptions(
     expenseHandlers: expenseHandlers.map((employee) => option(employee.id, `${employee.displayName} (${employee.staffCode})`))
   } satisfies ServiceCallFormOptions;
 }
+
+export type TherapistStatusOverviewDto = {
+  therapistId: string;
+  staffCode: string;
+  displayName: string;
+  sortOrder: number;
+  attendanceStatus: "checked_in" | "scheduled" | "absent";
+  checkInTime: string | null;
+  completedCallsCount: number;
+  remainingReservationsCount: number;
+  currentStatus: "available" | "in_use" | "scheduled" | "cleaning";
+  nextEventTime: string | null;
+  nextEventLabel: string | null;
+  freeMinutes: number | null;
+  availableCourseCodes: string[];
+};
+
+export type CallLedgerQuotaDto = {
+  totalTherapists: number;
+  assignedSlots: number;
+  unassignedSlots: number;
+  availableSlots: number;
+  time: string;
+};
+
+export async function getCallLedgerQuota(input: {
+  operatingMonthId: string;
+  serviceDate: string;
+  time: string;
+  prismaClient?: ServiceCallPrismaClient;
+}): Promise<CallLedgerQuotaDto> {
+  const client = getClient(input.prismaClient);
+  const month = await requireOperatingMonth(client, input.operatingMonthId);
+  const [therapists, attendances, calls, slots, policies] = await Promise.all([
+    client.employee.findMany({ where: { isActive: true, employeeGroup: "THERAPIST" } }),
+    client.therapistAttendance.findMany({
+      where: { operatingMonthId: month.id, attendanceDate: toDateOnly(input.serviceDate), isActive: true }
+    }),
+    client.serviceCall.findMany({
+      where: { operatingMonthId: month.id, serviceDate: toDateOnly(input.serviceDate) },
+      include: { assignments: true, course: { include: { policies: true } } }
+    }),
+    client.timeSlot.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }),
+    client.coursePolicy.findMany({ where: { isActive: true } })
+  ]);
+
+  const activeSlots = [...slots].filter((slot) => slot.isActive).sort((l, r) => l.sortOrder - r.sortOrder);
+  const dayStart = activeSlots[0] ? clockMinutes(activeSlots[0].value) : AVAILABILITY_DEFAULT_DAY_START;
+  const targetMinute = businessMinute(input.time, dayStart);
+
+  const totalTherapists = attendances.length > 0 ? attendances.length : therapists.length;
+
+  let assignedSlots = 0;
+  let unassignedSlots = 0;
+
+  for (const call of calls) {
+    if (isNoShowStatus(call.status) || isCanceledStatus(call.status)) continue;
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(call.startTime)) continue;
+    const policy = currentPolicyForCourse(policies, call.courseId, month.monthKey);
+    const duration = policy?.durationMinutes ?? 60;
+    const start = businessMinute(call.startTime, dayStart);
+    const earlyMatch = call.note ? /\[종료\s*(([01]\d|2[0-3]):[0-5]\d)\]/.exec(call.note) : null;
+    const end = earlyMatch ? businessMinute(earlyMatch[1], dayStart) : start + duration;
+
+    if (targetMinute >= start && targetMinute < end) {
+      const activeAssignments = (call.assignments ?? []).filter(
+        (a) => a.isActive !== false && (a.assignmentRole === "THERAPIST_1" || a.assignmentRole === "THERAPIST_2")
+      );
+      if (activeAssignments.length > 0) {
+        assignedSlots += activeAssignments.length;
+      } else {
+        unassignedSlots += policy?.requiresSecondTherapist ? 2 : 1;
+      }
+    }
+  }
+
+  const availableSlots = Math.max(0, totalTherapists - assignedSlots - unassignedSlots);
+
+  return {
+    totalTherapists,
+    assignedSlots,
+    unassignedSlots,
+    availableSlots,
+    time: input.time
+  };
+}
+
+export async function listTherapistStatusOverview(input: {
+  operatingMonthId: string;
+  serviceDate: string;
+  currentTime?: string;
+  prismaClient?: ServiceCallPrismaClient;
+}): Promise<TherapistStatusOverviewDto[]> {
+  const client = getClient(input.prismaClient);
+  const month = await requireOperatingMonth(client, input.operatingMonthId);
+  const [therapists, attendances, calls, slots, courses, policies] = await Promise.all([
+    client.employee.findMany({
+      where: { isActive: true, employeeGroup: "THERAPIST" },
+      orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }]
+    }),
+    client.therapistAttendance.findMany({
+      where: { operatingMonthId: month.id, attendanceDate: toDateOnly(input.serviceDate), isActive: true }
+    }),
+    client.serviceCall.findMany({
+      where: { operatingMonthId: month.id, serviceDate: toDateOnly(input.serviceDate) },
+      include: { assignments: true, course: { include: { policies: true } } }
+    }),
+    client.timeSlot.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }),
+    client.course.findMany({ where: { isActive: true } }),
+    client.coursePolicy.findMany({ where: { isActive: true } })
+  ]);
+
+  const activeSlots = [...slots].filter((slot) => slot.isActive).sort((l, r) => l.sortOrder - r.sortOrder);
+  const dayStart = activeSlots[0] ? clockMinutes(activeSlots[0].value) : AVAILABILITY_DEFAULT_DAY_START;
+  const dayEnd = activeSlots.length > 0 ? businessMinute(activeSlots[activeSlots.length - 1].value, dayStart) : null;
+  const atTimeStr = input.currentTime && /^([01]\d|2[0-3]):[0-5]\d$/.test(input.currentTime)
+    ? input.currentTime
+    : activeSlots[0]?.value ?? "15:00";
+  const at = businessMinute(atTimeStr, dayStart);
+
+  const attendancesByEmployee = new Map(attendances.map((a) => [a.employeeId, a]));
+  const intervalsByTherapist = new Map<string, AvailabilityInterval[]>();
+  const completedCounts = new Map<string, number>();
+  const remainingCounts = new Map<string, number>();
+
+  for (const call of calls) {
+    const isCompleted = isCompletedServiceCallStatus(call.status);
+    const isRemaining = isReservationStatus(call.status) || isInUseStatus(call.status);
+    for (const a of call.assignments ?? []) {
+      if (a.isActive === false) continue;
+      if (a.assignmentRole !== "THERAPIST_1" && a.assignmentRole !== "THERAPIST_2") continue;
+      if (isCompleted) {
+        completedCounts.set(a.employeeId, (completedCounts.get(a.employeeId) ?? 0) + 1);
+      }
+      if (isRemaining) {
+        remainingCounts.set(a.employeeId, (remainingCounts.get(a.employeeId) ?? 0) + 1);
+      }
+    }
+
+    if (!occupiesAvailability(call.status) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(call.startTime)) continue;
+    const policy = currentPolicyForCourse(policies, call.courseId, month.monthKey);
+    if (!policy) continue;
+    const start = businessMinute(call.startTime, dayStart);
+    const earlyMatch = call.note ? /\[종료\s*(([01]\d|2[0-3]):[0-5]\d)\]/.exec(call.note) : null;
+    const end = earlyMatch ? businessMinute(earlyMatch[1], dayStart) : start + policy.durationMinutes;
+    const interval = { start, end };
+    for (const a of call.assignments ?? []) {
+      if (a.isActive === false) continue;
+      if (a.assignmentRole !== "THERAPIST_1" && a.assignmentRole !== "THERAPIST_2") continue;
+      const current = intervalsByTherapist.get(a.employeeId) ?? [];
+      current.push(interval);
+      intervalsByTherapist.set(a.employeeId, current);
+    }
+  }
+
+  const offeredCourses = courses.flatMap((course) => {
+    const policy = currentPolicyForCourse(policies, course.id, month.monthKey);
+    if (!policy) return [];
+    return [{ courseId: course.id, courseCode: course.code, durationMinutes: policy.durationMinutes }];
+  });
+
+  return therapists.map((therapist) => {
+    const attendance = attendancesByEmployee.get(therapist.id);
+    const intervals = intervalsByTherapist.get(therapist.id) ?? [];
+    const occupiedUntil = coveringEnd(intervals, at);
+    const nextStart = nextIntervalStart(intervals, at);
+    const freeMinutes = occupiedUntil === null ? Math.max((nextStart ?? dayEnd ?? at) - at, 0) : null;
+
+    let attendanceStatus: "checked_in" | "scheduled" | "absent" = "absent";
+    let checkInTime: string | null = null;
+    if (attendance) {
+      if (attendance.checkInMinute !== undefined && attendance.checkInMinute !== null) {
+        checkInTime = formatBusinessMinute(attendance.checkInMinute);
+        attendanceStatus = attendance.checkInMinute <= at ? "checked_in" : "scheduled";
+      }
+    } else {
+      attendanceStatus = "scheduled";
+    }
+
+    let currentStatus: "available" | "in_use" | "scheduled" | "cleaning";
+    let nextEventTime: string | null = null;
+    let nextEventLabel: string | null = null;
+
+    if (occupiedUntil !== null) {
+      currentStatus = "in_use";
+      nextEventTime = formatBusinessMinute(occupiedUntil);
+      nextEventLabel = `종료 예상 ${nextEventTime}`;
+    } else if (attendanceStatus === "scheduled" && checkInTime && attendance && attendance.checkInMinute != null && attendance.checkInMinute > at) {
+      currentStatus = "scheduled";
+      nextEventTime = checkInTime;
+      nextEventLabel = `출근 예정 ${checkInTime}`;
+    } else {
+      currentStatus = "available";
+      if (nextStart !== null) {
+        nextEventTime = formatBusinessMinute(nextStart);
+        nextEventLabel = `다음 ${nextEventTime}`;
+      } else {
+        nextEventLabel = "종일 가능";
+      }
+    }
+
+    const availableCourseCodes = freeMinutes !== null
+      ? offeredCourses
+          .filter((c) => c.durationMinutes <= freeMinutes)
+          .map((c) => c.courseCode)
+      : [];
+
+    return {
+      therapistId: therapist.id,
+      staffCode: therapist.staffCode,
+      displayName: therapist.displayName,
+      sortOrder: therapist.sortOrder ?? 0,
+      attendanceStatus,
+      checkInTime,
+      completedCallsCount: completedCounts.get(therapist.id) ?? 0,
+      remainingReservationsCount: remainingCounts.get(therapist.id) ?? 0,
+      currentStatus,
+      nextEventTime,
+      nextEventLabel,
+      freeMinutes,
+      availableCourseCodes
+    };
+  });
+}
+
+export type QuickBookingInput = {
+  operatingMonthId: string;
+  serviceDate: string;
+  startTime: string;
+  courseId: string;
+  therapist1Id?: string | null;
+  therapist2Id?: string | null;
+  bookingPath?: string | null;
+  customerName?: string | null;
+  customerMemo?: string | null;
+  customerId?: string | null;
+  partySize?: number;
+  actorId?: string;
+  allowQuotaOverride?: boolean;
+};
+
+export async function createQuickBooking(
+  input: QuickBookingInput,
+  prismaClient?: ServiceCallPrismaClient
+) {
+  const partySize = Math.max(1, input.partySize ?? 1);
+  const client = getClient(prismaClient);
+
+  if (!input.allowQuotaOverride) {
+    const quota = await getCallLedgerQuota({
+      operatingMonthId: input.operatingMonthId,
+      serviceDate: input.serviceDate,
+      time: input.startTime,
+      prismaClient: client
+    });
+    if (quota.availableSlots < partySize) {
+      throw new ServiceCallDomainError(
+        `예약 가능 인원(${quota.availableSlots}명)을 초과했습니다. 관리자 확인 후 예외 예약을 진행할 수 있습니다.`,
+        "QUOTA_EXCEEDED"
+      );
+    }
+  }
+
+  const pathPrefix = input.bookingPath ? `[${input.bookingPath}]` : "";
+  const namePart = input.customerName ? input.customerName.trim() : "";
+  const baseMemo = [pathPrefix, namePart].filter(Boolean).join(" ");
+  const fullMemo = baseMemo + (input.customerMemo ? ` / ${input.customerMemo.trim()}` : "");
+
+  const firstCall = await saveBasicServiceCallRow({
+    operatingMonthId: input.operatingMonthId,
+    serviceDate: input.serviceDate,
+    startTime: input.startTime,
+    courseId: input.courseId,
+    therapist1Id: input.therapist1Id ?? null,
+    therapist2Id: input.therapist2Id ?? null,
+    roomId: null,
+    status: "예약",
+    customerMemo: fullMemo || null,
+    customerId: input.customerId ?? null,
+    note: input.bookingPath ? `예약경로: ${input.bookingPath}` : null,
+    confirmationCode: "N",
+    actorId: input.actorId,
+    prismaClient: client
+  });
+
+  for (let i = 2; i <= partySize; i++) {
+    await saveBasicServiceCallRow({
+      operatingMonthId: input.operatingMonthId,
+      serviceDate: input.serviceDate,
+      startTime: input.startTime,
+      courseId: input.courseId,
+      therapist1Id: null,
+      therapist2Id: null,
+      roomId: null,
+      status: "예약",
+      customerMemo: `[동행 ${i}] ${fullMemo}`.trim(),
+      customerId: null,
+      note: input.bookingPath ? `예약경로: ${input.bookingPath} (일행)` : null,
+      confirmationCode: "N",
+      actorId: input.actorId,
+      prismaClient: client
+    });
+  }
+
+  return firstCall;
+}
+
+export async function earlyFinishServiceCall(input: {
+  serviceCallId: string;
+  operatingMonthId: string;
+  finishTime?: string;
+  actorId?: string;
+  prismaClient?: ServiceCallPrismaClient;
+}) {
+  const client = getClient(input.prismaClient);
+  return runInTransaction(client, async (tx) => {
+    const existing = await tx.serviceCall.findUnique({
+      where: { id: input.serviceCallId },
+      include: { assignments: true, room: true }
+    });
+    if (!existing) {
+      throw new ServiceCallDomainError("콜 행을 찾을 수 없습니다.", "SERVICE_CALL_NOT_FOUND");
+    }
+    await assertWritableDate(tx, {
+      operatingMonthId: input.operatingMonthId,
+      serviceDate: toIsoDateOnly(existing.serviceDate)
+    });
+
+    const now = new Date();
+    const currentHhMm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const finishTime = input.finishTime ?? currentHhMm;
+
+    const cleanNote = (existing.note ?? "").replace(/\[종료\s*(([01]\d|2[0-3]):[0-5]\d)\]/g, "").trim();
+    const updatedNote = cleanNote ? `${cleanNote} [종료 ${finishTime}]` : `[종료 ${finishTime}]`;
+
+    const updated = await tx.serviceCall.update({
+      where: { id: input.serviceCallId },
+      data: {
+        status: "청소중",
+        note: updatedNote
+      }
+    });
+
+    await tx.serviceCallStatusHistory.create({
+      data: {
+        serviceCallId: input.serviceCallId,
+        previousStatus: existing.status,
+        newStatus: "청소중",
+        changedByAccountId: input.actorId || "system",
+        changedAt: new Date()
+      }
+    });
+
+    return updated;
+  });
+}
+
+export async function undoFinishServiceCall(input: {
+  serviceCallId: string;
+  operatingMonthId: string;
+  actorId?: string;
+  prismaClient?: ServiceCallPrismaClient;
+}) {
+  const client = getClient(input.prismaClient);
+  return runInTransaction(client, async (tx) => {
+    const existing = await tx.serviceCall.findUnique({
+      where: { id: input.serviceCallId },
+      include: { assignments: true, room: true }
+    });
+    if (!existing) {
+      throw new ServiceCallDomainError("콜 행을 찾을 수 없습니다.", "SERVICE_CALL_NOT_FOUND");
+    }
+    await assertWritableDate(tx, {
+      operatingMonthId: input.operatingMonthId,
+      serviceDate: toIsoDateOnly(existing.serviceDate)
+    });
+
+    const updatedNote = (existing.note ?? "").replace(/\[종료\s*(([01]\d|2[0-3]):[0-5]\d)\]/g, "").trim() || null;
+
+    const updated = await tx.serviceCall.update({
+      where: { id: input.serviceCallId },
+      data: {
+        status: "사용중",
+        note: updatedNote
+      }
+    });
+
+    await tx.serviceCallStatusHistory.create({
+      data: {
+        serviceCallId: input.serviceCallId,
+        previousStatus: existing.status,
+        newStatus: "사용중",
+        changedByAccountId: input.actorId || "system",
+        changedAt: new Date()
+      }
+    });
+
+    return updated;
+  });
+}
+
+export async function quickAssignTherapist(input: {
+  serviceCallId: string;
+  therapistId: string | null;
+  actorId?: string;
+  prismaClient?: ServiceCallPrismaClient;
+}) {
+  const client = getClient(input.prismaClient);
+  return runInTransaction(client, async (tx) => {
+    const call = await tx.serviceCall.findUnique({
+      where: { id: input.serviceCallId },
+      include: { assignments: true }
+    });
+    if (!call) throw new ServiceCallDomainError("콜 행을 찾을 수 없습니다.", "SERVICE_CALL_NOT_FOUND");
+    await assertWritableDate(tx, {
+      operatingMonthId: call.operatingMonthId,
+      serviceDate: toIsoDateOnly(call.serviceDate)
+    });
+
+    if (input.therapistId) {
+      await assertActiveEmployee(tx, { role: "THERAPIST_1", employeeId: input.therapistId });
+    }
+
+    await writeAssignment(tx, {
+      serviceCallId: call.id,
+      assignmentRole: "THERAPIST_1",
+      employeeId: input.therapistId
+    });
+
+    return tx.serviceCall.findUnique({ where: { id: call.id }, include: { assignments: true } });
+  });
+}
+
+export async function quickAssignRoom(input: {
+  serviceCallId: string;
+  roomId: string | null;
+  actorId?: string;
+  prismaClient?: ServiceCallPrismaClient;
+}) {
+  const client = getClient(input.prismaClient);
+  return runInTransaction(client, async (tx) => {
+    const call = await tx.serviceCall.findUnique({ where: { id: input.serviceCallId } });
+    if (!call) throw new ServiceCallDomainError("콜 행을 찾을 수 없습니다.", "SERVICE_CALL_NOT_FOUND");
+    await assertWritableDate(tx, {
+      operatingMonthId: call.operatingMonthId,
+      serviceDate: toIsoDateOnly(call.serviceDate)
+    });
+
+    if (input.roomId) {
+      await assertActiveRoom(tx, input.roomId);
+    }
+
+    return tx.serviceCall.update({
+      where: { id: call.id },
+      data: { roomId: input.roomId }
+    });
+  });
+}
+
+export async function quickTogglePaymentConfirmation(input: {
+  serviceCallId: string;
+  operatingMonthId?: string;
+  actorId?: string;
+  prismaClient?: ServiceCallPrismaClient;
+}) {
+  const client = getClient(input.prismaClient);
+  return runInTransaction(client, async (tx) => {
+    const call = await tx.serviceCall.findUnique({ where: { id: input.serviceCallId } });
+    if (!call) throw new ServiceCallDomainError("콜 행을 찾을 수 없습니다.", "SERVICE_CALL_NOT_FOUND");
+    await assertWritableDate(tx, {
+      operatingMonthId: call.operatingMonthId,
+      serviceDate: toIsoDateOnly(call.serviceDate)
+    });
+
+    const nextCode = call.confirmationCode === "Y" ? "N" : "Y";
+    return tx.serviceCall.update({
+      where: { id: call.id },
+      data: { confirmationCode: nextCode }
+    });
+  });
+}
+

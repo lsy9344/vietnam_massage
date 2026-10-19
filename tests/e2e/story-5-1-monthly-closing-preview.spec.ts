@@ -469,23 +469,23 @@ test.describe("Story 5.1 monthly closing preview", () => {
     await expect(page.getByRole("heading", { name: "마사지사" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "운영팀" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "귀케어" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "산출 근거/warning" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "이번 달 계산 기준" })).toBeVisible();
 
     const therapistRow = page.getByRole("row").filter({ hasText: seededData.therapistLabel });
     await expect(therapistRow).toContainText("THR-001");
     await expect(therapistRow).toContainText("2건");
     await expect(therapistRow).toContainText("1,400,000 VND");
     // Story 5.2에서 보너스 계산이 들어오며 마사지사 표 설명이 "Story 5.2 대기"에서 합산 문구로 바뀌었다.
-    await expect(page.getByText("최종지급액은 월 정산액과 만근/갯수왕 보너스를 합산한다.", { exact: false })).toBeVisible();
+    await expect(page.getByText("최종지급액은 월 정산액에 만근수당과 갯수왕 수당을 더한 금액입니다.", { exact: false })).toBeVisible();
 
     const earcareRow = page.getByRole("row").filter({ hasText: seededData.earcareLabel });
     await expect(earcareRow).toContainText("1일");
     await expect(earcareRow).toContainText("100,000 VND");
-    await expect(page.getByText(`기간 ${seededData.previewStartDate} ~ ${seededData.previewEndDate}, source day count 2`)).toBeVisible();
-    await expect(page.getByText("excluded call count 1")).toBeVisible();
-    await expect(page.getByText(/귀케어 정상근무자 0명\s+1/)).toBeVisible();
-    await expect(page.getByText(/미분배\s+1/)).toBeVisible();
-    await expect(page.getByText("대표 evidence")).toBeVisible();
+    await expect(page.getByText(`기간 ${seededData.previewStartDate} ~ ${seededData.previewEndDate} (2일).`)).toBeVisible();
+    await expect(page.getByText("마사지사 정산에서 뺀 콜 1건.")).toBeVisible();
+    await expect(page.getByText("귀케어 정상 근무자가 없는 날 1일.")).toBeVisible();
+    await expect(page.getByText("귀케어 금액을 나누지 못한 날 1일.")).toBeVisible();
+    await expect(page.getByText("대표 evidence")).toHaveCount(0);
 
     await expect(page.getByRole("button", { name: /마감확정|잠금|재오픈|저장|수정/ })).toHaveCount(0);
   });
@@ -507,7 +507,7 @@ test.describe("Story 5.1 monthly closing preview", () => {
     await page.goto(`/closing?operatingMonthId=${seededData.lockedOperatingMonthId}`);
 
     await expect(page.getByText("현재 기준 미리보기")).toBeVisible();
-    await expect(page.getByText("확정값은 월마감 스냅샷 기준")).toBeVisible();
+    await expect(page.getByText("확정값은 월마감 확정 기록 기준")).toBeVisible();
   });
 
   test("counter, waiter, and read-only roles are redirected by route access policy", async ({ page }) => {

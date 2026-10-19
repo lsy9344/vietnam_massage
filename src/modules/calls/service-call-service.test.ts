@@ -5,7 +5,10 @@ import {
   calculationWarningCallsFromRows,
   createCustomer,
   createDailyExpense,
+  createQuickBooking,
   deactivateDailyExpense,
+  earlyFinishServiceCall,
+  getCallLedgerQuota,
   getDailyCallLedgerSummary,
   listCustomerVisitHistory,
   listCustomers,
@@ -16,10 +19,13 @@ import {
   listServiceCallFormOptions,
   listServiceCallsForDate,
   listTherapistAvailability,
+  listTherapistStatusOverview,
+  quickTogglePaymentConfirmation,
   redactServiceCallSettlementAmounts,
   saveBasicServiceCallRow,
   searchCustomerVisitCandidates,
   ServiceCallDomainError,
+  undoFinishServiceCall,
   updateCustomer,
   updateDailyExpense,
   type ServiceCallRowDto
@@ -332,6 +338,10 @@ function createMemoryPrisma() {
   );
   const timeSlots = new Map<string, any>([
     ["11:00", { id: "slot-1100", value: "11:00", sortOrder: 10, isActive: true, createdAt, updatedAt }],
+    ["15:00", { id: "slot-1500", value: "15:00", sortOrder: 50, isActive: true, createdAt, updatedAt }],
+    ["15:30", { id: "slot-1530", value: "15:30", sortOrder: 55, isActive: true, createdAt, updatedAt }],
+    ["15:40", { id: "slot-1540", value: "15:40", sortOrder: 57, isActive: true, createdAt, updatedAt }],
+    ["16:00", { id: "slot-1600", value: "16:00", sortOrder: 60, isActive: true, createdAt, updatedAt }],
     ["01:00", { id: "slot-0100", value: "01:00", sortOrder: 290, isActive: true, createdAt, updatedAt }]
   ]);
   const serviceCalls = new Map<string, any>();
@@ -479,6 +489,13 @@ function createMemoryPrisma() {
       async findUnique({ where }: any) {
         const record = serviceCalls.get(where.id);
         return record ? withRelations(record) : null;
+      },
+      async update({ where, data }: any) {
+        const record = serviceCalls.get(where.id);
+        if (!record) throw new Error("Record not found");
+        const updated = { ...record, ...data, updatedAt: new Date("2026-06-09T01:00:00.000Z") };
+        serviceCalls.set(where.id, updated);
+        return withRelations(updated);
       },
       async updateMany({ where, data }: any) {
         const record = serviceCalls.get(where.id);
@@ -3738,5 +3755,226 @@ describe("ledger status counts", () => {
       noShowCount: 0,
       canceledCount: 0
     });
+  });
+
+  it("calculates quota correctly for assigned and unassigned calls", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    // With 2 therapists and no calls
+    const initialQuota = await getCallLedgerQuota({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      time: "15:00",
+      prismaClient
+    });
+    assert.equal(initialQuota.totalTherapists, 2);
+    assert.equal(initialQuota.assignedSlots, 0);
+    assert.equal(initialQuota.unassignedSlots, 0);
+    assert.equal(initialQuota.availableSlots, 2);
+
+    // Book 1 unassigned call
+    const call1 = await createQuickBooking(
+      {
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-06-10",
+        startTime: "15:00",
+        courseId: "course-a",
+        partySize: 1,
+        bookingPath: "텔레그램",
+        customerName: "홍길동"
+      },
+      prismaClient
+    );
+    assert.ok(call1.id);
+    assert.equal(call1.status, "예약");
+    assert.match(call1.customerMemo ?? "", /\[텔레그램\] 홍길동/);
+
+    const updatedQuota = await getCallLedgerQuota({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      time: "15:00",
+      prismaClient
+    });
+    assert.equal(updatedQuota.unassignedSlots, 1);
+    assert.equal(updatedQuota.availableSlots, 1);
+  });
+
+  it("blocks booking when quota is exceeded unless allowQuotaOverride is set", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    // Fill capacity with partySize: 2
+    await createQuickBooking(
+      {
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-06-10",
+        startTime: "15:00",
+        courseId: "course-a",
+        partySize: 2,
+        bookingPath: "카카오톡",
+        customerName: "일행손님"
+      },
+      prismaClient
+    );
+
+    // Try booking 1 more without override
+    await assert.rejects(
+      async () => {
+        await createQuickBooking(
+          {
+            operatingMonthId: "month-2026-06",
+            serviceDate: "2026-06-10",
+            startTime: "15:00",
+            courseId: "course-a",
+            partySize: 1,
+            bookingPath: "전화",
+            customerName: "초과손님",
+            allowQuotaOverride: false
+          },
+          prismaClient
+        );
+      },
+      (err: any) => {
+        assert.ok(err instanceof ServiceCallDomainError);
+        assert.equal(err.code, "QUOTA_EXCEEDED");
+        return true;
+      }
+    );
+
+    // With allowQuotaOverride: true, booking succeeds
+    const overrideCall = await createQuickBooking(
+      {
+        operatingMonthId: "month-2026-06",
+        serviceDate: "2026-06-10",
+        startTime: "15:00",
+        courseId: "course-a",
+        partySize: 1,
+        bookingPath: "전화",
+        customerName: "초과손님",
+        allowQuotaOverride: true
+      },
+      prismaClient
+    );
+    assert.ok(overrideCall.id);
+  });
+
+  it("supports early finish and undo finish with note tags", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const created = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "15:00",
+      courseId: "course-a",
+      roomId: "room-101",
+      therapist1Id: "therapist-1",
+      status: "사용중",
+      note: "기존 메모",
+      actorId: "actor-1",
+      prismaClient
+    });
+
+    // Early finish at 15:40
+    const finished = await earlyFinishServiceCall({
+      serviceCallId: created.id,
+      operatingMonthId: "month-2026-06",
+      finishTime: "15:40",
+      actorId: "actor-1",
+      prismaClient
+    });
+    assert.equal(finished.status, "청소중");
+    assert.match(finished.note ?? "", /기존 메모/);
+    assert.match(finished.note ?? "", /\[종료 15:40\]/);
+
+    // Undo early finish
+    const undone = await undoFinishServiceCall({
+      serviceCallId: created.id,
+      operatingMonthId: "month-2026-06",
+      actorId: "actor-1",
+      prismaClient
+    });
+    assert.equal(undone.status, "사용중");
+    assert.equal(undone.note, "기존 메모");
+  });
+
+  it("reflects early finish in listTherapistStatusOverview", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const created = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "15:00",
+      courseId: "course-a", // 60 min course
+      roomId: "room-101",
+      therapist1Id: "therapist-1",
+      status: "사용중",
+      note: "고객 메모",
+      actorId: "actor-1",
+      prismaClient
+    });
+
+    // Overview at 15:30: therapist is in_use until 16:00
+    const overview1 = await listTherapistStatusOverview({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      currentTime: "15:30",
+      prismaClient
+    });
+    const t1Before = overview1.find((t) => t.therapistId === "therapist-1");
+    assert.equal(t1Before?.currentStatus, "in_use");
+
+    // Early finish at 15:30
+    await earlyFinishServiceCall({
+      serviceCallId: created.id,
+      operatingMonthId: "month-2026-06",
+      finishTime: "15:30",
+      actorId: "actor-1",
+      prismaClient
+    });
+
+    // Overview at 15:35: therapist early finish has released them, so status is available
+    const overview2 = await listTherapistStatusOverview({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      currentTime: "15:35",
+      prismaClient
+    });
+    const t1After = overview2.find((t) => t.therapistId === "therapist-1");
+    assert.equal(t1After?.currentStatus, "available");
+  });
+
+  it("toggles payment confirmation code between CONFIRMED (Y) and UNCONFIRMED (N)", async () => {
+    const prismaClient = createMemoryPrisma();
+
+    const created = await saveBasicServiceCallRow({
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "15:00",
+      courseId: "course-a",
+      roomId: "room-101",
+      therapist1Id: "therapist-1",
+      status: "예약",
+      confirmationCode: "N",
+      actorId: "actor-1",
+      prismaClient
+    });
+    assert.equal(created.confirmationCode, "N");
+
+    // Toggle to Y
+    const res1 = await quickTogglePaymentConfirmation({
+      serviceCallId: created.id,
+      operatingMonthId: "month-2026-06",
+      actorId: "actor-1",
+      prismaClient
+    });
+    assert.equal(res1.confirmationCode, "Y");
+
+    // Toggle back to N
+    const res2 = await quickTogglePaymentConfirmation({
+      serviceCallId: created.id,
+      operatingMonthId: "month-2026-06",
+      actorId: "actor-1",
+      prismaClient
+    });
+    assert.equal(res2.confirmationCode, "N");
   });
 });

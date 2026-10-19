@@ -12,16 +12,27 @@ import {
   autosaveServiceCallRow,
   createCustomer,
   createDailyExpense,
+  createQuickBooking,
   deactivateDailyExpense,
+  earlyFinishServiceCall,
+  getCallLedgerQuota,
   updateCustomer,
   updateDailyExpense,
-  redactServiceCallSettlementAmounts,
   listTherapistAvailability,
+  listTherapistStatusOverview,
+  quickAssignRoom,
+  quickAssignTherapist,
+  quickTogglePaymentConfirmation,
+  redactServiceCallSettlementAmounts,
   saveBasicServiceCallRow,
   ServiceCallDomainError,
+  undoFinishServiceCall,
+  type CallLedgerQuotaDto,
   type CustomerDto,
   type DailyExpenseDto,
-  type ServiceCallRowDto
+  type QuickBookingInput,
+  type ServiceCallRowDto,
+  type TherapistStatusOverviewDto
 } from "@/modules/calls/service-call-service";
 import {
   customerInputSchema,
@@ -368,3 +379,105 @@ export async function loadTherapistAvailabilityAction(input: { operatingMonthId:
   await requireRouteAccess("/calls");
   return listTherapistAvailability(input);
 }
+
+export async function loadQuotaAction(input: { operatingMonthId: string; serviceDate: string; time: string }): Promise<CallLedgerQuotaDto> {
+  await requireRouteAccess("/calls");
+  return getCallLedgerQuota(input);
+}
+
+export async function loadTherapistStatusOverviewAction(input: {
+  operatingMonthId: string;
+  serviceDate: string;
+  currentTime?: string;
+}): Promise<TherapistStatusOverviewDto[]> {
+  await requireRouteAccess("/calls");
+  return listTherapistStatusOverview(input);
+}
+
+export async function createQuickBookingAction(input: QuickBookingInput): Promise<ActionResult<ServiceCallRowDto>> {
+  const locale = await getLocale();
+  try {
+    const account = await requirePermission("call:write");
+    const data = await createQuickBooking({ ...input, actorId: account.id });
+    revalidatePath("/calls");
+    return { ok: true, data };
+  } catch (error) {
+    return mapActionError<ServiceCallRowDto>(error, locale);
+  }
+}
+
+export async function earlyFinishCallAction(input: {
+  serviceCallId: string;
+  operatingMonthId: string;
+  finishTime?: string;
+}): Promise<ActionResult<{ success: boolean }>> {
+  const locale = await getLocale();
+  try {
+    const account = await requirePermission("call:write");
+    await earlyFinishServiceCall({ ...input, actorId: account.id });
+    revalidatePath("/calls");
+    return { ok: true, data: { success: true } };
+  } catch (error) {
+    return mapActionError<{ success: boolean }>(error, locale);
+  }
+}
+
+export async function undoFinishCallAction(input: {
+  serviceCallId: string;
+  operatingMonthId: string;
+}): Promise<ActionResult<{ success: boolean }>> {
+  const locale = await getLocale();
+  try {
+    const account = await requirePermission("call:write");
+    await undoFinishServiceCall({ ...input, actorId: account.id });
+    revalidatePath("/calls");
+    return { ok: true, data: { success: true } };
+  } catch (error) {
+    return mapActionError<{ success: boolean }>(error, locale);
+  }
+}
+
+export async function quickAssignTherapistAction(input: {
+  serviceCallId: string;
+  therapistId: string | null;
+}): Promise<ActionResult<{ success: boolean }>> {
+  const locale = await getLocale();
+  try {
+    const account = await requirePermission("call:write");
+    await quickAssignTherapist({ ...input, actorId: account.id });
+    revalidatePath("/calls");
+    return { ok: true, data: { success: true } };
+  } catch (error) {
+    return mapActionError<{ success: boolean }>(error, locale);
+  }
+}
+
+export async function quickAssignRoomAction(input: {
+  serviceCallId: string;
+  roomId: string | null;
+}): Promise<ActionResult<{ success: boolean }>> {
+  const locale = await getLocale();
+  try {
+    const account = await requirePermission("call:write");
+    await quickAssignRoom({ ...input, actorId: account.id });
+    revalidatePath("/calls");
+    return { ok: true, data: { success: true } };
+  } catch (error) {
+    return mapActionError<{ success: boolean }>(error, locale);
+  }
+}
+
+export async function quickTogglePaymentAction(input: {
+  serviceCallId: string;
+}): Promise<ActionResult<{ success: boolean }>> {
+  const locale = await getLocale();
+  try {
+    const account = await requirePermission("call:write");
+    await quickTogglePaymentConfirmation({ ...input, actorId: account.id });
+    revalidatePath("/calls");
+    return { ok: true, data: { success: true } };
+  } catch (error) {
+    return mapActionError<{ success: boolean }>(error, locale);
+  }
+}
+

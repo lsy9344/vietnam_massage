@@ -110,6 +110,7 @@ describe("therapist settlement view", () => {
     assert.match(html, /<aside aria-label="Mai \(THR-001\)"/);
     assert.match(html, /aria-pressed="true"/);
     assert.match(html, /aria-label="Mai 출근시간"[^>]*value="10:00"/);
+    assert.equal(html.match(/현재 시간 입력/g)?.length, 2);
     assert.match(html, /콜별 산출 근거/);
     assert.match(html, /2026-10-14 14:00/);
     assert.match(html, /정책 적용/);
@@ -142,6 +143,7 @@ describe("therapist settlement view", () => {
     const html = render({ attendanceDisabled: true, paymentLocked: true });
 
     assert.match(html, /aria-label="Mai 출근시간"[^>]*disabled=""/);
+    assert.equal(html.match(/<button[^>]*disabled=""[^>]*>현재 시간 입력<\/button>/g)?.length, 2);
     assert.doesNotMatch(html, />지급완료<\/button>/);
     assert.match(html, />잠금</);
   });

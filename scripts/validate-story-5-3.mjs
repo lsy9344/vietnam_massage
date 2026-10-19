@@ -127,7 +127,7 @@ for (const required of [
 ]) {
   if (!page.includes(required)) errors.push(`closing page.tsx missing ${required}`);
 }
-requireMoved(page, "closing page.tsx", "closing.snapshot.confirmed", "확정 스냅샷");
+requireMoved(page, "closing page.tsx", "closing.snapshot.confirmed", "확정 기록");
 requireMoved(page, "closing page.tsx", "closing.preview.current", "현재 기준 미리보기");
 for (const forbidden of ["recordAuditEvent", "monthlyClosing.create", "updateMany({", "monthly_close.confirmed"]) {
   if (page.includes(forbidden)) errors.push(`closing page.tsx must not perform domain write/audit work: ${forbidden}`);
@@ -161,7 +161,7 @@ for (const required of [
   "/closing?operatingMonthId",
   "검토 시작",
   "마감 확정",
-  "확정 스냅샷",
+  "확정 기록",
   "현재 기준 미리보기",
   "story53_admin",
   "story53_settlement",

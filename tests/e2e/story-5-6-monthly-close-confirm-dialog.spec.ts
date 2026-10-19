@@ -151,7 +151,7 @@ async function assertAlertDialogLabeling(page: Page) {
   expect(labels.labelledBy).toBeTruthy();
   expect(labels.describedBy).toBeTruthy();
   expect(labels.titleText).toContain("월마감을 확정할까요");
-  expect(labels.descriptionText).toContain("확정 시 스냅샷이 고정되어 이후 설정 변경으로 재계산되지 않습니다.");
+  expect(labels.descriptionText).toContain("확정 시 확정 기록이 고정되어 이후 설정 변경으로 재계산되지 않습니다.");
 }
 
 async function confirmedAuditCount(operatingMonthId: string) {
@@ -190,13 +190,13 @@ test.describe("Story 5.6 monthly close double-confirm dialog", () => {
     await expect(dialog).toContainText(/마사지사[\s\S]*[\d,]+ VND[\s\S]*\d+명/);
     await expect(dialog).toContainText(/운영팀[\s\S]*[\d,]+ VND[\s\S]*\d+명 \/ 일일 [\d,]+ VND \/ 월 [\d,]+ VND/);
     await expect(dialog).toContainText(/귀케어[\s\S]*[\d,]+ VND[\s\S]*\d+명/);
-    await expect(dialog).toContainText(/warning[\s\S]*\d+건/);
-    await expect(dialog).toContainText("확정 시 스냅샷이 고정되어 이후 설정 변경으로 재계산되지 않습니다.");
+    await expect(dialog).toContainText(/주의[\s\S]*\d+건/);
+    await expect(dialog).toContainText("확정 시 확정 기록이 고정되어 이후 설정 변경으로 재계산되지 않습니다.");
     expect(await (prisma as any).monthlyClosing.count({ where: { operatingMonthId: seededData.months.success } })).toBe(0);
     expect(await confirmedAuditCount(seededData.months.success)).toBe(0);
 
-    await dialog.getByRole("button", { name: "지급 스냅샷 확정" }).click();
-    await expect(page.getByText("확정 스냅샷", { exact: true }).first()).toBeVisible();
+    await dialog.getByRole("button", { name: "지급 기록 확정" }).click();
+    await expect(page.getByText("확정 기록", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "잠금" })).toBeEnabled();
 
     const month = await (prisma as any).operatingMonth.findUnique({ where: { id: seededData.months.success }, select: { status: true } });
@@ -231,9 +231,9 @@ test.describe("Story 5.6 monthly close double-confirm dialog", () => {
 
     const dialog = await openConfirmDialog(page);
     await assertAlertDialogLabeling(page);
-    await expect(dialog).toContainText("확정 시 스냅샷이 고정되어 이후 설정 변경으로 재계산되지 않습니다.");
+    await expect(dialog).toContainText("확정 시 확정 기록이 고정되어 이후 설정 변경으로 재계산되지 않습니다.");
     await expect(dialog.getByRole("button", { name: "취소" })).toBeFocused();
-    await expect(dialog.getByRole("button", { name: "지급 스냅샷 확정" })).not.toBeFocused();
+    await expect(dialog.getByRole("button", { name: "지급 기록 확정" })).not.toBeFocused();
 
     for (let index = 0; index < 8; index += 1) {
       await page.keyboard.press("Tab");
@@ -260,7 +260,7 @@ test.describe("Story 5.6 monthly close double-confirm dialog", () => {
       where: { id: seededData.months.stale },
       data: { status: "작성중" }
     });
-    await dialog.getByRole("button", { name: "지급 스냅샷 확정" }).click();
+    await dialog.getByRole("button", { name: "지급 기록 확정" }).click();
     await expect(dialog.getByRole("alert")).toContainText("현재 상태에서는 마감 확정할 수 없습니다.");
     await expect(dialog).toBeVisible();
 

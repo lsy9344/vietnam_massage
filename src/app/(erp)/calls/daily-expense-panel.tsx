@@ -14,6 +14,9 @@ import {
   type DailyExpenseActionState
 } from "@/app/(erp)/calls/actions";
 
+/** 행의 입력칸과 머리글의 칸 이름이 같은 열 폭을 쓰도록 공유한다. 열: 금액·내용·담당자·수단·비고·수정. */
+const EXPENSE_INPUT_GRID = "grid grid-cols-[7rem_11rem_10rem_6.5rem_11rem_auto] items-start gap-2";
+
 function fieldError(state: DailyExpenseActionState, field: string) {
   if (!state || state.ok) {
     return null;
@@ -37,19 +40,22 @@ function InlineError({ state, field }: { state: DailyExpenseActionState; field?:
 export function ExpenseMethodControl({
   defaultMethod = "cash",
   disabled,
-  error
+  error,
+  hideLabel = false
 }: {
   defaultMethod?: ExpenseMethod;
   disabled: boolean;
   error: string | null;
+  /** 라벨이 없는 한 줄 입력행에서는 라벨을 숨겨 다른 입력칸과 높이를 맞춘다. */
+  hideLabel?: boolean;
 }) {
   const t = useT();
   return (
-    <label className="grid gap-1.5">
-      <span className="text-sm font-semibold text-foreground">{t("calls.expense.field.method")}</span>
+    <label className={hideLabel ? "grid gap-1" : "grid gap-1.5"}>
+      <span className={hideLabel ? "sr-only" : "text-sm font-semibold text-foreground"}>{t("calls.expense.field.method")}</span>
       <select
         aria-label={t("calls.expense.field.method")}
-        className={inputFieldClassName({ className: "min-w-28" })}
+        className={inputFieldClassName({ className: hideLabel ? "w-full" : "min-w-28" })}
         defaultValue={defaultMethod}
         disabled={disabled}
         name="method"
@@ -143,14 +149,14 @@ function ExpenseRow({
   return (
     <tr className="align-top hover:bg-readonly">
       <td className="border-b border-border px-3 py-2">
-        <form action={updateAction} className="flex min-w-[760px] flex-wrap items-start gap-2" noValidate>
+        <form action={updateAction} className={`${EXPENSE_INPUT_GRID} min-w-[840px]`} noValidate>
           <input name="dailyExpenseId" type="hidden" value={expense.id} />
           <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
           <input name="expenseDate" type="hidden" value={serviceDate} />
           <label className="grid gap-1">
             <span className="sr-only">{t("calls.expense.field.amount")}</span>
             <input
-              className={inputFieldClassName({ className: "w-32" })}
+              className={inputFieldClassName({ className: "w-full" })}
               defaultValue={expense.amount}
               disabled={disabled}
               min={1}
@@ -164,7 +170,7 @@ function ExpenseRow({
           <label className="grid gap-1">
             <span className="sr-only">{t("calls.expense.field.description")}</span>
             <input
-              className={inputFieldClassName({ className: "w-48" })}
+              className={inputFieldClassName({ className: "w-full" })}
               defaultValue={expense.description}
               disabled={disabled}
               maxLength={200}
@@ -174,12 +180,12 @@ function ExpenseRow({
             />
             <InlineError field="description" state={updateState} />
           </label>
-          <HandlerSelect defaultValue={expense.handledByEmployee.id} disabled={disabled} handlers={handlers} label={t("calls.expense.field.handler")} name="handledByEmployeeId" />
-          <ExpenseMethodControl defaultMethod={expense.method} disabled={disabled} error={fieldError(updateState, "method")} />
+          <HandlerSelect className="w-full" defaultValue={expense.handledByEmployee.id} disabled={disabled} handlers={handlers} label={t("calls.expense.field.handler")} name="handledByEmployeeId" />
+          <ExpenseMethodControl defaultMethod={expense.method} disabled={disabled} error={fieldError(updateState, "method")} hideLabel />
           <label className="grid gap-1">
             <span className="sr-only">{t("calls.expense.field.note")}</span>
             <input
-              className={inputFieldClassName({ className: "w-48" })}
+              className={inputFieldClassName({ className: "w-full" })}
               defaultValue={expense.note ?? ""}
               disabled={disabled}
               maxLength={500}
@@ -189,7 +195,7 @@ function ExpenseRow({
             <InlineError field="note" state={updateState} />
           </label>
           <ExpenseSaveButton disabled={disabled} idleLabel={t("calls.expense.action.update")} pending={updatePending} variant="secondary" />
-          <div className="basis-full">
+          <div className="col-span-full">
             {updateState?.ok ? <span className="text-xs text-muted">{t("calls.save.saved")}</span> : <InlineError state={updateState} />}
           </div>
         </form>
@@ -335,13 +341,22 @@ export function DailyExpensePanel({
         <div className="px-4 py-4 text-sm text-muted">{t("calls.expense.empty")}</div>
       ) : (
         <div className="relative overflow-x-auto">
-          <table className="w-full min-w-[980px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
             <thead className="bg-readonly text-xs font-semibold text-muted">
               <tr>
-                <th className="border-b border-border px-3 py-2">{t("calls.expense.column.input")}</th>
-                <th className="border-b border-border px-3 py-2 text-right">{t("calls.expense.column.displayAmount")}</th>
-                <th className="border-b border-border px-3 py-2">{t("calls.expense.column.handler")}</th>
-                <th className="border-b border-border px-3 py-2 text-right">{t("calls.expense.column.actions")}</th>
+                <th className="border-b border-border px-3 py-2 align-bottom">
+                  <div>{t("calls.expense.column.input")}</div>
+                  <div className={`${EXPENSE_INPUT_GRID} mt-1 min-w-[840px] font-medium`}>
+                    <span>{t("calls.expense.field.amount")}</span>
+                    <span>{t("calls.expense.field.description")}</span>
+                    <span>{t("calls.expense.field.handler")}</span>
+                    <span>{t("calls.expense.field.method")}</span>
+                    <span>{t("calls.expense.field.note")}</span>
+                  </div>
+                </th>
+                <th className="border-b border-border px-3 py-2 text-right align-bottom">{t("calls.expense.column.displayAmount")}</th>
+                <th className="border-b border-border px-3 py-2 align-bottom">{t("calls.expense.column.handler")}</th>
+                <th className="border-b border-border px-3 py-2 text-right align-bottom">{t("calls.expense.column.actions")}</th>
               </tr>
             </thead>
             <tbody>

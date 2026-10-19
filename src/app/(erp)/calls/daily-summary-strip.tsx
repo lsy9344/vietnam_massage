@@ -46,12 +46,14 @@ export function DailySummaryStrip({
   summary,
   warningCalls,
   showSettlementAmounts,
+  showMonthlyTotals = true,
   locale
 }: {
   summary: DailyCallLedgerSummaryDto;
   /** 계산 경고 건수를 펼치면 보이는 콜(calculationWarningCallsFromRows). */
   warningCalls: CalculationWarningCallDto[];
   showSettlementAmounts: boolean;
+  showMonthlyTotals?: boolean;
   locale: Locale;
 }) {
   const showTherapistAssignmentCount = showSettlementAmounts;
@@ -72,14 +74,14 @@ export function DailySummaryStrip({
         <SummaryCard
           accent="blue"
           label={t(locale, "calls.summary.cashBalance")}
-          note={monthNote(summary.till.month.cashBalance, "cash")}
+          note={showMonthlyTotals ? monthNote(summary.till.month.cashBalance, "cash") : undefined}
           unit={vndSuffix}
           value={balance(summary.till.day.cashBalance, "cash")}
         />
         <SummaryCard
           accent="blue"
           label={t(locale, "calls.summary.bankBalance")}
-          note={monthNote(summary.till.month.bankBalance, "bank")}
+          note={showMonthlyTotals ? monthNote(summary.till.month.bankBalance, "bank") : undefined}
           unit={vndSuffix}
           value={balance(summary.till.day.bankBalance, "bank")}
         />
@@ -122,7 +124,7 @@ export function DailySummaryStrip({
           </dl>
         </Card>
         <Card title={t(locale, "calls.cashbook.till")}>
-          <TillTable day={summary.till.day} locale={locale} month={summary.till.month} />
+          <TillTable day={summary.till.day} locale={locale} month={summary.till.month} showMonth={showMonthlyTotals} />
         </Card>
       </div>
 
@@ -156,13 +158,13 @@ export function DailySummaryStrip({
   );
 }
 
-function TillTable({ day, month, locale }: { day: TillBalanceDto; month: TillBalanceDto; locale: Locale }) {
+function TillTable({ day, month, locale, showMonth = true }: { day: TillBalanceDto; month: TillBalanceDto; locale: Locale; showMonth?: boolean }) {
   const vndSuffix = t(locale, "calls.summary.vndSuffix");
   const formatVnd = (value: number) => `${formatNumber(locale, value)} ${vndSuffix}`;
   const formatBalance = (value: number, kind: "cash" | "bank") => `${balanceAmount(locale, value, kind)} ${vndSuffix}`;
   const periods = [
     { key: "today", label: t(locale, "calls.cashbook.till.today"), till: day },
-    { key: "month", label: t(locale, "calls.cashbook.till.month"), till: month }
+    ...(showMonth ? [{ key: "month", label: t(locale, "calls.cashbook.till.month"), till: month }] : [])
   ];
 
   return (

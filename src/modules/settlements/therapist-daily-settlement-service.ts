@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import {
   listServiceCallsForDate,
+  listServiceCallsForOperatingMonth,
   type ServiceCallAssigneeDto,
   type ServiceCallRowDto
 } from "@/modules/calls/service-call-service";
@@ -557,6 +558,48 @@ export async function listTherapistDailySettlements(input: {
 
   const employeesById = new Map(therapistEmployees.map((employee) => [employee.id, employee]));
   const rateLookup = await loadApplicableRates(client, rows);
+  const settled = settleTherapistDay({
+    operatingMonthId: parsed.data.operatingMonthId,
+    serviceDate: parsed.data.serviceDate,
+    monthKey: operatingMonth.monthKey,
+    rows,
+    employeesById,
+    rateLookup
+  });
+
+  return {
+    ...settled,
+    settlements: await attachPaymentStatuses({
+      client,
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate: parsed.data.serviceDate,
+      settlements: settled.settlements
+    })
+  };
+}
+
+function eachIsoDate(startDate: string, endDate: string) {
+  const dates: string[] = [];
+  let cursor = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+  while (cursor <= end) {
+    const year = cursor.getUTCFullYear();
+    const month = String(cursor.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(cursor.getUTCDate()).padStart(2, "0");
+    dates.push(`${year}-${month}-${day}`);
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return dates;
+}
+
+function settleTherapistDay(input: {
+  operatingMonthId: string;
+  serviceDate: string;
+  monthKey: string;
+  rows: ServiceCallRowDto[];
+  employeesById: Map<string, EmployeeRecord>;
+  rateLookup: Awaited<ReturnType<typeof loadApplicableRates>>;
+}): TherapistDailySettlementResultDto {
   const settlementsByEmployeeId = new Map<string, TherapistDailySettlementDto>();
   const warningCounts = {
     coursePolicyMissing: 0,
@@ -565,7 +608,7 @@ export async function listTherapistDailySettlements(input: {
   };
   let excludedCallCount = 0;
 
-  for (const row of rows) {
+  for (const row of input.rows) {
     if (!isCompletedStatus(row.status)) {
       excludedCallCount += 1;
       continue;
@@ -589,7 +632,7 @@ export async function listTherapistDailySettlements(input: {
       const assignee = assigneeForRole(row, role);
       if (!assignee) continue;
 
-      const employee = employeesById.get(assignee.id) ?? employeeFallback(assignee);
+      const employee = input.employeesById.get(assignee.id) ?? employeeFallback(assignee);
       if (!settlementsByEmployeeId.has(employee.id)) {
         settlementsByEmployeeId.set(employee.id, createSettlement(employee));
       }
@@ -598,8 +641,8 @@ export async function listTherapistDailySettlements(input: {
       if (!settlement) continue;
 
       const evidence = evidenceForRole({
-        rateLookup,
-        monthKey: operatingMonth.monthKey,
+        rateLookup: input.rateLookup,
+        monthKey: input.monthKey,
         row,
         role,
         assignee
@@ -619,19 +662,57 @@ export async function listTherapistDailySettlements(input: {
   }
 
   const settlements = [...settlementsByEmployeeId.values()].sort((a, b) => a.sortOrder - b.sortOrder || a.staffCode.localeCompare(b.staffCode));
-
   return {
-    operatingMonthId: parsed.data.operatingMonthId,
-    serviceDate: parsed.data.serviceDate,
-    settlements: await attachPaymentStatuses({
-      client,
-      operatingMonthId: parsed.data.operatingMonthId,
-      serviceDate: parsed.data.serviceDate,
-      settlements
-    }),
+    operatingMonthId: input.operatingMonthId,
+    serviceDate: input.serviceDate,
+    settlements,
     warningCounts,
     excludedCallCount
   };
+}
+
+// 그래프 리포트의 마사지사 순위는 지급 상태가 필요 없다. 날짜마다 콜과 수당을 다시 읽지 않는다.
+export async function listTherapistDailySettlementsForOperatingMonth(input: {
+  operatingMonthId: string;
+  startDate: string;
+  endDate: string;
+  prismaClient?: TherapistDailySettlementPrismaClient;
+}): Promise<TherapistDailySettlementResultDto[]> {
+  const client = getClient(input.prismaClient);
+  const [operatingMonth, therapistEmployees, rows] = await Promise.all([
+    client.operatingMonth.findUnique({ where: { id: input.operatingMonthId } }),
+    client.employee.findMany({ where: { employeeGroup: "THERAPIST", isActive: true }, orderBy: [{ sortOrder: "asc" }, { staffCode: "asc" }] }),
+    listServiceCallsForOperatingMonth({
+      operatingMonthId: input.operatingMonthId,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      prismaClient: client as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
+    })
+  ]);
+
+  if (!operatingMonth) {
+    throw new Error("운영월을 찾을 수 없습니다.");
+  }
+
+  const employeesById = new Map(therapistEmployees.map((employee) => [employee.id, employee]));
+  const rateLookup = await loadApplicableRates(client, rows);
+  const rowsByDate = new Map<string, ServiceCallRowDto[]>();
+  for (const row of rows) {
+    const bucket = rowsByDate.get(row.serviceDate) ?? [];
+    bucket.push(row);
+    rowsByDate.set(row.serviceDate, bucket);
+  }
+
+  return eachIsoDate(input.startDate, input.endDate).map((serviceDate) =>
+    settleTherapistDay({
+      operatingMonthId: input.operatingMonthId,
+      serviceDate,
+      monthKey: operatingMonth.monthKey,
+      rows: rowsByDate.get(serviceDate) ?? [],
+      employeesById,
+      rateLookup
+    })
+  );
 }
 
 export async function setTherapistDailySettlementPayment(input: {

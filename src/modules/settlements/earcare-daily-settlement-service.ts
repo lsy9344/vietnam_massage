@@ -2,12 +2,15 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import {
+  completedServiceCallCalculationsFromRows,
   listCompletedServiceCallCalculationsForDate,
-  listServiceCallsForDate
+  listServiceCallsForDate,
+  type ServiceCallRowDto
 } from "@/modules/calls/service-call-service";
 import {
   listEarcareAttendanceForDate,
-  type EarcareAttendanceDto
+  type EarcareAttendanceDto,
+  type EarcareAttendanceForDateDto
 } from "@/modules/settlements/earcare-attendance-service";
 import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/modules/settlements/settlement-evidence-call";
 
@@ -147,6 +150,8 @@ export async function listEarcareDailySettlements(input: {
   operatingMonthId: string;
   serviceDate: string;
   prismaClient?: EarcareDailySettlementPrismaClient;
+  serviceCallRows?: ServiceCallRowDto[];
+  attendance?: EarcareAttendanceForDateDto;
 }): Promise<EarcareDailySettlementResultDto> {
   const parsed = settlementQuerySchema.safeParse(input);
   if (!parsed.success) throw toFieldError(parsed.error);
@@ -160,21 +165,26 @@ export async function listEarcareDailySettlements(input: {
   assertDateInOperatingMonth(operatingMonth, parsed.data.serviceDate);
 
   const [attendance, completedCalculations, callRows] = await Promise.all([
-    listEarcareAttendanceForDate({
-      operatingMonthId: parsed.data.operatingMonthId,
-      attendanceDate: parsed.data.serviceDate,
-      prismaClient: client as Parameters<typeof listEarcareAttendanceForDate>[0]["prismaClient"]
-    }),
-    listCompletedServiceCallCalculationsForDate({
-      operatingMonthId: parsed.data.operatingMonthId,
-      serviceDate: parsed.data.serviceDate,
-      prismaClient: client as Parameters<typeof listCompletedServiceCallCalculationsForDate>[0]["prismaClient"]
-    }),
-    listServiceCallsForDate({
-      operatingMonthId: parsed.data.operatingMonthId,
-      serviceDate: parsed.data.serviceDate,
-      prismaClient: client as Parameters<typeof listServiceCallsForDate>[0]["prismaClient"]
-    })
+    input.attendance ??
+      listEarcareAttendanceForDate({
+        operatingMonthId: parsed.data.operatingMonthId,
+        attendanceDate: parsed.data.serviceDate,
+        prismaClient: client as Parameters<typeof listEarcareAttendanceForDate>[0]["prismaClient"]
+      }),
+    input.serviceCallRows
+      ? completedServiceCallCalculationsFromRows(input.serviceCallRows)
+      : listCompletedServiceCallCalculationsForDate({
+          operatingMonthId: parsed.data.operatingMonthId,
+          serviceDate: parsed.data.serviceDate,
+          prismaClient: client as Parameters<typeof listCompletedServiceCallCalculationsForDate>[0]["prismaClient"]
+        }),
+    input.serviceCallRows
+      ? input.serviceCallRows
+      : listServiceCallsForDate({
+          operatingMonthId: parsed.data.operatingMonthId,
+          serviceDate: parsed.data.serviceDate,
+          prismaClient: client as Parameters<typeof listServiceCallsForDate>[0]["prismaClient"]
+        })
   ]);
 
   const earcarePoolTotal = completedCalculations.reduce((sum, calculation) => sum + calculation.earcarePoolAmount, 0);

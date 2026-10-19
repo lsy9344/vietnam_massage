@@ -45,6 +45,30 @@ export function formatDateTime(locale: Locale, value: string | number | Date, op
   return new Intl.DateTimeFormat(intlLocale(locale), { timeZone: BUSINESS_TIME_ZONE, hour12: false, ...options }).format(new Date(value));
 }
 
+/**
+ * 베트남 업무 시간 기준 `YYYY-MM-DD HH:mm`.
+ * 화면에서 시스템 시각(ISO)을 그대로 보이지 않기 위한 표시용이다.
+ * 해석할 수 없는 값이면 null을 돌려 호출부가 원문을 유지하게 한다.
+ */
+export function formatBusinessDateTime(value: string | number | Date | null | undefined): string | null {
+  if (value == null || value === "") return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  const hour = pick("hour") === "24" ? "00" : pick("hour");
+  return `${pick("year")}-${pick("month")}-${pick("day")} ${hour}:${pick("minute")}`;
+}
+
 /** 베트남 업무 시간 기준 HH:mm 시각. */
 export function formatBusinessTime(locale: Locale, value: string | null): string {
   if (!value) return "-";
