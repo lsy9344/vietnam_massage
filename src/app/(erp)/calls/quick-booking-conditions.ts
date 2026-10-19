@@ -1,4 +1,5 @@
-import type { TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
+import { seatShortage } from "@/modules/calls/seat-capacity";
+import type { SeatPointDto, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
 
 // "use client"가 없는 모듈이다. 빠른 예약 ①(1018 스펙 D20·D23)의 Therapist 목록과 ②의 한 줄 요약을 정하는 순수 함수다.
 
@@ -83,4 +84,26 @@ export function quickBookingCourseColumns(rows: TherapistAvailabilityRowDto[]): 
     }
   }
   return [...columns.values()];
+}
+
+export type QuickBookingSeatShortage = { time: string; remaining: number; demand: number };
+
+/**
+ * 담은 손님이 남은 자리를 넘는지(1018 스펙 D25·D26). 손님마다 코스 길이 동안 미지명 몫 1자리(두 명 코스는 2자리)를 쓰고, 지명
+ * 몫은 그 Therapist가 그때 일하면서 비어 있을 때만 남은 자리를 쓴다(지명과 미지명이 같은 남은 자리를 쓴다). 서버가 준 자리 점과
+ * 견주어, 넘으면 처음 모자라는 시각과 그때의 남은 자리·필요한 자리를 돌려준다.
+ */
+export function quickBookingSeatShortage(
+  seats: SeatPointDto[],
+  columns: QuickBookingCourseColumn[],
+  guests: Array<{ courseId: string; therapist1Id: string | null; therapist2Id: string | null }>
+): QuickBookingSeatShortage | null {
+  const demand = guests.flatMap((guest) => {
+    const column = columns.find((candidate) => candidate.courseId === guest.courseId);
+    if (!column) return [];
+    const therapistIds = [guest.therapist1Id, guest.therapist2Id].filter((therapistId): therapistId is string => Boolean(therapistId));
+    return [{ minutes: column.minutes, therapistIds, requiresSecondTherapist: column.requiresSecondTherapist }];
+  });
+  const shortage = seatShortage(seats, demand);
+  return shortage ? { time: shortage.point.time, remaining: shortage.point.remaining, demand: shortage.demand } : null;
 }

@@ -35,7 +35,12 @@ export function ScheduleView({
     header: `${t(SCHEDULE_WEEKDAY_MESSAGE_KEYS[index])} ${date.slice(5)}`,
     cell: (row) => {
       const day = row.days[index];
-      return <StatusIndicator label={scheduleStatusLabel(locale, day.status)} tone={scheduleStatusTone(day.status)} />;
+      return (
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+          <StatusIndicator label={scheduleStatusLabel(locale, day.status)} tone={scheduleStatusTone(day.status)} />
+          {day.plannedStartTime ? <span className="text-xs text-muted">{day.plannedStartTime}</span> : null}
+        </span>
+      );
     }
   }));
 
@@ -70,6 +75,7 @@ export function ScheduleView({
                         employeeId={row.employeeId}
                         employeeName={row.displayName}
                         key={day.date}
+                        plannedStartTime={day.plannedStartTime}
                         status={day.status}
                         weekdayLabel={t(SCHEDULE_WEEKDAY_MESSAGE_KEYS[index])}
                       />

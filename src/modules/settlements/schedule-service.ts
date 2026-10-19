@@ -16,6 +16,8 @@ import { employeeGroups, type EmployeeGroup } from "@/modules/masters/employee-s
  * - 출퇴근 기록, 만근, 수당을 만들거나 바꾸지 않으며 예약 저장을 막지 않는다.
  * - 지난주 복사(copyLastWeekSchedule)와 휴무 영향 콜 조회(setPlannedWorkingDay의 impactedCalls)는 티켓 28이 더했다.
  *   영향받는 콜은 콜 서비스(service-call-service.ts)에서 읽기만 하고, 콜의 예약시각·배정·상태는 바꾸지 않는다.
+ * - 출근 예정 시각(HH:MM, 선택)은 근무 예정 칸에만 둔다(1018 스펙 D28). 비어 있으면 종일 근무로 본다. 가능 판정은 출근 기록
+ *   전까지 이 시각 전을 비는 시간으로 보지 않는다(service-call-service.ts).
  */
 
 type EmployeeRecord = {
@@ -32,6 +34,7 @@ type PlannedWorkingDayRecord = {
   employeeId: string;
   workDate: Date;
   planStatus: string;
+  plannedStartTime?: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -71,6 +74,8 @@ function runInTransaction<T>(client: ScheduleServicePrismaClient, callback: (tx:
 export type PlannedWorkingDayCellDto = {
   date: string;
   status: PlannedWorkingDayCellStatus;
+  /** 출근 예정 시각(HH:MM). 근무 예정 칸에만 있고, 적지 않았으면 null이다. */
+  plannedStartTime: string | null;
 };
 
 export type PlannedWorkingDayEmployeeRowDto = {
@@ -98,6 +103,7 @@ export type PlannedWorkingDayCellResultDto = {
   employeeId: string;
   date: string;
   status: PlannedWorkingDayCellStatus;
+  plannedStartTime: string | null;
   /** 상태가 휴무일 때만 채운다. 그 직원이 그 날짜에 어느 배정 역할로든 배정된, 노쇼·취소가 아닌 콜(스토리 102). */
   impactedCalls: AssignedServiceCallSummaryDto[];
 };
@@ -110,6 +116,12 @@ const setCellSchema = z.object({
   employeeId: z.string().trim().min(1, "직원을 선택하세요."),
   date: isoDateFieldSchema,
   status: z.enum(plannedWorkingDayCellStatuses, { error: "근무 상태가 올바르지 않습니다." }),
+  plannedStartTime: z
+    .string()
+    .trim()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$|^$/, "출근 예정 시각은 HH:MM 형식이어야 합니다.")
+    .nullish()
+    .transform((value) => value || null),
   actorId: z.string().trim().min(1, "행위자 계정이 필요합니다.")
 });
 
@@ -155,8 +167,9 @@ async function findCell(client: ScheduleServicePrismaClient, employeeId: string,
   });
 }
 
-function cellSnapshot(employeeId: string, date: string, status: PlannedWorkingDayCellStatus): AuditJsonSnapshot {
-  return { employeeId, date, status };
+// 출근 예정 시각은 있을 때만 넣는다. 시각을 쓰지 않는 칸의 기록 모양은 그대로다.
+function cellSnapshot(employeeId: string, date: string, status: PlannedWorkingDayCellStatus, plannedStartTime: string | null): AuditJsonSnapshot {
+  return plannedStartTime ? { employeeId, date, status, plannedStartTime } : { employeeId, date, status };
 }
 
 /** 월요일 시작 7일(해당 날짜가 속한 주)의 근무표를 직군별로 묶어 반환한다. */
@@ -189,10 +202,7 @@ export async function listPlannedWorkingDaysForWeek(input: {
     employeesByGroup.get(employee.employeeGroup)?.push(employee);
   }
 
-  const statusByKey = new Map<string, WorkPlanStatus>();
-  for (const row of rows) {
-    statusByKey.set(`${row.employeeId}::${toIsoDate(row.workDate)}`, row.planStatus as WorkPlanStatus);
-  }
+  const rowByKey = new Map(rows.map((row) => [`${row.employeeId}::${toIsoDate(row.workDate)}`, row]));
 
   const groups: PlannedWorkingDayGroupDto[] = employeeGroups.map((employeeGroup) => ({
     employeeGroup,
@@ -202,10 +212,14 @@ export async function listPlannedWorkingDaysForWeek(input: {
       displayName: employee.displayName,
       employeeGroup,
       sortOrder: employee.sortOrder,
-      days: dates.map((date) => ({
-        date,
-        status: statusByKey.get(`${employee.id}::${date}`) ?? unsetPlanStatus
-      }))
+      days: dates.map((date) => {
+        const row = rowByKey.get(`${employee.id}::${date}`);
+        return {
+          date,
+          status: row ? (row.planStatus as WorkPlanStatus) : unsetPlanStatus,
+          plannedStartTime: row?.plannedStartTime ?? null
+        };
+      })
     }))
   }));
 
@@ -213,8 +227,9 @@ export async function listPlannedWorkingDaysForWeek(input: {
 }
 
 /**
- * 칸 하나를 근무 예정·휴무·미입력으로 설정한다. 미입력으로 설정하면 기존 행을 지운다.
- * 실제로 값이 바뀔 때만 감사 기록(직원, 날짜, 이전 값, 새 값, 처리자)을 남긴다.
+ * 칸 하나를 근무 예정·휴무·미입력으로 설정한다. 미입력으로 설정하면 기존 행을 지운다. 출근 예정 시각은 근무 예정일 때만
+ * 저장하고, 다른 상태면 지운다(1018 스펙 D28).
+ * 실제로 값(상태 또는 출근 예정 시각)이 바뀔 때만 감사 기록(직원, 날짜, 이전 값, 새 값, 처리자)을 남긴다.
  * 결과가 휴무면 그 직원이 그 날짜에 배정된 콜(노쇼·취소 제외)을 함께 돌려준다(스토리 102). 저장은 이미
  * 끝난 뒤의 조회뿐이라, 영향받는 콜이 있어도 저장은 막지 않고 콜의 예약시각·배정·상태는 그대로 둔다.
  */
@@ -222,6 +237,8 @@ export async function setPlannedWorkingDay(input: {
   employeeId: string;
   date: string;
   status: PlannedWorkingDayCellStatus;
+  /** 출근 예정 시각(HH:MM). 비우거나 빼면 종일 근무다. */
+  plannedStartTime?: string | null;
   actorId: string;
   prismaClient?: ScheduleServicePrismaClient;
 }): Promise<PlannedWorkingDayCellResultDto> {
@@ -231,15 +248,17 @@ export async function setPlannedWorkingDay(input: {
 
   const client = getClient(input.prismaClient);
   await loadActiveScheduleEmployee(client, parsed.data.employeeId);
+  const plannedStartTime = parsed.data.status === "근무 예정" ? parsed.data.plannedStartTime : null;
 
   const written = await runInTransaction(client, async (tx) => {
     // 트랜잭션 안에서 다시 확인한다: 바깥 조회와 트랜잭션 사이에 직원이 비활성화됐을 수 있다.
     await loadActiveScheduleEmployee(tx, parsed.data.employeeId);
     const existing = await findCell(tx, parsed.data.employeeId, parsed.data.date);
     const previousStatus: PlannedWorkingDayCellStatus = existing ? (existing.planStatus as WorkPlanStatus) : unsetPlanStatus;
+    const previousStartTime = existing?.plannedStartTime ?? null;
 
-    if (previousStatus === parsed.data.status) {
-      return { employeeId: parsed.data.employeeId, date: parsed.data.date, status: previousStatus };
+    if (previousStatus === parsed.data.status && previousStartTime === plannedStartTime) {
+      return { employeeId: parsed.data.employeeId, date: parsed.data.date, status: previousStatus, plannedStartTime };
     }
 
     if (parsed.data.status === unsetPlanStatus) {
@@ -255,19 +274,19 @@ export async function setPlannedWorkingDay(input: {
           action: "planned_working_day.cleared",
           targetType: "planned_working_day",
           targetId: removed.id,
-          beforeValue: cellSnapshot(parsed.data.employeeId, parsed.data.date, previousStatus),
-          afterValue: cellSnapshot(parsed.data.employeeId, parsed.data.date, unsetPlanStatus)
+          beforeValue: cellSnapshot(parsed.data.employeeId, parsed.data.date, previousStatus, previousStartTime),
+          afterValue: cellSnapshot(parsed.data.employeeId, parsed.data.date, unsetPlanStatus, null)
         },
         { prismaClient: tx as any }
       );
 
-      return { employeeId: parsed.data.employeeId, date: parsed.data.date, status: unsetPlanStatus };
+      return { employeeId: parsed.data.employeeId, date: parsed.data.date, status: unsetPlanStatus, plannedStartTime: null };
     }
 
     const after = await tx.plannedWorkingDay.upsert({
       where: { employeeId_workDate: { employeeId: parsed.data.employeeId, workDate: toDate(parsed.data.date) } },
-      create: { employeeId: parsed.data.employeeId, workDate: toDate(parsed.data.date), planStatus: parsed.data.status },
-      update: { planStatus: parsed.data.status }
+      create: { employeeId: parsed.data.employeeId, workDate: toDate(parsed.data.date), planStatus: parsed.data.status, plannedStartTime },
+      update: { planStatus: parsed.data.status, plannedStartTime }
     });
 
     await recordAuditEvent(
@@ -276,13 +295,13 @@ export async function setPlannedWorkingDay(input: {
         action: existing ? "planned_working_day.changed" : "planned_working_day.created",
         targetType: "planned_working_day",
         targetId: after.id,
-        beforeValue: cellSnapshot(parsed.data.employeeId, parsed.data.date, previousStatus),
-        afterValue: cellSnapshot(parsed.data.employeeId, parsed.data.date, parsed.data.status)
+        beforeValue: cellSnapshot(parsed.data.employeeId, parsed.data.date, previousStatus, previousStartTime),
+        afterValue: cellSnapshot(parsed.data.employeeId, parsed.data.date, parsed.data.status, plannedStartTime)
       },
       { prismaClient: tx as any }
     );
 
-    return { employeeId: parsed.data.employeeId, date: parsed.data.date, status: parsed.data.status };
+    return { employeeId: parsed.data.employeeId, date: parsed.data.date, status: parsed.data.status, plannedStartTime };
   });
 
   const impactedCalls =
@@ -319,7 +338,8 @@ const copyLastWeekSchema = z.object({
 });
 
 /**
- * 지난주(이 날짜가 속한 주의 바로 앞 7일)의 값을 이번 주의 같은 요일 중 미입력 칸에만 채운다(스토리 101).
+ * 지난주(이 날짜가 속한 주의 바로 앞 7일)의 값을 이번 주의 같은 요일 중 미입력 칸에만 채운다(스토리 101). 출근 예정 시각도
+ * 함께 복사한다(1018 스펙 D28).
  * 이미 입력된 근무 예정·휴무는 덮지 않는다. 운영월 경계를 넘는 주도 날짜 기준으로 그대로 복사한다.
  * 칸마다 setPlannedWorkingDay와 같은 경로로 쓰고 같은 감사 기록을 남기며, 그렇게 휴무가 된 칸의 영향받는
  * 콜을 모아 돌려준다(S8, 스토리 102). 칸이 몇 개든(활성 직원 수 × 7) 한 트랜잭션으로 묶어(S8) 중간에
@@ -351,10 +371,7 @@ export async function copyLastWeekSchedule(input: {
     ]);
 
     // 행이 있으면 입력된 것(근무 예정 또는 휴무)이고, 없으면 미입력이다(F04).
-    const statusByKey = new Map<string, WorkPlanStatus>();
-    for (const row of rows) {
-      statusByKey.set(`${row.employeeId}::${toIsoDate(row.workDate)}`, row.planStatus as WorkPlanStatus);
-    }
+    const rowByKey = new Map(rows.map((row) => [`${row.employeeId}::${toIsoDate(row.workDate)}`, row]));
 
     let count = 0;
     const impactRows: PlannedWorkingDayCopyImpactDto[] = [];
@@ -362,14 +379,15 @@ export async function copyLastWeekSchedule(input: {
       if (!isEmployeeGroup(employee.employeeGroup)) continue;
       for (let index = 0; index < 7; index += 1) {
         const currentDate = dates[index];
-        if (statusByKey.has(`${employee.id}::${currentDate}`)) continue; // 이미 입력된 칸은 덮지 않는다.
-        const previousStatus = statusByKey.get(`${employee.id}::${previousDates[index]}`);
-        if (previousStatus === undefined) continue; // 지난주도 미입력이면 채울 값이 없다.
+        if (rowByKey.has(`${employee.id}::${currentDate}`)) continue; // 이미 입력된 칸은 덮지 않는다.
+        const previous = rowByKey.get(`${employee.id}::${previousDates[index]}`);
+        if (previous === undefined) continue; // 지난주도 미입력이면 채울 값이 없다.
 
         const written = await setPlannedWorkingDay({
           employeeId: employee.id,
           date: currentDate,
-          status: previousStatus,
+          status: previous.planStatus as WorkPlanStatus,
+          plannedStartTime: previous.plannedStartTime ?? null,
           actorId: parsed.data.actorId,
           prismaClient: tx
         });

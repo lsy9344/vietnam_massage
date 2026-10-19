@@ -410,6 +410,11 @@ export const vi: Messages = {
   "calls.quickBooking.guests.count": "Khách đã thêm {count} / {size}",
   "calls.quickBooking.guests.empty": "Bấm vào gói để thêm khách.",
   "calls.quickBooking.guests.remove": "Bỏ",
+  "calls.quickBooking.seats.remaining": "{time} còn {remaining} / {capacity} chỗ",
+  "calls.quickBooking.seats.short": "Thiếu chỗ: lúc {time} còn {remaining} chỗ, khách đã thêm cần {demand} chỗ",
+  "calls.quickBooking.seats.overrideTitle": "Không đủ chỗ. Vẫn đặt lịch?",
+  "calls.quickBooking.seats.overrideDescription": "Lúc {time} chỉ còn {remaining} chỗ nhưng khách đã thêm cần {demand} chỗ. Nếu vẫn đặt, lịch được lưu dù vượt số chỗ còn lại.",
+  "calls.quickBooking.seats.overrideConfirm": "Vẫn đặt lịch",
   "calls.quickBooking.secondImpossible": "không thể",
   "calls.quickBooking.channel": "Kênh đặt chỗ",
   "calls.quickBooking.bookerName": "Tên người đặt",
@@ -633,6 +638,8 @@ export const vi: Messages = {
   "settlements.schedule.panel.note": "Dự kiến làm việc không đảm bảo có mặt đến một giờ cụ thể. Giờ vào – ra thực tế được chỉnh trong bảng điều khiển nhân viên của từng màn hình thanh toán.",
   "settlements.schedule.cell.statusLabel": "Trạng thái làm việc",
   "settlements.schedule.cell.statusAria": "Trạng thái làm việc của {name} ngày {date}",
+  "settlements.schedule.cell.plannedStartLabel": "Dự kiến vào",
+  "settlements.schedule.cell.plannedStartAria": "Giờ dự kiến vào ca của {name} ngày {date}",
 
   // Sao chép tuần trước và cuộc gọi bị ảnh hưởng khi nghỉ (ticket 28)
   "settlements.schedule.copy.action": "Sao chép tuần trước",

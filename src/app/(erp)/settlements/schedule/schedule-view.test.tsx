@@ -13,7 +13,7 @@ function render(element: ReactElement, locale: "ko" | "vi" = "ko") {
 const dates = ["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17", "2026-10-18"];
 
 function emptyDays() {
-  return dates.map((date) => ({ date, status: "미입력" as const }));
+  return dates.map((date) => ({ date, status: "미입력" as const, plannedStartTime: null }));
 }
 
 function week(overrides: Partial<PlannedWorkingDayWeekDto> = {}): PlannedWorkingDayWeekDto {
@@ -32,7 +32,9 @@ function week(overrides: Partial<PlannedWorkingDayWeekDto> = {}): PlannedWorking
             displayName: "Mai",
             employeeGroup: "THERAPIST",
             sortOrder: 10,
-            days: emptyDays().map((day, index) => (index === 0 ? { ...day, status: "근무 예정" } : index === 2 ? { ...day, status: "휴무" } : day))
+            days: emptyDays().map((day, index) =>
+              index === 0 ? { ...day, status: "근무 예정", plannedStartTime: "18:00" } : index === 2 ? { ...day, status: "휴무" } : day
+            )
           }
         ]
       }
@@ -72,6 +74,19 @@ describe("schedule view", () => {
     // 요일 7개의 select가 모두 그려졌는지(옵션 3개 x 7)
     const options = html.match(/<option/g)?.length ?? 0;
     assert.equal(options, 21);
+  });
+
+  // 1018 스펙 D28: 근무 예정 칸에는 출근 예정 시각을 적을 수 있고, 표에도 그 시각이 보인다.
+  it("근무 예정 칸의 출근 예정 시각을 표에 보이고, 패널에서는 근무 예정인 날만 시각을 고칠 수 있다", () => {
+    const html = render(<ScheduleView canOpenLedger={false} initialEmployeeId="thr-1" week={week()} />);
+
+    assert.match(html, /<span class="text-xs text-muted">18:00<\/span>/);
+    const timeInputs = html.match(/<input[^>]*type="time"[^>]*>/g) ?? [];
+    assert.equal(timeInputs.length, 7);
+    assert.match(timeInputs[0], /value="18:00"/);
+    assert.match(timeInputs[0], /aria-label="Mai의 2026-10-12 출근 예정 시각"/);
+    assert.doesNotMatch(timeInputs[0], / disabled=""/);
+    assert.ok(timeInputs.slice(1).every((input) => / disabled=""/.test(input)));
   });
 
   it("활성 직원이 없는 직군은 표를 그리지 않는다", () => {

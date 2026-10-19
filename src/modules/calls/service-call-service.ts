@@ -15,6 +15,7 @@ import { listActiveCourses } from "@/modules/masters/course-service";
 import { listActiveEmployees } from "@/modules/masters/employee-service";
 import { listActiveRooms } from "@/modules/masters/room-service";
 import { listPlannedWorkingDayStatusesForDate, type PlannedWorkingDayCellStatus } from "@/modules/masters/planned-working-day-query";
+import { seatTimeline, type SeatCall, type SeatPoint, type SeatTherapist } from "./seat-capacity";
 import {
   customerInputSchema,
   customerUpdateSchema,
@@ -261,6 +262,7 @@ type TherapistAttendanceRecord = {
   employeeId: string;
   operatingMonthId: string;
   attendanceDate: Date;
+  checkInMinute: number;
   checkOutMinute: number | null;
   isActive: boolean;
 };
@@ -478,7 +480,8 @@ export type TherapistAvailabilityCourseDto = {
 export type TherapistAvailabilityRowDto = {
   therapistId: string;
   therapistName: string;
-  // 그날의 출근 기록: 없으면 출근 전, 퇴근 시각이 없으면 출근, 있으면 퇴근(현재 퇴근). 판정과 코스 버튼은 바꾸지 않는다.
+  // 그날의 출근 기록: 없으면 출근 전, 퇴근 시각이 없으면 출근, 있으면 퇴근(현재 퇴근). 출근 시각 전을 비는 시간으로 보지 않는 것
+  // (1018 스펙 D28) 말고는 판정과 코스 버튼을 바꾸지 않는다.
   attendance: "before_check_in" | "checked_in" | "checked_out";
   // 고른 날짜가 오늘이고 고른 시각이 지금보다 30분을 넘겨 뒤인데 출근 상태가 아니다.
   shiftCheck: boolean;
@@ -493,7 +496,7 @@ export type TherapistAvailabilityRowDto = {
   // 청소중·방문완료(현황 줄의 "완료", 1018 스펙 D17), reserved는 예약이다. 노쇼·취소는 세지 않는다. Therapist가 둘인 콜은
   // 두 사람에게 각자 1개다(정산과 같은 방식). 가능 판정과는 무관하다.
   callCounts: { done: number; finished: number; reserved: number };
-  /** 근무표의 출근 예정 시각(HH:MM). 적지 않았으면 null. */
+  /** 근무표의 출근 예정 시각(HH:MM). 적지 않았으면 null. 근무 예정이고 출근 기록이 없으면 이 시각 전은 비는 시간이 아니다(1018 스펙 D28). */
   plannedStartTime: string | null;
   // 원장 현황 줄의 지금 상태(1018 스펙 D17). 고른 날짜가 영업일 오늘이면 지금, 아니면 고른 시각 기준이다. 출근 기록이 먼저이고,
   // 출근 중이면 점유(예약 포함)로 사용 중과 지금 가능을 나눈다. 사용 중이면 expectedEnd(점유 끝), 지금 가능이면 다음 예약과
@@ -506,6 +509,9 @@ export type TherapistAvailabilityRowDto = {
   };
   courses: TherapistAvailabilityCourseDto[];
 };
+
+/** 남은 자리 한 점(1018 스펙 D25). time은 그 점의 시각(HH:MM)이고, offsetMinutes는 고른 시각에서 지난 분이다. */
+export type SeatPointDto = SeatPoint & { time: string };
 
 /**
  * 오래된 저장(STALE_CALL). 화면이 읽은 뒤에 다른 저장이 먼저 들어왔다. 아무것도 쓰지 않았고,
@@ -1348,7 +1354,10 @@ function clockMinutes(value: string) {
 
 // 영업일 슬롯은 저녁을 지나 다음 달력날 새벽까지 이어진다. 첫 슬롯보다 이른 시각은 그 영업일의 뒤로 본다.
 function businessMinute(value: string, dayStart: number) {
-  const minutes = clockMinutes(value);
+  return businessMinuteOfDay(clockMinutes(value), dayStart);
+}
+
+function businessMinuteOfDay(minutes: number, dayStart: number) {
   return minutes < dayStart ? minutes + AVAILABILITY_DAY_MINUTES : minutes;
 }
 
@@ -1785,7 +1794,7 @@ function currentTherapistState(
   };
 }
 
-export async function listTherapistAvailability(input: {
+type TherapistAvailabilityInput = {
   operatingMonthId: string;
   serviceDate: string;
   time: string;
@@ -1793,7 +1802,19 @@ export async function listTherapistAvailability(input: {
   excludeCallId?: string;
   now?: Date;
   prismaClient?: ServiceCallPrismaClient;
-}): Promise<TherapistAvailabilityRowDto[]> {
+};
+
+export async function listTherapistAvailability(input: TherapistAvailabilityInput): Promise<TherapistAvailabilityRowDto[]> {
+  return (await listTherapistAvailabilityWithSeats(input)).rows;
+}
+
+/**
+ * 가능 판정 행과 함께, 고른 시각부터 가장 긴 코스 길이까지의 자리 수와 남은 자리(1018 스펙 D24–D27)를 돌려준다. 빠른 예약 ①이
+ * `HH:MM 남은 자리 n / N`과 넘침 경고에 쓴다. 같은 조회 결과로 계산하므로 DB를 더 읽지 않는다.
+ */
+export async function listTherapistAvailabilityWithSeats(
+  input: TherapistAvailabilityInput
+): Promise<{ rows: TherapistAvailabilityRowDto[]; seats: SeatPointDto[] }> {
   const parsed = serviceCallInputSchema.pick({ operatingMonthId: true, serviceDate: true, startTime: true }).safeParse({
     operatingMonthId: input.operatingMonthId,
     serviceDate: input.serviceDate,
@@ -1841,10 +1862,9 @@ export async function listTherapistAvailability(input: {
   const dayStart = activeSlots[0] ? clockMinutes(activeSlots[0].value) : AVAILABILITY_DEFAULT_DAY_START;
   const dayEnd = activeSlots.length > 0 ? businessMinute(activeSlots[activeSlots.length - 1].value, dayStart) : null;
   const at = businessMinute(parsed.data.startTime, dayStart);
+  const activeAttendances = attendances.filter((attendance) => attendance.isActive);
   const attendanceByTherapist = new Map(
-    attendances
-      .filter((attendance) => attendance.isActive)
-      .map((attendance) => [attendance.employeeId, attendance.checkOutMinute === null ? "checked_in" as const : "checked_out" as const])
+    activeAttendances.map((attendance) => [attendance.employeeId, attendance.checkOutMinute === null ? "checked_in" as const : "checked_out" as const])
   );
   const offeredCourses = [...courses]
     .filter((course) => course.isActive)
@@ -1862,6 +1882,7 @@ export async function listTherapistAvailability(input: {
     });
 
   const intervalsByTherapist = new Map<string, AvailabilityInterval[]>();
+  const seatCalls: SeatCall[] = [];
   const releaseContext = { dayCalls: calls, dayStart };
   for (const call of calls) {
     if (!occupiesAvailability(call.status) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(call.startTime)) continue;
@@ -1870,12 +1891,12 @@ export async function listTherapistAvailability(input: {
     if (!policy) continue;
     const start = businessMinute(call.startTime, dayStart);
     const interval = { start, end: therapistReleaseMinute(call, releaseContext) };
-    for (const assignment of call.assignments ?? []) {
-      if (assignment.isActive === false) continue;
-      if (assignment.assignmentRole !== "THERAPIST_1" && assignment.assignmentRole !== "THERAPIST_2") continue;
-      const current = intervalsByTherapist.get(assignment.employeeId) ?? [];
+    const therapistIds = assignedTherapistIds(call);
+    seatCalls.push({ ...interval, therapistIds, requiresSecondTherapist: policy.requiresSecondTherapist });
+    for (const therapistId of therapistIds) {
+      const current = intervalsByTherapist.get(therapistId) ?? [];
       current.push(interval);
-      intervalsByTherapist.set(assignment.employeeId, current);
+      intervalsByTherapist.set(therapistId, current);
     }
   }
 
@@ -1905,13 +1926,34 @@ export async function listTherapistAvailability(input: {
     .filter((therapist) => therapist.isActive && therapist.employeeGroup === "THERAPIST")
     .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0) || left.displayName.localeCompare(right.displayName));
 
-  // 근무표(27)의 그날 근무 예정. 읽기만 하고, 가능 판정·코스 버튼에는 쓰지 않는다(티켓 29).
+  // 근무표(27)의 그날 근무 예정. 근무 예정·휴무는 가능 판정·코스 버튼을 바꾸지 않는다(티켓 29). 출근 예정 시각만 아래에서 쓴다.
   const plannedWorkingDayStatuses = await listPlannedWorkingDayStatusesForDate({
     employeeIds: activeTherapists.map((therapist) => therapist.id),
     date: parsed.data.serviceDate,
     prismaClient: client
   });
   const plannedWorkingDayByTherapist = new Map(plannedWorkingDayStatuses.map((status) => [status.employeeId, status]));
+  // 근무 시작(1018 스펙 D28): 출근 기록이 있으면 출근 시각, 없으면 근무 예정의 출근 예정 시각이다. 그 전은 비는 시간이 아니다
+  // (`18:00부터`). 마지막 슬롯보다 뒤로 읽히는 시각(첫 슬롯 전의 아침)은 영업 시작부터 일한 것으로 본다. 출근 기록이 없고 근무
+  // 예정이 아니거나 시각을 적지 않았으면 null이다(종일).
+  const activeAttendanceByTherapist = new Map(activeAttendances.map((attendance) => [attendance.employeeId, attendance]));
+  const workStartOf = (therapistId: string) => {
+    const attendance = activeAttendanceByTherapist.get(therapistId);
+    const planned = plannedWorkingDayByTherapist.get(therapistId);
+    const clock = attendance
+      ? attendance.checkInMinute
+      : planned?.status === "근무 예정" && planned.plannedStartTime && CLOCK_TIME.test(planned.plannedStartTime)
+        ? clockMinutes(planned.plannedStartTime)
+        : null;
+    if (clock === null) return null;
+    const minute = businessMinuteOfDay(clock, dayStart);
+    return dayEnd !== null && minute > dayEnd ? null : minute;
+  };
+  const availabilityOf = (therapistId: string) => {
+    const workStart = workStartOf(therapistId);
+    const holds = occupancyOf(therapistId);
+    return workStart !== null && workStart > dayStart ? [...holds, { start: dayStart, end: workStart }] : holds;
+  };
 
   // 방문완료 금액 계산과 같은 firstCurrentRate로 고른다. 0 VND도 수당이다.
   const ratesByTherapistCourse = groupRatesByTherapistCourse(rates);
@@ -1921,8 +1963,22 @@ export async function listTherapistAvailability(input: {
     offeredCourses.map((course) => [course.courseId, activeTherapists.filter((therapist) => hasRate(therapist.id, course.courseId))])
   );
 
-  return activeTherapists.map((therapist) => {
-    const intervals = occupancyOf(therapist.id);
+  // 자리 수(1018 스펙 D25): 출근 기록이 있으면 출근 시각부터 퇴근 전까지, 출근 기록 없이 근무 예정이면 출근 예정 시각(비었으면
+  // 종일)부터 센다.
+  const seatTherapists = activeTherapists.flatMap((therapist): SeatTherapist[] => {
+    const attendance = activeAttendanceByTherapist.get(therapist.id);
+    if (!attendance && plannedWorkingDayByTherapist.get(therapist.id)?.status !== "근무 예정") return [];
+    const checkOut = attendance?.checkOutMinute ?? null;
+    return [{ therapistId: therapist.id, from: workStartOf(therapist.id), until: checkOut === null ? null : businessMinuteOfDay(checkOut, dayStart) }];
+  });
+  const longestCourse = Math.max(0, ...offeredCourses.map((course) => course.durationMinutes));
+  const seats = seatTimeline({ therapists: seatTherapists, calls: seatCalls }, at, longestCourse).map((point) => ({
+    ...point,
+    time: formatBusinessMinute(at + point.offsetMinutes)
+  }));
+
+  const rows = activeTherapists.map((therapist): TherapistAvailabilityRowDto => {
+    const intervals = availabilityOf(therapist.id);
     const occupiedUntil = coveringEnd(intervals, at);
     const available = occupiedUntil === null;
     const nextStart = nextIntervalStart(intervals, at);
@@ -1941,12 +1997,12 @@ export async function listTherapistAvailability(input: {
       plannedWorkingDayStatus: plannedWorkingDay?.status ?? "미입력",
       callCounts: callCountsByTherapist.get(therapist.id) ?? { done: 0, finished: 0, reserved: 0 },
       plannedStartTime: plannedWorkingDay?.plannedStartTime ?? null,
-      current: currentTherapistState(attendance, intervals, currentAt),
+      current: currentTherapistState(attendance, occupancyOf(therapist.id), currentAt),
       courses: offeredCourses.map((course) => {
         const fits = available && freeMinutes !== null && course.durationMinutes <= freeMinutes;
         const rateHolders = rateHoldersByCourse.get(course.courseId) ?? [];
         const partners = course.requiresSecondTherapist ? rateHolders.filter((other) => other.id !== therapist.id) : [];
-        const partnerFree = partners.some((other) => !intervalOverlaps(occupancyOf(other.id), at, at + course.durationMinutes));
+        const partnerFree = partners.some((other) => !intervalOverlaps(availabilityOf(other.id), at, at + course.durationMinutes));
         const verdict: TherapistAvailabilityCourseVerdict =
           !rateHolders.some((holder) => holder.id === therapist.id) || (course.requiresSecondTherapist && partners.length === 0)
             ? "rate_missing"
@@ -1964,6 +2020,7 @@ export async function listTherapistAvailability(input: {
       })
     };
   });
+  return { rows, seats };
 }
 
 async function listServiceCallsInOperatingMonth(

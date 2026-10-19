@@ -28,7 +28,7 @@ import {
   updateDailyExpense,
   redactServiceCallSettlementAmounts,
   autoFinishOverdueCalls,
-  listTherapistAvailability,
+  listTherapistAvailabilityWithSeats,
   QuickBookingGuestError,
   ServiceCallDomainError,
   StaleServiceCallError,
@@ -485,7 +485,8 @@ export async function loadTherapistAvailabilityAction(input: { operatingMonthId:
   // 열린 줄이 새 행을 따르게 한다(낡은 저장 거절이 그 줄을 막지 않게).
   const finished = await autoFinishOverdueCalls({ operatingMonthId: input.operatingMonthId, serviceDate: input.serviceDate });
   if (finished.length > 0) revalidatePath("/calls");
-  return listTherapistAvailability(input);
+  // 빠른 예약 ①은 남은 자리(1018 스펙 D25)도 함께 받는다. 같은 조회로 계산해 DB를 더 읽지 않는다.
+  return listTherapistAvailabilityWithSeats(input);
 }
 
 /** 콜 상세 패널의 고객 연결 정정이 검색할 때 쓴다. 22의 방문 건수·같은 연락처 비교 정보를 그대로 돌려준다. */

@@ -25,7 +25,7 @@ function createMemoryPrisma(
     failAudit?: boolean;
     /** S8: 여러 칸을 쓰는 지난주 복사가 한 트랜잭션인지 보려고, N번째 감사 기록부터만 실패시킨다. */
     failAuditAfter?: number;
-    seedCells?: Array<{ id: string; employeeId: string; workDate: string; planStatus: string }>;
+    seedCells?: Array<{ id: string; employeeId: string; workDate: string; planStatus: string; plannedStartTime?: string | null }>;
     // 휴무 영향 콜(28): 콜 서비스의 listAssignedServiceCallsForEmployeeOnDate가 읽는 모양만 흉내 낸다.
     seedCalls?: Array<{
       id: string;
@@ -58,6 +58,7 @@ function createMemoryPrisma(
       employeeId: seed.employeeId,
       workDate: dbDate(seed.workDate),
       planStatus: seed.planStatus,
+      plannedStartTime: seed.plannedStartTime ?? null,
       createdAt,
       updatedAt
     });
@@ -540,5 +541,93 @@ describe("schedule service", () => {
     assert.equal(client.cells.has(cellKey("thr-1", "2026-10-12")), false);
     assert.equal(client.cells.has(cellKey("thr-2", "2026-10-12")), false);
     assert.equal(client.auditEvents.length, 0);
+  });
+});
+
+describe("근무표 출근 예정 시각(1018 스펙 D28)", () => {
+  it("근무 예정에 출근 예정 시각을 함께 저장하고, 주 조회와 감사 기록에 남긴다", async () => {
+    const client = createMemoryPrisma();
+
+    await setPlannedWorkingDay({
+      employeeId: "thr-1",
+      date: "2026-10-14",
+      status: "근무 예정",
+      plannedStartTime: "18:00",
+      actorId: "acc-1",
+      prismaClient: client
+    });
+
+    assert.equal(client.cells.get(cellKey("thr-1", "2026-10-14"))?.plannedStartTime, "18:00");
+    assert.deepEqual(client.auditEvents[0].afterValue, { employeeId: "thr-1", date: "2026-10-14", status: "근무 예정", plannedStartTime: "18:00" });
+    const week = await listPlannedWorkingDaysForWeek({ date: "2026-10-14", prismaClient: client });
+    const day = week.groups.find((group) => group.employeeGroup === "THERAPIST")?.employees[0]?.days.find((cell) => cell.date === "2026-10-14");
+    assert.deepEqual(day, { date: "2026-10-14", status: "근무 예정", plannedStartTime: "18:00" });
+  });
+
+  it("시각만 바꾸거나 지워도 변경 감사 기록을 남기고, 같은 값이면 남기지 않는다", async () => {
+    const client = createMemoryPrisma({
+      seedCells: [{ id: "pwd-1", employeeId: "thr-1", workDate: "2026-10-14", planStatus: "근무 예정", plannedStartTime: "18:00" }]
+    });
+    const set = (plannedStartTime: string | null) =>
+      setPlannedWorkingDay({ employeeId: "thr-1", date: "2026-10-14", status: "근무 예정", plannedStartTime, actorId: "acc-1", prismaClient: client });
+
+    await set("18:00");
+    assert.equal(client.auditEvents.length, 0);
+
+    await set("19:30");
+    assert.equal(client.auditEvents[0].action, "planned_working_day.changed");
+    assert.deepEqual(client.auditEvents[0].beforeValue, { employeeId: "thr-1", date: "2026-10-14", status: "근무 예정", plannedStartTime: "18:00" });
+    assert.equal(client.cells.get(cellKey("thr-1", "2026-10-14"))?.plannedStartTime, "19:30");
+
+    await set(null);
+    assert.equal(client.auditEvents.length, 2);
+    assert.deepEqual(client.auditEvents[1].afterValue, { employeeId: "thr-1", date: "2026-10-14", status: "근무 예정" });
+    assert.equal(client.cells.get(cellKey("thr-1", "2026-10-14"))?.plannedStartTime, null);
+  });
+
+  it("휴무로 바꾸면 출근 예정 시각을 남기지 않는다", async () => {
+    const client = createMemoryPrisma({
+      seedCells: [{ id: "pwd-1", employeeId: "thr-1", workDate: "2026-10-14", planStatus: "근무 예정", plannedStartTime: "18:00" }]
+    });
+
+    await setPlannedWorkingDay({
+      employeeId: "thr-1",
+      date: "2026-10-14",
+      status: "휴무",
+      plannedStartTime: "18:00",
+      actorId: "acc-1",
+      prismaClient: client
+    });
+
+    assert.equal(client.cells.get(cellKey("thr-1", "2026-10-14"))?.plannedStartTime, null);
+  });
+
+  it("HH:MM이 아닌 시각은 거절한다", async () => {
+    await assert.rejects(
+      setPlannedWorkingDay({
+        employeeId: "thr-1",
+        date: "2026-10-14",
+        status: "근무 예정",
+        plannedStartTime: "25:00",
+        actorId: "acc-1",
+        prismaClient: createMemoryPrisma()
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof ScheduleDomainError);
+        assert.equal(error.code, "INVALID_SCHEDULE_INPUT");
+        assert.equal(error.field, "plannedStartTime");
+        return true;
+      }
+    );
+  });
+
+  it("지난주 복사는 출근 예정 시각도 함께 복사한다", async () => {
+    const client = createMemoryPrisma({
+      seedCells: [{ id: "pwd-1", employeeId: "thr-1", workDate: "2026-10-05", planStatus: "근무 예정", plannedStartTime: "18:00" }]
+    });
+
+    await copyLastWeekSchedule({ date: "2026-10-14", actorId: "acc-1", prismaClient: client });
+
+    assert.equal(client.cells.get(cellKey("thr-1", "2026-10-12"))?.plannedStartTime, "18:00");
   });
 });

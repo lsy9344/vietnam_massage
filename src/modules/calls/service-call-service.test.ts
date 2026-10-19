@@ -27,6 +27,7 @@ import {
   listServiceCallFormOptions,
   listServiceCallsForDate,
   listTherapistAvailability,
+  listTherapistAvailabilityWithSeats,
   redactServiceCallSettlementAmounts,
   roomFloorFactsForDate,
   saveBasicServiceCallRow,
@@ -4179,14 +4180,14 @@ describe("therapist availability with an in-use call past its display end (1018 
 
 function addAvailabilityAttendance(
   prismaClient: ReturnType<typeof createMemoryPrisma>,
-  input: { employeeId: string; checkOutMinute: number | null; isActive?: boolean }
+  input: { employeeId: string; checkOutMinute: number | null; checkInMinute?: number; isActive?: boolean }
 ) {
   prismaClient.therapistAttendances.set(`att-${input.employeeId}`, {
     id: `att-${input.employeeId}`,
     operatingMonthId: "month-2026-06",
     attendanceDate: dbDate(availabilityDate),
     employeeId: input.employeeId,
-    checkInMinute: 600,
+    checkInMinute: input.checkInMinute ?? 600,
     checkOutMinute: input.checkOutMinute,
     isActive: input.isActive ?? true
   });
@@ -4267,6 +4268,126 @@ describe("therapist availability planned working day", () => {
       prismaClient
     });
     assert.equal(saved.row.status, "예약");
+  });
+});
+
+describe("therapist availability planned start time (1018 spec D28)", () => {
+  it("does not take a scheduled therapist before the planned start until check-in, and frees them from it", async () => {
+    const prismaClient = createMemoryPrisma();
+    addPlannedWorkingDay(prismaClient, { employeeId: "therapist-1", status: "근무 예정", plannedStartTime: "18:00" });
+
+    const early = await availabilityAt(prismaClient, "15:00");
+    const therapist1 = early.find((row) => row.therapistId === "therapist-1");
+    assert.equal(therapist1?.available, false);
+    assert.equal(therapist1?.freeFrom, "18:00");
+    assert.equal(courseVerdict(early, "therapist-1", "course-a"), "time_short");
+    // 두 명 코스의 짝으로도 18:00 전에는 비어 있지 않다.
+    assert.equal(courseVerdict(early, "therapist-2", "course-d"), "time_short");
+    assert.equal(early.find((row) => row.therapistId === "therapist-2")?.available, true);
+
+    const onTime = await availabilityAt(prismaClient, "18:00");
+    assert.equal(onTime.find((row) => row.therapistId === "therapist-1")?.available, true);
+    assert.equal(courseVerdict(onTime, "therapist-1", "course-a"), "possible");
+  });
+
+  it("goes by the check-in time once there is one, not the planned start", async () => {
+    const prismaClient = createMemoryPrisma();
+    addPlannedWorkingDay(prismaClient, { employeeId: "therapist-1", status: "근무 예정", plannedStartTime: "18:00" });
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-1", checkOutMinute: null, checkInMinute: 16 * 60 });
+
+    const before = await availabilityAt(prismaClient, "15:00");
+    assert.equal(before.find((row) => row.therapistId === "therapist-1")?.freeFrom, "16:00");
+    assert.equal(courseVerdict(before, "therapist-1", "course-a"), "time_short");
+
+    const after = await availabilityAt(prismaClient, "16:00");
+    assert.equal(after.find((row) => row.therapistId === "therapist-1")?.available, true);
+    assert.equal(courseVerdict(after, "therapist-1", "course-a"), "possible");
+  });
+
+  // 첫 슬롯(11:00)보다 이른 출근(예정)은 다음 날 새벽이 아니라 영업 시작부터다.
+  it("reads a start before the first time slot as working from opening", async () => {
+    const prismaClient = createMemoryPrisma();
+    addPlannedWorkingDay(prismaClient, { employeeId: "therapist-1", status: "근무 예정", plannedStartTime: "10:00" });
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-2", checkOutMinute: null, checkInMinute: 9 * 60 });
+
+    const rows = await availabilityAt(prismaClient, "11:00");
+
+    assert.equal(courseVerdict(rows, "therapist-1", "course-a"), "possible");
+    assert.equal(courseVerdict(rows, "therapist-2", "course-a"), "possible");
+  });
+});
+
+describe("seats for the quick booking (1018 spec D24–D27)", () => {
+  const seatsAt = async (prismaClient: ReturnType<typeof createMemoryPrisma>, time: string) =>
+    (await listTherapistAvailabilityWithSeats({ operatingMonthId: "month-2026-06", serviceDate: availabilityDate, time, prismaClient })).seats;
+
+  it("counts checked-in and scheduled therapists until check-out, and takes seats for named and unassigned calls", async () => {
+    const prismaClient = createMemoryPrisma();
+    addTherapist(prismaClient, "therapist-3");
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-1", checkOutMinute: null });
+    addPlannedWorkingDay(prismaClient, { employeeId: "therapist-2", status: "근무 예정", plannedStartTime: "18:00" });
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-3", checkOutMinute: 17 * 60 });
+    addAvailabilityCall(prismaClient, { id: "unassigned-1500", startTime: "15:00", courseId: "course-a", status: "예약", assignments: [] });
+    addAvailabilityCall(prismaClient, {
+      id: "named-1800",
+      startTime: "18:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    // 15:00부터 가장 긴 코스(90분)까지. 미지명 콜이 16:00에 끝나 자리가 하나 돌아온다.
+    assert.deepEqual(await seatsAt(prismaClient, "15:00"), [
+      { time: "15:00", offsetMinutes: 0, capacity: 2, remaining: 1, freeTherapistIds: ["therapist-1", "therapist-3"] },
+      { time: "16:00", offsetMinutes: 60, capacity: 2, remaining: 2, freeTherapistIds: ["therapist-1", "therapist-3"] }
+    ]);
+    // 18:00에는 17:00에 퇴근한 사람이 빠지고 출근 예정 18:00인 사람이 들어온다. 지명 콜이 한 자리를 쓴다.
+    assert.deepEqual((await seatsAt(prismaClient, "18:00"))[0], {
+      time: "18:00",
+      offsetMinutes: 0,
+      capacity: 2,
+      remaining: 1,
+      freeTherapistIds: ["therapist-2"]
+    });
+  });
+
+  it("counts a checked-in therapist from the check-in time", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-1", checkOutMinute: null });
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-2", checkOutMinute: null, checkInMinute: 16 * 60 });
+
+    assert.deepEqual(
+      (await seatsAt(prismaClient, "15:00")).map(({ time, capacity }) => ({ time, capacity })),
+      [
+        { time: "15:00", capacity: 1 },
+        { time: "16:00", capacity: 2 }
+      ]
+    );
+  });
+
+  it("holds 2 seats for an unassigned D course, and the same seats once a therapist is assigned", async () => {
+    const checkedIn = () => {
+      const prismaClient = createMemoryPrisma();
+      addTherapist(prismaClient, "therapist-3");
+      for (const employeeId of ["therapist-1", "therapist-2", "therapist-3"]) addAvailabilityAttendance(prismaClient, { employeeId, checkOutMinute: null });
+      return prismaClient;
+    };
+    const unassignedD = checkedIn();
+    addAvailabilityCall(unassignedD, { id: "d-1500", startTime: "15:00", courseId: "course-d", status: "예약", assignments: [] });
+    assert.equal((await seatsAt(unassignedD, "15:00"))[0].remaining, 1);
+
+    const unassignedA = checkedIn();
+    addAvailabilityCall(unassignedA, { id: "a-1500", startTime: "15:00", courseId: "course-a", status: "예약", assignments: [] });
+    const assignedA = checkedIn();
+    addAvailabilityCall(assignedA, {
+      id: "a-1500",
+      startTime: "15:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-2" }]
+    });
+    assert.equal((await seatsAt(unassignedA, "15:00"))[0].remaining, 2);
+    assert.equal((await seatsAt(assignedA, "15:00"))[0].remaining, 2);
   });
 });
 

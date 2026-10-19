@@ -58,10 +58,20 @@ export async function chooseSecondTherapist(panel: Locator, guestPosition: numbe
   await panel.locator(`[data-quick-booking-guest="${guestPosition}"]`).getByLabel("두 번째 Therapist").selectOption(therapistId);
 }
 
-/** ①에서 인원만큼 담은 뒤 ② 고객으로 넘어간다. */
+/** 담은 손님이 남은 자리를 넘을 때 ② 고객으로 넘어가며 뜨는 확인 창(1018 스펙 D26). */
+export const SEAT_SHORTAGE_DIALOG = "자리가 모자랍니다. 그래도 예약하시겠습니까?";
+
+/**
+ * ①에서 인원만큼 담은 뒤 ② 고객으로 넘어간다. 담은 손님이 남은 자리를 넘으면(출근 기록이 없는 날의 미지명 등) 남은 자리 확인
+ * 창이 먼저 뜨는데, 이 헬퍼를 쓰는 스펙의 관심 밖이라 "그래도 예약"으로 넘긴다. 남은 자리 동작은 story-1018-06이 본다.
+ */
 export async function goToCustomerStep(panel: Locator) {
   await panel.getByRole("button", { name: "다음", exact: true }).click();
-  await expect(panel.getByRole("group", { name: "예약 경로" })).toBeVisible();
+  const customerStep = panel.getByRole("group", { name: "예약 경로" });
+  const seatDialog = panel.page().getByRole("alertdialog", { name: SEAT_SHORTAGE_DIALOG });
+  await expect(customerStep.or(seatDialog)).toBeVisible();
+  if (await seatDialog.isVisible()) await seatDialog.getByRole("button", { name: "그래도 예약" }).click();
+  await expect(customerStep).toBeVisible();
 }
 
 /** ②의 예약 경로·예약자명·메모. */

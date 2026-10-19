@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { quickBookingCourseColumns, quickBookingFreeTime, quickBookingSummary, quickBookingTherapistGroups } from "@/app/(erp)/calls/quick-booking-conditions";
-import type { TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
+import {
+  quickBookingCourseColumns,
+  quickBookingFreeTime,
+  quickBookingSeatShortage,
+  quickBookingSummary,
+  quickBookingTherapistGroups
+} from "@/app/(erp)/calls/quick-booking-conditions";
+import type { SeatPointDto, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
 
 function row(therapistId: string, changes: Partial<TherapistAvailabilityRowDto> = {}): TherapistAvailabilityRowDto {
   return {
@@ -123,5 +129,41 @@ describe("quick booking course columns (1018 스펙 D20)", () => {
       { courseId: "c", code: "C", minutes: 90, requiresSecondTherapist: false },
       { courseId: "d", code: "D", minutes: 90, requiresSecondTherapist: true }
     ]);
+  });
+});
+
+describe("quick booking seat shortage (1018 스펙 D25·D26)", () => {
+  const columns = [
+    { courseId: "course-a", code: "A", minutes: 60, requiresSecondTherapist: false },
+    { courseId: "course-d", code: "D", minutes: 90, requiresSecondTherapist: true }
+  ];
+  // 18:00에 2자리, 18:30부터 1자리가 남는다. 일하면서 비어 있는 사람은 t1·t2다.
+  const seats: SeatPointDto[] = [
+    { time: "18:00", offsetMinutes: 0, capacity: 4, remaining: 2, freeTherapistIds: ["t1", "t2"] },
+    { time: "18:30", offsetMinutes: 30, capacity: 4, remaining: 1, freeTherapistIds: ["t1", "t2"] }
+  ];
+  const guest = (courseId: string, therapist1Id: string | null = null, therapist2Id: string | null = null) => ({ courseId, therapist1Id, therapist2Id });
+
+  it("reads the guests' courses as seats over their length, a D course as 2 seats", () => {
+    assert.equal(quickBookingSeatShortage(seats, columns, [guest("course-a")]), null);
+    assert.deepEqual(quickBookingSeatShortage(seats, columns, [guest("course-a"), guest("course-a", "t1")]), {
+      time: "18:30",
+      remaining: 1,
+      demand: 2
+    });
+    assert.deepEqual(quickBookingSeatShortage(seats, columns, [guest("course-d"), guest("course-a")]), {
+      time: "18:00",
+      remaining: 2,
+      demand: 3
+    });
+  });
+
+  it("takes no seat for a named guest whose Therapist is busy or not working", () => {
+    assert.equal(quickBookingSeatShortage(seats, columns, [guest("course-a"), guest("course-a", "busy-or-off")]), null);
+    assert.equal(quickBookingSeatShortage(seats, columns, [guest("course-d", "t1", "busy-or-off")]), null);
+  });
+
+  it("finds no shortage before the seats are loaded", () => {
+    assert.equal(quickBookingSeatShortage([], columns, [guest("course-d"), guest("course-d")]), null);
   });
 });

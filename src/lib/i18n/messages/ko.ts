@@ -410,6 +410,11 @@ export const ko = {
   "calls.quickBooking.guests.count": "담은 손님 {count} / {size}명",
   "calls.quickBooking.guests.empty": "코스 칩을 눌러 손님을 담으세요.",
   "calls.quickBooking.guests.remove": "빼기",
+  "calls.quickBooking.seats.remaining": "{time} 남은 자리 {remaining} / {capacity}",
+  "calls.quickBooking.seats.short": "자리가 모자랍니다: {time} 남은 자리 {remaining}, 담은 손님 {demand}자리",
+  "calls.quickBooking.seats.overrideTitle": "자리가 모자랍니다. 그래도 예약하시겠습니까?",
+  "calls.quickBooking.seats.overrideDescription": "{time}에 남은 자리는 {remaining}인데 담은 손님은 {demand}자리가 필요합니다. 그래도 예약하면 남은 자리를 넘겨 저장됩니다.",
+  "calls.quickBooking.seats.overrideConfirm": "그래도 예약",
   "calls.quickBooking.secondImpossible": "불가",
   "calls.quickBooking.channel": "예약 경로",
   "calls.quickBooking.bookerName": "예약자명",
@@ -634,6 +639,8 @@ export const ko = {
   "settlements.schedule.panel.note": "근무 예정은 특정 시각까지 근무한다는 보장이 아닙니다. 실제 출퇴근은 각 직군 정산의 직원 패널에서 따로 정정합니다.",
   "settlements.schedule.cell.statusLabel": "근무 상태",
   "settlements.schedule.cell.statusAria": "{name}의 {date} 근무 상태",
+  "settlements.schedule.cell.plannedStartLabel": "출근 예정",
+  "settlements.schedule.cell.plannedStartAria": "{name}의 {date} 출근 예정 시각",
 
   // 지난주 복사와 휴무 영향 콜(티켓 28)
   "settlements.schedule.copy.action": "지난주 복사",

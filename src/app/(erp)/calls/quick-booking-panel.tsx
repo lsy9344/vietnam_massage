@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import { SidePanel } from "@/components/ui/panel";
 import { ScreenState } from "@/components/ui/screen-state";
+import { StatusIndicator } from "@/components/ui/status-indicator";
 import { CustomerCandidateCompare } from "@/components/domain/customer-candidate-compare";
 import { CustomerVisitCounts } from "@/components/domain/customer-visit-counts";
 import {
@@ -23,9 +24,11 @@ import { NewCallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
 import {
   quickBookingCourseColumns,
   quickBookingFreeTime,
+  quickBookingSeatShortage,
   quickBookingSummary,
   quickBookingTherapistGroups,
-  type QuickBookingCourseColumn
+  type QuickBookingCourseColumn,
+  type QuickBookingSeatShortage
 } from "@/app/(erp)/calls/quick-booking-conditions";
 import {
   QUICK_BOOKING_STEPS,
@@ -57,6 +60,7 @@ import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
 import { CALL_PARAM } from "@/lib/ledger-address";
 import { CUSTOMER_SEARCH_DEBOUNCE_MS } from "@/app/(erp)/customers/customer-search";
 import { useLocale, useT } from "@/lib/i18n/client";
+import { formatNumber } from "@/lib/i18n/format";
 import type { Locale } from "@/lib/i18n/config";
 import type { MessageKey } from "@/lib/i18n/types";
 import { businessTodayIsoDate } from "@/lib/operating-date";
@@ -67,6 +71,7 @@ import type {
   CustomerVisitCandidateDto,
   CustomerVisitCountsDto,
   CustomerVisitHistoryRowDto,
+  SeatPointDto,
   ServiceCallFormOptions,
   ServiceCallOption,
   TherapistAvailabilityRowDto
@@ -257,10 +262,15 @@ const nameColumnClassName = "grid w-36 shrink-0 gap-0.5";
 /** 칩 하나의 판정. 이 줄에 그 코스가 없으면 null이고 빈 칸으로 둔다. */
 type ChipVerdict = TherapistAvailabilityRowDto["courses"][number]["verdict"] | null;
 
-/** 불가 칩이나 자리가 없는 담기를 경고 확인 후 담기 전에 먼저 보여줄 경고(티켓 21과 같은 확인 창). */
+/** 불가 칩을 경고 확인 후 담기 전에 먼저 보여줄 경고(티켓 21과 같은 확인 창). */
 type PendingPick =
   | { kind: "first"; courseId: string; therapistId: string; therapistName: string; verdict: "time_short" | "rate_missing" }
   | { kind: "second"; index: number; therapistId: string; therapistName: string; verdict: "time_short" | "rate_missing" };
+
+/** 남은 자리 경고 문구의 값(1018 스펙 D26). ①의 경고와 ②로 넘어갈 때의 확인 창이 같이 쓴다. */
+function seatShortageText(locale: Locale, shortage: QuickBookingSeatShortage) {
+  return { time: shortage.time, remaining: formatNumber(locale, shortage.remaining), demand: formatNumber(locale, shortage.demand) };
+}
 
 function FreeTimeText({ row }: { row: TherapistAvailabilityRowDto }) {
   const t = useT();
@@ -343,11 +353,19 @@ function PickLine({
   );
 }
 
-export type QuickBookingAvailability = { rows: TherapistAvailabilityRowDto[]; pending: boolean; failed: boolean };
+export type QuickBookingAvailability = {
+  rows: TherapistAvailabilityRowDto[];
+  /** 고른 시각부터의 자리 수와 남은 자리(1018 스펙 D25). 아직 받지 못했으면 비어 있다. */
+  seats: SeatPointDto[];
+  pending: boolean;
+  failed: boolean;
+};
 
 /**
  * ① 조건(1018 스펙 D20·D23): 날짜·시각·인원, 맨 위 "미지명" 줄과 Therapist 줄의 코스 칩, 그 시각에 안 되는 사람을 접어 둔 "N명",
  * 담은 손님 목록. 칩을 누르면 손님이 담긴다. 불가 칩은 경고를 확인한 뒤 담긴다. D코스는 두 번째 Therapist를 고른다.
+ * 목록 위에 `HH:MM 남은 자리 n / N`을 보이고, 담은 손님이 남은 자리를 넘으면 담은 손님 목록에 경고를 보인다(스펙 D25·D26). 담기는
+ * 막지 않는다. `그래도 예약` 확인은 ② 고객으로 넘어갈 때 패널이 묻는다.
  */
 export function ConditionsStep({
   availability,
@@ -398,7 +416,7 @@ export function ConditionsStep({
   const t = useT();
   const locale = useLocale();
   const [pendingPick, setPendingPick] = useState<PendingPick | null>(null);
-  const { rows, pending, failed } = availability;
+  const { rows, seats, pending, failed } = availability;
   const columns = quickBookingCourseColumns(rows);
   const groups = quickBookingTherapistGroups(rows, { presetTherapistId, showBeforeCheckIn });
   const taken = takenTherapistIds(guests);
@@ -406,6 +424,9 @@ export function ConditionsStep({
   const text = guestTextOf(t, rows, options);
   const verdictOf = (row: TherapistAvailabilityRowDto) => (courseId: string) =>
     row.courses.find((course) => course.courseId === courseId)?.verdict ?? null;
+
+  const seatsNow = seats[0] ?? null;
+  const shortage = quickBookingSeatShortage(seats, columns, guests);
 
   function pickFor(row: TherapistAvailabilityRowDto) {
     return (column: QuickBookingCourseColumn, verdict: Exclude<ChipVerdict, null>) => {
@@ -495,6 +516,15 @@ export function ConditionsStep({
       </div>
 
       <section aria-label={t("calls.quickBooking.pickList")} className="grid gap-2">
+        {seatsNow ? (
+          <p className="text-sm font-semibold text-foreground" data-quick-booking-seats={`${seatsNow.remaining}/${seatsNow.capacity}`}>
+            {t("calls.quickBooking.seats.remaining", {
+              time: seatsNow.time,
+              remaining: formatNumber(locale, seatsNow.remaining),
+              capacity: formatNumber(locale, seatsNow.capacity)
+            })}
+          </p>
+        ) : null}
         {groups.beforeCheckInCount > 0 ? (
           <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
             <input
@@ -541,6 +571,11 @@ export function ConditionsStep({
           {t("calls.quickBooking.guests.count", { count: guests.length, size: partySize })}
         </p>
         {guests.length === 0 ? <p className="text-sm text-muted">{t("calls.quickBooking.guests.empty")}</p> : null}
+        {shortage ? (
+          <div data-quick-booking-seat-shortage="">
+            <StatusIndicator label={t("calls.quickBooking.seats.short", seatShortageText(locale, shortage))} tone="warning" />
+          </div>
+        ) : null}
         <ol className="grid gap-1.5">
           {guests.map((guest, index) => {
             const needsSecond = Boolean(guest.therapist1Id) && columns.some((column) => column.courseId === guest.courseId && column.requiresSecondTherapist);
@@ -927,6 +962,8 @@ export function QuickBookingPanel({
   const request = save.inFlight;
 
   const [availabilityRows, setAvailabilityRows] = useState(initialAvailabilityRows);
+  const [seats, setSeats] = useState<SeatPointDto[]>([]);
+  const [confirmSeats, setConfirmSeats] = useState(false);
   const [showBeforeCheckIn, setShowBeforeCheckIn] = useState(false);
   const [availabilityPending, setAvailabilityPending] = useState(false);
   const [availabilityFailed, setAvailabilityFailed] = useState(false);
@@ -936,14 +973,19 @@ export function QuickBookingPanel({
     // 열 때마다 다시 읽는다. 앞서 저장한 예약이 가능 판정에 바로 들어가야 한다.
     const id = ++availabilityRequestId.current;
     setAvailabilityFailed(false);
+    // 다른 시각의 남은 자리로 경고하지 않게 새로 받을 때까지 비운다.
+    setSeats([]);
     if (!time) {
       setAvailabilityRows([]);
       return;
     }
     setAvailabilityPending(true);
     try {
-      const rows = await loadTherapistAvailabilityAction({ operatingMonthId, serviceDate: date, time });
-      if (availabilityRequestId.current === id) setAvailabilityRows(rows);
+      const result = await loadTherapistAvailabilityAction({ operatingMonthId, serviceDate: date, time });
+      if (availabilityRequestId.current === id) {
+        setAvailabilityRows(result.rows);
+        setSeats(result.seats);
+      }
     } catch (error) {
       unstable_rethrow(error);
       if (availabilityRequestId.current === id) setAvailabilityFailed(true);
@@ -1114,6 +1156,16 @@ export function QuickBookingPanel({
   }, [fieldErrors]);
 
   const full = guests.length > 0 && guests.length === partySize;
+  // ② 고객으로 넘어갈 때 담은 손님이 남은 자리를 넘으면 `그래도 예약`을 먼저 묻는다(1018 스펙 D26). 담은 뒤 시각을 바꿔 넘치게 된
+  // 것도 여기서 걸린다. 담기 자체는 막지 않는다.
+  const seatShortage = quickBookingSeatShortage(seats, quickBookingCourseColumns(availabilityRows), guests);
+  function goToStep(next: QuickBookingStep) {
+    if (next === "customer" && seatShortage) {
+      setConfirmSeats(true);
+      return;
+    }
+    dispatch({ type: "step", step: next });
+  }
   const text = guestTextOf(t, availabilityRows, options);
   const summary = quickBookingSummary({
     startTime: draft.startTime,
@@ -1139,7 +1191,7 @@ export function QuickBookingPanel({
               customerReady={full}
               disabled={locked}
               errorSteps={errorSteps}
-              onSelect={(next) => dispatch({ type: "step", step: next })}
+              onSelect={goToStep}
               step={step}
             />
             {joinParty ? (
@@ -1153,7 +1205,7 @@ export function QuickBookingPanel({
 
             {step === "conditions" ? (
               <ConditionsStep
-                availability={{ rows: availabilityRows, pending: availabilityPending, failed: availabilityFailed }}
+                availability={{ rows: availabilityRows, seats, pending: availabilityPending, failed: availabilityFailed }}
                 disabled={locked}
                 draft={draft}
                 fieldErrors={fieldErrors}
@@ -1162,7 +1214,7 @@ export function QuickBookingPanel({
                 monthEndDate={monthEndDate}
                 monthStartDate={monthStartDate}
                 onAddGuest={(guest) => dispatch({ type: "addGuest", guest })}
-                onNext={() => dispatch({ type: "step", step: "customer" })}
+                onNext={() => goToStep("customer")}
                 onShowBeforeCheckInChange={setShowBeforeCheckIn}
                 onNow={() => setSchedule(businessTodayIsoDate(), selectNowSlot(options.timeSlots, nowClockString()))}
                 onPartySizeChange={(size) => dispatch({ type: "partySize", size })}
@@ -1204,6 +1256,18 @@ export function QuickBookingPanel({
         </div>
       ) : null}
 
+      <ConfirmDialog
+        cancelLabel={t("common.confirm.cancel")}
+        confirmLabel={t("calls.quickBooking.seats.overrideConfirm")}
+        description={seatShortage ? t("calls.quickBooking.seats.overrideDescription", seatShortageText(locale, seatShortage)) : undefined}
+        onConfirm={() => {
+          setConfirmSeats(false);
+          dispatch({ type: "step", step: "customer" });
+        }}
+        onOpenChange={setConfirmSeats}
+        open={confirmSeats}
+        title={t("calls.quickBooking.seats.overrideTitle")}
+      />
       <ConfirmDialog
         cancelLabel={t("common.confirm.cancel")}
         confirmLabel={t("calls.leaveGuard.confirm")}

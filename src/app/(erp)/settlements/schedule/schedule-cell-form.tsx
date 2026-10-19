@@ -83,6 +83,7 @@ export function DayOffImpactNotice({
 /**
  * 근무표 패널의 요일 한 줄(티켓 27). 고른 직원의 패널 안에 요일마다 하나씩 쌓인다.
  * 휴무로 저장되면 그 칸에 배정된 콜(휴무 영향 콜)을 DayOffImpactNotice로 보여준다(28).
+ * 근무 예정이면 출근 예정 시각을 함께 적을 수 있다(1018 스펙 D28). 비워 두면 종일 근무다.
  */
 export function ScheduleCellForm({
   employeeId,
@@ -90,6 +91,7 @@ export function ScheduleCellForm({
   date,
   weekdayLabel,
   status,
+  plannedStartTime,
   canOpenLedger
 }: {
   employeeId: string;
@@ -97,12 +99,13 @@ export function ScheduleCellForm({
   date: string;
   weekdayLabel: string;
   status: PlannedWorkingDayCellStatus;
+  plannedStartTime: string | null;
   canOpenLedger: boolean;
 }) {
   const t = useT();
   const locale = useLocale();
   const [state, formAction, pending] = useActionState<ScheduleActionState, FormData>(setPlannedWorkingDayAction, null);
-  const statusErrorId = useId();
+  const fieldErrorId = useId();
   const formError = inlineError(state);
   const statusError = inlineError(state, "status");
   const saved = state?.ok && state.data.employeeId === employeeId && state.data.date === date;
@@ -117,6 +120,13 @@ export function ScheduleCellForm({
   useEffect(() => {
     setSelectedStatus(status);
   }, [status]);
+  // 출근 예정 시각도 같은 이유로 제어 상태다. 근무 예정이 아니면 칸을 막아 보내지 않으므로 서버가 시각을 지운다.
+  const [startTime, setStartTime] = useState(plannedStartTime ?? "");
+  useEffect(() => {
+    setStartTime(plannedStartTime ?? "");
+  }, [plannedStartTime]);
+  const startTimeError = inlineError(state, "plannedStartTime");
+  const fieldError = statusError ?? startTimeError;
 
   return (
     <form action={formAction} className="grid grid-cols-[3.5rem_1fr_auto] items-center gap-2 border-b border-border py-2 last:border-b-0" noValidate>
@@ -126,25 +136,41 @@ export function ScheduleCellForm({
         {weekdayLabel}
         <span className="block text-xs font-normal text-muted">{date.slice(5)}</span>
       </span>
-      <label className="grid gap-1">
-        <span className="sr-only">{t("settlements.schedule.cell.statusLabel")}</span>
-        <select
-          aria-describedby={statusError ? statusErrorId : undefined}
-          aria-invalid={statusError ? "true" : undefined}
-          aria-label={t("settlements.schedule.cell.statusAria", { name: employeeName, date })}
-          className={inputFieldClassName({ invalid: Boolean(statusError) })}
-          disabled={pending}
-          name="status"
-          onChange={(event) => setSelectedStatus(event.target.value as PlannedWorkingDayCellStatus)}
-          value={selectedStatus}
-        >
-          {ALL_SCHEDULE_CELL_STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {scheduleStatusLabel(locale, value)}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="grid min-w-32 flex-1 gap-1">
+          <span className="sr-only">{t("settlements.schedule.cell.statusLabel")}</span>
+          <select
+            aria-describedby={statusError ? fieldErrorId : undefined}
+            aria-invalid={statusError ? "true" : undefined}
+            aria-label={t("settlements.schedule.cell.statusAria", { name: employeeName, date })}
+            className={inputFieldClassName({ invalid: Boolean(statusError) })}
+            disabled={pending}
+            name="status"
+            onChange={(event) => setSelectedStatus(event.target.value as PlannedWorkingDayCellStatus)}
+            value={selectedStatus}
+          >
+            {ALL_SCHEDULE_CELL_STATUSES.map((value) => (
+              <option key={value} value={value}>
+                {scheduleStatusLabel(locale, value)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-muted">
+          {t("settlements.schedule.cell.plannedStartLabel")}
+          <input
+            aria-describedby={startTimeError && !statusError ? fieldErrorId : undefined}
+            aria-invalid={startTimeError ? "true" : undefined}
+            aria-label={t("settlements.schedule.cell.plannedStartAria", { name: employeeName, date })}
+            className={inputFieldClassName({ className: "w-28", invalid: Boolean(startTimeError) })}
+            disabled={pending || selectedStatus !== "근무 예정"}
+            name="plannedStartTime"
+            onChange={(event) => setStartTime(event.target.value)}
+            type="time"
+            value={selectedStatus === "근무 예정" ? startTime : ""}
+          />
+        </label>
+      </div>
       <div className="grid justify-items-end gap-1">
         <Button disabled={pending} type="submit">
           {pending
@@ -161,9 +187,9 @@ export function ScheduleCellForm({
               : null}
         </span>
       </div>
-      {statusError ? (
-        <span className="col-span-3 text-sm text-danger" id={statusErrorId} role="alert">
-          {statusError}
+      {fieldError ? (
+        <span className="col-span-3 text-sm text-danger" id={fieldErrorId} role="alert">
+          {fieldError}
         </span>
       ) : formError ? (
         <p className="col-span-3 text-sm text-danger" role="alert">

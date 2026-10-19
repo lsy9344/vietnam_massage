@@ -351,14 +351,13 @@ function CallLedgerLine({
     setTherapistChoices(null);
     setTherapistChoicesFailed(false);
     try {
-      setTherapistChoices(
-        await loadTherapistAvailabilityAction({
-          operatingMonthId: row.operatingMonthId,
-          serviceDate: row.serviceDate,
-          time: draft.startTime,
-          excludeCallId: row.id
-        })
-      );
+      const { rows } = await loadTherapistAvailabilityAction({
+        operatingMonthId: row.operatingMonthId,
+        serviceDate: row.serviceDate,
+        time: draft.startTime,
+        excludeCallId: row.id
+      });
+      setTherapistChoices(rows);
     } catch {
       setTherapistChoices([]);
       setTherapistChoicesFailed(true);

@@ -22,6 +22,7 @@ Owns daily settlement calculations and payout confirmation events.
 - Never touches `TherapistAttendance`, full-attendance recognition, payout, or `ServiceCall` rows. Does not block call/reservation writes.
 - Edits require `payout:write` (administrator, settlement manager); enforced in the `/settlements/schedule` server action, not in this service.
 - Copying last week's values into unset cells and surfacing calls assigned to an employee being marked off are ticket 28's additions on top of this service.
+- 1018 Ticket 06 (spec D28): a `"근무 예정"` cell may carry `plannedStartTime` (HH:MM, optional; empty means the whole day). Other statuses store none, so changing a cell to `"휴무"` clears it. Changing only the time is audited like a status change, and the audit snapshot carries `plannedStartTime` only when there is one. Last week's copy copies the time with the status. Availability reads it (calls module, 1018 Ticket 06).
 
 ## Therapist Daily Settlement Service
 

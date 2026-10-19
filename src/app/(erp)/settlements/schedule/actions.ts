@@ -78,6 +78,7 @@ export async function setPlannedWorkingDayAction(
       employeeId: formValue(formData, "employeeId"),
       date: formValue(formData, "date"),
       status: formValue(formData, "status") as PlannedWorkingDayCellStatus,
+      plannedStartTime: formValue(formData, "plannedStartTime"),
       actorId: account.id
     });
     revalidatePath("/settlements/schedule");

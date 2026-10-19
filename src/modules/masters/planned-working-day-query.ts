@@ -12,7 +12,7 @@ export const plannedWorkingDayCellStatuses = [...workPlanStatuses, unsetPlanStat
   ...PlannedWorkingDayCellStatus[]
 ];
 
-export type ScheduleErrorField = "employeeId" | "date" | "status";
+export type ScheduleErrorField = "employeeId" | "date" | "status" | "plannedStartTime";
 
 export class ScheduleDomainError extends Error {
   constructor(message: string, public readonly code: string, public readonly field?: ScheduleErrorField) {
@@ -35,7 +35,7 @@ export type PlannedWorkingDayStatusDto = {
   plannedStartTime: string | null;
 };
 
-const errorFields: readonly ScheduleErrorField[] = ["employeeId", "date", "status"];
+const errorFields: readonly ScheduleErrorField[] = ["employeeId", "date", "status", "plannedStartTime"];
 
 function asErrorField(path: PropertyKey | undefined): ScheduleErrorField | undefined {
   return errorFields.find((field) => field === path);

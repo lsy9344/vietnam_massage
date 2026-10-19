@@ -349,6 +349,8 @@ test.describe("1018 티켓 05: 빠른 예약 옆 패널과 2단계", () => {
 
     await panel.locator('[data-quick-booking-line="unassigned"]').locator(`[data-course-id="${courseId}"]`).click();
     await panel.getByRole("button", { name: "Tiếp" }).click();
+    // 이날은 출근 기록도 근무표도 없어 남은 자리가 0이다. 남은 자리 확인(1018 티켓 06)을 베트남어 버튼으로 넘긴다.
+    await page.getByRole("alertdialog", { name: "Không đủ chỗ. Vẫn đặt lịch?" }).getByRole("button", { name: "Vẫn đặt lịch" }).click();
     await expect(panel.getByRole("group", { name: "Kênh đặt chỗ" })).toBeVisible();
   });
 });

@@ -113,7 +113,7 @@ const noop = () => undefined;
 function conditions(
   locale: Locale,
   {
-    availability = { rows, pending: false, failed: false },
+    availability = { rows, seats: [], pending: false, failed: false },
     guests = [],
     joining = false,
     partySize = 1,
@@ -324,6 +324,35 @@ function customerStep(
     />
   );
 }
+
+describe("빠른 예약 ① 남은 자리(1018 스펙 D25·D26)", () => {
+  // 18:00에 10자리 중 3자리가 남고, 18:30부터는 1자리다.
+  const seats = [
+    { time: "18:00", offsetMinutes: 0, capacity: 10, remaining: 3, freeTherapistIds: ["therapist-12", "therapist-7"] },
+    { time: "18:30", offsetMinutes: 30, capacity: 10, remaining: 1, freeTherapistIds: ["therapist-12", "therapist-7"] }
+  ];
+
+  it("shows the remaining seats at the chosen time over the pick list", () => {
+    const html = conditions("ko", { availability: { rows, seats, pending: false, failed: false } });
+    assert.match(html, /<p[^>]*data-quick-booking-seats="3\/10"[^>]*>18:00 남은 자리 3 \/ 10<\/p>/);
+    assert.ok(html.indexOf("data-quick-booking-seats") < html.indexOf('data-quick-booking-line="unassigned"'));
+    assert.match(conditions("vi", { availability: { rows, seats, pending: false, failed: false } }), /18:00 còn 3 \/ 10 chỗ/);
+    // 가능 판정을 아직 못 받았으면 보이지 않는다.
+    assert.doesNotMatch(conditions("ko"), /data-quick-booking-seats/);
+  });
+
+  it("warns when the picked guests need more seats than remain, and still lets the counter go on", () => {
+    const availability = { rows, seats, pending: false, failed: false };
+    const enough = conditions("ko", { availability, guests: [guest("course-a", null)], partySize: 2 });
+    assert.doesNotMatch(enough, /data-quick-booking-seat-shortage/);
+
+    const short = conditions("ko", { availability, guests: [guest("course-a", null), guest("course-a", "therapist-7")], partySize: 2 });
+    assert.match(short, /data-quick-booking-seat-shortage=""/);
+    assert.match(short, /자리가 모자랍니다: 18:30 남은 자리 1, 담은 손님 2자리/);
+    // 경고만 하고 막지 않는다. 인원만큼 담았으니 다음으로 갈 수 있다.
+    assert.doesNotMatch(short, /<button[^>]*disabled=""[^>]*>다음<\/button>/);
+  });
+});
 
 describe("빠른 예약 ② 고객(1018 스펙 D21)", () => {
   it("경로 버튼, 예약자명, 기존 고객 검색, 메모, 한 줄 요약과 저장을 둔다", () => {
