@@ -6,27 +6,14 @@ import { DetailRow } from "@/components/ui/detail-row";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import { ModalPanel } from "@/components/ui/panel";
 import { ScreenState } from "@/components/ui/screen-state";
-import { StatusIndicator, type StatusTone } from "@/components/ui/status-indicator";
+import { StatusIndicator, statusGlyphChar, toneTextClassName, type StatusTone } from "@/components/ui/status-indicator";
 import { therapistAttendanceMethodLabel, therapistRequestKindLabel, therapistRequestStatusLabel, scheduleStatusLabel } from "@/lib/i18n/codes";
 import { useT } from "@/lib/i18n/client";
 import type { Locale } from "@/lib/i18n/config";
+import { intlLocale } from "@/lib/i18n/format";
 import { cn } from "@/lib/utils";
 import { cancelTherapistRequestAction, requestTherapistDayOffAction, type TherapistRequestActionState } from "@/app/therapist/attendance/actions";
 import type { TherapistAttendanceCalendarDayDto, TherapistAttendanceDayRequestStatus } from "@/modules/therapists/therapist-attendance-calendar-service";
-
-// 압축 칸(7열 그리드)에 쓰는 작은 기호. StatusIndicator(status-indicator.tsx)와 같은 기호·색이다.
-const TONE_GLYPH: Record<"info" | "success" | "warning" | "danger", string> = {
-  info: "◆",
-  success: "●",
-  warning: "▲",
-  danger: "■"
-};
-const TONE_TEXT_CLASS: Record<"info" | "success" | "warning" | "danger", string> = {
-  info: "text-info",
-  success: "text-success",
-  warning: "text-warning",
-  danger: "text-danger"
-};
 
 type AttendanceBadge = { label: string; tone: StatusTone };
 
@@ -59,12 +46,12 @@ function weekdayIndexMondayFirst(isoDate: string) {
 const WEEKDAY_HEADER_REFERENCE_DATES = ["2023-01-02", "2023-01-03", "2023-01-04", "2023-01-05", "2023-01-06", "2023-01-07", "2023-01-08"];
 
 function weekdayHeaders(locale: Locale) {
-  const formatter = new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "ko-KR", { timeZone: "UTC", weekday: "short" });
+  const formatter = new Intl.DateTimeFormat(intlLocale(locale), { timeZone: "UTC", weekday: "short" });
   return WEEKDAY_HEADER_REFERENCE_DATES.map((date) => formatter.format(new Date(`${date}T00:00:00.000Z`)));
 }
 
 function formatFullDate(locale: Locale, isoDate: string) {
-  return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "ko-KR", {
+  return new Intl.DateTimeFormat(intlLocale(locale), {
     timeZone: "UTC",
     year: "numeric",
     month: "long",
@@ -289,7 +276,7 @@ export function TherapistAttendanceCalendar({
   }
 
   const leadingBlankCount = weekdayIndexMondayFirst(days[0]!.date);
-  const monthLabel = new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "ko-KR", { timeZone: "UTC", year: "numeric", month: "long" }).format(
+  const monthLabel = new Intl.DateTimeFormat(intlLocale(locale), { timeZone: "UTC", year: "numeric", month: "long" }).format(
     new Date(`${monthKey}-01T00:00:00.000Z`)
   );
 
@@ -325,8 +312,8 @@ export function TherapistAttendanceCalendar({
                 {formatDayNumber(day.date)}
               </span>
               {primaryBadge ? (
-                <span aria-hidden="true" className={TONE_TEXT_CLASS[primaryBadge.tone as keyof typeof TONE_TEXT_CLASS]}>
-                  {TONE_GLYPH[primaryBadge.tone as keyof typeof TONE_GLYPH]}
+                <span aria-hidden="true" className={toneTextClassName[primaryBadge.tone]}>
+                  {statusGlyphChar(primaryBadge.tone)}
                 </span>
               ) : (
                 <span aria-hidden="true" className="h-[1em]" />
@@ -337,7 +324,9 @@ export function TherapistAttendanceCalendar({
       </div>
 
       {days.some((day) => day.isSpecialDayOff) ? (
-        <p className="mt-3 text-xs font-semibold text-danger">■ {t("therapistRequestKind.special_day_off")}</p>
+        <p className="mt-3 text-xs font-semibold text-danger">
+          {statusGlyphChar("danger")} {t("therapistRequestKind.special_day_off")}
+        </p>
       ) : null}
 
       <ModalPanel onOpenChange={(open) => !open && setSelectedDate(null)} open={selectedDay !== null} title={selectedDay ? formatFullDate(locale, selectedDay.date) : ""}>

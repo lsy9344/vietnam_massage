@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { DayOffRequestControls } from "@/components/therapist/therapist-attendance-calendar";
+import { DayOffRequestControls, TherapistAttendanceCalendar } from "@/components/therapist/therapist-attendance-calendar";
+import { statusGlyphChar } from "@/components/ui/status-indicator";
 import { renderInShell } from "@/components/shell/test-harness";
 import type { TherapistAttendanceCalendarDayDto, TherapistAttendanceDayRequestStatus } from "@/modules/therapists/therapist-attendance-calendar-service";
 
@@ -62,5 +63,21 @@ describe("DayOffRequestControls", () => {
   it("shows nothing once the day is already day off", () => {
     const html = render({ kind: "day_off", status: "approved", rejectionReason: null }, "휴무");
     assert.equal(html, "");
+  });
+});
+
+// R18(스멜): 압축 칸의 배지 기호는 status-indicator.tsx의 공용 맵(statusGlyphChar)을 그대로 쓴다 —
+// 따로 적은 글자는 U+FE0E(이모지 방지)가 빠지기 쉽고, 공용 맵이 바뀌어도 같이 바뀌지 않는다.
+describe("TherapistAttendanceCalendar compact cell badge", () => {
+  it("renders the day's primary badge glyph with the shared U+FE0E-suffixed status glyph", () => {
+    const absentDay = day(null);
+    absentDay.judgment = { lateMinutes: null, isAbsent: true, isClockOutMissing: false, isUnscheduledAttendance: false };
+    const html = renderToStaticMarkup(
+      renderInShell(
+        <TherapistAttendanceCalendar days={[absentDay]} locale="ko" monthKey="2042-08" todayServiceDate="2042-08-16" />,
+        "ko"
+      )
+    );
+    assert.match(html, new RegExp(statusGlyphChar("danger")));
   });
 });

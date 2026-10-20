@@ -9,7 +9,7 @@ import { ScreenState } from "@/components/ui/screen-state";
 import { StatusIndicator, type StatusTone } from "@/components/ui/status-indicator";
 import { therapistRequestKindLabel, therapistRequestStatusLabel } from "@/lib/i18n/codes";
 import { useT } from "@/lib/i18n/client";
-import { formatDateTime } from "@/lib/i18n/format";
+import { formatDateTime, intlLocale } from "@/lib/i18n/format";
 import type { Locale } from "@/lib/i18n/config";
 import {
   approveTherapistCorrectionRequestAction,
@@ -22,7 +22,7 @@ import type { TherapistRequestAdminListItemDto } from "@/modules/therapists/ther
 // 06의 근태 달력(formatFullDate)과 같은 이유로 "날짜만"은 UTC로 고정해 영업 시간대 보정이 날짜를
 // 밀지 않게 한다. 처리 시각 같은 타임스탬프는 formatDateTime(영업 시간대)을 그대로 쓴다.
 function formatRequestDate(locale: Locale, isoDate: string) {
-  return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "ko-KR", { timeZone: "UTC", year: "numeric", month: "long", day: "numeric" }).format(
+  return new Intl.DateTimeFormat(intlLocale(locale), { timeZone: "UTC", year: "numeric", month: "long", day: "numeric" }).format(
     new Date(`${isoDate}T00:00:00.000Z`)
   );
 }

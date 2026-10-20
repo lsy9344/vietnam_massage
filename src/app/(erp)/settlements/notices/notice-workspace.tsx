@@ -145,7 +145,7 @@ function NoticeCard({ locale, notice }: { locale: Locale; notice: TherapistNotic
           {t("settlements.notices.list.recipients", { total: current.recipientCount, read: current.readCount, unread: current.unreadCount })}
         </span>
         <button
-          className="font-semibold text-foreground underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary"
+          className="inline-flex min-h-11 items-center font-semibold text-foreground underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary"
           onClick={() => setExpanded((value) => !value)}
           type="button"
         >

@@ -2,6 +2,7 @@ import { CallStatusChip, callStatusKeyOf, type CallStatusKey } from "@/component
 import { DateCapsule } from "@/components/ui/date-capsule";
 import { createTranslator } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
+import { intlLocale } from "@/lib/i18n/format";
 import type { MessageKey } from "@/lib/i18n/types";
 import { cn } from "@/lib/utils";
 import type { TherapistTodayCallDto, TherapistTodayDayDto } from "@/modules/therapists/therapist-today-view-service";
@@ -22,7 +23,7 @@ const FADED_STATUSES: ReadonlySet<CallStatusKey> = new Set(["noShow", "canceled"
 
 function formatDayHeading(locale: Locale, serviceDate: string) {
   const date = new Date(`${serviceDate}T00:00:00.000Z`);
-  return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "ko-KR", {
+  return new Intl.DateTimeFormat(intlLocale(locale), {
     timeZone: "UTC",
     month: "long",
     day: "numeric",

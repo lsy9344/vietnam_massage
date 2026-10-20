@@ -23,7 +23,7 @@ export default async function SettlementsLayout({ children }: { children: ReactN
   return (
     <>
       {canApprove && pendingCount > 0 ? (
-        <div className="px-4 pt-3 min-[840px]:px-8">
+        <div className="screen">
           <Link className="inline-flex focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary" href="/settlements/requests">
             <StatusIndicator label={t("settlements.requests.badge.pending", { count: pendingCount })} tone="warning" />
           </Link>

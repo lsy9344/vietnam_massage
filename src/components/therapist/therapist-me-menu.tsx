@@ -36,10 +36,7 @@ export function TherapistMeMenu({ profile }: { profile: TherapistProfile | null 
         <div className="border-b border-border px-3 py-3">
           <LocaleSwitcher />
         </div>
-        <Link
-          className="flex min-h-11 w-full items-center rounded-sm px-3 text-left text-sm font-semibold text-foreground transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary"
-          href="/therapist/password"
-        >
+        <Link className="shell-menu-item" href="/therapist/password">
           {t("therapist.me.changePassword")}
         </Link>
         <SignOutButton />

@@ -34,7 +34,7 @@ export default async function TherapistTodayPage() {
         <TherapistAttendanceActionsSlot attendanceStatus={todayView.today.attendanceStatus} serviceDate={todayView.today.serviceDate} />
         <TherapistTodayStatus doneCount={todayView.today.doneCount} locale={locale} nextCallInMinutes={todayView.today.nextCallInMinutes}>
           <SummaryCard
-            accent="butter"
+            accent="lavender"
             label={t("therapist.today.expectedPayoutLabel")}
             note={t("therapist.today.expectedPayoutNote")}
             unit={t("settlements.vndSuffix")}
