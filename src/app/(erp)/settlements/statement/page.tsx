@@ -1,4 +1,5 @@
 import { requireRouteAccess } from "@/lib/authorization";
+import { ListboxSelect } from "@/components/ui/listbox-select";
 import { selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
 import type { Translator } from "@/lib/i18n";
@@ -65,50 +66,55 @@ function StatementPicker({
     <form action="/settlements/statement" className="flex flex-wrap items-end gap-2" method="get">
       <label className="grid gap-1 text-xs font-medium text-muted">
         {t("common.operatingMonth")}
-        <select aria-label={t("common.operatingMonth")} className="screen-field min-w-44" defaultValue={selectedMonthId} name="operatingMonthId">
-          {months.map((month) => (
-            <option key={month.id} value={month.id}>
-              {t("common.monthOption", { monthKey: month.monthKey, status: operatingMonthStatusLabel(locale, month.status) })}
-            </option>
-          ))}
-        </select>
+        <ListboxSelect
+          ariaLabel={t("common.operatingMonth")}
+          className="min-w-44"
+          defaultValue={selectedMonthId}
+          name="operatingMonthId"
+          options={months.map((month) => ({
+            label: t("common.monthOption", { monthKey: month.monthKey, status: operatingMonthStatusLabel(locale, month.status) }),
+            value: month.id
+          }))}
+          variant="capsule"
+        />
       </label>
       <label className="grid gap-1 text-xs font-medium text-muted">
         {t("settlements.statement.picker.employeeLabel")}
-        <select
-          aria-label={t("settlements.statement.picker.employeeLabel")}
-          className="screen-field min-w-56"
+        <ListboxSelect
+          ariaLabel={t("settlements.statement.picker.employeeLabel")}
+          className="min-w-56"
           defaultValue={selectedEmployeeId ?? ""}
           name="employee"
-        >
-          <option value="">{t("settlements.statement.picker.employeePlaceholder")}</option>
-          {groups.map(({ group, rows }) => (
-            <optgroup key={group} label={t(`settlements.statement.group.${group}`)}>
-              {rows.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.displayName} ({employee.staffCode})
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+          options={[
+            { label: t("settlements.statement.picker.employeePlaceholder"), value: "" },
+            ...groups.flatMap(({ group, rows }) =>
+              rows.map((employee) => ({
+                group: t(`settlements.statement.group.${group}`),
+                label: `${employee.displayName} (${employee.staffCode})`,
+                value: employee.id
+              }))
+            )
+          ]}
+          variant="capsule"
+        />
       </label>
       {versions.length > 0 ? (
         <label className="grid gap-1 text-xs font-medium text-muted">
           {t("settlements.statement.picker.versionLabel")}
-          <select
-            aria-label={t("settlements.statement.picker.versionLabel")}
-            className="screen-field min-w-44"
+          <ListboxSelect
+            ariaLabel={t("settlements.statement.picker.versionLabel")}
+            className="min-w-44"
             defaultValue={selectedVersion ? String(selectedVersion) : ""}
             name="closeVersion"
-          >
-            <option value="">{t("settlements.statement.picker.versionLatestOption")}</option>
-            {versions.map((version) => (
-              <option key={version.closeVersion} value={version.closeVersion}>
-                {t("settlements.statement.picker.versionOption", { version: version.closeVersion })}
-              </option>
-            ))}
-          </select>
+            options={[
+              { label: t("settlements.statement.picker.versionLatestOption"), value: "" },
+              ...versions.map((version) => ({
+                label: t("settlements.statement.picker.versionOption", { version: version.closeVersion }),
+                value: String(version.closeVersion)
+              }))
+            ]}
+            variant="capsule"
+          />
         </label>
       ) : null}
       <button className="screen-step" type="submit">

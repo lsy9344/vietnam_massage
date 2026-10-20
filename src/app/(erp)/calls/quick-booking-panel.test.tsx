@@ -271,9 +271,9 @@ describe("빠른 예약 ① 조건(1018 스펙 D20·D23)", () => {
     const html = conditions("ko", { partySize: 2, guests: [guest("course-d", "therapist-7"), guest("course-a", "therapist-12")] });
     const first = html.slice(html.indexOf('data-quick-booking-guest="1"'), html.indexOf('data-quick-booking-guest="2"'));
     assert.match(first, /두 번째 Therapist/);
-    assert.doesNotMatch(first, /<option value="therapist-7">/);
-    assert.doesNotMatch(first, /<option value="therapist-12">/);
-    assert.match(first, /<option value="therapist-3">3번 · 불가<\/option>/);
+    // 후보 목록은 열 때만 그린다(포털 listbox). 후보에서 빠지는지는 E2E가 본다
+    // (tests/e2e/story-ticket-21-quick-booking-two-therapists-and-override-path.spec.ts).
+    assert.match(first, /role="combobox"/);
     // 미지명 D코스 손님은 두 번째 Therapist를 고르지 않는다.
     assert.doesNotMatch(conditions("ko", { guests: [guest("course-d", null)] }), /두 번째 Therapist/);
   });

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { measureListboxPosition, type ListboxPosition } from "@/components/ui/listbox-position";
 import { useT } from "@/lib/i18n/client";
 import type { ServiceCallOption } from "@/modules/calls/service-call-service";
 import { spokenClock } from "@/app/(erp)/calls/call-warning-label";
@@ -34,34 +35,13 @@ export function optionLabel(options: ServiceCallOption[], value: string | null |
   return options.find((option) => option.value === value)?.label ?? "";
 }
 
-type ListboxPosition = {
-  left: number;
-  top: number;
-  width: number;
-  maxHeight: number;
-  placement: "below" | "above";
-};
-
-const LISTBOX_MAX_HEIGHT = 240; // px
-const LISTBOX_GAP = 4; // px gap between the input and the popup.
-
 // 패널은 세로로 스크롤되는 상자라 그 안에 절대 위치로 띄운 목록은 잘린다. 입력칸의 화면 위치에 맞춰 body에
 // 그리고(portal), 화면 아래쪽에서는 입력칸 위로 뒤집어 스크롤 없이 항목이 보이게 한다. 원장 줄의 칸 안 목록
 // (ledger-cell-picker.tsx)도 같은 자리 재기를 쓴다.
-export function measureListboxPosition(anchor: HTMLElement): ListboxPosition {
-  const rect = anchor.getBoundingClientRect();
-  const spaceBelow = window.innerHeight - rect.bottom - LISTBOX_GAP;
-  const spaceAbove = rect.top - LISTBOX_GAP;
-  const openAbove = spaceBelow < Math.min(LISTBOX_MAX_HEIGHT, spaceAbove) && spaceAbove > spaceBelow;
-  const maxHeight = Math.max(120, Math.min(LISTBOX_MAX_HEIGHT, openAbove ? spaceAbove : spaceBelow));
-  return {
-    left: rect.left,
-    top: openAbove ? rect.top - LISTBOX_GAP : rect.bottom + LISTBOX_GAP,
-    width: rect.width,
-    maxHeight,
-    placement: openAbove ? "above" : "below"
-  };
-}
+// 자리 재기 본체는 공용 선택 칸과 함께 `src/components/ui/listbox-position.ts`에 있다(내용 높이를 주지
+// 않으면 아래처럼 자리의 비율로 정한다 — 원장 칸 목록은 이 경로로 돈다).
+export { measureListboxPosition };
+export type { ListboxPosition };
 
 // 첫 위치는 목록 자신의 callback ref(measureRef)가 재고, 열려 있는 동안은 scroll·resize가 따라가게 한다.
 // setState를 effect 본문에서 바로 부르지 않고 이벤트 콜백에서만 부른다.

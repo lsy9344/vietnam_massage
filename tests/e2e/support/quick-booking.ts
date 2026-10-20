@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 import { prisma } from "./db";
+import { pickListboxOptionByValue } from "./listbox-select";
 
 /**
  * 2단계 빠른 예약(1018 스펙 D19–D23)을 E2E에서 다루는 헬퍼. 패널은 원장 옆의 비모달 패널(`aside`, 이름 "빠른 예약")이다.
@@ -23,9 +24,8 @@ export async function openQuickBooking(page: Page) {
 
 /** ①의 시간(과 인원). 시간을 바꾸면 Therapist 줄을 다시 불러온다. */
 export async function chooseConditions(panel: Locator, input: { time?: string; partySize?: number }) {
-  // select를 감싼 label의 이름에는 option 글자도 섞여 exact 비교가 맞지 않는다.
-  if (input.time) await panel.locator("#quick-booking-time").selectOption(input.time);
-  if (input.partySize) await panel.getByLabel("인원").selectOption(String(input.partySize));
+  if (input.time) await pickListboxOptionByValue(panel.locator("#quick-booking-time"), input.time);
+  if (input.partySize) await pickListboxOptionByValue(panel.getByLabel("인원"), String(input.partySize));
 }
 
 /** ①의 한 줄. therapistId가 null이면 맨 위 "미지명" 줄이다. */
@@ -55,7 +55,7 @@ export async function pickGuest(
 
 /** D코스 손님(1부터)의 두 번째 Therapist. */
 export async function chooseSecondTherapist(panel: Locator, guestPosition: number, therapistId: string) {
-  await panel.locator(`[data-quick-booking-guest="${guestPosition}"]`).getByLabel("두 번째 Therapist").selectOption(therapistId);
+  await pickListboxOptionByValue(panel.locator(`[data-quick-booking-guest="${guestPosition}"]`).getByLabel("두 번째 Therapist"), therapistId);
 }
 
 /** 담은 손님이 남은 자리를 넘을 때 ② 고객으로 넘어가며 뜨는 확인 창(1018 스펙 D26). */

@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login, setLocaleCookie } from "./support/auth";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 
 /**
  * 티켓 28: 근무표 지난주 복사(스토리 101)와 휴무 영향 콜(스토리 102, 148).
@@ -176,7 +177,7 @@ test.describe("티켓 28 근무표 지난주 복사·휴무 영향 콜", () => {
     await row.getByRole("button", { name: /T28 마사지사1/ }).click();
     const panel = page.getByRole("complementary");
     const dayForm = panel.locator("form").filter({ hasText: thisWeekThursday.slice(5) });
-    await dayForm.getByRole("combobox").selectOption("휴무");
+    await pickListboxOptionByValue(dayForm.getByRole("combobox"), "휴무");
     await dayForm.getByRole("button", { name: "저장" }).click();
     await expect(dayForm.getByText("저장됨")).toBeVisible();
 
@@ -210,7 +211,7 @@ test.describe("티켓 28 근무표 지난주 복사·휴무 영향 콜", () => {
     const panel = page.getByRole("complementary");
     const dayForm = panel.locator("form").filter({ hasText: thisWeekThursday.slice(5) });
     // 이미 휴무이지만 다시 저장해도 같은 영향받는 콜 안내가 보여야 한다.
-    await dayForm.getByRole("combobox").selectOption("휴무");
+    await pickListboxOptionByValue(dayForm.getByRole("combobox"), "휴무");
     await dayForm.getByRole("button", { name: "저장" }).click();
     await expect(dayForm.getByText("저장됨")).toBeVisible();
 
@@ -251,13 +252,13 @@ test.describe("티켓 28 근무표 지난주 복사·휴무 영향 콜", () => {
     await row.getByRole("button", { name: /T28 마사지사1/ }).click();
     const panel = page.getByRole("complementary");
     const wednesdayForm = panel.locator("form").filter({ hasText: thisWeekWednesday.slice(5) });
-    await expect(wednesdayForm.getByRole("combobox")).toHaveValue("미입력");
+    await expect(wednesdayForm.getByRole("combobox")).toContainText("미입력");
 
     await page.getByRole("button", { name: "지난주 복사" }).click();
     await expect(page.getByText(/\d+칸을 채웠습니다\./)).toBeVisible();
 
     // 복사로 수요일 칸이 채워졌으면(지난주 수요일이 "근무 예정") select도 같이 바뀌어야 한다.
-    await expect(wednesdayForm.getByRole("combobox")).toHaveValue("근무 예정");
+    await expect(wednesdayForm.getByRole("combobox")).toContainText("근무 예정");
 
     // select를 건드리지 않고 그대로 저장한다 — 비제어였다면 옛 값("미입력")을 보내 복사한 값을 지웠을 자리다.
     await wednesdayForm.getByRole("button", { name: "저장" }).click();
@@ -278,7 +279,7 @@ test.describe("티켓 28 근무표 지난주 복사·휴무 영향 콜", () => {
     const panel = page.getByRole("complementary");
     const dayForm = panel.locator("form").filter({ hasText: thisWeekThursday.slice(5) });
     // 영향받는 콜 안내는 저장 응답으로 오는 상태라, 다시 저장해야 그려진다.
-    await dayForm.getByRole("combobox").selectOption("휴무");
+    await pickListboxOptionByValue(dayForm.getByRole("combobox"), "휴무");
     await dayForm.getByRole("button", { name: "Lưu" }).click();
     await expect(dayForm.getByText("Đã lưu")).toBeVisible();
     await expect(dayForm.getByText("cuộc gọi bị ảnh hưởng")).toBeVisible();

@@ -5,6 +5,7 @@ import { businessTodayIsoDate } from "@/lib/operating-date";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 import { checkInTherapist, goToCustomerStep, openQuickBooking, pickGuest, quickBookingLine, saveQuickBooking } from "./support/quick-booking";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 
 // 콜 원장 흐름 재구성 티켓 02: 빠른 예약 ①에서 인원 수를 받아 코스 칩으로 손님마다 Therapist를 담고, 일행 콜 N건을
 // 한 번에 만든다(스펙 D10–D13, 1018 스펙 D19–D20). 티켓 20·21과 같은 이유로 실제 오늘을 덮는 운영월을 쓴다. 객실은
@@ -188,7 +189,7 @@ test.describe("콜 원장 흐름 티켓 02 빠른 예약: 일행 예약", () => 
       // ①: 인원 3명을 고르고 "지금"으로 시각을 채운 뒤, 세 Therapist의 코스 칩을 눌러 손님을 담는다(1018 스펙 D19–D20).
       // "인원" select는 <option> 텍스트가 겹쳐 helper의 getByLabel(exact)이 못 찾는다(아래 보고 참고). 느슨한 매칭으로 고른다.
       const panel = await openQuickBooking(page);
-      await panel.getByLabel("인원").selectOption("3");
+      await pickListboxOptionByValue(panel.getByLabel("인원"), "3");
       await panel.getByRole("button", { name: "지금" }).click();
 
       await pickGuest(page, panel, { therapistId: therapistIds[0], courseId });

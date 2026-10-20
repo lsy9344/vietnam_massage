@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login as loginAccount } from "./support/auth";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 
 
 type SeededData = {
@@ -293,7 +294,7 @@ test.describe("Story 2.5 일별 지출 입력과 요약 계산", () => {
     const drawer = page.getByRole("dialog", { name: "지출 추가" });
     await drawer.getByLabel("지출금액").fill("250000");
     await drawer.getByLabel("내용").fill("소모품");
-    await drawer.getByLabel("지출 담당자").selectOption(seededData.handlerId);
+    await pickListboxOptionByValue(drawer.getByLabel("지출 담당자"), seededData.handlerId);
     await drawer.getByRole("button", { name: "지출 추가" }).click();
     await expect(drawer).toHaveCount(0);
     await expect(expensePanel.getByRole("row", { name: /소모품/ })).toBeVisible();

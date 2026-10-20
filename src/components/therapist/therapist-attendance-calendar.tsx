@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { DateCapsule } from "@/components/ui/date-capsule";
 import { DetailRow } from "@/components/ui/detail-row";
 import { inputFieldClassName } from "@/components/ui/input-field";
+import { ListboxSelect } from "@/components/ui/listbox-select";
 import { ModalPanel } from "@/components/ui/panel";
 import { ScreenState } from "@/components/ui/screen-state";
 import { StatusIndicator, statusGlyphChar, toneTextClassName, type StatusTone } from "@/components/ui/status-indicator";
@@ -143,10 +144,16 @@ export function DayOffRequestControls({ day }: { day: TherapistAttendanceCalenda
       <input name="date" type="hidden" value={day.date} />
       <label className="grid gap-1.5 text-sm font-semibold text-foreground" htmlFor={kindId}>
         {t("therapist.attendance.dayOff.kindLabel")}
-        <select className={inputFieldClassName()} defaultValue="day_off" disabled={requestPending} id={kindId} name="kind">
-          <option value="day_off">{t("therapistRequestKind.day_off")}</option>
-          <option value="special_day_off">{t("therapistRequestKind.special_day_off")}</option>
-        </select>
+        <ListboxSelect
+          defaultValue="day_off"
+          disabled={requestPending}
+          id={kindId}
+          name="kind"
+          options={[
+            { value: "day_off", label: t("therapistRequestKind.day_off") },
+            { value: "special_day_off", label: t("therapistRequestKind.special_day_off") }
+          ]}
+        />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold text-foreground" htmlFor={reasonId}>
         {t("therapist.attendance.dayOff.reasonLabel")}

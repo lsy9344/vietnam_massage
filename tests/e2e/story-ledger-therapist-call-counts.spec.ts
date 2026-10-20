@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 
 // 빠른 예약 카드의 Therapist별 "한 것 +예약"(한 것은 사용중·청소중·방문완료, 예약은 예약 상태)과, 같은 콜 수로 그리는
 // 원장 Therapist 현황 줄(1018 티켓 04, "완료"는 청소중·방문완료). 현황 줄 자체의 대상·정렬·동작은
@@ -190,7 +191,7 @@ test.describe("빠른 예약 카드의 한 것 +예약과 원장 현황 줄의 �
     // 빠른 예약은 원장 옆 패널이다(1018 스펙 D19). ① 조건에서 시각을 고르면 Therapist 줄이 그 시각으로 다시 그려진다.
     const panel = page.getByRole("complementary", { name: "빠른 예약" });
     await expect(panel).toBeVisible();
-    await panel.getByLabel("시간").selectOption("18:00");
+    await pickListboxOptionByValue(panel.getByLabel("시간"), "18:00");
 
     const line = (therapistId: string) => panel.locator(`[data-quick-booking-line="${therapistId}"]`);
     await expect(line(busyId).locator("[data-therapist-call-count]")).toContainText("한 것 2, 예약 1");

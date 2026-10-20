@@ -4,6 +4,7 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 import { checkInTherapist, goToCustomerStep, pickGuest, quickBookingPanel, saveQuickBooking } from "./support/quick-booking";
+import { openListbox, pickListboxOptionByValue } from "./support/listbox-select";
 
 // 콜 원장 흐름 재구성 티켓 04: 원장에서 일행이 머리 줄 아래 붙어 보이고, 일행 전체 입장·전체 취소·1명 추가를 한다.
 // 결제·노쇼는 사람별이다(스펙 D14). 다른 스펙이 쓰지 않는 과거 운영월을 쓰고, 만든 운영월·정책은 afterAll에서 지운다.
@@ -227,9 +228,11 @@ test.describe("콜 원장 흐름 재구성 티켓 04 일행 묶음과 일행 동
     const picker = page.getByRole("group", { name: "LF04 정 대표 일행 3명 입장 객실 고르기" });
     await expect(picker).toBeVisible();
     await expect(picker.locator(`[data-party-entry-room="${jung.ids[0]}"]`)).toHaveCount(0);
-    await picker.locator(`[data-party-entry-room="${jung.ids[1]}"]`).selectOption(roomIds[1]);
-    await expect(picker.locator(`[data-party-entry-room="${jung.ids[2]}"] option[value="${roomIds[1]}"]`)).toHaveCount(0);
-    await picker.locator(`[data-party-entry-room="${jung.ids[2]}"]`).selectOption(roomIds[2]);
+    await pickListboxOptionByValue(picker.locator(`[data-party-entry-room="${jung.ids[1]}"]`), roomIds[1]);
+    // 이미 고른 객실은 다른 손님의 목록에서 빠진다(목록은 열 때만 body에 떠 있다).
+    const thirdRoomListbox = await openListbox(picker.locator(`[data-party-entry-room="${jung.ids[2]}"]`));
+    await expect(thirdRoomListbox.locator(`[data-value="${roomIds[1]}"]`)).toHaveCount(0);
+    await thirdRoomListbox.locator(`[data-value="${roomIds[2]}"]`).click();
     await picker.getByRole("button", { name: "입장", exact: true }).click();
 
     for (const [index, id] of jung.ids.entries()) {

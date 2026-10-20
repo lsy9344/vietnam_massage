@@ -4,6 +4,7 @@ import { useActionState, useEffect, useId, useRef, useState, type ReactNode } fr
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { inputFieldClassName } from "@/components/ui/input-field";
+import { ListboxSelect } from "@/components/ui/listbox-select";
 import { ModalPanel } from "@/components/ui/panel";
 import { requestTherapistCorrectionAction, type TherapistRequestActionState } from "@/app/therapist/attendance/actions";
 import { useT } from "@/lib/i18n/client";
@@ -56,13 +57,14 @@ export function TherapistCorrectionRequestDialog({ dateOptions, trigger }: { dat
             <label className="text-sm font-semibold text-foreground" htmlFor={dateId}>
               {t("therapist.attendance.correction.dateLabel")}
             </label>
-            <select className={inputFieldClassName({ className: "w-full", invalid: Boolean(dateError) })} defaultValue={dateOptions[0]} id={dateId} name="date">
-              {dateOptions.map((date) => (
-                <option key={date} value={date}>
-                  {date}
-                </option>
-              ))}
-            </select>
+            <ListboxSelect
+              className="w-full"
+              defaultValue={dateOptions[0]}
+              id={dateId}
+              invalid={Boolean(dateError)}
+              name="date"
+              options={dateOptions.map((date) => ({ value: date, label: date }))}
+            />
           </div>
         )}
         {dateError ? (

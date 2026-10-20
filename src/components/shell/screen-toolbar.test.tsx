@@ -129,8 +129,9 @@ describe("DateContextControls", () => {
     const html = renderControls("/calls", "2026-10-14");
 
     assert.match(html, /<form[^>]*action="\/calls"[^>]*method="get"/);
-    assert.match(html, /<select[^>]*aria-label="운영월"[^>]*name="operatingMonthId"/);
-    assert.match(html, /<option value="m-2026-10" selected="">2026-10/);
+    assert.match(html, /aria-label="운영월"[^>]*role="combobox"/);
+    assert.match(html, /<input type="hidden" name="operatingMonthId" value="m-2026-10"\/>/);
+    assert.match(html, />2026-10 \(OPEN\)</);
     assert.match(html, /<input[^>]*aria-label="조회날짜"[^>]*name="serviceDate"[^>]*value="2026-10-14"/);
     assert.match(html, /<button[^>]*type="submit"[^>]*>조회<\/button>/);
   });

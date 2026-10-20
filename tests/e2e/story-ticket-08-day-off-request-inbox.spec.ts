@@ -3,6 +3,7 @@ import { testEmployees } from "./support/test-employees";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 
 /**
  * 티켓 08: 휴무 신청과 승인함(스펙 D22, D24, M5, M18, M24).
@@ -28,6 +29,8 @@ const APPROVE_DATE = "2042-08-15";
 const REJECT_DATE = "2042-08-16";
 const CANCEL_DATE = "2042-08-17";
 const SPECIAL_DATE = "2042-08-18";
+/** 목록 키보드 테스트 전용 날짜(다른 테스트와 신청이 겹치지 않게). */
+const KEYBOARD_DATE = "2042-08-19";
 
 let employeeId = "";
 
@@ -270,7 +273,7 @@ test.describe("티켓 08 휴무 신청과 승인함", () => {
     await login(page, ACCOUNT_ID, PASSWORD);
     const dialog = await openDay(page, SPECIAL_DATE);
     await dialog.getByRole("button", { name: "휴무 신청" }).click();
-    await dialog.getByLabel("휴가 종류").selectOption("special_day_off");
+    await pickListboxOptionByValue(dialog.getByLabel("휴가 종류"), "special_day_off");
     await dialog.getByRole("button", { name: "신청 보내기" }).click();
     await expect(dialog.getByRole("button", { name: "신청 취소" })).toBeVisible();
 
@@ -304,6 +307,36 @@ test.describe("티켓 08 휴무 신청과 승인함", () => {
     await page.reload();
     await expect(page.getByRole("note", { name: "Chú thích ký hiệu" })).toContainText("Nghỉ ngày đặc biệt");
     await managerContext.close();
+    await therapistContext.close();
+  });
+
+  // 목록(공용 listbox)이 열려 있는 동안의 키: Escape는 목록만 닫고, Tab은 목록을 닫고 포커스를 다음 칸으로 보낸다.
+  // 목록을 다룰 때 Radix Dialog까지 닫히면(캡처 단계의 Escape) 작성 중인 사유가 사라진다.
+  test("휴가 종류 목록이 열려 있는 동안 Escape는 목록만 닫고 팝업은 닫지 않는다", async ({ browser }) => {
+    const therapistContext = await browser.newContext();
+    const page = await therapistContext.newPage();
+    await login(page, ACCOUNT_ID, PASSWORD);
+
+    const dialog = await openDay(page, KEYBOARD_DATE);
+    await dialog.getByRole("button", { name: "휴무 신청" }).click();
+    await dialog.getByLabel("사유(선택)").fill("작성 중인 사유");
+
+    const kind = dialog.getByLabel("휴가 종류");
+    await kind.click();
+    await expect(page.getByRole("listbox")).toBeVisible();
+    await page.keyboard.press("Escape");
+    // 목록은 닫히고 팝업은 그대로다.
+    await expect(page.getByRole("listbox")).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel("사유(선택)")).toHaveValue("작성 중인 사유");
+
+    // Tab은 목록을 닫고 포커스를 다음 칸으로 보낸다.
+    await kind.click();
+    await expect(page.getByRole("listbox")).toBeVisible();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("listbox")).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+
     await therapistContext.close();
   });
 

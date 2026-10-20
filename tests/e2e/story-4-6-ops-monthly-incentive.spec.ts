@@ -3,6 +3,7 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 import { employeeRow, openEmployeePanel } from "./support/settlement";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 
 
 type SeededData = {
@@ -274,7 +275,7 @@ test.describe("Story 4.6 operations monthly incentive", () => {
   test("settlement manager previews monthly total, threshold, team split, employee distribution, and evidence", async ({ page }) => {
     await login(page, "story46_settlement", "Story46!settlement");
     await page.goto(`/settlements/operations/monthly?operatingMonthId=${seededData.missingPolicyOperatingMonthId}`);
-    await page.getByLabel("운영월").selectOption(seededData.writableOperatingMonthId);
+    await pickListboxOptionByValue(page.getByLabel("운영월"), seededData.writableOperatingMonthId);
     // 직원 이름도 버튼이라("조회 전용" 직원 등) 조회 버튼은 이름이 정확히 같은 것으로 고른다.
     await page.getByRole("button", { name: "조회", exact: true }).click();
 

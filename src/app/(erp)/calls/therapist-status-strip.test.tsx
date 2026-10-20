@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { renderInShell } from "@/components/shell/test-harness";
 import { TherapistStatusStrip } from "@/app/(erp)/calls/therapist-status-strip";
-import { sortTherapistStatusRows, therapistStatusRows } from "@/app/(erp)/calls/therapist-status";
+import { sortTherapistStatusRows, therapistStatusRows, THERAPIST_STATUS_SORTS } from "@/app/(erp)/calls/therapist-status";
 import type { Locale } from "@/lib/i18n/config";
 import type { TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
 
@@ -130,7 +130,9 @@ describe("Therapist 현황 줄 (1018 스펙 D17)", () => {
   it("offers the four sorts with free now first, a filter button per card, and a collapse toggle", () => {
     const html = render("ko", rows);
 
-    assert.match(html, /<option value="available" selected="">지금 가능 순<\/option><option value="finished">완료 적은 순<\/option><option value="reserved">남은 예약 적은 순<\/option><option value="number">번호순<\/option>/);
+    assert.deepEqual(THERAPIST_STATUS_SORTS, ["available", "finished", "reserved", "number"]);
+    assert.match(html, /aria-label="정렬"[^>]*role="combobox"/);
+    assert.match(html, />지금 가능 순</);
     assert.match(card(html, "12"), /aria-label="12 콜만 보기" aria-pressed="false"/);
     assert.match(card(html, "12"), /data-therapist-status-book=""/);
     assert.match(html, /aria-expanded="true"[^>]*>현황 접기</);

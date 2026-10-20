@@ -1,8 +1,9 @@
 "use client";
 
-import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
+import { useId, type InputHTMLAttributes, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { inputFieldClassName } from "@/components/ui/input-field";
+import { ListboxSelect } from "@/components/ui/listbox-select";
 import type { ActionResult } from "@/lib/action-result";
 import { cn } from "@/lib/utils";
 
@@ -93,10 +94,23 @@ export function SelectField({
   state,
   hint,
   className,
-  children,
+  options,
   id,
-  ...selectProps
-}: { label: string; name: string; state: FormState; hint?: ReactNode; children: ReactNode } & Omit<SelectHTMLAttributes<HTMLSelectElement>, "name">) {
+  defaultValue,
+  disabled,
+  required
+}: {
+  label: string;
+  name: string;
+  state: FormState;
+  hint?: ReactNode;
+  className?: string;
+  options: Array<{ value: string; label: string }>;
+  id?: string;
+  defaultValue?: string;
+  disabled?: boolean;
+  required?: boolean;
+}) {
   const autoId = useId();
   const hintId = useId();
   const errorId = useId();
@@ -104,16 +118,17 @@ export function SelectField({
   const errors = fieldErrors(state, name);
   return (
     <FieldFrame errorId={errorId} errors={errors} hint={hint} hintId={hintId} inputId={selectId} label={label}>
-      <select
+      <ListboxSelect
+        ariaDescribedBy={describedBy(hint, hintId, errors, errorId)}
+        className={cn("w-full", className)}
+        defaultValue={defaultValue}
+        disabled={disabled}
         id={selectId}
-        aria-describedby={describedBy(hint, hintId, errors, errorId)}
-        aria-invalid={errors.length > 0 ? true : undefined}
-        className={inputFieldClassName({ invalid: errors.length > 0, className: cn("w-full", className) })}
+        invalid={errors.length > 0}
         name={name}
-        {...selectProps}
-      >
-        {children}
-      </select>
+        options={options}
+        required={required}
+      />
     </FieldFrame>
   );
 }

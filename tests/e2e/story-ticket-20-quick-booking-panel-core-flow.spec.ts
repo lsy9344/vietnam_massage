@@ -239,7 +239,8 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
 
     await panel.getByRole("button", { name: "지금", exact: true }).click();
     await expect(panel.getByLabel("조회날짜")).toHaveValue(today);
-    await expect(panel.locator("#quick-booking-time")).not.toHaveValue("");
+    // 시간 칸은 공용 listbox(role=combobox)라 값 대신 고른 시각 글자를 보여 준다.
+    await expect(panel.locator("#quick-booking-time")).not.toContainText("검색 결과 없음");
   });
 
   test("태블릿 폭(768px): 같은 흐름으로 예약을 만들 수 있다", async ({ page }) => {

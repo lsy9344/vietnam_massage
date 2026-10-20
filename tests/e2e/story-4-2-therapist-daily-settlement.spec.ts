@@ -244,7 +244,7 @@ test.describe("Story 4.2 therapist daily settlement", () => {
     }
 
     await expect(page.getByRole("heading", { name: "마사지사 일일정산" })).toBeVisible({ timeout: 45000 });
-    await expect(page.getByLabel("운영월")).toHaveValue(seededData.operatingMonthId);
+    await expect(page.locator('input[name="operatingMonthId"]')).toHaveValue(seededData.operatingMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2034-02-12");
     // 직원 비교 표: 담당 콜 수와 당일정산. 수당 정책이 없는 마사지사3은 0원이 아니라 근거 없음이다(티켓 05).
     const therapist1Summary = employeeRow(page, "E2E42 마사지사1");

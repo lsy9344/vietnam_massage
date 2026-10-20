@@ -1,4 +1,5 @@
 import { testEmployees } from "./support/test-employees";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -158,7 +159,7 @@ test.describe("1018 티켓 06: 미지명 자리와 근무표 출근 예정 시�
     const startTime = dayForm.getByLabel(`T1806 늦게의 ${DATE_PLANNED} 출근 예정 시각`);
     // 근무 예정이 아니면 시각을 적을 수 없다.
     await expect(startTime).toBeDisabled();
-    await dayForm.getByRole("combobox").selectOption("근무 예정");
+    await pickListboxOptionByValue(dayForm.getByRole("combobox"), "근무 예정");
     await startTime.fill("13:00");
     await dayForm.getByRole("button", { name: "저장" }).click();
     await expect(dayForm).toContainText("저장됨");

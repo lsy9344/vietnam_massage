@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { inputFieldClassName } from "@/components/ui/input-field";
+import { ListboxSelect } from "@/components/ui/listbox-select";
 import { StatusIndicator, type StatusTone } from "@/components/ui/status-indicator";
 import { useLocale, useT } from "@/lib/i18n/client";
 import { formatNumber } from "@/lib/i18n/format";
@@ -116,19 +116,15 @@ export function TherapistStatusStrip({
         {collapsed ? null : (
           <label className="inline-flex items-center gap-2 text-xs font-semibold text-muted">
             {t("calls.therapistStatus.sort.label")}
-            <select
-              className={inputFieldClassName({ className: "font-normal" })}
-              onChange={(event) => {
-                if (isTherapistStatusSort(event.target.value)) setSort(event.target.value);
+            <ListboxSelect
+              ariaLabel={t("calls.therapistStatus.sort.label")}
+              className="font-normal"
+              onChange={(next) => {
+                if (isTherapistStatusSort(next)) setSort(next);
               }}
+              options={THERAPIST_STATUS_SORTS.map((option) => ({ label: t(sortLabelKeys[option]), value: option }))}
               value={sort}
-            >
-              {THERAPIST_STATUS_SORTS.map((option) => (
-                <option key={option} value={option}>
-                  {t(sortLabelKeys[option])}
-                </option>
-              ))}
-            </select>
+            />
           </label>
         )}
       </div>

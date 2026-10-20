@@ -71,9 +71,9 @@ describe("schedule view", () => {
 
     assert.match(html, /Mai \(THR-001\)/);
     assert.match(html, /근무 예정은 특정 시각까지/);
-    // 요일 7개의 select가 모두 그려졌는지(옵션 3개 x 7)
-    const options = html.match(/<option/g)?.length ?? 0;
-    assert.equal(options, 21);
+    // 요일 7개의 선택 칸이 모두 그려졌는지(선택 칸마다 combobox 하나)
+    const combos = html.match(/role="combobox"/g)?.length ?? 0;
+    assert.equal(combos, 7);
   });
 
   // 1018 스펙 D28: 근무 예정 칸에는 출근 예정 시각을 적을 수 있고, 표에도 그 시각이 보인다.

@@ -4,6 +4,7 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login, setLocaleCookie } from "./support/auth";
 import { restoreUserAccount } from "./support/cleanup";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 
 /**
  * 티켓 27: 근무표 기본(F04). 근무표 서비스 테스트(메모리 Prisma)는 schedule-service.test.ts가 확인했으므로,
@@ -106,7 +107,7 @@ test.describe("티켓 27 근무표", () => {
     await expect(panel.getByRole("heading", { name: /E2E-T27-THR/ })).toBeVisible();
 
     const dayForm = panel.locator("form").filter({ hasText: targetDate.slice(5) });
-    await dayForm.getByRole("combobox").selectOption("근무 예정");
+    await pickListboxOptionByValue(dayForm.getByRole("combobox"), "근무 예정");
     await dayForm.getByRole("button", { name: "저장" }).click();
     await expect(dayForm.getByText("저장됨")).toBeVisible();
 
@@ -137,7 +138,7 @@ test.describe("티켓 27 근무표", () => {
     await row.getByRole("button", { name: /T27 Therapist/ }).click();
     const panel = page.getByRole("complementary");
     const dayForm = panel.locator("form").filter({ hasText: targetDate.slice(5) });
-    await dayForm.getByRole("combobox").selectOption("휴무");
+    await pickListboxOptionByValue(dayForm.getByRole("combobox"), "휴무");
     await dayForm.getByRole("button", { name: "저장" }).click();
     await expect(dayForm.getByText("저장됨")).toBeVisible();
     await expect(row.getByText("휴무")).toBeVisible();
@@ -174,7 +175,7 @@ test.describe("티켓 27 근무표", () => {
     // (다른 역할이 이 편집 서버 액션을 직접 호출한 상황과 같은 서버 재검사를 확인한다).
     await (prisma as any).userAccount.update({ where: { accountId: settlementManager.accountId }, data: { role: "counter" } });
     try {
-      await dayForm.getByRole("combobox").selectOption("근무 예정");
+      await pickListboxOptionByValue(dayForm.getByRole("combobox"), "근무 예정");
       await dayForm.getByRole("button", { name: "저장" }).click();
       await expect(dayForm.getByText("권한이 없습니다.")).toBeVisible();
       expect(await cellStatus()).toBe(beforeStatus);

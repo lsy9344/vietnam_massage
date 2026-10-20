@@ -71,33 +71,36 @@ function ProfileFields({ employee, state }: { employee?: EmployeeDto; state: Emp
   const t = useT();
   return (
     <>
-      <SelectField defaultValue={employee?.employeeGroup} label={t("masters.employees.field.group")} name="employeeGroup" required state={state}>
-        {employeeGroups.map((group) => (
-          <option key={group} value={group}>
-            {t(groupLabelKeys[group])}
-          </option>
-        ))}
-      </SelectField>
+      <SelectField
+        defaultValue={employee?.employeeGroup}
+        label={t("masters.employees.field.group")}
+        name="employeeGroup"
+        options={employeeGroups.map((group) => ({ label: t(groupLabelKeys[group]), value: group }))}
+        required
+        state={state}
+      />
       <TextField defaultValue={employee?.position} label={t("masters.employees.field.position")} name="position" required state={state} />
-      <SelectField defaultValue={employee?.shiftType ?? ""} label={t("masters.employees.field.shiftType")} name="shiftType" state={state}>
-        <option value="">{t("masters.employees.field.notEntered")}</option>
-        {shiftTypes.map((shiftType) => (
-          <option key={shiftType} value={shiftType}>
-            {t(shiftLabelKeys[shiftType])}
-          </option>
-        ))}
-      </SelectField>
+      <SelectField
+        defaultValue={employee?.shiftType ?? ""}
+        label={t("masters.employees.field.shiftType")}
+        name="shiftType"
+        options={[
+          { label: t("masters.employees.field.notEntered"), value: "" },
+          ...shiftTypes.map((shiftType) => ({ label: t(shiftLabelKeys[shiftType]), value: shiftType }))
+        ]}
+        state={state}
+      />
       <TextField defaultValue={employee?.baseSalary} label={t("masters.employees.field.baseSalary")} min={0} name="baseSalary" required state={state} type="number" />
       <TextField defaultValue={employee?.phone ?? ""} label={t("masters.employees.field.phone")} name="phone" state={state} />
       <TextField defaultValue={employee?.birthday ?? ""} label={t("masters.employees.field.birthday")} name="birthday" state={state} type="date" />
       <TextField defaultValue={employee?.hireDate ?? ""} label={t("masters.employees.field.hireDate")} name="hireDate" state={state} type="date" />
-      <SelectField defaultValue={employee?.employmentStatus} label={t("masters.employees.field.employmentStatus")} name="employmentStatus" state={state}>
-        {employmentStatuses.map((status) => (
-          <option key={status} value={status}>
-            {t(employmentLabelKeys[status])}
-          </option>
-        ))}
-      </SelectField>
+      <SelectField
+        defaultValue={employee?.employmentStatus}
+        label={t("masters.employees.field.employmentStatus")}
+        name="employmentStatus"
+        options={employmentStatuses.map((status) => ({ label: t(employmentLabelKeys[status]), value: status }))}
+        state={state}
+      />
     </>
   );
 }
@@ -176,13 +179,14 @@ function AccountLinkForm({ employee }: { employee: EmployeeDto }) {
       <div className="grid gap-4 min-[1200px]:grid-cols-2">
         <TextField defaultValue={employee.account?.accountId ?? ""} label={t("masters.employees.field.accountId")} name="accountId" state={state} />
         <TextField defaultValue={employee.account?.email ?? ""} label={t("masters.employees.field.email")} name="email" state={state} type="email" />
-        <SelectField defaultValue={employee.account?.role ?? "counter"} hint={t("masters.employees.role.tvHint")} label={t("masters.employees.field.role")} name="role" state={state}>
-          {accountRoles.map((role) => (
-            <option key={role} value={role}>
-              {t(roleLabelKeys[role])}
-            </option>
-          ))}
-        </SelectField>
+        <SelectField
+          defaultValue={employee.account?.role ?? "counter"}
+          hint={t("masters.employees.role.tvHint")}
+          label={t("masters.employees.field.role")}
+          name="role"
+          options={accountRoles.map((role) => ({ label: t(roleLabelKeys[role]), value: role }))}
+          state={state}
+        />
         <TextField hint={t("masters.employees.initialSecretHint")} label={t("masters.employees.field.initialSecret")} name="initialSecret" state={state} type="password" />
       </div>
       <SaveRow label={t("masters.employees.linkAccount")} pending={pending} savedMessage={t("masters.employees.savedNotice")} state={state} />

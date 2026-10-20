@@ -4,6 +4,7 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 import { expectTherapistCenterPopup } from "./support/therapist-popup";
+import { pickListboxOption } from "./support/listbox-select";
 
 /**
  * 티켓 10: Therapist 공지 — 대상, 읽음, 내리기(스펙 D25, M4, M5, M18).
@@ -81,7 +82,7 @@ test.describe("티켓 10 Therapist 공지", () => {
 
     await adminPage.getByLabel("본문").fill(noticeBody);
     await adminPage.getByLabel("특정 Therapist 한 명").check();
-    await adminPage.getByLabel("대상 Therapist").selectOption({ label: `${THERAPIST_A.staffCode} · ${THERAPIST_A.displayName}` });
+    await pickListboxOption(adminPage.getByLabel("대상 Therapist"), `${THERAPIST_A.staffCode} · ${THERAPIST_A.displayName}`);
     await adminPage.getByRole("button", { name: "보내기" }).click();
     await expect(adminPage.getByText("보냈습니다.")).toBeVisible();
 
@@ -163,7 +164,7 @@ test.describe("티켓 10 Therapist 공지", () => {
 
       await adminPage.getByLabel("본문").fill("거절 확인용 공지(저장되면 안 됨)");
       await adminPage.getByLabel("특정 Therapist 한 명").check();
-      await adminPage.getByLabel("대상 Therapist").selectOption({ label: `${THERAPIST_B.staffCode} · ${THERAPIST_B.displayName}` });
+      await pickListboxOption(adminPage.getByLabel("대상 Therapist"), `${THERAPIST_B.staffCode} · ${THERAPIST_B.displayName}`);
 
       const actionRequest = adminPage.waitForRequest((request) => request.method() === "POST" && Boolean(request.headers()["next-action"]));
       await adminPage.getByRole("button", { name: "보내기" }).click();

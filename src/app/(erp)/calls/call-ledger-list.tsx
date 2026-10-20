@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { inputFieldClassName } from "@/components/ui/input-field";
+import { ListboxSelect } from "@/components/ui/listbox-select";
 import { ScreenState } from "@/components/ui/screen-state";
 import { SaveStatus } from "@/components/ui/save-status";
 import { CallStatusChip, callStatusKeyOf } from "@/components/domain/call-status-chip";
@@ -809,7 +810,8 @@ function CallPartyHead({
   const canCancel = Boolean(statusCodeFor(options.statuses, "canceled"));
 
   useEffect(() => {
-    if (picking) pickerRef.current?.querySelector<HTMLElement>("select")?.focus();
+    // 객실 칸은 네이티브 select가 아니라 공용 listbox(role=combobox) 버튼이다.
+    if (picking) pickerRef.current?.querySelector<HTMLElement>('[role="combobox"]')?.focus();
   }, [picking]);
 
   function enterAll() {
@@ -918,26 +920,26 @@ function CallPartyHead({
                 return (
                   <label className="grid gap-1 text-xs font-semibold text-muted" key={target.callId}>
                     {t("calls.party.guestRoom", { position: positionOf(target.callId) })}
-                    <select
-                      className={inputFieldClassName({ className: "w-40" })}
-                      data-party-entry-room={target.callId}
-                      onChange={(event) =>
+                    <ListboxSelect
+                      className="w-40"
+                      onChange={(nextValue) =>
                         setRooms((current) => {
                           const next = { ...current };
-                          if (event.target.value) next[target.callId] = event.target.value;
+                          if (nextValue) next[target.callId] = nextValue;
                           else delete next[target.callId];
                           return next;
                         })
                       }
+                      options={[
+                        {
+                          label: choices.length === 0 ? t("calls.list.noFreeRoom") : t("calls.party.roomPlaceholder"),
+                          value: ""
+                        },
+                        ...choices.map((room) => ({ label: room.label, value: room.value }))
+                      ]}
+                      triggerProps={{ "data-party-entry-room": target.callId }}
                       value={rooms[target.callId] ?? ""}
-                    >
-                      <option value="">{choices.length === 0 ? t("calls.list.noFreeRoom") : t("calls.party.roomPlaceholder")}</option>
-                      {choices.map((room) => (
-                        <option key={room.value} value={room.value}>
-                          {room.label}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </label>
                 );
               })}

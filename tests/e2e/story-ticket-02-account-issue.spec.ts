@@ -4,6 +4,7 @@ import { prisma } from "./support/db";
 import { testEmployees } from "./support/test-employees";
 import { argon2idOptions, login } from "./support/auth";
 import { openMasterPanelByRowText } from "./support/masters";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 
 /**
  * 티켓 02: Therapist 계정 발급·초기화·정지와 첫 비밀번호 변경.
@@ -134,7 +135,7 @@ test.describe("티켓 02 Therapist 계정 발급·초기화·정지", () => {
       await login(page, ADMIN_ACCOUNT_ID, ADMIN_PASSWORD);
       await page.goto("/masters/employees");
       const panel = await openMasterPanelByRowText(page, RETIRE_STAFF_CODE);
-      await panel.getByLabel("재직상태").selectOption("퇴사");
+      await pickListboxOptionByValue(panel.getByLabel("재직상태"), "퇴사");
       await panel.getByRole("button", { name: "프로필 저장" }).click();
       await expect(panel.getByText("저장되었습니다.")).toBeVisible();
 

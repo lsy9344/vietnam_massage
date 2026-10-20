@@ -3,6 +3,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login, setLocaleCookie } from "./support/auth";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 
 
 type SeededData = {
@@ -525,7 +526,7 @@ test.describe("Story 6.2 monthly dashboard", () => {
     await login(page, account.accountId, account.password);
     await page.goto(`/dashboard/monthly?operatingMonthId=${seededData.months.closed}`);
 
-    await page.getByLabel("운영월").selectOption(seededData.months.draft);
+    await pickListboxOptionByValue(page.getByLabel("운영월"), seededData.months.draft);
     await page.getByRole("button", { name: "조회" }).click();
 
     await expect(page).toHaveURL(new RegExp(`/dashboard/monthly\\?operatingMonthId=${seededData.months.draft}`));

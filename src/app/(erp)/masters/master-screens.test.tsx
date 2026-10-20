@@ -157,7 +157,7 @@ describe("직원", () => {
     const html = render(<EmployeeManager employees={[employee]} initialItem="emp-1" />, "vi");
     assert.ok(rowOf(html, "Mai").includes(t("vi", "masters.employees.shift.day")));
     assert.ok(rowOf(html, "Mai").includes(t("vi", "masters.employees.employment.employed")));
-    assert.ok(html.includes('<option value="주간" selected="">'));
+    assert.ok(html.includes('<input type="hidden" name="shiftType" value="주간"/>'));
   });
 
   it("직원을 비활성으로 바꿔도 연결 계정은 막히지 않는다는 영향을 보인다", () => {

@@ -191,6 +191,13 @@ UI를 만들거나 고치기 전에 이 문서를 읽는다. 화면에 새 모�
 - 읽기 전용·비활성: `bg-readonly text-muted`.
 - 안내 문구는 `::placeholder`가 `--faint`로 그린다. 라벨을 안내 문구로 대신하지 않는다.
 - 표 안 편집 칸은 `h-8 rounded-sm`까지 줄일 수 있다.
+- **선택 칸(`src/components/ui/listbox-select.tsx`, 2026-10-20).** 네이티브 `<select>`를 쓰지 않는다. 네이티브 select의 목록은 브라우저(OS) 팝업이라 페이지 CSS가 위치를 관할하지 않아, 뷰어·임베드 웹뷰·확대율 환경마다 그 팝업이 엉뚱한 자리에 그려졌다(모달의 왼쪽 최상단 등). 목록을 body에 portal로 그리면 위치는 CSS가 정하므로 어디서 봐도 같다.
+  - 트리거는 입력칸 모양의 `role="combobox"` 버튼이다. 도구줄의 캡슐 모양은 `variant="capsule"`(`.screen-field`와 같은 모양)이다. 오른쪽 끝에 `▾`를 둔다.
+  - 목록은 6.12 팝오버 모양(`--surface-float`, `--border`, 18px, `--shadow-float`, 안쪽 여백 6px)이고 항목은 `rounded-sm` 44px다. 지금 고른 항목은 `--readonly` 바탕 + 왼쪽 3px 검정 막대, 묶음은 `text-xs font-semibold text-muted` 머리말로 쓴다.
+  - 목록은 기준 칸 아래에 뜨고 자리가 모자라면 위로 뒤집는다(높이는 보이는 만큼, 최대 240px). 기준 칸이 모달·패널 안에 있어도 잘리지 않게 항상 body에 그린다.
+  - 키보드: Enter·Space·↓·↑로 열고, ↑↓·Home·End로 옮기고, Enter·Space로 고르고, Esc로 닫는다. 포커스는 트리거에 남는다(모달의 포커스 가두기와 겹치지 않게).
+  - 폼에 넘길 값은 숨은 input으로 보낸다(`name`). 값이 비어 있으면 폼을 보내지 않는다(네이티브 `required` 자리).
+  - 원장 줄 안의 `▾` 칸(`LedgerCellPicker`)도 같은 목록 모양을 쓰되, 칸 높이는 `h-8`이고 항목에 부가 정보가 있다.
 
 ### 6.5 검색 캡슐
 

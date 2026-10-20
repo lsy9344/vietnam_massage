@@ -5,6 +5,7 @@ import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 import { openEmployeePanel } from "./support/settlement";
 import { checkInTherapist, fillBooking, goToCustomerStep, openQuickBooking, pickGuest, saveQuickBooking } from "./support/quick-booking";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 
 /**
  * 티켓 36: 전체 흐름 교차 검증. 각 티켓이 이미 확인한 검사(09–35의 `## Comments`)는 되풀이하지 않고,
@@ -207,7 +208,7 @@ test.describe("티켓 36 전체 흐름 교차 검증", () => {
     await page.goto(`/calls?operatingMonthId=${month.id}&serviceDate=${serviceDate}`);
     const bookingPanel = await openQuickBooking(page);
     // "시간" select는 <option> 텍스트가 겹쳐 helper의 getByLabel(exact)이 못 찾는다(아래 보고 참고). 느슨한 매칭으로 고른다.
-    await bookingPanel.getByLabel("시간").selectOption("15:00");
+    await pickListboxOptionByValue(bookingPanel.getByLabel("시간"), "15:00");
     await pickGuest(page, bookingPanel, { therapistId: therapist.id, courseId: course.id });
     await goToCustomerStep(bookingPanel);
 

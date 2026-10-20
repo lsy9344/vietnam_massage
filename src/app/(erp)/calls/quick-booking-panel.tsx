@@ -5,6 +5,7 @@ import { unstable_rethrow, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { inputFieldClassName } from "@/components/ui/input-field";
+import { ListboxSelect } from "@/components/ui/listbox-select";
 import { SidePanel } from "@/components/ui/panel";
 import { ScreenState } from "@/components/ui/screen-state";
 import { StatusIndicator } from "@/components/ui/status-indicator";
@@ -480,38 +481,33 @@ export function ConditionsStep({
           />
         </Field>
         <Field error={fieldErrors.startTime?.[0] ?? null} label={t("calls.column.time")}>
-          <select
-            className={inputFieldClassName({ invalid: Boolean(fieldErrors.startTime?.[0]) })}
+          <ListboxSelect
             disabled={disabled}
             id="quick-booking-time"
-            onChange={(event) => onScheduleChange(draft.serviceDate, event.target.value)}
+            invalid={Boolean(fieldErrors.startTime?.[0])}
+            onChange={(next) => onScheduleChange(draft.serviceDate, next)}
+            options={[
+              { label: t("calls.placeholder.searchEmpty"), value: "" },
+              ...options.timeSlots.map((slot) => ({ label: slot.label, value: slot.value }))
+            ]}
             value={draft.startTime}
-          >
-            <option value="">{t("calls.placeholder.searchEmpty")}</option>
-            {options.timeSlots.map((slot) => (
-              <option key={slot.value} value={slot.value}>
-                {slot.label}
-              </option>
-            ))}
-          </select>
+          />
         </Field>
         <Button disabled={disabled} onClick={onNow} type="button" variant="secondary">
           {t("calls.quickBooking.schedule.now")}
         </Button>
         {joining ? null : (
           <Field label={t("calls.quickBooking.customer.partySize")}>
-            <select
-              className={inputFieldClassName({ className: "w-24" })}
+            <ListboxSelect
+              className="w-24"
               disabled={disabled}
-              onChange={(event) => onPartySizeChange(Number(event.target.value))}
-              value={partySize}
-            >
-              {Array.from({ length: QUICK_BOOKING_PARTY_MAX_GUESTS }, (_, index) => index + 1).map((count) => (
-                <option key={count} value={count}>
-                  {t("calls.quickBooking.customer.partySizeOption", { count })}
-                </option>
-              ))}
-            </select>
+              onChange={(next) => onPartySizeChange(Number(next))}
+              options={Array.from({ length: QUICK_BOOKING_PARTY_MAX_GUESTS }, (_, index) => index + 1).map((count) => ({
+                label: t("calls.quickBooking.customer.partySizeOption", { count }),
+                value: String(count)
+              }))}
+              value={String(partySize)}
+            />
           </Field>
         )}
       </div>
@@ -599,11 +595,12 @@ export function ConditionsStep({
                 {needsSecond ? (
                   <label className="flex flex-wrap items-center gap-2 text-sm text-foreground">
                     {t("calls.quickBooking.therapist.secondTitle")}
-                    <select
-                      className={inputFieldClassName({ className: "min-w-40", invalid: !guest.therapist2Id })}
+                    <ListboxSelect
+                      className="min-w-40"
                       disabled={disabled}
-                      onChange={(event) => {
-                        const therapistId = event.target.value || null;
+                      invalid={!guest.therapist2Id}
+                      onChange={(next) => {
+                        const therapistId = next || null;
                         const candidate = secondCandidates.find((row) => row.therapistId === therapistId);
                         const verdict = candidate?.courses.find((course) => course.courseId === guest.courseId)?.verdict ?? "possible";
                         if (!candidate || verdict === "possible") {
@@ -612,18 +609,18 @@ export function ConditionsStep({
                         }
                         setPendingPick({ kind: "second", index, therapistId: candidate.therapistId, therapistName: candidate.therapistName, verdict });
                       }}
+                      options={[
+                        { label: t("calls.quickBooking.therapist.secondUnset"), value: "" },
+                        ...secondCandidates.map((row) => {
+                          const verdict = row.courses.find((course) => course.courseId === guest.courseId)?.verdict ?? "possible";
+                          return {
+                            label: verdict === "possible" ? row.therapistName : `${row.therapistName} · ${t("calls.quickBooking.secondImpossible")}`,
+                            value: row.therapistId
+                          };
+                        })
+                      ]}
                       value={guest.therapist2Id ?? ""}
-                    >
-                      <option value="">{t("calls.quickBooking.therapist.secondUnset")}</option>
-                      {secondCandidates.map((row) => {
-                        const verdict = row.courses.find((course) => course.courseId === guest.courseId)?.verdict ?? "possible";
-                        return (
-                          <option key={row.therapistId} value={row.therapistId}>
-                            {verdict === "possible" ? row.therapistName : `${row.therapistName} · ${t("calls.quickBooking.secondImpossible")}`}
-                          </option>
-                        );
-                      })}
-                    </select>
+                    />
                   </label>
                 ) : null}
                 {error ? (

@@ -23,14 +23,15 @@ describe("expense method control", () => {
     const html = render("ko", <ExpenseMethodControl disabled={false} error="수단은 현금 또는 계좌입니다." />);
 
     assert.match(html, />수단</);
-    assert.match(html, /<option value="cash" selected="">현금<\/option>/);
-    assert.match(html, /<option value="bank">계좌<\/option>/);
+    assert.match(html, />현금</);
+    assert.match(html, /<input type="hidden" name="method" value="cash"\/>/);
     assert.match(html, /class="h-11 /);
     assert.match(html, /role="alert">수단은 현금 또는 계좌입니다.</);
 
     const vietnamese = render("vi", <ExpenseMethodControl defaultMethod="bank" disabled={false} error={null} />);
     assert.match(vietnamese, />Hình thức</);
-    assert.match(vietnamese, /<option value="bank" selected="">Chuyển khoản<\/option>/);
+    assert.match(vietnamese, />Chuyển khoản</);
+    assert.match(vietnamese, /<input type="hidden" name="method" value="bank"\/>/);
   });
 
   it("waits on the save control while the expense is saving", () => {

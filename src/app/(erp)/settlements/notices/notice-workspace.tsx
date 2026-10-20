@@ -4,6 +4,7 @@ import { useActionState, useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DateCapsule } from "@/components/ui/date-capsule";
 import { inputFieldClassName } from "@/components/ui/input-field";
+import { ListboxSelect } from "@/components/ui/listbox-select";
 import { ScreenState } from "@/components/ui/screen-state";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { useT } from "@/lib/i18n/client";
@@ -83,24 +84,21 @@ function SendNoticeForm({ targetOptions }: { targetOptions: TherapistNoticeTarge
       {targetType === "특정" ? (
         <label className="grid max-w-sm gap-1.5 text-sm font-semibold text-foreground" htmlFor={targetEmployeeFieldId}>
           {t("settlements.notices.form.targetEmployeeLabel")}
-          <select
-            aria-describedby={targetFieldError ? targetErrorId : undefined}
-            aria-invalid={targetFieldError ? "true" : undefined}
-            className={inputFieldClassName({ invalid: Boolean(targetFieldError) })}
+          <ListboxSelect
+            ariaDescribedBy={targetFieldError ? targetErrorId : undefined}
             defaultValue=""
             disabled={pending}
             id={targetEmployeeFieldId}
+            invalid={Boolean(targetFieldError)}
             name="targetEmployeeId"
-          >
-            <option disabled value="">
-              {t("settlements.notices.form.targetEmployeePlaceholder")}
-            </option>
-            {targetOptions.map((option) => (
-              <option key={option.employeeId} value={option.employeeId}>
-                {option.staffCode} · {option.displayName}
-              </option>
-            ))}
-          </select>
+            options={[
+              { disabled: true, label: t("settlements.notices.form.targetEmployeePlaceholder"), value: "" },
+              ...targetOptions.map((option) => ({
+                label: `${option.staffCode} · ${option.displayName}`,
+                value: option.employeeId
+              }))
+            ]}
+          />
           {targetFieldError ? (
             <span className="text-sm text-danger" id={targetErrorId} role="alert">
               {targetFieldError}

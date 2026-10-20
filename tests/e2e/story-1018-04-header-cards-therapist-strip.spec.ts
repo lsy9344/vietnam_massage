@@ -4,6 +4,7 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 import { quickBookingLine, quickBookingPanel } from "./support/quick-booking";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 
 // 1018 티켓 04: 원장 머리의 상태 카드 7개, Therapist 현황 줄(대상·숫자·정렬·빠른 예약·걸러 보기·접기 기억·미지명),
 // 하루 수납 화면에는 누구에게도 이번 달 숫자가 없다. 지금 상태(지금 가능/사용 중)의 시각 계산은 단위 테스트가 보고, 여기서는
@@ -202,7 +203,7 @@ test.describe("1018 티켓 04: 상태 카드와 Therapist 현황 줄, 하루 수
     await openLedger(page);
 
     // 기본은 지금 가능 순이다. 먼 뒤 날짜라 출근한 1·2는 첫 시각 기준이고, 출근 전(3)·퇴근(5)이 뒤에 온다.
-    await expect(strip(page).getByLabel("정렬")).toHaveValue("available");
+    await expect(strip(page).getByLabel("정렬")).toContainText("지금 가능 순");
     expect(await stripOrder(page)).toEqual([therapists.two, therapists.one, therapists.three, therapists.five]);
     await expect(card(page, therapists.four)).toHaveCount(0);
 
@@ -215,9 +216,9 @@ test.describe("1018 티켓 04: 상태 카드와 Therapist 현황 줄, 하루 수
     await expect(strip(page).locator("li").last()).toHaveText("미지명 1");
     await expect(strip(page)).not.toContainText(/객실|청소/);
 
-    await strip(page).getByLabel("정렬").selectOption("number");
+    await pickListboxOptionByValue(strip(page).getByLabel("정렬"), "number");
     expect(await stripOrder(page)).toEqual([therapists.one, therapists.two, therapists.three, therapists.five]);
-    await strip(page).getByLabel("정렬").selectOption("finished");
+    await pickListboxOptionByValue(strip(page).getByLabel("정렬"), "finished");
     expect(await stripOrder(page)).toEqual([therapists.two, therapists.three, therapists.five, therapists.one]);
   });
 

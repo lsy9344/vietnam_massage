@@ -289,7 +289,7 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
     await expect(page.getByRole("button", { name: "빠른 예약" })).toBeEnabled();
     // 티켓 03: 콜이 없으면 표 자체가 숨고(빈 상태 문구만 보인다) 콜이 생겨야 머리글이 뜬다 —
     // "코스" 머리 확인은 빠른 예약으로 콜을 만든 뒤로 옮긴다.
-    await expect(page.getByLabel("운영월")).toHaveValue(seededData.openMonthId);
+    await expect(page.locator('input[name="operatingMonthId"]')).toHaveValue(seededData.openMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2032-01-05");
 
     // 티켓 03: 새 콜은 표 아래 "새 콜 행 추가"가 아니라 빠른 예약으로만 만든다. 1018 티켓 05: 5단계 모달 대신

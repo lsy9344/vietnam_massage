@@ -4,7 +4,7 @@ import { useActionState, useEffect, useId } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { DetailRow } from "@/components/ui/detail-row";
-import { inputFieldClassName } from "@/components/ui/input-field";
+import { ListboxSelect } from "@/components/ui/listbox-select";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { useLocale, useT } from "@/lib/i18n/client";
 import { codeLabel } from "@/lib/i18n/codes";
@@ -68,21 +68,18 @@ export function OpsAttendanceForm({
       <input name="employeeId" type="hidden" value={row.employeeId} />
       <label className="grid gap-1.5">
         <span className="text-sm font-semibold text-foreground">{t("settlements.ops.column.workStatus")}</span>
-        <select
-          aria-describedby={statusError ? statusErrorId : undefined}
-          aria-invalid={statusError ? "true" : undefined}
-          aria-label={t("settlements.ops.attendance.workStatusAria", { name: row.displayName })}
-          className={inputFieldClassName({ invalid: Boolean(statusError) })}
+        <ListboxSelect
+          ariaDescribedBy={statusError ? statusErrorId : undefined}
+          ariaLabel={t("settlements.ops.attendance.workStatusAria", { name: row.displayName })}
           defaultValue={row.statusCode}
           disabled={disabled || pending}
+          invalid={Boolean(statusError)}
           name="statusCode"
-        >
-          {statusOptions.map((option) => (
-            <option key={option.code} value={option.code}>
-              {attendanceLabel(locale, option.code, option.displayName)}
-            </option>
-          ))}
-        </select>
+          options={statusOptions.map((option) => ({
+            label: attendanceLabel(locale, option.code, option.displayName),
+            value: option.code
+          }))}
+        />
         {statusError ? (
           <span className="text-sm text-danger" id={statusErrorId} role="alert">
             {statusError}

@@ -3,6 +3,7 @@
 import { useActionState, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { inputFieldClassName } from "@/components/ui/input-field";
+import { ListboxSelect } from "@/components/ui/listbox-select";
 import { ModalPanel } from "@/components/ui/panel";
 import { useLocale, useT } from "@/lib/i18n/client";
 import { formatNumber } from "@/lib/i18n/format";
@@ -50,16 +51,17 @@ export function ExpenseMethodControl({
   return (
     <label className="grid gap-1.5">
       <span className={labelHidden ? "sr-only" : "text-sm font-semibold text-foreground"}>{t("calls.expense.field.method")}</span>
-      <select
-        aria-label={t("calls.expense.field.method")}
-        className={inputFieldClassName({ className: "min-w-28" })}
+      <ListboxSelect
+        ariaLabel={t("calls.expense.field.method")}
+        className="min-w-28"
         defaultValue={defaultMethod}
         disabled={disabled}
         name="method"
-      >
-        <option value="cash">{t("calls.expense.method.cash")}</option>
-        <option value="bank">{t("calls.expense.method.bank")}</option>
-      </select>
+        options={[
+          { label: t("calls.expense.method.cash"), value: "cash" },
+          { label: t("calls.expense.method.bank"), value: "bank" }
+        ]}
+      />
       {error ? (
         <span className="text-xs text-danger" role="alert">
           {error}
@@ -106,21 +108,18 @@ function HandlerSelect({
 }) {
   const t = useT();
   return (
-    <select
-      aria-label={label}
-      className={inputFieldClassName({ className })}
+    <ListboxSelect
+      ariaLabel={label}
+      className={className}
       defaultValue={defaultValue ?? ""}
       disabled={disabled}
       name={name}
+      options={[
+        { label: t("calls.expense.field.handlerPlaceholder"), value: "" },
+        ...handlers.map((handler) => ({ label: handler.label, value: handler.value }))
+      ]}
       required
-    >
-      <option value="">{t("calls.expense.field.handlerPlaceholder")}</option>
-      {handlers.map((handler) => (
-        <option key={handler.value} value={handler.value}>
-          {handler.label}
-        </option>
-      ))}
-    </select>
+    />
   );
 }
 

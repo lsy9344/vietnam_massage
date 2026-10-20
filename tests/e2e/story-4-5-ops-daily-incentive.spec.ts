@@ -3,6 +3,7 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 import { employeeRow, openEmployeePanel } from "./support/settlement";
+import { openListbox, pickListboxOptionByValue } from "./support/listbox-select";
 
 const summaryLabel = "운영팀 일일 인센 요약";
 
@@ -317,7 +318,7 @@ test.describe("Story 4.5 operations daily incentive", () => {
     await page.goto(`/settlements/operations?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2035-05-12`);
 
     await expect(page.getByRole("heading", { name: "운영팀 근무/일일인센" })).toBeVisible();
-    await expect(page.getByLabel("운영월")).toHaveValue(seededData.writableOperatingMonthId);
+    await expect(page.locator('input[name="operatingMonthId"]')).toHaveValue(seededData.writableOperatingMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2035-05-12");
     // 같은 문구가 요약 카드와 직원 패널 양쪽에 나오므로 요약 카드 목록으로 좁힌다.
     const summary = page.getByLabel(summaryLabel);
@@ -332,7 +333,9 @@ test.describe("Story 4.5 operations daily incentive", () => {
     await expect(employeeRow(page, "E2E45 카운터2")).toContainText("제외: 휴무");
     await expect(employeeRow(page, "E2E45 웨이터1")).toContainText("제외: 지각");
     const leadPanel = await openEmployeePanel(page, "E2E45 팀장");
-    await expect(leadPanel.getByLabel("E2E45 팀장 근무상태").locator("option")).toContainText(["정상", "휴무", "지각", "조퇴", "결근"]);
+    // 근무상태 목록은 열 때만 그린다(공용 listbox). 펼쳐서 항목을 본다.
+    const statusListbox = await openListbox(leadPanel.getByLabel("E2E45 팀장 근무상태"));
+    await expect(statusListbox.getByRole("option")).toContainText(["정상", "휴무", "지각", "조퇴", "결근"]);
     await expect(leadPanel.getByRole("heading", { name: "일 총콜 산출 근거" })).toBeVisible();
     await expect(page.getByText("비완료 1, 정책없음 0, 수당없음 0, D코스누락 0").first()).toBeVisible();
   });
@@ -370,7 +373,7 @@ test.describe("Story 4.5 operations daily incentive", () => {
     await page.goto(`/settlements/operations?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2035-05-12`);
 
     const counter1Row = await openEmployeePanel(page, "E2E45 카운터1");
-    await counter1Row.getByLabel("E2E45 카운터1 근무상태").selectOption("DAY_OFF");
+    await pickListboxOptionByValue(counter1Row.getByLabel("E2E45 카운터1 근무상태"), "DAY_OFF");
     await counter1Row.getByRole("button", { name: "저장" }).click();
     await expect(counter1Row.getByText("저장됨")).toBeVisible();
 

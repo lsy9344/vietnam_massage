@@ -5,6 +5,7 @@ import { useActionState, useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DateCapsule } from "@/components/ui/date-capsule";
 import { inputFieldClassName } from "@/components/ui/input-field";
+import { ListboxSelect } from "@/components/ui/listbox-select";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { ledgerCallHref } from "@/lib/ledger-address";
 import { useLocale, useT } from "@/lib/i18n/client";
@@ -111,7 +112,7 @@ export function ScheduleCellForm({
   const saved = state?.ok && state.data.employeeId === employeeId && state.data.date === date;
   const impactedCalls = state?.ok && state.data.employeeId === employeeId && state.data.date === date ? state.data.impactedCalls : [];
 
-  // S8: <select>를 비제어(defaultValue)로 두면 지난주 복사처럼 이 줄 바깥에서 status prop이 바뀌어도
+  // S8: 선택 칸을 비제어(defaultValue)로 두면 지난주 복사처럼 이 줄 바깥에서 status prop이 바뀌어도
   // 화면이 갱신되지 않는다(이 컴포넌트는 key가 date뿐이라 다시 마운트되지 않는다, schedule-view.tsx).
   // 그 상태로 저장하면 브라우저가 들고 있던 옛 값을 보내 복사한 값을 지운다. 제어 상태로 두고 status
   // prop이 바뀔 때만(복사 등 바깥 변경) 다시 맞춘다 — 저장 직후 반영되는 값도 결국 같은 값이라
@@ -139,22 +140,16 @@ export function ScheduleCellForm({
       <div className="flex flex-wrap items-center gap-2">
         <label className="grid min-w-32 flex-1 gap-1">
           <span className="sr-only">{t("settlements.schedule.cell.statusLabel")}</span>
-          <select
-            aria-describedby={statusError ? fieldErrorId : undefined}
-            aria-invalid={statusError ? "true" : undefined}
-            aria-label={t("settlements.schedule.cell.statusAria", { name: employeeName, date })}
-            className={inputFieldClassName({ invalid: Boolean(statusError) })}
+          <ListboxSelect
+            ariaDescribedBy={statusError ? fieldErrorId : undefined}
+            ariaLabel={t("settlements.schedule.cell.statusAria", { name: employeeName, date })}
             disabled={pending}
+            invalid={Boolean(statusError)}
             name="status"
-            onChange={(event) => setSelectedStatus(event.target.value as PlannedWorkingDayCellStatus)}
+            onChange={(next) => setSelectedStatus(next as PlannedWorkingDayCellStatus)}
+            options={ALL_SCHEDULE_CELL_STATUSES.map((value) => ({ label: scheduleStatusLabel(locale, value), value }))}
             value={selectedStatus}
-          >
-            {ALL_SCHEDULE_CELL_STATUSES.map((value) => (
-              <option key={value} value={value}>
-                {scheduleStatusLabel(locale, value)}
-              </option>
-            ))}
-          </select>
+          />
         </label>
         <label className="flex items-center gap-1.5 text-xs text-muted">
           {t("settlements.schedule.cell.plannedStartLabel")}

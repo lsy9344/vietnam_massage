@@ -1,4 +1,5 @@
 import { testEmployees } from "./support/test-employees";
+import { openListbox, pickListboxOptionByValue } from "./support/listbox-select";
 import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -191,8 +192,9 @@ test.describe("티켓 21 빠른 예약: 두 명 코스와 경고 확인 후 배�
     // 두 번째 Therapist 선택이 보이고, 이미 고른 첫 번째 Therapist는 후보에서 빠진다.
     const secondSelect = guest.getByLabel("두 번째 Therapist");
     await expect(secondSelect).toBeVisible();
-    await expect(secondSelect.getByRole("option", { name: "T21 마사지사1" })).toHaveCount(0);
-    await chooseSecondTherapist(panel, 1, therapist2Id);
+    const secondListbox = await openListbox(secondSelect);
+    await expect(secondListbox.getByRole("option", { name: "T21 마사지사1" })).toHaveCount(0);
+    await secondListbox.getByRole("option", { name: "T21 마사지사2" }).click();
     await expect(guest).toContainText("+ T21 마사지사2");
 
     await goToCustomerStep(panel);
@@ -221,23 +223,24 @@ test.describe("티켓 21 빠른 예약: 두 명 코스와 경고 확인 후 배�
     const secondSelect = guest.getByLabel("두 번째 Therapist");
     await expect(secondSelect).toBeVisible();
     // 수당 없는 후보는 선택지에 "불가" 표시와 함께 들어 있다.
-    await expect(secondSelect.getByRole("option", { name: "T21 마사지사3 · 불가" })).toHaveCount(1);
+    const secondListbox = await openListbox(secondSelect);
+    await expect(secondListbox.getByRole("option", { name: "T21 마사지사3 · 불가" })).toHaveCount(1);
+    await secondListbox.getByRole("option", { name: "T21 마사지사3 · 불가" }).click();
 
     const confirmDialog = page.getByRole("alertdialog", { name: "경고를 확인하고 배정하시겠습니까?" });
-    await secondSelect.selectOption(therapist3NoRateId);
     await expect(confirmDialog).toBeVisible();
     await expect(confirmDialog).toContainText("T21 마사지사3");
     await confirmDialog.getByRole("button", { name: "취소" }).click();
     await expect(confirmDialog).toBeHidden();
     // 취소하면 아직 배정되지 않아 선택 칸이 비어 있는 채로 남는다.
-    await expect(secondSelect).toHaveValue("");
+    await expect(secondSelect).toContainText("두 번째 Therapist를 고르세요.");
 
     // 다시 골라 확인하면 그제서야 배정된다.
-    await secondSelect.selectOption(therapist3NoRateId);
+    await pickListboxOptionByValue(secondSelect, therapist3NoRateId);
     await expect(confirmDialog).toBeVisible();
     await confirmDialog.getByRole("button", { name: "경고 확인 후 배정" }).click();
     await expect(confirmDialog).toBeHidden();
-    await expect(secondSelect).toHaveValue(therapist3NoRateId);
+    await expect(secondSelect).toContainText("T21 마사지사3");
 
     await goToCustomerStep(panel);
     await fillBooking(panel, { channel: "전화", bookerName: name });
