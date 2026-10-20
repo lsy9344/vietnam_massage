@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { expectTherapistCenterPopup } from "./support/therapist-popup";
 
 /**
  * 티켓 06: 근태 판정과 근태 달력 — 지각, 결근, 퇴근 미입력, 예정 없는 출근(스펙 D15–D18, M12).
@@ -347,17 +348,10 @@ test.describe("티켓 06 근태 판정과 근태 달력", () => {
     await page.getByRole("list", { name: / 근태$/ }).getByRole("button", { name: dayCellName(ABSENT_DATE) }).click();
 
     const dialog = page.getByRole("dialog", { name: formatFullDateKo(ABSENT_DATE) });
-    await expect(dialog).toBeVisible();
+    await expectTherapistCenterPopup(page, dialog);
+    // 짧은 상세라 세로로도 가운데다.
     const box = (await dialog.boundingBox())!;
-    // 화면 가장자리에서 떨어져 있고(전체 화면 시트가 아니다), 가로·세로 가운데에 있다.
-    expect(box.x).toBeGreaterThanOrEqual(15);
-    expect(390 - (box.x + box.width)).toBeGreaterThanOrEqual(15);
-    expect(box.y).toBeGreaterThan(0);
-    expect(box.height).toBeLessThan(844);
-    expect(Math.abs(box.x + box.width / 2 - 195)).toBeLessThanOrEqual(1);
     expect(Math.abs(box.y + box.height / 2 - 422)).toBeLessThanOrEqual(1);
-    // 뒤의 근태 화면이 흐린 덮개 너머로 보인다.
-    await expect(page.locator("[data-modal-overlay]")).toHaveCSS("backdrop-filter", /blur/);
     await dialog.getByRole("button", { name: "닫기" }).click();
     await expect(dialog).toHaveCount(0);
   });

@@ -3,6 +3,7 @@ import { testEmployees } from "./support/test-employees";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { expectTherapistCenterPopup } from "./support/therapist-popup";
 
 /**
  * 티켓 10: Therapist 공지 — 대상, 읽음, 내리기(스펙 D25, M4, M5, M18).
@@ -104,6 +105,7 @@ test.describe("티켓 10 Therapist 공지", () => {
     await noticeButton.click();
     const noticeDialog = therapistAPage.getByRole("dialog");
     await expect(noticeDialog.getByRole("heading", { name: "공지" })).toBeVisible();
+    await expectTherapistCenterPopup(therapistAPage, noticeDialog);
     await expect(noticeDialog.getByText(noticeBody)).toBeVisible();
     await therapistAPage.keyboard.press("Escape");
     await expect(noticesTab.locator(".therapist-tab-badge")).toHaveCount(0);

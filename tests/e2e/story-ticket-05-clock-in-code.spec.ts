@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { prisma } from "./support/db";
 import { login } from "./support/auth";
 import { clockCodeMinuteNow, computeClockInCode, deriveClockCodeDaySecretHex } from "@/modules/therapists/therapist-clock-code";
+import { expectTherapistCenterPopup } from "./support/therapist-popup";
 
 /**
  * 티켓 05: 출근 코드와 직접 출퇴근(스펙 D13–D15, D28, M4, M11, M23).
@@ -109,6 +110,7 @@ test.describe("Story ticket 05 clock-in code", () => {
     await page.goto("/therapist");
 
     await page.getByRole("button", { name: "출근" }).click();
+    await expectTherapistCenterPopup(page, page.getByRole("dialog", { name: "출근 코드 입력" }));
 
     // 틀린 코드 5번: 1~4번째는 남은 시도 횟수를, 5번째는 잠김과 풀리는 시각을 보인다(D14).
     for (let attempt = 1; attempt <= 4; attempt += 1) {

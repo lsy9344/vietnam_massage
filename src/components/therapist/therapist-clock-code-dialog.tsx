@@ -80,13 +80,14 @@ export function TherapistClockCodeDialog({ action, trigger }: { action: Therapis
       description={t("therapist.attendance.dialog.description")}
       onOpenChange={handleOpenChange}
       open={open}
+      placement="center"
       title={action === "check_in" ? t("therapist.attendance.dialog.checkInTitle") : t("therapist.attendance.dialog.checkOutTitle")}
       trigger={trigger}
     >
       <div className="grid gap-5">
         <p
           aria-label={t("therapist.attendance.dialog.codeAria")}
-          className="rounded-lg border border-border bg-surface py-4 text-center text-5xl font-black tabular-nums tracking-[0.3em] text-foreground"
+          className="rounded-lg border border-border bg-background py-4 text-center text-5xl font-black tabular-nums tracking-[0.3em] text-foreground"
         >
           {digits.padEnd(CODE_LENGTH, "·")}
         </p>
@@ -103,7 +104,7 @@ export function TherapistClockCodeDialog({ action, trigger }: { action: Therapis
               <span aria-hidden key={`blank-${index}`} />
             ) : (
               <button
-                className="min-h-16 rounded-lg bg-surface text-3xl font-bold text-foreground transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary disabled:pointer-events-none disabled:opacity-50"
+                className="min-h-16 rounded-lg border border-border bg-background text-3xl font-bold text-foreground transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary disabled:pointer-events-none disabled:opacity-50"
                 disabled={isPending}
                 key={key}
                 onClick={() => (key === "⌫" ? pressBackspace() : pressDigit(key))}

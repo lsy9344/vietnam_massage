@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { expectTherapistCenterPopup } from "./support/therapist-popup";
 
 /**
  * 티켓 09: 출퇴근 정정 요청(스펙 D23, D24, D28, M23, M24, ADR 0004).
@@ -294,7 +295,7 @@ test.describe("티켓 09 출퇴근 정정 요청", () => {
     // 거절된 뒤에도 출퇴근은 그대로 남아 "이미 찍음" 안내가 계속 보인다(앞 테스트에서 확인함).
     const alreadyClockedNotice = page.getByText("이미 찍음 — 정정 요청", { exact: true }).locator("..");
     await alreadyClockedNotice.getByRole("button", { name: "정정 요청" }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
+    await expectTherapistCenterPopup(page, page.getByRole("dialog"));
     const hasHorizontalScroll = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
     expect(hasHorizontalScroll).toBe(false);
   });
