@@ -108,7 +108,7 @@ test.describe("티켓 09 앞으로 콜이 잡힌 직원의 비활성 거절", ()
 
   test.beforeAll(async () => {
     const slots = await prisma.timeSlot.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } });
-    previousServiceDate = addDaysToIsoDate(businessTodayServiceDate(slots), -1);
+    previousServiceDate = addDaysToIsoDate(businessTodayServiceDate(), -1);
     await seedAdmin();
     targetId = (await upsertEmployee({ ...target, employeeGroup: "THERAPIST", position: "마사지사" })).id;
     await removeTargetCalls();

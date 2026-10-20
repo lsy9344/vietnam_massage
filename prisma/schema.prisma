@@ -600,7 +600,7 @@ model TherapistRequest {
   id         String   @id @default(cuid())
   employeeId String   @map("employee_id")
   employee   Employee @relation(fields: [employeeId], references: [id])
-  // "휴무" | "정정"
+  // "휴무" | "소중한날 휴가" | "정정"
   kind       String
   targetDate DateTime @map("target_date") @db.Date
   // 정정 요청만 쓴다(HH:mm). 휴무 신청은 항상 null이다.

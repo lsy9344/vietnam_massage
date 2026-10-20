@@ -19,23 +19,25 @@ import type { TherapistAttendanceDayRequestStatus } from "@/modules/therapists/t
 
 // DB 저장값은 "이전 기록" 같은 다른 코드 칸처럼 한국어 문자열이다. 화면·DTO는 06이 이미 정한
 // TherapistAttendanceDayRequestStatus의 영문 kind/status를 그대로 쓴다(타입을 다시 적지 않는다).
-export const therapistRequestKinds = ["day_off", "correction"] as const;
+export const therapistRequestKinds = ["day_off", "special_day_off", "correction"] as const;
 export type TherapistRequestKind = (typeof therapistRequestKinds)[number];
 
-type DbRequestKind = "휴무" | "정정";
+type DbRequestKind = "휴무" | "소중한날 휴가" | "정정";
 
 // 09(정정 요청 만들기)가 쓸 변환이라 지금부터 export해 둔다(toDbKind("correction") === "정정").
 export function toDbKind(kind: TherapistRequestKind): DbRequestKind {
+  if (kind === "special_day_off") return "소중한날 휴가";
   return kind === "correction" ? "정정" : "휴무";
 }
 
 function fromDbKind(kind: string): TherapistRequestKind {
+  if (kind === "소중한날 휴가") return "special_day_off";
   return kind === "정정" ? "correction" : "day_off";
 }
 
 type RequestStatusValue = NonNullable<TherapistAttendanceDayRequestStatus>["status"];
 
-export type TherapistRequestErrorField = "date" | "reason";
+export type TherapistRequestErrorField = "date" | "reason" | "kind";
 
 export class TherapistRequestDomainError extends Error {
   constructor(message: string, public readonly code: string, public readonly field?: TherapistRequestErrorField) {
@@ -121,13 +123,6 @@ function toDate(isoDate: string) {
   return new Date(`${isoDate}T00:00:00.000Z`);
 }
 
-// timeSlot.findMany만 요구하는 좁은 모양이라, 아래 더 좁은 TherapistRequestRangeReadClient도
-// 그대로 넘길 수 있다.
-async function todayServiceDateOf(client: { timeSlot: { findMany(args?: unknown): Promise<RequestTimeSlotRecord[]> } }, now: Date) {
-  const slots = await client.timeSlot.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
-  return businessTodayServiceDate(slots, now);
-}
-
 /** "기한 지남"은 저장하지 않고 읽을 때 정한다(M24) — 대기 중인데 날짜가 지났으면 기한 지남이다. */
 function toStatusValue(dbStatus: string, targetDateIso: string, todayServiceDate: string): RequestStatusValue {
   if (dbStatus === "대기") {
@@ -180,6 +175,7 @@ export type TherapistRequestAdminListItemDto = {
 
 const createDayOffSchema = z.object({
   date: isoDateFieldSchema,
+  kind: z.enum(["day_off", "special_day_off"]).default("day_off"),
   reason: z.string().trim().max(500).nullish()
 });
 
@@ -192,11 +188,12 @@ const createDayOffSchema = z.object({
 export async function requestTherapistDayOff(input: {
   employeeId: string;
   date: string;
+  kind?: string;
   reason?: string | null;
   now?: Date;
   prismaClient?: TherapistRequestPrismaClient;
 }): Promise<TherapistRequestSelfDto> {
-  const parsed = createDayOffSchema.safeParse({ date: input.date, reason: input.reason ?? null });
+  const parsed = createDayOffSchema.safeParse({ date: input.date, kind: input.kind, reason: input.reason ?? null });
   if (!parsed.success) {
     throw new TherapistRequestDomainError(parsed.error.issues[0]?.message ?? "입력값을 확인하세요.", "INVALID_THERAPIST_REQUEST_INPUT", "date");
   }
@@ -204,7 +201,7 @@ export async function requestTherapistDayOff(input: {
 
   const client = getClient(input.prismaClient);
   const now = input.now ?? new Date();
-  const todayServiceDate = await todayServiceDateOf(client, now);
+  const todayServiceDate = businessTodayServiceDate(now);
   if (parsed.data.date < todayServiceDate) {
     throw new TherapistRequestDomainError("지난 날짜는 신청할 수 없습니다.", "THERAPIST_REQUEST_DATE_IN_PAST", "date");
   }
@@ -215,7 +212,7 @@ export async function requestTherapistDayOff(input: {
   }
 
   const pending = await client.therapistRequest.findMany({
-    where: { employeeId: input.employeeId, targetDate: toDate(parsed.data.date), kind: "휴무", status: "대기" }
+    where: { employeeId: input.employeeId, targetDate: toDate(parsed.data.date), status: "대기" }
   });
   if (pending.length > 0) {
     throw new TherapistRequestDomainError("이미 신청 중인 날입니다.", "THERAPIST_DAY_OFF_REQUEST_ALREADY_PENDING", "date");
@@ -223,10 +220,10 @@ export async function requestTherapistDayOff(input: {
 
   const reason = parsed.data.reason?.trim() || null;
   const created = await client.therapistRequest.create({
-    data: { employeeId: input.employeeId, kind: "휴무", targetDate: toDate(parsed.data.date), reason }
+    data: { employeeId: input.employeeId, kind: toDbKind(parsed.data.kind), targetDate: toDate(parsed.data.date), reason }
   });
 
-  return { id: created.id, kind: "day_off", targetDate: parsed.data.date, status: "pending", reason: created.reason };
+  return { id: created.id, kind: parsed.data.kind, targetDate: parsed.data.date, status: "pending", reason: created.reason };
 }
 
 /**
@@ -243,7 +240,7 @@ export async function cancelTherapistRequest(input: {
 }): Promise<TherapistRequestSelfDto> {
   const client = getClient(input.prismaClient);
   const now = input.now ?? new Date();
-  const todayServiceDate = await todayServiceDateOf(client, now);
+  const todayServiceDate = businessTodayServiceDate(now);
 
   const existing = await client.therapistRequest.findUnique({ where: { id: input.requestId } });
   // 남의 신청이든 없는 신청이든 같은 오류로 묶어 어느 쪽인지 알려주지 않는다(M6 보안, markTherapistNoticeRead와 같은 방식).
@@ -277,7 +274,7 @@ export async function cancelTherapistDayOffRequestForDate(input: {
 }): Promise<TherapistRequestSelfDto> {
   const client = getClient(input.prismaClient);
   const pending = await client.therapistRequest.findMany({
-    where: { employeeId: input.employeeId, targetDate: toDate(input.date), kind: "휴무", status: "대기" }
+    where: { employeeId: input.employeeId, targetDate: toDate(input.date), status: "대기" }
   });
   const target = pending[0];
   if (!target) {
@@ -301,6 +298,26 @@ export type TherapistRequestRangeReadClient = {
   therapistRequest: { findMany(args?: unknown): Promise<RequestRecord[]> };
 };
 
+/** 승인된 소중한날 휴가만 읽는다. 다른 신청이 뒤에 생겨도 휴가 표시는 유지된다. */
+export async function listApprovedSpecialDayOffs(input: {
+  employeeIds: string[];
+  startDate: string;
+  endDate: string;
+  prismaClient?: Pick<TherapistRequestRangeReadClient, "therapistRequest">;
+}): Promise<Array<{ employeeId: string; date: string }>> {
+  const client = input.prismaClient ?? prisma;
+  const rows = await client.therapistRequest.findMany({
+    where: {
+      employeeId: { in: input.employeeIds },
+      kind: "소중한날 휴가",
+      status: "승인",
+      targetDate: { gte: toDate(input.startDate), lte: toDate(input.endDate) }
+    },
+    select: { employeeId: true, targetDate: true }
+  });
+  return rows.map((row) => ({ employeeId: row.employeeId, date: toIsoDateOnly(row.targetDate) }));
+}
+
 /**
  * 근태 달력(06)의 `TherapistAttendanceDayRequestStatus` 자리를 채우는 좁은 조회(스펙 M24).
  * 날짜 하나에 신청이 여러 번 있었으면(예: 거절 뒤 다시 신청) 대기 중인 것을 먼저 보이고, 없으면
@@ -315,7 +332,7 @@ export async function listTherapistRequestsForEmployeeInRange(input: {
 }): Promise<TherapistRequestDayStatusDto[]> {
   const client = input.prismaClient ?? (prisma as unknown as TherapistRequestRangeReadClient);
   const now = input.now ?? new Date();
-  const todayServiceDate = await todayServiceDateOf(client, now);
+  const todayServiceDate = businessTodayServiceDate(now);
 
   const requests = await client.therapistRequest.findMany({
     where: { employeeId: input.employeeId, targetDate: { gte: toDate(input.startDate), lte: toDate(input.endDate) } }
@@ -361,7 +378,7 @@ async function toAdminListItemDto(
   const status = toStatusValue(request.status, targetDate, todayServiceDate);
   const kind = fromDbKind(request.kind);
   const assignedCallCount =
-    kind === "day_off" && status === "pending"
+    kind !== "correction" && status === "pending"
       ? (await listAssignedServiceCallsForEmployeeOnDate({ employeeId: request.employeeId, date: targetDate, prismaClient: client })).length
       : null;
 
@@ -396,7 +413,7 @@ export async function listTherapistRequestsForAdmin(options: {
 } = {}): Promise<TherapistRequestAdminListItemDto[]> {
   const client = getClient(options.prismaClient);
   const now = options.now ?? new Date();
-  const todayServiceDate = await todayServiceDateOf(client, now);
+  const todayServiceDate = businessTodayServiceDate(now);
 
   const requests = await client.therapistRequest.findMany({ include: requestWithEmployeeInclude });
   const resolvedByNames = await listAuditActors(
@@ -438,13 +455,13 @@ export async function approveTherapistDayOffRequest(input: {
 }): Promise<TherapistRequestAdminListItemDto> {
   const client = getClient(input.prismaClient);
   const now = input.now ?? new Date();
-  const todayServiceDate = await todayServiceDateOf(client, now);
+  const todayServiceDate = businessTodayServiceDate(now);
 
   const before = await client.therapistRequest.findUnique({ where: { id: input.requestId }, include: requestWithEmployeeInclude });
   if (!before) {
     throw new TherapistRequestDomainError("신청을 찾을 수 없습니다.", "THERAPIST_REQUEST_NOT_FOUND");
   }
-  if (before.kind !== "휴무") {
+  if (before.kind !== "휴무" && before.kind !== "소중한날 휴가") {
     throw new TherapistRequestDomainError("아직 지원하지 않는 신청 종류입니다.", "THERAPIST_REQUEST_KIND_NOT_SUPPORTED");
   }
   assertActionable(before, todayServiceDate);
@@ -497,7 +514,7 @@ export async function rejectTherapistRequest(input: {
 
   const client = getClient(input.prismaClient);
   const now = input.now ?? new Date();
-  const todayServiceDate = await todayServiceDateOf(client, now);
+  const todayServiceDate = businessTodayServiceDate(now);
 
   const before = await client.therapistRequest.findUnique({ where: { id: input.requestId }, include: requestWithEmployeeInclude });
   if (!before) {

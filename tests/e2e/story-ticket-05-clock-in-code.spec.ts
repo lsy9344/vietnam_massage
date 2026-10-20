@@ -16,7 +16,7 @@ import { clockCodeMinuteNow, computeClockInCode, deriveClockCodeDaySecretHex } f
  */
 
 function businessTodayServiceDate(now: Date): string {
-  const DAY_START_CLOCK = "11:00"; // scripts/seed-master-data.ts의 defaultTimeSlots[0]과 같다.
+  const DAY_START_CLOCK = "03:00"; // 영업일 전환은 베트남 시각 03:00이다.
   const calendarToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
   const clockNow = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
   if (clockNow < DAY_START_CLOCK) return addIsoDays(calendarToday, -1);
@@ -56,7 +56,9 @@ async function enterCodeAndSubmit(page: Page, code: string) {
   for (const digit of code) {
     await page.getByRole("button", { name: digit, exact: true }).click();
   }
+  const submitted = page.waitForResponse((response) => response.request().method() === "POST" && Boolean(response.request().headers()["next-action"]));
   await page.getByRole("button", { name: "확인" }).click();
+  await submitted;
 }
 
 function wrongCodeFrom(code: string) {

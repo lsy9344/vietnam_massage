@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { BUSINESS_DAY_START_TIME } from "@/lib/business-time";
 import { businessTodayServiceDate } from "@/lib/operating-date";
 import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import {
@@ -19,23 +20,13 @@ import {
   type TherapistAttendanceMethod
 } from "@/modules/settlements/therapist-attendance-service";
 import { judgeTherapistAttendanceDay, type TherapistAttendanceDayJudgment } from "@/modules/therapists/therapist-attendance-judgment";
+import { listApprovedSpecialDayOffs } from "@/modules/therapists/therapist-request-service";
 
 /**
  * 관리자 Therapist 현황(스펙 D26, M12, M18, 티켓 11). 06의 판정(judgeTherapistAttendanceDay)과 좁은 조회,
  * 월마감 미리보기/스냅샷의 Therapist 행을 그대로 써서 두 영역(오늘, 운영월)을 만든다. 이 화면만의 집계
  * 규칙은 새로 만들지 않는다.
  */
-
-type AdminOverviewTimeSlotRecord = { value: string; sortOrder: number; createdAt: Date; isActive: boolean };
-type AdminOverviewTimeSlotClient = { timeSlot: { findMany(args?: unknown): Promise<AdminOverviewTimeSlotRecord[]> } };
-
-async function loadDayStartAndServiceDate(client: unknown, now: Date) {
-  const slots = await (client as AdminOverviewTimeSlotClient).timeSlot.findMany({
-    where: { isActive: true },
-    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
-  });
-  return { dayStart: slots[0]?.value ?? "00:00", serviceDate: businessTodayServiceDate(slots, now) };
-}
 
 export type TherapistAdminTodayRowDto = {
   employeeId: string;
@@ -45,6 +36,7 @@ export type TherapistAdminTodayRowDto = {
   checkInMethod: TherapistAttendanceMethod | null;
   checkOutTime: string | null;
   checkOutMethod: TherapistAttendanceMethod | null;
+  isSpecialDayOff: boolean;
   /** 06의 판정 그대로(오늘 운영일은 늘 isOperatingDayEnded: false라 결근·퇴근 미입력은 늘 false다). */
   judgment: TherapistAttendanceDayJudgment;
 };
@@ -67,7 +59,8 @@ export async function getTherapistAdminTodayOverview(input: {
 }): Promise<TherapistAdminTodayOverviewDto> {
   const client = input.prismaClient ?? prisma;
   const now = input.now ?? new Date();
-  const { dayStart, serviceDate } = await loadDayStartAndServiceDate(client, now);
+  const dayStart = BUSINESS_DAY_START_TIME;
+  const serviceDate = businessTodayServiceDate(now);
 
   const monthKey = serviceDate.slice(0, 7);
   const operatingMonth = input.operatingMonths.find((month) => month.monthKey === monthKey) ?? null;
@@ -81,8 +74,12 @@ export async function getTherapistAdminTodayOverview(input: {
     prismaClient: client as never
   });
   const employeeIds = attendance.rows.map((row) => row.employeeId);
-  const plannedStatuses = await listPlannedWorkingDayStatusesForDate({ employeeIds, date: serviceDate, prismaClient: client as never });
+  const [plannedStatuses, specialDaysOff] = await Promise.all([
+    listPlannedWorkingDayStatusesForDate({ employeeIds, date: serviceDate, prismaClient: client as never }),
+    listApprovedSpecialDayOffs({ employeeIds, startDate: serviceDate, endDate: serviceDate, prismaClient: client as never })
+  ]);
   const plannedByEmployeeId = new Map(plannedStatuses.map((status) => [status.employeeId, status]));
+  const specialEmployeeIds = new Set(specialDaysOff.map((day) => day.employeeId));
 
   const rows: TherapistAdminTodayRowDto[] = attendance.rows.map((row) => {
     const planned = plannedByEmployeeId.get(row.employeeId) ?? null;
@@ -102,6 +99,7 @@ export async function getTherapistAdminTodayOverview(input: {
       checkInMethod: row.checkInMethod,
       checkOutTime: row.checkOutTime,
       checkOutMethod: row.checkOutMethod,
+      isSpecialDayOff: planned?.status === "휴무" && specialEmployeeIds.has(row.employeeId),
       judgment
     };
   });
@@ -174,7 +172,8 @@ export async function getTherapistAdminMonthlyOverview(input: {
   const rankedRows = [...closingRows].sort(compareTherapistRowsByCountKingOrder);
   const rankByEmployeeId = new Map(rankedRows.map((row, index) => [row.employeeId, index + 1]));
 
-  const { dayStart, serviceDate: todayServiceDate } = await loadDayStartAndServiceDate(client, input.now ?? new Date());
+  const dayStart = BUSINESS_DAY_START_TIME;
+  const todayServiceDate = businessTodayServiceDate(input.now);
 
   const rows = await Promise.all(
     closingRows.map(async (closingRow): Promise<TherapistAdminMonthlyRowDto> => {

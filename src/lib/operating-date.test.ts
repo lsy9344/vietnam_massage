@@ -50,23 +50,17 @@ describe("operating date helpers", () => {
     assert.equal(businessClockString(new Date("2026-10-14T17:30:00.000Z")), "00:30");
   });
 
-  // S10(스펙 226줄, 티켓 10): 영업일은 첫 활성 슬롯부터 다음 날 첫 활성 슬롯 전까지라서, 자정부터 첫
-  // 활성 슬롯 전까지는 전날 서비스 날짜가 오늘이다 — businessTodayIsoDate(달력날)와는 다르다.
   describe("businessTodayServiceDate", () => {
-    const activeSlots = [{ value: "11:00" }, { value: "11:30" }, { value: "23:30" }, { value: "00:00" }, { value: "00:30" }, { value: "01:00" }];
-
-    it("returns yesterday's calendar date when now is before the first active slot (past-midnight tail of yesterday's business day)", () => {
-      // 2026-10-14T17:30:00Z = 호찌민 2026-10-15 00:30, 첫 슬롯(11:00)보다 이르다.
-      assert.equal(businessTodayServiceDate(activeSlots, new Date("2026-10-14T17:30:00.000Z")), "2026-10-14");
+    it("keeps 02:59:59 in the previous service date and switches at exactly 03:00 Vietnam time", () => {
+      assert.equal(businessTodayServiceDate(new Date("2026-10-15T02:59:59+07:00")), "2026-10-14");
+      assert.equal(businessTodayServiceDate(new Date("2026-10-15T03:00:00+07:00")), "2026-10-15");
+      assert.equal(businessTodayServiceDate(new Date("2026-10-15T08:00:00+07:00")), "2026-10-15");
     });
 
-    it("returns today's calendar date once now reaches the first active slot", () => {
-      // 2026-10-14T05:30:00Z = 호찌민 2026-10-14 12:30, 첫 슬롯(11:00) 이후다.
-      assert.equal(businessTodayServiceDate(activeSlots, new Date("2026-10-14T05:30:00.000Z")), "2026-10-14");
-    });
-
-    it("falls back to the calendar date when there is no active slot", () => {
-      assert.equal(businessTodayServiceDate([], new Date("2026-10-14T17:30:00.000Z")), "2026-10-15");
+    it("handles month and year boundaries without depending on reservation slots", () => {
+      assert.equal(businessTodayServiceDate(new Date("2026-11-01T02:59:00+07:00")), "2026-10-31");
+      assert.equal(businessTodayServiceDate(new Date("2027-01-01T01:00:00+07:00")), "2026-12-31");
+      assert.equal(businessTodayServiceDate(new Date("2027-01-01T03:00:00+07:00")), "2027-01-01");
     });
   });
 });
