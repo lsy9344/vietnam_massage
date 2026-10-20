@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { clockCodeMinuteNow, computeClockInCode } from "@/modules/therapists/therapist-clock-code";
+import { clockCodeMinuteNow, computeClockInCode, selectClockCodeDaySecret } from "@/modules/therapists/therapist-clock-code";
 import type { ClockCodeDisplayKeys } from "@/modules/therapists/therapist-clock-code-service";
 import { createTranslator } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
@@ -24,6 +24,9 @@ export function ClockCodeDisplay({ keys, locale, size = "corner" }: { keys: Cloc
   useEffect(() => {
     let lastMinuteKey = "";
     let cancelled = false;
+    // R12: 받은 키(오늘·다음 날)의 날짜를 넘으면 한 번만 새로고침한다. 주기 폴링이 아니라 이 화면이
+    // 사흘 넘게 켜져 있을 때만 한 번 일어나는 일이다(D13, D8).
+    let reloadTriggered = false;
 
     async function tick() {
       const minute = clockCodeMinuteNow();
@@ -31,8 +34,18 @@ export function ClockCodeDisplay({ keys, locale, size = "corner" }: { keys: Cloc
       if (minuteKey === lastMinuteKey) return;
       lastMinuteKey = minuteKey;
 
-      const current = keysRef.current;
-      const daySecretHex = minute.calendarDate === current.tomorrow.date ? current.tomorrow.daySecretHex : current.today.daySecretHex;
+      const daySecretHex = selectClockCodeDaySecret(keysRef.current, minute.calendarDate);
+      if (daySecretHex === null) {
+        // 받은 키 모두의 날짜를 지났다 — 틀린 코드를 보이는 대신 비우고, 새 키를 받도록 한 번만
+        // 새로고침한다.
+        if (!cancelled) setCode(null);
+        if (!reloadTriggered && typeof window !== "undefined") {
+          reloadTriggered = true;
+          window.location.reload();
+        }
+        return;
+      }
+
       const next = await computeClockInCode(daySecretHex, minute.minuteOfDay);
       if (!cancelled) setCode(next);
     }
