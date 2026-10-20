@@ -2,6 +2,7 @@
 
 import { useActionState, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DateCapsule } from "@/components/ui/date-capsule";
 import { DetailRow } from "@/components/ui/detail-row";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import { ModalPanel } from "@/components/ui/panel";
@@ -244,10 +245,64 @@ function AttendanceDayDetail({ locale, day, todayServiceDate }: { locale: Locale
   );
 }
 
+// 칸·띠·카드가 함께 쓰는 압축 기호. 오늘 칸(검정)에서는 의미색이 묻히므로 밝은 방울 안에 둔다.
+function AttendanceGlyph({ badge, onInk = false }: { badge: AttendanceBadge | null; onInk?: boolean }) {
+  if (!badge) return <span aria-hidden="true" className="h-[1.125rem]" />;
+  const tone = badge.tone as keyof typeof TONE_GLYPH;
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("inline-flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full text-xs leading-none", TONE_TEXT_CLASS[tone], onInk && "bg-surface")}
+    >
+      {`${TONE_GLYPH[tone]}\uFE0E`}
+    </span>
+  );
+}
+
+function weekdayShort(locale: Locale, isoDate: string) {
+  return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "ko-KR", { timeZone: "UTC", weekday: "short" }).format(new Date(`${isoDate}T00:00:00.000Z`));
+}
+
+// 날짜를 누르면 여는 상세 패널. 월 달력과 주 보기가 같은 패널을 쓴다.
+function AttendanceDayPanel({
+  locale,
+  day,
+  todayServiceDate,
+  onClose
+}: {
+  locale: Locale;
+  day: TherapistAttendanceCalendarDayDto | null;
+  todayServiceDate: string;
+  onClose: () => void;
+}) {
+  return (
+    <ModalPanel onOpenChange={(open) => !open && onClose()} open={day !== null} title={day ? formatFullDate(locale, day.date) : ""}>
+      {day ? <AttendanceDayDetail day={day} locale={locale} todayServiceDate={todayServiceDate} /> : null}
+    </ModalPanel>
+  );
+}
+
+function SpecialDayOffLegend({ days }: { days: TherapistAttendanceCalendarDayDto[] }) {
+  const t = useT();
+  return days.some((day) => day.isSpecialDayOff) ? <p className="mt-3 text-xs font-semibold text-danger">■ {t("therapistRequestKind.special_day_off")}</p> : null;
+}
+
+function AttendanceEmptyState() {
+  const t = useT();
+  return (
+    <ScreenState
+      description={t("therapist.attendance.calendar.empty.description")}
+      kind="empty"
+      label={t("common.screenState.empty")}
+      title={t("therapist.attendance.calendar.empty.title")}
+    />
+  );
+}
+
 /**
- * 근태 달력(티켓 06, 스펙 D18). 월요일 시작 7열 그리드. 칸은 날짜와 가장 급한 배지 기호 하나만 보이고,
+ * 근태 달력 월 보기(티켓 06, 스펙 D18). 월요일 시작 7열 그리드. 칸은 날짜와 가장 급한 배지 기호 하나만 보이고,
  * 누르면 패널에 그날 전체(근무표·출퇴근·방식·판정·신청 상태 자리)를 보인다 — 390px에서 모든 내용을
- * 칸 안에 바로 적으면 읽을 수 없어서다(코드베이스 지도에 선례가 없어 이번 티켓에서 정한 모양, 가정).
+ * 칸 안에 바로 적으면 읽을 수 없어서다. 오늘 칸은 검정으로 채우고, 근무 예정이 아닌 날의 숫자는 흐리게 둔다.
  */
 export function TherapistAttendanceCalendar({
   locale,
@@ -264,16 +319,7 @@ export function TherapistAttendanceCalendar({
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const selectedDay = days.find((day) => day.date === selectedDate) ?? null;
 
-  if (days.length === 0) {
-    return (
-      <ScreenState
-        description={t("therapist.attendance.calendar.empty.description")}
-        kind="empty"
-        label={t("common.screenState.empty")}
-        title={t("therapist.attendance.calendar.empty.title")}
-      />
-    );
-  }
+  if (days.length === 0) return <AttendanceEmptyState />;
 
   const leadingBlankCount = weekdayIndexMondayFirst(days[0]!.date);
   const monthLabel = new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "ko-KR", { timeZone: "UTC", year: "numeric", month: "long" }).format(
@@ -284,7 +330,9 @@ export function TherapistAttendanceCalendar({
     <div>
       <div aria-hidden="true" className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-muted">
         {weekdayHeaders(locale).map((label, index) => (
-          <span key={`${label}-${index}`}>{label}</span>
+          <span className="rounded-full bg-surface py-1" key={`${label}-${index}`}>
+            {label}
+          </span>
         ))}
       </div>
       <div aria-label={t("therapist.attendance.calendar.aria", { month: monthLabel })} className="mt-2 grid grid-cols-7 gap-1" role="grid">
@@ -301,35 +349,197 @@ export function TherapistAttendanceCalendar({
             <button
               aria-label={ariaLabel}
               className={cn(
-                "flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-md border bg-surface text-sm transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary",
-                day.isSpecialDayOff ? "border-danger bg-danger-soft hover:bg-danger-soft" : isToday ? "border-brand" : "border-border"
+                "flex min-h-14 flex-col items-center justify-center gap-1 rounded-md border text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary",
+                isToday
+                  ? "border-brand bg-brand text-brand-foreground hover:bg-brand-strong"
+                  : day.isSpecialDayOff
+                    ? "border-danger bg-danger-soft hover:bg-danger-soft"
+                    : "border-transparent bg-surface hover:bg-readonly"
               )}
               key={day.date}
               onClick={() => setSelectedDate(day.date)}
               type="button"
             >
-              <span className={cn("font-semibold [font-variant-numeric:tabular-nums]", isToday ? "text-brand" : "text-foreground")}>
+              <span
+                className={cn(
+                  "font-semibold leading-none [font-variant-numeric:tabular-nums]",
+                  !isToday && (day.planStatus === "근무 예정" ? "text-foreground" : "text-muted")
+                )}
+              >
                 {formatDayNumber(day.date)}
               </span>
-              {primaryBadge ? (
-                <span aria-hidden="true" className={TONE_TEXT_CLASS[primaryBadge.tone as keyof typeof TONE_TEXT_CLASS]}>
-                  {TONE_GLYPH[primaryBadge.tone as keyof typeof TONE_GLYPH]}
-                </span>
-              ) : (
-                <span aria-hidden="true" className="h-[1em]" />
-              )}
+              <AttendanceGlyph badge={primaryBadge} onInk={isToday} />
             </button>
           );
         })}
       </div>
 
-      {days.some((day) => day.isSpecialDayOff) ? (
-        <p className="mt-3 text-xs font-semibold text-danger">■ {t("therapistRequestKind.special_day_off")}</p>
-      ) : null}
+      <SpecialDayOffLegend days={days} />
 
-      <ModalPanel onOpenChange={(open) => !open && setSelectedDate(null)} open={selectedDay !== null} title={selectedDay ? formatFullDate(locale, selectedDay.date) : ""}>
-        {selectedDay ? <AttendanceDayDetail day={selectedDay} locale={locale} todayServiceDate={todayServiceDate} /> : null}
-      </ModalPanel>
+      <AttendanceDayPanel day={selectedDay} locale={locale} onClose={() => setSelectedDate(null)} todayServiceDate={todayServiceDate} />
+    </div>
+  );
+}
+
+// 카드에 바로 보일 신청 상태. 취소·만료는 지난 일이라 카드에서는 빼고 패널에서만 보인다.
+const CARD_REQUEST_STATUSES = new Set(["pending", "approved", "rejected"]);
+
+function AttendanceWeekDayCard({
+  locale,
+  day,
+  isToday,
+  onOpen
+}: {
+  locale: Locale;
+  day: TherapistAttendanceCalendarDayDto;
+  isToday: boolean;
+  onOpen: () => void;
+}) {
+  const t = useT();
+  const badges = attendanceDayBadges(t, day);
+  const isScheduled = day.planStatus === "근무 예정";
+  const isWorkingNow = isToday && day.checkInTime !== null && day.checkOutTime === null;
+  const hasAttendance = day.checkInTime !== null || day.checkOutTime !== null;
+  const request = day.requestStatus && CARD_REQUEST_STATUSES.has(day.requestStatus.status) ? day.requestStatus : null;
+
+  return (
+    <li className="scroll-mt-24" id={`attendance-day-${day.date}`}>
+      <button
+        className={cn(
+          "flex min-h-14 w-full items-stretch gap-3 rounded-md border px-4 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary",
+          day.isSpecialDayOff ? "border-danger bg-danger-soft" : cn("bg-surface hover:bg-readonly", isToday ? "border-brand" : "border-border")
+        )}
+        onClick={onOpen}
+        type="button"
+      >
+        <span className="sr-only">{formatFullDate(locale, day.date)}</span>
+        <span
+          aria-hidden="true"
+          className={cn(
+            "flex w-12 shrink-0 flex-col items-center justify-center gap-1 rounded-sm",
+            isToday ? "bg-brand text-brand-foreground" : "bg-readonly text-foreground"
+          )}
+        >
+          <span className="text-xs font-semibold leading-none">{weekdayShort(locale, day.date)}</span>
+          <span className="text-xl font-semibold leading-none [font-variant-numeric:tabular-nums]">{formatDayNumber(day.date)}</span>
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col justify-center gap-1.5 py-0.5">
+          <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className={cn("text-[0.9375rem] font-semibold", isScheduled ? "text-foreground" : "text-muted")}>
+              {scheduleStatusLabel(locale, day.planStatus)}
+            </span>
+            {day.plannedStartTime ? (
+              <span className="text-sm text-muted">
+                {t("therapist.attendance.dayDetail.plannedStartTimeLabel")} {day.plannedStartTime}
+              </span>
+            ) : null}
+          </span>
+          {hasAttendance ? (
+            <span className="flex flex-wrap items-center gap-1.5">
+              <DateCapsule>
+                {t("therapist.attendance.dayDetail.checkInLabel")} {day.checkInTime ?? "—"}
+              </DateCapsule>
+              <DateCapsule>
+                {t("therapist.attendance.dayDetail.checkOutLabel")} {day.checkOutTime ?? "—"}
+              </DateCapsule>
+            </span>
+          ) : null}
+          {isWorkingNow || badges.length > 0 || request ? (
+            <span className="flex flex-wrap items-center gap-1.5">
+              {isWorkingNow ? <StatusIndicator label={t("therapist.attendance.week.working")} size="sm" tone="info" /> : null}
+              {badges.map((badge) => (
+                <StatusIndicator key={badge.label} label={badge.label} size="sm" tone={badge.tone} />
+              ))}
+              {request ? (
+                <StatusIndicator
+                  label={`${therapistRequestKindLabel(locale, request.kind)} · ${therapistRequestStatusLabel(locale, request.status)}`}
+                  size="sm"
+                  tone={REQUEST_STATUS_TONE[request.status]}
+                />
+              ) : null}
+            </span>
+          ) : null}
+        </span>
+        <span aria-hidden="true" className="self-center text-lg text-muted">
+          ›
+        </span>
+      </button>
+    </li>
+  );
+}
+
+/**
+ * 근태 주 보기(근태 탭의 기본 보기). 위에는 월–일 띠(오늘은 검정, 그날 가장 급한 배지 기호)를 두고,
+ * 아래에 날짜마다 근무표·출퇴근 시각·판정이 한눈에 보이는 카드를 쌓는다. 띠의 날짜를 누르면 그 카드로
+ * 내려가고, 카드를 누르면 월 보기와 같은 상세 패널(휴무 신청 포함)이 열린다.
+ */
+export function TherapistAttendanceWeek({
+  locale,
+  weekLabel,
+  todayServiceDate,
+  days
+}: {
+  locale: Locale;
+  weekLabel: string;
+  todayServiceDate: string;
+  days: TherapistAttendanceCalendarDayDto[];
+}) {
+  const t = useT();
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const selectedDay = days.find((day) => day.date === selectedDate) ?? null;
+
+  if (days.length === 0) return <AttendanceEmptyState />;
+
+  return (
+    <div>
+      <nav aria-label={t("therapist.attendance.week.stripAria")} className="grid grid-cols-7 gap-1">
+        {days.map((day) => {
+          const isToday = day.date === todayServiceDate;
+          const primaryBadge = attendanceDayBadges(t, day)[0] ?? null;
+          return (
+            <a
+              aria-label={formatFullDate(locale, day.date)}
+              className={cn(
+                "flex min-h-16 flex-col items-center justify-center gap-1 rounded-md border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary",
+                isToday
+                  ? "border-brand bg-brand text-brand-foreground hover:bg-brand-strong"
+                  : day.isSpecialDayOff
+                    ? "border-danger bg-danger-soft"
+                    : "border-transparent bg-surface hover:bg-readonly"
+              )}
+              href={`#attendance-day-${day.date}`}
+              key={day.date}
+            >
+              <span className={cn("text-xs font-semibold leading-none", !isToday && "text-muted")}>{weekdayShort(locale, day.date)}</span>
+              <span
+                className={cn(
+                  "text-base font-semibold leading-none [font-variant-numeric:tabular-nums]",
+                  !isToday && (day.planStatus === "근무 예정" ? "text-foreground" : "text-muted")
+                )}
+              >
+                {formatDayNumber(day.date)}
+              </span>
+              <AttendanceGlyph badge={primaryBadge} onInk={isToday} />
+            </a>
+          );
+        })}
+      </nav>
+
+      <ul aria-label={t("therapist.attendance.week.aria", { range: weekLabel })} className="mt-4 grid gap-2">
+        {days.map((day) => (
+          <AttendanceWeekDayCard
+            day={day}
+            isToday={day.date === todayServiceDate}
+            key={day.date}
+            locale={locale}
+            onOpen={() => setSelectedDate(day.date)}
+          />
+        ))}
+      </ul>
+
+      <SpecialDayOffLegend days={days} />
+
+      <AttendanceDayPanel day={selectedDay} locale={locale} onClose={() => setSelectedDate(null)} todayServiceDate={todayServiceDate} />
     </div>
   );
 }

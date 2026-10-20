@@ -261,6 +261,57 @@ test.describe("티켓 06 근태 판정과 근태 달력", () => {
     await expect(page.getByText("퇴근 미입력 — 정정 요청", { exact: true })).toBeVisible();
   });
 
+  test("근태 탭은 이번 주를 기본으로 보이고, 주의 날짜 카드에 출퇴근과 판정이 바로 보인다", async ({ page }) => {
+    await login(page, ACCOUNT_ID, "Story06!mine");
+
+    await page.goto("/therapist/attendance");
+    await expect(page.getByRole("navigation", { name: "근태 보기" }).getByRole("link", { name: "주" })).toHaveAttribute("aria-current", "page");
+    const thisWeek = page.getByRole("list", { name: / 근태$/ });
+    await expect(thisWeek.getByRole("button", { name: dayCellName(TODAY_DATE) })).toBeVisible();
+    await expect(thisWeek.getByRole("button")).toHaveCount(7);
+
+    // 어제가 지난주일 수 있으므로(오늘이 월요일) 그 날짜가 든 주를 ?week=로 연다.
+    await page.goto(`/therapist/attendance?week=${LATE_AND_MISSING_CHECKOUT_DATE}`);
+    const card = page.getByRole("list", { name: / 근태$/ }).getByRole("button", { name: dayCellName(LATE_AND_MISSING_CHECKOUT_DATE) });
+    await expect(card).toContainText("근무 예정");
+    await expect(card).toContainText("출근 09:10");
+    await expect(card).toContainText("지각 10분");
+    await expect(card).toContainText("퇴근 미입력");
+
+    await card.click();
+    const panel = page.getByRole("dialog", { name: formatFullDateKo(LATE_AND_MISSING_CHECKOUT_DATE) });
+    await expect(panel.getByText("직접")).toBeVisible();
+    await panel.getByRole("button", { name: "닫기" }).click();
+  });
+
+  test("주 보기와 월 보기를 오가며 같은 기간을 본다", async ({ page }) => {
+    await login(page, ACCOUNT_ID, "Story06!mine");
+    await page.goto("/therapist/attendance");
+
+    const viewTabs = page.getByRole("navigation", { name: "근태 보기" });
+    await viewTabs.getByRole("link", { name: "월" }).click();
+    await expect(page).toHaveURL(new RegExp(`\\?month=${monthKeyOf(TODAY_DATE)}$`));
+    await expect(page.getByRole("grid")).toBeVisible();
+    await expect(viewTabs.getByRole("link", { name: "월" })).toHaveAttribute("aria-current", "page");
+
+    await viewTabs.getByRole("link", { name: "주" }).click();
+    await expect(page).toHaveURL(/\/therapist\/attendance$/);
+    await expect(page.getByRole("list", { name: / 근태$/ }).getByRole("button", { name: dayCellName(TODAY_DATE) })).toBeVisible();
+
+    await page.getByRole("navigation", { name: "근태 주 이동" }).getByRole("link", { name: "이전 주" }).click();
+    await expect(page).toHaveURL(/\?week=\d{4}-\d{2}-\d{2}$/);
+    await expect(page.getByRole("list", { name: / 근태$/ }).getByRole("button", { name: dayCellName(addDaysToIsoDate(TODAY_DATE, -7)) })).toBeVisible();
+  });
+
+  test("390px 폭에서 주 보기가 가로 스크롤 없이 보인다", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await login(page, ACCOUNT_ID, "Story06!mine");
+    await page.goto("/therapist/attendance");
+    await expect(page.getByRole("list", { name: / 근태$/ })).toBeVisible();
+    const hasHorizontalScroll = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+    expect(hasHorizontalScroll).toBe(false);
+  });
+
   test("390px 폭에서 근태 달력이 가로 스크롤 없이 보인다", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, ACCOUNT_ID, "Story06!mine");

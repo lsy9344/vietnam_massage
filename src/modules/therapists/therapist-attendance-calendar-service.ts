@@ -89,9 +89,8 @@ function getClient(client?: TherapistAttendanceCalendarPrismaClient) {
 }
 
 /**
- * 근태 달력 한 달(티켓 06, 스펙 D18, M12). 근무표(좁은 조회)·출퇴근(좁은 조회)·판정 순수 함수를
- * 합쳐 날짜별 한 줄로 만든다. monthKey가 없으면 오늘이 속한 달이다. 지난 달을 봐도 운영월 레코드가
- * 없을 수 있어(사용자 확인 전) 달 경계는 calculateOperatingMonthRange(달력월, DB 없음)로만 정한다.
+ * 근태 달력 한 달(티켓 06, 스펙 D18, M12). monthKey가 없으면 오늘이 속한 달이다. 지난 달을 봐도
+ * 운영월 레코드가 없을 수 있어(사용자 확인 전) 달 경계는 calculateOperatingMonthRange(달력월, DB 없음)로만 정한다.
  */
 export async function getTherapistAttendanceCalendar(input: {
   employeeId: string;
@@ -99,40 +98,96 @@ export async function getTherapistAttendanceCalendar(input: {
   now?: Date;
   prismaClient?: TherapistAttendanceCalendarPrismaClient;
 }): Promise<TherapistAttendanceCalendarMonthDto> {
-  const client = getClient(input.prismaClient);
   const now = input.now ?? new Date();
+  const todayServiceDate = businessTodayServiceDate(now);
+  const range = calculateOperatingMonthRange(input.monthKey ?? todayServiceDate.slice(0, 7));
+  const days = await listTherapistAttendanceDays({
+    employeeId: input.employeeId,
+    startDate: range.startDate,
+    endDate: range.endDate,
+    now,
+    client: getClient(input.prismaClient)
+  });
 
+  return { monthKey: range.monthKey, startDate: range.startDate, endDate: range.endDate, todayServiceDate, days };
+}
+
+export type TherapistAttendanceCalendarWeekDto = {
+  /** 월요일. */
+  weekStartDate: string;
+  /** 일요일. */
+  weekEndDate: string;
+  todayServiceDate: string;
+  days: TherapistAttendanceCalendarDayDto[];
+};
+
+// 월요일 시작(근무표 주간 보기 listPlannedWorkingDaysForWeek와 같은 규칙). getUTCDay()는 일요일이 0이다.
+function mondayOfWeekContaining(isoDate: string) {
+  const weekday = new Date(`${isoDate}T00:00:00.000Z`).getUTCDay();
+  return addDaysToIsoDate(isoDate, -((weekday + 6) % 7));
+}
+
+/**
+ * 근태 달력 한 주(월–일). 근태 탭의 기본 보기다. date가 속한 주를 돌려주고, date가 없으면 오늘
+ * 운영일이 속한 주다. 주가 두 달에 걸쳐도 한 번에 읽는다(달 경계와 무관).
+ */
+export async function getTherapistAttendanceWeek(input: {
+  employeeId: string;
+  date?: string;
+  now?: Date;
+  prismaClient?: TherapistAttendanceCalendarPrismaClient;
+}): Promise<TherapistAttendanceCalendarWeekDto> {
+  const now = input.now ?? new Date();
+  const todayServiceDate = businessTodayServiceDate(now);
+  const weekStartDate = mondayOfWeekContaining(input.date ?? todayServiceDate);
+  const weekEndDate = addDaysToIsoDate(weekStartDate, 6);
+  const days = await listTherapistAttendanceDays({
+    employeeId: input.employeeId,
+    startDate: weekStartDate,
+    endDate: weekEndDate,
+    now,
+    client: getClient(input.prismaClient)
+  });
+
+  return { weekStartDate, weekEndDate, todayServiceDate, days };
+}
+
+// 근무표(좁은 조회)·출퇴근(좁은 조회)·신청·판정 순수 함수를 합쳐 기간의 날짜별 한 줄로 만든다.
+async function listTherapistAttendanceDays(input: {
+  employeeId: string;
+  startDate: string;
+  endDate: string;
+  now: Date;
+  client: TherapistAttendanceCalendarPrismaClient;
+}): Promise<TherapistAttendanceCalendarDayDto[]> {
+  const { employeeId, startDate, endDate, now, client } = input;
   const dayStart = BUSINESS_DAY_START_TIME;
   const todayServiceDate = businessTodayServiceDate(now);
-
-  const monthKey = input.monthKey ?? todayServiceDate.slice(0, 7);
-  const range = calculateOperatingMonthRange(monthKey);
-
   const [plannedDays, attendances, requestDays, specialDaysOff] = await Promise.all([
     listPlannedWorkingDayStatusesForEmployeeInRange({
-      employeeId: input.employeeId,
-      startDate: range.startDate,
-      endDate: range.endDate,
+      employeeId,
+      startDate,
+      endDate,
       prismaClient: client
     }),
     listTherapistAttendanceForEmployeeInRange({
-      employeeId: input.employeeId,
-      startDate: range.startDate,
-      endDate: range.endDate,
+      employeeId,
+      startDate,
+      endDate,
       prismaClient: client
     }),
     // 08·09가 채운 자리(휴무 신청·정정 요청 상태). 값만 메운다 — 타입은 06이 정한 그대로다.
     listTherapistRequestsForEmployeeInRange({
-      employeeId: input.employeeId,
-      startDate: range.startDate,
-      endDate: range.endDate,
+      employeeId,
+      startDate,
+      endDate,
       now,
       prismaClient: client
     }),
     listApprovedSpecialDayOffs({
-      employeeIds: [input.employeeId],
-      startDate: range.startDate,
-      endDate: range.endDate,
+      employeeIds: [employeeId],
+      startDate,
+      endDate,
       prismaClient: client
     })
   ]);
@@ -142,7 +197,7 @@ export async function getTherapistAttendanceCalendar(input: {
   const requestByDate = new Map(requestDays.map((request) => [request.targetDate, request]));
   const specialDates = new Set(specialDaysOff.map((day) => day.date));
 
-  const days: TherapistAttendanceCalendarDayDto[] = plannedDays.map((planned) => {
+  return plannedDays.map((planned) => {
     const attendance = attendanceByDate.get(planned.date) ?? null;
     const request = requestByDate.get(planned.date) ?? null;
     const judgment = judgeTherapistAttendanceDay({
@@ -168,8 +223,6 @@ export async function getTherapistAttendanceCalendar(input: {
       requestStatus: request ? { kind: request.kind, status: request.status, rejectionReason: request.rejectionReason } : null
     };
   });
-
-  return { monthKey: range.monthKey, startDate: range.startDate, endDate: range.endDate, todayServiceDate, days };
 }
 
 // 끝난 운영일의 퇴근 미입력을 찾는 돌아보는 창(스펙 D17, "오늘" 탭·근태 탭 공통 안내). 운영월
