@@ -21,6 +21,21 @@ const THERAPIST_STAFF_CODE = "E2E-T01-THR-1";
 const SORT_TARGET_STAFF_CODE = "E2E-T01-OPS-1";
 const SORT_TARGET_DISPLAY_NAME = "T01 임시직원";
 
+// R26: 공용 계정 "therapist"의 원래 연결(scripts/seed-dev-accounts.ts). 이 스펙이 테스트 동안
+// THERAPIST_STAFF_CODE로 다시 연결하므로, afterAll에서 이 직원으로 되돌려야 01 뒤에 도는 스펙(05 등)이
+// "활성 Therapist 없음"으로 실패하지 않는다 — deactivateAll()이 THERAPIST_STAFF_CODE 직원을 비활성화
+// 하는데, 계정이 그 직원에 그대로 묶여 있으면 그 계정 전체가 비활성 Therapist로 막힌다.
+const SEED_THERAPIST_STAFF_CODE = "THR-E2E-001";
+
+async function restoreTherapistAccountLink() {
+  const seedEmployee = await (prisma as any).employee.findUnique({ where: { staffCode: SEED_THERAPIST_STAFF_CODE } });
+  if (!seedEmployee) return;
+  await (prisma as any).userAccount.update({
+    where: { accountId: THERAPIST_ACCOUNT_ID },
+    data: { employeeId: seedEmployee.id, role: "therapist", isActive: true, lockedUntil: null, failedLoginCount: 0 }
+  });
+}
+
 let therapistAccountDbId = "";
 let sortTargetEmployeeId = "";
 
@@ -150,6 +165,9 @@ test.describe("티켓 01 therapist 역할과 빈 Therapist 화면", () => {
   });
 
   test.afterAll(async () => {
+    // R26: 공용 계정을 원래 직원(THR-E2E-001)으로 되돌린 다음에 이 스펙이 만든 직원을 비활성화한다 —
+    // 순서를 바꾸면 그 사이 짧게라도 계정이 비활성 직원에 묶인다.
+    await restoreTherapistAccountLink();
     await testEmployees.deactivateAll();
     await prisma.$disconnect();
   });

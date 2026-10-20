@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { testEmployees } from "./support/test-employees";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
@@ -59,7 +60,9 @@ async function openDay(page: import("@playwright/test").Page, isoDate: string) {
 }
 
 async function seedTherapistAccount() {
-  const employee = await (prisma as any).employee.upsert({
+  // R27: testEmployees.upsert()(01·02·10·12와 같은 헬퍼)가 공유 DB에서 sortOrder가 이미 쓰였으면
+  // 빈 자리를 찾는다(P2002 방지).
+  const employee = await testEmployees.upsert({
     where: { staffCode: STAFF_CODE },
     update: { displayName: DISPLAY_NAME, employeeGroup: "THERAPIST", employmentStatus: "재직", isActive: true },
     create: {

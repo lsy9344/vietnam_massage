@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { testEmployees } from "./support/test-employees";
 import { hash } from "@/lib/password-hash";
 import { businessTodayServiceDate } from "@/lib/operating-date";
 import { confirmPayoutConfirmation } from "@/modules/settlements/payout-confirmation-service";
@@ -41,10 +42,12 @@ async function ensureOperatingMonth(monthKey: string, status: string) {
   });
 }
 
+// R27: testEmployees.upsert()(01·02·10·12와 같은 헬퍼)가 공유 DB에서 sortOrder가 이미 쓰였으면
+// 빈 자리를 찾는다(P2002 방지).
 async function seedEmployee(staffCode: string, displayName: string, sortOrder: number) {
-  return (prisma as any).employee.upsert({
+  return testEmployees.upsert({
     where: { staffCode },
-    update: { displayName, employeeGroup: "THERAPIST", employmentStatus: "재직", sortOrder, isActive: true },
+    update: { displayName, employeeGroup: "THERAPIST", employmentStatus: "재직", isActive: true },
     create: {
       staffCode,
       displayName,
