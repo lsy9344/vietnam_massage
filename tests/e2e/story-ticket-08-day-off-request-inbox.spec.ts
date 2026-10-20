@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { testEmployees } from "./support/test-employees";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
@@ -59,7 +60,9 @@ async function openDay(page: import("@playwright/test").Page, isoDate: string) {
 }
 
 async function seedTherapistAccount() {
-  const employee = await (prisma as any).employee.upsert({
+  // R27: testEmployees.upsert()(01·02·10·12와 같은 헬퍼)가 공유 DB에서 sortOrder가 이미 쓰였으면
+  // 빈 자리를 찾는다(P2002 방지).
+  const employee = await testEmployees.upsert({
     where: { staffCode: STAFF_CODE },
     update: { displayName: DISPLAY_NAME, employeeGroup: "THERAPIST", employmentStatus: "재직", isActive: true },
     create: {
@@ -288,7 +291,8 @@ test.describe("티켓 08 휴무 신청과 승인함", () => {
     const cell = page.getByRole("grid").getByRole("button", { name: dayCellName(SPECIAL_DATE) });
     await expect(cell).toHaveAccessibleName(/소중한날 휴가/);
     await expect(cell).toHaveClass(/border-danger/);
-    // 기호 설명란이 붉은 ■가 소중한날 휴가도 뜻한다고 알려 준다.
+    // 기호 설명란이 붉은 ■가 소중한날 휴가도 뜻한다고 알려 준다(기호는 U+FE0E로 이모지 대신 글자
+    // 모양을 강제한다, R18, statusGlyphChar).
     await expect(page.getByRole("note", { name: "기호 설명" })).toContainText("소중한날 휴가");
     expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
     await page.screenshot({ path: testInfo.outputPath("special-day-off-mobile.png") });

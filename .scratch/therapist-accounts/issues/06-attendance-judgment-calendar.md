@@ -4,7 +4,7 @@
 
 **Blocked by:** 03, 04
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] 판정 규칙은 `CONTEXT.md`와 같다(M12).
   - 지각은 출근 예정 시각보다 1분이라도 늦은 출근이고, 늦은 분 수를 같이 낸다. 출근 예정 시각이 비어 있으면 판정하지 않는다.

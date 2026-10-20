@@ -7,27 +7,14 @@ import { DetailRow } from "@/components/ui/detail-row";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import { ModalPanel } from "@/components/ui/panel";
 import { ScreenState } from "@/components/ui/screen-state";
-import { StatusIndicator, type StatusTone } from "@/components/ui/status-indicator";
+import { StatusIndicator, statusGlyphChar, toneTextClassName, type StatusTone } from "@/components/ui/status-indicator";
 import { therapistAttendanceMethodLabel, therapistRequestKindLabel, therapistRequestStatusLabel, scheduleStatusLabel } from "@/lib/i18n/codes";
 import { useT } from "@/lib/i18n/client";
 import type { Locale } from "@/lib/i18n/config";
+import { intlLocale } from "@/lib/i18n/format";
 import { cn } from "@/lib/utils";
 import { cancelTherapistRequestAction, requestTherapistDayOffAction, type TherapistRequestActionState } from "@/app/therapist/attendance/actions";
-import type { TherapistAttendanceCalendarDayDto } from "@/modules/therapists/therapist-attendance-calendar-service";
-
-// 압축 칸(7열 그리드)에 쓰는 작은 기호. StatusIndicator(status-indicator.tsx)와 같은 기호·색이다.
-const TONE_GLYPH: Record<"info" | "success" | "warning" | "danger", string> = {
-  info: "◆",
-  success: "●",
-  warning: "▲",
-  danger: "■"
-};
-const TONE_TEXT_CLASS: Record<"info" | "success" | "warning" | "danger", string> = {
-  info: "text-info",
-  success: "text-success",
-  warning: "text-warning",
-  danger: "text-danger"
-};
+import type { TherapistAttendanceCalendarDayDto, TherapistAttendanceDayRequestStatus } from "@/modules/therapists/therapist-attendance-calendar-service";
 
 type AttendanceBadge = { label: string; tone: StatusTone };
 
@@ -60,12 +47,12 @@ function weekdayIndexMondayFirst(isoDate: string) {
 const WEEKDAY_HEADER_REFERENCE_DATES = ["2023-01-02", "2023-01-03", "2023-01-04", "2023-01-05", "2023-01-06", "2023-01-07", "2023-01-08"];
 
 function weekdayHeaders(locale: Locale) {
-  const formatter = new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "ko-KR", { timeZone: "UTC", weekday: "short" });
+  const formatter = new Intl.DateTimeFormat(intlLocale(locale), { timeZone: "UTC", weekday: "short" });
   return WEEKDAY_HEADER_REFERENCE_DATES.map((date) => formatter.format(new Date(`${date}T00:00:00.000Z`)));
 }
 
 function formatFullDate(locale: Locale, isoDate: string) {
-  return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "ko-KR", {
+  return new Intl.DateTimeFormat(intlLocale(locale), {
     timeZone: "UTC",
     year: "numeric",
     month: "long",
@@ -82,13 +69,24 @@ const REQUEST_STATUS_TONE: Record<"pending" | "approved" | "rejected" | "cancele
   expired: "neutral"
 };
 
+// 휴무 계열(보통 휴무, 소중한날 휴가)만 이 조작의 "대기 중" 취소 UI를 받는다(D22, R1·R2). 서비스
+// 쪽의 isDayOffFamilyKind(therapist-request-service.ts)와 같은 구분이다.
+type TherapistRequestKindOfDay = NonNullable<TherapistAttendanceDayRequestStatus>["kind"];
+function isDayOffFamilyRequestKind(kind: TherapistRequestKindOfDay) {
+  return kind === "day_off" || kind === "special_day_off";
+}
+
 /**
  * 휴무 신청·취소(스펙 D22, 티켓 08). 근태 달력(06)의 requestStatus 자리는 날짜만 알므로
  * (TherapistAttendanceDayRequestStatus에 신청 id가 없다) 취소는 날짜로 찾아 처리한다
- * (cancelTherapistDayOffRequestForDate). 정정 요청(09)은 다른 화면(정정 요청 만들기)에서 만든다 —
- * 이 자리는 kind가 "day_off"인 대기 중 신청의 취소도 함께 보여줄 수 있게 kind를 따로 보지 않는다.
+ * (cancelTherapistDayOffRequestForDate). 정정 요청(09)은 다른 화면(정정 요청 만들기)에서 만든다.
+ *
+ * R1: 그날 대기 중인 신청이 정정이면(종류를 안 보고 status만 보면 생기던 버그) 이 휴무 취소 UI를
+ * 보이지 않는다 — "신청 보냄" 줄은 위 dl의 requestLabel이 이미 종류와 함께 보여준다. R3(사용자
+ * 이야기 98)로 같은 날 다른 종류의 대기 중인 신청이 있으면 새 휴무 신청도 서버가 막으므로, 그 사이에는
+ * "신청" 버튼도 보이지 않는다.
  */
-function DayOffRequestControls({ day }: { day: TherapistAttendanceCalendarDayDto }) {
+export function DayOffRequestControls({ day }: { day: TherapistAttendanceCalendarDayDto }) {
   const t = useT();
   const [requestState, requestAction, requestPending] = useActionState<TherapistRequestActionState, FormData>(requestTherapistDayOffAction, null);
   const [cancelState, cancelAction, cancelPending] = useActionState<TherapistRequestActionState, FormData>(cancelTherapistRequestAction, null);
@@ -99,13 +97,15 @@ function DayOffRequestControls({ day }: { day: TherapistAttendanceCalendarDayDto
   const requestFormError = requestState && !requestState.ok ? requestState.formError : undefined;
   const cancelFormError = cancelState && !cancelState.ok ? cancelState.formError : undefined;
 
+  const pendingOtherKind = day.requestStatus?.status === "pending" && !isDayOffFamilyRequestKind(day.requestStatus.kind);
   // 서버가 다시 읽기 전까지는 이 자리에서 지금 한 행동(신청/취소)의 결과를 먼저 보인다. 서버 값은
   // revalidatePath로 곧 뒤따라온다 — 둘이 어긋나는 사이에도 이 화면만은 맞는 쪽을 보인다.
-  const effectivelyPending = cancelState?.ok ? false : requestState?.ok ? true : day.requestStatus?.status === "pending";
+  const effectivelyPending =
+    cancelState?.ok ? false : requestState?.ok ? true : day.requestStatus?.status === "pending" && isDayOffFamilyRequestKind(day.requestStatus.kind);
   // 승인되면 서버가 planStatus를 "휴무"로 바꾸므로, 이 칸은 더는 신청·취소 어느 쪽도 보이지 않는다.
   const alreadyDayOff = day.planStatus === "휴무";
 
-  if (alreadyDayOff) {
+  if (alreadyDayOff || pendingOtherKind) {
     return null;
   }
 
@@ -246,21 +246,25 @@ function AttendanceDayDetail({ locale, day, todayServiceDate }: { locale: Locale
 }
 
 // 칸·띠·카드가 함께 쓰는 압축 기호. 오늘 칸(검정)에서는 의미색이 묻히므로 밝은 방울 안에 둔다.
+// 기호·색은 status-indicator.tsx의 공용 맵을 쓴다(R18) — 여기서 따로 적지 않는다.
 function AttendanceGlyph({ badge, onInk = false }: { badge: AttendanceBadge | null; onInk?: boolean }) {
   if (!badge) return <span aria-hidden="true" className="h-[1.125rem]" />;
-  const tone = badge.tone as keyof typeof TONE_GLYPH;
   return (
     <span
       aria-hidden="true"
-      className={cn("inline-flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full text-xs leading-none", TONE_TEXT_CLASS[tone], onInk && "bg-surface")}
+      className={cn(
+        "inline-flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full text-xs leading-none",
+        toneTextClassName[badge.tone],
+        onInk && "bg-surface"
+      )}
     >
-      {`${TONE_GLYPH[tone]}\uFE0E`}
+      {statusGlyphChar(badge.tone)}
     </span>
   );
 }
 
 function weekdayShort(locale: Locale, isoDate: string) {
-  return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "ko-KR", { timeZone: "UTC", weekday: "short" }).format(new Date(`${isoDate}T00:00:00.000Z`));
+  return new Intl.DateTimeFormat(intlLocale(locale), { timeZone: "UTC", weekday: "short" }).format(new Date(`${isoDate}T00:00:00.000Z`));
 }
 
 // 날짜를 누르면 여는 상세 패널. 월 달력과 주 보기가 같은 패널을 쓴다.
@@ -283,6 +287,7 @@ function AttendanceDayPanel({
 }
 
 // 기호 설명란. 띠·월 칸의 기호는 attendanceDayBadges의 tone을 따르므로 같은 순서(심각한 것 먼저)로 적는다.
+// 기호·색은 status-indicator.tsx의 공용 맵을 쓴다(R18).
 const LEGEND_TONES = ["danger", "warning", "info", "success"] as const;
 
 /**
@@ -296,7 +301,7 @@ function AttendanceLegend() {
       <ul className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs font-semibold text-foreground">
         {LEGEND_TONES.map((tone) => (
           <li className="inline-flex items-center gap-1.5" key={tone}>
-            <span aria-hidden="true" className={TONE_TEXT_CLASS[tone]}>{`${TONE_GLYPH[tone]}\uFE0E`}</span>
+            <span aria-hidden="true" className={toneTextClassName[tone]}>{statusGlyphChar(tone)}</span>
             {t(`therapist.attendance.legend.${tone}`)}
           </li>
         ))}
@@ -345,7 +350,7 @@ export function TherapistAttendanceCalendar({
   if (days.length === 0) return <AttendanceEmptyState />;
 
   const leadingBlankCount = weekdayIndexMondayFirst(days[0]!.date);
-  const monthLabel = new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "ko-KR", { timeZone: "UTC", year: "numeric", month: "long" }).format(
+  const monthLabel = new Intl.DateTimeFormat(intlLocale(locale), { timeZone: "UTC", year: "numeric", month: "long" }).format(
     new Date(`${monthKey}-01T00:00:00.000Z`)
   );
 

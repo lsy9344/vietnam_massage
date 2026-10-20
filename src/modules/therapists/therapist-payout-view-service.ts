@@ -19,6 +19,11 @@ export type TherapistPayoutViewDto = {
   calls: TherapistPayoutCallDto[];
 };
 
+// R28: 형제 파일(therapist-request-service.ts 등)처럼 이 함수가 직접 건드리는 모양만 좁게
+// 선언한다. listTherapistDailySettlements에 넘길 때는 그 함수의 prismaClient 타입(therapist-daily-
+// settlement-service.ts 안에만 있고 export되지 않는다)을 Parameters로 가져와 그 자리에서만 캐스팅한다
+// (monthly-closing-preview-service.ts와 같은 선례) — 이 함수의 입력 타입 자체를 `unknown`으로 두지
+// 않는다.
 type PayoutReadClient = {
   operatingMonth: { findUnique(args: unknown): Promise<{ id: string } | null> };
 };
@@ -30,10 +35,10 @@ type PayoutReadClient = {
 export async function getTherapistPayoutView(input: {
   employeeId: string;
   now?: Date;
-  prismaClient?: unknown;
+  prismaClient?: PayoutReadClient;
   dependencies?: { listTherapistDailySettlements: typeof listTherapistDailySettlements };
 }): Promise<TherapistPayoutViewDto> {
-  const client = (input.prismaClient ?? prisma) as PayoutReadClient;
+  const client = input.prismaClient ?? (prisma as unknown as PayoutReadClient);
   const serviceDate = businessTodayServiceDate(input.now);
   const month = await client.operatingMonth.findUnique({ where: { monthKey: serviceDate.slice(0, 7) }, select: { id: true } });
   const empty: TherapistPayoutViewDto = { operatingMonthId: month?.id ?? null, serviceDate, amount: 0, confirmationStatus: null, calls: [] };
@@ -42,7 +47,7 @@ export async function getTherapistPayoutView(input: {
   const { settlements } = await (input.dependencies?.listTherapistDailySettlements ?? listTherapistDailySettlements)({
     operatingMonthId: month.id,
     serviceDate,
-    prismaClient: input.prismaClient as never
+    prismaClient: client as unknown as Parameters<typeof listTherapistDailySettlements>[0]["prismaClient"]
   });
   const settlement = settlements.find((row) => row.employeeId === input.employeeId);
   if (!settlement) return empty;
@@ -67,12 +72,12 @@ export async function expectedPayoutAmountForDate(input: {
   employeeId: string;
   operatingMonthId: string;
   serviceDate: string;
-  prismaClient?: unknown;
+  prismaClient?: NonNullable<Parameters<typeof listTherapistDailySettlements>[0]["prismaClient"]>;
 }): Promise<number> {
   const { settlements } = await listTherapistDailySettlements({
     operatingMonthId: input.operatingMonthId,
     serviceDate: input.serviceDate,
-    prismaClient: input.prismaClient as never
+    prismaClient: input.prismaClient
   });
   return settlements.find((settlement) => settlement.employeeId === input.employeeId)?.totalCommissionAmount ?? 0;
 }

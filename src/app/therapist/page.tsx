@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { SummaryCard } from "@/components/ui/summary-card";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { formatCurrencyVnd } from "@/lib/i18n/format";
-import { requireTherapistAccess } from "@/modules/therapists/therapist-access-service";
+import { requireTherapistAccess } from "@/app/therapist/require-therapist-access";
 import { getTherapistProfile } from "@/modules/therapists/therapist-profile-service";
 import { getTherapistTodayView } from "@/modules/therapists/therapist-today-view-service";
 
@@ -34,7 +34,7 @@ export default async function TherapistTodayPage() {
         <TherapistAttendanceActionsSlot attendanceStatus={todayView.today.attendanceStatus} serviceDate={todayView.today.serviceDate} />
         <TherapistTodayStatus doneCount={todayView.today.doneCount} locale={locale} nextCallInMinutes={todayView.today.nextCallInMinutes}>
           <SummaryCard
-            accent="butter"
+            accent="lavender"
             label={t("therapist.today.expectedPayoutLabel")}
             note={t("therapist.today.expectedPayoutNote")}
             unit={t("settlements.vndSuffix")}

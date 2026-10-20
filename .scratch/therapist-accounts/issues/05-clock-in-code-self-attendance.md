@@ -4,7 +4,7 @@
 
 **Blocked by:** 03, 04
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] 출근 코드는 서버 비밀값과 시각에서 계산하는 4자리 숫자이고, 1분마다 바뀐다(M11).
   - 그날 키는 `NEXTAUTH_SECRET`에서 용도 이름을 붙여 끌어낸다. 새 환경 변수는 두지 않는다.

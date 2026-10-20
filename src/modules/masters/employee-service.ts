@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { businessTodayServiceDate } from "@/lib/operating-date";
+import { businessTodayServiceDateFromActiveSlots } from "@/lib/operating-date";
 import { listAssignedServiceCallsForEmployeeFromDate } from "@/modules/calls/assigned-service-call-query";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
 import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
@@ -159,12 +159,13 @@ export class EmployeeHasFutureCallsError extends EmployeeDomainError {
 
 /**
  * S10: "오늘"은 달력날이 아니라 지금이 들어 있는 영업일의 서비스 날짜다(스펙 226줄, 티켓 10 결정) —
- * 자정부터 03:00 전까지는 전날 서비스 날짜가 오늘이다. 원장 직접 조회와 노쇼·취소 상태 복제도
- * 콜 서비스의 질의 함수(listAssignedServiceCallsForEmployeeFromDate)로 옮긴다(src/modules/README.md).
+ * 자정부터 첫 활성 슬롯 전까지는 전날 서비스 날짜가 오늘이다(운영팀 쪽 기준, R0로 되돌림). 원장
+ * 직접 조회와 노쇼·취소 상태 복제도 콜 서비스의 질의 함수
+ * (listAssignedServiceCallsForEmployeeFromDate)로 옮긴다(src/modules/README.md).
  */
 async function findFutureCalls(tx: EmployeePrismaClient, employeeId: string, now: Date): Promise<FutureCallSummary[]> {
   const timeSlots = await tx.timeSlot.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
-  const today = businessTodayServiceDate(now);
+  const today = businessTodayServiceDateFromActiveSlots(timeSlots, now);
   const records = await listAssignedServiceCallsForEmployeeFromDate({
     employeeId,
     fromDate: today,

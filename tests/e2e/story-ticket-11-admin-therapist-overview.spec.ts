@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { testEmployees } from "./support/test-employees";
 import { prisma } from "./support/db";
 import { login } from "./support/auth";
 
@@ -75,10 +76,11 @@ async function ensureOperatingMonth(monthKey: string) {
 }
 
 async function seedStoryData() {
-  // E2E 데이터(공유 자원 규칙): 직원 정렬 순서 98110대(티켓 11).
-  const employee = await (prisma as any).employee.upsert({
+  // E2E 데이터(공유 자원 규칙): 직원 정렬 순서 98110대(티켓 11). testEmployees.upsert()(01·02·10·12와
+  // 같은 헬퍼)가 공유 DB에서 그 자리가 이미 쓰였으면 빈 자리를 찾는다(R27, P2002 방지).
+  const employee = await testEmployees.upsert({
     where: { staffCode: STAFF_CODE },
-    update: { displayName: "E2E11 현황 Therapist", employeeGroup: "THERAPIST", employmentStatus: "재직", sortOrder: 98110, isActive: true },
+    update: { displayName: "E2E11 현황 Therapist", employeeGroup: "THERAPIST", employmentStatus: "재직", isActive: true },
     create: {
       staffCode: STAFF_CODE,
       displayName: "E2E11 현황 Therapist",

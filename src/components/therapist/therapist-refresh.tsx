@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { createTranslator } from "@/lib/i18n";
 import { defaultLocale, type Locale } from "@/lib/i18n/config";
+import { intlLocale } from "@/lib/i18n/format";
 import { BUSINESS_DAY_START_TIME, BUSINESS_TIME_ZONE, BUSINESS_TIME_ZONE_OFFSET } from "@/lib/business-time";
 import { addDaysToIsoDate, businessTodayServiceDate } from "@/lib/operating-date";
 
@@ -81,7 +82,7 @@ export function TherapistRefresh({
 }
 
 function formatLastUpdated(locale: Locale, value: string) {
-  return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "ko-KR", {
+  return new Intl.DateTimeFormat(intlLocale(locale), {
     timeZone: BUSINESS_TIME_ZONE,
     hour: "2-digit",
     minute: "2-digit",

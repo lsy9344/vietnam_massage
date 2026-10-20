@@ -185,6 +185,11 @@ describe("auditSourcePath", () => {
     assert.equal(auditSourcePath(entry("therapist_request", { kind: "휴무", status: "승인" })), "/settlements/requests");
   });
 
+  // R9: 형제 target(therapist_request·therapist_internal_memo)처럼 therapist_notice도 원본 화면으로 열려야 한다.
+  it("opens the notices workspace for a therapist_notice entry (R9)", () => {
+    assert.equal(auditSourcePath(entry("therapist_notice", { targetType: "전체" })), "/settlements/notices");
+  });
+
   it("has no source screen for an unknown target", () => {
     assert.equal(auditSourcePath(entry("missing_story13_target", {})), null);
   });

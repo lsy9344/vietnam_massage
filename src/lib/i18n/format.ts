@@ -7,8 +7,12 @@ import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
  *
  * 주의: 업무 timezone(Asia/Ho_Chi_Minh)과 VND 통화는 유지한다.
  * ISO 날짜 생성용 en-CA(src/lib/operating-date.ts)는 이 helper와 무관하며 건드리지 않는다.
+ *
+ * export(R19, 스멜): 이 화면이 직접 `new Intl.DateTimeFormat(…)`을 만들어야 해서(요일만, 월만
+ * 같은 옵션이 달라 formatDateTime 등을 그대로 못 쓰는 자리) `locale === "vi" ? "vi-VN" : "ko-KR"`를
+ * 여러 파일이 따로 적었다. 그 자리들은 이 함수를 그대로 쓴다.
  */
-function intlLocale(locale: Locale): string {
+export function intlLocale(locale: Locale): string {
   return locale === "vi" ? "vi-VN" : "ko-KR";
 }
 

@@ -5,6 +5,7 @@ import {
   deactivateTherapistAttendance,
   listTherapistAttendanceForDate,
   listTherapistAttendanceForEmployeeInRange,
+  listTherapistAttendanceForEmployeesInRange,
   listTherapistFullAttendanceRecognitions,
   upsertTherapistAttendance
 } from "@/modules/settlements/therapist-attendance-service";
@@ -162,7 +163,8 @@ function createMemoryPrisma(
               return false;
             }
           }
-          if (where?.employeeId !== undefined && record.employeeId !== where.employeeId) return false;
+          if (typeof where?.employeeId === "string" && record.employeeId !== where.employeeId) return false;
+          if (where?.employeeId?.in && !where.employeeId.in.includes(record.employeeId)) return false;
           return true;
         });
       },
@@ -1009,6 +1011,46 @@ describe("therapist attendance service", () => {
 
       assert.equal(rows.length, 1);
       assert.equal(rows[0].isLocked, true);
+    });
+  });
+
+  // R7(비용): 관리자 운영월 현황(11)이 사람마다 listTherapistAttendanceForEmployeeInRange를 부르는
+  // 대신 한 번에 읽어 메모리에서 나눌 수 있는 자리. R6: 활성 여부를 보지 않아 퇴사한 Therapist도
+  // (listTherapistAttendanceForEmployeeInRange라면 거절될 사람도) 그대로 포함된다.
+  describe("listTherapistAttendanceForEmployeesInRange", () => {
+    it("groups rows by employeeId in one query, including a now-inactive employee's rows", async () => {
+      const prismaClient = createMemoryPrisma({
+        seedAttendances: [
+          { id: "a1", employeeId: "thr-1", attendanceDate: "2026-06-12", checkInMinute: 600, checkInMethod: "직접", checkOutMinute: 1200, checkOutMethod: "직접", standbyMinutes: 600, isFullAttendanceRecognized: true },
+          { id: "a2", employeeId: "thr-inactive", attendanceDate: "2026-06-10", checkInMinute: 540, checkInMethod: "직접", checkOutMinute: 1080, checkOutMethod: "직접", standbyMinutes: 540, isFullAttendanceRecognized: true }
+        ]
+      });
+
+      const byEmployeeId = await listTherapistAttendanceForEmployeesInRange({
+        employeeIds: ["thr-1", "thr-inactive", "thr-2"],
+        startDate: "2026-06-01",
+        endDate: "2026-06-30",
+        prismaClient
+      });
+
+      assert.deepEqual([...byEmployeeId.keys()].sort(), ["thr-1", "thr-2", "thr-inactive"]);
+      assert.equal(byEmployeeId.get("thr-1")?.length, 1);
+      assert.equal(byEmployeeId.get("thr-1")?.[0].checkInTime, "10:00");
+      assert.equal(byEmployeeId.get("thr-inactive")?.length, 1);
+      assert.equal(byEmployeeId.get("thr-inactive")?.[0].checkInTime, "09:00");
+      assert.deepEqual(byEmployeeId.get("thr-2"), []);
+    });
+
+    it("returns an empty-array map entry for every requested id when none have attendance", async () => {
+      const prismaClient = createMemoryPrisma();
+      const byEmployeeId = await listTherapistAttendanceForEmployeesInRange({
+        employeeIds: ["thr-1", "thr-2"],
+        startDate: "2026-06-01",
+        endDate: "2026-06-30",
+        prismaClient
+      });
+      assert.deepEqual(byEmployeeId.get("thr-1"), []);
+      assert.deepEqual(byEmployeeId.get("thr-2"), []);
     });
   });
 });

@@ -159,3 +159,65 @@ export async function listPlannedWorkingDayStatusesForEmployeeInRange(input: {
     };
   });
 }
+
+const rangeManyQuerySchema = z.object({
+  employeeIds: z.array(z.string().trim().min(1)).max(500),
+  startDate: isoDateFieldSchema,
+  endDate: isoDateFieldSchema
+});
+
+// listPlannedWorkingDayStatusesForEmployeesInRange(아래)만 요구하는 좁은 타입이다. employeeId를
+// 같이 돌려주는 점만 PlannedWorkingDayRangeReadClient와 다르다.
+type PlannedWorkingDayRangeManyReadClient = {
+  plannedWorkingDay: {
+    findMany(args?: unknown): Promise<Array<{ employeeId: string; workDate: Date; planStatus: string; plannedStartTime: string | null }>>;
+  };
+};
+
+/**
+ * 직원 여럿·기간 하나의 근무표 상태를 한 번에 돌려준다(11 관리자 운영월 현황, R7 비용). 사람마다
+ * listPlannedWorkingDayStatusesForEmployeeInRange를 부르면 질의가 사람 수만큼 늘어나는 것을 피한다.
+ */
+export async function listPlannedWorkingDayStatusesForEmployeesInRange(input: {
+  employeeIds: string[];
+  startDate: string;
+  endDate: string;
+  prismaClient?: PlannedWorkingDayRangeManyReadClient;
+}): Promise<Map<string, PlannedWorkingDayDayStatusDto[]>> {
+  const parsed = rangeManyQuerySchema.safeParse(input);
+  if (!parsed.success) throw toFieldError(parsed.error);
+  assertValidParsedDate(parsed.data.startDate);
+  assertValidParsedDate(parsed.data.endDate);
+  if (parsed.data.startDate > parsed.data.endDate) {
+    throw invalidInput("조회 기간의 시작일이 종료일보다 늦습니다.", "date");
+  }
+
+  const uniqueEmployeeIds = [...new Set(parsed.data.employeeIds)];
+  const dates = enumerateIsoDates(parsed.data.startDate, parsed.data.endDate);
+  const result = new Map<string, PlannedWorkingDayDayStatusDto[]>();
+  if (uniqueEmployeeIds.length === 0) return result;
+
+  const client = input.prismaClient ?? (prisma as unknown as PlannedWorkingDayRangeManyReadClient);
+  const rows = await client.plannedWorkingDay.findMany({
+    where: { employeeId: { in: uniqueEmployeeIds }, workDate: { gte: toDate(parsed.data.startDate), lte: toDate(parsed.data.endDate) } }
+  });
+
+  const rowByEmployeeAndDate = new Map<string, Map<string, { planStatus: string; plannedStartTime: string | null }>>();
+  for (const row of rows) {
+    const byDate = rowByEmployeeAndDate.get(row.employeeId) ?? new Map();
+    byDate.set(toIsoDate(row.workDate), row);
+    rowByEmployeeAndDate.set(row.employeeId, byDate);
+  }
+
+  for (const employeeId of uniqueEmployeeIds) {
+    const byDate = rowByEmployeeAndDate.get(employeeId);
+    result.set(
+      employeeId,
+      dates.map((date) => {
+        const row = byDate?.get(date);
+        return { date, status: row ? (row.planStatus as WorkPlanStatus) : unsetPlanStatus, plannedStartTime: row?.plannedStartTime ?? null };
+      })
+    );
+  }
+  return result;
+}

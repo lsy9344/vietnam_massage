@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createTranslator } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
+import { intlLocale } from "@/lib/i18n/format";
 import { addDaysToIsoDate } from "@/lib/operating-date";
 import {
   attendanceMonthHref,
@@ -17,10 +18,6 @@ function shiftMonthKey(monthKey: string, deltaMonths: number) {
   const [year, month] = monthKey.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1 + deltaMonths, 1));
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
-function intlLocale(locale: Locale) {
-  return locale === "vi" ? "vi-VN" : "ko-KR";
 }
 
 function utcDate(isoDate: string) {

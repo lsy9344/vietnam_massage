@@ -61,6 +61,22 @@ export function previousClockCodeMinute(minute: ClockCodeMinute): ClockCodeMinut
 }
 
 /**
+ * 매장 화면이 받은 오늘·다음 날 키 중, 지금 날짜에 맞는 키를 고른다(R12). 받은 두 키의 날짜를
+ * 모두 지나면(화면을 이틀 넘게 켜 둔 경우) null을 돌려준다 — 지난 날짜의 키로 계산한 틀린 코드를
+ * 절대 보이지 않는다(그 전에는 tomorrow.date를 지나 today.date로 돌아가 틀린 코드를 보였다). 호출하는
+ * 쪽(ClockCodeDisplay)이 null이면 코드를 비우고 페이지를 한 번만 새로고침해 새 키를 받는다(주기
+ * 폴링이 아니다, D13).
+ */
+export function selectClockCodeDaySecret(
+  keys: { today: { date: string; daySecretHex: string }; tomorrow: { date: string; daySecretHex: string } },
+  calendarDate: string
+): string | null {
+  if (calendarDate === keys.tomorrow.date) return keys.tomorrow.daySecretHex;
+  if (calendarDate === keys.today.date) return keys.today.daySecretHex;
+  return null;
+}
+
+/**
  * 서버 비밀값(NEXTAUTH_SECRET)에서 그날만 쓰는 키를 끌어낸다(M11). HMAC 메시지에 용도 이름과 날짜를
  * 함께 넣어, 이 날짜 키가 새도 다른 날짜나 다른 용도의 키를 끌어낼 수 없게 한다. hex로 돌려줘
  * 매장 화면에 JSON으로 그대로 내려줄 수 있다.

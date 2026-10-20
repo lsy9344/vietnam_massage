@@ -12,7 +12,7 @@ import { StatusIndicator } from "@/components/ui/status-indicator";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
 import { autosaveServiceCallRowAction, loadTherapistAvailabilityAction, reloadServiceCallRowAction } from "@/app/(erp)/calls/actions";
-import { businessClockString, businessTodayServiceDate } from "@/lib/operating-date";
+import { businessClockString, businessTodayServiceDateFromActiveSlots } from "@/lib/operating-date";
 import { ledgerCallAnchorId } from "@/lib/ledger-address";
 import { callRowSaveReducer, initialCallRowSave, isSaveHeld, type CallRowDraft, type RowSaveStatus } from "@/app/(erp)/calls/call-row-save";
 import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
@@ -60,7 +60,7 @@ function useLedgerClock(timeSlots: ServiceCallFormOptions["timeSlots"], enabled:
   const [clock, setClock] = useState<LedgerClock | null>(null);
   useEffect(() => {
     if (!enabled) return;
-    const tick = () => setClock({ today: businessTodayServiceDate(), time: businessClockString() });
+    const tick = () => setClock({ today: businessTodayServiceDateFromActiveSlots(timeSlots), time: businessClockString() });
     tick();
     const timer = window.setInterval(tick, 30_000);
     return () => window.clearInterval(timer);

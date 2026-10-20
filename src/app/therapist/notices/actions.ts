@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireTherapistAccess } from "@/modules/therapists/therapist-access-service";
+import { requireTherapistAccess } from "@/app/therapist/require-therapist-access";
 import { markTherapistNoticeRead, type TherapistNoticeListItemDto } from "@/modules/therapists/therapist-notice-service";
 
 /**

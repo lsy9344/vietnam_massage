@@ -1,11 +1,21 @@
-import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getAuthorizedAccount, getRoleLandingPath } from "@/lib/authorization";
+import { getAuthorizedAccount, type Role } from "@/lib/authorization";
 
 export type TherapistAccess = {
   accountId: string;
   employeeId: string;
 };
+
+/**
+ * M17 판정의 순수 결과(R20). redirect는 이 모듈이 하지 않는다 — 앱 쪽 어댑터
+ * (src/app/therapist/require-therapist-access.ts)가 verdict를 보고 한다. role-landing은 그 역할의
+ * 첫 화면을 알아야 해서 role을 들고 있다.
+ */
+export type TherapistAccessVerdict =
+  | { kind: "ok"; accountId: string; employeeId: string }
+  | { kind: "sign-in" }
+  | { kind: "role-landing"; role: Role }
+  | { kind: "password-change" };
 
 type TherapistAccessPrismaClient = {
   employee: {
@@ -31,36 +41,52 @@ export async function isTherapistEmployee(employeeId: string, options: { prismaC
 }
 
 /**
- * M17: Therapist 화면과 서버 액션이 거치는 검사 하나. 세션 계정이 활성이고, 역할이 therapist이고,
- * 연결된 직원이 Therapist 구분이며 퇴사가 아니어야 한다. 통과하면 {계정 id, 직원 id}를 돌려준다.
- *
- * 뒤 티켓(03–12)의 Therapist 화면·서버 액션은 모두 이 함수 하나를 부른다. 요청에서 직원 id를 받지
- * 않고(M3) 이 함수가 돌려주는 employeeId만 쓴다.
- *
- * 세션이 없거나 비활성·잠금이면 /sign-in으로 보낸다. 역할이 therapist가 아니면(예: 관리자가 Therapist
- * 주소를 직접 열었을 때) 그 역할의 첫 화면으로 보낸다. 역할은 therapist인데 연결된 직원 검사에서
- * 막히면(예: 계정은 아직 활성인데 직원 연결이 깨진 드문 상태) /sign-in으로 보낸다 — Therapist 첫 화면으로
- * 보내면 같은 검사가 다시 막혀 되돌이가 생기기 때문이다.
- *
- * 티켓 02(M17 뒷부분): 계정에 비밀번호 변경 필요 표시가 켜져 있으면 비밀번호 변경 화면과 로그아웃
- * 말고는 막는다(기본값). `allowPasswordChangeRequired`를 준 호출(비밀번호 변경 화면 자신, 그리고 이
- * 함수를 모든 하위 주소 앞에서 한 번 더 부르는 레이아웃)만 이 표시를 통과시킨다 — 레이아웃이 기본값으로
- * 부르면 비밀번호 변경 화면으로 가는 중에도 같은 자리로 다시 보내 되돌이가 생긴다.
+ * M17 판정 하나를 순수 함수로 돌려준다(R20, 스멜: src/modules/ 중 유일하게 next/navigation을 쓰던
+ * 것을 고친다). account가 없으면(세션 없음·비활성·잠금 — getAuthorizedAccount가 이미 가려낸다)
+ * sign-in이다. 역할이 therapist가 아니면 role-landing(그 역할의 첫 화면으로, 예: 관리자가 Therapist
+ * 주소를 직접 열었을 때)이다. 역할은 therapist인데 연결된 직원 검사(isValidTherapistEmployee —
+ * isTherapistEmployee의 결과, 직원 구분이 다르거나 퇴사면 false)에서 막히면 sign-in이다 — Therapist
+ * 첫 화면으로 보내면 같은 검사가 다시 막혀 되돌이가 생기기 때문이다. 비밀번호 변경 필요 표시가 있고
+ * allowPasswordChangeRequired가 아니면 password-change다.
  */
-export async function requireTherapistAccess(options: { allowPasswordChangeRequired?: boolean } = {}): Promise<TherapistAccess> {
-  const account = await getAuthorizedAccount();
+export function evaluateTherapistAccess(input: {
+  account: { id: string; role: Role; employeeId: string | null; passwordChangeRequired: boolean } | null;
+  isValidTherapistEmployee: boolean;
+  allowPasswordChangeRequired?: boolean;
+}): TherapistAccessVerdict {
+  const { account, isValidTherapistEmployee, allowPasswordChangeRequired } = input;
   if (!account) {
-    redirect("/sign-in");
+    return { kind: "sign-in" };
   }
   if (account.role !== "therapist") {
-    redirect(getRoleLandingPath(account.role));
+    return { kind: "role-landing", role: account.role };
   }
-  if (!account.employeeId || !(await isTherapistEmployee(account.employeeId))) {
-    redirect("/sign-in");
+  if (!account.employeeId || !isValidTherapistEmployee) {
+    return { kind: "sign-in" };
   }
-  if (account.passwordChangeRequired && !options.allowPasswordChangeRequired) {
-    redirect("/therapist/password");
+  if (account.passwordChangeRequired && !allowPasswordChangeRequired) {
+    return { kind: "password-change" };
   }
+  return { kind: "ok", accountId: account.id, employeeId: account.employeeId };
+}
 
-  return { accountId: account.id, employeeId: account.employeeId };
+/**
+ * evaluateTherapistAccess의 조립(R20): 세션을 읽고(getAuthorizedAccount, @/lib/authorization —
+ * redirect를 쓰지 않는 자리) 직원 검사를 거쳐 판정을 돌려준다. 앱 쪽 어댑터
+ * (requireTherapistAccess)만 이 결과로 redirect한다.
+ */
+export async function resolveTherapistAccess(
+  options: { allowPasswordChangeRequired?: boolean; prismaClient?: TherapistAccessPrismaClient } = {}
+): Promise<TherapistAccessVerdict> {
+  const account = await getAuthorizedAccount();
+  const isValidTherapistEmployee =
+    account?.role === "therapist" && account.employeeId
+      ? await isTherapistEmployee(account.employeeId, { prismaClient: options.prismaClient })
+      : false;
+
+  return evaluateTherapistAccess({
+    account,
+    isValidTherapistEmployee,
+    allowPasswordChangeRequired: options.allowPasswordChangeRequired
+  });
 }

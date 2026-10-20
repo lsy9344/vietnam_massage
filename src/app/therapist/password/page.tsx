@@ -2,7 +2,7 @@ import { TherapistTopBar } from "@/components/therapist/therapist-top-bar";
 import { TherapistPasswordForm } from "@/app/therapist/password/therapist-password-form";
 import { getAuthorizedAccount } from "@/lib/authorization";
 import { getServerTranslator } from "@/lib/i18n/server";
-import { requireTherapistAccess } from "@/modules/therapists/therapist-access-service";
+import { requireTherapistAccess } from "@/app/therapist/require-therapist-access";
 import { getTherapistProfile } from "@/modules/therapists/therapist-profile-service";
 
 /**

@@ -2,10 +2,11 @@ import type { ReactNode } from "react";
 import { ScreenState } from "@/components/ui/screen-state";
 import { createTranslator } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
+import { intlLocale } from "@/lib/i18n/format";
 
 function formatNoticeDate(locale: Locale, isoDate: string) {
   const date = new Date(`${isoDate}T00:00:00.000Z`);
-  return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "ko-KR", { timeZone: "UTC", month: "long", day: "numeric" }).format(date);
+  return new Intl.DateTimeFormat(intlLocale(locale), { timeZone: "UTC", month: "long", day: "numeric" }).format(date);
 }
 
 /**

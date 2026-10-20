@@ -88,7 +88,9 @@ test.describe("티켓 02 Therapist 계정 발급·초기화·정지", () => {
     await expect(panel.getByRole("heading", { name: "Therapist 계정" })).toBeVisible();
 
     await panel.getByRole("button", { name: "계정 발급" }).click();
-    const notice = panel.getByRole("region", { name: "Therapist 안내 쪽지" });
+    // 쪽지는 관리자 화면 언어와 무관하게 항상 베트남어다(D5, R10) — 관리자는 한국어로 로그인했지만
+    // 쪽지의 aria-label은 vi 문구("Giấy hướng dẫn cho KTV")로 그려진다.
+    const notice = panel.getByRole("region", { name: "Giấy hướng dẫn cho KTV" });
     await expect(notice).toBeVisible();
     // 발급 직후에만 보이는 임시 비밀번호(D5) — 화면에서 그대로 읽어 그 값으로 로그인한다.
     const temporaryPassword = await notice.locator("p.text-2xl.font-bold.tabular-nums").innerText();

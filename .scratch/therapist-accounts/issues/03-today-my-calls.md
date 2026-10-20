@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] 내가 첫 번째 또는 두 번째 Therapist로 배정된 콜만 나온다. 미지명 콜과 다른 Therapist의 콜은 나오지 않는다. 서버는 01의 Therapist 검사가 돌려준 직원 id로 거른다. 요청에서 직원 id를 받지 않는다.
 - [ ] 범위는 오늘 운영일과 앞으로 7일이고, 날짜별로 묶는다.

@@ -22,7 +22,9 @@ function createMemoryPrisma() {
     { id: "emp-a", displayName: "민호", staffCode: "THR-901", employeeGroup: "THERAPIST", sortOrder: 9801, isActive: true },
     { id: "emp-b", displayName: "수진", staffCode: "THR-902", employeeGroup: "THERAPIST", sortOrder: 9802, isActive: true },
     { id: "emp-c", displayName: "지훈", staffCode: "THR-903", employeeGroup: "THERAPIST", sortOrder: 9803, isActive: true },
-    { id: "emp-d", displayName: "유리", staffCode: "THR-904", employeeGroup: "THERAPIST", sortOrder: 9804, isActive: true }
+    { id: "emp-d", displayName: "유리", staffCode: "THR-904", employeeGroup: "THERAPIST", sortOrder: 9804, isActive: true },
+    // R6: 그 운영월이 끝난 뒤 퇴사한 Therapist. 스냅샷·미리보기 행에는 그대로 남지만 지금은 비활성이다.
+    { id: "emp-e", displayName: "퇴사자", staffCode: "THR-905", employeeGroup: "THERAPIST", sortOrder: 9805, isActive: false }
   ];
   const operatingMonth = { id: "month-2042-07", monthKey: "2042-07", startDate: dbDate("2042-07-01"), endDate: dbDate("2042-07-31"), status: "작성중" };
 
@@ -33,7 +35,8 @@ function createMemoryPrisma() {
     { employeeId: "emp-a", workDate: dbDate("2042-07-05"), planStatus: "근무 예정", plannedStartTime: "09:00" },
     { employeeId: "emp-a", workDate: dbDate("2042-07-06"), planStatus: "근무 예정", plannedStartTime: "09:00" },
     { employeeId: "emp-b", workDate: dbDate("2042-07-06"), planStatus: "근무 예정", plannedStartTime: "09:00" },
-    { employeeId: "emp-d", workDate: dbDate("2042-07-06"), planStatus: "휴무", plannedStartTime: null }
+    { employeeId: "emp-d", workDate: dbDate("2042-07-06"), planStatus: "휴무", plannedStartTime: null },
+    { employeeId: "emp-e", workDate: dbDate("2042-07-02"), planStatus: "근무 예정", plannedStartTime: "09:00" }
   ];
 
   const attendances = new Map<string, any>([
@@ -122,6 +125,24 @@ function createMemoryPrisma() {
         checkOutMethod: null,
         standbyMinutes: null,
         isFullAttendanceRecognized: false,
+        isActive: true,
+        createdAt,
+        updatedAt
+      }
+    ],
+    [
+      "att-e-02",
+      {
+        id: "att-e-02",
+        operatingMonthId: "month-2042-07",
+        attendanceDate: dbDate("2042-07-02"),
+        employeeId: "emp-e",
+        checkInMinute: 540, // 09:00, 정시(R6: 지금은 퇴사했지만 그 운영월 당시의 기록)
+        checkInMethod: "직접",
+        checkOutMinute: 1080,
+        checkOutMethod: "직접",
+        standbyMinutes: 540,
+        isFullAttendanceRecognized: true,
         isActive: true,
         createdAt,
         updatedAt
@@ -359,6 +380,32 @@ describe("getTherapistAdminMonthlyOverview", () => {
     assert.equal(byEmployeeId.get("emp-b")!.rank, 2);
     assert.equal(byEmployeeId.get("emp-c")!.totalCallCount, 5);
     assert.equal(byEmployeeId.get("emp-c")!.rank, 3); // 40콜 미달이어도 전체 순위는 받는다
+  });
+
+  // R6: 스냅샷·미리보기 행에 지금은 비활성(퇴사)인 Therapist가 섞여 있어도 전체가 깨지지 않는다.
+  it("includes a since-retired employee's row instead of throwing (R6)", async () => {
+    const { client, operatingMonth } = createMemoryPrisma();
+    const rows = [
+      closingRow({ employeeId: "emp-a", staffCode: "THR-901", displayName: "민호", totalCallCount: 10 }),
+      closingRow({ employeeId: "emp-e", staffCode: "THR-905", displayName: "퇴사자", totalCallCount: 20 })
+    ];
+    const listMonthlyClosingPreviewStub = (async () => ({ therapists: { rows } }) as unknown as MonthlyClosingPreviewDto) as any;
+
+    const overview = await getTherapistAdminMonthlyOverview({
+      operatingMonth: { id: operatingMonth.id, monthKey: "2042-07", startDate: "2042-07-01", endDate: "2042-07-31", status: "작성중" },
+      now,
+      prismaClient: client,
+      dependencies: { listMonthlyClosingPreview: listMonthlyClosingPreviewStub }
+    });
+
+    assert.equal(overview.rows.length, 2);
+    const retired = overview.rows.find((row) => row.employeeId === "emp-e")!;
+    assert.equal(retired.totalCallCount, 20);
+    // 2042-07-02에 정시 출근·퇴근(직접)을 했으니 지각·결근·퇴근 미입력·예정 없는 출근은 모두 0이다.
+    assert.equal(retired.lateCount, 0);
+    assert.equal(retired.absentCount, 0);
+    assert.equal(retired.clockOutMissingCount, 0);
+    assert.equal(retired.unscheduledAttendanceCount, 0);
   });
 });
 

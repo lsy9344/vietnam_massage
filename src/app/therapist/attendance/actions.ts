@@ -5,7 +5,7 @@ import type { ActionResult } from "@/lib/action-result";
 import { t } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n/server";
 import { resolveDomainErrorMessage } from "@/lib/i18n/errors";
-import { requireTherapistAccess } from "@/modules/therapists/therapist-access-service";
+import { requireTherapistAccess } from "@/app/therapist/require-therapist-access";
 import {
   TherapistRequestDomainError,
   cancelTherapistDayOffRequestForDate,

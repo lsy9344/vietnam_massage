@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { testEmployees } from "./support/test-employees";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
@@ -61,10 +62,15 @@ type SeededData = {
 
 let seeded: SeededData;
 
+// R27: 하드코딩한 sortOrder로 직접 prisma.employee.upsert()를 부르면 공유 DB에서 다른 스펙과 겹쳐
+// P2002가 날 수 있다. testEmployees.upsert()(01·02·10·12와 같은 헬퍼)가 그 sortOrder가 이미 쓰였으면
+// 빈 자리를 찾아 재시도한다.
 async function seedEmployee(staffCode: string, displayName: string, sortOrder: number, phone: string | null = null) {
-  return (prisma as any).employee.upsert({
+  return testEmployees.upsert({
     where: { staffCode },
-    update: { displayName, employeeGroup: "THERAPIST", position: "마사지사", employmentStatus: "재직", sortOrder, isActive: true, phone },
+    // sortOrder는 update에 넣지 않는다(01과 같은 이유) — 이미 있는 직원의 자리를 바꾸지 않고,
+    // 새로 만들 때만 testEmployees.upsert()가 고른 빈 자리를 쓴다.
+    update: { displayName, employeeGroup: "THERAPIST", position: "마사지사", employmentStatus: "재직", isActive: true, phone },
     create: {
       staffCode,
       displayName,

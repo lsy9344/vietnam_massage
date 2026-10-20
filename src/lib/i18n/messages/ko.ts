@@ -1755,6 +1755,7 @@ export const ko = {
   "audit.target.opsMonthlyIncentiveRule": "운영팀 월 인센티브 규칙",
   "audit.target.therapistInternalMemo": "Therapist 내부 메모",
   "audit.target.therapistRequest": "Therapist 신청",
+  "audit.target.therapistNotice": "Therapist 공지",
 
   // Therapist 전용 화면(티켓 01): 아래 탭 네 개, "나" 메뉴, 새로고침 공통 조각. vi에서 Therapist는 "KTV"다.
   "therapist.nav.aria": "Therapist 화면 이동",
@@ -1860,7 +1861,7 @@ export const ko = {
   "therapist.attendance.dayDetail.requestLabel": "신청",
   "therapist.attendance.dayDetail.noRecordValue": "기록 없음",
   "therapist.attendance.dayDetail.noValue": "없음",
-  "therapist.attendance.dayDetail.noJudgmentValue": "특이사항 없음",
+  "therapist.attendance.dayDetail.noJudgmentValue": "해당 없음",
   "therapist.attendance.dayDetail.lateBadge": "지각 {minutes}분",
   "therapist.attendance.dayDetail.absentBadge": "결근",
   "therapist.attendance.dayDetail.clockOutMissingBadge": "퇴근 미입력",

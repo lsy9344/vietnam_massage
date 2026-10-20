@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] 관리자(`employee:write`)는 직원 화면의 Therapist 패널에서 계정을 한 명씩 발급한다. 일괄 발급은 없다.
   - 직원 구분이 Therapist인 직원에게만 `therapist` 역할을 줄 수 있고, 그런 직원에게는 이 역할만 줄 수 있다. 기존 계정 연결도 같은 규칙으로 서버가 거절한다.
