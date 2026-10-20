@@ -54,6 +54,7 @@ export function SidePanel({
 
 /**
  * 모달 패널(빠른 예약 같은 생성 흐름). 오른쪽 서랍이고 휴대폰 폭에서는 전체 화면 시트다.
+ * placement="center"는 어느 폭에서나 흐린 배경 위 가운데에 뜨는 팝업이다(짧은 상세, 예: 근태 날짜 상세).
  * 포커스를 가두고 Esc로 닫으며, 닫으면 연 자리로 포커스를 돌려준다. 도크까지 덮어 배경을 비활성으로 만든다.
  * 미저장 값 안내는 onOpenChange를 받는 쪽이 정한다.
  */
@@ -63,6 +64,7 @@ export function ModalPanel({
   title,
   description,
   trigger,
+  placement = "drawer",
   children
 }: {
   open?: boolean;
@@ -70,6 +72,7 @@ export function ModalPanel({
   title: string;
   description?: string;
   trigger?: ReactNode;
+  placement?: "drawer" | "center";
   children: ReactNode;
 }) {
   const t = useT();
@@ -77,9 +80,14 @@ export function ModalPanel({
     <DialogPrimitive.Root onOpenChange={onOpenChange} open={open}>
       {trigger ? <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger> : null}
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-foreground/20 backdrop-blur-[3px]" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-foreground/20 backdrop-blur-[3px]" data-modal-overlay="" />
         <DialogPrimitive.Content
-          className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-surface-float text-foreground outline-none min-[600px]:inset-y-4 min-[600px]:left-auto min-[600px]:right-4 min-[600px]:w-[min(30rem,calc(100vw-2rem))] min-[600px]:rounded-xl min-[600px]:border min-[600px]:border-border"
+          className={cn(
+            "fixed z-50 flex flex-col overflow-y-auto bg-surface-float text-foreground outline-none",
+            placement === "center"
+              ? "left-1/2 top-1/2 max-h-[calc(100dvh-2rem)] w-[min(26rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border"
+              : "inset-0 min-[600px]:inset-y-4 min-[600px]:left-auto min-[600px]:right-4 min-[600px]:w-[min(30rem,calc(100vw-2rem))] min-[600px]:rounded-xl min-[600px]:border min-[600px]:border-border"
+          )}
         >
           <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
             <div>
@@ -90,7 +98,7 @@ export function ModalPanel({
             </div>
             <DialogPrimitive.Close className={closeButtonClass}>{t("common.panel.close")}</DialogPrimitive.Close>
           </div>
-          <div className="flex-1 p-4">{children}</div>
+          <div className={cn("p-4", placement === "drawer" && "flex-1")}>{children}</div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>

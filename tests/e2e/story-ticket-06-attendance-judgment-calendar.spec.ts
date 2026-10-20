@@ -312,6 +312,56 @@ test.describe("티켓 06 근태 판정과 근태 달력", () => {
     expect(hasHorizontalScroll).toBe(false);
   });
 
+  test("390px 폭 주 보기의 날짜 카드는 모두 같은 높이이고, 한국어·베트남어 글자가 카드 칸을 벗어나지 않는다", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await login(page, ACCOUNT_ID, "Story06!mine");
+
+    for (const locale of ["ko", "vi"] as const) {
+      await page.context().addCookies([{ name: "locale", value: locale, url: new URL(page.url()).origin }]);
+      // 지각·퇴근 미입력·예정 없는 출근·결근·미입력이 섞인 주들
+      for (const date of [LATE_AND_MISSING_CHECKOUT_DATE, FULL_ATTENDANCE_DATE]) {
+        await page.goto(`/therapist/attendance?week=${date}`);
+        const cards = page.locator("li[id^='attendance-day-'] > button");
+        await expect(cards).toHaveCount(7);
+        const measured = await cards.evaluateAll((buttons) =>
+          buttons.map((button) => {
+            const parts = [...button.querySelectorAll<HTMLElement>("[data-card-part]")];
+            return {
+              height: Math.round(button.getBoundingClientRect().height),
+              overflowing: parts
+                .filter((part) => part.scrollWidth > part.clientWidth + 1 || part.scrollHeight > part.clientHeight + 1)
+                .map((part) => part.dataset.cardPart)
+            };
+          })
+        );
+        expect(new Set(measured.map((card) => card.height)).size, `${locale} ${date} ${JSON.stringify(measured)}`).toBe(1);
+        expect(measured.flatMap((card) => card.overflowing), `${locale} ${date}`).toEqual([]);
+      }
+    }
+  });
+
+  test("390px 폭에서 날짜를 누르면 상세가 흐린 배경 위 가운데 팝업으로 뜬다", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await login(page, ACCOUNT_ID, "Story06!mine");
+    await page.goto(`/therapist/attendance?week=${ABSENT_DATE}`);
+    await page.getByRole("list", { name: / 근태$/ }).getByRole("button", { name: dayCellName(ABSENT_DATE) }).click();
+
+    const dialog = page.getByRole("dialog", { name: formatFullDateKo(ABSENT_DATE) });
+    await expect(dialog).toBeVisible();
+    const box = (await dialog.boundingBox())!;
+    // 화면 가장자리에서 떨어져 있고(전체 화면 시트가 아니다), 가로·세로 가운데에 있다.
+    expect(box.x).toBeGreaterThanOrEqual(15);
+    expect(390 - (box.x + box.width)).toBeGreaterThanOrEqual(15);
+    expect(box.y).toBeGreaterThan(0);
+    expect(box.height).toBeLessThan(844);
+    expect(Math.abs(box.x + box.width / 2 - 195)).toBeLessThanOrEqual(1);
+    expect(Math.abs(box.y + box.height / 2 - 422)).toBeLessThanOrEqual(1);
+    // 뒤의 근태 화면이 흐린 덮개 너머로 보인다.
+    await expect(page.locator("[data-modal-overlay]")).toHaveCSS("backdrop-filter", /blur/);
+    await dialog.getByRole("button", { name: "닫기" }).click();
+    await expect(dialog).toHaveCount(0);
+  });
+
   test("390px 폭에서 근태 달력이 가로 스크롤 없이 보인다", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, ACCOUNT_ID, "Story06!mine");

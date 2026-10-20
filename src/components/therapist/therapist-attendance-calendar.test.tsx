@@ -83,6 +83,41 @@ describe("TherapistAttendanceWeek", () => {
     assert.doesNotMatch(cardText(html, "2042-05-09"), /휴무 ·/);
   });
 
+  it("keeps every card to one line of status chips, folding extras into +N", () => {
+    const html = renderWeek(
+      WEEK_DATES.map((date) =>
+        date === "2042-05-06"
+          ? day(date, {
+              checkInTime: "09:10",
+              checkInMethod: "직접",
+              judgment: { lateMinutes: 10, isAbsent: false, isClockOutMissing: true, isUnscheduledAttendance: false },
+              requestStatus: { kind: "correction", status: "pending", rejectionReason: null }
+            })
+          : date === "2042-05-08"
+            ? day(date, { judgment: { lateMinutes: 5, isAbsent: false, isClockOutMissing: true, isUnscheduledAttendance: false } })
+            : day(date)
+      )
+    );
+    // 셋(퇴근 미입력·지각·정정 대기)이면 가장 급한 하나 + "+2"
+    const crowded = cardText(html.replace(/<span class="sr-only">[^<]*<\/span>/g, ""), "2042-05-06");
+    assert.match(crowded, /퇴근 미입력/);
+    assert.doesNotMatch(crowded, /지각 10분/);
+    assert.match(crowded, /\+2/);
+    // 접힌 칩은 화면 낭독기에는 그대로 읽힌다.
+    assert.match(cardText(html, "2042-05-06"), /지각 10분, 정정 · 대기/);
+    // 둘이면 그대로 둘
+    const two = cardText(html, "2042-05-08");
+    assert.match(two, /퇴근 미입력/);
+    assert.match(two, /지각 5분/);
+    assert.doesNotMatch(two, /\+\d/);
+  });
+
+  it("shows the planned start and clock times on every card, with a dash when there is no record", () => {
+    const html = renderWeek(WEEK_DATES.map((date) => (date === "2042-05-09" ? day(date, { planStatus: "미입력", plannedStartTime: null }) : day(date))));
+    assert.match(cardText(html, "2042-05-05"), /예정 09:00 출근 — 퇴근 —/);
+    assert.match(cardText(html, "2042-05-09"), /미입력 출근 — 퇴근 —/);
+  });
+
   it("explains what each symbol color means, next to the week strip", () => {
     const html = renderWeek(WEEK_DATES.map((date) => day(date)));
     const legend = legendText(html);

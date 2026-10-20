@@ -276,7 +276,7 @@ function AttendanceDayPanel({
   onClose: () => void;
 }) {
   return (
-    <ModalPanel onOpenChange={(open) => !open && onClose()} open={day !== null} title={day ? formatFullDate(locale, day.date) : ""}>
+    <ModalPanel onOpenChange={(open) => !open && onClose()} open={day !== null} placement="center" title={day ? formatFullDate(locale, day.date) : ""}>
       {day ? <AttendanceDayDetail day={day} locale={locale} todayServiceDate={todayServiceDate} /> : null}
     </ModalPanel>
   );
@@ -407,6 +407,14 @@ export function TherapistAttendanceCalendar({
 // 카드에 바로 보일 신청 상태. 취소·만료는 지난 일이라 카드에서는 빼고 패널에서만 보인다.
 const CARD_REQUEST_STATUSES = new Set(["pending", "approved", "rejected"]);
 
+// 카드의 칩 줄은 한 줄이다. 넘치면 가장 급한 하나만 두고 나머지는 "+N"으로 접는다(패널에는 모두 보인다).
+const MAX_CARD_CHIPS = 2;
+
+/**
+ * 주 보기의 날짜 카드. 모든 카드가 같은 높이가 되도록 줄을 고정한다(사용자 요청, 2026-10-20) — 근무표·출근 예정
+ * 한 줄, 출근·퇴근 캡슐 한 줄(기록이 없으면 "—"), 칩 한 줄. 390px에서 캡슐 셋은 한 줄에 들어가지 않아 예정 시각은 첫 줄에 둔다. 내용에 따라 줄이 생기고 사라지면 미입력 카드만 낮아져
+ * 왼쪽 요일·날짜 칸의 글자가 칸을 벗어났다.
+ */
 function AttendanceWeekDayCard({
   locale,
   day,
@@ -419,17 +427,24 @@ function AttendanceWeekDayCard({
   onOpen: () => void;
 }) {
   const t = useT();
-  const badges = attendanceDayBadges(t, day);
   const isScheduled = day.planStatus === "근무 예정";
   const isWorkingNow = isToday && day.checkInTime !== null && day.checkOutTime === null;
-  const hasAttendance = day.checkInTime !== null || day.checkOutTime !== null;
   const request = day.requestStatus && CARD_REQUEST_STATUSES.has(day.requestStatus.status) ? day.requestStatus : null;
+  const chips: AttendanceBadge[] = [
+    ...(isWorkingNow ? [{ label: t("therapist.attendance.week.working"), tone: "info" as const }] : []),
+    ...attendanceDayBadges(t, day),
+    ...(request
+      ? [{ label: `${therapistRequestKindLabel(locale, request.kind)} · ${therapistRequestStatusLabel(locale, request.status)}`, tone: REQUEST_STATUS_TONE[request.status] }]
+      : [])
+  ];
+  const visibleChips = chips.length > MAX_CARD_CHIPS ? chips.slice(0, 1) : chips;
+  const foldedChips = chips.slice(visibleChips.length);
 
   return (
     <li className="scroll-mt-24" id={`attendance-day-${day.date}`}>
       <button
         className={cn(
-          "flex min-h-14 w-full items-stretch gap-3 rounded-md border px-4 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary",
+          "flex w-full items-stretch gap-3 rounded-md border px-4 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary",
           day.isSpecialDayOff ? "border-danger bg-danger-soft" : cn("bg-surface hover:bg-readonly", isToday ? "border-brand" : "border-border")
         )}
         onClick={onOpen}
@@ -439,49 +454,43 @@ function AttendanceWeekDayCard({
         <span
           aria-hidden="true"
           className={cn(
-            "flex w-12 shrink-0 flex-col items-center justify-center gap-1 rounded-sm",
+            "flex w-12 shrink-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-sm",
             isToday ? "bg-brand text-brand-foreground" : "bg-readonly text-foreground"
           )}
+          data-card-part="date"
         >
           <span className="text-xs font-semibold leading-none">{weekdayShort(locale, day.date)}</span>
           <span className="text-xl font-semibold leading-none [font-variant-numeric:tabular-nums]">{formatDayNumber(day.date)}</span>
         </span>
-        <span className="flex min-w-0 flex-1 flex-col justify-center gap-1.5 py-0.5">
-          <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <span className={cn("text-[0.9375rem] font-semibold", isScheduled ? "text-foreground" : "text-muted")}>
+        <span className="flex min-w-0 flex-1 flex-col justify-center gap-1.5">
+          <span className="flex h-5 items-center justify-between gap-2">
+            <span
+              className={cn("min-w-0 truncate text-[0.9375rem] font-semibold leading-5", isScheduled ? "text-foreground" : "text-muted")}
+              data-card-part="status"
+            >
               {scheduleStatusLabel(locale, day.planStatus)}
             </span>
             {day.plannedStartTime ? (
-              <span className="text-sm text-muted">
-                {t("therapist.attendance.dayDetail.plannedStartTimeLabel")} {day.plannedStartTime}
+              <span className="shrink-0 text-sm leading-5 text-muted" data-card-part="planned">
+                {t("therapist.attendance.week.card.planned", { time: day.plannedStartTime })}
               </span>
             ) : null}
           </span>
-          {hasAttendance ? (
-            <span className="flex flex-wrap items-center gap-1.5">
-              <DateCapsule>
-                {t("therapist.attendance.dayDetail.checkInLabel")} {day.checkInTime ?? "—"}
-              </DateCapsule>
-              <DateCapsule>
-                {t("therapist.attendance.dayDetail.checkOutLabel")} {day.checkOutTime ?? "—"}
-              </DateCapsule>
-            </span>
-          ) : null}
-          {isWorkingNow || badges.length > 0 || request ? (
-            <span className="flex flex-wrap items-center gap-1.5">
-              {isWorkingNow ? <StatusIndicator label={t("therapist.attendance.week.working")} size="sm" tone="info" /> : null}
-              {badges.map((badge) => (
-                <StatusIndicator key={badge.label} label={badge.label} size="sm" tone={badge.tone} />
-              ))}
-              {request ? (
-                <StatusIndicator
-                  label={`${therapistRequestKindLabel(locale, request.kind)} · ${therapistRequestStatusLabel(locale, request.status)}`}
-                  size="sm"
-                  tone={REQUEST_STATUS_TONE[request.status]}
-                />
-              ) : null}
-            </span>
-          ) : null}
+          <span className="flex h-7 items-center gap-1.5 overflow-hidden" data-card-part="times">
+            <DateCapsule>{t("therapist.attendance.week.card.checkIn", { time: day.checkInTime ?? "—" })}</DateCapsule>
+            <DateCapsule>{t("therapist.attendance.week.card.checkOut", { time: day.checkOutTime ?? "—" })}</DateCapsule>
+          </span>
+          <span className="flex h-5 items-center gap-1.5 overflow-hidden" data-card-part="chips">
+            {visibleChips.map((chip) => (
+              <StatusIndicator key={chip.label} label={chip.label} size="sm" tone={chip.tone} />
+            ))}
+            {foldedChips.length > 0 ? (
+              <span className="inline-flex min-h-5 shrink-0 items-center rounded-full border border-border px-2 text-xs font-semibold leading-none text-muted">
+                <span aria-hidden="true">+{foldedChips.length}</span>
+                <span className="sr-only">{foldedChips.map((chip) => chip.label).join(", ")}</span>
+              </span>
+            ) : null}
+          </span>
         </span>
         <span aria-hidden="true" className="self-center text-lg text-muted">
           ›
