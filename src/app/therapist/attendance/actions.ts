@@ -21,6 +21,7 @@ export async function requestTherapistDayOffAction(_previousState: TherapistRequ
     const data = await requestTherapistDayOff({
       employeeId,
       date: String(formData.get("date") ?? ""),
+      kind: String(formData.get("kind") ?? "day_off"),
       reason: String(formData.get("reason") ?? "") || null
     });
     revalidatePath("/therapist/attendance");

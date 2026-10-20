@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { BUSINESS_DAY_START_TIME } from "@/lib/business-time";
 import { addDaysToIsoDate, businessClockString, businessTodayServiceDate } from "@/lib/operating-date";
 import { isDoneServiceCallStatus, roomFloorFactsForDate } from "@/modules/calls/service-call-service";
 import {
@@ -162,9 +163,8 @@ export async function getTherapistTodayView(input: {
   const client = getClient(input.prismaClient);
   const now = input.now ?? new Date();
 
-  const slots = await client.timeSlot.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
-  const dayStart = slots[0]?.value ?? "00:00";
-  const today = businessTodayServiceDate(slots, now);
+  const dayStart = BUSINESS_DAY_START_TIME;
+  const today = businessTodayServiceDate(now);
   const lastDate = addDaysToIsoDate(today, UPCOMING_DAYS);
 
   const records = await client.serviceCall.findMany({

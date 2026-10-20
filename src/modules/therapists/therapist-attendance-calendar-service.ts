@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { BUSINESS_DAY_START_TIME } from "@/lib/business-time";
 import { addDaysToIsoDate, businessTodayServiceDate } from "@/lib/operating-date";
 import { calculateOperatingMonthRange } from "@/modules/masters/operating-month-service";
 import {
@@ -11,11 +12,11 @@ import {
   type TherapistAttendanceMethod
 } from "@/modules/settlements/therapist-attendance-service";
 import { judgeTherapistAttendanceDay, type TherapistAttendanceDayJudgment } from "@/modules/therapists/therapist-attendance-judgment";
-import { listTherapistRequestsForEmployeeInRange, type TherapistRequestRangeReadClient } from "@/modules/therapists/therapist-request-service";
+import { listApprovedSpecialDayOffs, listTherapistRequestsForEmployeeInRange, type TherapistRequestRangeReadClient } from "@/modules/therapists/therapist-request-service";
 
 /** 그날 휴무 신청·정정 요청의 상태(08·09가 채운다). 06은 자리 모양만 정하고 항상 null을 돌려준다. */
 export type TherapistAttendanceDayRequestStatus = {
-  kind: "day_off" | "correction";
+  kind: "day_off" | "special_day_off" | "correction";
   status: "pending" | "approved" | "rejected" | "canceled" | "expired";
   /** 거절 사유(거절 상태일 때만). */
   rejectionReason: string | null;
@@ -30,6 +31,7 @@ export type TherapistAttendanceCalendarDayDto = {
   checkOutTime: string | null;
   checkOutMethod: TherapistAttendanceMethod | null;
   isFullAttendanceRecognized: boolean;
+  isSpecialDayOff: boolean;
   judgment: TherapistAttendanceDayJudgment;
   /** 08·09가 아직 없어 항상 null이다(모양만 정해 둔다). */
   requestStatus: TherapistAttendanceDayRequestStatus;
@@ -100,14 +102,13 @@ export async function getTherapistAttendanceCalendar(input: {
   const client = getClient(input.prismaClient);
   const now = input.now ?? new Date();
 
-  const slots = await client.timeSlot.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
-  const dayStart = slots[0]?.value ?? "00:00";
-  const todayServiceDate = businessTodayServiceDate(slots, now);
+  const dayStart = BUSINESS_DAY_START_TIME;
+  const todayServiceDate = businessTodayServiceDate(now);
 
   const monthKey = input.monthKey ?? todayServiceDate.slice(0, 7);
   const range = calculateOperatingMonthRange(monthKey);
 
-  const [plannedDays, attendances, requestDays] = await Promise.all([
+  const [plannedDays, attendances, requestDays, specialDaysOff] = await Promise.all([
     listPlannedWorkingDayStatusesForEmployeeInRange({
       employeeId: input.employeeId,
       startDate: range.startDate,
@@ -127,12 +128,19 @@ export async function getTherapistAttendanceCalendar(input: {
       endDate: range.endDate,
       now,
       prismaClient: client
+    }),
+    listApprovedSpecialDayOffs({
+      employeeIds: [input.employeeId],
+      startDate: range.startDate,
+      endDate: range.endDate,
+      prismaClient: client
     })
   ]);
 
   const plannedByDate = new Map(plannedDays.map((day) => [day.date, day]));
   const attendanceByDate = new Map(attendances.map((attendance) => [attendance.attendanceDate, attendance]));
   const requestByDate = new Map(requestDays.map((request) => [request.targetDate, request]));
+  const specialDates = new Set(specialDaysOff.map((day) => day.date));
 
   const days: TherapistAttendanceCalendarDayDto[] = plannedDays.map((planned) => {
     const attendance = attendanceByDate.get(planned.date) ?? null;
@@ -155,6 +163,7 @@ export async function getTherapistAttendanceCalendar(input: {
       checkOutTime: attendance?.checkOutTime ?? null,
       checkOutMethod: attendance?.checkOutMethod ?? null,
       isFullAttendanceRecognized: attendance?.isFullAttendanceRecognized ?? false,
+      isSpecialDayOff: planned.status === "휴무" && specialDates.has(planned.date),
       judgment,
       requestStatus: request ? { kind: request.kind, status: request.status, rejectionReason: request.rejectionReason } : null
     };
@@ -180,8 +189,7 @@ export async function listTherapistClockOutMissingDates(input: {
   const client = input.prismaClient ?? (prisma as unknown as TherapistClockOutMissingPrismaClient);
   const now = input.now ?? new Date();
 
-  const slots = await client.timeSlot.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
-  const todayServiceDate = businessTodayServiceDate(slots, now);
+  const todayServiceDate = businessTodayServiceDate(now);
   const lookbackStart = addDaysToIsoDate(todayServiceDate, -CLOCK_OUT_MISSING_LOOKBACK_DAYS);
   const lastEndedDate = addDaysToIsoDate(todayServiceDate, -1);
   if (lookbackStart > lastEndedDate) return [];

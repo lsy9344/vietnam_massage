@@ -181,3 +181,16 @@ describe("listTherapistClockOutMissingDates", () => {
     assert.deepEqual(dates, ["2042-05-04"]);
   });
 });
+
+
+it("keeps special day-off visible when a later correction request occupies the request-status slot", async () => {
+  const prismaClient = createMemoryPrisma();
+  prismaClient.therapistRequest.findMany = async ({ where }: any) => where.kind === "소중한날 휴가"
+    ? [{ employeeId: "emp-1", targetDate: dbDate("2042-05-04") }]
+    : [{ id: "correction-later", employeeId: "emp-1", kind: "정정", targetDate: dbDate("2042-05-04"), status: "대기", resolutionReason: null, createdAt: now }];
+  const calendar = await getTherapistAttendanceCalendar({ employeeId: "emp-1", monthKey: "2042-05", now, prismaClient });
+  const special = calendar.days.find((day) => day.date === "2042-05-04")!;
+  assert.equal(special.isSpecialDayOff, true);
+  assert.equal(special.requestStatus?.kind, "correction");
+  assert.equal(calendar.days.find((day) => day.date === "2042-05-03")?.isSpecialDayOff, false);
+});

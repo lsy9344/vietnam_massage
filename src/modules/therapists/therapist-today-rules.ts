@@ -9,7 +9,7 @@ function clockMinutes(clock: string): number {
   return (hour ?? 0) * 60 + (minute ?? 0);
 }
 
-/** 영업일 분: dayStart(첫 활성 슬롯 시각)보다 이른 시계 값은 자정을 넘은 다음 날로 본다. */
+/** 영업일 분: dayStart(영업일 경계 시각)보다 이른 시계 값은 자정을 넘은 다음 날로 본다. */
 export function businessMinuteOf(clock: string, dayStart: string): number {
   const minutes = clockMinutes(clock);
   const start = clockMinutes(dayStart);

@@ -11,7 +11,7 @@ import { login } from "./support/auth";
  * 들어갈 수 없는지만 본다.
  */
 
-const DAY_START_CLOCK = "11:00"; // scripts/seed-master-data.ts의 defaultTimeSlots[0]과 같다.
+const DAY_START_CLOCK = "03:00"; // 영업일 전환은 베트남 시각 03:00이다.
 
 function businessTodayServiceDate(now: Date): string {
   const calendarToday = new Intl.DateTimeFormat("en-CA", {

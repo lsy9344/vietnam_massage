@@ -11,7 +11,7 @@ import { argon2idOptions, login } from "./support/auth";
  * monthKey로 ?month=를 직접 지정해 달력을 연다 — 기본 보기(이번 달)에만 기대지 않는다.
  */
 
-const DAY_START_CLOCK = "11:00"; // scripts/seed-master-data.ts의 defaultTimeSlots[0]과 같다.
+const DAY_START_CLOCK = "03:00"; // 영업일 전환은 베트남 시각 03:00이다.
 
 function businessTodayServiceDate(now: Date): string {
   const calendarToday = new Intl.DateTimeFormat("en-CA", {

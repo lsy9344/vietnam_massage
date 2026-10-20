@@ -19,7 +19,7 @@ export type TherapistAttendanceDayJudgmentInput = {
   dayStart: string;
   /**
    * 그 운영일이 끝났는지. 오늘 운영일과 미래는 false다. 호출하는 쪽이
-   * `attendanceDate < businessTodayServiceDate(slots, now)`로 정한다(저장하는 값이 아니다).
+   * `attendanceDate < businessTodayServiceDate(now)`로 정한다(저장하는 값이 아니다).
    */
   isOperatingDayEnded: boolean;
 };

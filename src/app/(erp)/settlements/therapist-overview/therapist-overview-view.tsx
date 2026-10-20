@@ -128,12 +128,16 @@ export function TherapistOverviewTodaySection({
                 />
               </td>
               <td className={cellClassName}>
-                <TodayStatusCell
-                  checkInTime={row.checkInTime}
-                  isUnscheduledAttendance={row.judgment.isUnscheduledAttendance}
-                  lateMinutes={row.judgment.lateMinutes}
-                  t={t}
-                />
+                {row.isSpecialDayOff ? (
+                  <StatusIndicator label={t("therapistRequestKind.special_day_off")} tone="danger" />
+                ) : (
+                  <TodayStatusCell
+                    checkInTime={row.checkInTime}
+                    isUnscheduledAttendance={row.judgment.isUnscheduledAttendance}
+                    lateMinutes={row.judgment.lateMinutes}
+                    t={t}
+                  />
+                )}
               </td>
             </tr>
           ))}

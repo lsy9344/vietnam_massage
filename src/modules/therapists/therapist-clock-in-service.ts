@@ -88,8 +88,7 @@ export async function clockInWithCode(input: {
   const client = getClient(input.prismaClient);
   const now = input.now ?? new Date();
 
-  const slots = await client.timeSlot.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
-  const attendanceDate = businessTodayServiceDate(slots, now);
+  const attendanceDate = businessTodayServiceDate(now);
   const monthKey = attendanceDate.slice(0, 7);
   const operatingMonth = await client.operatingMonth.findUnique({ where: { monthKey } });
   if (!operatingMonth) {

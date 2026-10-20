@@ -145,6 +145,7 @@ function createMemoryPrisma() {
   }
 
   const client: any = {
+    therapistRequest: { async findMany() { return []; } },
     timeSlot: {
       async findMany() {
         return [{ value: "11:00", sortOrder: 10, createdAt, isActive: true }];
@@ -359,4 +360,13 @@ describe("getTherapistAdminMonthlyOverview", () => {
     assert.equal(byEmployeeId.get("emp-c")!.totalCallCount, 5);
     assert.equal(byEmployeeId.get("emp-c")!.rank, 3); // 40콜 미달이어도 전체 순위는 받는다
   });
+});
+
+
+it("shows approved special day-off in the admin today status without changing attendance", async () => {
+  const { client, operatingMonth } = createMemoryPrisma();
+  client.therapistRequest.findMany = async () => [{ employeeId: "emp-d", targetDate: dbDate("2042-07-06") }];
+  const overview = await getTherapistAdminTodayOverview({ operatingMonths: [{ id: operatingMonth.id, monthKey: operatingMonth.monthKey, startDate: "2042-07-01", endDate: "2042-07-31", status: "작성중", createdAt: "", updatedAt: "" }], now, prismaClient: client });
+  assert.equal(overview.rows.find((row) => row.employeeId === "emp-d")?.isSpecialDayOff, true);
+  assert.equal(overview.rows.find((row) => row.employeeId === "emp-b")?.isSpecialDayOff, false);
 });
