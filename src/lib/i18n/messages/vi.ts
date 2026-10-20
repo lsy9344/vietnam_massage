@@ -1738,6 +1738,7 @@ export const vi: Messages = {
   "audit.target.opsMonthlyIncentiveRule": "Quy tắc thưởng tháng nhóm vận hành",
   "audit.target.therapistInternalMemo": "Ghi chú nội bộ KTV",
   "audit.target.therapistRequest": "Đơn xin của KTV",
+  "audit.target.therapistNotice": "Thông báo KTV",
 
   // Màn hình dành riêng cho KTV (ticket 01): 4 tab dưới, menu "Tôi", cơ chế làm mới chung.
   "therapist.nav.aria": "Di chuyển màn hình KTV",

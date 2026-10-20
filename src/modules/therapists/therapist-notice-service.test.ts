@@ -235,6 +235,24 @@ describe("therapist notice service", () => {
     );
   });
 
+  // R8(M1 얇은 어댑터): 서버 액션은 받은 값을 그대로 이 서비스로 넘겨야 한다. 액션이 "특정"이
+  // 아니면 조용히 "전체"로 바꿔 버리면, 잘못된 값(오타·탐 조작)이 전원 발송이 될 수 있다 — 그 비대칭이
+  // 사라졌는지는 zod가 둘 다 아닌 값을 거절하는 이 테스트로 고정한다.
+  it("둘 다 아닌 targetType은 조용히 '전체'로 바뀌지 않고 거절된다", async () => {
+    const prismaClient = createMemoryPrisma();
+    prismaClient.employee("thr-1", "THR-001", "마사지사1");
+    prismaClient.account("acct-1", "thr-1");
+
+    await assert.rejects(
+      () => sendTherapistNotice({ actorId: "admin-1", body: "본문", targetType: "전원" as never, prismaClient }),
+      (error: unknown) => {
+        assert.ok(error instanceof TherapistNoticeDomainError);
+        assert.equal(error.code, "INVALID_NOTICE_INPUT");
+        return true;
+      }
+    );
+  });
+
   it("공지를 열면 읽음으로 기록되고, 다시 열어도 처음 읽은 시각이 그대로다", async () => {
     const prismaClient = createMemoryPrisma();
     prismaClient.employee("thr-1", "THR-001", "마사지사1");

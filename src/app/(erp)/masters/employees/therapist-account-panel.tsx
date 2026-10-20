@@ -17,6 +17,7 @@ import {
 import { SaveRow, TextField } from "@/app/(erp)/masters/master-fields";
 import { PanelSection } from "@/app/(erp)/masters/master-parts";
 import type { EmployeeDto } from "@/modules/masters/employee-service";
+import { createTranslator } from "@/lib/i18n";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { Locale } from "@/lib/i18n/config";
 import { formatDateTime } from "@/lib/i18n/format";
@@ -41,10 +42,14 @@ function TherapistAccountQrCode({ value, label }: { value: string; label: string
   return <div aria-label={label} className="h-40 w-40 [&>svg]:h-full [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: markup }} role="img" />;
 }
 
-/** 발급·초기화 직후 뜨는 인쇄용 안내 쪽지. print:hidden 밖(이 섹션 자체)만 인쇄되고 나머지 패널은 숨긴다. */
-function TherapistAccountNoticeView({ notice, onClose }: { notice: TherapistAccountNoticeDto; onClose: () => void }) {
-  const t = useT();
-  const locale = useLocale();
+/**
+ * 발급·초기화 직후 뜨는 인쇄용 안내 쪽지. print:hidden 밖(이 섹션 자체)만 인쇄되고 나머지 패널은 숨긴다.
+ * R10(D5 "쪽지는 베트남어"): 쪽지 본문은 관리자가 지금 보는 언어와 무관하게 늘 vi로 그린다 —
+ * 받는 사람이 Therapist라서다. useT()(관리자 locale)를 쓰지 않고 createTranslator("vi")로 고정한다.
+ */
+export function TherapistAccountNoticeView({ notice, onClose }: { notice: TherapistAccountNoticeDto; onClose: () => void }) {
+  const t = createTranslator("vi");
+  const locale: Locale = "vi";
   // 출력 시각: beforeprint에서 그 순간의 시각으로 갱신한다(월 명세서 인쇄와 같은 모양).
   const [printedAt, setPrintedAt] = useState(() => new Date().toISOString());
 

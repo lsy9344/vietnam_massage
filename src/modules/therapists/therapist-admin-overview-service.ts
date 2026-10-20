@@ -11,12 +11,12 @@ import { getMonthlyClosingSnapshot } from "@/modules/closing/monthly-closing-ser
 import type { OperatingMonthDto } from "@/modules/masters/operating-month-service";
 import {
   listPlannedWorkingDayStatusesForDate,
-  listPlannedWorkingDayStatusesForEmployeeInRange,
+  listPlannedWorkingDayStatusesForEmployeesInRange,
   unsetPlanStatus
 } from "@/modules/masters/planned-working-day-query";
 import {
   listTherapistAttendanceForDate,
-  listTherapistAttendanceForEmployeeInRange,
+  listTherapistAttendanceForEmployeesInRange,
   type TherapistAttendanceMethod
 } from "@/modules/settlements/therapist-attendance-service";
 import { judgeTherapistAttendanceDay, type TherapistAttendanceDayJudgment } from "@/modules/therapists/therapist-attendance-judgment";
@@ -158,6 +158,12 @@ async function therapistClosingRows(
  * 운영월 영역(D26 둘째 줄): 사람별 지각·결근·퇴근 미입력·예정 없는 출근·대리 입력 횟수(06의 좁은 조회 +
  * judgeTherapistAttendanceDay를 날짜마다 그대로 쓴다)와 완료 콜 수·순위(월마감 미리보기/스냅샷 행 +
  * compareTherapistRowsByCountKingOrder, 새로 만들지 않는다)를 합친다.
+ *
+ * R6: closingRows(미리보기·스냅샷)는 그 운영월에 유효했던 사람 그대로라 퇴사자 행도 있을 수 있다.
+ * 근무표·출퇴근 조회는 활성 여부를 보지 않으므로(아래 Range 함수들) 퇴사자 행도 그대로 집계된다.
+ * R7(비용): 사람마다 조회를 부르면 질의가 사람 수(최대 50명) × 2로 늘어나므로, 전체를 한 번에 읽어
+ * employeeId로 나눈다(listPlannedWorkingDayStatusesForEmployeesInRange,
+ * listTherapistAttendanceForEmployeesInRange).
  */
 export async function getTherapistAdminMonthlyOverview(input: {
   operatingMonth: Pick<OperatingMonthDto, "id" | "monthKey" | "startDate" | "endDate" | "status">;
@@ -175,67 +181,70 @@ export async function getTherapistAdminMonthlyOverview(input: {
   const dayStart = BUSINESS_DAY_START_TIME;
   const todayServiceDate = businessTodayServiceDate(input.now);
 
-  const rows = await Promise.all(
-    closingRows.map(async (closingRow): Promise<TherapistAdminMonthlyRowDto> => {
-      const [plannedDays, attendances] = await Promise.all([
-        listPlannedWorkingDayStatusesForEmployeeInRange({
-          employeeId: closingRow.employeeId,
-          startDate: input.operatingMonth.startDate,
-          endDate: input.operatingMonth.endDate,
-          prismaClient: client as never
-        }),
-        listTherapistAttendanceForEmployeeInRange({
-          employeeId: closingRow.employeeId,
-          startDate: input.operatingMonth.startDate,
-          endDate: input.operatingMonth.endDate,
-          prismaClient: client as never
-        })
-      ]);
-      const attendanceByDate = new Map(attendances.map((attendance) => [attendance.attendanceDate, attendance]));
-
-      let lateCount = 0;
-      let lateMinutesTotal = 0;
-      let absentCount = 0;
-      let clockOutMissingCount = 0;
-      let unscheduledAttendanceCount = 0;
-      let proxyInputCount = 0;
-
-      for (const planned of plannedDays) {
-        const attendance = attendanceByDate.get(planned.date) ?? null;
-        const judgment = judgeTherapistAttendanceDay({
-          planStatus: planned.status,
-          plannedStartTime: planned.plannedStartTime,
-          checkInTime: attendance?.checkInTime ?? null,
-          checkOutTime: attendance?.checkOutTime ?? null,
-          dayStart,
-          isOperatingDayEnded: planned.date < todayServiceDate
-        });
-        if (judgment.lateMinutes !== null) {
-          lateCount += 1;
-          lateMinutesTotal += judgment.lateMinutes;
-        }
-        if (judgment.isAbsent) absentCount += 1;
-        if (judgment.isClockOutMissing) clockOutMissingCount += 1;
-        if (judgment.isUnscheduledAttendance) unscheduledAttendanceCount += 1;
-        if (attendance?.checkInMethod === "대리 입력") proxyInputCount += 1;
-        if (attendance?.checkOutMethod === "대리 입력") proxyInputCount += 1;
-      }
-
-      return {
-        employeeId: closingRow.employeeId,
-        staffCode: closingRow.staffCode,
-        displayName: closingRow.displayName,
-        lateCount,
-        lateMinutesTotal,
-        absentCount,
-        clockOutMissingCount,
-        unscheduledAttendanceCount,
-        proxyInputCount,
-        totalCallCount: closingRow.totalCallCount,
-        rank: rankByEmployeeId.get(closingRow.employeeId) ?? rankedRows.length + 1
-      };
+  const employeeIds = closingRows.map((closingRow) => closingRow.employeeId);
+  const [plannedDaysByEmployeeId, attendancesByEmployeeId] = await Promise.all([
+    listPlannedWorkingDayStatusesForEmployeesInRange({
+      employeeIds,
+      startDate: input.operatingMonth.startDate,
+      endDate: input.operatingMonth.endDate,
+      prismaClient: client as never
+    }),
+    listTherapistAttendanceForEmployeesInRange({
+      employeeIds,
+      startDate: input.operatingMonth.startDate,
+      endDate: input.operatingMonth.endDate,
+      prismaClient: client as never
     })
-  );
+  ]);
+
+  const rows = closingRows.map((closingRow): TherapistAdminMonthlyRowDto => {
+    const plannedDays = plannedDaysByEmployeeId.get(closingRow.employeeId) ?? [];
+    const attendanceByDate = new Map(
+      (attendancesByEmployeeId.get(closingRow.employeeId) ?? []).map((attendance) => [attendance.attendanceDate, attendance])
+    );
+
+    let lateCount = 0;
+    let lateMinutesTotal = 0;
+    let absentCount = 0;
+    let clockOutMissingCount = 0;
+    let unscheduledAttendanceCount = 0;
+    let proxyInputCount = 0;
+
+    for (const planned of plannedDays) {
+      const attendance = attendanceByDate.get(planned.date) ?? null;
+      const judgment = judgeTherapistAttendanceDay({
+        planStatus: planned.status,
+        plannedStartTime: planned.plannedStartTime,
+        checkInTime: attendance?.checkInTime ?? null,
+        checkOutTime: attendance?.checkOutTime ?? null,
+        dayStart,
+        isOperatingDayEnded: planned.date < todayServiceDate
+      });
+      if (judgment.lateMinutes !== null) {
+        lateCount += 1;
+        lateMinutesTotal += judgment.lateMinutes;
+      }
+      if (judgment.isAbsent) absentCount += 1;
+      if (judgment.isClockOutMissing) clockOutMissingCount += 1;
+      if (judgment.isUnscheduledAttendance) unscheduledAttendanceCount += 1;
+      if (attendance?.checkInMethod === "대리 입력") proxyInputCount += 1;
+      if (attendance?.checkOutMethod === "대리 입력") proxyInputCount += 1;
+    }
+
+    return {
+      employeeId: closingRow.employeeId,
+      staffCode: closingRow.staffCode,
+      displayName: closingRow.displayName,
+      lateCount,
+      lateMinutesTotal,
+      absentCount,
+      clockOutMissingCount,
+      unscheduledAttendanceCount,
+      proxyInputCount,
+      totalCallCount: closingRow.totalCallCount,
+      rank: rankByEmployeeId.get(closingRow.employeeId) ?? rankedRows.length + 1
+    };
+  });
 
   return { operatingMonthId: input.operatingMonth.id, monthKey: input.operatingMonth.monthKey, rows };
 }

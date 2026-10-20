@@ -693,9 +693,11 @@ type TherapistAttendanceRangeReadClient = {
 };
 
 /**
- * 직원 하나·기간 하나의 출퇴근(06 근태 달력, 11 관리자 현황). listTherapistAttendanceForDate(그날
- * 전체 활성 Therapist)를 날짜마다 부르면 31번 × 전원이 되는 것을 피한다(코드베이스 지도 6절 함정).
- * toDto로 분→HH:mm 변환을 다시 쓴다. 비활성 줄은 뺀다.
+ * 직원 하나·기간 하나의 출퇴근(06 근태 달력). listTherapistAttendanceForDate(그날 전체 활성
+ * Therapist)를 날짜마다 부르면 31번 × 전원이 되는 것을 피한다(코드베이스 지도 6절 함정). toDto로
+ * 분→HH:mm 변환을 다시 쓴다. 비활성 줄은 뺀다. 11의 관리자 운영월 현황은 사람마다 부르면 질의가
+ * 사람 수만큼 늘어나고(R7) 퇴사자 행이 활성 확인에 걸려 전체가 깨지므로(R6)
+ * listTherapistAttendanceForEmployeesInRange(아래)를 따로 쓴다.
  */
 export async function listTherapistAttendanceForEmployeeInRange(input: {
   employeeId: string;
@@ -749,4 +751,83 @@ export async function listTherapistAttendanceForEmployeeInRange(input: {
         inServiceCallIds: []
       })
     );
+}
+
+const attendanceRangeManyQuerySchema = z.object({
+  employeeIds: z.array(z.string().trim().min(1)).max(500),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "시작일은 YYYY-MM-DD 형식이어야 합니다."),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "종료일은 YYYY-MM-DD 형식이어야 합니다.")
+});
+
+// listTherapistAttendanceForEmployeesInRange(아래)만 요구하는 좁은 타입이다. 위 TherapistAttendanceRangeReadClient와
+// 달리 employee.findMany로 여러 명을 한 번에 읽는다.
+type TherapistAttendanceRangeManyReadClient = {
+  employee: { findMany(args: unknown): Promise<EmployeeRecord[]> };
+  therapistAttendance: { findMany(args?: unknown): Promise<TherapistAttendanceRecord[]> };
+  operatingMonth: { findUnique(args: unknown): Promise<OperatingMonthRecord | null> };
+};
+
+/**
+ * 직원 여럿·기간 하나의 출퇴근을 한 번에 돌려준다(11 관리자 운영월 현황, R7 비용). 사람마다
+ * listTherapistAttendanceForEmployeeInRange를 부르면(사람 수 × 2쿼리) 질의 수가 사람 수만큼
+ * 늘어나는 것을 피한다. 활성 여부를 확인하지 않는다 — 호출하는 쪽(월마감 미리보기·스냅샷 행)이
+ * 이미 그 운영월에 유효했던 Therapist만 넘긴다(퇴사한 사람도 포함될 수 있다, R6).
+ */
+export async function listTherapistAttendanceForEmployeesInRange(input: {
+  employeeIds: string[];
+  startDate: string;
+  endDate: string;
+  prismaClient?: TherapistAttendanceRangeManyReadClient;
+}): Promise<Map<string, TherapistAttendanceDto[]>> {
+  const parsed = attendanceRangeManyQuerySchema.safeParse(input);
+  if (!parsed.success) throw toFieldError(parsed.error);
+  assertValidParsedDate(parsed.data.startDate);
+  assertValidParsedDate(parsed.data.endDate);
+  if (parsed.data.startDate > parsed.data.endDate) {
+    throw invalidInput("조회 기간의 시작일이 종료일보다 늦습니다.");
+  }
+
+  const uniqueEmployeeIds = [...new Set(parsed.data.employeeIds)];
+  const result = new Map<string, TherapistAttendanceDto[]>(uniqueEmployeeIds.map((id) => [id, []]));
+  if (uniqueEmployeeIds.length === 0) return result;
+
+  const client = input.prismaClient ?? (prisma as unknown as TherapistAttendanceRangeManyReadClient);
+  const employees = await client.employee.findMany({ where: { id: { in: uniqueEmployeeIds } } });
+  const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+
+  const attendances = await client.therapistAttendance.findMany({
+    where: {
+      employeeId: { in: uniqueEmployeeIds },
+      attendanceDate: { gte: toDate(parsed.data.startDate), lte: toDate(parsed.data.endDate) },
+      isActive: true
+    }
+  });
+
+  // 이 범위의 줄은 보통 운영월 하나에 속하지만(달력 월 = 운영월), 사람마다가 아니라 전체에서 한 번만
+  // 운영월 상태를 찾는다(listTherapistAttendanceForEmployeeInRange와 같은 이유).
+  const operatingMonthIds = [...new Set(attendances.map((attendance) => attendance.operatingMonthId))];
+  const operatingMonths = await Promise.all(
+    operatingMonthIds.map(async (id) => {
+      const month = await client.operatingMonth.findUnique({ where: { id } });
+      if (!month) throw new TherapistAttendanceDomainError("운영월을 찾을 수 없습니다.", "OPERATING_MONTH_NOT_FOUND");
+      return month;
+    })
+  );
+  const isLockedByOperatingMonthId = new Map(operatingMonths.map((month) => [month.id, isOperatingMonthPayoutLocked(month.status)]));
+
+  for (const attendance of [...attendances].sort((a, b) => toIsoDate(a.attendanceDate).localeCompare(toIsoDate(b.attendanceDate)))) {
+    const employee = employeeById.get(attendance.employeeId);
+    if (!employee) continue;
+    const dto = toDto({
+      operatingMonthId: attendance.operatingMonthId,
+      attendanceDate: toIsoDate(attendance.attendanceDate),
+      employee,
+      attendance,
+      isLocked: isLockedByOperatingMonthId.get(attendance.operatingMonthId) ?? false,
+      inServiceCallIds: []
+    });
+    result.get(attendance.employeeId)?.push(dto);
+  }
+
+  return result;
 }
