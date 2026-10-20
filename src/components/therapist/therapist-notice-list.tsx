@@ -54,6 +54,7 @@ function NoticeRow({ locale, notice }: { locale: Locale; notice: TherapistNotice
         description={t("therapist.notices.detail.sentAt", { time: noticeDateTime(locale, notice.sentAt) })}
         onOpenChange={handleOpenChange}
         open={open}
+        placement="center"
         title={t("therapist.notices.detail.title")}
         trigger={
           <button

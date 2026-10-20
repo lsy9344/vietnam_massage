@@ -139,7 +139,7 @@ function DayOffRequestControls({ day }: { day: TherapistAttendanceCalendarDayDto
   }
 
   return (
-    <form action={requestAction} className="grid gap-2 rounded-md border border-border bg-surface-float p-3">
+    <form action={requestAction} className="grid gap-2 rounded-md border border-border bg-background p-3">
       <input name="date" type="hidden" value={day.date} />
       <label className="grid gap-1.5 text-sm font-semibold text-foreground" htmlFor={kindId}>
         {t("therapist.attendance.dayOff.kindLabel")}

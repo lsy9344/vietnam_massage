@@ -44,6 +44,7 @@ export function TherapistCorrectionRequestDialog({ dateOptions, trigger }: { dat
       description={t("therapist.attendance.correction.dialogDescription")}
       onOpenChange={setOpen}
       open={open}
+      placement="center"
       title={t("therapist.attendance.correction.dialogTitle")}
       trigger={trigger}
     >
