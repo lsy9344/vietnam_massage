@@ -34,4 +34,18 @@
 - 새 CHECK 제약 마이그레이션은 격리된 로컬 PostgreSQL에서 적용하여 휴가 신청·승인을 검증했다.
 - `pnpm lint`는 변경하지 않은 Story 4.6의 기존 정적 검사 두 항목에서 실패한다. 해당 검사 파일·서비스·E2E 파일은 HEAD와 동일하며 나머지 Story 5–7 검사는 통과했다.
 - 출근 코드 잠금·직접 출퇴근·역할 접근·자정의 코드 갱신 E2E 3개 통과. 서버 액션 응답을 기다리도록 기존 테스트의 잠금 해제 경합도 보완했다.
-- 운영 DB 적용과 배포는 하지 않았다.
+- 최초 구현 검증 시점에는 운영 DB 적용과 배포를 하지 않았다. 프리뷰 반영은 아래 기록을 따른다.
+
+
+## 프리뷰 반영 (2026-10-20)
+
+- 사용자 요청: 프리뷰 브랜치에 커밋·푸시·재배포.
+- 구현 커밋: `93df843` (`feat/therapist-accounts`). 프리뷰 병합 커밋: `d6df6b0` (`preview/therapist-accounts`).
+- 기존 프리뷰의 메뉴 순서와 월 정산 성능 개선을 보존하여 충돌을 해결했다. 병합 후 단위 테스트 1,231개·타입 검사·Cloudflare 빌드·Wrangler dry-run 통과.
+- 원격 `origin/preview/therapist-accounts` 푸시 완료.
+- Cloudflare 버전: `e7223667-4025-4897-a5dd-00f808ca1a43`, 태그 `therapist-daily-d6df6b0`, 별칭 `app-expansion`.
+- 주소: https://app-expansion-vietnam-massage-erp.boothy-selectroom.workers.dev
+- `/sign-in`·`/api/auth/providers` 200, 인증 callback 호스트가 프리뷰 주소와 일치하며 비로그인 수당 접근은 `/sign-in`으로 이동한다.
+- 운영 트래픽 버전 `bff7cf91-d69b-486c-81eb-c4a8666af6ee` 100% 유지를 확인했다.
+- 프리뷰는 운영 DB를 공유한다. DB의 신청 종류 CHECK는 아직 휴무·정정만 허용한다. D29에 따라 새 유형 허용 SQL의 적용 승인을 요청했으며, 사용자 응답 전에는 운영 DB에 적용하지 않는다. 이 상태에서 소중한날 휴가 신청 저장은 사용할 수 없다.
+- 관리자 캘린더 확인: `/settlements/schedule`은 주간 근무 예정·휴무 표다. 실제 출퇴근·휴가를 보여 주는 월간 근태 달력은 Therapist 본인 페이지에만 있고, 관리자 현황은 오늘 상태·월간 집계 표다. 이번 범위에서 관리자 월간 근태 달력을 추가하지 않았다.
