@@ -52,3 +52,9 @@ Therapist 근태 탭의 날짜 팝업 → 휴무 신청 → "휴가 종류" 드�
 - E2E: `tests/e2e/support/listbox-select.ts` 헬퍼 추가(`pickListboxOption`, `pickListboxOptionByValue`, `openListbox`). `selectOption`을 쓰던 39곳을 이 헬퍼로 바꿨다. `toHaveValue`로 셀렉트 값을 보던断言은 숨은 input(`input[name=...]`) 또는 보이는 글자(`toContainText`)로 바꿨다. 티켓 08에 "목록이 열려 있는 동안 Escape는 목록만 닫고 팝업은 닫지 않는다"(Tab도 닫힘) E2E를 새로 넣었다.
 - 단위 테스트: 네이티브 `<option>` 마크업을 보던断言 6건을 새 마크업(combobox 버튼 + 숨은 input) 기준으로 고쳤다. 빠른 예약 "두 번째 Therapist 후보에서 빠짐"은 목록이 열 때만 그려져 단위에서 볼 수 없어, 같은 내용을 보는 E2E(`story-ticket-21`)가 그대로 확인한다.
 - 문서: `design.md` 6.4에 선택 칸 규칙을 적었다.
+
+## 배포
+
+- 2026-10-21 Cloudflare 프리뷰 배포(사용자 확인): `preview/therapist-accounts`(6d46a55)를 `pnpm cf:build` → `wrangler versions upload --preview-alias app-expansion`. 버전 `31e0b76b-1e17-4c96-96dc-2b96108b3385`, 태그 `listbox-6d46a55`, 주소 `https://app-expansion-vietnam-massage-erp.boothy-selectroom.workers.dev`.
+- 확인: 빌드 산출(gzip 4.37MiB, 한도 10MiB 아래)·Hyperdrive `275fdce2…`·프리뷰 `/sign-in` 200·`/api/auth/providers`의 callbackUrl이 프리뷰 도메인·프리뷰가 새로 올린 청크에 새 선택 칸 코드가 들어 있음·운영 트래픽은 `bff7cf91` 100% 그대로(운영 주소 변경 없음).
+- 이 변경은 마이그레이션이 없다(스키마·운영 DB 무변경). `prisma migrate deploy`는 쓰지 않았다(D29).
