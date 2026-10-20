@@ -5,6 +5,7 @@ import type { ActionResult } from "@/lib/action-result";
 import { requirePermission } from "@/lib/authorization";
 import { getLocale } from "@/lib/i18n/server";
 import {
+  approveTherapistCorrectionRequest,
   approveTherapistDayOffRequest,
   rejectTherapistRequest,
   type TherapistRequestAdminListItemDto
@@ -17,12 +18,28 @@ function formValue(formData: FormData, key: string) {
   return String(formData.get(key) ?? "");
 }
 
-/** 휴무 신청 승인(M5, M18 `payout:write`). 정정 요청(kind="정정") 승인은 09가 이어서 채운다. */
+/** 휴무 신청 승인(M5, M18 `payout:write`). 정정 요청(kind="정정")은 approveTherapistCorrectionRequestAction이 맡는다. */
 export async function approveTherapistDayOffRequestAction(_previousState: TherapistRequestActionState, formData: FormData): Promise<TherapistRequestActionState> {
   const locale = await getLocale();
   try {
     const account = await requirePermission("payout:write");
     const data = await approveTherapistDayOffRequest({ requestId: formValue(formData, "requestId"), actorId: account.id });
+    revalidatePath("/settlements/requests");
+    return { ok: true, data };
+  } catch (error) {
+    return mapTherapistRequestActionError(error, locale);
+  }
+}
+
+/**
+ * 정정 요청 승인(M5, M18 `payout:write`, 티켓 09). 신청 카드가 kind로 이 액션과
+ * approveTherapistDayOffRequestAction 중 하나를 고른다(request-workspace.tsx).
+ */
+export async function approveTherapistCorrectionRequestAction(_previousState: TherapistRequestActionState, formData: FormData): Promise<TherapistRequestActionState> {
+  const locale = await getLocale();
+  try {
+    const account = await requirePermission("payout:write");
+    const data = await approveTherapistCorrectionRequest({ requestId: formValue(formData, "requestId"), actorId: account.id });
     revalidatePath("/settlements/requests");
     return { ok: true, data };
   } catch (error) {

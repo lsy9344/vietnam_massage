@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { getTherapistAttendanceCalendar, listTherapistClockOutMissingDates } from "@/modules/therapists/therapist-attendance-calendar-service";
+import { getTherapistAttendanceCalendar, getTherapistAttendanceWeek, listTherapistClockOutMissingDates } from "@/modules/therapists/therapist-attendance-calendar-service";
 
 const createdAt = new Date("2042-01-01T00:00:00.000Z");
 const updatedAt = createdAt;
@@ -171,6 +171,35 @@ describe("getTherapistAttendanceCalendar", () => {
     const prismaClient = createMemoryPrisma();
     const calendar = await getTherapistAttendanceCalendar({ employeeId: "emp-1", now, prismaClient });
     assert.equal(calendar.monthKey, "2042-05");
+  });
+});
+
+describe("getTherapistAttendanceWeek", () => {
+  it("returns the Monday-to-Sunday week containing the given date, even across a month boundary", async () => {
+    const prismaClient = createMemoryPrisma();
+    // 2042-05-01은 목요일이다. 그 주는 2042-04-28(월)부터 2042-05-04(일)까지다.
+    const week = await getTherapistAttendanceWeek({ employeeId: "emp-1", date: "2042-05-01", now, prismaClient });
+
+    assert.equal(week.weekStartDate, "2042-04-28");
+    assert.equal(week.weekEndDate, "2042-05-04");
+    assert.equal(week.todayServiceDate, "2042-05-05");
+    assert.deepEqual(
+      week.days.map((day) => day.date),
+      ["2042-04-28", "2042-04-29", "2042-04-30", "2042-05-01", "2042-05-02", "2042-05-03", "2042-05-04"]
+    );
+    const byDate = new Map(week.days.map((day) => [day.date, day]));
+    assert.equal(byDate.get("2042-04-28")!.planStatus, "미입력");
+    assert.equal(byDate.get("2042-05-02")!.judgment.lateMinutes, 5);
+    assert.equal(byDate.get("2042-05-03")!.judgment.isAbsent, true);
+    assert.equal(byDate.get("2042-05-04")!.judgment.isUnscheduledAttendance, true);
+  });
+
+  it("defaults to the week containing today's service date when date is omitted", async () => {
+    const prismaClient = createMemoryPrisma();
+    // 2042-05-05는 월요일이다.
+    const week = await getTherapistAttendanceWeek({ employeeId: "emp-1", now, prismaClient });
+    assert.equal(week.weekStartDate, "2042-05-05");
+    assert.equal(week.weekEndDate, "2042-05-11");
   });
 });
 

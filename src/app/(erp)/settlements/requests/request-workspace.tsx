@@ -12,6 +12,7 @@ import { useT } from "@/lib/i18n/client";
 import { formatDateTime } from "@/lib/i18n/format";
 import type { Locale } from "@/lib/i18n/config";
 import {
+  approveTherapistCorrectionRequestAction,
   approveTherapistDayOffRequestAction,
   rejectTherapistRequestAction,
   type TherapistRequestActionState
@@ -39,13 +40,15 @@ const STATUS_TONE: Record<TherapistRequestAdminListItemDto["status"], StatusTone
 };
 
 /**
- * 신청 한 건(승인함, 티켓 08). 종류·대상·상태를 머리에, 사유·신청 시각(정정만)·처리 내역을 아래
- * dl에 둔다. 대기 중(기한 지남 제외)일 때만 승인·거절 버튼을 보인다. 09가 정정 요청을 더할 때는
- * 이 카드 모양 그대로에 신청한 출근·퇴근 줄만 채워지면 된다(requestedCheckInTime/Out이 이미 자리를 둠).
+ * 신청 한 건(승인함, 티켓 08·09). 종류·대상·상태를 머리에, 사유·신청 시각(정정만)·처리 내역을
+ * 아래 dl에 둔다. 대기 중(기한 지남 제외)일 때만 승인·거절 버튼을 보인다. 승인 버튼은 종류에 따라
+ * approveTherapistDayOffRequestAction과 approveTherapistCorrectionRequestAction 중 하나를 쓴다
+ * (카드 모양은 08이 이미 정정 요청 값까지 받게 만들어 뒀다 — requestedCheckInTime/Out).
  */
 function RequestCard({ locale, request }: { locale: Locale; request: TherapistRequestAdminListItemDto }) {
   const t = useT();
-  const [approveState, approveAction, approvePending] = useActionState<TherapistRequestActionState, FormData>(approveTherapistDayOffRequestAction, null);
+  const approveRequestAction = request.kind === "correction" ? approveTherapistCorrectionRequestAction : approveTherapistDayOffRequestAction;
+  const [approveState, approveAction, approvePending] = useActionState<TherapistRequestActionState, FormData>(approveRequestAction, null);
   const [rejectState, rejectAction, rejectPending] = useActionState<TherapistRequestActionState, FormData>(rejectTherapistRequestAction, null);
   const [rejecting, setRejecting] = useState(false);
   const reasonId = useId();

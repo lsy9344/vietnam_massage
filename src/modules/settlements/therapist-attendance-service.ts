@@ -64,7 +64,10 @@ type TherapistAttendancePrismaClient = {
     create(args: unknown): Promise<unknown>;
   };
   $executeRawUnsafe?(query: string, ...values: unknown[]): Promise<unknown>;
-  $transaction<T>(callback: (tx: TherapistAttendancePrismaClient) => Promise<T>): Promise<T>;
+  // 09(정정 승인)가 바깥 트랜잭션을 그대로 넘긴다 — 트랜잭션 콜백 인자(실제 Prisma의
+  // TransactionClient)에는 이게 없다(중첩 트랜잭션은 못 연다). optional로 둬 runInTransaction이
+  // 이미 트랜잭션 안인지 보고 새로 열지 정한다(schedule-service.ts와 같은 모양).
+  $transaction?<T>(callback: (tx: TherapistAttendancePrismaClient) => Promise<T>): Promise<T>;
 };
 
 // 퇴근이 저장됐는데 그날 그 Therapist의 사용중 콜이 있다. 저장은 막지 않고 콜도 바꾸지 않는다.
@@ -172,6 +175,16 @@ const attendanceRangeQuerySchema = z.object({
 
 function getClient(client?: TherapistAttendancePrismaClient) {
   return client ?? (prisma as unknown as TherapistAttendancePrismaClient);
+}
+
+// 이미 트랜잭션 안(client가 트랜잭션 콜백 인자라 $transaction이 없음)이면 새로 열지 않고 그대로
+// 쓴다(schedule-service.ts의 같은 이름 함수와 같은 모양). 09의 정정 승인이 신청 상태 바꾸기·출퇴근
+// 저장·감사를 한 트랜잭션에서 하려고 이 함수를 통해 바깥 트랜잭션을 그대로 받는다.
+function runInTransaction<T>(client: TherapistAttendancePrismaClient, callback: (tx: TherapistAttendancePrismaClient) => Promise<T>) {
+  if (client.$transaction) {
+    return client.$transaction(callback);
+  }
+  return callback(client);
 }
 
 function toDate(value: string) {
@@ -478,7 +491,7 @@ export async function upsertTherapistAttendance(input: {
   assertDateInOperatingMonth(operatingMonth, parsed.data.attendanceDate);
   assertUnlocked(operatingMonth);
 
-  return client.$transaction(async (tx) => {
+  return runInTransaction(client, async (tx) => {
     const transactionOperatingMonth = await loadOperatingMonth(tx, parsed.data.operatingMonthId);
     assertDateInOperatingMonth(transactionOperatingMonth, parsed.data.attendanceDate);
     assertUnlocked(transactionOperatingMonth);
@@ -568,7 +581,7 @@ export async function deactivateTherapistAttendance(input: {
     throw new TherapistAttendanceDomainError("비활성 처리할 출퇴근 입력이 없습니다.", "THERAPIST_ATTENDANCE_NOT_FOUND");
   }
 
-  return client.$transaction(async (tx) => {
+  return runInTransaction(client, async (tx) => {
     const transactionOperatingMonth = await loadOperatingMonth(tx, parsed.data.operatingMonthId);
     assertDateInOperatingMonth(transactionOperatingMonth, parsed.data.attendanceDate);
     assertUnlocked(transactionOperatingMonth);

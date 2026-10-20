@@ -4,17 +4,19 @@ import { businessTodayServiceDate } from "@/lib/operating-date";
 import { listAuditActors, recordAuditEvent } from "@/modules/audit/audit-service";
 import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
 import { listAssignedServiceCallsForEmployeeOnDate } from "@/modules/calls/service-call-service";
+import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import { toIsoDateOnly } from "@/modules/masters/operating-month-service";
 import { assertValidParsedDate, isoDateFieldSchema, listPlannedWorkingDayStatusesForDate } from "@/modules/masters/planned-working-day-query";
 import { setPlannedWorkingDay } from "@/modules/settlements/schedule-service";
+import { listTherapistAttendanceForEmployeeInRange, upsertTherapistAttendance } from "@/modules/settlements/therapist-attendance-service";
 import type { TherapistAttendanceDayRequestStatus } from "@/modules/therapists/therapist-attendance-calendar-service";
 
 /**
- * 휴무 신청과 정정 요청(스펙 D22–D24, M24, 티켓 08). 한 표(TherapistRequest)에 두 종류를 담는다.
- * 이 티켓은 "휴무"만 만들고 승인한다 — "정정"(09)은 이 표의 같은 칸을 쓰되, 승인 쪽 저장 경로가
- * upsertTherapistAttendance라 달라서 approveTherapistDayOffRequest가 아직 처리하지 못한다
- * (THERAPIST_REQUEST_KIND_NOT_SUPPORTED, 09가 채울 자리). 거절·취소·목록 조회는 종류와 무관해
- * 09가 그대로 재사용할 수 있다.
+ * 휴무 신청과 정정 요청(스펙 D22–D24, M24, 티켓 08·09). 한 표(TherapistRequest)에 두 종류를 담는다.
+ * 08이 "휴무"를 만들고 승인했다. 이 티켓(09)이 "정정"(requestTherapistCorrection,
+ * approveTherapistCorrectionRequest)을 채운다 — 승인 쪽 저장 경로가 upsertTherapistAttendance라
+ * 달라서 approveTherapistDayOffRequest와는 다른 함수다. 거절·취소·목록 조회는 종류와 무관해 그대로
+ * 재사용한다.
  */
 
 // DB 저장값은 "이전 기록" 같은 다른 코드 칸처럼 한국어 문자열이다. 화면·DTO는 06이 이미 정한
@@ -74,11 +76,15 @@ type RequestPlannedWorkingDayRecord = {
   createdAt: Date;
   updatedAt: Date;
 };
+type RequestOperatingMonthRecord = { id: string; monthKey: string; status: string };
 
-// 승인(approveTherapistDayOffRequest)이 같은 트랜잭션 안에서 setPlannedWorkingDay(근무표
-// 서비스)와 listAssignedServiceCallsForEmployeeOnDate(콜 서비스)를 그대로 부르기 때문에, 그 두
-// 서비스가 요구하는 모양을 모두 담아야 한다(06의 TherapistAttendanceCalendarPrismaClient와 같은
-// 방식의 교차 타입).
+// 승인(approveTherapistDayOffRequest·approveTherapistCorrectionRequest)이 같은 트랜잭션 안에서
+// setPlannedWorkingDay(근무표 서비스)·upsertTherapistAttendance(출퇴근 서비스)·
+// listAssignedServiceCallsForEmployeeOnDate(콜 서비스)를 그대로 부르기 때문에, 그 서비스들이
+// 요구하는 모양을 모두 담아야 한다(06의 TherapistAttendanceCalendarPrismaClient와 같은 방식의
+// 교차 타입). upsertTherapistAttendance·listTherapistAttendanceForEmployeeInRange는 therapistAttendance
+// 모델까지 요구해 타입이 더 커지므로, 이 둘은 clock-in-service.ts처럼 호출부에서 `as unknown as`로
+// 넘긴다(operatingMonth만 이 타입에 직접 둔다 — 정정 요청·승인이 날짜로 운영월을 직접 찾아야 해서다).
 type TherapistRequestPrismaClient = {
   timeSlot: { findMany(args?: unknown): Promise<RequestTimeSlotRecord[]> };
   employee: {
@@ -91,6 +97,7 @@ type TherapistRequestPrismaClient = {
     upsert(args: unknown): Promise<RequestPlannedWorkingDayRecord>;
     delete(args: unknown): Promise<RequestPlannedWorkingDayRecord>;
   };
+  operatingMonth: { findUnique(args: unknown): Promise<RequestOperatingMonthRecord | null> };
   serviceCall: { findMany(args?: unknown): Promise<unknown[]> };
   therapistRequest: {
     create(args: unknown): Promise<RequestRecord>;
@@ -123,10 +130,20 @@ function toDate(isoDate: string) {
   return new Date(`${isoDate}T00:00:00.000Z`);
 }
 
-/** "기한 지남"은 저장하지 않고 읽을 때 정한다(M24) — 대기 중인데 날짜가 지났으면 기한 지남이다. */
-function toStatusValue(dbStatus: string, targetDateIso: string, todayServiceDate: string): RequestStatusValue {
+// 휴무 계열(보통 휴무, 소중한날 휴가)만 "기한 지남"이 있다(M24) — 정정 요청은 애초에 이미 지난
+// (또는 오늘의) 출퇴근을 고치는 일이라 날짜가 지나 있는 것이 정상이고, 같은 규칙을 적용하면 거의
+// 모든 정정 요청이 대기 상태로 뜨는 즉시 처리할 수 없게 된다(09가 바로잡음).
+function isDayOffFamilyKind(kind: string) {
+  return kind === "휴무" || kind === "소중한날 휴가";
+}
+
+/**
+ * "기한 지남"은 저장하지 않고 읽을 때 정한다(M24) — 대기 중인 휴무 계열 신청의 날짜가 지났으면
+ * 기한 지남이다. 정정 요청에는 이 규칙이 없다(isDayOffFamilyKind 참고).
+ */
+function toStatusValue(dbStatus: string, kind: string, targetDateIso: string, todayServiceDate: string): RequestStatusValue {
   if (dbStatus === "대기") {
-    return targetDateIso < todayServiceDate ? "expired" : "pending";
+    return isDayOffFamilyKind(kind) && targetDateIso < todayServiceDate ? "expired" : "pending";
   }
   if (dbStatus === "승인") return "approved";
   if (dbStatus === "거절") return "rejected";
@@ -224,6 +241,82 @@ export async function requestTherapistDayOff(input: {
   });
 
   return { id: created.id, kind: parsed.data.kind, targetDate: parsed.data.date, status: "pending", reason: created.reason };
+}
+
+const createCorrectionSchema = z.object({
+  date: isoDateFieldSchema,
+  reason: z.string().trim().min(1, "정정 사유를 입력하세요.").max(500)
+});
+
+// upsertTherapistAttendance의 checkInTime/checkOutTime과 같은 HH:mm 형식 검사(그 서비스의
+// timeRegex는 비공개라 여기서 다시 둔다. toDate처럼 이 코드베이스에서 흔한 작은 중복이다).
+const correctionTimeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+/**
+ * 정정 요청(스펙 D23, M24). Therapist 본인만 부른다 — employeeId는 언제나
+ * requireTherapistAccess()가 돌려준 값이다(M3). 출근·퇴근 둘 중 하나는 적어야 한다(빠뜨린 출근·
+ * 퇴근도 포함). 잠긴·마감확정 운영월의 날짜나 같은 날에 대기 중인 정정 요청이 있으면 거절한다
+ * (스펙 D23). 신청 제출 자체는 감사에 남기지 않는다(D28은 승인·거절만 남긴다).
+ *
+ * (가정) 휴무 신청과 달리 미래 날짜 제한은 두지 않는다 — 정정은 이미 지난(또는 오늘의) 출퇴근을
+ * 고치는 일이고, 이 요청으로 이어지는 두 진입점(05의 "이미 찍음", 06의 "퇴근 미입력")이 이미
+ * 오늘·과거 날짜로만 연결한다.
+ */
+export async function requestTherapistCorrection(input: {
+  employeeId: string;
+  date: string;
+  requestedCheckInTime?: string | null;
+  requestedCheckOutTime?: string | null;
+  reason: string;
+  now?: Date;
+  prismaClient?: TherapistRequestPrismaClient;
+}): Promise<TherapistRequestSelfDto> {
+  const parsed = createCorrectionSchema.safeParse({ date: input.date, reason: input.reason });
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const field: TherapistRequestErrorField = issue?.path[0] === "reason" ? "reason" : "date";
+    throw new TherapistRequestDomainError(issue?.message ?? "입력값을 확인하세요.", "INVALID_THERAPIST_REQUEST_INPUT", field);
+  }
+  assertValidParsedDate(parsed.data.date);
+
+  const requestedCheckInTime = input.requestedCheckInTime?.trim() || null;
+  const requestedCheckOutTime = input.requestedCheckOutTime?.trim() || null;
+  if (!requestedCheckInTime && !requestedCheckOutTime) {
+    throw new TherapistRequestDomainError("출근 또는 퇴근 시각 중 하나는 적어야 합니다.", "THERAPIST_CORRECTION_TIME_REQUIRED");
+  }
+  if (requestedCheckInTime && !correctionTimeRegex.test(requestedCheckInTime)) {
+    throw new TherapistRequestDomainError("출근 시각은 HH:mm 형식이어야 합니다.", "INVALID_THERAPIST_REQUEST_INPUT");
+  }
+  if (requestedCheckOutTime && !correctionTimeRegex.test(requestedCheckOutTime)) {
+    throw new TherapistRequestDomainError("퇴근 시각은 HH:mm 형식이어야 합니다.", "INVALID_THERAPIST_REQUEST_INPUT");
+  }
+
+  const client = getClient(input.prismaClient);
+  const monthKey = parsed.data.date.slice(0, 7);
+  const operatingMonth = await client.operatingMonth.findUnique({ where: { monthKey } });
+  if (operatingMonth && isOperatingMonthPayoutLocked(operatingMonth.status)) {
+    throw new TherapistRequestDomainError("마감확정 또는 잠금 운영월의 날짜는 정정을 요청할 수 없습니다.", "OPERATING_MONTH_LOCKED", "date");
+  }
+
+  const pending = await client.therapistRequest.findMany({
+    where: { employeeId: input.employeeId, targetDate: toDate(parsed.data.date), kind: "정정", status: "대기" }
+  });
+  if (pending.length > 0) {
+    throw new TherapistRequestDomainError("이미 대기 중인 정정 요청이 있습니다.", "THERAPIST_CORRECTION_REQUEST_ALREADY_PENDING", "date");
+  }
+
+  const created = await client.therapistRequest.create({
+    data: {
+      employeeId: input.employeeId,
+      kind: "정정",
+      targetDate: toDate(parsed.data.date),
+      requestedCheckInTime,
+      requestedCheckOutTime,
+      reason: parsed.data.reason
+    }
+  });
+
+  return { id: created.id, kind: "correction", targetDate: parsed.data.date, status: "pending", reason: created.reason };
 }
 
 /**
@@ -358,7 +451,7 @@ export async function listTherapistRequestsForEmployeeInRange(input: {
   return [...byDate.entries()].map(([dateIso, request]) => ({
     targetDate: dateIso,
     kind: fromDbKind(request.kind),
-    status: toStatusValue(request.status, dateIso, todayServiceDate),
+    status: toStatusValue(request.status, request.kind, dateIso, todayServiceDate),
     rejectionReason: request.resolutionReason
   }));
 }
@@ -375,7 +468,7 @@ async function toAdminListItemDto(
   resolvedByNames: Map<string, { name: string }>
 ): Promise<TherapistRequestAdminListItemDto> {
   const targetDate = toIsoDateOnly(request.targetDate);
-  const status = toStatusValue(request.status, targetDate, todayServiceDate);
+  const status = toStatusValue(request.status, request.kind, targetDate, todayServiceDate);
   const kind = fromDbKind(request.kind);
   const assignedCallCount =
     kind !== "correction" && status === "pending"
@@ -432,11 +525,13 @@ export async function listTherapistRequestsForAdmin(options: {
   });
 }
 
+// "기한 지남"은 휴무 계열 신청에만 있다(M24, toStatusValue와 같은 이유) — 정정 요청은 지난 날짜를
+// 고치는 일이라 날짜가 지나 있어도 승인·거절할 수 있어야 한다.
 function assertActionable(request: RequestRecord, todayServiceDate: string) {
   if (request.status !== "대기") {
     throw new TherapistRequestDomainError("이미 처리된 신청입니다.", "THERAPIST_REQUEST_ALREADY_RESOLVED");
   }
-  if (toIsoDateOnly(request.targetDate) < todayServiceDate) {
+  if (isDayOffFamilyKind(request.kind) && toIsoDateOnly(request.targetDate) < todayServiceDate) {
     throw new TherapistRequestDomainError("기한이 지난 신청입니다.", "THERAPIST_REQUEST_EXPIRED");
   }
 }
@@ -445,7 +540,7 @@ function assertActionable(request: RequestRecord, todayServiceDate: string) {
  * 휴무 신청 승인(M5, M24). 신청 상태 바꾸기 + 근무표 서비스로 그날을 휴무로 저장하기 + 감사 기록을
  * 한 트랜잭션에서 한다(스펙 D22). 그날 그 Therapist에게 배정된 예약이 있어도 승인을 막지 않는다
  * (가정 — 승인 화면이 그 수를 보여줄 뿐이다). 정정 요청(kind="정정") 승인은 다른 저장 경로
- * (upsertTherapistAttendance)가 필요해 09가 이어서 채운다.
+ * (upsertTherapistAttendance)가 필요해 approveTherapistCorrectionRequest가 따로 맡는다.
  */
 export async function approveTherapistDayOffRequest(input: {
   requestId: string;
@@ -477,6 +572,102 @@ export async function approveTherapistDayOffRequest(input: {
     // setPlannedWorkingDay는 runInTransaction이라 이미 트랜잭션 안의 tx를 그대로 받으면 새로 열지
     // 않는다(0절 7번 함정). 자기 감사 기록(planned_working_day.changed)을 따로 남긴다.
     await setPlannedWorkingDay({ employeeId: before.employeeId, date: targetDateIso, status: "휴무", actorId: input.actorId, prismaClient: tx });
+
+    await recordAuditEvent(
+      {
+        actorId: input.actorId,
+        action: "therapist_request.approved",
+        targetType: "therapist_request",
+        targetId: updated.id,
+        beforeValue: requestSnapshot(before),
+        afterValue: requestSnapshot(updated)
+      },
+      { prismaClient: tx as any }
+    );
+
+    return updated;
+  });
+
+  const resolvedByNames = await listAuditActors([input.actorId], { prismaClient: client });
+  return toAdminListItemDto(client, after, todayServiceDate, resolvedByNames);
+}
+
+/**
+ * 정정 요청 승인(M5, M24, ADR 0004). 신청 상태 바꾸기 + 출퇴근 저장("정정 승인") + 감사 기록을 한
+ * 트랜잭션에서 한다(스펙 D23, D24). 저장은 upsertTherapistAttendance를 그대로 불러 밤샘·잠긴
+ * 운영월 거절·만근 재판정이 그대로 걸리게 한다 — 이 함수가 여는 트랜잭션을 그 서비스가 받아
+ * 그대로 쓰도록 그 서비스의 $transaction을 optional로 넓혔다(코드베이스 지도 0절 2번 함정).
+ * 승인하는 사람이 시각을 고치는 기능은 없다(스펙) — 요청에 없는 쪽 시각은 기존 출퇴근 기록을
+ * 그대로 쓰고, 출근 기록 자체가 없는데 퇴근만 요청했으면 저장할 수 없어 거절 뒤 대리 입력을
+ * 안내한다(THERAPIST_CORRECTION_CHECK_IN_REQUIRED, 코드베이스 지도 6절 함정).
+ *
+ * 날짜별 지급 확인 금액(코스 수당)은 출퇴근을 읽지 않고 계산되므로(therapist-daily-settlement-
+ * service.ts에 attendance 참조가 전혀 없다, 07이 이미 코드로 확인함 — merged-07.md) 이 승인은 그
+ * 금액을 바꾸지 않는다. ADR 0004의 지급 재확인 규칙은 그 금액이 바뀔 때만 켜지는 계산 상태라
+ * 여기서 따로 표시하지 않는다.
+ */
+export async function approveTherapistCorrectionRequest(input: {
+  requestId: string;
+  actorId: string;
+  now?: Date;
+  prismaClient?: TherapistRequestPrismaClient;
+}): Promise<TherapistRequestAdminListItemDto> {
+  const client = getClient(input.prismaClient);
+  const now = input.now ?? new Date();
+  const todayServiceDate = businessTodayServiceDate(now);
+
+  const before = await client.therapistRequest.findUnique({ where: { id: input.requestId }, include: requestWithEmployeeInclude });
+  if (!before) {
+    throw new TherapistRequestDomainError("신청을 찾을 수 없습니다.", "THERAPIST_REQUEST_NOT_FOUND");
+  }
+  if (before.kind !== "정정") {
+    throw new TherapistRequestDomainError("아직 지원하지 않는 신청 종류입니다.", "THERAPIST_REQUEST_KIND_NOT_SUPPORTED");
+  }
+  assertActionable(before, todayServiceDate);
+  const targetDateIso = toIsoDateOnly(before.targetDate);
+
+  const monthKey = targetDateIso.slice(0, 7);
+  const operatingMonth = await client.operatingMonth.findUnique({ where: { monthKey } });
+  if (!operatingMonth) {
+    throw new TherapistRequestDomainError("운영월을 찾을 수 없습니다.", "OPERATING_MONTH_NOT_FOUND");
+  }
+
+  const existingRows = await listTherapistAttendanceForEmployeeInRange({
+    employeeId: before.employeeId,
+    startDate: targetDateIso,
+    endDate: targetDateIso,
+    prismaClient: client as unknown as Parameters<typeof listTherapistAttendanceForEmployeeInRange>[0]["prismaClient"]
+  });
+  const existing = existingRows[0] ?? null;
+
+  const checkInTime = before.requestedCheckInTime ?? existing?.checkInTime ?? "";
+  if (!checkInTime) {
+    throw new TherapistRequestDomainError(
+      "출근 기록이 없어 승인할 수 없습니다. 거절한 뒤 출퇴근 화면에서 직접 입력하세요.",
+      "THERAPIST_CORRECTION_CHECK_IN_REQUIRED"
+    );
+  }
+  const checkOutTime = before.requestedCheckOutTime ?? existing?.checkOutTime ?? "";
+
+  const after = await runInTransaction(client, async (tx) => {
+    const updated = await tx.therapistRequest.update({
+      where: { id: input.requestId },
+      data: { status: "승인", resolvedByAccountId: input.actorId, resolvedAt: now },
+      include: requestWithEmployeeInclude
+    });
+
+    // upsertTherapistAttendance는 $transaction이 optional로 넓혀져 있어, 이미 트랜잭션 안인 tx를
+    // 받으면 새로 열지 않고 그대로 쓴다(이 함수와 같은 모양의 runInTransaction).
+    await upsertTherapistAttendance({
+      operatingMonthId: operatingMonth.id,
+      attendanceDate: targetDateIso,
+      employeeId: before.employeeId,
+      checkInTime,
+      checkOutTime,
+      method: "정정 승인",
+      actorId: input.actorId,
+      prismaClient: tx as unknown as Parameters<typeof upsertTherapistAttendance>[0]["prismaClient"]
+    });
 
     await recordAuditEvent(
       {
