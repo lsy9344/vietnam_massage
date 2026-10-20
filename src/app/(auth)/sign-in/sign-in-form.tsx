@@ -1,12 +1,13 @@
 "use client";
 
 import { FormEvent, useRef, useState } from "react";
-import { signIn } from "next-auth/react";
+import { getSession, signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { validateSignIn, type SignInField } from "@/app/(auth)/sign-in/sign-in-validation";
 import { Button } from "@/components/ui/button";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import type { MessageKey } from "@/lib/i18n";
+import { localeCookieAssignment, signInLocaleFor } from "@/lib/i18n/config";
 import { useT } from "@/lib/i18n/client";
 
 const CREDENTIALS_ERROR_ID = "sign-in-error";
@@ -55,6 +56,10 @@ export function SignInForm() {
       setCredentialsRejected(true);
       return;
     }
+
+    // Therapist는 로그인하면 바로 베트남어로 시작한다(signInLocaleFor). 첫 화면을 그리기 전에 쿠키를 바꾼다.
+    const signInLocale = signInLocaleFor((await getSession())?.user?.role);
+    if (signInLocale) document.cookie = localeCookieAssignment(signInLocale);
 
     router.replace(result.url ?? callbackUrl);
     router.refresh();

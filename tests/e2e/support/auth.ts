@@ -89,5 +89,12 @@ export async function login(page: Page, accountId: string, password: string) {
     .catch(() => false);
   if (reachedLanding) {
     await page.waitForLoadState("load").catch(() => undefined);
+    // therapist 로그인은 언어를 vi로 바꾼다(signInLocaleFor). 한국어 locator를 쓰는 스펙을 위해 ko로 되돌린다.
+    const localeCookie = (await page.context().cookies()).find((cookie) => cookie.name === "locale");
+    if (localeCookie?.value !== "ko") {
+      await setLocaleCookie(page, "ko");
+      await page.reload().catch(() => undefined);
+      await page.waitForLoadState("load").catch(() => undefined);
+    }
   }
 }

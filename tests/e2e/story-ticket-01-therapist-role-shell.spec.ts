@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { testEmployees } from "./support/test-employees";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
-import { argon2idOptions, login } from "./support/auth";
+import { argon2idOptions, login, setLocaleCookie } from "./support/auth";
 
 /**
  * 티켓 01: therapist 역할과 빈 Therapist 화면.
@@ -182,6 +182,27 @@ test.describe("티켓 01 therapist 역할과 빈 Therapist 화면", () => {
       await expect(page).toHaveURL(/\/therapist$/);
     });
   }
+
+  test("로그인 화면에서 한국어를 골라 둬도 therapist는 로그인하면 바로 베트남어이고, 관리자는 고른 한국어 그대로다", async ({ page, browser }) => {
+    await page.goto("/sign-in");
+    await setLocaleCookie(page, "ko");
+    await page.reload();
+    await page.getByLabel("이메일 또는 계정 ID").fill(THERAPIST_ACCOUNT_ID);
+    await page.getByLabel("비밀번호").fill(THERAPIST_PASSWORD);
+    await page.getByRole("button", { name: "로그인" }).click();
+    await expect(page).toHaveURL(/\/therapist$/);
+    await expect(page.locator("html")).toHaveAttribute("lang", "vi");
+    await expect(page.getByRole("heading", { name: "Hôm nay", level: 1 })).toBeVisible();
+
+    const adminContext = await browser.newContext();
+    try {
+      const adminPage = await adminContext.newPage();
+      await login(adminPage, ADMIN_ACCOUNT_ID, ADMIN_PASSWORD);
+      await expect(adminPage.locator("html")).toHaveAttribute("lang", "ko");
+    } finally {
+      await adminContext.close();
+    }
+  });
 
   test("390px 폭에서 Therapist 오늘 화면은 가로 스크롤이 없다", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
