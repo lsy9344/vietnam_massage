@@ -168,7 +168,7 @@ const recognitionQuerySchema = z.object({
 });
 
 const attendanceRangeQuerySchema = z.object({
-  employeeId: z.string().trim().min(1, "마사지사를 선택하세요."),
+  employeeId: z.string().trim().min(1, "Therapist를 선택하세요."),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "시작일은 YYYY-MM-DD 형식이어야 합니다."),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "종료일은 YYYY-MM-DD 형식이어야 합니다.")
 });
@@ -716,7 +716,7 @@ export async function listTherapistAttendanceForEmployeeInRange(input: {
   const client = input.prismaClient ?? (prisma as unknown as TherapistAttendanceRangeReadClient);
   const employee = await client.employee.findUnique({ where: { id: parsed.data.employeeId } });
   if (!employee || employee.employeeGroup !== "THERAPIST" || !employee.isActive) {
-    throw new TherapistAttendanceDomainError("활성 마사지사를 찾을 수 없습니다.", "THERAPIST_EMPLOYEE_NOT_FOUND");
+    throw new TherapistAttendanceDomainError("활성 Therapist를 찾을 수 없습니다.", "THERAPIST_EMPLOYEE_NOT_FOUND");
   }
 
   const attendances = await client.therapistAttendance.findMany({

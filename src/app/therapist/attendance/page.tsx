@@ -5,7 +5,7 @@ import { TherapistRefresh, TherapistRefreshController } from "@/components/thera
 import { TherapistTopBar } from "@/components/therapist/therapist-top-bar";
 import { Button } from "@/components/ui/button";
 import { getServerTranslator } from "@/lib/i18n/server";
-import { requireTherapistAccess } from "@/modules/therapists/therapist-access-service";
+import { requireTherapistAccess } from "@/app/therapist/require-therapist-access";
 import { getTherapistProfile } from "@/modules/therapists/therapist-profile-service";
 import { getTherapistAttendanceCalendar, listTherapistClockOutMissingDates } from "@/modules/therapists/therapist-attendance-calendar-service";
 import { TherapistAttendanceMonthNav } from "@/app/therapist/attendance/therapist-attendance-month-nav";

@@ -235,7 +235,10 @@ export async function getTherapistTodayView(input: {
         employeeId: input.employeeId,
         operatingMonthId: todayOperatingMonthId,
         serviceDate: today,
-        prismaClient: client
+        // R28: expectedPayoutAmountForDate는 listTherapistDailySettlements에 그대로 넘기는 좁은
+        // 타입을 요구한다(therapist-payout-view-service.ts) — 이 서비스의 더 좁은 TherapistTodayPrismaClient를
+        // 그 자리에서 캐스팅한다(monthly-closing-preview-service.ts와 같은 선례).
+        prismaClient: client as unknown as Parameters<typeof expectedPayoutAmountForDate>[0]["prismaClient"]
       })
     : 0;
 

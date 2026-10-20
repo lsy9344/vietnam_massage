@@ -38,7 +38,7 @@
     "next-auth": "4.24.14",
     "pg": "8.16.3",
     "pg-cloudflare": "1.4.0",
-    "qrcode-generator": "^2.0.4",
+    "qrcode-generator": "2.0.4",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "tailwind-merge": "3.3.1",

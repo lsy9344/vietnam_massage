@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getLocale } from "@/lib/i18n/server";
 import { resolveDomainErrorMessage } from "@/lib/i18n/errors";
-import { requireTherapistAccess } from "@/modules/therapists/therapist-access-service";
+import { requireTherapistAccess } from "@/app/therapist/require-therapist-access";
 import { clockInWithCode, TherapistClockInDomainError, type TherapistClockInAction } from "@/modules/therapists/therapist-clock-in-service";
 import type { TherapistAttendanceDto } from "@/modules/settlements/therapist-attendance-service";
 

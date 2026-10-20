@@ -2,7 +2,7 @@ import { TherapistNoticeList } from "@/components/therapist/therapist-notice-lis
 import { TherapistRefresh, TherapistRefreshController } from "@/components/therapist/therapist-refresh";
 import { TherapistTopBar } from "@/components/therapist/therapist-top-bar";
 import { getServerTranslator } from "@/lib/i18n/server";
-import { requireTherapistAccess } from "@/modules/therapists/therapist-access-service";
+import { requireTherapistAccess } from "@/app/therapist/require-therapist-access";
 import { getTherapistProfile } from "@/modules/therapists/therapist-profile-service";
 import { listTherapistNoticesForEmployee } from "@/modules/therapists/therapist-notice-service";
 

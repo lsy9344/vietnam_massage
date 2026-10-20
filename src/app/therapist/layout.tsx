@@ -3,7 +3,7 @@ import { TherapistSkipLinks, THERAPIST_MAIN_CONTENT_ID } from "@/components/ther
 import { TherapistTabBar } from "@/components/therapist/therapist-tab-bar";
 import { getLocale } from "@/lib/i18n/server";
 import { LocaleProvider } from "@/lib/i18n/client";
-import { requireTherapistAccess } from "@/modules/therapists/therapist-access-service";
+import { requireTherapistAccess } from "@/app/therapist/require-therapist-access";
 import { countUnreadTherapistNotices } from "@/modules/therapists/therapist-notice-service";
 
 /**

@@ -5,7 +5,7 @@ import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-no
 import { ScreenState } from "@/components/ui/screen-state";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { resolveDomainErrorMessage } from "@/lib/i18n/errors";
-import { requireTherapistAccess } from "@/modules/therapists/therapist-access-service";
+import { requireTherapistAccess } from "@/app/therapist/require-therapist-access";
 import { getTherapistProfile } from "@/modules/therapists/therapist-profile-service";
 import { getTherapistPayoutView } from "@/modules/therapists/therapist-payout-view-service";
 

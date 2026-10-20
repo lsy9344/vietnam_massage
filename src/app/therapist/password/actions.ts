@@ -5,7 +5,7 @@ import { t } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n/server";
 import { resolveDomainErrorMessage } from "@/lib/i18n/errors";
 import { AccountDomainError, changeOwnPassword } from "@/modules/masters/account-service";
-import { requireTherapistAccess } from "@/modules/therapists/therapist-access-service";
+import { requireTherapistAccess } from "@/app/therapist/require-therapist-access";
 
 export type TherapistPasswordActionState = ActionResult<{ changed: true }> | null;
 

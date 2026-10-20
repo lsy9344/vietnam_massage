@@ -1823,7 +1823,7 @@ export const vi: Messages = {
   "therapist.attendance.dayDetail.requestLabel": "Yêu cầu",
   "therapist.attendance.dayDetail.noRecordValue": "Chưa có bản ghi",
   "therapist.attendance.dayDetail.noValue": "Không có",
-  "therapist.attendance.dayDetail.noJudgmentValue": "Không có vấn đề",
+  "therapist.attendance.dayDetail.noJudgmentValue": "Không áp dụng",
   "therapist.attendance.dayDetail.lateBadge": "Đi muộn {minutes} phút",
   "therapist.attendance.dayDetail.absentBadge": "Vắng",
   "therapist.attendance.dayDetail.clockOutMissingBadge": "Thiếu giờ ra",
