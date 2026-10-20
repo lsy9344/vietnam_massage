@@ -291,7 +291,9 @@ test.describe("티켓 08 휴무 신청과 승인함", () => {
     const cell = page.getByRole("grid").getByRole("button", { name: dayCellName(SPECIAL_DATE) });
     await expect(cell).toHaveAccessibleName(/소중한날 휴가/);
     await expect(cell).toHaveClass(/border-danger/);
-    await expect(page.getByText("■ 소중한날 휴가")).toBeVisible();
+    // 기호는 U+FE0E로 이모지 대신 글자 모양을 강제한다(R18, statusGlyphChar) — "■" 바로 뒤에 보이지
+    // 않는 그 글자가 끼어 있다.
+    await expect(page.getByText("■︎ 소중한날 휴가")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
     await page.screenshot({ path: testInfo.outputPath("special-day-off-mobile.png") });
     await cell.click();
@@ -300,7 +302,9 @@ test.describe("티켓 08 휴무 신청과 승인함", () => {
     await page.getByRole("dialog").getByRole("button", { name: "닫기" }).click();
     await therapistContext.addCookies([{ name: "locale", value: "vi", url: new URL(page.url()).origin }]);
     await page.reload();
-    await expect(page.getByText("■ Nghỉ ngày đặc biệt")).toBeVisible();
+    // R18: 기호는 U+FE0E로 이모지 대신 글자 모양을 강제한다(statusGlyphChar) — "■" 바로 뒤에
+    // 보이지 않는 그 글자가 끼어 있다.
+    await expect(page.getByText("■︎ Nghỉ ngày đặc biệt")).toBeVisible();
     await managerContext.close();
     await therapistContext.close();
   });

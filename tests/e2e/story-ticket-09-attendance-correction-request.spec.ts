@@ -206,7 +206,8 @@ test.describe("티켓 09 출퇴근 정정 요청", () => {
     await secondDialog.getByLabel("퇴근 시각(선택)").fill("21:00");
     await secondDialog.getByLabel("사유").fill("다시 요청합니다.");
     await secondDialog.getByRole("button", { name: "요청 보내기" }).click();
-    await expect(secondDialog.getByText("이미 대기 중인 정정 요청이 있습니다.")).toBeVisible();
+    // R3(사용자 이야기 98): 중복 검사가 종류와 무관해져 메시지도 "신청"으로 바뀌었다.
+    await expect(secondDialog.getByText("이미 대기 중인 신청이 있습니다.")).toBeVisible();
     await secondDialog.getByRole("button", { name: "닫기" }).click();
     await therapistContext.close();
 
