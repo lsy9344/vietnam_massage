@@ -12,7 +12,7 @@ import { useT } from "@/lib/i18n/client";
 import type { Locale } from "@/lib/i18n/config";
 import { cn } from "@/lib/utils";
 import { cancelTherapistRequestAction, requestTherapistDayOffAction, type TherapistRequestActionState } from "@/app/therapist/attendance/actions";
-import type { TherapistAttendanceCalendarDayDto } from "@/modules/therapists/therapist-attendance-calendar-service";
+import type { TherapistAttendanceCalendarDayDto, TherapistAttendanceDayRequestStatus } from "@/modules/therapists/therapist-attendance-calendar-service";
 
 // 압축 칸(7열 그리드)에 쓰는 작은 기호. StatusIndicator(status-indicator.tsx)와 같은 기호·색이다.
 const TONE_GLYPH: Record<"info" | "success" | "warning" | "danger", string> = {
@@ -81,13 +81,24 @@ const REQUEST_STATUS_TONE: Record<"pending" | "approved" | "rejected" | "cancele
   expired: "neutral"
 };
 
+// 휴무 계열(보통 휴무, 소중한날 휴가)만 이 조작의 "대기 중" 취소 UI를 받는다(D22, R1·R2). 서비스
+// 쪽의 isDayOffFamilyKind(therapist-request-service.ts)와 같은 구분이다.
+type TherapistRequestKindOfDay = NonNullable<TherapistAttendanceDayRequestStatus>["kind"];
+function isDayOffFamilyRequestKind(kind: TherapistRequestKindOfDay) {
+  return kind === "day_off" || kind === "special_day_off";
+}
+
 /**
  * 휴무 신청·취소(스펙 D22, 티켓 08). 근태 달력(06)의 requestStatus 자리는 날짜만 알므로
  * (TherapistAttendanceDayRequestStatus에 신청 id가 없다) 취소는 날짜로 찾아 처리한다
- * (cancelTherapistDayOffRequestForDate). 정정 요청(09)은 다른 화면(정정 요청 만들기)에서 만든다 —
- * 이 자리는 kind가 "day_off"인 대기 중 신청의 취소도 함께 보여줄 수 있게 kind를 따로 보지 않는다.
+ * (cancelTherapistDayOffRequestForDate). 정정 요청(09)은 다른 화면(정정 요청 만들기)에서 만든다.
+ *
+ * R1: 그날 대기 중인 신청이 정정이면(종류를 안 보고 status만 보면 생기던 버그) 이 휴무 취소 UI를
+ * 보이지 않는다 — "신청 보냄" 줄은 위 dl의 requestLabel이 이미 종류와 함께 보여준다. R3(사용자
+ * 이야기 98)로 같은 날 다른 종류의 대기 중인 신청이 있으면 새 휴무 신청도 서버가 막으므로, 그 사이에는
+ * "신청" 버튼도 보이지 않는다.
  */
-function DayOffRequestControls({ day }: { day: TherapistAttendanceCalendarDayDto }) {
+export function DayOffRequestControls({ day }: { day: TherapistAttendanceCalendarDayDto }) {
   const t = useT();
   const [requestState, requestAction, requestPending] = useActionState<TherapistRequestActionState, FormData>(requestTherapistDayOffAction, null);
   const [cancelState, cancelAction, cancelPending] = useActionState<TherapistRequestActionState, FormData>(cancelTherapistRequestAction, null);
@@ -98,13 +109,15 @@ function DayOffRequestControls({ day }: { day: TherapistAttendanceCalendarDayDto
   const requestFormError = requestState && !requestState.ok ? requestState.formError : undefined;
   const cancelFormError = cancelState && !cancelState.ok ? cancelState.formError : undefined;
 
+  const pendingOtherKind = day.requestStatus?.status === "pending" && !isDayOffFamilyRequestKind(day.requestStatus.kind);
   // 서버가 다시 읽기 전까지는 이 자리에서 지금 한 행동(신청/취소)의 결과를 먼저 보인다. 서버 값은
   // revalidatePath로 곧 뒤따라온다 — 둘이 어긋나는 사이에도 이 화면만은 맞는 쪽을 보인다.
-  const effectivelyPending = cancelState?.ok ? false : requestState?.ok ? true : day.requestStatus?.status === "pending";
+  const effectivelyPending =
+    cancelState?.ok ? false : requestState?.ok ? true : day.requestStatus?.status === "pending" && isDayOffFamilyRequestKind(day.requestStatus.kind);
   // 승인되면 서버가 planStatus를 "휴무"로 바꾸므로, 이 칸은 더는 신청·취소 어느 쪽도 보이지 않는다.
   const alreadyDayOff = day.planStatus === "휴무";
 
-  if (alreadyDayOff) {
+  if (alreadyDayOff || pendingOtherKind) {
     return null;
   }
 

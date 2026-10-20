@@ -298,11 +298,13 @@ export async function requestTherapistCorrection(input: {
     throw new TherapistRequestDomainError("마감확정 또는 잠금 운영월의 날짜는 정정을 요청할 수 없습니다.", "OPERATING_MONTH_LOCKED", "date");
   }
 
+  // R3(사용자 이야기 98): 종류와 무관하게 같은 날 대기 중인 신청이 있으면 막는다 — 이전에는 kind="정정"
+  // 만 봐서 대기 중인 휴무 신청을 비켜 가는 비대칭이 있었다(requestTherapistDayOff의 검사와 맞춘다).
   const pending = await client.therapistRequest.findMany({
-    where: { employeeId: input.employeeId, targetDate: toDate(parsed.data.date), kind: "정정", status: "대기" }
+    where: { employeeId: input.employeeId, targetDate: toDate(parsed.data.date), status: "대기" }
   });
   if (pending.length > 0) {
-    throw new TherapistRequestDomainError("이미 대기 중인 정정 요청이 있습니다.", "THERAPIST_CORRECTION_REQUEST_ALREADY_PENDING", "date");
+    throw new TherapistRequestDomainError("이미 대기 중인 신청이 있습니다.", "THERAPIST_CORRECTION_REQUEST_ALREADY_PENDING", "date");
   }
 
   const created = await client.therapistRequest.create({
@@ -320,9 +322,10 @@ export async function requestTherapistCorrection(input: {
 }
 
 /**
- * 신청 취소(스펙 D22, M24). 승인 전에만, 기한이 지나지 않았을 때만 Therapist 본인이 취소할 수
- * 있다. 상태 전환만 하므로 종류와 무관하다 — 09의 정정 요청 취소도 이 함수를 그대로 쓸 수 있다.
- * 취소는 감사에 남기지 않는다(D28은 승인·거절만 남긴다).
+ * 신청 취소(스펙 D22, M24). Therapist가 취소할 수 있는 신청은 휴무 계열(휴무, 소중한날 휴가)뿐이다
+ * (R2, D22). 정정 요청(kind="정정")은 취소 버튼을 두지 않는다 — 승인하는 사람이 거절하거나 처리해야
+ * 한다. 그 밖에 승인 전에만, 기한이 지나지 않았을 때만 취소할 수 있다. 취소는 감사에 남기지 않는다
+ * (D28은 승인·거절만 남긴다).
  */
 export async function cancelTherapistRequest(input: {
   employeeId: string;
@@ -341,7 +344,7 @@ export async function cancelTherapistRequest(input: {
     throw new TherapistRequestDomainError("신청을 찾을 수 없습니다.", "THERAPIST_REQUEST_NOT_FOUND");
   }
   const targetDateIso = toIsoDateOnly(existing.targetDate);
-  if (existing.status !== "대기" || targetDateIso < todayServiceDate) {
+  if (existing.status !== "대기" || targetDateIso < todayServiceDate || !isDayOffFamilyKind(existing.kind)) {
     throw new TherapistRequestDomainError("취소할 수 없는 신청입니다.", "THERAPIST_REQUEST_NOT_CANCELABLE");
   }
 
@@ -496,6 +499,11 @@ async function toAdminListItemDto(
 
 const requestWithEmployeeInclude = { employee: { select: { displayName: true, staffCode: true } } } as const;
 
+// R5(비용): 처리된 신청은 시간이 지나도 표가 줄지 않으므로(상태는 더하기만 한다), 승인함은 처리된
+// 신청을 최근 것만 읽는다. 대기 중(기한 지남 포함, M24로 승인·거절·취소할 수 없어도 목록에는 남는다)
+// 신청은 날짜와 무관하게 전부 읽는다 — 처리할 일이 그 안에 있을 수 있어서다.
+const ADMIN_REQUEST_HISTORY_WINDOW_DAYS = 90;
+
 /**
  * 승인함 목록(M5, D24). 휴무 신청과 정정 요청을 한 표에서 읽어 함께 돌려준다. 대기 중(기한 지남
  * 포함)이 위에 날짜가 가까운 순으로, 처리된 신청은 아래에 최근 처리 순으로 온다(가정, 선례 없음).
@@ -507,8 +515,12 @@ export async function listTherapistRequestsForAdmin(options: {
   const client = getClient(options.prismaClient);
   const now = options.now ?? new Date();
   const todayServiceDate = businessTodayServiceDate(now);
+  const historyWindowStart = new Date(now.getTime() - ADMIN_REQUEST_HISTORY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
-  const requests = await client.therapistRequest.findMany({ include: requestWithEmployeeInclude });
+  const requests = await client.therapistRequest.findMany({
+    where: { OR: [{ status: "대기" }, { createdAt: { gte: historyWindowStart } }] },
+    include: requestWithEmployeeInclude
+  });
   const resolvedByNames = await listAuditActors(
     requests.map((request) => request.resolvedByAccountId).filter((id): id is string => id !== null),
     { prismaClient: client }
@@ -536,6 +548,50 @@ function assertActionable(request: RequestRecord, todayServiceDate: string) {
   }
 }
 
+// R4(스멜): 승인·승인·거절 세 함수가 공유하는 앞머리. assertKind는 approveTherapistDayOffRequest·
+// approveTherapistCorrectionRequest의 종류 확인이고, rejectTherapistRequest는 넘기지 않는다(종류와
+// 무관해서다) — 동작은 그대로다. 종류 확인이 기한 확인(assertActionable)보다 먼저 와야, 둘 다 걸리는
+// 입력에서 지금까지와 같은 오류(KIND_NOT_SUPPORTED)가 먼저 난다.
+async function loadActionableRequest(
+  client: TherapistRequestPrismaClient,
+  requestId: string,
+  todayServiceDate: string,
+  assertKind?: (kind: string) => void
+): Promise<RequestRecord> {
+  const before = await client.therapistRequest.findUnique({ where: { id: requestId }, include: requestWithEmployeeInclude });
+  if (!before) {
+    throw new TherapistRequestDomainError("신청을 찾을 수 없습니다.", "THERAPIST_REQUEST_NOT_FOUND");
+  }
+  assertKind?.(before.kind);
+  assertActionable(before, todayServiceDate);
+  return before;
+}
+
+// R4(스멜): 세 함수가 공유하는 감사 기록 꼬리(D28, 한 트랜잭션 안에서 남긴다).
+async function recordRequestResolutionAudit(
+  tx: TherapistRequestPrismaClient,
+  actorId: string,
+  action: "therapist_request.approved" | "therapist_request.rejected",
+  before: RequestRecord,
+  updated: RequestRecord
+) {
+  await recordAuditEvent(
+    { actorId, action, targetType: "therapist_request", targetId: updated.id, beforeValue: requestSnapshot(before), afterValue: requestSnapshot(updated) },
+    { prismaClient: tx as any }
+  );
+}
+
+// R4(스멜): 트랜잭션 뒤 세 함수가 공유하는 꼬리 — 처리한 계정 이름을 풀어 관리자 목록 DTO로 돌려준다.
+async function toResolvedAdminListItemDto(
+  client: TherapistRequestPrismaClient,
+  after: RequestRecord,
+  todayServiceDate: string,
+  actorId: string
+): Promise<TherapistRequestAdminListItemDto> {
+  const resolvedByNames = await listAuditActors([actorId], { prismaClient: client });
+  return toAdminListItemDto(client, after, todayServiceDate, resolvedByNames);
+}
+
 /**
  * 휴무 신청 승인(M5, M24). 신청 상태 바꾸기 + 근무표 서비스로 그날을 휴무로 저장하기 + 감사 기록을
  * 한 트랜잭션에서 한다(스펙 D22). 그날 그 Therapist에게 배정된 예약이 있어도 승인을 막지 않는다
@@ -552,14 +608,11 @@ export async function approveTherapistDayOffRequest(input: {
   const now = input.now ?? new Date();
   const todayServiceDate = businessTodayServiceDate(now);
 
-  const before = await client.therapistRequest.findUnique({ where: { id: input.requestId }, include: requestWithEmployeeInclude });
-  if (!before) {
-    throw new TherapistRequestDomainError("신청을 찾을 수 없습니다.", "THERAPIST_REQUEST_NOT_FOUND");
-  }
-  if (before.kind !== "휴무" && before.kind !== "소중한날 휴가") {
-    throw new TherapistRequestDomainError("아직 지원하지 않는 신청 종류입니다.", "THERAPIST_REQUEST_KIND_NOT_SUPPORTED");
-  }
-  assertActionable(before, todayServiceDate);
+  const before = await loadActionableRequest(client, input.requestId, todayServiceDate, (kind) => {
+    if (kind !== "휴무" && kind !== "소중한날 휴가") {
+      throw new TherapistRequestDomainError("아직 지원하지 않는 신청 종류입니다.", "THERAPIST_REQUEST_KIND_NOT_SUPPORTED");
+    }
+  });
   const targetDateIso = toIsoDateOnly(before.targetDate);
 
   const after = await runInTransaction(client, async (tx) => {
@@ -573,23 +626,12 @@ export async function approveTherapistDayOffRequest(input: {
     // 않는다(0절 7번 함정). 자기 감사 기록(planned_working_day.changed)을 따로 남긴다.
     await setPlannedWorkingDay({ employeeId: before.employeeId, date: targetDateIso, status: "휴무", actorId: input.actorId, prismaClient: tx });
 
-    await recordAuditEvent(
-      {
-        actorId: input.actorId,
-        action: "therapist_request.approved",
-        targetType: "therapist_request",
-        targetId: updated.id,
-        beforeValue: requestSnapshot(before),
-        afterValue: requestSnapshot(updated)
-      },
-      { prismaClient: tx as any }
-    );
+    await recordRequestResolutionAudit(tx, input.actorId, "therapist_request.approved", before, updated);
 
     return updated;
   });
 
-  const resolvedByNames = await listAuditActors([input.actorId], { prismaClient: client });
-  return toAdminListItemDto(client, after, todayServiceDate, resolvedByNames);
+  return toResolvedAdminListItemDto(client, after, todayServiceDate, input.actorId);
 }
 
 /**
@@ -616,14 +658,11 @@ export async function approveTherapistCorrectionRequest(input: {
   const now = input.now ?? new Date();
   const todayServiceDate = businessTodayServiceDate(now);
 
-  const before = await client.therapistRequest.findUnique({ where: { id: input.requestId }, include: requestWithEmployeeInclude });
-  if (!before) {
-    throw new TherapistRequestDomainError("신청을 찾을 수 없습니다.", "THERAPIST_REQUEST_NOT_FOUND");
-  }
-  if (before.kind !== "정정") {
-    throw new TherapistRequestDomainError("아직 지원하지 않는 신청 종류입니다.", "THERAPIST_REQUEST_KIND_NOT_SUPPORTED");
-  }
-  assertActionable(before, todayServiceDate);
+  const before = await loadActionableRequest(client, input.requestId, todayServiceDate, (kind) => {
+    if (kind !== "정정") {
+      throw new TherapistRequestDomainError("아직 지원하지 않는 신청 종류입니다.", "THERAPIST_REQUEST_KIND_NOT_SUPPORTED");
+    }
+  });
   const targetDateIso = toIsoDateOnly(before.targetDate);
 
   const monthKey = targetDateIso.slice(0, 7);
@@ -669,23 +708,12 @@ export async function approveTherapistCorrectionRequest(input: {
       prismaClient: tx as unknown as Parameters<typeof upsertTherapistAttendance>[0]["prismaClient"]
     });
 
-    await recordAuditEvent(
-      {
-        actorId: input.actorId,
-        action: "therapist_request.approved",
-        targetType: "therapist_request",
-        targetId: updated.id,
-        beforeValue: requestSnapshot(before),
-        afterValue: requestSnapshot(updated)
-      },
-      { prismaClient: tx as any }
-    );
+    await recordRequestResolutionAudit(tx, input.actorId, "therapist_request.approved", before, updated);
 
     return updated;
   });
 
-  const resolvedByNames = await listAuditActors([input.actorId], { prismaClient: client });
-  return toAdminListItemDto(client, after, todayServiceDate, resolvedByNames);
+  return toResolvedAdminListItemDto(client, after, todayServiceDate, input.actorId);
 }
 
 const rejectSchema = z.object({ reason: z.string().trim().min(1, "거절 사유를 입력하세요.") });
@@ -707,11 +735,7 @@ export async function rejectTherapistRequest(input: {
   const now = input.now ?? new Date();
   const todayServiceDate = businessTodayServiceDate(now);
 
-  const before = await client.therapistRequest.findUnique({ where: { id: input.requestId }, include: requestWithEmployeeInclude });
-  if (!before) {
-    throw new TherapistRequestDomainError("신청을 찾을 수 없습니다.", "THERAPIST_REQUEST_NOT_FOUND");
-  }
-  assertActionable(before, todayServiceDate);
+  const before = await loadActionableRequest(client, input.requestId, todayServiceDate);
 
   const after = await runInTransaction(client, async (tx) => {
     const updated = await tx.therapistRequest.update({
@@ -720,21 +744,10 @@ export async function rejectTherapistRequest(input: {
       include: requestWithEmployeeInclude
     });
 
-    await recordAuditEvent(
-      {
-        actorId: input.actorId,
-        action: "therapist_request.rejected",
-        targetType: "therapist_request",
-        targetId: updated.id,
-        beforeValue: requestSnapshot(before),
-        afterValue: requestSnapshot(updated)
-      },
-      { prismaClient: tx as any }
-    );
+    await recordRequestResolutionAudit(tx, input.actorId, "therapist_request.rejected", before, updated);
 
     return updated;
   });
 
-  const resolvedByNames = await listAuditActors([input.actorId], { prismaClient: client });
-  return toAdminListItemDto(client, after, todayServiceDate, resolvedByNames);
+  return toResolvedAdminListItemDto(client, after, todayServiceDate, input.actorId);
 }

@@ -312,22 +312,31 @@ function createMemoryPrisma(
         return withEmployee(record);
       },
       async findMany({ where }: any = {}) {
+        // R5: listTherapistRequestsForAdmin이 { OR: [{ status: "대기" }, { createdAt: { gte } }] }를
+        // 보내므로, 단일 조건 매칭(matchesClause)을 OR로도 겹쳐 쓸 수 있게 뺀다.
+        function matchesClause(record: any, clause: any) {
+          if (typeof clause?.employeeId === "string" && record.employeeId !== clause.employeeId) return false;
+          if (clause?.employeeId?.in && !clause.employeeId.in.includes(record.employeeId)) return false;
+          if (clause?.kind !== undefined && record.kind !== clause.kind) return false;
+          if (clause?.status !== undefined && record.status !== clause.status) return false;
+          if (clause?.targetDate !== undefined) {
+            if (clause.targetDate.gte !== undefined || clause.targetDate.lte !== undefined) {
+              const iso = toIsoDate(record.targetDate);
+              if (clause.targetDate.gte !== undefined && iso < toIsoDate(clause.targetDate.gte)) return false;
+              if (clause.targetDate.lte !== undefined && iso > toIsoDate(clause.targetDate.lte)) return false;
+            } else if (toIsoDate(record.targetDate) !== toIsoDate(clause.targetDate)) {
+              return false;
+            }
+          }
+          if (clause?.createdAt?.gte !== undefined && record.createdAt.getTime() < clause.createdAt.gte.getTime()) return false;
+          return true;
+        }
         return [...requests.values()]
           .filter((record) => {
-            if (typeof where?.employeeId === "string" && record.employeeId !== where.employeeId) return false;
-            if (where?.employeeId?.in && !where.employeeId.in.includes(record.employeeId)) return false;
-            if (where?.kind !== undefined && record.kind !== where.kind) return false;
-            if (where?.status !== undefined && record.status !== where.status) return false;
-            if (where?.targetDate !== undefined) {
-              if (where.targetDate.gte !== undefined || where.targetDate.lte !== undefined) {
-                const iso = toIsoDate(record.targetDate);
-                if (where.targetDate.gte !== undefined && iso < toIsoDate(where.targetDate.gte)) return false;
-                if (where.targetDate.lte !== undefined && iso > toIsoDate(where.targetDate.lte)) return false;
-              } else if (toIsoDate(record.targetDate) !== toIsoDate(where.targetDate)) {
-                return false;
-              }
+            if (Array.isArray(where?.OR)) {
+              return where.OR.some((clause: any) => matchesClause(record, clause));
             }
-            return true;
+            return matchesClause(record, where ?? {});
           })
           .map(withEmployee);
       },
@@ -450,6 +459,19 @@ describe("requestTherapistDayOff", () => {
     const result = await requestTherapistDayOff({ employeeId: "emp-1", date: "2042-08-15", now, prismaClient: client });
     assert.equal(result.status, "pending");
   });
+
+  // R3(사용자 이야기 98): 종류와 무관하게 같은 날 대기 중인 신청이 있으면 새 신청을 막는다.
+  it("also rejects a date that already has a pending correction request (dedup covers every kind)", async () => {
+    const client = createMemoryPrisma({ seedRequests: [{ id: "req-1", employeeId: "emp-1", kind: "정정", targetDate: "2042-08-15", status: "대기", requestedCheckOutTime: "20:00" }] });
+    await assert.rejects(
+      () => requestTherapistDayOff({ employeeId: "emp-1", date: "2042-08-15", now, prismaClient: client }),
+      (error: unknown) => {
+        assert.ok(error instanceof TherapistRequestDomainError);
+        assert.equal(error.code, "THERAPIST_DAY_OFF_REQUEST_ALREADY_PENDING");
+        return true;
+      }
+    );
+  });
 });
 
 describe("requestTherapistCorrection", () => {
@@ -565,19 +587,28 @@ describe("requestTherapistCorrection", () => {
     );
   });
 
-  it("does not block on a pending day-off request for the same date (dedup is kind-scoped)", async () => {
+  // R3(사용자 이야기 98): 종류와 무관하게 같은 날 대기 중인 신청이 있으면 새 신청을 막는다 —
+  // 전에는 정정 요청의 중복 검사가 kind="정정"만 봐서 대기 중인 휴무 신청을 비켜 갔다(비대칭).
+  it("also blocks on a pending day-off request for the same date (dedup covers every kind)", async () => {
     const client = createMemoryPrisma({
       seedRequests: [{ id: "req-1", employeeId: "emp-1", kind: "휴무", targetDate: "2042-08-05", status: "대기" }]
     });
-    const result = await requestTherapistCorrection({
-      employeeId: "emp-1",
-      date: "2042-08-05",
-      requestedCheckOutTime: "20:30",
-      reason: "사유",
-      now,
-      prismaClient: client
-    });
-    assert.equal(result.status, "pending");
+    await assert.rejects(
+      () =>
+        requestTherapistCorrection({
+          employeeId: "emp-1",
+          date: "2042-08-05",
+          requestedCheckOutTime: "20:30",
+          reason: "사유",
+          now,
+          prismaClient: client
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof TherapistRequestDomainError);
+        assert.equal(error.code, "THERAPIST_CORRECTION_REQUEST_ALREADY_PENDING");
+        return true;
+      }
+    );
   });
 
   it("allows a new correction request for a date whose earlier one was rejected", async () => {
@@ -646,6 +677,29 @@ describe("cancelTherapistRequest", () => {
         return true;
       }
     );
+  });
+
+  // R2(D22): Therapist 취소는 휴무 계열(휴무, 소중한날 휴가)만 된다. 정정 요청은 취소할 수 없다.
+  it("rejects canceling a pending correction request (Therapist cancel is day-off-family only, D22)", async () => {
+    const client = createMemoryPrisma({
+      seedRequests: [{ id: "req-1", employeeId: "emp-1", kind: "정정", targetDate: "2042-08-10", status: "대기", requestedCheckOutTime: "20:00" }]
+    });
+    await assert.rejects(
+      () => cancelTherapistRequest({ employeeId: "emp-1", requestId: "req-1", actorAccountId: "acct-emp-1", now, prismaClient: client }),
+      (error: unknown) => {
+        assert.ok(error instanceof TherapistRequestDomainError);
+        assert.equal(error.code, "THERAPIST_REQUEST_NOT_CANCELABLE");
+        return true;
+      }
+    );
+  });
+
+  it("still allows canceling a pending 소중한날 휴가 request (day-off family)", async () => {
+    const client = createMemoryPrisma({
+      seedRequests: [{ id: "req-1", employeeId: "emp-1", kind: "소중한날 휴가", targetDate: "2042-08-15", status: "대기" }]
+    });
+    const result = await cancelTherapistRequest({ employeeId: "emp-1", requestId: "req-1", actorAccountId: "acct-emp-1", now, prismaClient: client });
+    assert.equal(result.status, "canceled");
   });
 });
 
@@ -717,6 +771,21 @@ describe("listTherapistRequestsForAdmin", () => {
     });
     const rows = await listTherapistRequestsForAdmin({ now, prismaClient: client });
     assert.equal(rows.find((row) => row.id === "req-1")?.status, "pending");
+  });
+
+  // R5(비용): 처리된 신청은 시간이 지나도 표에서 사라지지 않는다. 승인함이 전체를 매번 읽으면
+  // 시간이 지날수록 질의가 커지므로, 오래된 처리된 신청은 읽지 않는다 — 대기 중인 신청은 날짜와
+  // 무관하게 전부 읽는다(처리할 일이라서).
+  it("skips a resolved request older than the admin inbox's history window, but keeps an equally old pending one", async () => {
+    const oldCreatedAt = new Date(now.getTime() - 200 * 24 * 60 * 60 * 1000);
+    const client = createMemoryPrisma({
+      seedRequests: [
+        { id: "req-old-resolved", employeeId: "emp-1", kind: "휴무", targetDate: "2041-08-05", status: "승인", resolvedByAccountId: "acct-admin", resolvedAt: oldCreatedAt, createdAt: oldCreatedAt },
+        { id: "req-old-pending", employeeId: "emp-1", kind: "휴무", targetDate: "2042-08-20", status: "대기", createdAt: oldCreatedAt }
+      ]
+    });
+    const rows = await listTherapistRequestsForAdmin({ now, prismaClient: client });
+    assert.deepEqual(rows.map((row) => row.id), ["req-old-pending"]);
   });
 });
 
