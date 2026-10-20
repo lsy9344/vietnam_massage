@@ -35,6 +35,7 @@ function draftTherapistResult(overrides: Partial<MonthlyStatementDto> = {}): Mon
     reopenedByAccountId: null,
     reopenReason: null,
     availableVersions: [],
+    rankBaseline: [],
     finalAmount: 3600000,
     summary: {
       kind: "THERAPIST",

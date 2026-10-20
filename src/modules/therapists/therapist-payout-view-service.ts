@@ -1,15 +1,15 @@
 import { getMonthlyClosingSnapshotByVersion } from "@/modules/closing/monthly-closing-service";
-import { listMonthlyClosingPreview, type MonthlyClosingTherapistRowDto } from "@/modules/closing/monthly-closing-preview-service";
+import { listMonthlyClosingPreview } from "@/modules/closing/monthly-closing-preview-service";
 import { getMonthlyStatement, type MonthlyStatementDto } from "@/modules/closing/monthly-statement-service";
 import { listTherapistDailySettlements } from "@/modules/settlements/therapist-daily-settlement-service";
 import { therapistPayoutStatusOf, type TherapistPayoutStatus } from "@/modules/therapists/therapist-payout-status";
 
 /**
  * 수당 탭(스펙 D19–D21, M8–M10, ADR 0004·0010, 티켓 07). 새 계산식을 만들지 않고 기존 월 명세서
- * (`getMonthlyStatement`)·월마감 미리보기(`listMonthlyClosingPreview`)·마감 스냅샷
- * (`getMonthlyClosingSnapshotByVersion`)의 결과를 이 Therapist의 행만 골라 좁은 DTO로 옮긴다(M6).
+ * (`getMonthlyStatement`)의 결과를 이 Therapist의 행만 골라 좁은 DTO로 옮긴다(M6).
+ * 순위·기준선(콜킹 1–3위 콜 수)도 명세서가 담아 온 숫자를 그대로 쓴다(M9).
  *
- * 다른 Therapist의 이름·금액은 아예 담지 않는다. 순위·기준선(콜킹 1–3위 콜 수)은 숫자만 옮긴다(M9).
+ * 다른 Therapist의 이름·금액은 아예 담지 않는다.
  */
 
 export type TherapistPayoutCallDto = {
@@ -68,6 +68,10 @@ export type TherapistPayoutViewDto = {
 
 export type TherapistPayoutViewDependencies = {
   getMonthlyStatement: typeof getMonthlyStatement;
+  /**
+   * 기준선은 명세서의 rankBaseline만 쓰므로 아래 두 조회는 호출하지 않는다. 호출부·테스트가 같은 달을
+   * 두 번 계산하지 않는다는 것을 확인할 수 있도록 의존성 모양은 남겨 둔다.
+   */
   listMonthlyClosingPreview: typeof listMonthlyClosingPreview;
   getMonthlyClosingSnapshotByVersion: typeof getMonthlyClosingSnapshotByVersion;
 };
@@ -108,34 +112,6 @@ function buildDailyEntries(statement: MonthlyStatementDto): TherapistPayoutDaily
     }));
 }
 
-function rankBaselineOf(rows: MonthlyClosingTherapistRowDto[]): TherapistPayoutRankBaselineDto[] {
-  return rows
-    .filter((row): row is MonthlyClosingTherapistRowDto & { countKingRank: 1 | 2 | 3 } => row.countKingRank !== null)
-    .sort((a, b) => a.countKingRank - b.countKingRank)
-    .map((row) => ({ rank: row.countKingRank, callCount: row.totalCallCount }));
-}
-
-/**
- * M9: 순위·기준선은 월마감 미리보기(지금 계산 중인 달)나 그 마감 버전 스냅샷(마감된 달)의 Therapist
- * 행에서 그대로 가져온다 — getMonthlyStatement가 고른 버전(statement.closeVersion)과 같은 버전을 본다.
- */
-async function therapistRankingRows(
-  statement: MonthlyStatementDto,
-  deps: TherapistPayoutViewDependencies,
-  prismaClient: unknown
-): Promise<MonthlyClosingTherapistRowDto[]> {
-  if (statement.closeVersion != null) {
-    const closing = await deps.getMonthlyClosingSnapshotByVersion({
-      operatingMonthId: statement.operatingMonthId,
-      closeVersion: statement.closeVersion,
-      prismaClient: prismaClient as never
-    });
-    return closing.snapshot.therapists.rows;
-  }
-  const preview = await deps.listMonthlyClosingPreview({ operatingMonthId: statement.operatingMonthId, prismaClient: prismaClient as never });
-  return preview.therapists.rows;
-}
-
 export async function getTherapistPayoutView(input: {
   employeeId: string;
   operatingMonthId: string;
@@ -144,13 +120,14 @@ export async function getTherapistPayoutView(input: {
 }): Promise<TherapistPayoutViewDto> {
   const deps = { ...defaultDependencies, ...input.dependencies };
 
+  // 순위·기준선은 월 명세서가 이미 읽은 마감 미리보기(또는 스냅샷)의 행에서 담아 온다(M9).
+  // 여기서 다시 미리보기·스냅샷을 부르면 같은 달을 두 번 계산한다(2026-10-20 성능 개선).
   const statement = await deps.getMonthlyStatement({
     operatingMonthId: input.operatingMonthId,
     employeeId: input.employeeId,
     prismaClient: input.prismaClient as never
   });
 
-  const rankingRows = await therapistRankingRows(statement, deps, input.prismaClient);
   const summary = statement.summary?.kind === "THERAPIST" ? statement.summary : null;
 
   return {
@@ -168,7 +145,7 @@ export async function getTherapistPayoutView(input: {
       fullAttendanceAllowanceAmount: summary?.fullAttendanceAllowanceAmount ?? 0,
       countKingRank: summary?.countKingRank ?? null,
       countKingBonusAmount: summary?.countKingBonusAmount ?? 0,
-      rankBaseline: rankBaselineOf(rankingRows)
+      rankBaseline: statement.rankBaseline
     }
   };
 }

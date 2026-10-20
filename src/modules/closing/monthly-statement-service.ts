@@ -2,7 +2,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import {
   listMonthlyClosingPreview,
-  type MonthlyClosingPreviewDto
+  type MonthlyClosingPreviewDto,
+  type MonthlyClosingTherapistRowDto
 } from "@/modules/closing/monthly-closing-preview-service";
 import {
   getMonthlyClosingSnapshotByVersion,
@@ -13,9 +14,15 @@ import { type SettlementEvidenceCallDto } from "@/modules/settlements/settlement
 import {
   listTherapistDailyPayoutConfirmationsForMonth,
   listTherapistDailySettlements,
+  listTherapistDailySettlementsForOperatingMonth,
   type TherapistAssignmentEvidenceDto
 } from "@/modules/settlements/therapist-daily-settlement-service";
 import { listTherapistAttendanceForDate } from "@/modules/settlements/therapist-attendance-service";
+import {
+  derivePayoutConfirmationStatus,
+  listPayoutConfirmationHistoriesByDate,
+  toPayoutConfirmationPrismaClient
+} from "@/modules/settlements/payout-confirmation-service";
 import {
   listOpsDailyIncentives,
   listOpsDailyPayoutConfirmationsForMonth
@@ -59,12 +66,23 @@ type EmployeeRecord = {
   employeeGroup: string;
 };
 
+/** 날짜별 근거에 필요한 Therapist 출퇴근 행(분 단위 원장). */
+type TherapistAttendanceRangeRecord = {
+  attendanceDate: Date;
+  employeeId: string;
+  checkInMinute: number;
+  checkOutMinute: number | null;
+};
+
 type MonthlyStatementPrismaClient = {
   operatingMonth: {
     findUnique(args: unknown): Promise<OperatingMonthRecord | null>;
   };
   employee: {
     findUnique(args: unknown): Promise<EmployeeRecord | null>;
+  };
+  therapistAttendance: {
+    findMany(args: unknown): Promise<TherapistAttendanceRangeRecord[]>;
   };
 };
 
@@ -139,6 +157,26 @@ export type MonthlyStatementPayoutUnitDto = {
   payoutConfirmation: PayoutConfirmationDto;
 };
 
+/** 콜킹 기준선: 지금 1–3위의 완료 콜 수(숫자만). 다른 Therapist의 이름·금액은 담지 않는다(스펙 M9). */
+export type MonthlyStatementRankBaselineDto = {
+  rank: 1 | 2 | 3;
+  callCount: number;
+};
+
+/**
+ * M9: 순위·기준선은 마감 미리보기(지금 계산 중인 달)나 그 마감 버전 스냅샷의 Therapist 행에서 그대로
+ * 가져온다. 명세서는 이미 그 행을 갖고 있으므로 여기서 다시 계산하지 않는다(2026-10-20 성능 개선).
+ */
+function rankBaselineOf(rows: MonthlyClosingTherapistRowDto[]): MonthlyStatementRankBaselineDto[] {
+  return rows
+    .filter(
+      (row): row is MonthlyClosingTherapistRowDto & { countKingRank: 1 | 2 | 3 } =>
+        row.countKingRank === 1 || row.countKingRank === 2 || row.countKingRank === 3
+    )
+    .sort((a, b) => a.countKingRank - b.countKingRank)
+    .map((row) => ({ rank: row.countKingRank, callCount: row.totalCallCount }));
+}
+
 export type MonthlyStatementDto = {
   operatingMonthId: string;
   monthKey: string;
@@ -163,6 +201,8 @@ export type MonthlyStatementDto = {
   summary: MonthlyStatementSummaryDto;
   evidence: MonthlyStatementEvidenceDto;
   payoutUnits: MonthlyStatementPayoutUnitDto[];
+  /** 콜킹 기준선(지금 1–3위의 완료 콜 수). 숫자만 담고 다른 Therapist의 이름은 담지 않는다(M9). */
+  rankBaseline: MonthlyStatementRankBaselineDto[];
 };
 
 export type MonthlyStatementDependencies = {
@@ -175,6 +215,13 @@ export type MonthlyStatementDependencies = {
   listOpsDailyIncentives: typeof listOpsDailyIncentives;
   listOpsDailyPayoutConfirmationsForMonth: typeof listOpsDailyPayoutConfirmationsForMonth;
   listOpsMonthlyIncentivePreview: typeof listOpsMonthlyIncentivePreview;
+  /**
+   * 운영월 전체를 한 번에 읽는 경로(2026-10-20 성능 개선). 날짜마다 `listTherapistDailySettlements`와
+   * `listTherapistAttendanceForDate`를 부르면 31일 × (그날 전체 Therapist 정산 + 전체 출퇴근)을 다시
+   * 계산한다. 같은 계산을 운영월당 한 번의 읽기로 바꾼다.
+   */
+  listTherapistDailySettlementsForOperatingMonth: typeof listTherapistDailySettlementsForOperatingMonth;
+  listPayoutConfirmationHistoriesByDate: typeof listPayoutConfirmationHistoriesByDate;
 };
 
 const defaultDependencies: MonthlyStatementDependencies = {
@@ -186,7 +233,9 @@ const defaultDependencies: MonthlyStatementDependencies = {
   listTherapistDailyPayoutConfirmationsForMonth,
   listOpsDailyIncentives,
   listOpsDailyPayoutConfirmationsForMonth,
-  listOpsMonthlyIncentivePreview
+  listOpsMonthlyIncentivePreview,
+  listTherapistDailySettlementsForOperatingMonth,
+  listPayoutConfirmationHistoriesByDate
 };
 
 export type GetMonthlyStatementInput = {
@@ -271,10 +320,107 @@ function* eachServiceDate(startDate: Date, endDate: Date) {
   }
 }
 
+/** 분 단위 출퇴근 원장을 화면 문구(HH:mm)로 바꾼다. 목록 서비스의 같은 변환과 규칙이 같다. */
+function minuteToTime(minute: number) {
+  const hours = Math.floor(minute / 60);
+  const minutes = minute % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+/**
+ * Therapist의 날짜별 근거(2026-10-20 성능 개선).
+ *
+ * 이전에는 날짜마다 `listTherapistDailySettlements`와 `listTherapistAttendanceForDate`를 다시 불러
+ * 그날 **모든** Therapist의 정산을 다시 계산했다(2026-10 운영 원장 기준 조회 약 330번, 약 17초).
+ * 지금은 운영월 전체를 한 번에 읽고, 그 안에서 이 직원의 줄만 골라 쓴다. 계산식·숫자는 이전과 같다
+ * (같은 정산 함수를 쓴다).
+ *
+ * 하루 줄이 생기는 조건은 '근거가 있는 날'이다: 그날 계산된 정산이 있거나, 출퇴근 기록이 있거나,
+ * 지급 확인 사건이 남아 있다(확인 뒤 콜이 취소돼도 '지급 재확인 필요'가 보여야 하므로 남긴다).
+ */
+async function buildTherapistDraftEntries(input: {
+  employee: EmployeeRecord;
+  operatingMonthId: string;
+  monthStatus: string;
+  startDate: string;
+  endDate: string;
+  deps: MonthlyStatementDependencies;
+  client: MonthlyStatementPrismaClient;
+}): Promise<MonthlyStatementDailyEntryDto[]> {
+  const { employee, deps } = input;
+  const [dayResults, historiesByDate, attendanceRows] = await Promise.all([
+    deps.listTherapistDailySettlementsForOperatingMonth({
+      operatingMonthId: input.operatingMonthId,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      prismaClient: castClient(input.client)
+    }),
+    deps.listPayoutConfirmationHistoriesByDate({
+      unitType: "THERAPIST_DAILY",
+      operatingMonthId: input.operatingMonthId,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      prismaClient: toPayoutConfirmationPrismaClient(input.client)
+    }),
+    // 이 직원의 출퇴근만 날짜 범위로 한 번 읽는다. listTherapistAttendanceForEmployeeInRange는
+    // 비활성 Therapist에게 예외를 던지므로 쓰지 않는다. 기록이 없으면 빈 결과다.
+    input.client.therapistAttendance.findMany({
+      where: {
+        operatingMonthId: input.operatingMonthId,
+        employeeId: employee.id,
+        attendanceDate: {
+          gte: new Date(`${input.startDate}T00:00:00.000Z`),
+          lte: new Date(`${input.endDate}T00:00:00.000Z`)
+        },
+        isActive: true
+      },
+      orderBy: { attendanceDate: "asc" }
+    })
+  ]);
+
+  const attendanceByDate = new Map(
+    attendanceRows.map((attendance) => [
+      toIsoDate(attendance.attendanceDate),
+      {
+        checkInTime: minuteToTime(attendance.checkInMinute),
+        checkOutTime: attendance.checkOutMinute === null ? null : minuteToTime(attendance.checkOutMinute)
+      }
+    ])
+  );
+  const dayByServiceDate = new Map(dayResults.map((day) => [day.serviceDate, day]));
+  const entries: MonthlyStatementDailyEntryDto[] = [];
+
+  for (const serviceDate of eachServiceDate(new Date(`${input.startDate}T00:00:00.000Z`), new Date(`${input.endDate}T00:00:00.000Z`))) {
+    const settlement = dayByServiceDate.get(serviceDate)?.settlements.find((item) => item.employeeId === employee.id) ?? null;
+    const attendance = attendanceByDate.get(serviceDate) ?? null;
+    const history = historiesByDate.get(serviceDate)?.get(employee.id) ?? [];
+    // 지급 확인은 독립된 사건 기록이다(ADR 0004). 마지막 사건이 해제면 유효한 확인이 아니다.
+    const hasConfirmation = history.length > 0 && history[0]?.eventType !== "release";
+    if (!settlement && !attendance && !hasConfirmation) continue;
+
+    entries.push({
+      serviceDate,
+      attendanceSummary: therapistAttendanceSummary(attendance),
+      callCount: settlement?.totalCallCount ?? 0,
+      amount: settlement?.totalCommissionAmount ?? 0,
+      calls: settlement ? settlement.assignmentEvidence.map((evidence) => evidence.call) : [],
+      appliedPolicies: settlement ? settlement.assignmentEvidence : [],
+      payoutConfirmation:
+        settlement || hasConfirmation
+          ? derivePayoutConfirmationStatus(history, settlement?.totalCommissionAmount ?? 0, input.monthStatus)
+          : null
+    });
+  }
+
+  return entries;
+}
+
 async function buildDraftDailyEntries(input: {
   group: MonthlyStatementEmployeeGroup;
   employeeId: string;
+  employee: EmployeeRecord;
   operatingMonthId: string;
+  monthStatus: string;
   startDate: Date;
   endDate: Date;
   deps: MonthlyStatementDependencies;
@@ -282,36 +428,19 @@ async function buildDraftDailyEntries(input: {
 }): Promise<MonthlyStatementDailyEntryDto[]> {
   const entries: MonthlyStatementDailyEntryDto[] = [];
 
-  for (const serviceDate of eachServiceDate(input.startDate, input.endDate)) {
-    if (input.group === "THERAPIST") {
-      const [settlementResult, attendanceResult] = await Promise.all([
-        input.deps.listTherapistDailySettlements({
-          operatingMonthId: input.operatingMonthId,
-          serviceDate,
-          prismaClient: castClient(input.client)
-        }),
-        input.deps.listTherapistAttendanceForDate({
-          operatingMonthId: input.operatingMonthId,
-          attendanceDate: serviceDate,
-          prismaClient: castClient(input.client)
-        })
-      ]);
-      const settlement = settlementResult.settlements.find((item) => item.employeeId === input.employeeId) ?? null;
-      const attendance = attendanceResult.rows.find((item) => item.employeeId === input.employeeId) ?? null;
-      if (!settlement && !attendance) continue;
-      entries.push({
-        serviceDate,
-        attendanceSummary: therapistAttendanceSummary(attendance),
-        callCount: settlement?.totalCallCount ?? 0,
-        amount: settlement?.totalCommissionAmount ?? 0,
-        calls: settlement ? settlement.assignmentEvidence.map((evidence) => evidence.call) : [],
-        // S9(V08): 코스 수당 근거(적용/0원/수당 없음)를 담당 역할·콜별로 그대로 둔다.
-        appliedPolicies: settlement ? settlement.assignmentEvidence : [],
-        payoutConfirmation: settlement?.payoutConfirmation ?? null
-      });
-      continue;
-    }
+  if (input.group === "THERAPIST") {
+    return buildTherapistDraftEntries({
+      employee: input.employee,
+      operatingMonthId: input.operatingMonthId,
+      monthStatus: input.monthStatus,
+      startDate: toIsoDate(input.startDate),
+      endDate: toIsoDate(input.endDate),
+      deps: input.deps,
+      client: input.client
+    });
+  }
 
+  for (const serviceDate of eachServiceDate(input.startDate, input.endDate)) {
     const result = await input.deps.listOpsDailyIncentives({
       operatingMonthId: input.operatingMonthId,
       serviceDate,
@@ -483,7 +612,8 @@ export async function getMonthlyStatement(input: GetMonthlyStatementInput): Prom
       reopenReason: closing.reopenReason,
       ...summary,
       evidence: { available: false, notice: NO_EVIDENCE_NOTICE },
-      payoutUnits
+      payoutUnits,
+      rankBaseline: rankBaselineOf(closing.snapshot.therapists.rows)
     };
   }
 
@@ -492,7 +622,9 @@ export async function getMonthlyStatement(input: GetMonthlyStatementInput): Prom
   const dailyEntries = await buildDraftDailyEntries({
     group,
     employeeId: employee.id,
+    employee,
     operatingMonthId: parsed.data.operatingMonthId,
+    monthStatus: operatingMonth.status,
     startDate: operatingMonth.startDate,
     endDate: operatingMonth.endDate,
     deps,
@@ -511,6 +643,7 @@ export async function getMonthlyStatement(input: GetMonthlyStatementInput): Prom
     reopenReason: null,
     ...summary,
     evidence: { available: true, dailyEntries },
-    payoutUnits
+    payoutUnits,
+    rankBaseline: rankBaselineOf(preview.therapists.rows)
   };
 }

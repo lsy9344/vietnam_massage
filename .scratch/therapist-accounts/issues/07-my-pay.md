@@ -53,3 +53,11 @@
 - `for f in scripts/validate-story-*.mjs; do node "$f" ...; done`: `validate-story-4-6.mjs`만 실패(기존 실패).
 - 운영 빌드 E2E(DB `vietnam_aesthetic_th07`, 포트 3207): 새 스펙 `story-ticket-07-therapist-payout.spec.ts` 4/4 통과(미확정 날짜별 코스 수당·금액 확인 중·짝꿍·다른 Therapist 이름 비노출, 확인/재확인 필요 전환, 마감확정 달의 확정 금액·순위·기준선 숫자만·1·3위 이름 비노출, 390px). 직접 관련 기존 스펙도 같은 DB로 돌려 회귀가 없는지 봤다: `story-ticket-03-today-my-calls.spec.ts` 3/3(오늘 탭에 내 수당 카드가 더해졌지만 기존 단언은 그대로 통과), `story-ticket-01-therapist-role-shell.spec.ts` 7/7, `story-ticket-10-therapist-notices.spec.ts` 3/3. 끝나고 서버 종료, DB 삭제.
 - 통합 브랜치 tip(47cfa27, 티켓 02 포함)을 병합했다. 충돌 없음(i18n 두 파일만 자동 병합). 병합 뒤 단위 테스트·tsc 재확인 완료.
+
+### 2026-10-20 수당 탭 지연 개선(작업지시서 `payout-speed-work-order.md`)
+
+- 원인: 수당 탭이 한 직원의 명세서를 만들면서 **모든** Therapist의 일일 정산을 31일치 다시 계산했다(쿼리 589개, 직접 연결 22초 / 프리뷰 Worker 75초). `listTherapistAttendanceForDate`는 출퇴근 기록이 없어도 활성 Therapist 전원을 행으로 돌려줘서, 활동이 없는 직원도 31일치 빈 줄을 갖게 된다.
+- 고친 것: ① Therapist 날짜별 근거를 운영월 1회 일괄 읽기(`listTherapistDailySettlementsForOperatingMonth` + `listPayoutConfirmationHistoriesByDate` + 이 직원의 출퇴근 범위 조회)로 바꾼다. ② 달 안에서 바뀌지 않는 운영월·직원 목록을 날짜마다 다시 읽지 않게 한다. ③ 콜킹 기준선을 `MonthlyStatementDto.rankBaseline`으로 옮겨 미리보기·스냅샷을 두 번째로 계산하지 않는다. ④ `src/app/therapist/payout/loading.tsx`로 계산 중 표시를 넣는다.
+- 숫자 동일성: 운영 DB 2026-10, Therapist 4명을 이전 방식과 새 방식으로 각각 계산해 날짜별 항목(금액·콜 근거·적용 정책·지급 확인 상태)을 비교했다. 124개 날짜 불일치 0건. 달라진 것은 "근거가 없는 날의 빈 줄"뿐이다(31줄 → 활동 있는 날만).
+- 측정: 직접 연결 18–22초·589쿼리 → 2.4–3.1초·47쿼리. 분석 문서는 `docs/research/2026-10-20-payout-latency-analysis.md`.
+- 테스트: `pnpm test:unit` 1225개 통과, `npx tsc --noEmit` 오류 없음. 추가 테스트는 날짜 단위 함수를 0번·월 단위를 1번 부르는지, 근거 없는 날이 줄을 만들지 않는지, 수당 뷰가 미리보기·스냅샷을 다시 부르지 않는지를 확인한다.

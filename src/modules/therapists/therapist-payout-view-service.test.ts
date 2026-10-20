@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { MonthlyClosingDto } from "@/modules/closing/monthly-closing-service";
-import type { MonthlyClosingPreviewDto } from "@/modules/closing/monthly-closing-preview-service";
 import type { MonthlyStatementDto } from "@/modules/closing/monthly-statement-service";
 import type { PayoutConfirmationDto } from "@/modules/settlements/payout-confirmation-service";
 import { expectedPayoutAmountForDate, getTherapistPayoutView } from "@/modules/therapists/therapist-payout-view-service";
@@ -45,6 +43,7 @@ function baseStatement(overrides: Partial<MonthlyStatementDto> = {}): MonthlySta
     summary: null,
     evidence: { available: true, dailyEntries: [] },
     payoutUnits: [],
+    rankBaseline: [],
     ...overrides
   } as MonthlyStatementDto;
 }
@@ -104,7 +103,12 @@ describe("getTherapistPayoutView", () => {
       operatingMonthId: "month-1",
       dependencies: {
         getMonthlyStatement: async () => statement,
-        listMonthlyClosingPreview: async () => ({ therapists: { payoutAmount: 0, totalCallCount: 0, rows: [] }, operations: { rows: [] } }) as unknown as MonthlyClosingPreviewDto
+        listMonthlyClosingPreview: async () => {
+          throw new Error("수당 뷰는 이 달을 다시 계산하지 않는다");
+        },
+        getMonthlyClosingSnapshotByVersion: async () => {
+          throw new Error("수당 뷰는 마감 스냅샷을 다시 읽지 않는다");
+        }
       }
     });
 
@@ -145,51 +149,26 @@ describe("getTherapistPayoutView", () => {
         countKingBonusAmount: 3000000
       },
       evidence: { available: false, notice: "이 마감 버전에는 해당 근거가 저장되지 않았습니다." },
-      payoutUnits: [{ serviceDate: "2042-07-10", payoutConfirmation: payout("confirmed", 250000) }]
+      payoutUnits: [{ serviceDate: "2042-07-10", payoutConfirmation: payout("confirmed", 250000) }],
+      // 기준선은 명세서가 담아 온 값이다(미리보기·스냅샷을 여기서 다시 부르지 않는다).
+      rankBaseline: [
+        { rank: 1, callCount: 50 },
+        { rank: 2, callCount: 22 },
+        { rank: 3, callCount: 41 }
+      ]
     });
-
-    const snapshot = {
-      id: "closing-1",
-      operatingMonthId: "month-1",
-      closeVersion: 3,
-      status: "마감확정",
-      confirmedByAccountId: "account-admin",
-      confirmedAt: "2042-08-01T00:00:00.000Z",
-      reopenedAt: null,
-      reopenedByAccountId: null,
-      reopenReason: null,
-      snapshot: {
-        id: "snap-1",
-        month: {
-          operatingMonthId: "month-1",
-          monthKey: "2042-07",
-          startDate: "2042-07-01",
-          endDate: "2042-07-31",
-          statusAtConfirmation: "검토중",
-          confirmedStatus: "마감확정",
-          confirmedAt: "2042-08-01T00:00:00.000Z",
-          confirmedByAccountId: "account-admin"
-        },
-        therapists: {
-          payoutAmount: 7000000,
-          totalCallCount: 70,
-          rows: [
-            { employeeId: "emp-rank1", staffCode: "THR-901", displayName: "1위", totalCallCount: 50, monthlySettlementAmount: 0, courseBreakdown: {} as any, assignmentEvidenceCount: 0, warningCounts: { zeroPolicy: 0, missingPolicy: 0 }, fullAttendanceDays: null, fullAttendanceAllowanceAmount: 0, fullAttendanceBasis: "", countKingRank: 1, countKingBonusAmount: 5000000, countKingBasis: "", finalPayoutAmount: 0, bonusWarningMessages: [] },
-            { employeeId: "emp-me", staffCode: "THR-907", displayName: "티켓07 Therapist", totalCallCount: 22, monthlySettlementAmount: 1800000, courseBreakdown: {} as any, assignmentEvidenceCount: 0, warningCounts: { zeroPolicy: 0, missingPolicy: 0 }, fullAttendanceDays: 22, fullAttendanceAllowanceAmount: 2000000, fullAttendanceBasis: "", countKingRank: 2, countKingBonusAmount: 3000000, countKingBasis: "", finalPayoutAmount: 2700000, bonusWarningMessages: [] },
-            { employeeId: "emp-rank3", staffCode: "THR-903", displayName: "3위", totalCallCount: 41, monthlySettlementAmount: 0, courseBreakdown: {} as any, assignmentEvidenceCount: 0, warningCounts: { zeroPolicy: 0, missingPolicy: 0 }, fullAttendanceDays: null, fullAttendanceAllowanceAmount: 0, fullAttendanceBasis: "", countKingRank: 3, countKingBonusAmount: 1000000, countKingBasis: "", finalPayoutAmount: 0, bonusWarningMessages: [] }
-          ]
-        } as unknown as MonthlyClosingPreviewDto["therapists"],
-        operations: { rows: [] } as unknown as MonthlyClosingPreviewDto["operations"],
-        financials: {} as any
-      }
-    } as unknown as MonthlyClosingDto;
 
     const view = await getTherapistPayoutView({
       employeeId: "emp-me",
       operatingMonthId: "month-1",
       dependencies: {
         getMonthlyStatement: async () => statement,
-        getMonthlyClosingSnapshotByVersion: async () => snapshot
+        listMonthlyClosingPreview: async () => {
+          throw new Error("수당 뷰는 이 달을 다시 계산하지 않는다");
+        },
+        getMonthlyClosingSnapshotByVersion: async () => {
+          throw new Error("수당 뷰는 마감 스냅샷을 다시 읽지 않는다");
+        }
       }
     });
 
@@ -223,18 +202,45 @@ describe("getTherapistPayoutView", () => {
       operatingMonthId: "month-1",
       dependencies: {
         getMonthlyStatement: async () => statement,
-        listMonthlyClosingPreview: async () =>
-          ({
-            therapists: {
-              payoutAmount: 0,
-              totalCallCount: 0,
-              rows: [{ employeeId: "emp-me", staffCode: "THR-907", displayName: "티켓07 Therapist", totalCallCount: 5, monthlySettlementAmount: 0, courseBreakdown: {} as any, assignmentEvidenceCount: 0, warningCounts: { zeroPolicy: 0, missingPolicy: 0 }, fullAttendanceDays: null, fullAttendanceAllowanceAmount: 0, fullAttendanceBasis: "", countKingRank: null, countKingBonusAmount: 0, countKingBasis: "", finalPayoutAmount: 0, bonusWarningMessages: [] }]
-            },
-            operations: { rows: [] }
-          }) as unknown as MonthlyClosingPreviewDto
+        listMonthlyClosingPreview: async () => {
+          throw new Error("수당 뷰는 이 달을 다시 계산하지 않는다");
+        },
+        getMonthlyClosingSnapshotByVersion: async () => {
+          throw new Error("수당 뷰는 마감 스냅샷을 다시 읽지 않는다");
+        }
       }
     });
 
+    assert.deepEqual(view.month.rankBaseline, []);
+  });
+
+  it("수당 뷰는 미리보기·마감 스냅샷을 다시 부르지 않는다(같은 달을 두 번 계산하지 않는다)", async () => {
+    const statement = baseStatement();
+    let statementCalls = 0;
+    let previewCalls = 0;
+    let snapshotCalls = 0;
+    const view = await getTherapistPayoutView({
+      employeeId: "emp-me",
+      operatingMonthId: "month-1",
+      dependencies: {
+        getMonthlyStatement: async () => {
+          statementCalls += 1;
+          return statement;
+        },
+        listMonthlyClosingPreview: async () => {
+          previewCalls += 1;
+          return null as never;
+        },
+        getMonthlyClosingSnapshotByVersion: async () => {
+          snapshotCalls += 1;
+          return null as never;
+        }
+      }
+    });
+
+    assert.equal(statementCalls, 1, "월 명세서는 한 번만 부른다");
+    assert.equal(previewCalls, 0, "수당 뷰는 미리보기를 다시 부르지 않는다");
+    assert.equal(snapshotCalls, 0, "수당 뷰는 마감 스냅샷을 다시 부르지 않는다");
     assert.deepEqual(view.month.rankBaseline, []);
   });
 });

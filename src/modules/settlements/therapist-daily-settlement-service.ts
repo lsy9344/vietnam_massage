@@ -382,6 +382,12 @@ export async function listTherapistDailySettlements(input: {
   rateLookup?: Awaited<ReturnType<typeof loadApplicableRates>>;
   /** 월간 집계는 금액만 쓴다. 지급 확인 조회를 날짜마다 하지 않는다. */
   skipPayoutReads?: boolean;
+  /**
+   * 운영월·Therapist 목록은 달 안에서 바뀌지 않는 값이다. 날짜를 여러 번 돌 때(월간 집계) 매번 다시 읽으면
+   * 운영월 31회 + 직원 목록 31회씩 왕복이 생긴다. 읽어 둔 값을 넘기면 그 왕복이 사라진다.
+   */
+  operatingMonth?: OperatingMonthRecord;
+  therapistEmployees?: EmployeeRecord[];
 }): Promise<TherapistDailySettlementResultDto> {
   const parsed = settlementQuerySchema.safeParse(input);
   if (!parsed.success) {
@@ -390,8 +396,9 @@ export async function listTherapistDailySettlements(input: {
 
   const client = getClient(input.prismaClient);
   const [operatingMonth, therapistEmployees, rows] = await Promise.all([
-    client.operatingMonth.findUnique({ where: { id: parsed.data.operatingMonthId } }),
-    client.employee.findMany({ where: { employeeGroup: "THERAPIST", isActive: true }, orderBy: [{ sortOrder: "asc" }, { staffCode: "asc" }] }),
+    input.operatingMonth ?? client.operatingMonth.findUnique({ where: { id: parsed.data.operatingMonthId } }),
+    input.therapistEmployees ??
+      client.employee.findMany({ where: { employeeGroup: "THERAPIST", isActive: true }, orderBy: [{ sortOrder: "asc" }, { staffCode: "asc" }] }),
     input.serviceCallRows
       ? Promise.resolve(input.serviceCallRows)
       : listServiceCallsForDate({
@@ -539,6 +546,11 @@ export async function listTherapistDailySettlementsForOperatingMonth(input: {
       prismaClient: client as unknown as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
     }));
   const rateLookup = await loadApplicableRates(client, rows);
+  // 운영월과 Therapist 목록은 달 안에서 바뀌지 않는다. 날짜마다 다시 읽지 않고 한 번 읽은 값을 넘긴다.
+  const [operatingMonth, therapistEmployees] = await Promise.all([
+    client.operatingMonth.findUnique({ where: { id: input.operatingMonthId } }),
+    client.employee.findMany({ where: { employeeGroup: "THERAPIST", isActive: true }, orderBy: [{ sortOrder: "asc" }, { staffCode: "asc" }] })
+  ]);
   const rowsByDate = new Map<string, ServiceCallRowDto[]>();
   for (const row of rows) {
     const bucket = rowsByDate.get(row.serviceDate) ?? [];
@@ -553,6 +565,8 @@ export async function listTherapistDailySettlementsForOperatingMonth(input: {
       prismaClient: client,
       serviceCallRows: rowsByDate.get(serviceDate) ?? [],
       rateLookup,
+      operatingMonth: operatingMonth ?? undefined,
+      therapistEmployees,
       skipPayoutReads: true
     })
   );
