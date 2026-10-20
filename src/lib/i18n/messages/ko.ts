@@ -1757,6 +1757,8 @@ export const ko = {
   "therapist.attendance.checkInButton": "출근",
   "therapist.attendance.checkOutButton": "퇴근",
   "therapist.attendance.alreadyClockedNotice": "이미 찍음 — 정정 요청",
+  // 정정 요청 다이얼로그를 여는 버튼(티켓 09). "이미 찍음"(05)과 "퇴근 미입력"(06) 안내 양쪽이 쓴다.
+  "therapist.attendance.correctionRequestButton": "정정 요청",
   "therapist.attendance.dialog.checkInTitle": "출근 코드 입력",
   "therapist.attendance.dialog.checkOutTitle": "퇴근 코드 입력",
   "therapist.attendance.dialog.description": "매장 화면에 보이는 4자리 코드를 입력하세요.",
@@ -1811,6 +1813,17 @@ export const ko = {
   "therapist.attendance.dayOff.reasonPlaceholder": "사유를 적어주세요(선택).",
   "therapist.attendance.dayOff.sentNotice": "휴무를 신청했습니다.",
   "therapist.attendance.dayOff.canceledNotice": "신청을 취소했습니다.",
+
+  // 정정 요청 다이얼로그(티켓 09, 스펙 D23): "이미 찍음"(05)·"퇴근 미입력"(06) 안내가 연다.
+  "therapist.attendance.correction.dialogTitle": "정정 요청",
+  "therapist.attendance.correction.dialogDescription": "맞는 시각과 사유를 적어주세요. 승인하면 그 시각으로 바뀝니다.",
+  "therapist.attendance.correction.dateLabel": "날짜",
+  "therapist.attendance.correction.checkInLabel": "출근 시각(선택)",
+  "therapist.attendance.correction.checkOutLabel": "퇴근 시각(선택)",
+  "therapist.attendance.correction.reasonLabel": "사유",
+  "therapist.attendance.correction.reasonPlaceholder": "정정이 필요한 이유를 적어주세요.",
+  "therapist.attendance.correction.submit": "요청 보내기",
+  "therapist.attendance.correction.submitting": "요청하는 중",
 
   "therapist.today.expectedPayoutLabel": "오늘 예상 코스 수당",
   "therapist.today.expectedPayoutNote": "계산 중(미확정)",
