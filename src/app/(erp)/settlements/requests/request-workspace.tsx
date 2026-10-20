@@ -64,7 +64,7 @@ function RequestCard({ locale, request }: { locale: Locale; request: TherapistRe
     <li className="grid gap-2 rounded-md border border-border bg-surface px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <DateCapsule>{formatRequestDate(locale, current.targetDate)}</DateCapsule>
-        <StatusIndicator label={therapistRequestKindLabel(locale, current.kind)} size="sm" tone="neutral" />
+        <StatusIndicator label={therapistRequestKindLabel(locale, current.kind)} size="sm" tone={current.kind === "special_day_off" ? "danger" : "neutral"} />
         <span className="text-sm font-semibold text-foreground">
           {current.staffCode} · {current.displayName}
         </span>

@@ -34,6 +34,7 @@ type AttendanceBadge = { label: string; tone: StatusTone };
 // 기호만 보이고, 패널(날짜 상세)은 전부 보인다.
 function attendanceDayBadges(t: ReturnType<typeof useT>, day: TherapistAttendanceCalendarDayDto): AttendanceBadge[] {
   const badges: AttendanceBadge[] = [];
+  if (day.isSpecialDayOff) badges.push({ label: t("therapistRequestKind.special_day_off"), tone: "danger" });
   if (day.judgment.isAbsent) badges.push({ label: t("therapist.attendance.dayDetail.absentBadge"), tone: "danger" });
   if (day.judgment.isClockOutMissing) badges.push({ label: t("therapist.attendance.dayDetail.clockOutMissingBadge"), tone: "warning" });
   if (day.judgment.isUnscheduledAttendance) badges.push({ label: t("therapist.attendance.dayDetail.unscheduledBadge"), tone: "info" });
@@ -92,6 +93,7 @@ function DayOffRequestControls({ day }: { day: TherapistAttendanceCalendarDayDto
   const [cancelState, cancelAction, cancelPending] = useActionState<TherapistRequestActionState, FormData>(cancelTherapistRequestAction, null);
   const [formOpen, setFormOpen] = useState(false);
   const reasonId = useId();
+  const kindId = useId();
 
   const requestFormError = requestState && !requestState.ok ? requestState.formError : undefined;
   const cancelFormError = cancelState && !cancelState.ok ? cancelState.formError : undefined;
@@ -138,6 +140,13 @@ function DayOffRequestControls({ day }: { day: TherapistAttendanceCalendarDayDto
   return (
     <form action={requestAction} className="grid gap-2 rounded-md border border-border bg-surface-float p-3">
       <input name="date" type="hidden" value={day.date} />
+      <label className="grid gap-1.5 text-sm font-semibold text-foreground" htmlFor={kindId}>
+        {t("therapist.attendance.dayOff.kindLabel")}
+        <select className={inputFieldClassName()} defaultValue="day_off" disabled={requestPending} id={kindId} name="kind">
+          <option value="day_off">{t("therapistRequestKind.day_off")}</option>
+          <option value="special_day_off">{t("therapistRequestKind.special_day_off")}</option>
+        </select>
+      </label>
       <label className="grid gap-1.5 text-sm font-semibold text-foreground" htmlFor={reasonId}>
         {t("therapist.attendance.dayOff.reasonLabel")}
         <textarea
@@ -293,7 +302,7 @@ export function TherapistAttendanceCalendar({
               aria-label={ariaLabel}
               className={cn(
                 "flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-md border bg-surface text-sm transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary",
-                isToday ? "border-brand" : "border-border"
+                day.isSpecialDayOff ? "border-danger bg-danger-soft hover:bg-danger-soft" : isToday ? "border-brand" : "border-border"
               )}
               key={day.date}
               onClick={() => setSelectedDate(day.date)}
@@ -313,6 +322,10 @@ export function TherapistAttendanceCalendar({
           );
         })}
       </div>
+
+      {days.some((day) => day.isSpecialDayOff) ? (
+        <p className="mt-3 text-xs font-semibold text-danger">■ {t("therapistRequestKind.special_day_off")}</p>
+      ) : null}
 
       <ModalPanel onOpenChange={(open) => !open && setSelectedDate(null)} open={selectedDay !== null} title={selectedDay ? formatFullDate(locale, selectedDay.date) : ""}>
         {selectedDay ? <AttendanceDayDetail day={selectedDay} locale={locale} todayServiceDate={todayServiceDate} /> : null}

@@ -26,6 +26,7 @@ const MONTH_KEY = "2042-08";
 const APPROVE_DATE = "2042-08-15";
 const REJECT_DATE = "2042-08-16";
 const CANCEL_DATE = "2042-08-17";
+const SPECIAL_DATE = "2042-08-18";
 
 let employeeId = "";
 
@@ -259,4 +260,46 @@ test.describe("티켓 08 휴무 신청과 승인함", () => {
       await adminContext.close();
     }
   });
+
+  test("소중한날 휴가 신청·승인 후 달력에 이름과 붉은 표시가 보인다", async ({ browser }, testInfo) => {
+    const therapistContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await therapistContext.newPage();
+    await login(page, ACCOUNT_ID, PASSWORD);
+    const dialog = await openDay(page, SPECIAL_DATE);
+    await dialog.getByRole("button", { name: "휴무 신청" }).click();
+    await dialog.getByLabel("휴가 종류").selectOption("special_day_off");
+    await dialog.getByRole("button", { name: "신청 보내기" }).click();
+    await expect(dialog.getByRole("button", { name: "신청 취소" })).toBeVisible();
+
+    const managerContext = await browser.newContext();
+    const manager = await managerContext.newPage();
+    await login(manager, SETTLEMENT_ACCOUNT_ID, SETTLEMENT_PASSWORD);
+    await manager.goto("/settlements/requests");
+    const card = manager.locator("li").filter({ hasText: requestCardDateLabel(SPECIAL_DATE) });
+    await expect(card.getByText("소중한날 휴가")).toBeVisible();
+    await card.getByRole("button", { name: "승인", exact: true }).click();
+    await expect.poll(async () => {
+      const request = await prisma.therapistRequest.findFirst({ where: { employeeId, targetDate: new Date(`${SPECIAL_DATE}T00:00:00.000Z`) } });
+      return request?.status;
+    }).toBe("승인");
+    await expect(card.getByRole("button", { name: "승인", exact: true })).toHaveCount(0);
+
+    await page.goto(`/therapist/attendance?month=${MONTH_KEY}`);
+    const cell = page.getByRole("grid").getByRole("button", { name: dayCellName(SPECIAL_DATE) });
+    await expect(cell).toHaveAccessibleName(/소중한날 휴가/);
+    await expect(cell).toHaveClass(/border-danger/);
+    await expect(page.getByText("■ 소중한날 휴가")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
+    await page.screenshot({ path: testInfo.outputPath("special-day-off-mobile.png") });
+    await cell.click();
+    await expect(page.getByRole("dialog").getByText("소중한날 휴가", { exact: false }).first()).toBeVisible();
+    await expect(page.getByRole("dialog").getByRole("button", { name: "휴무 신청" })).toHaveCount(0);
+    await page.getByRole("dialog").getByRole("button", { name: "닫기" }).click();
+    await therapistContext.addCookies([{ name: "locale", value: "vi", url: new URL(page.url()).origin }]);
+    await page.reload();
+    await expect(page.getByText("■ Nghỉ ngày đặc biệt")).toBeVisible();
+    await managerContext.close();
+    await therapistContext.close();
+  });
+
 });

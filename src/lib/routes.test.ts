@@ -53,6 +53,15 @@ const accessMatrix: Record<
     read_only_viewer: false,
     therapist: false
   },
+  // 관리자 Therapist 현황(티켓 11): 관리자 전용. settlement_manager는 therapist:manage가 없어 거절된다(M18).
+  "/settlements/therapist-overview": {
+    administrator: true,
+    counter: false,
+    settlement_manager: false,
+    waiter: false,
+    read_only_viewer: false,
+    therapist: false
+  },
   // 휴무 신청·정정 요청 승인함(티켓 08): payout:write라 settlement_manager도 들어간다(M18).
   "/settlements/requests": {
     administrator: true,
@@ -288,6 +297,7 @@ describe("zone tabs", () => {
       "/settlements/operations",
       "/settlements/operations/monthly",
       "/settlements/notices",
+      "/settlements/therapist-overview",
       "/settlements/requests"
     ]);
     assert.deepEqual(tabPaths("administrator", "settings"), [
@@ -327,6 +337,7 @@ describe("zone menu in the dock", () => {
       { labelKey: "shell.tab.opsDaily", href: "/settlements/operations?operatingMonthId=m-2026-10&attendanceDate=2026-10-14", current: true },
       { labelKey: "shell.tab.opsMonthly", href: "/settlements/operations/monthly?operatingMonthId=m-2026-10", current: false },
       { labelKey: "shell.tab.therapistNotices", href: "/settlements/notices", current: false },
+      { labelKey: "shell.tab.therapistOverview", href: "/settlements/therapist-overview?operatingMonthId=m-2026-10", current: false },
       { labelKey: "shell.tab.therapistRequests", href: "/settlements/requests", current: false }
     ]);
   });

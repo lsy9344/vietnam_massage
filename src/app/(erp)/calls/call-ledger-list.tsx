@@ -60,7 +60,7 @@ function useLedgerClock(timeSlots: ServiceCallFormOptions["timeSlots"], enabled:
   const [clock, setClock] = useState<LedgerClock | null>(null);
   useEffect(() => {
     if (!enabled) return;
-    const tick = () => setClock({ today: businessTodayServiceDate(timeSlots), time: businessClockString() });
+    const tick = () => setClock({ today: businessTodayServiceDate(), time: businessClockString() });
     tick();
     const timer = window.setInterval(tick, 30_000);
     return () => window.clearInterval(timer);

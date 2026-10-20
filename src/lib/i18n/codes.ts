@@ -132,7 +132,7 @@ export function therapistAttendanceMethodLabel(locale: Locale, method: "직접" 
 /**
  * 신청 종류(휴무/정정, 스펙 M24)를 화면 라벨로 번역한다. 승인함(08)과 근태 탭이 함께 쓴다.
  */
-export function therapistRequestKindLabel(locale: Locale, kind: "day_off" | "correction"): string {
+export function therapistRequestKindLabel(locale: Locale, kind: "day_off" | "special_day_off" | "correction"): string {
   return t(locale, `therapistRequestKind.${kind}`);
 }
 

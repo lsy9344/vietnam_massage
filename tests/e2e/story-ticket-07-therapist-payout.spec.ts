@@ -1,28 +1,17 @@
 import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
+import { businessTodayServiceDate } from "@/lib/operating-date";
 import { confirmPayoutConfirmation } from "@/modules/settlements/payout-confirmation-service";
 import { listTherapistDailySettlements } from "@/modules/settlements/therapist-daily-settlement-service";
 import { prisma } from "./support/db";
 import { argon2idOptions, login, setLocaleCookie } from "./support/auth";
 
-/**
- * 티켓 07: 수당 탭 — 날짜별, 이번 달, 확정 월 명세서(스펙 D19–D21, M8–M10, ADR 0004·0010).
- *
- * 계산 자체(코스 수당, 지급 확인 상태 전이, 월 마감 미리보기 순위)는 각 서비스의 메모리 Prisma
- * 단위 테스트가 이미 확인했으므로, 여기서는 이 화면 고유의 것만 본다: 미확정/마감 금액의 분리 표시,
- * 날짜별 지급 확인 세 상태, 코스 수당 없는 콜의 "금액 확인 중", 그리고 가장 중요한 것 —
- * 함께한 Therapist·다른 Therapist의 이름과 금액이 어디에도 없다는 것(M6, M9).
- *
- * 월은 먼 고정 달(2042-07 미확정, 2042-08 마감확정)을 써서 "지금" 영업일에 매이지 않는다
- * (05가 아직 없는 이 시점엔 그래도 되고, 다른 스펙과 날짜가 겹치지 않는다).
- *
- * 이 DB는 티켓 07 전용(vietnam_aesthetic_th07)이라 다른 스펙과 직원·운영월이 겹칠 걱정이 없다.
- */
+/** 현재 영업일 수당·지급 확인·월 조회 우회 차단·다른 직원 금액 비노출을 검증한다. */
 
 const mineAccount = { accountId: "story07_mine", password: "Story07!mine" };
 
-const draftMonthKey = "2042-07";
-const draftDate = "2042-07-10";
+const draftDate = businessTodayServiceDate();
+const draftMonthKey = draftDate.slice(0, 7);
 const closedMonthKey = "2042-08";
 
 const RATE_AMOUNT = 123000;
@@ -276,7 +265,8 @@ test.describe("티켓 07 수당 탭", () => {
     await page.goto(`/therapist/payout?operatingMonthId=${seeded.draftOperatingMonthId}`);
 
     await expect(page.getByRole("heading", { name: "수당", level: 1 })).toBeVisible();
-    await expect(page.getByText("계산 중(미확정)").first()).toBeVisible();
+    await expect(page.getByText("오늘 코스 수당")).toBeVisible();
+    await expect(page.getByRole("combobox")).toHaveCount(0);
     await expect(page.getByText(draftDate)).toBeVisible();
     await expect(page.getByText(RATE_AMOUNT.toLocaleString("ko-KR")).first()).toBeVisible();
     await expect(page.getByText("금액 확인 중")).toBeVisible();
@@ -316,26 +306,16 @@ test.describe("티켓 07 수당 탭", () => {
     await expect(page.getByText("관리자 확인 중").first()).toBeVisible();
   });
 
-  test("마감확정 달: 확정 금액과 순위·기준선 숫자만 보이고, 1·3위 이름·금액은 어디에도 없다", async ({ page }) => {
+  test("past-month URLs and date overrides still expose only the current service day", async ({ page }) => {
     await login(page, mineAccount.accountId, mineAccount.password);
     await setLocaleCookie(page, "ko");
-    await page.goto(`/therapist/payout?operatingMonthId=${seeded.closedOperatingMonthId}`);
-
-    await expect(page.getByText("1차 마감 확정")).toBeVisible();
-    await expect(page.getByText("6,800,000").first()).toBeVisible();
-    await expect(page.getByText("2위", { exact: true }).first()).toBeVisible();
-    // 기준선: 1위 55콜 · 2위(나) 45콜 · 3위 41콜 — 숫자만 보인다.
-    await expect(page.getByText("1위 55콜")).toBeVisible();
-    await expect(page.getByText("3위 41콜")).toBeVisible();
-    // 마감 버전에는 날짜별 콜 근거가 저장되지 않는다는 안내가 보인다.
-    await expect(page.getByText("이 마감 버전에는 해당 근거가 저장되지 않았습니다.")).toBeVisible();
-
+    await page.goto(`/therapist/payout?operatingMonthId=${seeded.closedOperatingMonthId}&serviceDate=2042-08-10&month=2042-08`);
+    await expect(page.getByText(draftDate, { exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox")).toHaveCount(0);
     const bodyText = (await page.locator("body").innerText()).normalize();
-    expect(bodyText).not.toContain("E2E07 보이면 안 되는 1위");
-    expect(bodyText).not.toContain("E2E07 보이면 안 되는 3위");
-    expect(bodyText).not.toContain("9999999");
-    expect(bodyText).not.toContain("8888888");
-    expect(bodyText).not.toContain("e2e07-ghost");
+    for (const hidden of ["이번 달 수당", "콜킹 보너스", "만근수당", "6,800,000", "1위 55콜", "3위 41콜", "E2E07 보이면 안 되는 1위", "E2E07 보이면 안 되는 3위"]) {
+      expect(bodyText).not.toContain(hidden);
+    }
   });
 
   test("390px 폭에서 가로 스크롤이 없다", async ({ page }) => {
