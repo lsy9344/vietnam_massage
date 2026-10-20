@@ -1829,7 +1829,7 @@ export const vi: Messages = {
   "therapist.attendance.weekNav.next": "Tuần sau",
   "therapist.attendance.weekNav.thisWeek": "Tuần này",
   "therapist.attendance.week.aria": "Chấm công {range}",
-  "therapist.attendance.week.stripAria": "Đi tới ngày",
+  "therapist.attendance.week.stripAria": "Chấm công theo ngày",
   "therapist.attendance.week.working": "Đang làm việc",
   "therapist.attendance.week.card.planned": "Dự kiến {time}",
   "therapist.attendance.week.card.checkIn": "Vào {time}",

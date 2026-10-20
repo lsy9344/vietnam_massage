@@ -8,9 +8,10 @@ import { cn } from "@/lib/utils";
 const closeButtonClass =
   "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-border px-4 text-sm font-semibold text-foreground transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary";
 
-// 검정 머리 띠 위의 닫기 버튼(가운데 팝업). 모양은 closeButtonClass와 같고 색만 뒤집는다.
+// 검정 머리 띠 위의 닫기 버튼(가운데 팝업). 모양은 closeButtonClass와 같고, 화면 바탕색(모래 크림)으로 채워
+// 검정 띠 위에서 바로 보이게 한다(사용자 요청, 2026-10-20).
 const inkCloseButtonClass =
-  "inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-brand-foreground/40 px-4 text-sm font-semibold text-brand-foreground transition-colors hover:bg-brand-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary";
+  "inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full bg-background px-4 text-sm font-semibold text-foreground transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary";
 
 /**
  * 비모달 보조 패널(콜 상세, 직원 근거, 항목 편집). 작업면을 보면서 다른 행을 고르면 내용만 바뀐다.

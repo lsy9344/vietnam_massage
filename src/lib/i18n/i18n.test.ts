@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { defaultLocale, fallbackLocale, isLocale, normalizeLocale } from "@/lib/i18n/config";
+import { defaultLocale, fallbackLocale, isLocale, localeCookieAssignment, normalizeLocale, signInLocaleFor } from "@/lib/i18n/config";
 import { getMessages, has, t } from "@/lib/i18n";
 import { ko } from "@/lib/i18n/messages/ko";
 import { vi } from "@/lib/i18n/messages/vi";
@@ -102,5 +102,21 @@ describe("format helpers", () => {
     assert.equal(formatCurrencyVnd("vi", 1500000).replace(/\D/g, ""), "1500000");
     const withSymbol = formatCurrencyVnd("vi", 1500000, true);
     assert.match(withSymbol, /1[.,\s]?500[.,\s]?000/);
+  });
+});
+
+describe("sign-in locale", () => {
+  it("therapist 로그인은 베트남어로 시작한다", () => {
+    assert.equal(signInLocaleFor("therapist"), "vi");
+  });
+
+  it("다른 역할은 지금 고른 언어를 그대로 둔다", () => {
+    for (const role of ["administrator", "counter", "waiter", "settlement_manager", "read_only_viewer", undefined]) {
+      assert.equal(signInLocaleFor(role), null);
+    }
+  });
+
+  it("언어 쿠키는 1년 동안 모든 경로에서 쓴다", () => {
+    assert.equal(localeCookieAssignment("vi"), "locale=vi; path=/; max-age=31536000; samesite=lax");
   });
 });
