@@ -41,6 +41,7 @@ export const ko = {
   "shell.tab.statement": "월 명세서",
   "shell.tab.therapistNotices": "공지",
   "shell.tab.therapistOverview": "현황",
+  "shell.tab.therapistRequests": "승인함",
   "shell.tab.closing": "월마감",
   "shell.tab.dashboardToday": "오늘",
   "shell.tab.dashboardMonthly": "월간",
@@ -188,6 +189,13 @@ export const ko = {
   "attendanceMethod.대리 입력": "대리 입력",
   "attendanceMethod.정정 승인": "정정 승인",
   "attendanceMethod.이전 기록": "이전 기록",
+  "therapistRequestKind.day_off": "휴무",
+  "therapistRequestKind.correction": "정정",
+  "therapistRequestStatus.pending": "대기",
+  "therapistRequestStatus.approved": "승인",
+  "therapistRequestStatus.rejected": "거절",
+  "therapistRequestStatus.canceled": "취소",
+  "therapistRequestStatus.expired": "기한 지남",
 
   // /live /rooms /tv 화면
   // 첫화면(실시간 현황)
@@ -969,6 +977,28 @@ export const ko = {
   "settlements.therapistOverview.error.title": "현황을 불러오지 못했습니다",
   "settlements.therapistOverview.error.fallback": "현황을 불러오지 못했습니다. 다시 시도하세요.",
 
+  // /settlements/requests 화면(티켓 08, 휴무·정정 요청 승인함, 스펙 D24)
+  "settlements.requests.title": "승인함",
+  "settlements.requests.badge.pending": "승인 대기 {count}건",
+  "settlements.requests.list.title": "신청 목록",
+  "settlements.requests.list.empty.title": "신청이 없습니다",
+  "settlements.requests.list.empty.description": "Therapist가 휴무나 정정을 신청하면 여기에 쌓입니다.",
+  "settlements.requests.row.reasonLabel": "신청 사유",
+  "settlements.requests.row.noReason": "사유 없음",
+  "settlements.requests.row.requestedCheckInLabel": "신청한 출근",
+  "settlements.requests.row.requestedCheckOutLabel": "신청한 퇴근",
+  "settlements.requests.row.assignedCalls": "그날 배정된 예약 {count}건 — 승인해도 자동으로 취소되지 않습니다.",
+  "settlements.requests.row.resolvedBy": "{name} · {time}",
+  "settlements.requests.row.resolutionReason": "처리 사유: {reason}",
+  "settlements.requests.action.approve": "승인",
+  "settlements.requests.action.approving": "승인하는 중",
+  "settlements.requests.action.reject": "거절",
+  "settlements.requests.action.rejecting": "거절하는 중",
+  "settlements.requests.action.rejectReasonLabel": "거절 사유",
+  "settlements.requests.action.rejectReasonPlaceholder": "거절 사유를 입력하세요.",
+  "settlements.requests.action.rejectSubmit": "거절 확정",
+  "settlements.requests.action.rejectCancel": "닫기",
+
   // /closing 화면
   "closing.title": "월마감 미리보기",
   "closing.emptyMonthDescription": "월마감 미리보기는 운영월 시작일과 종료일 기준으로만 조회할 수 있다.",
@@ -1713,6 +1743,7 @@ export const ko = {
   "audit.target.opsDailyIncentiveRule": "운영팀 일일 인센티브 규칙",
   "audit.target.opsMonthlyIncentiveRule": "운영팀 월 인센티브 규칙",
   "audit.target.therapistInternalMemo": "Therapist 내부 메모",
+  "audit.target.therapistRequest": "Therapist 신청",
 
   // Therapist 전용 화면(티켓 01): 아래 탭 네 개, "나" 메뉴, 새로고침 공통 조각. vi에서 Therapist는 "KTV"다.
   "therapist.nav.aria": "Therapist 화면 이동",
@@ -1802,8 +1833,19 @@ export const ko = {
   "therapist.attendance.dayDetail.clockOutMissingBadge": "퇴근 미입력",
   "therapist.attendance.dayDetail.unscheduledBadge": "예정 없는 출근",
   "therapist.attendance.dayDetail.fullAttendanceBadge": "만근 인정",
+  "therapist.attendance.dayDetail.requestRejectionReason": "거절 사유: {reason}",
   "therapist.attendance.cell.aria": "{date} 근태 상세",
   "therapist.attendance.cell.todayMarker": "오늘",
+  "therapist.attendance.dayOff.requestButton": "휴무 신청",
+  "therapist.attendance.dayOff.cancelButton": "신청 취소",
+  "therapist.attendance.dayOff.canceling": "취소하는 중",
+  "therapist.attendance.dayOff.submitting": "신청하는 중",
+  "therapist.attendance.dayOff.submit": "신청 보내기",
+  "therapist.attendance.dayOff.dismiss": "닫기",
+  "therapist.attendance.dayOff.reasonLabel": "사유(선택)",
+  "therapist.attendance.dayOff.reasonPlaceholder": "사유를 적어주세요(선택).",
+  "therapist.attendance.dayOff.sentNotice": "휴무를 신청했습니다.",
+  "therapist.attendance.dayOff.canceledNotice": "신청을 취소했습니다.",
 
   "therapist.today.expectedPayoutLabel": "오늘 예상 코스 수당",
   "therapist.today.expectedPayoutNote": "계산 중(미확정)",

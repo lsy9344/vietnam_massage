@@ -101,6 +101,13 @@ function createMemoryPrisma() {
       async findUnique({ where }: any) {
         return where.id === operatingMonth.id ? operatingMonth : null;
       }
+    },
+    // 08이 채운 자리(휴무·정정 신청). 이 파일의 시나리오에는 신청이 없어 늘 빈 배열이다 — 신청이
+    // 있는 날의 requestStatus는 therapist-request-service.test.ts에서 확인한다.
+    therapistRequest: {
+      async findMany() {
+        return [];
+      }
     }
   };
 

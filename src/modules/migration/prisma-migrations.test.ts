@@ -58,6 +58,18 @@ describe("Prisma migration chain", () => {
     assert.match(sql, /FOREIGN KEY \("author_account_id"\) REFERENCES "user_accounts"\("id"\)/);
   });
 
+  it("휴무 신청·정정 요청 표는 더하기만 하고, 종류·상태·거절 사유 필수를 DB CHECK로 묶는다(스펙 D22–D24, D29, 티켓 08)", () => {
+    const sql = migrationSql("20261020120800_add_therapist_requests");
+
+    assert.match(sql, /CREATE TABLE "therapist_requests"/);
+    assert.doesNotMatch(sql, /DROP COLUMN|DROP TABLE/);
+    assert.match(sql, /CHECK \("kind" IN \('휴무', '정정'\)\)/);
+    assert.match(sql, /CHECK \("status" IN \('대기', '승인', '거절', '취소'\)\)/);
+    assert.match(sql, /CHECK \(\s*"status" <> '거절' OR "resolution_reason" IS NOT NULL\s*\)/);
+    assert.match(sql, /FOREIGN KEY \("employee_id"\) REFERENCES "employees"\("id"\)/);
+    assert.match(sql, /FOREIGN KEY \("resolved_by_account_id"\) REFERENCES "user_accounts"\("id"\)/);
+  });
+
   it("출근 코드 실패 잠금 칸은 더하기만 한다(스펙 D14, D29, 티켓 05)", () => {
     const sql = migrationSql("20261020120500_add_therapist_clock_in_code_lockout");
 

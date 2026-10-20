@@ -165,6 +165,9 @@ export function auditSourcePath(entry: AuditEntry): string | null {
       return withQuery("/settlements/operations", [["operatingMonthId", month], ["attendanceDate", snapshotText(entry, "attendanceDate")]], [employee]);
     case "monthly_close":
       return withQuery("/closing", [["operatingMonthId", month]]);
+    // 휴무 신청·정정 요청 승인함(티켓 08)은 운영월·직원 자리가 없는 평평한 목록이다.
+    case "therapist_request":
+      return "/settlements/requests";
     default: {
       const source = masterSources[entry.targetType];
       return source ? withQuery(source.path, [[MASTER_ITEM_PARAM, source.item(entry)]]) : null;
@@ -199,7 +202,8 @@ const targetLabelKeys: Record<string, MessageKey> = {
   therapist_course_rate: "audit.target.therapistCourseRate",
   ops_daily_incentive_rule: "audit.target.opsDailyIncentiveRule",
   ops_monthly_incentive_rule: "audit.target.opsMonthlyIncentiveRule",
-  therapist_internal_memo: "audit.target.therapistInternalMemo"
+  therapist_internal_memo: "audit.target.therapistInternalMemo",
+  therapist_request: "audit.target.therapistRequest"
 };
 
 /** 화면이 이름을 아는 대상 종류. 필터 칸의 제안 목록에 쓴다. */

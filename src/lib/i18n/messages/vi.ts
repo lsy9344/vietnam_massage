@@ -40,6 +40,7 @@ export const vi: Messages = {
   "shell.tab.statement": "Phiếu lương tháng",
   "shell.tab.therapistNotices": "Thông báo",
   "shell.tab.therapistOverview": "Tổng quan",
+  "shell.tab.therapistRequests": "Hộp duyệt đơn",
   "shell.tab.closing": "Chốt tháng",
   "shell.tab.dashboardToday": "Hôm nay",
   "shell.tab.dashboardMonthly": "Theo tháng",
@@ -183,6 +184,13 @@ export const vi: Messages = {
   "attendanceMethod.대리 입력": "Nhập hộ",
   "attendanceMethod.정정 승인": "Đã duyệt chỉnh sửa",
   "attendanceMethod.이전 기록": "Bản ghi cũ",
+  "therapistRequestKind.day_off": "Nghỉ",
+  "therapistRequestKind.correction": "Điều chỉnh",
+  "therapistRequestStatus.pending": "Đang chờ",
+  "therapistRequestStatus.approved": "Đã duyệt",
+  "therapistRequestStatus.rejected": "Đã từ chối",
+  "therapistRequestStatus.canceled": "Đã hủy",
+  "therapistRequestStatus.expired": "Quá hạn",
 
   // /live /rooms /tv 화면
   // 첫화면(실시간 현황)
@@ -962,6 +970,28 @@ export const vi: Messages = {
   "settlements.therapistOverview.error.title": "Không tải được tổng quan",
   "settlements.therapistOverview.error.fallback": "Không tải được tổng quan. Vui lòng thử lại.",
 
+  // /settlements/requests 화면(티켓 08, 휴무·정정 요청 승인함, 스펙 D24)
+  "settlements.requests.title": "Hộp duyệt đơn",
+  "settlements.requests.badge.pending": "{count} đơn đang chờ duyệt",
+  "settlements.requests.list.title": "Danh sách đơn",
+  "settlements.requests.list.empty.title": "Chưa có đơn nào",
+  "settlements.requests.list.empty.description": "Khi KTV xin nghỉ hoặc xin điều chỉnh, đơn sẽ hiện ở đây.",
+  "settlements.requests.row.reasonLabel": "Lý do xin",
+  "settlements.requests.row.noReason": "Không có lý do",
+  "settlements.requests.row.requestedCheckInLabel": "Giờ vào xin điều chỉnh",
+  "settlements.requests.row.requestedCheckOutLabel": "Giờ ra xin điều chỉnh",
+  "settlements.requests.row.assignedCalls": "Ngày này đã có {count} lịch đặt — duyệt không tự hủy các lịch này.",
+  "settlements.requests.row.resolvedBy": "{name} · {time}",
+  "settlements.requests.row.resolutionReason": "Lý do xử lý: {reason}",
+  "settlements.requests.action.approve": "Duyệt",
+  "settlements.requests.action.approving": "Đang duyệt",
+  "settlements.requests.action.reject": "Từ chối",
+  "settlements.requests.action.rejecting": "Đang từ chối",
+  "settlements.requests.action.rejectReasonLabel": "Lý do từ chối",
+  "settlements.requests.action.rejectReasonPlaceholder": "Nhập lý do từ chối.",
+  "settlements.requests.action.rejectSubmit": "Xác nhận từ chối",
+  "settlements.requests.action.rejectCancel": "Đóng",
+
   // /closing 화면
   "closing.title": "Xem trước chốt tháng",
   "closing.emptyMonthDescription": "Xem trước chốt tháng chỉ tra cứu được theo ngày bắt đầu và ngày kết thúc của tháng vận hành.",
@@ -1706,6 +1736,7 @@ export const vi: Messages = {
   "audit.target.opsDailyIncentiveRule": "Quy tắc thưởng ngày nhóm vận hành",
   "audit.target.opsMonthlyIncentiveRule": "Quy tắc thưởng tháng nhóm vận hành",
   "audit.target.therapistInternalMemo": "Ghi chú nội bộ KTV",
+  "audit.target.therapistRequest": "Đơn xin của KTV",
 
   // Màn hình dành riêng cho KTV (ticket 01): 4 tab dưới, menu "Tôi", cơ chế làm mới chung.
   "therapist.nav.aria": "Di chuyển màn hình KTV",
@@ -1795,8 +1826,19 @@ export const vi: Messages = {
   "therapist.attendance.dayDetail.clockOutMissingBadge": "Thiếu giờ ra",
   "therapist.attendance.dayDetail.unscheduledBadge": "Đi làm ngoài lịch",
   "therapist.attendance.dayDetail.fullAttendanceBadge": "Đạt chuyên cần",
+  "therapist.attendance.dayDetail.requestRejectionReason": "Lý do từ chối: {reason}",
   "therapist.attendance.cell.aria": "Chi tiết chấm công {date}",
   "therapist.attendance.cell.todayMarker": "Hôm nay",
+  "therapist.attendance.dayOff.requestButton": "Xin nghỉ",
+  "therapist.attendance.dayOff.cancelButton": "Hủy đơn",
+  "therapist.attendance.dayOff.canceling": "Đang hủy",
+  "therapist.attendance.dayOff.submitting": "Đang gửi",
+  "therapist.attendance.dayOff.submit": "Gửi đơn",
+  "therapist.attendance.dayOff.dismiss": "Đóng",
+  "therapist.attendance.dayOff.reasonLabel": "Lý do (không bắt buộc)",
+  "therapist.attendance.dayOff.reasonPlaceholder": "Nhập lý do (không bắt buộc).",
+  "therapist.attendance.dayOff.sentNotice": "Đã gửi đơn xin nghỉ.",
+  "therapist.attendance.dayOff.canceledNotice": "Đã hủy đơn.",
 
   "therapist.today.expectedPayoutLabel": "Thu nhập ca hôm nay (dự kiến)",
   "therapist.today.expectedPayoutNote": "Đang tính (chưa xác nhận)",

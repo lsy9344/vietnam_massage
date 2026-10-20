@@ -128,3 +128,18 @@ export function scheduleStatusLabel(locale: Locale, status: "근무 예정" | "�
 export function therapistAttendanceMethodLabel(locale: Locale, method: "직접" | "대리 입력" | "정정 승인" | "이전 기록"): string {
   return t(locale, `attendanceMethod.${method}`);
 }
+
+/**
+ * 신청 종류(휴무/정정, 스펙 M24)를 화면 라벨로 번역한다. 승인함(08)과 근태 탭이 함께 쓴다.
+ */
+export function therapistRequestKindLabel(locale: Locale, kind: "day_off" | "correction"): string {
+  return t(locale, `therapistRequestKind.${kind}`);
+}
+
+/**
+ * 신청 상태(대기/승인/거절/취소/기한 지남)를 화면 라벨로 번역한다. "기한 지남"은 저장값이 아니라
+ * 읽을 때 계산한 값이다(M24). 승인함(08)과 근태 탭이 함께 쓴다.
+ */
+export function therapistRequestStatusLabel(locale: Locale, status: "pending" | "approved" | "rejected" | "canceled" | "expired"): string {
+  return t(locale, `therapistRequestStatus.${status}`);
+}

@@ -111,7 +111,19 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   INVALID_NOTICE_INPUT: "Vui lòng nhập nội dung thông báo.",
   TARGET_EMPLOYEE_REQUIRED: "Vui lòng chọn KTV nhận thông báo.",
   THERAPIST_ACCOUNT_NOT_FOUND: "Không tìm thấy tài khoản KTV đang hoạt động.",
-  NOTICE_NOT_FOUND: "Không tìm thấy thông báo."
+  NOTICE_NOT_FOUND: "Không tìm thấy thông báo.",
+
+  // 휴무 신청·승인함(스펙 D22–D24, 티켓 08)
+  INVALID_THERAPIST_REQUEST_INPUT: "Dữ liệu đơn không hợp lệ.",
+  THERAPIST_REQUEST_DATE_IN_PAST: "Không thể xin cho ngày đã qua.",
+  THERAPIST_DAY_OFF_ALREADY_SET: "Ngày này đã được xếp nghỉ.",
+  THERAPIST_DAY_OFF_REQUEST_ALREADY_PENDING: "Ngày này đã có đơn xin nghỉ đang chờ.",
+  THERAPIST_REQUEST_NOT_FOUND: "Không tìm thấy đơn xin.",
+  THERAPIST_REQUEST_NOT_CANCELABLE: "Không thể hủy đơn này.",
+  THERAPIST_REQUEST_ALREADY_RESOLVED: "Đơn này đã được xử lý.",
+  THERAPIST_REQUEST_EXPIRED: "Đơn này đã quá hạn xử lý.",
+  THERAPIST_REQUEST_KIND_NOT_SUPPORTED: "Loại đơn này chưa được hỗ trợ.",
+  THERAPIST_REQUEST_REJECTION_REASON_REQUIRED: "Vui lòng nhập lý do từ chối."
 };
 
 /**

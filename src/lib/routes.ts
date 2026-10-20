@@ -71,6 +71,9 @@ export const screenRoutes: readonly ScreenRoute[] = [
   { path: "/settlements/notices", labelKey: "shell.tab.therapistNotices", zone: "settlements", roles: ["administrator"] },
   // 관리자 Therapist 현황(티켓 11, 스펙 D26, M18). 오늘 영역은 날짜 맥락이 없고, 운영월 영역만 고른다.
   { path: "/settlements/therapist-overview", labelKey: "shell.tab.therapistOverview", zone: "settlements", roles: ["administrator"], dateContext: "month" },
+  // 휴무 신청·정정 요청 승인함(티켓 08, 스펙 D24, M18). payout:write라 근무표·출퇴근을 고치는
+  // administrator·settlement_manager가 함께 연다(공지와 달리 settlement_manager도 들어간다).
+  { path: "/settlements/requests", labelKey: "shell.tab.therapistRequests", zone: "settlements", roles: ["administrator", "settlement_manager"] },
   { path: "/closing", labelKey: "shell.tab.closing", zone: "closing", roles: ["administrator", "settlement_manager"], dateContext: "month" },
   { path: "/dashboard/today", labelKey: "shell.tab.dashboardToday", zone: "reports", roles: reportRoles, dateContext: "serviceDate" },
   { path: "/dashboard/monthly", labelKey: "shell.tab.dashboardMonthly", zone: "reports", roles: reportRoles, dateContext: "month" },
