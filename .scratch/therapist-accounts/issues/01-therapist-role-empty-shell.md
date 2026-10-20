@@ -4,7 +4,7 @@
 
 **Blocked by:** 없음 (바로 시작)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] 역할 목록에 `therapist`를 더한다. 이 역할은 민감 권한이 없다. 역할 칸은 문자열이라 스키마를 바꾸지 않는다.
 - [ ] Therapist 화면(오늘, 근태, 수당, 공지)을 기존 라우트 목록에 therapist 전용으로 올린다.

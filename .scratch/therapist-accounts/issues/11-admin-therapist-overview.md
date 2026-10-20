@@ -4,7 +4,7 @@
 
 **Blocked by:** 06
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `therapist:manage`를 가진 관리자만 연다. 운영팀 라우트 목록에 관리자 전용으로 올린다.
 - [ ] 오늘 영역에는 활성 Therapist마다 출근 여부, 출근·퇴근 시각, 찍힌 방식(직접, 대리 입력, 정정 승인)이 보인다. 지각, 퇴근 미입력, 예정 없는 출근이 표시된다.

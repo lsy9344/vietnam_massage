@@ -4,7 +4,7 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] 수당은 기존 월 명세서 서비스를 세션의 직원 id로, 마감 버전을 고르지 않고 부른다(M8).
   - 마감확정·잠금이면 최신 마감 버전이고, 작성중·검토중(재오픈 포함)이면 지금 계산이다.
@@ -53,3 +53,5 @@
 - `for f in scripts/validate-story-*.mjs; do node "$f" ...; done`: `validate-story-4-6.mjs`만 실패(기존 실패).
 - 운영 빌드 E2E(DB `vietnam_aesthetic_th07`, 포트 3207): 새 스펙 `story-ticket-07-therapist-payout.spec.ts` 4/4 통과(미확정 날짜별 코스 수당·금액 확인 중·짝꿍·다른 Therapist 이름 비노출, 확인/재확인 필요 전환, 마감확정 달의 확정 금액·순위·기준선 숫자만·1·3위 이름 비노출, 390px). 직접 관련 기존 스펙도 같은 DB로 돌려 회귀가 없는지 봤다: `story-ticket-03-today-my-calls.spec.ts` 3/3(오늘 탭에 내 수당 카드가 더해졌지만 기존 단언은 그대로 통과), `story-ticket-01-therapist-role-shell.spec.ts` 7/7, `story-ticket-10-therapist-notices.spec.ts` 3/3. 끝나고 서버 종료, DB 삭제.
 - 통합 브랜치 tip(47cfa27, 티켓 02 포함)을 병합했다. 충돌 없음(i18n 두 파일만 자동 병합). 병합 뒤 단위 테스트·tsc 재확인 완료.
+
+- 2026-10-20 (오케스트레이터): 이 티켓의 월 수당 열람 범위(D19–D21)는 사용자 확정 스펙 `.scratch/therapist-daily-only/spec.md`(93df843)로 대체됐다. Therapist 수당 탭은 현재 영업일의 본인 코스 수당만 보인다. done은 그 대체 범위 기준이다.
