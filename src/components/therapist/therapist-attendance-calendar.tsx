@@ -282,9 +282,32 @@ function AttendanceDayPanel({
   );
 }
 
-function SpecialDayOffLegend({ days }: { days: TherapistAttendanceCalendarDayDto[] }) {
+// 기호 설명란. 띠·월 칸의 기호는 attendanceDayBadges의 tone을 따르므로 같은 순서(심각한 것 먼저)로 적는다.
+const LEGEND_TONES = ["danger", "warning", "info", "success"] as const;
+
+/**
+ * 띠·월 칸의 기호와 검정 칸이 뜻하는 것. 칸에는 가장 급한 기호 하나만 보이므로 그 점도 함께 적는다
+ * (사용자 요청, 2026-10-20). 소중한날 휴가의 붉은 칸도 ■에 들어 있어 따로 적지 않는다.
+ */
+function AttendanceLegend() {
   const t = useT();
-  return days.some((day) => day.isSpecialDayOff) ? <p className="mt-3 text-xs font-semibold text-danger">■ {t("therapistRequestKind.special_day_off")}</p> : null;
+  return (
+    <div aria-label={t("therapist.attendance.legend.aria")} className="mt-3 rounded-md bg-surface px-4 py-2.5" role="note">
+      <ul className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs font-semibold text-foreground">
+        {LEGEND_TONES.map((tone) => (
+          <li className="inline-flex items-center gap-1.5" key={tone}>
+            <span aria-hidden="true" className={TONE_TEXT_CLASS[tone]}>{`${TONE_GLYPH[tone]}\uFE0E`}</span>
+            {t(`therapist.attendance.legend.${tone}`)}
+          </li>
+        ))}
+        <li className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true" className="inline-block size-3 rounded-[4px] bg-brand" />
+          {t("therapist.attendance.legend.today")}
+        </li>
+      </ul>
+      <p className="mt-1.5 text-xs text-muted">{t("therapist.attendance.legend.note")}</p>
+    </div>
+  );
 }
 
 function AttendanceEmptyState() {
@@ -374,7 +397,7 @@ export function TherapistAttendanceCalendar({
         })}
       </div>
 
-      <SpecialDayOffLegend days={days} />
+      <AttendanceLegend />
 
       <AttendanceDayPanel day={selectedDay} locale={locale} onClose={() => setSelectedDate(null)} todayServiceDate={todayServiceDate} />
     </div>
@@ -525,6 +548,8 @@ export function TherapistAttendanceWeek({
         })}
       </nav>
 
+      <AttendanceLegend />
+
       <ul aria-label={t("therapist.attendance.week.aria", { range: weekLabel })} className="mt-4 grid gap-2">
         {days.map((day) => (
           <AttendanceWeekDayCard
@@ -536,8 +561,6 @@ export function TherapistAttendanceWeek({
           />
         ))}
       </ul>
-
-      <SpecialDayOffLegend days={days} />
 
       <AttendanceDayPanel day={selectedDay} locale={locale} onClose={() => setSelectedDate(null)} todayServiceDate={todayServiceDate} />
     </div>

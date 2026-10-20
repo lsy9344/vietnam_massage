@@ -288,7 +288,8 @@ test.describe("티켓 08 휴무 신청과 승인함", () => {
     const cell = page.getByRole("grid").getByRole("button", { name: dayCellName(SPECIAL_DATE) });
     await expect(cell).toHaveAccessibleName(/소중한날 휴가/);
     await expect(cell).toHaveClass(/border-danger/);
-    await expect(page.getByText("■ 소중한날 휴가")).toBeVisible();
+    // 기호 설명란이 붉은 ■가 소중한날 휴가도 뜻한다고 알려 준다.
+    await expect(page.getByRole("note", { name: "기호 설명" })).toContainText("소중한날 휴가");
     expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
     await page.screenshot({ path: testInfo.outputPath("special-day-off-mobile.png") });
     await cell.click();
@@ -297,7 +298,7 @@ test.describe("티켓 08 휴무 신청과 승인함", () => {
     await page.getByRole("dialog").getByRole("button", { name: "닫기" }).click();
     await therapistContext.addCookies([{ name: "locale", value: "vi", url: new URL(page.url()).origin }]);
     await page.reload();
-    await expect(page.getByText("■ Nghỉ ngày đặc biệt")).toBeVisible();
+    await expect(page.getByRole("note", { name: "Chú thích ký hiệu" })).toContainText("Nghỉ ngày đặc biệt");
     await managerContext.close();
     await therapistContext.close();
   });
