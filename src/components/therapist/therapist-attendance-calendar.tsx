@@ -441,7 +441,7 @@ function AttendanceWeekDayCard({
   const foldedChips = chips.slice(visibleChips.length);
 
   return (
-    <li className="scroll-mt-24" id={`attendance-day-${day.date}`}>
+    <li id={`attendance-day-${day.date}`}>
       <button
         className={cn(
           "flex w-full items-stretch gap-3 rounded-md border px-4 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary",
@@ -502,8 +502,8 @@ function AttendanceWeekDayCard({
 
 /**
  * 근태 주 보기(근태 탭의 기본 보기). 위에는 월–일 띠(오늘은 검정, 그날 가장 급한 배지 기호)를 두고,
- * 아래에 날짜마다 근무표·출퇴근 시각·판정이 한눈에 보이는 카드를 쌓는다. 띠의 날짜를 누르면 그 카드로
- * 내려가고, 카드를 누르면 월 보기와 같은 상세 패널(휴무 신청 포함)이 열린다.
+ * 아래에 날짜마다 근무표·출퇴근 시각·판정이 한눈에 보이는 카드를 쌓는다. 띠의 날짜와 카드 어느 쪽을 눌러도
+ * 월 보기와 같은 상세 팝업(휴무 신청 포함)이 열린다(사용자 요청, 2026-10-20).
  */
 export function TherapistAttendanceWeek({
   locale,
@@ -524,13 +524,13 @@ export function TherapistAttendanceWeek({
 
   return (
     <div>
-      <nav aria-label={t("therapist.attendance.week.stripAria")} className="grid grid-cols-7 gap-1">
+      <div aria-label={t("therapist.attendance.week.stripAria")} className="grid grid-cols-7 gap-1" role="group">
         {days.map((day) => {
           const isToday = day.date === todayServiceDate;
           const primaryBadge = attendanceDayBadges(t, day)[0] ?? null;
           return (
-            <a
-              aria-label={formatFullDate(locale, day.date)}
+            <button
+              aria-label={t("therapist.attendance.cell.aria", { date: formatFullDate(locale, day.date) }) + (primaryBadge ? ` · ${primaryBadge.label}` : "")}
               className={cn(
                 "flex min-h-16 flex-col items-center justify-center gap-1 rounded-md border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary",
                 isToday
@@ -539,8 +539,9 @@ export function TherapistAttendanceWeek({
                     ? "border-danger bg-danger-soft"
                     : "border-transparent bg-surface hover:bg-readonly"
               )}
-              href={`#attendance-day-${day.date}`}
               key={day.date}
+              onClick={() => setSelectedDate(day.date)}
+              type="button"
             >
               <span className={cn("text-xs font-semibold leading-none", !isToday && "text-muted")}>{weekdayShort(locale, day.date)}</span>
               <span
@@ -552,10 +553,10 @@ export function TherapistAttendanceWeek({
                 {formatDayNumber(day.date)}
               </span>
               <AttendanceGlyph badge={primaryBadge} onInk={isToday} />
-            </a>
+            </button>
           );
         })}
-      </nav>
+      </div>
 
       <AttendanceLegend />
 

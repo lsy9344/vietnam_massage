@@ -283,6 +283,13 @@ test.describe("티켓 06 근태 판정과 근태 달력", () => {
     const panel = page.getByRole("dialog", { name: formatFullDateKo(LATE_AND_MISSING_CHECKOUT_DATE) });
     await expect(panel.getByText("직접")).toBeVisible();
     await panel.getByRole("button", { name: "닫기" }).click();
+    await expect(panel).toHaveCount(0);
+
+    // 위쪽 요일 띠의 날짜를 눌러도 같은 팝업이 열린다.
+    await page.getByRole("group", { name: "요일별 근태" }).getByRole("button", { name: dayCellName(LATE_AND_MISSING_CHECKOUT_DATE) }).click();
+    await expectTherapistCenterPopup(page, panel);
+    await expect(panel.getByText("지각 10분")).toBeVisible();
+    await panel.getByRole("button", { name: "닫기" }).click();
   });
 
   test("주 보기와 월 보기를 오가며 같은 기간을 본다", async ({ page }) => {

@@ -118,6 +118,17 @@ describe("TherapistAttendanceWeek", () => {
     assert.match(cardText(html, "2042-05-09"), /미입력 출근 — 퇴근 —/);
   });
 
+  it("makes each strip day a button that opens the same day detail as the cards, not a jump link", () => {
+    const html = renderWeek(WEEK_DATES.map((date) => (date === "2042-05-06" ? day(date, { judgment: { lateMinutes: 5, isAbsent: false, isClockOutMissing: false, isUnscheduledAttendance: false } }) : day(date))));
+    const strip = html.match(/<div[^>]*aria-label="요일별 근태"[^>]*>([\s\S]*?)<\/div><div[^>]*aria-label="기호 설명"/);
+    assert.ok(strip, "strip");
+    assert.doesNotMatch(strip[1], /<a /);
+    const buttons = [...strip[1].matchAll(/<button[^>]*aria-label="([^"]*)"/g)].map((match) => match[1]);
+    assert.equal(buttons.length, 7);
+    // 월 달력 칸과 같은 이름(날짜 + 근태 상세 + 가장 급한 배지)
+    assert.equal(buttons[1], "2042년 5월 6일 화요일 근태 상세 · 지각 5분");
+  });
+
   it("explains what each symbol color means, next to the week strip", () => {
     const html = renderWeek(WEEK_DATES.map((date) => day(date)));
     const legend = legendText(html);
@@ -127,7 +138,7 @@ describe("TherapistAttendanceWeek", () => {
     assert.match(legend, /●︎ 만근 인정/);
     assert.match(legend, /오늘/);
     // 띠(기호가 있는 곳)와 카드 목록 사이에 둔다.
-    assert.ok(html.indexOf('aria-label="기호 설명"') > html.indexOf('aria-label="요일로 이동"'));
+    assert.ok(html.indexOf('aria-label="기호 설명"') > html.indexOf('aria-label="요일별 근태"'));
     assert.ok(html.indexOf('aria-label="기호 설명"') < html.indexOf('id="attendance-day-'));
   });
 });

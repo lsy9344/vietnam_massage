@@ -1827,7 +1827,7 @@ export const ko = {
   "therapist.attendance.weekNav.next": "다음 주",
   "therapist.attendance.weekNav.thisWeek": "이번 주",
   "therapist.attendance.week.aria": "{range} 근태",
-  "therapist.attendance.week.stripAria": "요일로 이동",
+  "therapist.attendance.week.stripAria": "요일별 근태",
   "therapist.attendance.week.working": "근무 중",
   "therapist.attendance.week.card.planned": "예정 {time}",
   "therapist.attendance.week.card.checkIn": "출근 {time}",
