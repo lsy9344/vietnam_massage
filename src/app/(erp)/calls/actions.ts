@@ -38,20 +38,6 @@ import {
   type CustomerVisitHistoryRowDto,
   type DailyExpenseDto,
   type ServiceCallRowDto
-,
-  getCallLedgerQuota,
-  listTherapistStatusOverview,
-  createQuickBooking,
-  earlyFinishServiceCall,
-  undoFinishServiceCall,
-  finishCleaningServiceCall,
-  quickAssignTherapist,
-  quickAssignRoom,
-  quickTogglePaymentConfirmation,
-  saveBasicServiceCallRow,
-  type CallLedgerQuotaDto,
-  type TherapistStatusOverviewDto,
-  type QuickBookingInput
 } from "@/modules/calls/service-call-service";
 import {
   customerInputSchema,
@@ -61,7 +47,6 @@ import {
   dailyExpenseUpdateSchema,
   quickBookingPartyInputSchema,
   serviceCallAutosaveInputSchema,
-  serviceCallInputSchema,
   serviceCallCreateInputSchema,
   serviceCallCustomerLinkCorrectionSchema,
   type QuickBookingPartyInput,
@@ -73,10 +58,9 @@ import { quickBookingGuestFieldKey, quickBookingPartyIssueField } from "@/app/(e
 /** 오래된 저장(STALE_CALL)이면 저장은 거절되고, 화면이 다시 불러올 수 있게 지금의 행을 함께 받는다. */
 export type ServiceCallAutosaveResult =
   | ActionResult<ServiceCallRowDto>
-  | { ok: false; formError: string; domainErrorCode: "STALE_CALL"; currentRow: ServiceCallRowDto; fieldErrors?: Record<string, string[]> };
+  | { ok: false; formError: string; domainErrorCode: "STALE_CALL"; currentRow: ServiceCallRowDto };
 /** 고객 연결 정정(F06)도 같은 모양: STALE_CALL이면 쓰기·감사 없이 지금의 행을 함께 돌려준다. */
 export type ServiceCallCustomerLinkCorrectionActionState = ServiceCallAutosaveResult | null;
-export type ServiceCallActionState = ActionResult<ServiceCallRowDto> | null;
 export type DailyExpenseActionState = ActionResult<DailyExpenseDto> | null;
 export type CustomerActionState = ActionResult<CustomerDto> | null;
 
@@ -577,163 +561,5 @@ export async function correctServiceCallCustomerLinkAction(
       };
     }
     return mapActionError<ServiceCallRowDto>(error, locale);
-  }
-}
-
-export async function saveBasicServiceCallRowAction(
-  _previousState: ServiceCallActionState,
-  formData: FormData
-): Promise<ServiceCallActionState> {
-  const locale = await getLocale();
-  const parsed = serviceCallInputSchema.safeParse({
-    serviceCallId: formValue(formData, "serviceCallId"),
-    operatingMonthId: formValue(formData, "operatingMonthId"),
-    serviceDate: formValue(formData, "serviceDate"),
-    startTime: formValue(formData, "startTime"),
-    actualEntryTime: formData.has("actualEntryTime") ? formValue(formData, "actualEntryTime") : undefined,
-    roomId: formValue(formData, "roomId"),
-    courseId: formValue(formData, "courseId"),
-    customerMemo: formValue(formData, "customerMemo"),
-    customerId: formData.has("customerId") ? formValue(formData, "customerId") : undefined,
-    therapist1Id: formValue(formData, "therapist1Id"),
-    therapist2Id: formValue(formData, "therapist2Id"),
-    status: formValue(formData, "status"),
-    discountTypeCode: formValue(formData, "discountTypeCode"),
-    paymentMethodCode: formValue(formData, "paymentMethodCode"),
-    note: formValue(formData, "note"),
-    confirmationCode: formValue(formData, "confirmationCode")
-  });
-
-  if (!parsed.success) {
-    return {
-      ok: false,
-      fieldErrors: toFieldErrors(parsed.error.flatten().fieldErrors, locale),
-      formError: t(locale, "action.error.invalidInput")
-    };
-  }
-
-  try {
-    const account = await requirePermission("call:write");
-    const data = await saveBasicServiceCallRow({ ...parsed.data, actorId: account.id });
-    revalidatePath("/calls");
-    return { ok: true, data: visibleServiceCallRowForRole(data, account.role) };
-  } catch (error) {
-    return mapActionError<ServiceCallRowDto>(error, locale);
-  }
-}
-
-export async function loadQuotaAction(input: { operatingMonthId: string; serviceDate: string; time: string }): Promise<CallLedgerQuotaDto> {
-  await requireRouteAccess("/calls");
-  return getCallLedgerQuota(input);
-}
-
-export async function loadTherapistStatusOverviewAction(input: {
-  operatingMonthId: string;
-  serviceDate: string;
-  currentTime?: string;
-}): Promise<TherapistStatusOverviewDto[]> {
-  await requireRouteAccess("/calls");
-  return listTherapistStatusOverview(input);
-}
-
-export async function createQuickBookingAction(input: QuickBookingInput): Promise<ActionResult<ServiceCallRowDto>> {
-  const locale = await getLocale();
-  try {
-    const account = await requirePermission("call:write");
-    const data = await createQuickBooking({ ...input, actorId: account.id });
-    revalidatePath("/calls");
-    return { ok: true, data };
-  } catch (error) {
-    return mapActionError<ServiceCallRowDto>(error, locale);
-  }
-}
-
-export async function earlyFinishCallAction(input: {
-  serviceCallId: string;
-  operatingMonthId: string;
-  finishTime?: string;
-}): Promise<ActionResult<{ success: boolean }>> {
-  const locale = await getLocale();
-  try {
-    const account = await requirePermission("call:write");
-    await earlyFinishServiceCall({ ...input, actorId: account.id });
-    revalidatePath("/calls");
-    return { ok: true, data: { success: true } };
-  } catch (error) {
-    return mapActionError<{ success: boolean }>(error, locale);
-  }
-}
-
-export async function undoFinishCallAction(input: {
-  serviceCallId: string;
-  operatingMonthId: string;
-}): Promise<ActionResult<{ success: boolean }>> {
-  const locale = await getLocale();
-  try {
-    const account = await requirePermission("call:write");
-    await undoFinishServiceCall({ ...input, actorId: account.id });
-    revalidatePath("/calls");
-    return { ok: true, data: { success: true } };
-  } catch (error) {
-    return mapActionError<{ success: boolean }>(error, locale);
-  }
-}
-
-export async function finishCleaningCallAction(input: {
-  serviceCallId: string;
-  operatingMonthId: string;
-}): Promise<ActionResult<{ success: boolean }>> {
-  const locale = await getLocale();
-  try {
-    const account = await requirePermission("call:write");
-    await finishCleaningServiceCall({ ...input, actorId: account.id });
-    revalidatePath("/calls");
-    return { ok: true, data: { success: true } };
-  } catch (error) {
-    return mapActionError<{ success: boolean }>(error, locale);
-  }
-}
-
-export async function quickAssignTherapistAction(input: {
-  serviceCallId: string;
-  therapistId: string | null;
-}): Promise<ActionResult<{ success: boolean }>> {
-  const locale = await getLocale();
-  try {
-    const account = await requirePermission("call:write");
-    await quickAssignTherapist({ ...input, actorId: account.id });
-    revalidatePath("/calls");
-    return { ok: true, data: { success: true } };
-  } catch (error) {
-    return mapActionError<{ success: boolean }>(error, locale);
-  }
-}
-
-export async function quickAssignRoomAction(input: {
-  serviceCallId: string;
-  roomId: string | null;
-}): Promise<ActionResult<{ success: boolean }>> {
-  const locale = await getLocale();
-  try {
-    const account = await requirePermission("call:write");
-    await quickAssignRoom({ ...input, actorId: account.id });
-    revalidatePath("/calls");
-    return { ok: true, data: { success: true } };
-  } catch (error) {
-    return mapActionError<{ success: boolean }>(error, locale);
-  }
-}
-
-export async function quickTogglePaymentAction(input: {
-  serviceCallId: string;
-}): Promise<ActionResult<{ success: boolean }>> {
-  const locale = await getLocale();
-  try {
-    const account = await requirePermission("call:write");
-    await quickTogglePaymentConfirmation({ ...input, actorId: account.id });
-    revalidatePath("/calls");
-    return { ok: true, data: { success: true } };
-  } catch (error) {
-    return mapActionError<{ success: boolean }>(error, locale);
   }
 }

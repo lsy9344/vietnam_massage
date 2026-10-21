@@ -162,11 +162,13 @@ test.describe("1018 티켓 03 입장·종료·청소 끝과 자동 청소 중", 
     await expect.poll(async () => (await stored(callId)).status).toBe("CLEANING");
     const endTime = (await stored(callId)).actualEndTime;
     expect(endTime).toMatch(/^\d{2}:\d{2}$/);
-    await expect(line(page, callId).locator("[data-line-top]")).toContainText(endTime);
+    await expect(line(page, callId).locator('[data-line-cell="end"]')).toContainText(endTime);
     await expect(await roomCard(page, "future", "T1018-03 객실1")).toHaveAccessibleName("T1018-03 객실1 청소중");
 
     await openLedger(page, "future");
-    await line(page, callId).getByRole("button", { name: "13:00 콜 종료 취소" }).click();
+    // 종료 취소는 청소 끝 옆 ▾ 목록에 있다(2026-10-22 시안 444.png).
+    await line(page, callId).getByRole("button", { name: "13:00 콜 청소 메뉴 열기" }).click();
+    await page.getByRole("listbox", { name: "13:00 콜 청소 메뉴 열기" }).getByRole("option", { name: "종료 취소" }).click();
     await expect.poll(async () => (await stored(callId)).status).toBe("IN_USE");
     expect((await stored(callId)).actualEndTime).toBeNull();
     await expect(await roomCard(page, "future", "T1018-03 객실1")).toHaveAccessibleName(/^T1018-03 객실1 (사용중|종료임박)$/);
@@ -192,7 +194,7 @@ test.describe("1018 티켓 03 입장·종료·청소 끝과 자동 청소 중", 
     await page.getByRole("listbox", { name: "14:00 콜 결제수단 고르기" }).getByRole("option", { name: "카드" }).click();
     await expect.poll(async () => (await stored(paidId)).paymentMethodCode).toBe("CARD");
     expect((await stored(paidId)).status).toBe("RESERVED");
-    await expect(line(page, paidId).locator("[data-line-bottom]")).toContainText("결제완료");
+    await expect(line(page, paidId).locator('[data-line-cell="pay"]')).toContainText("결제완료");
 
     // 다른 날 원장에서 예약을 방문완료로 고르면 입장 = 예약시각, 종료 = 표시 종료다(스펙 D11).
     await line(page, doneId).getByRole("button", { name: "15:00 콜 상태 고르기" }).click();
@@ -221,7 +223,8 @@ test.describe("1018 티켓 03 입장·종료·청소 끝과 자동 청소 중", 
     await entry.press("Enter");
     await expect.poll(async () => (await stored(paidId)).actualEntryTime).toBe("14:07");
     // 같은 Therapist의 15:00 예약이 있어 표시 종료는 15:00에 양보한다(ADR 0001).
-    await expect(line(page, paidId).locator("[data-line-top]")).toContainText("입장 14:07 → 예상 15:00");
+    await expect(line(page, paidId).locator('[data-line-cell="entry"]')).toContainText("14:07");
+    await expect(line(page, paidId).locator('[data-line-cell="end"]')).toContainText("예상 15:00");
   });
 
   test("자동 청소 중: 표시 종료가 지난 사용중 콜은 읽을 때 청소중이 되고 실제 종료 = 표시 종료이며, 감사는 한 번이고, 종료 취소한 콜은 다시 끝내지 않는다", async ({ page }) => {
@@ -230,8 +233,9 @@ test.describe("1018 티켓 03 입장·종료·청소 끝과 자동 청소 중", 
     await login(page, account.accountId, account.password);
     await openLedger(page, "past");
 
-    await expect(line(page, overdueId).locator("[data-line-top]")).toContainText("청소중");
-    await expect(line(page, overdueId).locator("[data-line-top]")).toContainText("입장 13:05 → 14:05");
+    await expect(line(page, overdueId).locator('[data-line-cell="status"]')).toContainText("청소중");
+    await expect(line(page, overdueId).locator('[data-line-cell="entry"]')).toContainText("13:05");
+    await expect(line(page, overdueId).locator('[data-line-cell="end"]')).toContainText("14:05");
     const finished = await stored(overdueId);
     expect(finished.status).toBe("CLEANING");
     expect(finished.actualEndTime).toBe("14:05");
@@ -246,10 +250,12 @@ test.describe("1018 티켓 03 입장·종료·청소 끝과 자동 청소 중", 
     expect(recorded[0].reason).toBe("자동 종료");
 
     await openLedger(page, "past");
-    await line(page, overdueId).getByRole("button", { name: "13:00 콜 종료 취소" }).click();
+    // 종료 취소는 청소 끝 옆 ▾ 목록에 있다(2026-10-22 시안 444.png).
+    await line(page, overdueId).getByRole("button", { name: "13:00 콜 청소 메뉴 열기" }).click();
+    await page.getByRole("listbox", { name: "13:00 콜 청소 메뉴 열기" }).getByRole("option", { name: "종료 취소" }).click();
     await expect.poll(async () => (await stored(overdueId)).status).toBe("IN_USE");
     await openLedger(page, "past");
-    await expect(line(page, overdueId).locator("[data-line-top]")).toContainText("사용중");
+    await expect(line(page, overdueId).locator('[data-line-cell="status"]')).toContainText("사용중");
     expect((await stored(overdueId)).status).toBe("IN_USE");
     expect(await audits()).toHaveLength(1);
   });

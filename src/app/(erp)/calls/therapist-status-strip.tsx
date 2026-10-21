@@ -105,6 +105,9 @@ export function TherapistStatusStrip({
   return (
     <section aria-label={t("calls.therapistStatus.aria")} className="mb-4 grid gap-2">
       <div className="flex flex-wrap items-center gap-2">
+        <h2 className="mr-2 text-sm font-semibold text-foreground">
+          {t("calls.therapistStatus.title", { count: count(stripRows.filter((row) => row.attendance === "checked_in").length) })}
+        </h2>
         <button
           aria-expanded={!collapsed}
           className="screen-step"
@@ -135,24 +138,21 @@ export function TherapistStatusStrip({
             const checkedOut = row.current.state === "checked_out";
             const nextTime = nextTimeText(row);
             const pressed = filtered === row.therapistId;
+            // 시안(111.png)처럼 세로 카드: 번호 · 완료·예약 · 지금 상태 · 다음 시각, 맨 아래 "콜만".
             const body = (
               <>
-                <span className="flex items-baseline gap-1.5 whitespace-nowrap">
-                  <span className={cn("font-semibold", !checkedOut && "text-foreground")}>{row.therapistName}</span>
-                  <span className="text-xs">
-                    {t("calls.therapistStatus.counts", { finished: count(row.callCounts.finished), reserved: count(row.callCounts.reserved) })}
-                  </span>
+                <span className={cn("truncate text-base font-semibold", !checkedOut && "text-foreground")}>{row.therapistName}</span>
+                <span className="text-xs">
+                  {t("calls.therapistStatus.counts", { finished: count(row.callCounts.finished), reserved: count(row.callCounts.reserved) })}
                 </span>
-                <span className="flex items-center gap-1.5 whitespace-nowrap">
-                  <StatusIndicator label={t(display.labelKey)} size="sm" tone={display.tone} />
-                  {nextTime ? <span className="text-xs">{nextTime}</span> : null}
-                </span>
+                <StatusIndicator label={t(display.labelKey)} size="sm" tone={display.tone} />
+                <span className="min-h-4 text-sm font-semibold [font-variant-numeric:tabular-nums]">{nextTime ?? ""}</span>
               </>
             );
             return (
               <li
                 className={cn(
-                  "flex shrink-0 items-stretch rounded-md border bg-surface text-sm",
+                  "flex w-36 shrink-0 flex-col items-stretch rounded-md border bg-surface text-sm",
                   pressed ? "border-brand" : "border-border",
                   checkedOut && "text-muted"
                 )}
@@ -162,7 +162,7 @@ export function TherapistStatusStrip({
               >
                 {canBook ? (
                   <button
-                    className="grid gap-1 rounded-l-md px-3 py-2 text-left hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary"
+                    className="grid flex-1 justify-items-start gap-1.5 rounded-t-md px-3 pb-2 pt-3 text-left hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary"
                     data-therapist-status-book=""
                     onClick={() => requestQuickBookingWithTherapist(row.therapistId)}
                     title={t("calls.therapistStatus.book", { name: row.therapistName })}
@@ -171,26 +171,28 @@ export function TherapistStatusStrip({
                     {body}
                   </button>
                 ) : (
-                  <div className="grid gap-1 px-3 py-2">{body}</div>
+                  <div className="grid flex-1 justify-items-start gap-1.5 px-3 pb-2 pt-3">{body}</div>
                 )}
-                <button
-                  aria-label={t("calls.therapistStatus.filter", { name: row.therapistName })}
-                  aria-pressed={pressed}
-                  className={cn(
-                    "rounded-r-md border-l border-border px-2 text-xs font-semibold hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary",
-                    pressed && "bg-brand text-brand-foreground hover:bg-brand-strong"
-                  )}
-                  data-therapist-status-filter=""
-                  onClick={() => replaceAddressParam(THERAPIST_FILTER_PARAM, pressed ? null : row.therapistId)}
-                  type="button"
-                >
-                  {t("calls.therapistStatus.filterShort")}
-                </button>
+                <span className="px-3 pb-3">
+                  <button
+                    aria-label={t("calls.therapistStatus.filter", { name: row.therapistName })}
+                    aria-pressed={pressed}
+                    className={cn(
+                      "min-h-11 w-full rounded-full border border-border text-xs font-semibold hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary",
+                      pressed && "border-brand bg-brand text-brand-foreground hover:bg-brand-strong"
+                    )}
+                    data-therapist-status-filter=""
+                    onClick={() => replaceAddressParam(THERAPIST_FILTER_PARAM, pressed ? null : row.therapistId)}
+                    type="button"
+                  >
+                    {t("calls.therapistStatus.filterShort")}
+                  </button>
+                </span>
               </li>
             );
           })}
           {unassignedCount > 0 ? (
-            <li className="flex shrink-0 items-center whitespace-nowrap rounded-md border border-border bg-surface px-3 py-2 text-sm font-semibold text-foreground" data-unassigned-call-count="">
+            <li className="flex w-36 shrink-0 items-center justify-center whitespace-nowrap rounded-md border border-dashed border-border-strong bg-surface px-3 py-2 text-sm font-semibold text-foreground" data-unassigned-call-count="">
               {t("calls.therapistStatus.unassigned", { count: count(unassignedCount) })}
             </li>
           ) : null}

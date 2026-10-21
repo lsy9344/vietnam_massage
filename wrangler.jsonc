@@ -17,7 +17,7 @@
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "275fdce287004225848fd6d73f120173",
+      "id": "00000000000000000000000000000000",
       "localConnectionString": "postgresql://postgres:postgres@localhost:5432/vietnam_aesthetic"
     }
   ]

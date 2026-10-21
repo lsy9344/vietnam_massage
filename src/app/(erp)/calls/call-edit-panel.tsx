@@ -15,6 +15,7 @@ import { ActualEntryField, ClockTimeField, firstFieldError, nullableValue, optio
 import { isSaveHeld, type CallRowDraft, type CallRowSave } from "@/app/(erp)/calls/call-row-save";
 import { CallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
 import { callWarningLabel } from "@/app/(erp)/calls/call-warning-label";
+import { timeOptionsWith } from "@/app/(erp)/calls/quick-booking-now-slot";
 
 /** 패널을 열며 옮길 자리. 목록의 Enter는 첫 칸이다. token이 바뀔 때마다 다시 옮긴다. */
 export type CallPanelFocusRequest = { target: "first"; token: number };
@@ -213,7 +214,7 @@ export function CallEditPanel({
 
       <PanelSection title={t("calls.panel.section.booking")}>
         <div className="grid gap-3 min-[480px]:grid-cols-2">
-          <SelectField {...selectProps("startTime", false)} label={t("calls.column.time")} options={options.timeSlots} required />
+          <SelectField {...selectProps("startTime", false)} label={t("calls.column.time")} options={timeOptionsWith(options.timeSlots, draft.startTime)} required />
           <SelectField {...selectProps("courseId", false)} label={t("calls.column.course")} options={options.courses} required />
         </div>
         <TextField {...textProps("customerMemo")} label={t("calls.column.customerMemo")} />

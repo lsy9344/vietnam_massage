@@ -47,7 +47,7 @@ import {
   type QuickBookingState,
   type QuickBookingStep
 } from "@/app/(erp)/calls/quick-booking-draft";
-import { nowClockString, selectNowSlot } from "@/app/(erp)/calls/quick-booking-now-slot";
+import { nowClockString, selectNowSlot, shiftStartTime, timeOptionsWith } from "@/app/(erp)/calls/quick-booking-now-slot";
 import { TherapistCallCount } from "@/app/(erp)/calls/therapist-call-counts";
 import {
   announceQuickBookingShown,
@@ -149,7 +149,7 @@ function Field({ label, children, error }: { label: string; children: ReactNode;
  * 원장 탭 머리의 주요 버튼(명세 F08). 패널은 원장 옆에 열린다(1018 스펙 D19). 휴대폰 폭에서는 제공하지 않는다(티켓 20).
  * 원장 목록의 N 단축키(티켓 03)가 data-quick-booking-trigger로 이 버튼을 찾아 누른다.
  */
-export function QuickBookingTrigger({ isLocked }: { isLocked: boolean }) {
+export function QuickBookingTrigger({ isLocked, large = false }: { isLocked: boolean; /** 원장 상태 카드 줄 오른쪽의 큰 버튼(2026-10-22 고객 요청). */ large?: boolean }) {
   const t = useT();
   // 화면의 주 버튼은 하나다(design.md). 패널이 보이는 동안은 패널의 "다음"·"예약 저장"이 주 버튼이라 테두리 버튼이 된다.
   const shown = useSyncExternalStore(subscribeQuickBookingShown, isQuickBookingShown, () => false);
@@ -157,14 +157,15 @@ export function QuickBookingTrigger({ isLocked }: { isLocked: boolean }) {
     <Button
       aria-controls="quick-booking-panel"
       aria-expanded={shown}
-      className="hidden min-[600px]:inline-flex"
+      className={cn("hidden min-[600px]:inline-flex", large && "h-14 px-8")}
       data-quick-booking-trigger=""
       disabled={isLocked}
       onClick={requestQuickBookingOpen}
       type="button"
       variant={shown ? "secondary" : "default"}
     >
-      {t("calls.quickBooking.open")}
+      {/* 버튼 글자는 font: inherit에 덮이므로(globals.css) 큰 글자는 안쪽 span에 준다. */}
+      {large ? <span className="text-lg font-bold">{t("calls.quickBooking.open")} +</span> : t("calls.quickBooking.open")}
     </Button>
   );
 }
@@ -301,7 +302,8 @@ function PickLine({
   onPick,
   preset = false,
   tag,
-  therapistId
+  therapistId,
+  unassigned = false
 }: {
   chips: (courseId: string) => ChipVerdict;
   columns: QuickBookingCourseColumn[];
@@ -314,20 +316,27 @@ function PickLine({
   preset?: boolean;
   tag?: string | null;
   therapistId: string | null;
+  /** 미지명 줄. 지명 줄들과 다른 면(점선 테두리·회색 바탕)으로 구분한다. */
+  unassigned?: boolean;
 }) {
   const t = useT();
   return (
     <li
       aria-current={preset ? "true" : undefined}
-      className={cn("flex min-w-max items-center gap-1.5 border-b border-border py-1.5 last:border-b-0", preset && "rounded-md bg-readonly px-1")}
+      className={cn(
+        "flex min-w-max items-center gap-1.5 py-1.5",
+        unassigned ? "rounded-md border border-dashed border-border-strong bg-readonly px-2" : "border-b border-border last:border-b-0",
+        preset && "rounded-md bg-readonly px-1"
+      )}
       data-quick-booking-line={therapistId ?? "unassigned"}
     >
       <span className={nameColumnClassName}>
         <span className="flex items-baseline gap-1.5 text-sm">
           <span className="font-semibold text-foreground [overflow-wrap:anywhere]">{name}</span>
           {tag ? <span className="shrink-0 text-xs text-muted">{tag}</span> : null}
-          {count}
         </span>
+        {/* "한 것 N · 예약 N"은 이름 줄이 아니라 그 아래에 둔다(이름이 좁아져 접히지 않게). */}
+        {count ? <span className="text-xs">{count}</span> : null}
         {note}
       </span>
       {columns.map((column) => {
@@ -480,19 +489,41 @@ export function ConditionsStep({
             value={draft.serviceDate}
           />
         </Field>
-        <Field error={fieldErrors.startTime?.[0] ?? null} label={t("calls.column.time")}>
-          <ListboxSelect
-            disabled={disabled}
-            id="quick-booking-time"
-            invalid={Boolean(fieldErrors.startTime?.[0])}
-            onChange={(next) => onScheduleChange(draft.serviceDate, next)}
-            options={[
-              { label: t("calls.placeholder.searchEmpty"), value: "" },
-              ...options.timeSlots.map((slot) => ({ label: slot.label, value: slot.value }))
-            ]}
-            value={draft.startTime}
-          />
-        </Field>
+        {/* ±10분(2026-10-22 고객 요청): 목록은 30분 슬롯이고, 그 사이 시각은 버튼으로 맞춘다. 버튼은 "시간" 라벨 밖에 둔다. */}
+        <span className="flex items-end gap-1">
+          <Button
+            aria-label={t("calls.quickBooking.schedule.minus10Aria")}
+            className="h-11 px-3"
+            data-quick-booking-time-shift="-10"
+            disabled={disabled || !draft.startTime}
+            onClick={() => onScheduleChange(draft.serviceDate, shiftStartTime(options.timeSlots, draft.startTime, -10))}
+            type="button"
+            variant="secondary"
+          >
+            {t("calls.quickBooking.schedule.minus10")}
+          </Button>
+          <Field error={fieldErrors.startTime?.[0] ?? null} label={t("calls.column.time")}>
+            <ListboxSelect
+              disabled={disabled}
+              id="quick-booking-time"
+              invalid={Boolean(fieldErrors.startTime?.[0])}
+              onChange={(next) => onScheduleChange(draft.serviceDate, next)}
+              options={[{ label: t("calls.placeholder.searchEmpty"), value: "" }, ...timeOptionsWith(options.timeSlots, draft.startTime)]}
+              value={draft.startTime}
+            />
+          </Field>
+          <Button
+            aria-label={t("calls.quickBooking.schedule.plus10Aria")}
+            className="h-11 px-3"
+            data-quick-booking-time-shift="10"
+            disabled={disabled || !draft.startTime}
+            onClick={() => onScheduleChange(draft.serviceDate, shiftStartTime(options.timeSlots, draft.startTime, 10))}
+            type="button"
+            variant="secondary"
+          >
+            {t("calls.quickBooking.schedule.plus10")}
+          </Button>
+        </span>
         <Button disabled={disabled} onClick={onNow} type="button" variant="secondary">
           {t("calls.quickBooking.schedule.now")}
         </Button>
@@ -547,9 +578,14 @@ export function ConditionsStep({
                 note={<span className="text-xs text-muted">{t("calls.quickBooking.unassignedNote")}</span>}
                 onPick={(column) => onAddGuest({ courseId: column.courseId, therapist1Id: null })}
                 therapistId={null}
+                unassigned
               />
-              {groups.listed.map(therapistLine)}
             </ul>
+            {/* 미지명과 지명(Therapist를 골라 담기)을 제목으로 나눈다(2026-10-22 고객 요청). */}
+            <p className="mt-3 text-xs font-semibold text-muted" data-quick-booking-named-heading="">
+              {t("calls.quickBooking.namedHeading")}
+            </p>
+            <ul className="grid min-w-max">{groups.listed.map(therapistLine)}</ul>
             {groups.listed.length === 0 ? <p className="py-2 text-sm text-muted">{t("calls.quickBooking.nobodyListed")}</p> : null}
             {groups.unavailable.length > 0 ? (
               <details className="mt-1" data-quick-booking-unavailable="">
@@ -584,7 +620,16 @@ export function ConditionsStep({
             return (
               <li className="grid gap-1.5" data-quick-booking-guest={index + 1} key={index}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm text-foreground">
+                  <span className="flex flex-wrap items-center gap-1.5 text-sm text-foreground">
+                    {/* 지명·미지명 표시는 상태가 아니라 구분이라 의미색 없이 테두리 알약이다(미지명은 줄과 같은 점선). */}
+                    <span
+                      className={cn(
+                        "inline-flex min-h-6 items-center rounded-full border px-2 text-xs font-semibold",
+                        guest.therapist1Id ? "border-border-strong" : "border-dashed border-border-strong text-muted"
+                      )}
+                    >
+                      {t(guest.therapist1Id ? "calls.quickBooking.namedTag" : "calls.quickBooking.unassigned")}
+                    </span>
                     {`${t("calls.quickBooking.party.guest", { position: index + 1 })} · ${text.guest(guest)}`}
                     {guest.therapist2Id ? ` + ${text.therapist(guest.therapist2Id)}` : ""}
                   </span>

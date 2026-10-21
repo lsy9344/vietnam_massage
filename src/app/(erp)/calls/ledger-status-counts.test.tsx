@@ -28,13 +28,25 @@ describe("원장 탭의 상태 카드 (1018 스펙 D16)", () => {
 
     assert.equal(cards.length, 7);
     assert.equal(text(line), "전체 6건 예약 1건 사용중 1건 청소중 1건 방문완료 2건 노쇼 0건 취소 1건");
-    // 좁은 폭에서는 줄을 넘겨 감싼다. 카드는 요약 카드 모양이고 상태별 색상 테두리와 배경을 가진다.
-    assert.match(line, /^<ul aria-label="상태별 건수" class="[^"]*grid/);
-    for (const card of cards) assert.match(card, /^<li class="[^"]*rounded-xl border/);
-    assert.match(cards[2], /bg-info-soft text-info/);
-    assert.match(cards[3], /bg-amber-100 text-amber-700/);
-    assert.match(cards[4], /bg-success-soft text-success/);
+    // 좁은 폭에서는 줄을 넘겨 감싼다. 카드는 요약 카드 모양(rounded-lg px-5 py-4)이고 베이지 면이다.
+    assert.match(line, /^<ul aria-label="상태별 건수" class="[^"]*flex-wrap/);
+    // 카드는 글자 폭만큼만 차지하는 간결한 요약 카드다(2026-10-22 고객 요청). 늘어나 옆 여백을 만들지 않는다.
+    for (const card of cards) assert.match(card, /^<li class="[^"]*rounded-lg bg-surface px-4 py-2\.5/);
+    for (const card of cards) assert.doesNotMatch(card, /^<li class="(?:[^"]* )?grow[ "]/);
+    // 전체 숫자가 가장 크다. 상태 카드는 그보다 작다.
+    assert.match(cards[0], /text-2xl[^"]*">6/);
+    assert.doesNotMatch(cards[1], /text-2xl/);
+    // 상태는 같은 기호와 색의 칩으로 이름을 단다. 사용중과 청소중은 색이 다르고, 노쇼 0건은 채우지 않는다.
+    assert.match(cards[2], /bg-info text-info-foreground/);
+    assert.match(cards[3], /bg-warning text-warning-foreground/);
+    assert.match(cards[4], /bg-success text-success-foreground/);
+    assert.doesNotMatch(line, /bg-danger/);
     assert.doesNotMatch(html, /VND/);
+  });
+
+  it("puts the main action (quick booking) at the right end of the card row", () => {
+    const html = renderToStaticMarkup(<LedgerStatusCounts action={<button type="button">빠른 예약 +</button>} counts={counts} customerHref={null} locale="ko" />);
+    assert.match(html, /<\/ul><div class="ml-auto[^"]*">[\s\S]*빠른 예약 \+/);
   });
 
   it("links to the customer screen instead of holding customer registration", () => {

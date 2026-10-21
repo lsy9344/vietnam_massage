@@ -188,24 +188,25 @@ test.describe("1018 티켓 02 두 줄 원장", () => {
     await prisma.$disconnect();
   });
 
-  test("두 줄 행: 윗줄은 예약시각·입장 → 종료·상태·주 버튼, 아랫줄은 예약자·코스·Therapist·객실·결제이고, 옛 콜은 고객 이름을 보인다", async ({ page }) => {
+  test("원장 줄: 예약시간·상태·고객·코스·Therapist·객실·입장·종료·결제·조치 칸이 있고, 옛 콜은 고객 이름을 보인다", async ({ page }) => {
     await login(page, account.accountId, account.password);
     await openLedger(page);
 
     const inUse = line(page, busyCallId);
-    await expect(inUse.locator("[data-line-top]")).toContainText("15:30");
-    await expect(inUse.locator("[data-line-top]")).toContainText("입장 15:30 → 예상 16:30");
-    await expect(inUse.locator("[data-line-top]")).toContainText("사용중");
-    await expect(inUse.locator("[data-line-top]").getByRole("button", { name: "15:30 콜 종료" })).toBeVisible();
-    await expect(inUse.locator("[data-line-bottom]")).toContainText("T1018 사용 손님");
-    await expect(inUse.locator("[data-line-bottom]")).toContainText("T1018 바쁜 사람");
-    await expect(inUse.locator("[data-line-bottom]")).toContainText("T1018 사용 객실");
-    await expect(inUse.locator("[data-line-bottom]")).toContainText("결제 미확인");
+    await expect(inUse.locator('[data-line-cell="time"]')).toContainText("15:30");
+    await expect(inUse.locator('[data-line-cell="entry"]')).toContainText("15:30");
+    await expect(inUse.locator('[data-line-cell="end"]')).toContainText("예상 16:30");
+    await expect(inUse.locator('[data-line-cell="status"]')).toContainText("사용중");
+    await expect(inUse.locator('[data-line-cell="action"]').getByRole("button", { name: "15:30 콜 종료" })).toBeVisible();
+    await expect(inUse.locator('[data-line-cell="who"]')).toContainText("T1018 사용 손님");
+    await expect(inUse.locator('[data-line-cell="therapist"]')).toContainText("T1018 바쁜 사람");
+    await expect(inUse.locator('[data-line-cell="room"]')).toContainText("T1018 사용 객실");
+    await expect(inUse.locator('[data-line-cell="pay"]')).toContainText("결제 미확인");
 
-    await expect(line(page, callId).locator("[data-line-top]")).toContainText("미입장");
+    await expect(line(page, callId).locator('[data-line-cell="entry"]')).toContainText("미입장");
     // 예약자명이 없는 옛 콜은 연결된 고객 이름을 보인다(스펙 D10).
-    await expect(line(page, legacyCallId).locator("[data-line-bottom]")).toContainText("T1018 김고객");
-    await expect(line(page, legacyCallId).locator("[data-line-bottom]")).not.toContainText("T1018 옛 메모");
+    await expect(line(page, legacyCallId).locator('[data-line-cell="who"]')).toContainText("T1018 김고객");
+    await expect(line(page, legacyCallId).locator('[data-line-cell="who"]')).not.toContainText("T1018 옛 메모");
   });
 
   test("Therapist 칸: 출근해 있고 가능한 사람이 오늘 완료 적은 순으로 위, 출근 전·불가한 사람은 아래이고 불가는 경고를 확인하면 배정된다", async ({ page }) => {
@@ -234,7 +235,7 @@ test.describe("1018 티켓 02 두 줄 원장", () => {
     await expect
       .poll(async () => (await stored(callId)).assignments.find((assignment: any) => assignment.assignmentRole === "THERAPIST_1" && assignment.isActive !== false)?.employeeId)
       .toBe(therapistIds.busy);
-    await expect(line(page, callId).locator("[data-line-bottom]")).toContainText("T1018 바쁜 사람");
+    await expect(line(page, callId).locator('[data-line-cell="therapist"]')).toContainText("T1018 바쁜 사람");
 
     // 가능한 사람은 경고 없이 바로 배정된다.
     await line(page, callId).getByRole("button", { name: "16:00 콜 Therapist 고르기" }).click();
@@ -274,14 +275,14 @@ test.describe("1018 티켓 02 두 줄 원장", () => {
     await page.keyboard.press("Enter");
     await expect.poll(async () => (await stored(callId)).roomId).toBe(freeRoomId);
     await expect(trigger).toBeFocused();
-    await expect(line(page, callId).locator("[data-line-bottom]")).toContainText("T1018 빈 객실");
+    await expect(line(page, callId).locator('[data-line-cell="room"]')).toContainText("T1018 빈 객실");
   });
 
   test("행의 나머지를 누르면 편집 패널이 열리고, 입장 묶음에 상세 시각 여섯 개가 있다", async ({ page }) => {
     await login(page, account.accountId, account.password);
     await openLedger(page);
 
-    await line(page, busyCallId).locator("[data-line-bottom] [data-line-who]").click();
+    await line(page, busyCallId).locator("[data-line-who]").click();
     await expect(page).toHaveURL(new RegExp(`call=${busyCallId}$`));
     const entry = panel(page).getByRole("region", { name: "입장" });
     for (const [label, value] of [
@@ -297,13 +298,13 @@ test.describe("1018 티켓 02 두 줄 원장", () => {
     }
   });
 
-  test("휴대폰 폭은 같은 두 줄 행을 읽기만 한다", async ({ page }) => {
+  test("휴대폰 폭은 같은 줄을 읽기만 한다", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 800 });
     await login(page, account.accountId, account.password);
     await openLedger(page);
     const inUse = line(page, busyCallId);
-    await expect(inUse.locator("[data-line-top]")).toContainText("입장 15:30");
-    await expect(inUse.locator("[data-line-bottom]")).toContainText("T1018 바쁜 사람");
+    await expect(inUse.locator('[data-line-cell="entry"]')).toContainText("15:30");
+    await expect(inUse.locator('[data-line-cell="therapist"]')).toContainText("T1018 바쁜 사람");
     await expect(page.locator("[data-call-ledger-list] [aria-haspopup=listbox]")).toHaveCount(0);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);

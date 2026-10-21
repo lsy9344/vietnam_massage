@@ -4,7 +4,7 @@ import { formatNumber } from "@/lib/i18n/format";
 import { cn } from "@/lib/utils";
 import type { TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
 
-// "use client"가 없는 모듈이다. 빠른 예약 카드가 쓰는 Therapist별 "한 것 +예약" 표시다.
+// "use client"가 없는 모듈이다. 빠른 예약 카드가 쓰는 Therapist별 "한 것 · 예약" 표시다.
 
 type CountedRow = Pick<TherapistAvailabilityRowDto, "attendance" | "callCounts">;
 
@@ -14,7 +14,7 @@ export function isIdleTherapist(row: CountedRow) {
 }
 
 /**
- * "3 +2": 한 것은 진하게, 예약은 흐리게 "+"를 붙인다. 출근 중인데 둘 다 0이면 ▲와 주의 색으로 감싸고, 퇴근이면 흐리게 둔다.
+ * "한 것 3 · 예약 2". 출근 중인데 둘 다 0이면 ▲와 주의 색으로 감싸고, 퇴근이면 흐리게 둔다.
  * 화면 낭독기에는 "한 것 3, 예약 2"로 읽힌다.
  */
 export function TherapistCallCount({ locale, row }: { locale: Locale; row: CountedRow }) {
@@ -40,11 +40,9 @@ export function TherapistCallCount({ locale, row }: { locale: Locale; row: Count
       title={label}
     >
       {idle ? <span aria-hidden="true">{"▲︎"}</span> : null}
-      <span aria-hidden="true" className={cn("font-semibold", !idle && !checkedOut && "text-foreground")}>
-        {formatNumber(locale, done)}
-      </span>
-      <span aria-hidden="true" className={idle ? undefined : "text-muted"}>
-        +{formatNumber(locale, reserved)}
+      {/* 이름 옆 숫자만 있으면 "마사지사1 1 2"처럼 읽혀(2026-10-22 고객 요청) 숫자마다 이름을 붙인다. */}
+      <span aria-hidden="true" className={cn("text-xs", !idle && !checkedOut && "text-foreground")}>
+        {t(locale, "calls.therapistCounts.visible", { done: formatNumber(locale, done), reserved: formatNumber(locale, reserved) })}
       </span>
       <span className="sr-only">{label}</span>
     </span>

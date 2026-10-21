@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { businessTodayServiceDateFromActiveSlots } from "@/lib/operating-date";
 import { listAssignedServiceCallsForEmployeeFromDate } from "@/modules/calls/assigned-service-call-query";
+import { startTimeOrder } from "@/modules/calls/start-time-order";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
 import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
 import {
@@ -175,8 +176,9 @@ async function findFutureCalls(tx: EmployeePrismaClient, employeeId: string, now
     return [];
   }
   // 원장처럼 같은 날 안에서는 시간 슬롯 순서로 놓는다(01:00 슬롯은 그 서비스 날짜의 끝이다).
-  const sortOrderByTime = new Map(timeSlots.map((slot) => [slot.value, slot.sortOrder]));
-  const slotOrder = (startTime: string) => sortOrderByTime.get(startTime) ?? Number.MAX_SAFE_INTEGER;
+  // 위 조회는 활성 슬롯만 읽는다.
+  const orderOf = startTimeOrder(timeSlots);
+  const slotOrder = (startTime: string) => orderOf(startTime) ?? Number.MAX_SAFE_INTEGER;
   return [...records]
     .sort(
       (a, b) =>

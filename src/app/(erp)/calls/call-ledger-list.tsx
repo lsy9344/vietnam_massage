@@ -22,8 +22,10 @@ import { CallEditPanel, type CallPanelFocusRequest } from "@/app/(erp)/calls/cal
 import { nullableValue, optionLabel } from "@/app/(erp)/calls/call-ledger-fields";
 import { LedgerCellPicker, type LedgerPickOption } from "@/app/(erp)/calls/ledger-cell-picker";
 import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
+import { clockMinutes } from "@/app/(erp)/calls/quick-booking-now-slot";
 import { requestQuickBookingJoinParty } from "@/app/(erp)/calls/quick-booking-party-join";
 import { callWarningLabel } from "@/app/(erp)/calls/call-warning-label";
+import { BookingChannelIcon } from "@/app/(erp)/calls/booking-channel-icons";
 import {
   freeRoomOptions,
   lateMinutes,
@@ -52,6 +54,20 @@ type PartyAction = { kind: "enter"; callIds: string[]; rooms: Record<string, str
 type PartyCommand = PartyAction & { token: number };
 /** 일행 동작 하나(token)를 받은 손님 줄의 저장 결과. 그 뒤 사람별로 고친 저장은 알리지 않는다. */
 type PartyCommandOutcome = { token: number; status: RowSaveStatus; message: string | null };
+
+const LEDGER_HEAD_KEYS = [
+  "calls.list.head.time",
+  "calls.list.head.status",
+  "calls.list.head.customer",
+  "calls.list.head.course",
+  "calls.list.head.therapist",
+  "calls.list.head.room",
+  "calls.list.head.entry",
+  "calls.list.head.end",
+  "calls.list.head.payment",
+  "calls.list.head.discount",
+  "calls.list.head.action"
+] as const;
 
 /** 오늘 영업일과 지금 시각(영업 시간대). `지금` 구분선과 `N분 늦음`(스펙 D5)은 오늘 원장에서만 보인다. */
 export type LedgerClock = { today: string; time: string };
@@ -94,14 +110,32 @@ const selectedBarClass = "data-[selected=true]:[box-shadow:inset_3px_0_0_var(--b
 const selectedPartyBarClass = "data-[selected=true]:[box-shadow:inset_4px_0_0_var(--border-strong),inset_7px_0_0_var(--brand)]";
 
 /**
- * 원장 줄은 모든 줄이 같은 열을 쓴다. 예약자·코스·입장 글자 길이가 줄마다 달라도 상태·Therapist·객실·결제 칸이 같은
- * 자리에 오고, 넘치는 글자는 칸 안에서 말줄임으로 자른다. 윗줄은 예약시각 · 입장 → 종료(늦음) · 상태 · 경고·저장·주 버튼이다.
- * 마지막 칸은 최소 폭을 고정해 줄마다 주 버튼이 달라도 앞 칸이 움직이지 않는다. 휴대폰 폭은 주 버튼이 없어 경고 칩(44px)만 둔다.
+ * 원장 줄의 칸 배치(2026-10-22 고객 시안 111.png). 모든 줄이 같은 열을 써서 예약자·코스 글자 길이가 달라도 칸이 줄마다 같은
+ * 자리에 오고, 넘치는 글자는 칸 안에서 말줄임으로 자른다. 열은 화면 폭이 아니라 원장 폭(컨테이너 쿼리)을 따른다.
+ * - 80rem 이상: 예약시간 · 상태 · 고객 정보 · 코스 · 관리사 · 객실 · 입장 · 종료 · 결제 · 할인 · 조치 한 줄(머리 줄과 같은 열).
+ * - 48rem 이상(편집·빠른 예약 패널이 열려 좁아졌을 때): 윗줄 예약시간 · 상태 · 입장 · 종료 · 조치, 아랫줄 고객 · 코스 · 관리사 · 객실 · 결제 · 할인.
+ * - 그보다 좁으면(휴대폰 읽기 전용) 세 칸씩 여러 줄.
  */
-const lineTopColumns = "grid-cols-[4rem_minmax(0,11rem)_minmax(0,9rem)_minmax(9rem,1fr)]";
-const lineTopReadOnlyColumns = "grid-cols-[4rem_minmax(0,11rem)_minmax(0,9rem)_minmax(2.75rem,1fr)]";
-/** 아랫줄은 원장 폭이 48rem 이상이면 예약자 · 코스 · Therapist · 객실 · 결제 한 줄, 좁으면 예약자 · 코스 / Therapist · 객실 · 결제다. */
-const lineBottomColumns = "grid-cols-3 @3xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,0.75fr)_minmax(0,1fr)]";
+const ledgerWideColumns =
+  "@7xl:grid-cols-[4rem_7.5rem_minmax(9rem,1.2fr)_minmax(7rem,1fr)_minmax(9rem,1.2fr)_minmax(5.5rem,0.6fr)_5rem_5.5rem_6.5rem_minmax(6rem,0.7fr)_8.5rem]";
+const ledgerLineAreas = [
+  "grid-cols-3 [grid-template-areas:'time_status_status'_'entry_end_end'_'who_who_who'_'course_course_course'_'therapist_room_pay'_'discount_action_action']",
+  "@3xl:grid-cols-[4rem_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,0.7fr)_minmax(0,0.9fr)_minmax(0,0.9fr)]",
+  "@3xl:[grid-template-areas:'time_status_entry_end_._action_action'_'who_who_course_therapist_room_pay_discount']",
+  ledgerWideColumns,
+  "@7xl:[grid-template-areas:'time_status_who_course_therapist_room_entry_end_pay_discount_action']"
+].join(" ");
+/** 원장 줄 안의 선택 칸: 칸 폭을 채우고 ▾를 오른쪽 끝에 둔다(시안의 드롭다운 칸). */
+const pickerFieldClass = "h-10 w-full justify-between rounded-sm bg-surface px-3";
+/** 조치 칸의 입장·종료 버튼(시안 111.png): 칸 폭을 채우는 채운 알약. */
+const actionButtonClass = "w-full max-w-36 justify-center";
+
+type TherapistSlot = "therapist1Id" | "therapist2Id";
+
+/** 예약시각부터 예약 종료까지의 분(코스 길이). 자정을 넘으면 다음 날로 센다. */
+function clockSpanMinutes(from: string, to: string) {
+  return (clockMinutes(to) - clockMinutes(from) + 24 * 60) % (24 * 60) || null;
+}
 
 /**
  * 윗줄의 입장·종료 시각(1018 스펙 D11): 누르면 그 자리에서 분 단위 시각 칸이 되고, Enter나 칸을 떠나면 저장한다.
@@ -226,7 +260,7 @@ function CallLedgerLine({
   // Therapist 칸 목록(스펙 D6): 열 때마다 그 콜의 시각·코스로 가능 판정을 다시 받는다. null은 불러오는 중이다.
   const [therapistChoices, setTherapistChoices] = useState<TherapistAvailabilityRowDto[] | null>(null);
   const [therapistChoicesFailed, setTherapistChoicesFailed] = useState(false);
-  const [pendingOverride, setPendingOverride] = useState<{ therapistId: string; name: string; verdict: TherapistPickVerdict } | null>(null);
+  const [pendingOverride, setPendingOverride] = useState<{ therapistId: string; name: string; verdict: TherapistPickVerdict; slot: TherapistSlot } | null>(null);
 
   // 저장은 줄마다 하나씩 보낸다. 응답을 받으면 모아 둔 수정이 다음 저장으로 inFlight에 들어온다.
   useEffect(() => {
@@ -400,13 +434,13 @@ function CallLedgerLine({
     : null;
 
   // 불가한 사람은 빠른 예약과 같은 경고를 확인한 뒤 배정한다(기존 경고 후 배정 경로). 미지명 줄이면 이것이 배정이다.
-  function pickTherapist(value: string) {
+  function pickTherapist(value: string, slot: TherapistSlot) {
     const entry = therapistList?.find((candidate) => candidate.therapistId === value);
     if (entry && entry.verdict !== "possible") {
-      setPendingOverride({ therapistId: entry.therapistId, name: entry.therapistName, verdict: entry.verdict });
+      setPendingOverride({ therapistId: entry.therapistId, name: entry.therapistName, verdict: entry.verdict, slot });
       return;
     }
-    commit({ therapist1Id: nullableValue(value) });
+    commit({ [slot]: nullableValue(value) });
   }
 
   const roomOptions: LedgerPickOption[] = [
@@ -421,11 +455,14 @@ function CallLedgerLine({
 
   const time = draft.startTime;
   const courseLabel = optionLabel(options.courses, draft.courseId) || serverRow.courseLabel;
+  // 코스 칸은 시안(111.png)처럼 "C 90분"을 굵게, 코스 이름을 그 아래 흐리게 둔다. 길이는 저장된 예약 종료에서 잰다.
+  const courseCode = draft.courseId === serverRow.courseId ? serverRow.courseCode : courseLabel.split(" ")[0];
+  const courseName = courseLabel.startsWith(`${courseCode} `) ? courseLabel.slice(courseCode.length + 1) : courseLabel;
+  const courseMinutes = draft.courseId === serverRow.courseId ? clockSpanMinutes(serverRow.startTime, freshestRow.reservedEnd) : null;
   const therapistName = (id: string | null | undefined, assigned: ServiceCallRowDto["therapist1"]) =>
     !id ? null : assigned?.id === id ? assigned.displayName : (therapistChoices?.find((choice) => choice.therapistId === id)?.therapistName ?? (optionLabel(options.therapists, id) || id));
-  const therapists = [therapistName(draft.therapist1Id, serverRow.therapist1), therapistName(draft.therapist2Id, serverRow.therapist2)]
-    .filter(Boolean)
-    .join(" · ");
+  const therapist1Text = therapistName(draft.therapist1Id, serverRow.therapist1) ?? t("calls.cell.unassigned");
+  const therapist2Text = therapistName(draft.therapist2Id, serverRow.therapist2);
   const roomLabel = draft.roomId ? optionLabel(options.rooms, draft.roomId) || serverRow.roomLabel : null;
   const statusKey = callStatusKeyOf(draft.status);
   const statusLabel = optionLabel(options.statuses, draft.status) || draft.status;
@@ -443,21 +480,26 @@ function CallLedgerLine({
     options.bookingChannels,
     customers
   );
-  const therapistText = therapists || t("calls.cell.unassigned");
+  // 고객 칸 둘째 줄: 이은 고객의 전화번호, 없으면 예약 경로 이름.
+  const contact = (draft.customerId ? customers.find((customer) => customer.id === draft.customerId)?.phone : null) || who.channel;
   const roomText = roomLabel ?? t("calls.placeholder.roomUnassigned");
   const paid = Boolean(draft.paymentMethodCode);
   const paymentLabel = paid ? t("calls.line.paid") : t("calls.line.unpaid");
-  const paymentBadge = <StatusIndicator label={paymentLabel} size="sm" tone={paid ? "success" : "neutral"} />;
+  const paymentMethodLabel = draft.paymentMethodCode ? optionLabel(options.paymentMethods, draft.paymentMethodCode) : null;
+  const paymentBadge = <StatusIndicator label={paymentLabel} size="sm" tone={paid ? "success" : "warning"} />;
+  const discountText = draft.discountTypeCode ? optionLabel(options.discountTypes, draft.discountTypeCode) || draft.discountTypeCode : t("calls.line.noDiscount");
   const statusChip = statusKey ? (
     <CallStatusChip label={statusLabel} size="sm" status={statusKey} />
   ) : (
     <StatusIndicator label={statusLabel} size="sm" tone="neutral" />
   );
+  const timeEditClass = "text-base font-semibold";
 
   return (
     // 편집 패널이 열린 줄은 선택된 줄 모양이다(design.md 6.6). 버튼이 아닌 자리를 눌러도 패널이 열린다.
+    // 원장 폭이 넓으면 시안(111.png)처럼 한 줄 11칸, 좁으면 두 줄, 휴대폰 폭이면 여러 줄로 같은 칸을 접는다(ledgerLineAreas).
     <li
-      className={`grid cursor-pointer gap-1 border-b border-border px-3 py-2 transition-colors hover:bg-readonly data-[selected=true]:bg-readonly ${party ? `${partyBarClass} ${selectedPartyBarClass}` : selectedBarClass}`}
+      className={`grid cursor-pointer items-center gap-x-2 gap-y-1.5 border-b border-border px-3 py-2.5 transition-colors hover:bg-readonly data-[selected=true]:bg-readonly ${ledgerLineAreas} ${party ? `${partyBarClass} ${selectedPartyBarClass}` : selectedBarClass}`}
       data-ledger-line=""
       data-ledger-party-member={party ? (row.partyId ?? undefined) : undefined}
       data-selected={selected}
@@ -471,7 +513,7 @@ function CallLedgerLine({
         onOpen(row.id);
       }}
     >
-      <div className={`grid min-w-0 items-center justify-items-start gap-x-3 gap-y-1 ${readOnly ? lineTopReadOnlyColumns : lineTopColumns}`} data-line-top="">
+      <span className="[grid-area:time]" data-line-cell="time">
         <button
           aria-label={t("calls.detail.rowAria", { time })}
           className="min-h-11 rounded-sm px-1 text-lg font-semibold text-foreground [font-variant-numeric:tabular-nums] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-secondary"
@@ -481,51 +523,13 @@ function CallLedgerLine({
         >
           {time}
         </button>
-        {/* 칸이 좁으면 시각 조각 사이(→)에서 줄을 바꾼다. 옆 칸을 덮지 않는다. */}
-        <div className="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-sm text-foreground [font-variant-numeric:tabular-nums]" data-line-clock={end.kind}>
-            {end.kind === "notEntered" ? (
-              <span className="whitespace-nowrap text-muted">{t("calls.line.notEntered")}</span>
-            ) : (
-              <>
-                {draft.actualEntryTime ? (
-                  <LedgerTimeEdit
-                    disabled={isLocked}
-                    label={t("calls.line.entryEditAria", { time })}
-                    onCommit={(value) => commit({ actualEntryTime: value })}
-                    readOnly={readOnly}
-                    value={draft.actualEntryTime}
-                  >
-                    {t("calls.line.entry", { time: draft.actualEntryTime })}
-                  </LedgerTimeEdit>
-                ) : null}
-                {" "}
-                {/* 줄을 바꿀 때 화살표는 종료 시각과 함께 내려간다. */}
-                <span className="whitespace-nowrap">
-                  {"→ "}
-                  {end.kind === "expected" ? (
-                    <span className="text-faint">{t("calls.line.expectedEnd", { time: end.time })}</span>
-                  ) : (
-                    <LedgerTimeEdit
-                      disabled={isLocked}
-                      label={t("calls.line.endEditAria", { time })}
-                      onCommit={(value) => commit({ actualEndTime: value })}
-                      readOnly={readOnly}
-                      value={end.time}
-                    >
-                      <span className="font-semibold">{end.time}</span>
-                    </LedgerTimeEdit>
-                  )}
-                </span>
-              </>
-            )}
-          </span>
-          {late ? <StatusIndicator label={t("calls.line.late", { minutes: late })} size="sm" tone="warning" /> : null}
-        </div>
+      </span>
+      <span className="flex min-w-0 flex-wrap items-center gap-1 [grid-area:status]" data-line-cell="status">
         {readOnly ? (
           statusChip
         ) : (
           <LedgerCellPicker
+            className="h-10 border-transparent px-1"
             disabled={isLocked}
             emptyText={t("calls.cell.empty")}
             field="status"
@@ -539,101 +543,62 @@ function CallLedgerLine({
             {statusChip}
           </LedgerCellPicker>
         )}
-        <div className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          {warnings.length > 0 ? (
-            // 누르는 영역은 44px(design.md 4.3)이고, 보이는 칩은 그 안의 작은 경고 칩이다.
-            <button
-              aria-label={t("calls.list.warningsAria", { count: warnings.length, first: warnings[0] })}
-              className="inline-flex min-h-11 items-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-secondary"
-              onClick={() => onOpen(row.id)}
-              title={warnings.join("\n")}
-              type="button"
-            >
-              <span className="inline-flex min-h-7 items-center gap-1 rounded-full bg-warning-soft px-2 text-xs font-semibold text-warning">
-                <span aria-hidden="true">▲︎</span>
-                <span className="[font-variant-numeric:tabular-nums]">{warnings.length}</span>
-              </span>
-            </button>
+        {warnings.length > 0 ? (
+          // 누르는 영역은 44px(design.md 4.3)이고, 보이는 칩은 그 안의 작은 경고 칩이다.
+          <button
+            aria-label={t("calls.list.warningsAria", { count: warnings.length, first: warnings[0] })}
+            className="inline-flex min-h-11 items-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-secondary"
+            onClick={() => onOpen(row.id)}
+            title={warnings.join("\n")}
+            type="button"
+          >
+            <span className="inline-flex min-h-7 items-center gap-1 rounded-full bg-warning-soft px-2 text-xs font-semibold text-warning">
+              <span aria-hidden="true">▲︎</span>
+              <span className="[font-variant-numeric:tabular-nums]">{warnings.length}</span>
+            </span>
+          </button>
+        ) : null}
+        <span data-line-save-state={saveStatus}>
+          {saveStatus === "saving" || isSaveHeld(saveStatus) ? <SaveStatus locale={locale} state={saveStatus === "saving" ? "saving" : saveStatus} /> : null}
+        </span>
+      </span>
+      <span className="flex w-full min-w-0 items-center gap-2.5 [grid-area:who]" data-line-cell="who" data-line-who="">
+        <BookingChannelIcon channel={draft.bookingChannelCode ?? who.channel ?? ""} className="h-9 w-9 shrink-0" />
+        <span className="grid min-w-0">
+          <span className="flex min-w-0 items-baseline gap-1.5">
+            <span className="min-w-0 truncate text-sm font-semibold text-foreground" title={who.name ?? undefined}>
+              {who.name ?? <span className="text-muted">-</span>}
+            </span>
+            {party ? <span className="shrink-0 text-xs text-muted">{t("calls.party.position", party)}</span> : null}
+          </span>
+          {contact ? (
+            <span className="min-w-0 truncate text-xs text-muted" title={contact}>
+              {contact}
+            </span>
           ) : null}
-          <span data-line-save-state={saveStatus}>
-            {saveStatus === "saving" || isSaveHeld(saveStatus) ? <SaveStatus locale={locale} state={saveStatus === "saving" ? "saving" : saveStatus} /> : null}
-          </span>
-          {/* 휴대폰 폭은 읽기 전용이라(티켓 26) 주 버튼을 두지 않는다. */}
-          {readOnly || !action ? null : (
-            <span className="ml-auto">
-              {action === "enter" ? (
-                <Button
-                  aria-label={t("calls.list.enterAria", { time })}
-                  className="h-11 px-4"
-                  disabled={isLocked || !inUse}
-                  onClick={() => enter()}
-                  type="button"
-                  variant="secondary"
-                >
-                  {t("calls.list.enter")}
-                </Button>
-              ) : action === "finish" ? (
-                <Button
-                  aria-label={t("calls.list.finishAria", { time })}
-                  className="h-11 px-4"
-                  disabled={isLocked || !cleaning}
-                  onClick={finish}
-                  type="button"
-                  variant="secondary"
-                >
-                  {t("calls.list.finish")}
-                </Button>
-              ) : (
-                <span className="flex flex-wrap items-center justify-end gap-1">
-                  <Button
-                    aria-label={t("calls.list.cancelFinishAria", { time })}
-                    className="h-11 px-2 text-xs text-muted"
-                    disabled={isLocked || !inUse}
-                    onClick={cancelFinish}
-                    type="button"
-                    variant="ghost"
-                  >
-                    {t("calls.list.cancelFinish")}
-                  </Button>
-                  <Button
-                    aria-label={t("calls.list.cleanDoneAria", { time })}
-                    className="h-11 px-4"
-                    disabled={isLocked || !visitComplete}
-                    onClick={() => visitComplete && commit({ status: visitComplete })}
-                    type="button"
-                    variant="secondary"
-                  >
-                    {t("calls.list.cleanDone")}
-                  </Button>
-                </span>
-              )}
-            </span>
-          )}
-        </div>
-      </div>
-      <div className={`grid min-w-0 items-center justify-items-start gap-x-2 gap-y-1 text-sm text-foreground ${lineBottomColumns}`} data-line-bottom="">
-        <span className="flex w-full min-w-0 items-center gap-1.5" data-line-who="">
-          {who.channel ? <span className="shrink-0 text-xs font-semibold text-muted">{who.channel}</span> : null}
-          <span className="min-w-0 truncate" title={who.name ?? undefined}>
-            {who.name ?? <span className="text-muted">-</span>}
-          </span>
-          {party ? <span className="shrink-0 text-xs text-muted">{t("calls.party.position", party)}</span> : null}
         </span>
-        <span className="col-span-2 w-full min-w-0 truncate @3xl:col-span-1" title={courseLabel}>
-          {courseLabel}
+      </span>
+      <span className="grid w-full min-w-0 [grid-area:course]" data-line-cell="course" title={courseLabel}>
+        <span className="truncate text-sm font-semibold text-foreground">
+          {courseMinutes ? t("calls.line.courseMinutes", { code: courseCode, minutes: courseMinutes }) : courseCode}
         </span>
-        {readOnly ? (
-          <>
-            <span className="w-full min-w-0 truncate" title={therapistText}>
-              {therapistText}
-            </span>
-            <span className="w-full min-w-0 truncate" title={roomText}>
-              {roomText}
-            </span>
-          </>
-        ) : (
-          <>
+        <span className="truncate text-xs text-muted">{courseName}</span>
+      </span>
+      {readOnly ? (
+        <>
+          <span className="w-full min-w-0 truncate text-sm [grid-area:therapist]" data-line-cell="therapist" title={[therapist1Text, therapist2Text].filter(Boolean).join(" · ")}>
+            {[therapist1Text, therapist2Text].filter(Boolean).join(" · ")}
+          </span>
+          <span className="w-full min-w-0 truncate text-sm [grid-area:room]" data-line-cell="room" title={roomText}>
+            {roomText}
+          </span>
+        </>
+      ) : (
+        <>
+          {/* 두 번째 Therapist가 있으면 시안처럼 두 칸을 나란히 둔다. */}
+          <span className="flex w-full min-w-0 gap-1 [grid-area:therapist]" data-line-cell="therapist">
             <LedgerCellPicker
+              className={therapist2Text ? `${pickerFieldClass} px-2` : pickerFieldClass}
               disabled={isLocked}
               emptyText={t("calls.cell.empty")}
               failedText={therapistChoicesFailed ? t("calls.cell.failed") : null}
@@ -641,14 +606,35 @@ function CallLedgerLine({
               label={t("calls.cell.therapistAria", { time })}
               loadingText={t("calls.cell.loading")}
               onOpen={() => void loadTherapistChoices()}
-              onPick={pickTherapist}
+              onPick={(value) => pickTherapist(value, "therapist1Id")}
               options={therapistOptions}
-              title={therapistText}
+              title={therapist1Text}
               value={draft.therapist1Id ?? ""}
             >
-              {therapistText}
+              {therapist1Text}
             </LedgerCellPicker>
+            {therapist2Text ? (
+              <LedgerCellPicker
+                className={`${pickerFieldClass} px-2`}
+                disabled={isLocked}
+                emptyText={t("calls.cell.empty")}
+                failedText={therapistChoicesFailed ? t("calls.cell.failed") : null}
+                field="therapist2Id"
+                label={t("calls.cell.therapist2Aria", { time })}
+                loadingText={t("calls.cell.loading")}
+                onOpen={() => void loadTherapistChoices()}
+                onPick={(value) => pickTherapist(value, "therapist2Id")}
+                options={therapistOptions?.filter((option) => !option.value || option.value !== draft.therapist1Id) ?? null}
+                title={therapist2Text}
+                value={draft.therapist2Id ?? ""}
+              >
+                {therapist2Text}
+              </LedgerCellPicker>
+            ) : null}
+          </span>
+          <span className="flex w-full min-w-0 [grid-area:room]" data-line-cell="room">
             <LedgerCellPicker
+              className={pickerFieldClass}
               disabled={isLocked}
               emptyText={t("calls.cell.empty")}
               field="roomId"
@@ -661,15 +647,51 @@ function CallLedgerLine({
             >
               {roomText}
             </LedgerCellPicker>
-          </>
-        )}
-        {readOnly ? (
-          <span className="flex min-w-0 max-w-full overflow-hidden" title={paymentLabel}>
-            {paymentBadge}
           </span>
+        </>
+      )}
+      <span className="grid min-w-0 text-sm text-foreground [font-variant-numeric:tabular-nums] [grid-area:entry]" data-line-cell="entry" data-line-clock={end.kind}>
+        {end.kind === "notEntered" ? (
+          <span className="w-fit whitespace-nowrap rounded-full bg-danger-soft px-2.5 py-1 text-xs font-semibold text-danger">{t("calls.line.notEntered")}</span>
+        ) : draft.actualEntryTime ? (
+          <LedgerTimeEdit
+            disabled={isLocked}
+            label={t("calls.line.entryEditAria", { time })}
+            onCommit={(value) => commit({ actualEntryTime: value })}
+            readOnly={readOnly}
+            value={draft.actualEntryTime}
+          >
+            <span className={timeEditClass}>{draft.actualEntryTime}</span>
+          </LedgerTimeEdit>
         ) : (
-          // 결제 배지(스펙 D12): 고르는 즉시 결제수단만 저장한다. 상태는 바꾸지 않는다.
+          <span className="text-muted">-</span>
+        )}
+        {late ? <StatusIndicator label={t("calls.line.late", { minutes: late })} size="sm" tone="warning" /> : null}
+      </span>
+      <span className="min-w-0 text-sm text-foreground [font-variant-numeric:tabular-nums] [grid-area:end]" data-line-cell="end">
+        {end.kind === "notEntered" ? (
+          <span className="text-muted">-</span>
+        ) : end.kind === "expected" ? (
+          <span className="whitespace-nowrap text-faint">{t("calls.line.expectedEnd", { time: end.time })}</span>
+        ) : (
+          <LedgerTimeEdit
+            disabled={isLocked}
+            label={t("calls.line.endEditAria", { time })}
+            onCommit={(value) => commit({ actualEndTime: value })}
+            readOnly={readOnly}
+            value={end.time}
+          >
+            <span className={timeEditClass}>{end.time}</span>
+          </LedgerTimeEdit>
+        )}
+      </span>
+      <span className="grid min-w-0 justify-items-start [grid-area:pay]" data-line-cell="pay" title={paymentMethodLabel ? `${paymentLabel} · ${paymentMethodLabel}` : paymentLabel}>
+        {readOnly ? (
+          paymentBadge
+        ) : (
+          // 결제 배지(스펙 D12): 누르면 결제수단 목록이 뜨고, 고르는 즉시 결제수단만 저장한다. 상태는 바꾸지 않는다.
           <LedgerCellPicker
+            className="h-10 border-transparent px-1"
             disabled={isLocked}
             emptyText={t("calls.cell.empty")}
             field="paymentMethodCode"
@@ -683,11 +705,92 @@ function CallLedgerLine({
             {paymentBadge}
           </LedgerCellPicker>
         )}
-      </div>
+        {paymentMethodLabel ? <span className="px-1 text-xs text-muted">{paymentMethodLabel}</span> : null}
+      </span>
+      <span className="flex w-full min-w-0 [grid-area:discount]" data-line-cell="discount">
+        {readOnly ? (
+          <span className="min-w-0 truncate text-sm" title={discountText}>
+            {discountText}
+          </span>
+        ) : (
+          <LedgerCellPicker
+            className={pickerFieldClass}
+            disabled={isLocked}
+            emptyText={t("calls.cell.empty")}
+            field="discountTypeCode"
+            label={t("calls.cell.discountAria", { time })}
+            loadingText={t("calls.cell.loading")}
+            onPick={(value) => commit({ discountTypeCode: nullableValue(value) })}
+            options={[...options.discountTypes, { value: "", label: t("calls.line.noDiscount") }]}
+            title={discountText}
+            value={draft.discountTypeCode ?? ""}
+          >
+            {discountText}
+          </LedgerCellPicker>
+        )}
+      </span>
+      <span className="flex w-full min-w-0 justify-end [grid-area:action]" data-line-cell="action">
+        {/* 휴대폰 폭은 읽기 전용이라(티켓 26) 주 버튼을 두지 않는다. */}
+        {readOnly || !action ? null : action === "enter" ? (
+          <Button
+            aria-label={t("calls.list.enterAria", { time })}
+            className={`${actionButtonClass} bg-info text-info-foreground hover:bg-info`}
+            disabled={isLocked || !inUse}
+            onClick={() => enter()}
+            type="button"
+          >
+            {t("calls.list.enter")}
+          </Button>
+        ) : action === "finish" ? (
+          <Button
+            aria-label={t("calls.list.finishAria", { time })}
+            className={`${actionButtonClass} bg-danger text-danger-foreground hover:bg-danger`}
+            disabled={isLocked || !cleaning}
+            onClick={finish}
+            type="button"
+          >
+            {t("calls.list.finish")}
+          </Button>
+        ) : (
+          // 청소 끝(시안 444.png): 앞 버튼은 바로 방문완료, ▾는 청소 끝·종료 취소를 고르는 목록이다.
+          <span className="inline-flex w-full max-w-36 items-stretch rounded-full border border-border-strong">
+            <Button
+              aria-label={t("calls.list.cleanDoneAria", { time })}
+              className="min-w-0 flex-1 justify-center rounded-l-full rounded-r-none px-3"
+              disabled={isLocked || !visitComplete}
+              onClick={() => visitComplete && commit({ status: visitComplete })}
+              type="button"
+              variant="ghost"
+            >
+              <span className="text-sm font-semibold text-foreground">{t("calls.list.cleanDone")}</span>
+            </Button>
+            <LedgerCellPicker
+              className="h-11 rounded-l-none rounded-r-full border-0 border-l border-l-border px-2.5"
+              disabled={isLocked}
+              emptyText={t("calls.cell.empty")}
+              field="cleaningAction"
+              label={t("calls.list.cleaningMenuAria", { time })}
+              loadingText={t("calls.cell.loading")}
+              onPick={(value) => {
+                if (value === "cleanDone" && visitComplete) commit({ status: visitComplete });
+                if (value === "cancelFinish") cancelFinish();
+              }}
+              options={[
+                // 기준정보에 상태 코드가 없으면 그 항목은 두지 않는다(앞 버튼도 꺼진다).
+                ...(visitComplete ? [{ value: "cleanDone", label: t("calls.list.cleanDoneVisit") }] : []),
+                ...(inUse ? [{ value: "cancelFinish", label: t("calls.list.cancelFinish") }] : [])
+              ]}
+              value=""
+            >
+              {null}
+            </LedgerCellPicker>
+          </span>
+        )}
+      </span>
       {pickingRoom ? (
         <div
           aria-label={t("calls.list.pickRoomAria", { time })}
-          className="flex flex-wrap items-center gap-2 rounded-sm bg-readonly px-2 py-2"
+          className="flex flex-wrap items-center gap-2 rounded-sm bg-readonly px-2 py-2 [grid-column:1/-1]"
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.preventDefault();
@@ -720,7 +823,7 @@ function CallLedgerLine({
             : undefined
         }
         onConfirm={() => {
-          if (pendingOverride) commit({ therapist1Id: pendingOverride.therapistId });
+          if (pendingOverride) commit({ [pendingOverride.slot]: pendingOverride.therapistId });
           setPendingOverride(null);
         }}
         onOpenChange={(open) => {
@@ -1163,7 +1266,7 @@ export function CallLedgerList({
   }
 
   return (
-    <section className="overflow-hidden rounded-md border border-border bg-surface">
+    <section className="@container overflow-hidden rounded-md border border-border bg-surface">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div>
           <h2 className="text-base font-semibold text-foreground">{t("calls.grid.title")}</h2>
@@ -1184,10 +1287,21 @@ export function CallLedgerList({
           {isPhoneWidth ? null : <p className="text-xs text-muted">{t("calls.grid.empty.description")}</p>}
         </div>
       ) : null}
+      {/* 한 줄 11칸일 때만 표 머리처럼 칸 이름을 둔다(design.md 6.6의 머리 모양). 줄과 같은 열을 쓴다. */}
+      {rows.length > 0 ? (
+        <div
+          aria-hidden="true"
+          className={`hidden gap-x-2 border-b border-border bg-readonly px-3 py-2 text-xs font-semibold text-muted @7xl:grid ${ledgerWideColumns}`}
+          data-ledger-head=""
+        >
+          {LEDGER_HEAD_KEYS.map((key) => (
+            <span key={key}>{t(key)}</span>
+          ))}
+        </div>
+      ) : null}
       {/* 콜이 없어도 목록은 그대로 둔다 — 빠른 예약으로 첫 콜을 만들면 같은 자리에 줄이 생긴다. 휴대폰 폭도 같은
-          두 줄 행이다(스펙 D9). */}
-      {/* 줄의 열은 화면 폭이 아니라 목록 폭을 따른다(편집·빠른 예약 패널이 열리면 목록이 좁아진다). */}
-      <ol aria-label={t("calls.list.aria")} className="@container grid min-w-0" data-call-ledger-list="" hidden={rows.length === 0}>
+          칸을 접은 행이다(스펙 D9). 줄의 열은 화면 폭이 아니라 원장 폭을 따른다(편집·빠른 예약 패널이 열리면 좁아진다). */}
+      <ol aria-label={t("calls.list.aria")} className="grid min-w-0" data-call-ledger-list="" hidden={rows.length === 0}>
         {body}
       </ol>
     </section>

@@ -238,7 +238,8 @@ test.describe("1018 티켓 04: 상태 카드와 Therapist 현황 줄, 하루 수
     // 고친 것이 없으니 묻지 않고 닫힌다. 머리 버튼으로 다시 열면 미리 고른 Therapist가 남지 않는다.
     await panel.getByRole("button", { name: "닫기" }).click();
     await expect(panel).toBeHidden();
-    await page.locator("header").getByRole("button", { name: "빠른 예약" }).click();
+    // 빠른 예약 버튼은 상태 카드 줄 오른쪽에 있다(2026-10-22 고객 요청).
+    await page.locator("[data-quick-booking-trigger]").click();
     await expect(panel).toBeVisible();
     await expect(quickBookingLine(panel, therapists.one)).not.toHaveAttribute("aria-current", "true");
   });

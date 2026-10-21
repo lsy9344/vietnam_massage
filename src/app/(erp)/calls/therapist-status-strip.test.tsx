@@ -112,7 +112,7 @@ describe("Therapist 현황 줄 (1018 스펙 D17)", () => {
     const html = render("ko", rows, 2);
 
     assert.match(html, /aria-label="Therapist 현황"/);
-    assert.equal(text(card(html, "12")), "12 완료 2 · 예약 1 ●︎ 지금 가능 ~19:00 120분 콜만");
+    assert.equal(text(card(html, "12")), "12 완료 2 · 예약 1 ●︎ 지금 가능 ~19:00 (120분) 콜만");
     assert.equal(text(card(html, "17")), "17 완료 1 · 예약 3 ◆︎ 사용 중 종료 예상 18:30 콜만");
     assert.equal(text(card(html, "19")), "19 완료 0 · 예약 1 ○︎ 출근 전 18:00 콜만");
     // 퇴근한 사람은 흐리게 보인다.
@@ -146,7 +146,7 @@ describe("Therapist 현황 줄 (1018 스펙 D17)", () => {
   it("speaks Vietnamese", () => {
     const html = render("vi", rows, 2);
 
-    assert.match(text(card(html, "12")), /Hoàn thành 2 · Đặt trước 1 ●︎ Rảnh ngay ~19:00 120 phút/);
+    assert.match(text(card(html, "12")), /Hoàn thành 2 · Đặt trước 1 ●︎ Rảnh ngay ~19:00 \(120 phút\)/);
     assert.match(text(card(html, "17")), /Đang sử dụng Dự kiến xong 18:30/);
     assert.match(html, />Chưa chỉ định 2</);
   });

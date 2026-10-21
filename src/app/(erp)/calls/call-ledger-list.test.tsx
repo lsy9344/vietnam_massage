@@ -117,12 +117,17 @@ function line(html: string, callId: string) {
   return html.match(new RegExp(`<li[^>]*data-service-call-id="${callId}"[\\s\\S]*?</li>`))?.[0] ?? "";
 }
 
-function top(markup: string) {
-  return markup.match(/<div[^>]*data-line-top=""[\s\S]*?(?=<div[^>]*data-line-bottom="")/)?.[0] ?? "";
-}
-
-function bottom(markup: string) {
-  return markup.slice(markup.indexOf("data-line-bottom"));
+/** 줄의 칸(data-line-cell) 하나의 마크업. 칸은 형제라 다음 칸 표시까지 자른다. 여러 이름을 주면 이어 붙인다. */
+function cell(markup: string, ...names: string[]) {
+  return names
+    .map((name) => {
+      const marker = markup.indexOf(`data-line-cell="${name}"`);
+      if (marker === -1) return "";
+      const next = markup.indexOf('data-line-cell="', marker + 1);
+      // 칸 표시가 든 여는 태그부터 다음 칸의 여는 태그 앞까지.
+      return markup.slice(markup.lastIndexOf("<", marker), next === -1 ? undefined : markup.lastIndexOf("<", next));
+    })
+    .join("");
 }
 
 function text(markup: string) {
@@ -259,55 +264,59 @@ describe("two-line ledger (1018 ticket 02)", () => {
     assert.match(line(html, "done-11"), /data-selected="true"/);
   });
 
-  it("shows the booking time, entry and end, status and the next thing to do on the top line (1018 ticket 03)", () => {
+  it("shows the booking time, status, entry, end and the next thing to do in their own cells (1018 ticket 03, 2026-10-22 시안)", () => {
     const html = renderList([...rows, ledgerRow({ id: "cleaning-14", startTime: "14:00", status: "CLEANING", actualEntryTime: "14:02", actualEndTime: "14:58" })]);
-    const inUse = top(line(html, "in-use-13"));
-    assert.match(inUse, /data-call-open="in-use-13"[^>]*>13:00</);
-    assert.match(text(inUse), /입장 13:10 → 예상 14:10/);
-    assert.match(inUse, /text-faint[^>]*>예상 14:10</);
-    assert.match(inUse, /<span[^>]*>사용중<\/span>/);
-    assert.deepEqual(buttons(inUse).slice(-1), ["종료"]);
-    // 청소중은 청소 끝이 주 버튼이고, 옆에 작은 종료 취소가 있다(스펙 D11·D13).
-    assert.deepEqual(buttons(top(line(html, "cleaning-14"))).slice(-2), ["종료 취소", "청소 끝"]);
-    assert.match(text(top(line(html, "cleaning-14"))), /입장 14:02 → 14:58/);
+    const inUse = line(html, "in-use-13");
+    assert.match(cell(inUse, "time"), /data-call-open="in-use-13"[^>]*>13:00</);
+    assert.equal(text(cell(inUse, "entry")), "13:10");
+    assert.match(cell(inUse, "end"), /text-faint[^>]*>예상 14:10</);
+    assert.match(cell(inUse, "status"), /<span[^>]*>사용중<\/span>/);
+    assert.deepEqual(buttons(cell(inUse, "action")), ["종료"]);
+    // 청소중은 청소 끝이 주 버튼이고, 옆 ▾가 청소 끝·종료 취소 목록을 연다(스펙 D11·D13, 시안 444.png).
+    const cleaning = cell(line(html, "cleaning-14"), "action");
+    assert.deepEqual(buttons(cleaning), ["청소 끝", "▾"]);
+    assert.match(cleaning, /aria-haspopup="listbox"[^>]*aria-label="14:00 콜 청소 메뉴 열기"/);
+    assert.match(text(cell(line(html, "cleaning-14"), "entry", "end")), /14:02[\s\S]*14:58/);
 
-    assert.match(text(top(line(html, "reserved-12"))), /미입장/);
-    assert.deepEqual(buttons(top(line(html, "reserved-12"))).slice(-1), ["입장"]);
-    assert.match(text(top(line(html, "done-11"))), /입장 11:00 → 11:55/);
-    assert.match(top(line(html, "done-11")), /font-semibold[^>]*>11:55</);
+    assert.match(text(cell(line(html, "reserved-12"), "entry")), /미입장/);
+    assert.deepEqual(buttons(cell(line(html, "reserved-12"), "action")), ["입장"]);
+    assert.match(text(cell(line(html, "done-11"), "entry", "end")), /11:00[\s\S]*11:55/);
+    assert.match(cell(line(html, "done-11"), "end"), /font-semibold[^>]*>11:55</);
   });
 
-  it("shows channel and booker, course, therapist, room and payment on the bottom line", () => {
+  it("shows the channel symbol and booker, course, therapist, room, payment and discount", () => {
     const html = renderList(rows);
-    const inUse = text(bottom(line(html, "in-use-13")));
-    for (const part of ["텔레그램", "홍길동", "A 누루60", "Therapist 1", "101 호실", "결제완료"]) assert.ok(inUse.includes(part), part);
+    const inUse = text(cell(line(html, "in-use-13"), "who", "course", "therapist", "room", "pay", "discount"));
+    for (const part of ["텔레그램", "홍길동", "누루60", "Therapist 1", "101 호실", "결제완료", "현금", "없음"]) assert.ok(inUse.includes(part), part);
+    assert.match(cell(line(html, "in-use-13"), "who"), /<svg[^>]*aria-label="텔레그램"/);
     assert.doesNotMatch(inUse, /옛 메모/);
-    assert.match(text(bottom(line(html, "reserved-12"))), /예약 손님[\s\S]*결제 미확인/);
-    const unassigned = text(bottom(line(html, "reserved-15")));
+    assert.match(text(cell(line(html, "reserved-12"), "who", "pay")), /예약 손님[\s\S]*결제 미확인/);
+    const unassigned = text(cell(line(html, "reserved-15"), "therapist", "room"));
     assert.match(unassigned, /미지명/);
     assert.match(unassigned, /미배정/);
   });
 
   it("opens the status, therapist, room and payment lists in place, and locks them in a locked month (1018 spec D6·D12)", () => {
     const pickers = (markup: string) => markup.match(/<button[^>]*aria-haspopup="listbox"[^>]*>/g) ?? [];
-    const statusPicker = pickers(top(line(renderList(rows), "reserved-12")));
+    const statusPicker = pickers(cell(line(renderList(rows), "reserved-12"), "status"));
     assert.equal(statusPicker.length, 1);
     assert.match(statusPicker[0], /aria-label="12:00 콜 상태 고르기"/);
-    const open = pickers(bottom(line(renderList(rows), "reserved-12")));
-    assert.equal(open.length, 3);
+    const open = pickers(cell(line(renderList(rows), "reserved-12"), "therapist", "room", "pay", "discount"));
+    assert.equal(open.length, 4);
     assert.match(open[0], /aria-label="12:00 콜 Therapist 고르기"/);
     assert.match(open[1], /aria-label="12:00 콜 객실 고르기"/);
     assert.match(open[2], /aria-label="12:00 콜 결제수단 고르기"/);
+    assert.match(open[3], /aria-label="12:00 콜 할인 고르기"/);
     assert.ok(open.every((picker) => /aria-expanded="false"/.test(picker) && !/disabled=""/.test(picker)));
     assert.ok(pickers(line(renderList(rows, { isLocked: true }), "reserved-12")).every((picker) => /disabled=""/.test(picker)));
   });
 
   it("lets the entry and end times be corrected in place, and locks them in a locked month (1018 spec D11)", () => {
     const html = renderList([ledgerRow({ id: "ended", status: "CLEANING", actualEntryTime: "14:02", actualEndTime: "14:58" })]);
-    assert.match(top(line(html, "ended")), /<button[^>]*aria-label="16:00 콜 실제입장 고치기"[^>]*>[\s\S]*?14:02/);
-    assert.match(top(line(html, "ended")), /<button[^>]*aria-label="16:00 콜 실제 종료 고치기"[^>]*>[\s\S]*?14:58/);
+    assert.match(cell(line(html, "ended"), "entry"), /<button[^>]*aria-label="16:00 콜 실제입장 고치기"[^>]*>[\s\S]*?14:02/);
+    assert.match(cell(line(html, "ended"), "end"), /<button[^>]*aria-label="16:00 콜 실제 종료 고치기"[^>]*>[\s\S]*?14:58/);
     const locked = renderList([ledgerRow({ id: "ended", status: "CLEANING", actualEntryTime: "14:02", actualEndTime: "14:58" })], { isLocked: true });
-    assert.match(top(line(locked, "ended")), /<button[^>]*aria-label="16:00 콜 실제입장 고치기"[^>]*disabled=""/);
+    assert.match(cell(line(locked, "ended"), "entry"), /<button[^>]*aria-label="16:00 콜 실제입장 고치기"[^>]*disabled=""/);
   });
 
   it("draws a now line between the calls and says how late a reservation is, only for today", () => {
@@ -316,7 +325,7 @@ describe("two-line ledger (1018 ticket 02)", () => {
     assert.ok(order.every((index) => index >= 0), String(order));
     assert.deepEqual([...order].sort((a, b) => a - b), order);
     assert.match(html, /data-ledger-now=""[^>]*>[\s\S]*?지금 12:30/);
-    assert.match(text(top(line(html, "reserved-12"))), /30분 늦음/);
+    assert.match(text(cell(line(html, "reserved-12"), "entry")), /30분 늦음/);
     assert.doesNotMatch(text(line(html, "reserved-15")), /늦음/);
 
     const otherDay = renderList(rows, { clock: { today: "2026-06-11", time: "12:30" } });
@@ -338,7 +347,7 @@ describe("two-line ledger (1018 ticket 02)", () => {
 
   it("keeps a status it does not know as a plain ○ chip with its own name", () => {
     const html = renderList([ledgerRow({ id: "hold-15", startTime: "15:00", status: "ON_HOLD" })]);
-    assert.doesNotMatch(line(html, "hold-15"), /<svg[^>]*viewBox="0 0 24 24"/);
+    assert.doesNotMatch(cell(line(html, "hold-15"), "status"), /<svg[^>]*viewBox="0 0 24 24"/);
     assert.match(line(html, "hold-15"), /<span aria-hidden="true">○︎<\/span>ON_HOLD/);
   });
 
@@ -423,11 +432,11 @@ describe("phone width (ticket 26, 1018 ticket 02)", () => {
     ledgerRow({ id: "in-use-13", startTime: "13:00", status: "IN_USE" })
   ];
 
-  it("draws the same two-line rows on a phone, with no separate card list", () => {
+  it("draws the same rows on a phone, with no separate card list", () => {
     const html = withWindowWidth(false, () => renderList(rows));
     assert.doesNotMatch(html, /원장 카드 목록/);
     assert.equal((html.match(/<ol/g) ?? []).length, 1);
-    assert.match(line(html, "in-use-13"), /data-line-top[\s\S]*data-line-bottom/);
+    assert.match(line(html, "in-use-13"), /data-line-cell="time"[\s\S]*data-line-cell="who"/);
   });
 
   it("keeps the phone read-only: no entry, pay, cell lists or party buttons", () => {
@@ -440,7 +449,7 @@ describe("phone width (ticket 26, 1018 ticket 02)", () => {
     assert.match(text(line(phone, "in-use-13")), /Therapist 1/);
 
     const wide = withWindowWidth(true, () => renderList(rows));
-    assert.deepEqual(buttons(top(line(wide, "in-use-13"))).slice(-1), ["종료"]);
+    assert.deepEqual(buttons(cell(line(wide, "in-use-13"), "action")), ["종료"]);
     assert.match(wide, /일행 입장/);
   });
 

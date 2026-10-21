@@ -3,6 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { measureListboxPosition } from "@/app/(erp)/calls/call-ledger-fields";
+import { cn } from "@/lib/utils";
 
 export type LedgerPickOption = {
   value: string;
@@ -32,6 +33,7 @@ function measure(anchor: HTMLElement): Position {
  */
 export function LedgerCellPicker({
   children,
+  className,
   disabled,
   emptyText,
   failedText,
@@ -45,6 +47,8 @@ export function LedgerCellPicker({
   value
 }: {
   children: ReactNode;
+  /** 칸 모양을 덧씌운다(원장 한 줄의 선택 칸은 칸 폭을 채우고, 상태·결제 칩 칸은 테두리 없이). */
+  className?: string;
   disabled: boolean;
   emptyText: string;
   failedText?: string | null;
@@ -135,7 +139,10 @@ export function LedgerCellPicker({
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-label={label}
-        className="inline-flex h-8 min-w-0 max-w-full items-center gap-1 rounded-sm border border-border-strong px-2 text-sm text-foreground transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-secondary disabled:cursor-not-allowed disabled:text-muted disabled:hover:bg-transparent"
+        className={cn(
+          "inline-flex h-8 min-w-0 max-w-full items-center gap-1 rounded-sm border border-border-strong px-2 text-sm text-foreground transition-colors hover:bg-readonly focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-secondary disabled:cursor-not-allowed disabled:text-muted disabled:hover:bg-transparent",
+          className
+        )}
         data-cell-picker={field}
         disabled={disabled}
         onClick={() => {
@@ -153,7 +160,8 @@ export function LedgerCellPicker({
         title={title}
         type="button"
       >
-        <span className="min-w-0 truncate">{children}</span>
+        {/* 버튼 글자는 font: inherit에 덮이므로(globals.css) 글자 크기는 안쪽 span에 준다. */}
+        <span className="min-w-0 truncate text-sm">{children}</span>
         <span aria-hidden="true" className="text-xs text-muted">
           ▾
         </span>

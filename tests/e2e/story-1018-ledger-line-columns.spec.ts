@@ -4,8 +4,8 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 
-// 1018 후속: 원장 두 줄 행의 칸은 열에 맞춘다. 예약자·코스·입장 글자 길이가 줄마다 달라도 윗줄 상태 칸과
-// 아랫줄 Therapist·객실·결제 칸이 모든 줄에서 같은 가로 위치에 있다.
+// 1018 후속: 원장 줄의 칸은 열에 맞춘다. 예약자·코스·입장 글자 길이가 줄마다 달라도 상태·Therapist·객실·결제·할인 칸이
+// 모든 줄에서 같은 가로 위치에 있다(넓으면 한 줄 11칸, 좁으면 두 줄).
 const account = { accountId: "t1018_columns_counter", password: "Ticket1018-columns!counter" };
 const monthKey = "2041-07";
 const serviceDate = "2041-07-14";
@@ -63,7 +63,7 @@ async function pickerColumns(page: Page) {
           const picker = line.querySelector(`[data-cell-picker="${field}"]`);
           return picker ? Math.round(picker.getBoundingClientRect().left) : null;
         };
-        return { status: left("status"), therapist: left("therapist1Id"), room: left("roomId"), payment: left("paymentMethodCode") };
+        return { status: left("status"), therapist: left("therapist1Id"), room: left("roomId"), payment: left("paymentMethodCode"), discount: left("discountTypeCode") };
       })
   );
 }
@@ -76,7 +76,7 @@ async function expectNoPageOverflow(page: Page) {
 async function expectAlignedColumns(page: Page) {
   const columns = await pickerColumns(page);
   expect(columns.length).toBe(6);
-  for (const field of ["status", "therapist", "room", "payment"] as const) {
+  for (const field of ["status", "therapist", "room", "payment", "discount"] as const) {
     const lefts = columns.map((column) => column[field]);
     expect(lefts, `${field} 칸이 모든 줄에 있다`).not.toContain(null);
     expect(new Set(lefts), `${field} 칸의 왼쪽 x: ${JSON.stringify(lefts)}`).toEqual(new Set([lefts[0]]));
@@ -159,7 +159,8 @@ test.describe("1018 후속 원장 줄의 칸 열 맞춤", () => {
     await prisma.$disconnect();
   });
 
-  for (const width of [1280, 1024, 700]) {
+  // 1600px은 한 줄 11칸(2026-10-22 시안 111.png), 그보다 좁으면 두 줄로 접힌다.
+  for (const width of [1600, 1280, 1024, 700]) {
     test(`${width}px: 상태·Therapist·객실·결제 칸이 모든 줄에서 같은 가로 위치에 있다`, async ({ page }) => {
       await openLedger(page, width);
       await expectAlignedColumns(page);

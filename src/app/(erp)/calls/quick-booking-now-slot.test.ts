@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { selectNowSlot } from "@/app/(erp)/calls/quick-booking-now-slot";
+import { selectNowSlot, shiftStartTime, timeOptionsWith } from "@/app/(erp)/calls/quick-booking-now-slot";
 
 const businessDaySlots = [
   { value: "11:00" },
@@ -36,5 +36,42 @@ describe("quick booking: 지금 슬롯 선택(B05)", () => {
 
   it("returns an empty slot when there are no active slots", () => {
     assert.equal(selectNowSlot([], "12:00"), "");
+  });
+});
+
+describe("quick booking: ±10분 버튼", () => {
+  const slots = [{ value: "11:00" }, { value: "11:30" }, { value: "23:30" }, { value: "00:00" }, { value: "01:00" }];
+
+  it("moves the start time by ten minutes between slots", () => {
+    assert.equal(shiftStartTime(slots, "11:00", 10), "11:10");
+    assert.equal(shiftStartTime(slots, "11:30", -10), "11:20");
+  });
+
+  it("walks past midnight", () => {
+    assert.equal(shiftStartTime(slots, "23:50", 10), "00:00");
+    assert.equal(shiftStartTime(slots, "00:00", -10), "23:50");
+  });
+
+  it("stays inside the first and last slot", () => {
+    assert.equal(shiftStartTime(slots, "11:00", -10), "11:00");
+    assert.equal(shiftStartTime(slots, "01:00", 10), "01:00");
+  });
+
+  it("leaves an empty time alone", () => {
+    assert.equal(shiftStartTime(slots, "", 10), "");
+  });
+});
+
+describe("quick booking: 슬롯 사이 시각을 시각 목록에 끼우기", () => {
+  const slots = [{ value: "23:30", label: "23:30" }, { value: "00:00", label: "00:00" }, { value: "00:30", label: "00:30" }];
+
+  it("inserts a 10-minute time after the slot before it, across midnight", () => {
+    assert.deepEqual(timeOptionsWith(slots, "00:10").map((option) => option.value), ["23:30", "00:00", "00:10", "00:30"]);
+    assert.deepEqual(timeOptionsWith(slots, "23:40").map((option) => option.value), ["23:30", "23:40", "00:00", "00:30"]);
+  });
+
+  it("keeps the slot list as is for a slot time or no time", () => {
+    assert.equal(timeOptionsWith(slots, "00:00").length, 3);
+    assert.equal(timeOptionsWith(slots, null).length, 3);
   });
 });
