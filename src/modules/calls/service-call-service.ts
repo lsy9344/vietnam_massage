@@ -2894,6 +2894,7 @@ export type QuickBookingInput = {
   therapist2Id?: string | null;
   bookingPath?: string | null;
   customerName?: string | null;
+  customerContact?: string | null;
   customerMemo?: string | null;
   customerId?: string | null;
   partySize?: number;
@@ -2925,7 +2926,8 @@ export async function createQuickBooking(
 
   const pathPrefix = input.bookingPath ? `[${input.bookingPath}]` : "";
   const namePart = input.customerName ? input.customerName.trim() : "";
-  const baseMemo = [pathPrefix, namePart].filter(Boolean).join(" ");
+  const contactPart = input.customerContact ? `| ${input.customerContact.trim()}` : "";
+  const baseMemo = [pathPrefix, namePart, contactPart].filter(Boolean).join(" ");
   const fullMemo = baseMemo + (input.customerMemo ? ` / ${input.customerMemo.trim()}` : "");
 
   const firstCall = await saveBasicServiceCallRow({
@@ -3008,6 +3010,47 @@ export async function earlyFinishServiceCall(input: {
         serviceCallId: input.serviceCallId,
         previousStatus: existing.status,
         newStatus: "청소중",
+        changedByAccountId: input.actorId || "system",
+        changedAt: new Date()
+      }
+    });
+
+    return updated;
+  });
+}
+
+export async function finishCleaningServiceCall(input: {
+  serviceCallId: string;
+  operatingMonthId: string;
+  actorId?: string;
+  prismaClient?: ServiceCallPrismaClient;
+}) {
+  const client = getClient(input.prismaClient);
+  return runInTransaction(client, async (tx) => {
+    const existing = await tx.serviceCall.findUnique({
+      where: { id: input.serviceCallId },
+      include: { assignments: true, room: true }
+    });
+    if (!existing) {
+      throw new ServiceCallDomainError("콜 행을 찾을 수 없습니다.", "SERVICE_CALL_NOT_FOUND");
+    }
+    await assertWritableDate(tx, {
+      operatingMonthId: input.operatingMonthId,
+      serviceDate: toIsoDateOnly(existing.serviceDate)
+    });
+
+    const updated = await tx.serviceCall.update({
+      where: { id: input.serviceCallId },
+      data: {
+        status: "방문완료"
+      }
+    });
+
+    await tx.serviceCallStatusHistory.create({
+      data: {
+        serviceCallId: input.serviceCallId,
+        previousStatus: existing.status,
+        newStatus: "방문완료",
         changedByAccountId: input.actorId || "system",
         changedAt: new Date()
       }

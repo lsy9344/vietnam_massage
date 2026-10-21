@@ -15,6 +15,7 @@ import {
   createQuickBooking,
   deactivateDailyExpense,
   earlyFinishServiceCall,
+  finishCleaningServiceCall,
   getCallLedgerQuota,
   updateCustomer,
   updateDailyExpense,
@@ -430,6 +431,21 @@ export async function undoFinishCallAction(input: {
   try {
     const account = await requirePermission("call:write");
     await undoFinishServiceCall({ ...input, actorId: account.id });
+    revalidatePath("/calls");
+    return { ok: true, data: { success: true } };
+  } catch (error) {
+    return mapActionError<{ success: boolean }>(error, locale);
+  }
+}
+
+export async function finishCleaningCallAction(input: {
+  serviceCallId: string;
+  operatingMonthId: string;
+}): Promise<ActionResult<{ success: boolean }>> {
+  const locale = await getLocale();
+  try {
+    const account = await requirePermission("call:write");
+    await finishCleaningServiceCall({ ...input, actorId: account.id });
     revalidatePath("/calls");
     return { ok: true, data: { success: true } };
   } catch (error) {

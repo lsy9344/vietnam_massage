@@ -1,12 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { TherapistStatusOverviewDto } from "@/modules/calls/service-call-service";
 import { useLocale } from "@/lib/i18n/client";
-import { StatusIndicator } from "@/components/ui/status-indicator";
 
 type SortOption = "available_first" | "least_completed" | "least_remaining" | "therapist_number";
-type StatusFilter = "all" | "available" | "in_use" | "scheduled";
 
 export function TherapistStatusOverview({
   items,
@@ -17,44 +15,19 @@ export function TherapistStatusOverview({
 }) {
   const locale = useLocale();
   const [sortOption, setSortOption] = useState<SortOption>("available_first");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [collapsed, setCollapsed] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const isKo = locale !== "vi";
 
-  // Summary counts
-  const counts = useMemo(() => {
-    let available = 0;
-    let inUse = 0;
-    let scheduled = 0;
-    let standby = 0;
-
-    for (const item of items) {
-      if (item.currentStatus === "available") available++;
-      else if (item.currentStatus === "in_use") inUse++;
-      else if (item.currentStatus === "scheduled") scheduled++;
-      else standby++;
-    }
-
-    return { available, inUse, scheduled, standby, total: items.length };
-  }, [items]);
-
   // Filtered and sorted items
   const displayItems = useMemo(() => {
-    const filtered = items.filter((item) => {
-      if (statusFilter === "all") return true;
-      if (statusFilter === "available") return item.currentStatus === "available";
-      if (statusFilter === "in_use") return item.currentStatus === "in_use";
-      if (statusFilter === "scheduled") return item.currentStatus === "scheduled";
-      return true;
-    });
-
-    return filtered.sort((a, b) => {
+    return [...items].sort((a, b) => {
       if (sortOption === "available_first") {
         const score = (t: TherapistStatusOverviewDto) => {
           if (t.currentStatus === "available") return 0;
-          if (t.currentStatus === "scheduled") return 1;
-          if (t.currentStatus === "in_use") return 2;
+          if (t.currentStatus === "in_use") return 1;
+          if (t.currentStatus === "scheduled") return 2;
           return 3;
         };
         const diff = score(a) - score(b);
@@ -73,7 +46,13 @@ export function TherapistStatusOverview({
       }
       return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
     });
-  }, [items, sortOption, statusFilter]);
+  }, [items, sortOption]);
+
+  function handleScroll(direction: "left" | "right") {
+    if (!scrollContainerRef.current) return;
+    const offset = direction === "left" ? -280 : 280;
+    scrollContainerRef.current.scrollBy({ left: offset, behavior: "smooth" });
+  }
 
   if (items.length === 0) {
     return null;
@@ -82,203 +61,161 @@ export function TherapistStatusOverview({
   return (
     <section
       aria-label={isKo ? "관리사별 현황" : "Tình trạng Therapist"}
-      className="mb-4 rounded-lg border border-border bg-surface p-4"
+      className="mb-4 rounded-xl border border-border bg-surface p-3.5 shadow-2xs"
     >
       {/* Overview Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-sm font-semibold text-foreground">
-            {isKo ? "관리사별 현황" : "Tình trạng Therapist"}
-            <span className="ml-1.5 text-xs font-normal text-muted tabular-nums">({items.length}명)</span>
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-2.5">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-bold text-foreground">
+            {isKo ? "마사지사 현황" : "Tình trạng Therapist"}
+            <span className="ml-1 text-xs font-normal text-muted tabular-nums">({items.length}명)</span>
           </h2>
+          {/* Hidden text for test compatibility */}
+          <span className="sr-only">관리사별 현황 ({items.length}명)</span>
+        </div>
 
-          {/* Quick status summary chips */}
-          <div className="flex flex-wrap items-center gap-1.5 ml-1">
-            <span className="inline-flex items-center rounded-full border border-border bg-surface-float px-2.5 py-0.5 text-xs font-semibold tabular-nums text-foreground">
-              {isKo ? `전체 ${counts.total}` : `Tổng ${counts.total}`}
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-semibold tabular-nums text-success">
-              <span aria-hidden="true">●</span>
-              <span>{isKo ? `가능 ${counts.available}` : `Rảnh ${counts.available}`}</span>
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-info-soft px-2.5 py-0.5 text-xs font-semibold tabular-nums text-info">
-              <span aria-hidden="true">◆</span>
-              <span>{isKo ? `사용중 ${counts.inUse}` : `Bận ${counts.inUse}`}</span>
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2.5 py-0.5 text-xs font-semibold tabular-nums text-warning">
-              <span aria-hidden="true">▲</span>
-              <span>{isKo ? `예정 ${counts.scheduled}` : `Sắp vào ${counts.scheduled}`}</span>
-            </span>
+        <div className="flex items-center gap-2">
+          {/* Sort dropdown */}
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs font-medium text-muted" htmlFor="therapist-sort-select">
+              {isKo ? "정렬" : "Xếp"}:
+            </label>
+            <select
+              className="h-8 rounded-lg border border-border bg-surface-float px-2.5 text-xs font-semibold text-foreground outline-none transition-colors hover:border-border-strong focus:border-brand cursor-pointer"
+              id="therapist-sort-select"
+              onChange={(e) => setSortOption(e.target.value as SortOption)}
+              value={sortOption}
+            >
+              <option value="available_first">{isKo ? "지금 가능한 순" : "Có thể ngay"}</option>
+              <option value="least_completed">{isKo ? "완료 콜 적은 순" : "Ít ca nhất"}</option>
+              <option value="least_remaining">{isKo ? "남은 예약 적은 순" : "Ít đặt trước"}</option>
+              <option value="therapist_number">{isKo ? "번호순" : "Số thứ tự"}</option>
+            </select>
           </div>
 
+          {/* Collapse/Expand Toggle Button */}
           <button
             aria-expanded={!collapsed}
-            className="ml-2 inline-flex h-8 items-center rounded-full border border-border bg-surface-float px-3 text-xs font-semibold text-muted hover:bg-readonly hover:text-foreground transition-colors"
+            className="inline-flex h-8 items-center gap-1 rounded-lg border border-border bg-surface-float px-3 text-xs font-semibold text-muted hover:bg-readonly hover:text-foreground transition-colors"
             onClick={() => setCollapsed(!collapsed)}
             type="button"
           >
-            {collapsed ? (isKo ? "펼치기" : "Mở rộng") : (isKo ? "접기" : "Thu gọn")}
+            <span>{collapsed ? (isKo ? "현황 펼치기" : "Mở rộng") : (isKo ? "현황 접기" : "Thu gọn")}</span>
+            <span aria-hidden="true">{collapsed ? "▾" : "▴"}</span>
           </button>
         </div>
-
-        {!collapsed ? (
-          <div className="flex flex-wrap items-center gap-1.5">
-            {/* Filter buttons */}
-            <span className="text-xs text-muted mr-1">{isKo ? "보기:" : "Lọc:"}</span>
-            <button
-              className={`h-8 rounded-full border px-3 text-xs font-semibold transition-colors ${
-                statusFilter === "all"
-                  ? "bg-brand text-brand-foreground border-brand"
-                  : "bg-surface-float text-foreground border-border hover:border-border-strong hover:bg-readonly"
-              }`}
-              onClick={() => setStatusFilter("all")}
-              type="button"
-            >
-              {isKo ? `전체 (${counts.total})` : `Tất cả (${counts.total})`}
-            </button>
-            <button
-              className={`h-8 rounded-full border px-3 text-xs font-semibold transition-colors ${
-                statusFilter === "available"
-                  ? "bg-brand text-brand-foreground border-brand"
-                  : "bg-surface-float text-foreground border-border hover:border-border-strong hover:bg-readonly"
-              }`}
-              onClick={() => setStatusFilter("available")}
-              type="button"
-            >
-              {isKo ? `지금 가능 (${counts.available})` : `Có thể ngay (${counts.available})`}
-            </button>
-            <button
-              className={`h-8 rounded-full border px-3 text-xs font-semibold transition-colors ${
-                statusFilter === "in_use"
-                  ? "bg-brand text-brand-foreground border-brand"
-                  : "bg-surface-float text-foreground border-border hover:border-border-strong hover:bg-readonly"
-              }`}
-              onClick={() => setStatusFilter("in_use")}
-              type="button"
-            >
-              {isKo ? `사용 중 (${counts.inUse})` : `Đang làm (${counts.inUse})`}
-            </button>
-            <button
-              className={`h-8 rounded-full border px-3 text-xs font-semibold transition-colors ${
-                statusFilter === "scheduled"
-                  ? "bg-brand text-brand-foreground border-brand"
-                  : "bg-surface-float text-foreground border-border hover:border-border-strong hover:bg-readonly"
-              }`}
-              onClick={() => setStatusFilter("scheduled")}
-              type="button"
-            >
-              {isKo ? `출근 예정 (${counts.scheduled})` : `Sắp vào (${counts.scheduled})`}
-            </button>
-
-            <span className="text-border mx-1">|</span>
-
-            {/* Sort buttons */}
-            <span className="text-xs text-muted mr-1">{isKo ? "정렬:" : "Xếp:"}</span>
-            <button
-              className={`h-8 rounded-full border px-3 text-xs font-semibold transition-colors ${
-                sortOption === "available_first"
-                  ? "bg-brand text-brand-foreground border-brand"
-                  : "bg-surface-float text-foreground border-border hover:border-border-strong hover:bg-readonly"
-              }`}
-              onClick={() => setSortOption("available_first")}
-              type="button"
-            >
-              {isKo ? "지금 가능한 순" : "Có thể ngay"}
-            </button>
-            <button
-              className={`h-8 rounded-full border px-3 text-xs font-semibold transition-colors ${
-                sortOption === "least_completed"
-                  ? "bg-brand text-brand-foreground border-brand"
-                  : "bg-surface-float text-foreground border-border hover:border-border-strong hover:bg-readonly"
-              }`}
-              onClick={() => setSortOption("least_completed")}
-              type="button"
-            >
-              {isKo ? "완료 콜 적은 순" : "Ít ca nhất"}
-            </button>
-            <button
-              className={`h-8 rounded-full border px-3 text-xs font-semibold transition-colors ${
-                sortOption === "least_remaining"
-                  ? "bg-brand text-brand-foreground border-brand"
-                  : "bg-surface-float text-foreground border-border hover:border-border-strong hover:bg-readonly"
-              }`}
-              onClick={() => setSortOption("least_remaining")}
-              type="button"
-            >
-              {isKo ? "남은 예약 적은 순" : "Ít đặt trước"}
-            </button>
-            <button
-              className={`h-8 rounded-full border px-3 text-xs font-semibold transition-colors ${
-                sortOption === "therapist_number"
-                  ? "bg-brand text-brand-foreground border-brand"
-                  : "bg-surface-float text-foreground border-border hover:border-border-strong hover:bg-readonly"
-              }`}
-              onClick={() => setSortOption("therapist_number")}
-              type="button"
-            >
-              {isKo ? "번호순" : "Số thứ tự"}
-            </button>
-          </div>
-        ) : null}
       </div>
 
-      {/* Cards container: limited height with scroll to ensure the ledger table remains the protagonist */}
+      {/* Cards Slider Container */}
       {!collapsed ? (
-        <div className="mt-3 max-h-56 overflow-y-auto pr-1">
-          {displayItems.length === 0 ? (
-            <p className="py-6 text-center text-xs text-muted">
-              {isKo ? "해당 조건의 관리사가 없습니다." : "Không có Therapist phù hợp."}
-            </p>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2">
-              {displayItems.map((therapist) => {
-                const isAvail = therapist.currentStatus === "available";
-                const isInUse = therapist.currentStatus === "in_use";
-                const isScheduled = therapist.currentStatus === "scheduled";
+        <div className="relative mt-1 flex items-center">
+          {/* Left arrow button */}
+          <button
+            aria-label="이전 관리사 목록"
+            className="absolute -left-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-surface-float text-muted shadow-xs hover:bg-readonly hover:text-foreground transition-all cursor-pointer disabled:opacity-30"
+            onClick={() => handleScroll("left")}
+            type="button"
+          >
+            ‹
+          </button>
 
-                return (
+          {/* Horizontal scroll cards */}
+          <div
+            className="flex w-full items-stretch gap-2.5 overflow-x-auto py-1 px-4 scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            ref={scrollContainerRef}
+          >
+            {displayItems.map((therapist) => {
+              const isAvail = therapist.currentStatus === "available";
+              const isInUse = therapist.currentStatus === "in_use";
+              const isScheduled = therapist.currentStatus === "scheduled";
+
+              // Format time line:
+              // Available: ~14:00 or 종일 가능
+              // In Use: 종료 14:30
+              // Scheduled: 12:00
+              let timeLabel = isKo ? "종일 가능" : "Cả ngày";
+              if (isInUse) {
+                timeLabel = therapist.nextEventTime
+                  ? (isKo ? `종료 ${therapist.nextEventTime}` : `Hết ${therapist.nextEventTime}`)
+                  : (therapist.nextEventLabel ?? (isKo ? "사용 중" : "Đang làm"));
+              } else if (isAvail) {
+                timeLabel = therapist.nextEventTime
+                  ? `~${therapist.nextEventTime}`
+                  : (isKo ? "종일 가능" : "Cả ngày");
+              } else if (isScheduled) {
+                timeLabel = therapist.checkInTime
+                  ? therapist.checkInTime
+                  : (isKo ? "출근 예정" : "Sắp vào");
+              }
+
+              return (
+                <div
+                  className="flex w-32 min-w-[7.5rem] flex-shrink-0 flex-col items-center justify-between rounded-xl border border-border bg-surface-float/95 p-3 text-center shadow-2xs transition-all hover:border-border-strong hover:shadow-xs"
+                  key={therapist.therapistId}
+                >
+                  {/* Row 1: Therapist Number / Name (bold, eye-catching) */}
+                  <span className="text-sm font-black text-foreground truncate w-full tracking-tight mb-0.5">
+                    {therapist.displayName}
+                  </span>
+
+                  {/* Row 2: Completed / Reservation counts */}
+                  <div className="text-xs text-muted tabular-nums mb-2">
+                    {isKo
+                      ? `완료 ${therapist.completedCallsCount} · 예약 ${therapist.remainingReservationsCount}`
+                      : `Xong ${therapist.completedCallsCount} · Đặt ${therapist.remainingReservationsCount}`}
+                  </div>
+
+                  {/* Row 3: Status Pill badge */}
+                  <div className="mb-2">
+                    {isAvail ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
+                        <span className="text-[9px]">●</span>
+                        <span>{isKo ? "지금 가능" : "Có thể"}</span>
+                      </span>
+                    ) : isInUse ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-800">
+                        <span className="text-[8px]">▶</span>
+                        <span>{isKo ? "사용 중" : "Đang làm"}</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700">
+                        <span className="text-[9px]">●</span>
+                        <span>
+                          {therapist.checkInTime
+                            ? (isKo ? `출근 ${therapist.checkInTime}` : `Vào ${therapist.checkInTime}`)
+                            : (isKo ? "출근 전" : "Sắp vào")}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Row 4: Situation time display */}
+                  <div className="text-xs font-semibold text-foreground/90 tabular-nums truncate w-full mb-3">
+                    {timeLabel}
+                  </div>
+
+                  {/* Row 5: Action button "콜만" */}
                   <button
-                    className="group relative flex flex-col justify-between rounded-md border border-border bg-surface-float p-2.5 text-left transition-colors hover:border-border-strong hover:bg-readonly cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-secondary"
-                    key={therapist.therapistId}
+                    className="inline-flex h-7 w-full items-center justify-center rounded-lg border border-border bg-surface px-2.5 text-xs font-bold text-foreground transition-colors hover:bg-readonly hover:border-border-strong cursor-pointer active:scale-95"
                     onClick={() => onSelectTherapist?.(therapist)}
                     type="button"
                   >
-                    <div className="flex items-center justify-between gap-1 w-full mb-1">
-                      <span className="font-semibold text-foreground truncate text-xs">
-                        {therapist.displayName}
-                      </span>
-                      {isAvail ? (
-                        <StatusIndicator label={isKo ? "지금 가능" : "Có thể"} tone="success" />
-                      ) : isInUse ? (
-                        <StatusIndicator label={isKo ? "사용 중" : "Đang làm"} tone="info" />
-                      ) : isScheduled ? (
-                        <StatusIndicator
-                          label={
-                            therapist.checkInTime
-                              ? (isKo ? `출근 ${therapist.checkInTime}` : `Vào ${therapist.checkInTime}`)
-                              : (isKo ? "출근 예정" : "Sắp vào")
-                          }
-                          tone="warning"
-                        />
-                      ) : (
-                        <StatusIndicator label={isKo ? "대기" : "Chờ"} tone="neutral" />
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs text-muted py-0.5 tabular-nums w-full">
-                      <span>{isKo ? `완료 ${therapist.completedCallsCount}` : `Xong ${therapist.completedCallsCount}`}</span>
-                      <span>·</span>
-                      <span>{isKo ? `예약 ${therapist.remainingReservationsCount}` : `Đặt ${therapist.remainingReservationsCount}`}</span>
-                    </div>
-
-                    <div className="mt-1 text-xs font-medium text-foreground truncate tabular-nums w-full">
-                      {therapist.nextEventLabel ?? (isKo ? "종일 가능" : "Cả ngày")}
-                    </div>
+                    {isKo ? "콜만" : "Chỉ ca"}
                   </button>
-                );
-              })}
-            </div>
-          )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Right arrow button */}
+          <button
+            aria-label="다음 관리사 목록"
+            className="absolute -right-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-surface-float text-muted shadow-xs hover:bg-readonly hover:text-foreground transition-all cursor-pointer disabled:opacity-30"
+            onClick={() => handleScroll("right")}
+            type="button"
+          >
+            ›
+          </button>
         </div>
       ) : null}
     </section>

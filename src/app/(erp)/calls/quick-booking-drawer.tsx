@@ -7,6 +7,7 @@ import { useLocale } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import { StatusIndicator } from "@/components/ui/status-indicator";
+import { BookingChannelIcon } from "@/app/(erp)/calls/booking-channel-icons";
 import { createQuickBookingAction, loadQuotaAction, loadTherapistAvailabilityAction } from "@/app/(erp)/calls/actions";
 import type {
   CallLedgerQuotaDto,
@@ -32,6 +33,14 @@ function useSafeRouter() {
   } catch {
     return null;
   }
+}
+
+function parseTherapistNameAndCounts(rawName: string) {
+  const match = rawName.match(/^(.+?)\s+([0-9]+\+[0-9]+|\([0-9]+\+[0-9]+\))$/);
+  if (match) {
+    return { name: match[1].trim(), counts: match[2].trim() };
+  }
+  return { name: rawName, counts: null };
 }
 
 export function QuickBookingDrawer({
@@ -73,6 +82,7 @@ export function QuickBookingDrawer({
   // Form state - Step 2
   const [bookingPath, setBookingPath] = useState<string>("텔레그램");
   const [customerName, setCustomerName] = useState<string>("");
+  const [customerContact, setCustomerContact] = useState<string>("");
   const [customerMemo, setCustomerMemo] = useState<string>("");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [customerSearchQuery, setCustomerSearchQuery] = useState<string>("");
@@ -91,6 +101,7 @@ export function QuickBookingDrawer({
       setStep(1);
       setFormError(null);
       setCustomerName("");
+      setCustomerContact("");
       setCustomerMemo("");
       setSelectedCustomerId(null);
       setCustomerSearchQuery("");
@@ -198,6 +209,7 @@ export function QuickBookingDrawer({
         therapist2Id: isSecondTherapistRequired ? therapist2Id : null,
         bookingPath,
         customerName: customerName.trim() || (bookingPath === "워크인" ? "워크인" : "손님"),
+        customerContact: customerContact.trim() || null,
         customerMemo: customerMemo.trim() || null,
         customerId: selectedCustomerId,
         partySize,
@@ -332,68 +344,7 @@ export function QuickBookingDrawer({
                   </div>
                 </div>
 
-                {/* 3. 지명 / 미지명 선택 */}
-                <div className="flex flex-col gap-2">
-                  <label className="text-xs font-semibold text-foreground">
-                    {isKo ? "지명 방식" : "Loại đặt chỗ"}
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      className={`h-11 rounded-full border text-xs font-semibold transition-colors ${
-                        bookingType === "assigned"
-                          ? "bg-brand text-brand-foreground border-brand"
-                          : "bg-surface text-foreground border-border hover:border-border-strong hover:bg-readonly"
-                      }`}
-                      onClick={() => setBookingType("assigned")}
-                      type="button"
-                    >
-                      {isKo ? "지명 예약 (특정 관리사)" : "Chỉ định Therapist"}
-                    </button>
-                    <button
-                      className={`h-11 rounded-full border text-xs font-semibold transition-colors ${
-                        bookingType === "unassigned"
-                          ? "bg-brand text-brand-foreground border-brand"
-                          : "bg-surface text-foreground border-border hover:border-border-strong hover:bg-readonly"
-                      }`}
-                      onClick={() => {
-                        setBookingType("unassigned");
-                        setTherapist1Id(null);
-                      }}
-                      type="button"
-                    >
-                      {isKo ? "미지명 예약 (방문 후 배정)" : "Chưa chỉ định (Xếp sau)"}
-                    </button>
-                  </div>
-                </div>
-
-                {/* 4. 정원 현황 카드 */}
-                {quota ? (
-                  <div className="rounded-md border border-border bg-surface p-3 text-xs">
-                    <div className="flex items-center justify-between font-semibold text-foreground mb-1.5">
-                      <span>{isKo ? `${startTime} 정원 현황` : `Tình trạng lúc ${startTime}`}</span>
-                      {quota.availableSlots >= partySize ? (
-                        <StatusIndicator
-                          label={isKo ? `예약 가능 (${quota.availableSlots}명 여유)` : `Còn ${quota.availableSlots} chỗ`}
-                          tone="success"
-                        />
-                      ) : (
-                        <StatusIndicator
-                          label={isKo ? `정원 초과 (${quota.availableSlots}명 남음)` : `Hết chỗ (còn ${quota.availableSlots})`}
-                          tone="danger"
-                        />
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-muted text-xs tabular-nums">
-                      <span>{isKo ? `총 가능: ${quota.totalTherapists}명` : `Tổng: ${quota.totalTherapists}`}</span>
-                      <span>·</span>
-                      <span>{isKo ? `지명 확정: ${quota.assignedSlots}명` : `Đã chỉ định: ${quota.assignedSlots}`}</span>
-                      <span>·</span>
-                      <span>{isKo ? `미지명 확보: ${quota.unassignedSlots}명` : `Đã giữ chỗ: ${quota.unassignedSlots}`}</span>
-                    </div>
-                  </div>
-                ) : null}
-
-                {/* 5. 코스 선택 */}
+                {/* 3. 코스 선택 */}
                 <div className="flex flex-col gap-2">
                   <label className="text-xs font-semibold text-foreground">
                     {isKo ? "코스 선택" : "Chọn gói dịch vụ"}
@@ -416,82 +367,138 @@ export function QuickBookingDrawer({
                   </div>
                 </div>
 
-                {/* 6. 관리사 선택 (지명 예약일 경우) */}
-                {bookingType === "assigned" ? (
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-semibold text-foreground">
-                        {isKo ? "관리사 선택 (지명)" : "Chọn Therapist chỉ định"}
-                      </label>
-                      {therapist1Id ? (
-                        <span className="text-xs font-semibold text-success">
-                          {isKo ? "선택 완료" : "Đã chọn"}
-                        </span>
-                      ) : (
-                        <span className="text-xs font-medium text-danger">
-                          {isKo ? "관리사를 선택하세요" : "Vui lòng chọn"}
-                        </span>
-                      )}
-                    </div>
-
-                    {isLoading ? (
-                      <div className="py-4 text-center text-xs text-muted">
-                        {isKo ? "관리사 가능 현황을 불러오는 중..." : "Đang tải dữ liệu..."}
-                      </div>
+                {/* 4. 관리사 배정 (미지명 전용 카드 및 지명 목록) */}
+                <div className="flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground">
+                      {isKo ? "관리사 배정 (미지명 또는 지명)" : "Phân công Therapist"}
+                    </label>
+                    {bookingType === "unassigned" ? (
+                      <span className="text-xs font-bold text-brand">
+                        {isKo ? "미지명 배정 선택됨" : "Chưa chỉ định"}
+                      </span>
+                    ) : therapist1Id ? (
+                      <span className="text-xs font-bold text-emerald-600">
+                        ✓ {therapistRows.find((r) => r.therapistId === therapist1Id)?.therapistName ?? (isKo ? "선택 완료" : "Đã chọn")}
+                      </span>
                     ) : (
-                      <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto rounded-md border border-border bg-surface p-2">
-                        {therapistRows.map((row) => {
-                          const isSelected = therapist1Id === row.therapistId;
-                          return (
-                            <button
-                              className={`flex flex-col justify-between rounded-md border p-2.5 text-left transition-colors ${
-                                isSelected
-                                  ? "bg-brand text-brand-foreground border-brand font-bold"
-                                  : row.available
-                                  ? "bg-surface-float text-foreground border-border hover:border-border-strong hover:bg-readonly"
-                                  : "bg-readonly text-muted border-border opacity-75"
-                              }`}
-                              key={row.therapistId}
-                              onClick={() => setTherapist1Id(row.therapistId)}
-                              type="button"
-                            >
-                              <div className="flex items-center justify-between gap-1 w-full">
-                                <span className="text-xs font-semibold truncate">{row.therapistName}</span>
-                                {row.available ? (
-                                  <StatusIndicator
-                                    className="min-h-5 px-1.5 text-xs"
-                                    label={isKo ? "가능" : "Rảnh"}
-                                    tone="success"
-                                  />
-                                ) : (
-                                  <span className="text-xs text-muted">
-                                    {row.freeFrom ? (isKo ? `${row.freeFrom}부터` : `Từ ${row.freeFrom}`) : (isKo ? "불가" : "Bận")}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="mt-1 text-xs text-muted truncate tabular-nums">
-                                {row.nextReservationTime
-                                  ? (isKo ? `다음 ${row.nextReservationTime}` : `Sau: ${row.nextReservationTime}`)
-                                  : (isKo ? "종일 가능" : "Cả ngày")}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <span className="text-xs font-medium text-danger">
+                        {isKo ? "관리사를 선택하거나 미지명을 선택하세요" : "Vui lòng chọn"}
+                      </span>
                     )}
                   </div>
-                ) : (
-                  <div className="rounded-md border border-border bg-surface p-4 text-xs text-muted">
-                    <p className="font-semibold text-foreground mb-1">
-                      {isKo ? "미지명 예약 안내" : "Đặt chỗ không chỉ định"}
-                    </p>
-                    <p>
-                      {isKo
-                        ? "관리사를 미리 고정하지 않고 해당 시간의 수용 인원(정원)만 차감 확보합니다. 손님이 업소에 방문했을 때 카운터 원장에서 대기 중인 관리사를 바로 배정할 수 있습니다."
-                        : "Chỉ giữ chỗ theo công suất phòng/thời gian. Sẽ xếp Therapist khi khách đến."}
-                    </p>
+
+                  {/* 미지명 배정 전용 카드 - Distinct Box with clear border and background */}
+                  <button
+                    className={`flex items-start gap-3 p-3.5 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                      bookingType === "unassigned"
+                        ? "border-brand bg-brand/10 shadow-xs ring-1 ring-brand/30"
+                        : "border-border-strong/40 bg-surface-float/60 hover:border-brand/60 hover:bg-surface-float"
+                    }`}
+                    onClick={() => {
+                      setBookingType("unassigned");
+                      setTherapist1Id(null);
+                    }}
+                    type="button"
+                  >
+                    <div
+                      className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-sm font-black ${
+                        bookingType === "unassigned"
+                          ? "bg-brand text-brand-foreground"
+                          : "bg-slate-200 text-slate-700"
+                      }`}
+                    >
+                      미
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-black text-foreground">
+                          {isKo ? "미지명 예약 (방문 후 배정)" : "Chưa chỉ định (Xếp sau)"}
+                        </span>
+                        {bookingType === "unassigned" ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-brand text-brand-foreground">
+                            {isKo ? "선택됨" : "Đã chọn"}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="text-xs text-muted mt-1 leading-relaxed">
+                        {isKo
+                          ? "관리사를 미리 고정하지 않고 해당 시간의 정원만 확보합니다. 손님 방문 시 카운터 원장에서 대기 관리사를 배정합니다."
+                          : "Không chỉ định cụ thể, giữ chỗ theo công suất. Xếp khi khách đến."}
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* 지명 마사지사 목록 헤더 */}
+                  <div className="flex items-center justify-between mt-1 pt-2 border-t border-border">
+                    <span className="text-xs font-bold text-foreground">
+                      {isKo ? "또는 특정 관리사 지명 선택" : "Hoặc chọn Therapist chỉ định"}
+                    </span>
+                    <span className="text-xs text-muted">
+                      ({therapistRows.length}{isKo ? "명" : ""})
+                    </span>
                   </div>
-                )}
+
+                  {isLoading ? (
+                    <div className="py-4 text-center text-xs text-muted">
+                      {isKo ? "관리사 가능 현황을 불러오는 중..." : "Đang tải dữ liệu..."}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto rounded-xl border border-border bg-surface p-2">
+                      {therapistRows.map((row) => {
+                        const isSelected = bookingType === "assigned" && therapist1Id === row.therapistId;
+                        const { name, counts } = parseTherapistNameAndCounts(row.therapistName);
+
+                        return (
+                          <button
+                            className={`flex flex-col justify-between rounded-lg border p-2.5 text-left transition-all ${
+                              isSelected
+                                ? "bg-brand text-brand-foreground border-brand shadow-xs"
+                                : row.available
+                                ? "bg-surface-float text-foreground border-border hover:border-border-strong hover:bg-readonly"
+                                : "bg-readonly text-muted border-border opacity-70"
+                            }`}
+                            key={row.therapistId}
+                            onClick={() => {
+                              setBookingType("assigned");
+                              setTherapist1Id(row.therapistId);
+                            }}
+                            type="button"
+                          >
+                            <div className="flex items-center justify-between gap-1 w-full">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className={`text-sm font-black truncate tracking-tight ${isSelected ? "text-brand-foreground" : "text-foreground"}`}>
+                                  {name}
+                                </span>
+                                {counts ? (
+                                  <span className={`text-xs tabular-nums ${isSelected ? "text-brand-foreground/80" : "text-muted"}`}>
+                                    ({counts})
+                                  </span>
+                                ) : null}
+                              </div>
+                              {row.available ? (
+                                <StatusIndicator
+                                  className="min-h-5 px-1.5 text-xs flex-shrink-0"
+                                  label={isKo ? "가능" : "Rảnh"}
+                                  tone="success"
+                                />
+                              ) : (
+                                <span className="text-xs text-muted flex-shrink-0">
+                                  {row.freeFrom ? (isKo ? `${row.freeFrom}부터` : `Từ ${row.freeFrom}`) : (isKo ? "불가" : "Bận")}
+                                </span>
+                              )}
+                            </div>
+                            <div className={`mt-1 text-xs truncate tabular-nums ${isSelected ? "text-brand-foreground/80" : "text-muted"}`}>
+                              {row.nextReservationTime
+                                ? (isKo ? `다음 ${row.nextReservationTime}` : `Sau: ${row.nextReservationTime}`)
+                                : (isKo ? "종일 가능" : "Cả ngày")}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               /* Step 2: 고객 정보 및 저장 */
@@ -570,7 +577,23 @@ export function QuickBookingDrawer({
                   />
                 </div>
 
-                {/* 4. 고객 메모 입력 */}
+                {/* 4. 연락처 입력 (선택사항) */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-foreground" htmlFor="quick-booking-contact">
+                    {isKo ? "연락처 (전화번호 또는 메신저 ID)" : "Liên hệ (SĐT hoặc ID)"}
+                    <span className="ml-1 text-muted font-normal">({isKo ? "선택사항" : "tùy chọn"})</span>
+                  </label>
+                  <input
+                    className={inputFieldClassName({ className: "w-full" })}
+                    id="quick-booking-contact"
+                    onChange={(e) => setCustomerContact(e.target.value)}
+                    placeholder={isKo ? "예: 010-1234-5678, @hong123" : "Nhập SĐT hoặc ID chat"}
+                    type="text"
+                    value={customerContact}
+                  />
+                </div>
+
+                {/* 5. 고객 메모 입력 */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-foreground" htmlFor="quick-booking-memo">
                     {isKo ? "고객 메모 / 특이사항" : "Ghi chú khách"}
@@ -611,6 +634,7 @@ export function QuickBookingDrawer({
                           onClick={() => {
                             setSelectedCustomerId(cust.id);
                             setCustomerName(cust.name);
+                            if (cust.phone) setCustomerContact(cust.phone);
                             if (cust.memo) setCustomerMemo(cust.memo);
                           }}
                           type="button"
@@ -699,9 +723,15 @@ export function QuickBookingTrigger({
 
   return (
     <>
-      <Button disabled={isLocked} onClick={() => setOpen(true)} type="button">
-        {isKo ? "+ 빠른 예약" : "+ Đặt nhanh"}
-      </Button>
+      <button
+        className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-foreground px-5 text-sm font-bold text-background shadow-xs hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+        disabled={isLocked}
+        onClick={() => setOpen(true)}
+        type="button"
+      >
+        <span>{isKo ? "빠른 예약" : "Đặt nhanh"}</span>
+        <span className="text-base font-black leading-none">+</span>
+      </button>
       {open ? (
         <QuickBookingDrawer
           courses={courses}

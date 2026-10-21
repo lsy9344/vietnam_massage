@@ -21,7 +21,13 @@ import type { Locale } from "@/lib/i18n/config";
 import type { MessageKey } from "@/lib/i18n/types";
 import type { CustomerDto, ServiceCallCalculationStatus, ServiceCallFormOptions, ServiceCallOption, ServiceCallRowDto } from "@/modules/calls/service-call-service";
 import type { ServiceCallAutosaveInput } from "@/modules/calls/service-call-schema";
-import { autosaveServiceCallRowAction, saveBasicServiceCallRowAction, type ServiceCallActionState } from "@/app/(erp)/calls/actions";
+import {
+  autosaveServiceCallRowAction,
+  finishCleaningCallAction,
+  saveBasicServiceCallRowAction,
+  type ServiceCallActionState
+} from "@/app/(erp)/calls/actions";
+import { BookingChannelIcon, parseCustomerCallInfo } from "@/app/(erp)/calls/booking-channel-icons";
 import type { AvailabilityCourseChoice } from "@/app/(erp)/calls/therapist-availability-view";
 import { calculationErrorMessageKey } from "@/app/(erp)/calls/calculation-status-message";
 import { ledgerCallAnchorId } from "@/app/(erp)/calls/ledger-address";
@@ -39,32 +45,33 @@ import {
 type RowSaveState = "idle" | "saving" | "saved" | "error";
 type FieldErrors = Record<string, string[]>;
 
-// Shared fixed column widths so the data table and the add-row table align
-// column-for-column. `id` is a stable English key (React key); `labelKey` points
-// at the localized header text in the message catalog.
+function shortTherapistLabel(nameOrLabel: string | null | undefined): string {
+  if (!nameOrLabel) return "-";
+  const match = nameOrLabel.match(/(?:마사지사|Therapist|마)\s*(\d+)/i);
+  if (match) return `마 ${match[1]}`;
+  return nameOrLabel.length > 5 ? nameOrLabel.slice(0, 4) : nameOrLabel;
+}
+
+// 11-column grid layout requested by user and mockups:
+// 예약시간 -> 상태 -> 고객정보 -> 코스 -> 관리사 -> 객실 -> 입장 -> 종료 -> 결제 -> 할인 -> 조치
+// (Settlement columns are appended at the end when showSettlementColumns is active)
 const CALL_GRID_COLUMNS = [
-  { id: "date", labelKey: "calls.column.date", width: "5.5rem" },
-  { id: "time", labelKey: "calls.column.time", width: "9rem" },
-  { id: "actualEntry", labelKey: "calls.column.actualEntry", width: "12rem" },
-  { id: "room", labelKey: "calls.column.room", width: "9rem" },
-  { id: "course", labelKey: "calls.column.course", width: "10rem" },
-  { id: "customerMemo", labelKey: "calls.column.customerMemo", width: "12rem" },
-  { id: "customer", labelKey: "calls.column.customer", width: "14rem" },
-  { id: "therapist1", labelKey: "calls.column.therapist1", width: "9rem" },
-  { id: "therapist2", labelKey: "calls.column.therapist2", width: "9rem" },
-  { id: "earcare", labelKey: "calls.column.earcare", width: "9rem" },
-  { id: "reservationStatus", labelKey: "calls.column.reservationStatus", width: "8rem" },
-  { id: "discountType", labelKey: "calls.column.discountType", width: "9rem" },
-  { id: "paymentMethod", labelKey: "calls.column.paymentMethod", width: "9rem" },
-  { id: "note", labelKey: "calls.column.note", width: "11rem" },
-  { id: "confirmation", labelKey: "calls.column.confirmation", width: "9rem" },
-  { id: "paymentAmount", labelKey: "calls.column.paymentAmount", width: "8rem" },
-  { id: "discount", labelKey: "calls.column.discount", width: "6rem" },
+  { id: "startTime", labelKey: "calls.column.time", width: "6.5rem" },
+  { id: "status", labelKey: "calls.column.status", width: "7.5rem" },
+  { id: "customerMemo", labelKey: "calls.column.customerMemo", width: "13.5rem" },
+  { id: "courseId", labelKey: "calls.column.course", width: "12rem" },
+  { id: "therapist", labelKey: "calls.column.therapist", width: "11rem" },
+  { id: "roomId", labelKey: "calls.column.room", width: "7.5rem" },
+  { id: "actualEntryTime", labelKey: "calls.column.actualEntry", width: "9.5rem" },
+  { id: "displayEnd", labelKey: "calls.column.displayEnd", width: "7rem" },
+  { id: "confirmationCode", labelKey: "calls.column.payment", width: "8rem" },
+  { id: "discountTypeCode", labelKey: "calls.column.discountType", width: "8.5rem" },
+  { id: "action", labelKey: "calls.column.action", width: "8.5rem" },
   { id: "therapist1Commission", labelKey: "calls.column.therapist1Commission", width: "7rem", settlement: true },
   { id: "therapist2Commission", labelKey: "calls.column.therapist2Commission", width: "7rem", settlement: true },
   { id: "earcarePool", labelKey: "calls.column.earcarePool", width: "6.5rem", settlement: true },
   { id: "opsCallCredit", labelKey: "calls.column.opsCallCredit", width: "6rem", settlement: true },
-  { id: "saveStatus", labelKey: "calls.column.saveStatus", width: "10rem" }
+  { id: "saveStatus", labelKey: "calls.column.saveStatus", width: "10rem", settlement: true }
 ] as const satisfies ReadonlyArray<{ id: string; labelKey: MessageKey; width: string; settlement?: boolean }>;
 
 function visibleCallGridColumns(showSettlementColumns: boolean) {
@@ -72,7 +79,7 @@ function visibleCallGridColumns(showSettlementColumns: boolean) {
 }
 
 function callGridMinWidth(showSettlementColumns: boolean) {
-  return showSettlementColumns ? "195rem" : "168rem";
+  return showSettlementColumns ? "134rem" : "99rem";
 }
 
 function CallGridColgroup({ showSettlementColumns }: { showSettlementColumns: boolean }) {
@@ -88,10 +95,10 @@ function CallGridColgroup({ showSettlementColumns }: { showSettlementColumns: bo
 function CallGridHead({ showSettlementColumns }: { showSettlementColumns: boolean }) {
   const t = useT();
   return (
-    <thead className="bg-readonly text-xs font-semibold text-foreground">
+    <thead className="bg-neutral-50/90 dark:bg-neutral-800/90 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
       <tr>
         {visibleCallGridColumns(showSettlementColumns).map((column) => (
-          <th className="whitespace-nowrap border-b border-border px-2 py-2 align-middle" key={column.id}>
+          <th className="whitespace-nowrap border-b border-border px-3 py-2.5 text-center align-middle" key={column.id}>
             {t(column.labelKey)}
           </th>
         ))}
@@ -150,7 +157,7 @@ function focusLedgerCell(rowIndex: number, columnId: string) {
 
 function optionLabel(options: ServiceCallOption[], value: string | null | undefined, emptyLabel = "") {
   if (!value) return emptyLabel;
-  return options.find((option) => option.value === value)?.label ?? "";
+  return options.find((option) => option.value === value || option.label === value)?.label ?? value;
 }
 
 type ListboxPosition = {
@@ -716,7 +723,7 @@ function AddRowForm({
           <CallGridHead showSettlementColumns={showSettlementColumns} />
           <tbody>
             <tr className="align-top">
-              <td className="border-b border-border px-2 py-2 text-xs text-muted">{serviceDate}</td>
+              {/* 1. 예약시간 */}
               <td className="border-b border-border px-2 py-2">
                 <SelectCell
                   columnId="startTime"
@@ -732,27 +739,47 @@ function AddRowForm({
                 />
                 <InlineError field="startTime" state={rowState} />
               </td>
-              <td className="border-b border-border px-2 py-2">
-                <ActualEntryCell
-                  disabled={disabled}
-                  onGridKeyDown={(event) => handleAddRowKeyDown("actualEntryTime", event)}
-                  rowIndex={rowIndex}
-                />
-                <InlineError field="actualEntryTime" state={rowState} />
-              </td>
+
+              {/* 2. 상태 */}
               <td className="border-b border-border px-2 py-2">
                 <SelectCell
-                  columnId="roomId"
+                  columnId="status"
+                  defaultValue="RESERVED"
                   disabled={disabled}
-                  emptyLabel={t("calls.placeholder.roomUnassigned")}
-                  label={t("calls.column.room")}
-                  name="roomId"
-                  onGridKeyDown={(event) => handleAddRowKeyDown("roomId", event)}
-                  options={options.rooms}
+                  label={t("calls.column.status")}
+                  name="status"
+                  onGridKeyDown={(event) => handleAddRowKeyDown("status", event)}
+                  options={options.statuses}
+                  required
                   rowIndex={rowIndex}
                 />
-                <InlineError field="roomId" state={rowState} />
+                <InlineError field="status" state={rowState} />
               </td>
+
+              {/* 3. 고객정보 */}
+              <td className="border-b border-border px-2 py-2">
+                <div className="flex flex-col gap-1">
+                  <TextCell
+                    columnId="customerMemo"
+                    disabled={disabled}
+                    label={t("calls.column.customerMemo")}
+                    name="customerMemo"
+                    onKeyDown={(event) => handleAddRowKeyDown("customerMemo", event)}
+                    placeholder={t("calls.column.customerMemo")}
+                    rowIndex={rowIndex}
+                  />
+                  <CustomerLinkSelect
+                    columnId="customerId"
+                    customers={customers}
+                    disabled={disabled}
+                    name="customerId"
+                    onKeyDown={(event) => handleAddRowKeyDown("customerId", event)}
+                    rowIndex={rowIndex}
+                  />
+                </div>
+              </td>
+
+              {/* 4. 코스 */}
               <td className="border-b border-border px-2 py-2">
                 <SelectCell
                   columnId="courseId"
@@ -768,111 +795,66 @@ function AddRowForm({
                 />
                 <InlineError field="courseId" state={rowState} />
               </td>
+
+              {/* 5. 관리사 */}
               <td className="border-b border-border px-2 py-2">
-                <TextCell
-                  columnId="customerMemo"
-                  disabled={disabled}
-                  label={t("calls.column.customerMemo")}
-                  name="customerMemo"
-                  onKeyDown={(event) => handleAddRowKeyDown("customerMemo", event)}
-                  placeholder={t("calls.column.customerMemo")}
-                  rowIndex={rowIndex}
-                />
+                <div className="flex items-center gap-1">
+                  <SelectCell
+                    columnId="therapist1Id"
+                    defaultValue={courseChoice?.therapistId}
+                    disabled={disabled}
+                    key={courseChoice ? `choice-${courseChoice.id}` : "blank"}
+                    label={t("calls.column.therapist1")}
+                    name="therapist1Id"
+                    onGridKeyDown={(event) => handleAddRowKeyDown("therapist1Id", event)}
+                    options={options.therapists}
+                    rowIndex={rowIndex}
+                  />
+                  <SelectCell
+                    columnId="therapist2Id"
+                    disabled={disabled}
+                    errorId="add-call-therapist2-error"
+                    errorMessage={fieldError(rowState, "therapist2Id")}
+                    label={t("calls.column.therapist2")}
+                    name="therapist2Id"
+                    onGridKeyDown={(event) => handleAddRowKeyDown("therapist2Id", event)}
+                    options={options.therapists}
+                    rowIndex={rowIndex}
+                  />
+                </div>
               </td>
-              <td className="border-b border-border px-2 py-2">
-                <CustomerLinkSelect
-                  columnId="customerId"
-                  customers={customers}
-                  disabled={disabled}
-                  name="customerId"
-                  onKeyDown={(event) => handleAddRowKeyDown("customerId", event)}
-                  rowIndex={rowIndex}
-                />
-              </td>
-              <td className="border-b border-border px-2 py-2">
-                <SelectCell
-                  columnId="therapist1Id"
-                  defaultValue={courseChoice?.therapistId}
-                  disabled={disabled}
-                  key={courseChoice ? `choice-${courseChoice.id}` : "blank"}
-                  label={t("calls.column.therapist1")}
-                  name="therapist1Id"
-                  onGridKeyDown={(event) => handleAddRowKeyDown("therapist1Id", event)}
-                  options={options.therapists}
-                  rowIndex={rowIndex}
-                />
-              </td>
+
+              {/* 6. 객실 */}
               <td className="border-b border-border px-2 py-2">
                 <SelectCell
+                  columnId="roomId"
                   disabled={disabled}
-                  errorId="add-call-therapist2-error"
-                  errorMessage={fieldError(rowState, "therapist2Id")}
-                  columnId="therapist2Id"
-                  label={t("calls.column.therapist2")}
-                  name="therapist2Id"
-                  onGridKeyDown={(event) => handleAddRowKeyDown("therapist2Id", event)}
-                  options={options.therapists}
+                  emptyLabel={t("calls.placeholder.roomUnassigned")}
+                  label={t("calls.column.room")}
+                  name="roomId"
+                  onGridKeyDown={(event) => handleAddRowKeyDown("roomId", event)}
+                  options={options.rooms}
                   rowIndex={rowIndex}
                 />
+                <InlineError field="roomId" state={rowState} />
               </td>
+
+              {/* 7. 입장 */}
               <td className="border-b border-border px-2 py-2">
-                <SelectCell
-                  columnId="earcareEmployeeId"
+                <ActualEntryCell
                   disabled={disabled}
-                  label={t("calls.column.earcare")}
-                  name="earcareEmployeeId"
-                  onGridKeyDown={(event) => handleAddRowKeyDown("earcareEmployeeId", event)}
-                  options={options.earcareEmployees}
+                  onGridKeyDown={(event) => handleAddRowKeyDown("actualEntryTime", event)}
                   rowIndex={rowIndex}
                 />
+                <InlineError field="actualEntryTime" state={rowState} />
               </td>
-              <td className="border-b border-border px-2 py-2">
-                <SelectCell
-                  columnId="status"
-                  defaultValue="RESERVED"
-                  disabled={disabled}
-                  label={t("calls.column.status")}
-                  name="status"
-                  onGridKeyDown={(event) => handleAddRowKeyDown("status", event)}
-                  options={options.statuses}
-                  required
-                  rowIndex={rowIndex}
-                />
-                <InlineError field="status" state={rowState} />
+
+              {/* 8. 종료 */}
+              <td className="border-b border-border px-2 py-2 text-center text-xs text-muted">
+                -
               </td>
-              <td className="border-b border-border px-2 py-2">
-                <SelectCell
-                  columnId="discountTypeCode"
-                  disabled={disabled}
-                  label={t("calls.column.discountType")}
-                  name="discountTypeCode"
-                  onGridKeyDown={(event) => handleAddRowKeyDown("discountTypeCode", event)}
-                  options={options.discountTypes}
-                  rowIndex={rowIndex}
-                />
-              </td>
-              <td className="border-b border-border px-2 py-2">
-                <SelectCell
-                  columnId="paymentMethodCode"
-                  disabled={disabled}
-                  label={t("calls.column.paymentMethod")}
-                  name="paymentMethodCode"
-                  onGridKeyDown={(event) => handleAddRowKeyDown("paymentMethodCode", event)}
-                  options={options.paymentMethods}
-                  rowIndex={rowIndex}
-                />
-              </td>
-              <td className="border-b border-border px-2 py-2">
-                <TextCell
-                  columnId="note"
-                  disabled={disabled}
-                  label={t("calls.column.note")}
-                  name="note"
-                  onKeyDown={(event) => handleAddRowKeyDown("note", event)}
-                  placeholder={t("calls.column.note")}
-                  rowIndex={rowIndex}
-                />
-              </td>
+
+              {/* 9. 결제 */}
               <td className="border-b border-border px-2 py-2">
                 <SelectCell
                   columnId="confirmationCode"
@@ -884,8 +866,26 @@ function AddRowForm({
                   rowIndex={rowIndex}
                 />
               </td>
-              <td className="border-b border-border bg-readonly px-2 py-2" colSpan={showSettlementColumns ? 7 : 3}>
-                <div className="flex flex-wrap items-center gap-2">
+
+              {/* 10. 할인 */}
+              <td className="border-b border-border px-2 py-2">
+                <SelectCell
+                  columnId="discountTypeCode"
+                  disabled={disabled}
+                  label={t("calls.column.discountType")}
+                  name="discountTypeCode"
+                  onGridKeyDown={(event) => handleAddRowKeyDown("discountTypeCode", event)}
+                  options={options.discountTypes}
+                  rowIndex={rowIndex}
+                />
+                <input name="paymentMethodCode" type="hidden" value="CASH" />
+                <input name="earcareEmployeeId" type="hidden" value="" />
+                <input name="note" type="hidden" value="" />
+              </td>
+
+              {/* 11. 조치 */}
+              <td className="border-b border-border px-2 py-2 text-center">
+                <div className="flex flex-col items-center gap-1">
                   <Button className="h-8 whitespace-nowrap px-3 text-xs" disabled={disabled} type="submit">
                     {t("calls.addRow.submit")}
                   </Button>
@@ -893,6 +893,10 @@ function AddRowForm({
                   {rowState?.ok ? <span className="text-xs text-muted">{t("calls.save.saved")}</span> : null}
                 </div>
               </td>
+
+              {showSettlementColumns ? (
+                <td className="border-b border-border bg-readonly px-2 py-2" colSpan={5} />
+              ) : null}
             </tr>
           </tbody>
         </table>
@@ -1047,7 +1051,9 @@ function EditableCallRow({
   row,
   rowCount,
   rowIndex,
-  showSettlementColumns
+  showSettlementColumns,
+  isSelected = false,
+  onToggleRowDetail
 }: {
   customers: CustomerDto[];
   isLocked: boolean;
@@ -1056,6 +1062,8 @@ function EditableCallRow({
   rowCount: number;
   rowIndex: number;
   showSettlementColumns: boolean;
+  isSelected?: boolean;
+  onToggleRowDetail?: (callId: string) => void;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -1065,7 +1073,15 @@ function EditableCallRow({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [savedAt, setSavedAt] = useState(row.savedAt);
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [, startTransition] = useTransition();
+
+  const customerInfo = parseCustomerCallInfo(row, customers);
+  const isDualTherapist =
+    Boolean(draft.therapist2Id) ||
+    draft.courseId?.toLowerCase().includes("course-d") ||
+    draft.courseId?.toLowerCase().includes("2:1");
+
   const navigableFields = useMemo(
     () => [
       ...EDITABLE_CALL_FIELDS,
@@ -1155,6 +1171,21 @@ function EditableCallRow({
     commit(nextDraft);
   }
 
+  function handleFinishCleaning() {
+    startTransition(() => {
+      void (async () => {
+        const result = await finishCleaningCallAction({
+          serviceCallId: row.id,
+          operatingMonthId: draft.operatingMonthId ?? row.operatingMonthId ?? ""
+        });
+        if (result.ok) {
+          setDraft((prev) => ({ ...prev, status: "방문완료" }));
+          setServerRow((prev) => ({ ...prev, status: "방문완료" }));
+        }
+      })();
+    });
+  }
+
   function handleTogglePayment() {
     const nextCode = draft.confirmationCode === "Y" ? "N" : "Y";
     updateDraftAndCommit("confirmationCode", nextCode);
@@ -1206,18 +1237,48 @@ function EditableCallRow({
     focusLedgerCell(nextCell.rowIndex, nextCell.columnId);
   }
 
+  // Parse early finish time in note e.g. [종료 15:10]
+  const noteText = draft.note ?? serverRow.note ?? "";
+  const earlyFinishMatch = noteText.match(/\[종료\s*(([01]\d|2[0-3]):[0-5]\d)\]/);
+  let displayEndTimeContent = null;
+  if (earlyFinishMatch) {
+    displayEndTimeContent = (
+      <div className="flex items-center justify-center gap-1">
+        <span className="font-bold text-rose-600 dark:text-rose-400">{earlyFinishMatch[1]}</span>
+        <span className="rounded border border-rose-200 bg-rose-50 px-1 text-[10px] font-bold text-rose-600 dark:border-rose-900/60 dark:bg-rose-950/60 dark:text-rose-400">
+          종료
+        </span>
+      </div>
+    );
+  } else if (serverRow.displayEnd && draft.status !== "예약") {
+    displayEndTimeContent = (
+      <span className="font-bold text-foreground tabular-nums">{serverRow.displayEnd}</span>
+    );
+  } else {
+    displayEndTimeContent = <span className="text-muted">-</span>;
+  }
+
   return (
-    // 다른 화면에서 #call-… 로 들어오면 이 행이 선택된 행 모양이 된다(design.md 6.6).
     <tr
-      className="align-top target:bg-readonly [&:target>td:first-child]:[box-shadow:inset_3px_0_0_var(--brand)]"
+      className={`align-top border-b border-border/70 transition-colors cursor-pointer ${
+        isSelected
+          ? "bg-blue-50/90 dark:bg-blue-950/60 ring-2 ring-inset ring-blue-500"
+          : rowIndex % 2 === 0
+            ? "bg-surface hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40"
+            : "bg-surface-float/30 hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40"
+      } target:bg-readonly [&:target>td:first-child]:[box-shadow:inset_3px_0_0_var(--brand)]`}
       data-service-call-id={row.id}
       id={ledgerCallAnchorId(row.id)}
+      onClick={(e) => {
+        const target = e.target as HTMLElement;
+        if (target.closest("button, select, input, textarea, a, [role='listbox']")) {
+          return;
+        }
+        onToggleRowDetail?.(row.id);
+      }}
     >
-      <td className="border-b border-border px-2 py-2 text-xs">
-        {draft.serviceDate}
-        <input name="serviceCallId" type="hidden" value={draft.serviceCallId} />
-      </td>
-      <td className="border-b border-border px-2 py-2">
+      {/* 1. 예약시간 */}
+      <td className="border-b border-border px-2 py-2.5">
         <SelectCell
           columnId="startTime"
           disabled={isLocked || saveStatus === "saving"}
@@ -1232,38 +1293,68 @@ function EditableCallRow({
           rowIndex={rowIndex}
           value={draft.startTime}
         />
+        <input name="serviceCallId" type="hidden" value={draft.serviceCallId} />
+        <input name="serviceDate" type="hidden" value={draft.serviceDate} />
       </td>
-      <td className="border-b border-border px-2 py-2">
-        <ActualEntryCell
-          disabled={isLocked || saveStatus === "saving"}
-          displayEnd={serverRow.displayEnd}
-          errorMessage={firstFieldError(fieldErrors, "actualEntryTime")}
-          onBlur={() => commit()}
-          onChange={(value) => updateDraft("actualEntryTime", nullableValue(value))}
-          onCommitValue={(value) => updateDraftAndCommit("actualEntryTime", nullableValue(value))}
-          onGridKeyDown={(event) => handleGridKeyDown("actualEntryTime", event)}
-          rowIndex={rowIndex}
-          value={draft.actualEntryTime ?? ""}
-          warningTime={serverRow.warningTime}
-        />
-      </td>
-      <td className="border-b border-border px-2 py-2">
+
+      {/* 2. 상태 */}
+      <td className="border-b border-border px-2 py-2.5">
         <SelectCell
-          columnId="roomId"
+          columnId="status"
           disabled={isLocked || saveStatus === "saving"}
-          emptyLabel={t("calls.placeholder.roomUnassigned")}
-          label={t("calls.column.room")}
-          name="roomId"
+          label={t("calls.column.status")}
+          name="status"
           onBlur={() => commit()}
-          onChange={(value) => updateDraft("roomId", nullableValue(value))}
-          onCommitValue={(value) => updateDraftAndCommit("roomId", nullableValue(value))}
-          onGridKeyDown={(event) => handleGridKeyDown("roomId", event)}
-          options={options.rooms}
+          onChange={(value) => updateDraft("status", value)}
+          onCommitValue={(value) => updateDraftAndCommit("status", value)}
+          onGridKeyDown={(event) => handleGridKeyDown("status", event)}
+          options={options.statuses}
+          required
           rowIndex={rowIndex}
-          value={draft.roomId ?? ""}
+          value={draft.status}
         />
       </td>
-      <td className="border-b border-border px-2 py-2">
+
+      {/* 3. 고객정보 */}
+      <td className="border-b border-border px-2.5 py-2.5">
+        <div className="flex items-center gap-2">
+          <BookingChannelIcon channel={customerInfo.channel} className="w-7 h-7 rounded-lg shrink-0 shadow-2xs" />
+          <div className="flex-1 min-w-0 flex flex-col justify-center">
+            <span className="font-bold text-xs text-foreground truncate" title={customerInfo.name || "-"}>
+              {customerInfo.name || "-"}
+            </span>
+            <span className="text-[11px] text-muted font-mono truncate" title={customerInfo.contact || "-"}>
+              {customerInfo.contact || "-"}
+            </span>
+          </div>
+        </div>
+        <div className="sr-only">
+          <CustomerLinkSelect
+            columnId="customerId"
+            customers={customers}
+            disabled={isLocked || saveStatus === "saving"}
+            onChange={(value) => updateDraftAndCommit("customerId", nullableValue(value))}
+            onKeyDown={(event) => handleGridKeyDown("customerId", event)}
+            rowIndex={rowIndex}
+            value={draft.customerId ?? ""}
+          />
+          <TextCell
+            columnId="customerMemo"
+            disabled={isLocked || saveStatus === "saving"}
+            label={t("calls.column.customerMemo")}
+            name="customerMemo"
+            onBlur={() => commit()}
+            onChange={(value) => updateDraft("customerMemo", nullableValue(value))}
+            onKeyDown={(event) => handleGridKeyDown("customerMemo", event)}
+            placeholder={t("calls.column.customerMemo")}
+            rowIndex={rowIndex}
+            value={draft.customerMemo ?? ""}
+          />
+        </div>
+      </td>
+
+      {/* 4. 코스 */}
+      <td className="border-b border-border px-2 py-2.5">
         <SelectCell
           columnId="courseId"
           disabled={isLocked || saveStatus === "saving"}
@@ -1279,123 +1370,147 @@ function EditableCallRow({
           value={draft.courseId}
         />
       </td>
-      <td className="border-b border-border px-2 py-2">
-        <TextCell
-          columnId="customerMemo"
-          disabled={isLocked || saveStatus === "saving"}
-          label={t("calls.column.customerMemo")}
-          name="customerMemo"
-          onBlur={() => commit()}
-          onChange={(value) => updateDraft("customerMemo", nullableValue(value))}
-          onKeyDown={(event) => handleGridKeyDown("customerMemo", event)}
-          placeholder={t("calls.column.customerMemo")}
-          rowIndex={rowIndex}
-          value={draft.customerMemo ?? ""}
-        />
-        <span className="sr-only">{draft.customerMemo ?? ""}</span>
+
+      {/* 5. 관리사 */}
+      <td className="border-b border-border px-2 py-2.5">
+        {isDualTherapist ? (
+          <div className="flex items-center gap-1 w-full">
+            <SelectCell
+              columnId="therapist1Id"
+              disabled={isLocked || saveStatus === "saving"}
+              label={t("calls.column.therapist1")}
+              name="therapist1Id"
+              onBlur={() => commit()}
+              onChange={(value) => updateDraft("therapist1Id", nullableValue(value))}
+              onCommitValue={(value) => updateDraftAndCommit("therapist1Id", nullableValue(value))}
+              onGridKeyDown={(event) => handleGridKeyDown("therapist1Id", event)}
+              options={options.therapists}
+              rowIndex={rowIndex}
+              value={draft.therapist1Id ?? ""}
+            />
+            <SelectCell
+              columnId="therapist2Id"
+              disabled={isLocked || saveStatus === "saving"}
+              errorId={`call-${row.id}-therapist2-error`}
+              errorMessage={firstFieldError(fieldErrors, "therapist2Id")}
+              label={t("calls.column.therapist2")}
+              name="therapist2Id"
+              onBlur={() => commit()}
+              onChange={(value) => updateDraft("therapist2Id", nullableValue(value))}
+              onCommitValue={(value) => updateDraftAndCommit("therapist2Id", nullableValue(value))}
+              onGridKeyDown={(event) => handleGridKeyDown("therapist2Id", event)}
+              options={options.therapists}
+              rowIndex={rowIndex}
+              value={draft.therapist2Id ?? ""}
+            />
+          </div>
+        ) : (
+          <div className="w-full">
+            <SelectCell
+              columnId="therapist1Id"
+              disabled={isLocked || saveStatus === "saving"}
+              label={t("calls.column.therapist1")}
+              name="therapist1Id"
+              onBlur={() => commit()}
+              onChange={(value) => updateDraft("therapist1Id", nullableValue(value))}
+              onCommitValue={(value) => updateDraftAndCommit("therapist1Id", nullableValue(value))}
+              onGridKeyDown={(event) => handleGridKeyDown("therapist1Id", event)}
+              options={options.therapists}
+              rowIndex={rowIndex}
+              value={draft.therapist1Id ?? ""}
+            />
+            <div className="sr-only">
+              <SelectCell
+                columnId="therapist2Id"
+                disabled={isLocked || saveStatus === "saving"}
+                label={t("calls.column.therapist2")}
+                name="therapist2Id"
+                options={options.therapists}
+                rowIndex={rowIndex}
+                value={draft.therapist2Id ?? ""}
+              />
+            </div>
+          </div>
+        )}
       </td>
-      <td className="border-b border-border px-2 py-2">
-        <CustomerLinkSelect
-          columnId="customerId"
-          customers={customers}
-          disabled={isLocked || saveStatus === "saving"}
-          onChange={(value) => updateDraftAndCommit("customerId", nullableValue(value))}
-          onKeyDown={(event) => handleGridKeyDown("customerId", event)}
-          rowIndex={rowIndex}
-          value={draft.customerId ?? ""}
-        />
-      </td>
-      <td className="border-b border-border px-2 py-2">
+
+      {/* 6. 객실 */}
+      <td className="border-b border-border px-2 py-2.5">
         <SelectCell
-          columnId="therapist1Id"
+          columnId="roomId"
           disabled={isLocked || saveStatus === "saving"}
-          label={t("calls.column.therapist1")}
-          name="therapist1Id"
+          emptyLabel={t("calls.placeholder.roomUnassigned")}
+          label={t("calls.column.room")}
+          name="roomId"
           onBlur={() => commit()}
-          onChange={(value) => updateDraft("therapist1Id", nullableValue(value))}
-          onCommitValue={(value) => updateDraftAndCommit("therapist1Id", nullableValue(value))}
-          onGridKeyDown={(event) => handleGridKeyDown("therapist1Id", event)}
-          options={options.therapists}
+          onChange={(value) => updateDraft("roomId", nullableValue(value))}
+          onCommitValue={(value) => updateDraftAndCommit("roomId", nullableValue(value))}
+          onGridKeyDown={(event) => handleGridKeyDown("roomId", event)}
+          options={options.rooms}
           rowIndex={rowIndex}
-          value={draft.therapist1Id ?? ""}
+          value={draft.roomId ?? ""}
         />
       </td>
-      <td className="border-b border-border px-2 py-2">
-        <SelectCell
-          columnId="therapist2Id"
+
+      {/* 7. 입장 */}
+      <td className="border-b border-border px-2 py-2.5">
+        <ActualEntryCell
           disabled={isLocked || saveStatus === "saving"}
-          errorId={`call-${row.id}-therapist2-error`}
-          errorMessage={firstFieldError(fieldErrors, "therapist2Id")}
-          label={t("calls.column.therapist2")}
-          name="therapist2Id"
+          displayEnd={serverRow.displayEnd}
+          errorMessage={firstFieldError(fieldErrors, "actualEntryTime")}
           onBlur={() => commit()}
-          onChange={(value) => updateDraft("therapist2Id", nullableValue(value))}
-          onCommitValue={(value) => updateDraftAndCommit("therapist2Id", nullableValue(value))}
-          onGridKeyDown={(event) => handleGridKeyDown("therapist2Id", event)}
-          options={options.therapists}
+          onChange={(value) => updateDraft("actualEntryTime", nullableValue(value))}
+          onCommitValue={(value) => updateDraftAndCommit("actualEntryTime", nullableValue(value))}
+          onGridKeyDown={(event) => handleGridKeyDown("actualEntryTime", event)}
           rowIndex={rowIndex}
-          value={draft.therapist2Id ?? ""}
+          value={draft.actualEntryTime ?? ""}
+          warningTime={serverRow.warningTime}
         />
       </td>
-      <td className="border-b border-border px-2 py-2">
-        <SelectCell
-          columnId="earcareEmployeeId"
-          disabled={isLocked || saveStatus === "saving"}
-          label={t("calls.column.earcare")}
-          name="earcareEmployeeId"
-          onBlur={() => commit()}
-          onChange={(value) => updateDraft("earcareEmployeeId", nullableValue(value))}
-          onCommitValue={(value) => updateDraftAndCommit("earcareEmployeeId", nullableValue(value))}
-          onGridKeyDown={(event) => handleGridKeyDown("earcareEmployeeId", event)}
-          options={options.earcareEmployees}
-          rowIndex={rowIndex}
-          value={draft.earcareEmployeeId ?? ""}
-        />
+
+      {/* 8. 종료 */}
+      <td className="border-b border-border px-2 py-2.5 text-center text-xs [font-variant-numeric:tabular-nums]">
+        {displayEndTimeContent}
       </td>
-      <td className="border-b border-border px-2 py-2">
-        <div className="flex flex-col gap-1">
-          <SelectCell
-            columnId="status"
-            disabled={isLocked || saveStatus === "saving"}
-            label={t("calls.column.status")}
-            name="status"
-            onBlur={() => commit()}
-            onChange={(value) => updateDraft("status", value)}
-            onCommitValue={(value) => updateDraftAndCommit("status", value)}
-            onGridKeyDown={(event) => handleGridKeyDown("status", event)}
-            options={options.statuses}
-            required
+
+      {/* 9. 결제 */}
+      <td className="border-b border-border px-2 py-2.5">
+        <div className="flex flex-col items-center gap-1">
+          <button
+            className={`inline-flex min-h-7 items-center justify-center px-3 rounded-full text-xs font-bold transition-all shadow-2xs cursor-pointer ${
+              draft.confirmationCode === "Y"
+                ? "bg-emerald-100/90 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300"
+                : "bg-surface-float text-neutral-600 border border-border hover:border-border-strong hover:text-foreground dark:text-neutral-400"
+            }`}
+            onClick={handleTogglePayment}
+            type="button"
+          >
+            {draft.confirmationCode === "Y"
+              ? (locale !== "vi" ? "✓ 결제완료" : "✓ Đã thanh toán")
+              : (locale !== "vi" ? "미확인" : "Chưa TT")}
+          </button>
+          <PaymentAmountCell
+            onKeyDown={(event) => handleReadonlyKeyDown("paymentAmount", event)}
+            row={serverRow}
             rowIndex={rowIndex}
-            value={draft.status}
+            saveStatus={saveStatus}
           />
-          {draft.status === "예약" ? (
-            <button
-              className="inline-flex min-h-7 items-center justify-center rounded-full bg-brand px-3 text-xs font-semibold text-brand-foreground hover:bg-brand-strong transition-colors self-start"
-              onClick={handleEnterService}
-              type="button"
-            >
-              {locale !== "vi" ? "입장" : "Vào"}
-            </button>
-          ) : draft.status === "사용중" ? (
-            <button
-              className="inline-flex min-h-7 items-center justify-center rounded-full border border-danger bg-danger-soft px-3 text-xs font-semibold text-danger hover:bg-danger hover:text-brand-foreground transition-colors self-start"
-              onClick={handleEarlyFinish}
-              type="button"
-            >
-              {locale !== "vi" ? "종료" : "Kết thúc"}
-            </button>
-          ) : draft.status === "청소중" && (draft.note?.includes("[종료") || serverRow.note?.includes("[종료")) ? (
-            <button
-              className="inline-flex min-h-7 items-center justify-center rounded-full border border-border bg-readonly px-3 text-xs font-semibold text-muted hover:text-foreground transition-colors self-start"
-              onClick={handleUndoFinish}
-              type="button"
-            >
-              {locale !== "vi" ? "종료 취소" : "Hủy kết thúc"}
-            </button>
-          ) : null}
+          <div className="sr-only">
+            <SelectCell
+              columnId="confirmationCode"
+              disabled={isLocked || saveStatus === "saving"}
+              label={t("calls.column.confirmation")}
+              name="confirmationCode"
+              options={options.confirmationCodes}
+              rowIndex={rowIndex}
+              value={draft.confirmationCode ?? ""}
+            />
+          </div>
         </div>
       </td>
-      <td className="border-b border-border px-2 py-2">
+
+      {/* 10. 할인 */}
+      <td className="border-b border-border px-2 py-2.5">
         <SelectCell
           columnId="discountTypeCode"
           disabled={isLocked || saveStatus === "saving"}
@@ -1409,81 +1524,128 @@ function EditableCallRow({
           rowIndex={rowIndex}
           value={draft.discountTypeCode ?? ""}
         />
-      </td>
-      <td className="border-b border-border px-2 py-2">
-        <SelectCell
-          columnId="paymentMethodCode"
-          disabled={isLocked || saveStatus === "saving"}
-          label={t("calls.column.paymentMethod")}
-          name="paymentMethodCode"
-          onBlur={() => commit()}
-          onChange={(value) => updateDraft("paymentMethodCode", nullableValue(value))}
-          onCommitValue={(value) => updateDraftAndCommit("paymentMethodCode", nullableValue(value))}
-          onGridKeyDown={(event) => handleGridKeyDown("paymentMethodCode", event)}
-          options={options.paymentMethods}
-          rowIndex={rowIndex}
-          value={draft.paymentMethodCode ?? ""}
-        />
-      </td>
-      <td className="border-b border-border px-2 py-2">
-        <TextCell
-          columnId="note"
-          disabled={isLocked || saveStatus === "saving"}
-          label={t("calls.column.note")}
-          name="note"
-          onBlur={() => commit()}
-          onChange={(value) => updateDraft("note", nullableValue(value))}
-          onKeyDown={(event) => handleGridKeyDown("note", event)}
-          placeholder={t("calls.column.note")}
-          rowIndex={rowIndex}
-          value={draft.note ?? ""}
-        />
-      </td>
-      <td className="border-b border-border px-2 py-2">
-        <div className="flex flex-col gap-1">
-          <button
-            className={`inline-flex min-h-7 items-center justify-center px-2.5 rounded-full text-xs font-semibold self-start transition-colors ${
-              draft.confirmationCode === "Y"
-                ? "bg-success-soft text-success border border-success"
-                : "bg-surface-float text-muted border border-border hover:border-border-strong hover:text-foreground"
-            }`}
-            onClick={handleTogglePayment}
-            type="button"
-          >
-            {draft.confirmationCode === "Y"
-              ? (locale !== "vi" ? "✓ 결제완료" : "✓ Đã thanh toán")
-              : (locale !== "vi" ? "결제 미확인" : "Chưa thanh toán")}
-          </button>
-          <SelectCell
-            columnId="confirmationCode"
-            disabled={isLocked || saveStatus === "saving"}
-            label={t("calls.column.confirmation")}
-            name="confirmationCode"
-            onBlur={() => commit()}
-            onChange={(value) => updateDraft("confirmationCode", nullableValue(value))}
-            onCommitValue={(value) => updateDraftAndCommit("confirmationCode", nullableValue(value))}
-            onGridKeyDown={(event) => handleGridKeyDown("confirmationCode", event)}
-            options={options.confirmationCodes}
+        {serverRow.discountAmount > 0 ? (
+          <span className="text-[11px] font-semibold text-rose-600 block mt-0.5 text-center">
+            -{formatVnd(locale, serverRow.discountAmount)}
+          </span>
+        ) : null}
+        <div className="sr-only">
+          <ComputedCell
+            columnId="discountAmount"
+            label={t("calls.column.discount")}
+            row={serverRow}
             rowIndex={rowIndex}
-            value={draft.confirmationCode ?? ""}
+            saveStatus={saveStatus}
+            value={serverRow.discountAmount}
+          />
+          <SelectCell
+            columnId="paymentMethodCode"
+            disabled={isLocked || saveStatus === "saving"}
+            label={t("calls.column.paymentMethod")}
+            name="paymentMethodCode"
+            options={options.paymentMethods}
+            rowIndex={rowIndex}
+            value={draft.paymentMethodCode ?? ""}
+          />
+          <TextCell
+            columnId="note"
+            disabled={isLocked || saveStatus === "saving"}
+            label={t("calls.column.note")}
+            name="note"
+            onBlur={() => commit()}
+            onChange={(value) => updateDraft("note", nullableValue(value))}
+            placeholder={t("calls.column.note")}
+            rowIndex={rowIndex}
+            value={draft.note ?? ""}
+          />
+          <SelectCell
+            columnId="earcareEmployeeId"
+            disabled={isLocked || saveStatus === "saving"}
+            label={t("calls.column.earcare")}
+            name="earcareEmployeeId"
+            options={options.earcareEmployees}
+            rowIndex={rowIndex}
+            value={draft.earcareEmployeeId ?? ""}
           />
         </div>
       </td>
-      <PaymentAmountCell
-        onKeyDown={(event) => handleReadonlyKeyDown("paymentAmount", event)}
-        row={serverRow}
-        rowIndex={rowIndex}
-        saveStatus={saveStatus}
-      />
-      <ComputedCell
-        columnId="discountAmount"
-        label={t("calls.column.discount")}
-        onKeyDown={(event) => handleReadonlyKeyDown("discountAmount", event)}
-        row={serverRow}
-        rowIndex={rowIndex}
-        saveStatus={saveStatus}
-        value={serverRow.discountAmount}
-      />
+
+      {/* 11. 조치 */}
+      <td className="border-b border-border px-2 py-2.5 text-center relative">
+        {draft.status === "예약" ? (
+          <button
+            className="inline-flex min-h-8 items-center justify-center rounded-full bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700 active:scale-95 transition-all shadow-xs cursor-pointer"
+            onClick={handleEnterService}
+            type="button"
+          >
+            {locale !== "vi" ? "입장" : "Vào"}
+          </button>
+        ) : draft.status === "사용중" ? (
+          <button
+            className="inline-flex min-h-8 items-center justify-center rounded-full bg-rose-600 px-4 text-xs font-bold text-white hover:bg-rose-700 active:scale-95 transition-all shadow-xs cursor-pointer"
+            onClick={handleEarlyFinish}
+            type="button"
+          >
+            {locale !== "vi" ? "종료" : "Kết thúc"}
+          </button>
+        ) : draft.status === "청소중" ? (
+          <div className="relative inline-block">
+            <button
+              className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-full border border-sky-300 bg-sky-100 px-3.5 text-xs font-bold text-sky-800 hover:bg-sky-200 active:scale-95 transition-all shadow-2xs cursor-pointer"
+              onClick={() => setActionMenuOpen(!actionMenuOpen)}
+              type="button"
+            >
+              <span>🧹 {locale !== "vi" ? "청소 끝" : "Xong dọn"}</span>
+              <svg className={`w-3.5 h-3.5 transition-transform ${actionMenuOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {actionMenuOpen ? (
+              <div
+                className="absolute right-0 top-full mt-1.5 z-40 w-36 overflow-hidden rounded-xl border border-border bg-surface py-1 text-left shadow-xl"
+                onMouseLeave={() => setActionMenuOpen(false)}
+              >
+                <button
+                  className="flex w-full items-center gap-2 px-3.5 py-2 text-xs font-bold text-foreground hover:bg-readonly transition-colors cursor-pointer"
+                  onClick={() => {
+                    setActionMenuOpen(false);
+                    handleFinishCleaning();
+                  }}
+                  type="button"
+                >
+                  <span>🧹</span>
+                  <span>{locale !== "vi" ? "청소 완료" : "Hoàn tất dọn"}</span>
+                </button>
+                <button
+                  className="flex w-full items-center gap-2 border-t border-border px-3.5 py-2 text-xs font-bold text-muted hover:bg-readonly hover:text-foreground transition-colors cursor-pointer"
+                  onClick={() => {
+                    setActionMenuOpen(false);
+                    handleUndoFinish();
+                  }}
+                  type="button"
+                >
+                  <span>↺</span>
+                  <span>{locale !== "vi" ? "종료 취소" : "Hủy kết thúc"}</span>
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : draft.status === "방문완료" || draft.status === "VISIT_COMPLETE" ? (
+          <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600">
+            ✓ {locale !== "vi" ? "완료" : "Hoàn tất"}
+          </span>
+        ) : draft.status === "노쇼" || draft.status === "NO_SHOW" ? (
+          <span className="inline-flex items-center gap-1 text-xs font-bold text-rose-600">
+            ✕ {locale !== "vi" ? "노쇼" : "No-show"}
+          </span>
+        ) : draft.status === "취소" || draft.status === "CANCELED" ? (
+          <span className="inline-flex items-center gap-1 text-xs font-bold text-neutral-500">
+            ⊖ {locale !== "vi" ? "취소" : "Đã hủy"}
+          </span>
+        ) : null}
+      </td>
+
+      {/* 정산 열 (showSettlementColumns=true 일 때만 표시) */}
       {showSettlementColumns ? (
         <>
           <ComputedCell
@@ -1524,37 +1686,41 @@ function EditableCallRow({
           />
         </>
       ) : null}
-      <td
-        className="border-b border-border bg-readonly px-2 py-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-brand"
-        data-call-cell-column="calculationStatus"
-        data-call-cell-row={rowIndex}
-        onKeyDown={(event) => handleReadonlyKeyDown("calculationStatus", event)}
-        tabIndex={-1}
-      >
-        <div className="grid w-full gap-1">
-          {saveStatus === "error" ? <span className="text-danger">{t("calls.calc.errorPending")}</span> : null}
-          {serverRow.calculationStatus === "calculated" && saveStatus !== "error" ? <span>{t("calls.calc.calculated")}</span> : null}
-          {serverRow.calculationStatus === "not_completed" && saveStatus !== "error" ? <span>{t("calls.calc.notCompleted")}</span> : null}
-          {(serverRow.calculationStatus === "course_policy_missing" ||
-            serverRow.calculationStatus === "therapist_rate_missing" ||
-            serverRow.calculationStatus === "second_therapist_required") &&
-          saveStatus !== "error" ? (
-            <span className="text-danger">{calcMessage(t, serverRow.calculationStatus)}</span>
-          ) : null}
-          <span aria-live="polite" className={saveStateClassName(saveStatus)}>
-            {saveStateLabel(saveStatus, t)}
-            {saveStatus === "saved" ? ` ${formatDateTime(locale, savedAt, { hour: "2-digit", minute: "2-digit" })}` : ""}
-          </span>
-          {saveStatus === "error" ? (
-            <span className="grid gap-1">
-              <span className="text-danger">{errorMessage ?? t("calls.save.error")}</span>
-              <Button className="h-7 justify-self-start px-2 text-xs" onClick={() => commit()} type="button" variant="secondary">
-                {t("calls.save.retry")}
-              </Button>
+
+      {/* 저장 상태 (정산 열 켜져 있을 때만 포함) */}
+      {showSettlementColumns ? (
+        <td
+          className="border-b border-border bg-readonly px-2 py-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-brand"
+          data-call-cell-column="calculationStatus"
+          data-call-cell-row={rowIndex}
+          onKeyDown={(event) => handleReadonlyKeyDown("calculationStatus", event)}
+          tabIndex={-1}
+        >
+          <div className="grid w-full gap-1">
+            {saveStatus === "error" ? <span className="text-danger">{t("calls.calc.errorPending")}</span> : null}
+            {serverRow.calculationStatus === "calculated" && saveStatus !== "error" ? <span>{t("calls.calc.calculated")}</span> : null}
+            {serverRow.calculationStatus === "not_completed" && saveStatus !== "error" ? <span>{t("calls.calc.notCompleted")}</span> : null}
+            {(serverRow.calculationStatus === "course_policy_missing" ||
+              serverRow.calculationStatus === "therapist_rate_missing" ||
+              serverRow.calculationStatus === "second_therapist_required") &&
+            saveStatus !== "error" ? (
+              <span className="text-danger">{calcMessage(t, serverRow.calculationStatus)}</span>
+            ) : null}
+            <span aria-live="polite" className={saveStateClassName(saveStatus)}>
+              {saveStateLabel(saveStatus, t)}
+              {saveStatus === "saved" ? ` ${formatDateTime(locale, savedAt, { hour: "2-digit", minute: "2-digit" })}` : ""}
             </span>
-          ) : null}
-        </div>
-      </td>
+            {saveStatus === "error" ? (
+              <span className="grid gap-1">
+                <span className="text-danger">{errorMessage ?? t("calls.save.error")}</span>
+                <Button className="h-7 justify-self-start px-2 text-xs" onClick={() => commit()} type="button" variant="secondary">
+                  {t("calls.save.retry")}
+                </Button>
+              </span>
+            ) : null}
+          </div>
+        </td>
+      ) : null}
     </tr>
   );
 }
@@ -1567,7 +1733,9 @@ export function EditableCallGrid({
   options,
   rows,
   serviceDate,
-  showSettlementColumns
+  showSettlementColumns,
+  selectedCallId = null,
+  onToggleRowDetail
 }: {
   courseChoice?: (AvailabilityCourseChoice & { id: number }) | null;
   customers?: CustomerDto[];
@@ -1577,12 +1745,13 @@ export function EditableCallGrid({
   rows: ServiceCallRowDto[];
   serviceDate: string;
   showSettlementColumns: boolean;
+  selectedCallId?: string | null;
+  onToggleRowDetail?: (callId: string) => void;
 }) {
   const t = useT();
   const locale = useLocale();
-  // TanStack column defs back the row model only; visible header text is rendered
-  // by <CallGridHead> from the localized CALL_GRID_COLUMNS catalog, so these
-  // `header` values are never shown: accessorKey stays the stable field name.
+  const [showCompletedSection, setShowCompletedSection] = useState(true);
+
   const columns = useMemo<ColumnDef<ServiceCallRowDto>[]>(
     () => [
       { accessorKey: "serviceDate", header: "serviceDate" },
@@ -1601,6 +1770,7 @@ export function EditableCallGrid({
     ],
     [showSettlementColumns]
   );
+
   const table = useReactTable({
     columns,
     data: rows,
@@ -1612,11 +1782,15 @@ export function EditableCallGrid({
   const activeRows = table.getRowModel().rows.filter((r) => !isCompletedStatus(r.original.status));
   const completedRows = table.getRowModel().rows.filter((r) => isCompletedStatus(r.original.status));
 
+  const completedCount = completedRows.filter((r) => ["방문완료", "VISIT_COMPLETE"].includes(r.original.status)).length;
+  const canceledCount = completedRows.filter((r) => ["취소", "CANCELED"].includes(r.original.status)).length;
+  const noShowCount = completedRows.filter((r) => ["노쇼", "NO_SHOW"].includes(r.original.status)).length;
+
   return (
-    <section className="overflow-hidden rounded-md border border-border bg-surface">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+    <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-xs">
+      <div className="flex items-center justify-between border-b border-border bg-surface-float/40 px-4 py-3">
         <div>
-          <h2 className="text-base font-semibold text-foreground">{t("calls.grid.title")}</h2>
+          <h2 className="text-base font-bold text-foreground">{t("calls.grid.title")}</h2>
           {isLocked ? (
             <div className="mt-1 text-xs text-danger">
               <p className="font-medium">{t("calls.grid.lockedTitle")}</p>
@@ -1624,7 +1798,7 @@ export function EditableCallGrid({
             </div>
           ) : null}
         </div>
-        <span className="text-xs text-muted">{t("calls.grid.rowCount", { count: rows.length })}</span>
+        <span className="text-xs font-semibold text-muted">{t("calls.grid.rowCount", { count: rows.length })}</span>
       </div>
 
       {rows.length === 0 ? (
@@ -1645,7 +1819,9 @@ export function EditableCallGrid({
                   <EditableCallRow
                     customers={customers}
                     isLocked={isLocked}
+                    isSelected={selectedCallId === tableRow.original.id}
                     key={tableRow.original.id}
+                    onToggleRowDetail={onToggleRowDetail}
                     options={options}
                     row={tableRow.original}
                     rowCount={table.getRowModel().rows.length + 1}
@@ -1658,31 +1834,66 @@ export function EditableCallGrid({
           </div>
 
           {activeRows.length > 0 && completedRows.length > 0 ? (
-            <details className="border-t border-border bg-surface" open>
-              <summary className="cursor-pointer px-4 py-3 text-xs font-semibold text-muted hover:text-foreground hover:bg-readonly transition-colors focus:outline-none">
-                {locale !== "vi" ? "완료 · 취소 · 노쇼 내역" : "Lịch sử Đã xong · Hủy · No-show"} ({completedRows.length}건)
-              </summary>
-              <div className="relative overflow-x-auto border-t border-border">
-                <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(showSettlementColumns) }}>
-                  <CallGridColgroup showSettlementColumns={showSettlementColumns} />
-                  <CallGridHead showSettlementColumns={showSettlementColumns} />
-                  <tbody>
-                    {completedRows.map((tableRow) => (
-                      <EditableCallRow
-                        customers={customers}
-                        isLocked={isLocked}
-                        key={tableRow.original.id}
-                        options={options}
-                        row={tableRow.original}
-                        rowCount={table.getRowModel().rows.length + 1}
-                        rowIndex={tableRow.index}
-                        showSettlementColumns={showSettlementColumns}
-                      />
-                    ))}
-                  </tbody>
-                </table>
+            <div className="border-t border-border">
+              {/* Bottom Collapsible Bar (222.png) */}
+              <div className="flex items-center justify-between bg-surface-float/40 px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                    ✓ 완료 {completedCount}건
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-muted">
+                    ⊖ 취소 {canceledCount}건
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-800 dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
+                    ✕ 노쇼 {noShowCount}건
+                  </span>
+                </div>
+                <button
+                  className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-foreground transition-colors cursor-pointer"
+                  onClick={() => setShowCompletedSection((prev) => !prev)}
+                  type="button"
+                >
+                  <span>
+                    {showCompletedSection
+                      ? (locale !== "vi" ? "내역 접기" : "Thu gọn")
+                      : (locale !== "vi" ? "내역 펼치기" : "Xem chi tiết")}
+                  </span>
+                  <svg
+                    className={`h-4 w-4 transition-transform ${showCompletedSection ? "rotate-180" : ""}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+                  </svg>
+                </button>
               </div>
-            </details>
+
+              {showCompletedSection ? (
+                <div className="relative overflow-x-auto border-t border-border bg-surface-float/10">
+                  <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(showSettlementColumns) }}>
+                    <CallGridColgroup showSettlementColumns={showSettlementColumns} />
+                    <CallGridHead showSettlementColumns={showSettlementColumns} />
+                    <tbody>
+                      {completedRows.map((tableRow) => (
+                        <EditableCallRow
+                          customers={customers}
+                          isLocked={isLocked}
+                          isSelected={selectedCallId === tableRow.original.id}
+                          key={tableRow.original.id}
+                          onToggleRowDetail={onToggleRowDetail}
+                          options={options}
+                          row={tableRow.original}
+                          rowCount={table.getRowModel().rows.length + 1}
+                          rowIndex={tableRow.index}
+                          showSettlementColumns={showSettlementColumns}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </div>
           ) : null}
         </>
       )}

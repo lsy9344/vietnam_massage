@@ -77,13 +77,13 @@ function renderGrid(locale: "ko" | "vi", row = ledgerRow()) {
 }
 
 function columnOrder(html: string) {
-  return ["startTime", "actualEntryTime", "roomId"].map((column) => html.indexOf(`data-call-cell-column="${column}"`));
+  return ["startTime", "roomId", "actualEntryTime"].map((column) => html.indexOf(`data-call-cell-column="${column}"`));
 }
 
 describe("actual entry cell", () => {
   it("shows the service warning in words and color, tied to the actual entry cell", () => {
     const html = renderGrid("ko");
-    const [startAt, entryAt, roomAt] = columnOrder(html);
+    const [startAt, roomAt, entryAt] = columnOrder(html);
 
     assert.match(html, /실제입장/);
     assert.match(html, /예약시각은 그대로입니다\./);
@@ -92,7 +92,7 @@ describe("actual entry cell", () => {
     assert.match(html, /text-danger/);
     assert.doesNotMatch(html, /role="dialog"|role="alertdialog"/);
     assert.doesNotMatch(html, /name="finishTime"|name="endTime"/);
-    assert.ok(startAt >= 0 && startAt < entryAt && entryAt < roomAt);
+    assert.ok(startAt >= 0 && startAt < roomAt && roomAt < entryAt);
 
     const entryInput = html.match(/<input[^>]*data-call-cell-column="actualEntryTime"[^>]*>/)?.[0] ?? "";
     assert.match(entryInput, /h-11/);

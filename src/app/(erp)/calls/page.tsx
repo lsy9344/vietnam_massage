@@ -152,7 +152,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
       )}
       <LedgerStatusCounts
         counts={ledgerStatusCountsFromRows(rows)}
-        customerHref={linkToScreen(account.role, "/customers", { operatingMonthId: selectedMonth.id, date: serviceDate })}
+        customerHref={null}
         locale={locale}
       />
       {/* 가능 코스 영역은 티켓 20에서 빠른 예약 패널로 옮길 때까지 원장 위에 둔다. */}
