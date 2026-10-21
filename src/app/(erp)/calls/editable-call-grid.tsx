@@ -1454,7 +1454,7 @@ function EditableCallRow({
       {/* 3. 고객정보 */}
       <td className="border-b border-border px-2.5 py-2.5">
         <div className="flex items-center gap-2">
-          <BookingChannelIcon channel={customerInfo.channel} className="w-7 h-7 rounded-lg shrink-0 shadow-2xs" />
+          <BookingChannelIcon channel={customerInfo.channel} className="w-7 h-7 rounded-full shrink-0 shadow-2xs" />
           <div className="flex-1 min-w-0 flex flex-col justify-center">
             <span className="font-bold text-xs text-foreground truncate" title={customerInfo.name || "-"}>
               {customerInfo.name || "-"}

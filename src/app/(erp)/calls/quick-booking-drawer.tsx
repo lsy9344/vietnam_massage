@@ -7,7 +7,7 @@ import { useLocale } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import { StatusIndicator } from "@/components/ui/status-indicator";
-import { BookingChannelIcon } from "@/app/(erp)/calls/booking-channel-icons";
+import { BOOKING_CHANNELS, BookingChannelIcon } from "@/app/(erp)/calls/booking-channel-icons";
 import { createQuickBookingAction, loadQuotaAction, loadTherapistAvailabilityAction } from "@/app/(erp)/calls/actions";
 import type {
   CallLedgerQuotaDto,
@@ -16,17 +16,6 @@ import type {
   ServiceCallRowDto,
   TherapistAvailabilityRowDto
 } from "@/modules/calls/service-call-service";
-
-const BOOKING_PATHS = [
-  { id: "전화", label: "전화" },
-  { id: "텔레그램", label: "텔레그램" },
-  { id: "카카오톡", label: "카카오톡" },
-  { id: "잘로", label: "잘로" },
-  { id: "왓츠앱", label: "왓츠앱" },
-  { id: "위챗", label: "위챗" },
-  { id: "워크인", label: "워크인" },
-  { id: "기타", label: "기타" }
-];
 
 function useSafeRouter() {
   try {
@@ -550,7 +539,7 @@ export function QuickBookingDrawer({
                     {isKo ? "예약 경로" : "Kênh đặt chỗ"}
                   </label>
                   <div className="flex flex-wrap gap-2">
-                    {BOOKING_PATHS.map((path) => (
+                    {BOOKING_CHANNELS.map((path) => (
                       <button
                         className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
                           bookingPath === path.id
@@ -561,7 +550,7 @@ export function QuickBookingDrawer({
                         onClick={() => setBookingPath(path.id)}
                         type="button"
                       >
-                        <BookingChannelIcon channel={path.id} className="w-4 h-4 rounded-md shrink-0 shadow-none" />
+                        <BookingChannelIcon channel={path.id} className="w-4 h-4 rounded-full shrink-0 shadow-none" />
                         <span>{path.label}</span>
                       </button>
                     ))}

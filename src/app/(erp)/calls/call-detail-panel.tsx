@@ -95,7 +95,7 @@ export function CallDetailPanel({
       <div className="flex flex-col gap-4 p-4 text-xs overflow-y-auto max-h-[calc(100vh-14rem)]">
         {/* Customer card */}
         <div className="flex items-center gap-3 rounded-lg border border-border bg-surface-float/60 p-3">
-          <BookingChannelIcon channel={channel} className="w-10 h-10 rounded-xl" />
+          <BookingChannelIcon channel={channel} className="w-10 h-10 rounded-full shadow-xs" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-1">
               <span className="text-sm font-black text-foreground truncate">{name}</span>
