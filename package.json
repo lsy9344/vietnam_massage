@@ -8,7 +8,7 @@
     "predev": "pnpm prisma:generate",
     "dev": "next dev",
     "prebuild": "pnpm prisma:generate",
-    "build": "next build",
+    "build": "next build --webpack",
     "vercel-build": "prisma generate && next build",
     "cf:build": "CLOUDFLARE_BUILD=1 opennextjs-cloudflare build",
     "cf:preview": "CLOUDFLARE_BUILD=1 opennextjs-cloudflare build && opennextjs-cloudflare preview",
