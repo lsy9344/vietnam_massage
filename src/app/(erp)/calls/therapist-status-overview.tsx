@@ -7,10 +7,14 @@ import { useLocale } from "@/lib/i18n/client";
 type SortOption = "available_first" | "least_completed" | "least_remaining" | "therapist_number";
 
 export function TherapistStatusOverview({
+  activeFilterTherapistId,
   items,
+  onFilterTherapist,
   onSelectTherapist
 }: {
+  activeFilterTherapistId?: string | null;
   items: TherapistStatusOverviewDto[];
+  onFilterTherapist?: (therapistId: string) => void;
   onSelectTherapist?: (therapist: TherapistStatusOverviewDto) => void;
 }) {
   const locale = useLocale();
@@ -96,7 +100,7 @@ export function TherapistStatusOverview({
           {/* Collapse/Expand Toggle Button */}
           <button
             aria-expanded={!collapsed}
-            className="inline-flex h-8 items-center gap-1 rounded-lg border border-border bg-surface-float px-3 text-xs font-semibold text-muted hover:bg-readonly hover:text-foreground transition-colors"
+            className="inline-flex h-8 items-center gap-1 rounded-lg border border-border bg-surface-float px-3 text-xs font-semibold text-muted hover:bg-readonly hover:text-foreground transition-colors cursor-pointer"
             onClick={() => setCollapsed(!collapsed)}
             type="button"
           >
@@ -128,6 +132,7 @@ export function TherapistStatusOverview({
               const isAvail = therapist.currentStatus === "available";
               const isInUse = therapist.currentStatus === "in_use";
               const isScheduled = therapist.currentStatus === "scheduled";
+              const isFiltered = activeFilterTherapistId === therapist.therapistId;
 
               // Format time line:
               // Available: ~14:00 or 종일 가능
@@ -150,8 +155,15 @@ export function TherapistStatusOverview({
 
               return (
                 <div
-                  className="flex w-32 min-w-[7.5rem] flex-shrink-0 flex-col items-center justify-between rounded-xl border border-border bg-surface-float/95 p-3 text-center shadow-2xs transition-all hover:border-border-strong hover:shadow-xs"
+                  className={`flex w-32 min-w-[7.5rem] flex-shrink-0 flex-col items-center justify-between rounded-xl border p-3 text-center shadow-2xs transition-all cursor-pointer ${
+                    isFiltered
+                      ? "border-brand bg-brand/5 ring-2 ring-brand"
+                      : "border-border bg-surface-float/95 hover:border-border-strong hover:shadow-xs"
+                  }`}
                   key={therapist.therapistId}
+                  onClick={() => onSelectTherapist?.(therapist)}
+                  role="button"
+                  tabIndex={0}
                 >
                   {/* Row 1: Therapist Number / Name (bold, eye-catching) */}
                   <span className="text-sm font-black text-foreground truncate w-full tracking-tight mb-0.5">
@@ -168,17 +180,17 @@ export function TherapistStatusOverview({
                   {/* Row 3: Status Pill badge */}
                   <div className="mb-2">
                     {isAvail ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-2.5 py-0.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
                         <span className="text-[9px]">●</span>
                         <span>{isKo ? "지금 가능" : "Có thể"}</span>
                       </span>
                     ) : isInUse ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-800">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 dark:bg-blue-950/60 px-2.5 py-0.5 text-xs font-bold text-blue-800 dark:text-blue-300">
                         <span className="text-[8px]">▶</span>
                         <span>{isKo ? "사용 중" : "Đang làm"}</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-neutral-800 px-2.5 py-0.5 text-xs font-bold text-slate-700 dark:text-neutral-300">
                         <span className="text-[9px]">●</span>
                         <span>
                           {therapist.checkInTime
@@ -196,11 +208,19 @@ export function TherapistStatusOverview({
 
                   {/* Row 5: Action button "콜만" */}
                   <button
-                    className="inline-flex h-7 w-full items-center justify-center rounded-lg border border-border bg-surface px-2.5 text-xs font-bold text-foreground transition-colors hover:bg-readonly hover:border-border-strong cursor-pointer active:scale-95"
-                    onClick={() => onSelectTherapist?.(therapist)}
+                    className={`inline-flex h-7 w-full items-center justify-center rounded-lg border px-2.5 text-xs font-bold transition-all cursor-pointer active:scale-95 ${
+                      isFiltered
+                        ? "bg-brand text-brand-foreground border-brand shadow-xs"
+                        : "border-border bg-surface text-foreground hover:bg-readonly hover:border-border-strong"
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFilterTherapist?.(therapist.therapistId);
+                    }}
+                    title={isKo ? `${therapist.displayName}의 콜만 그리드에서 보기` : "Lọc ca của Therapist"}
                     type="button"
                   >
-                    {isKo ? "콜만" : "Chỉ ca"}
+                    {isFiltered ? (isKo ? "필터 해제" : "Bỏ lọc") : (isKo ? "콜만" : "Chỉ ca")}
                   </button>
                 </div>
               );

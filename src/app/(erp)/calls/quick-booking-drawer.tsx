@@ -18,11 +18,12 @@ import type {
 } from "@/modules/calls/service-call-service";
 
 const BOOKING_PATHS = [
+  { id: "전화", label: "전화" },
   { id: "텔레그램", label: "텔레그램" },
   { id: "카카오톡", label: "카카오톡" },
-  { id: "왓츠앱", label: "왓츠앱" },
   { id: "잘로", label: "잘로" },
-  { id: "전화", label: "전화" },
+  { id: "왓츠앱", label: "왓츠앱" },
+  { id: "위챗", label: "위챗" },
   { id: "워크인", label: "워크인" },
   { id: "기타", label: "기타" }
 ];
@@ -392,8 +393,8 @@ export function QuickBookingDrawer({
                   <button
                     className={`flex items-start gap-3 p-3.5 rounded-xl border-2 text-left transition-all cursor-pointer ${
                       bookingType === "unassigned"
-                        ? "border-brand bg-brand/10 shadow-xs ring-1 ring-brand/30"
-                        : "border-border-strong/40 bg-surface-float/60 hover:border-brand/60 hover:bg-surface-float"
+                        ? "border-brand bg-brand/10 shadow-sm ring-2 ring-brand/40"
+                        : "border-amber-300/80 bg-amber-50/60 hover:border-brand hover:bg-amber-50/90 dark:border-amber-800/80 dark:bg-amber-950/30"
                     }`}
                     onClick={() => {
                       setBookingType("unassigned");
@@ -402,10 +403,10 @@ export function QuickBookingDrawer({
                     type="button"
                   >
                     <div
-                      className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-sm font-black ${
+                      className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 text-base font-black ${
                         bookingType === "unassigned"
-                          ? "bg-brand text-brand-foreground"
-                          : "bg-slate-200 text-slate-700"
+                          ? "bg-brand text-brand-foreground shadow-xs"
+                          : "bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200"
                       }`}
                     >
                       미
@@ -419,7 +420,11 @@ export function QuickBookingDrawer({
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-brand text-brand-foreground">
                             {isKo ? "선택됨" : "Đã chọn"}
                           </span>
-                        ) : null}
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-200/80 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200">
+                            {isKo ? "추천" : "Gợi ý"}
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-muted mt-1 leading-relaxed">
                         {isKo
@@ -471,8 +476,8 @@ export function QuickBookingDrawer({
                                   {name}
                                 </span>
                                 {counts ? (
-                                  <span className={`text-xs tabular-nums ${isSelected ? "text-brand-foreground/80" : "text-muted"}`}>
-                                    ({counts})
+                                  <span className={`text-[11px] font-medium tabular-nums ${isSelected ? "text-brand-foreground/80" : "text-muted/80"}`}>
+                                    {counts}
                                   </span>
                                 ) : null}
                               </div>
@@ -547,16 +552,17 @@ export function QuickBookingDrawer({
                   <div className="flex flex-wrap gap-2">
                     {BOOKING_PATHS.map((path) => (
                       <button
-                        className={`h-9 px-3.5 rounded-full border text-xs font-semibold transition-colors ${
+                        className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
                           bookingPath === path.id
-                            ? "bg-brand text-brand-foreground border-brand"
+                            ? "bg-brand text-brand-foreground border-brand shadow-xs"
                             : "bg-surface text-foreground border-border hover:border-border-strong hover:bg-readonly"
                         }`}
                         key={path.id}
                         onClick={() => setBookingPath(path.id)}
                         type="button"
                       >
-                        {path.label}
+                        <BookingChannelIcon channel={path.id} className="w-4 h-4 rounded-md shrink-0 shadow-none" />
+                        <span>{path.label}</span>
                       </button>
                     ))}
                   </div>

@@ -52,21 +52,84 @@ function shortTherapistLabel(nameOrLabel: string | null | undefined): string {
   return nameOrLabel.length > 5 ? nameOrLabel.slice(0, 4) : nameOrLabel;
 }
 
+function cleanSingleTherapistLabel(nameOrLabel: string | null | undefined): string {
+  if (!nameOrLabel || nameOrLabel === "-") return "선택";
+  const match = nameOrLabel.match(/(?:마사지사|Therapist|마)\s*(\d+)/i);
+  if (match) return `마사지사${match[1]}`;
+  return nameOrLabel.split("(")[0].trim() || nameOrLabel;
+}
+
+export function normalizeCallStatus(status: string): "RESERVED" | "IN_USE" | "CLEANING" | "COMPLETED" | "NO_SHOW" | "CANCELLED" {
+  const s = (status || "").trim().toUpperCase();
+  if (s === "RESERVED" || s === "예약") return "RESERVED";
+  if (s === "IN_USE" || s === "사용중" || s === "사용 중") return "IN_USE";
+  if (s === "CLEANING" || s === "청소중" || s === "청소 중") return "CLEANING";
+  if (s === "COMPLETED" || s === "VISIT_COMPLETE" || s === "방문완료" || s === "완료") return "COMPLETED";
+  if (s === "NO_SHOW" || s === "노쇼") return "NO_SHOW";
+  if (s === "CANCELLED" || s === "CANCELED" || s === "취소") return "CANCELLED";
+  return "RESERVED";
+}
+
+export function statusBadgeInfo(status: string) {
+  const norm = normalizeCallStatus(status);
+  switch (norm) {
+    case "RESERVED":
+      return { label: "예약", className: "bg-[#DCEBFF] text-[#1E6BFF]" };
+    case "IN_USE":
+      return { label: "사용 중", className: "bg-[#DCF5E3] text-[#1CA84C]" };
+    case "CLEANING":
+      return { label: "청소 중", className: "bg-[#FEF3C7] text-[#D97706]" };
+    case "COMPLETED":
+      return { label: "방문완료", className: "bg-[#DCF5E3] text-[#1CA84C]" };
+    case "NO_SHOW":
+      return { label: "노쇼", className: "bg-[#FEE2E2] text-[#DC2626]" };
+    case "CANCELLED":
+      return { label: "취소", className: "bg-[#F3F4F6] text-[#4B5563]" };
+  }
+}
+
+function resolveStatusOptionValue(options: ServiceCallOption[], target: "RESERVED" | "IN_USE" | "CLEANING" | "COMPLETED") {
+  const match = options.find((opt) => {
+    const val = opt.value.toUpperCase();
+    const lbl = opt.label;
+    if (target === "RESERVED") return val === "RESERVED" || lbl === "예약";
+    if (target === "IN_USE") return val === "IN_USE" || lbl === "사용중" || lbl === "사용 중";
+    if (target === "CLEANING") return val === "CLEANING" || lbl === "청소중" || lbl === "청소 중";
+    if (target === "COMPLETED") return val === "COMPLETED" || val === "VISIT_COMPLETE" || lbl === "방문완료";
+    return false;
+  });
+  return match?.value ?? (target === "RESERVED" ? "RESERVED" : target === "IN_USE" ? "IN_USE" : target === "CLEANING" ? "CLEANING" : "COMPLETED");
+}
+
+function parseCourseDisplay(courseLabel?: string | null) {
+  if (!courseLabel || courseLabel === "-" || courseLabel === "") {
+    return { line1: "-", line2: null };
+  }
+  const match = courseLabel.match(/^([A-Z]\s*(?:\d+분)?(?:\s*\([^)]+\))?)\s*(.+)?$/i);
+  if (match) {
+    return {
+      line1: match[1].trim(),
+      line2: match[2]?.trim() || null
+    };
+  }
+  return { line1: courseLabel, line2: null };
+}
+
 // 11-column grid layout requested by user and mockups:
 // 예약시간 -> 상태 -> 고객정보 -> 코스 -> 관리사 -> 객실 -> 입장 -> 종료 -> 결제 -> 할인 -> 조치
 // (Settlement columns are appended at the end when showSettlementColumns is active)
 const CALL_GRID_COLUMNS = [
-  { id: "startTime", labelKey: "calls.column.time", width: "6.5rem" },
-  { id: "status", labelKey: "calls.column.status", width: "7.5rem" },
-  { id: "customerMemo", labelKey: "calls.column.customerMemo", width: "13.5rem" },
+  { id: "startTime", labelKey: "calls.column.time", width: "5.5rem" },
+  { id: "status", labelKey: "calls.column.status", width: "6.5rem" },
+  { id: "customerMemo", labelKey: "calls.column.customerMemo", width: "12.5rem" },
   { id: "courseId", labelKey: "calls.column.course", width: "12rem" },
   { id: "therapist", labelKey: "calls.column.therapist", width: "11rem" },
   { id: "roomId", labelKey: "calls.column.room", width: "7.5rem" },
-  { id: "actualEntryTime", labelKey: "calls.column.actualEntry", width: "9.5rem" },
-  { id: "displayEnd", labelKey: "calls.column.displayEnd", width: "7rem" },
-  { id: "confirmationCode", labelKey: "calls.column.payment", width: "8rem" },
-  { id: "discountTypeCode", labelKey: "calls.column.discountType", width: "8.5rem" },
-  { id: "action", labelKey: "calls.column.action", width: "8.5rem" },
+  { id: "actualEntryTime", labelKey: "calls.column.actualEntry", width: "6.5rem" },
+  { id: "displayEnd", labelKey: "calls.column.displayEnd", width: "6rem" },
+  { id: "confirmationCode", labelKey: "calls.column.payment", width: "6.5rem" },
+  { id: "discountTypeCode", labelKey: "calls.column.discountType", width: "7.5rem" },
+  { id: "action", labelKey: "calls.column.action", width: "7.5rem" },
   { id: "therapist1Commission", labelKey: "calls.column.therapist1Commission", width: "7rem", settlement: true },
   { id: "therapist2Commission", labelKey: "calls.column.therapist2Commission", width: "7rem", settlement: true },
   { id: "earcarePool", labelKey: "calls.column.earcarePool", width: "6.5rem", settlement: true },
@@ -79,7 +142,7 @@ function visibleCallGridColumns(showSettlementColumns: boolean) {
 }
 
 function callGridMinWidth(showSettlementColumns: boolean) {
-  return showSettlementColumns ? "134rem" : "99rem";
+  return showSettlementColumns ? "125rem" : "89rem";
 }
 
 function CallGridColgroup({ showSettlementColumns }: { showSettlementColumns: boolean }) {
@@ -94,14 +157,31 @@ function CallGridColgroup({ showSettlementColumns }: { showSettlementColumns: bo
 
 function CallGridHead({ showSettlementColumns }: { showSettlementColumns: boolean }) {
   const t = useT();
+  const locale = useLocale();
+  const isKo = locale !== "vi";
+
   return (
-    <thead className="bg-neutral-50/90 dark:bg-neutral-800/90 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
+    <thead className="bg-[#FAF7F2] text-xs font-semibold text-gray-700 border-b border-[#EADBCE]">
       <tr>
-        {visibleCallGridColumns(showSettlementColumns).map((column) => (
-          <th className="whitespace-nowrap border-b border-border px-3 py-2.5 text-center align-middle" key={column.id}>
-            {t(column.labelKey)}
-          </th>
-        ))}
+        {visibleCallGridColumns(showSettlementColumns).map((column) => {
+          let label = t(column.labelKey);
+          if (isKo) {
+            if (column.id === "startTime") label = "예약시간";
+            if (column.id === "customerMemo") label = "고객 정보";
+            if (column.id === "actualEntryTime") label = "입장";
+            if (column.id === "discountTypeCode") label = "할인";
+          }
+          const isLeft = column.id === "customerMemo" || column.id === "courseId";
+          return (
+            <th
+              className={`whitespace-nowrap px-3 py-3 align-middle ${isLeft ? "text-left" : "text-center"}`}
+              key={column.id}
+            >
+              <span>{label}</span>
+              {column.id === "actualEntryTime" ? <span className="sr-only">실제입장</span> : null}
+            </th>
+          );
+        })}
       </tr>
     </thead>
   );
@@ -352,8 +432,10 @@ function SelectCell({
     onGridKeyDown?.(event);
   }
 
+  const isTimeColumn = columnId === "startTime";
+
   return (
-    <label className="grid w-full gap-1">
+    <label className="relative flex w-full items-center">
       <span className="sr-only">{label}</span>
       <input
         aria-activedescendant={open && activeOption ? `${reactId}-option-${activeOption.value}` : undefined}
@@ -364,8 +446,12 @@ function SelectCell({
         aria-invalid={invalid ? "true" : undefined}
         aria-label={label}
         autoComplete="off"
-        className={`${tall ? "h-11" : "h-8"} w-full border bg-background px-2 text-xs text-foreground outline-none disabled:bg-readonly ${
-          invalid ? "border-danger ring-1 ring-danger focus:border-danger" : "border-border focus:border-brand"
+        className={`${tall ? "h-11" : "h-9"} w-full rounded-xl border ${
+          isTimeColumn
+            ? "border-transparent bg-transparent px-1 text-center font-bold text-sm text-gray-900 tabular-nums hover:border-gray-300 focus:bg-white focus:border-blue-500"
+            : "border-[#D5CDC2] bg-white px-2.5 pr-6 font-semibold text-xs text-gray-800 shadow-2xs hover:border-gray-400 focus:border-blue-500"
+        } outline-none transition-colors disabled:bg-gray-100 ${
+          invalid ? "border-danger ring-1 ring-danger focus:border-danger" : ""
         }`}
         data-call-cell-column={columnId}
         data-call-cell-row={rowIndex}
@@ -406,6 +492,11 @@ function SelectCell({
         required={required}
         value={inputValue}
       />
+      {!isTimeColumn ? (
+        <span aria-hidden="true" className="pointer-events-none absolute right-2 text-[10px] text-muted">
+          ▾
+        </span>
+      ) : null}
       <input name={name} type="hidden" value={selectedValue} />
       {open && typeof document !== "undefined"
         ? createPortal(
@@ -625,36 +716,49 @@ function ActualEntryCell({
   const warning = warningTime ? t("calls.actualEntry.warning", { time: spokenClock(warningTime) }) : null;
 
   return (
-    <>
-      <SelectCell
-        columnId="actualEntryTime"
-        describedBy={[helpId, warning ? warningId : null].filter(Boolean).join(" ")}
-        disabled={disabled}
-        errorId={errorMessage ? `${reactId}-actual-entry-error` : undefined}
-        errorMessage={errorMessage}
-        label={t("calls.column.actualEntry")}
-        name="actualEntryTime"
-        onBlur={onBlur}
-        onChange={onChange}
-        onCommitValue={onCommitValue}
-        onGridKeyDown={onGridKeyDown}
-        options={TEN_MINUTE_ENTRY_OPTIONS}
-        rowIndex={rowIndex}
-        tall
-        {...(value === undefined ? {} : { value })}
-      />
-      <p className="text-xs text-muted" id={helpId}>
-        {t("calls.actualEntry.helper")}
-      </p>
-      {displayEnd ? (
-        <p className="text-xs text-foreground [font-variant-numeric:tabular-nums]">
-          {t("calls.actualEntry.displayEnd", { time: displayEnd })}
+    <div className="flex flex-col items-center justify-center text-center">
+      {!value ? (
+        <span className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-bold bg-[#FEECEC] text-[#FF4D4D]">
+          미입장
+        </span>
+      ) : (
+        <span className="font-bold text-sm text-gray-900 tabular-nums text-center block">
+          {value}
+        </span>
+      )}
+      <div className="sr-only">
+        <SelectCell
+          columnId="actualEntryTime"
+          describedBy={[helpId, warning ? warningId : null].filter(Boolean).join(" ")}
+          disabled={disabled}
+          errorId={errorMessage ? `${reactId}-actual-entry-error` : undefined}
+          errorMessage={errorMessage}
+          label={t("calls.column.actualEntry")}
+          name="actualEntryTime"
+          onBlur={onBlur}
+          onChange={onChange}
+          onCommitValue={onCommitValue}
+          onGridKeyDown={onGridKeyDown}
+          options={TEN_MINUTE_ENTRY_OPTIONS}
+          rowIndex={rowIndex}
+          tall
+          {...(value === undefined ? {} : { value })}
+        />
+        <p className="text-xs text-muted" id={helpId}>
+          {t("calls.actualEntry.helper")}
+        </p>
+        {displayEnd ? (
+          <p className="text-xs text-foreground [font-variant-numeric:tabular-nums]">
+            {t("calls.actualEntry.displayEnd", { time: displayEnd })}
+          </p>
+        ) : null}
+      </div>
+      {warning ? (
+        <p className="text-xs text-danger font-semibold [font-variant-numeric:tabular-nums] mt-0.5" id={warningId}>
+          {warning}
         </p>
       ) : null}
-      {warning ? (
-        <p className="text-xs text-danger [font-variant-numeric:tabular-nums]" id={warningId}>{warning}</p>
-      ) : null}
-    </>
+    </div>
   );
 }
 
@@ -1093,6 +1197,23 @@ function EditableCallRow({
     [showSettlementColumns]
   );
 
+  const singleTherapistOptions = useMemo(() => {
+    return options.therapists.map((o) => {
+      const match = o.label.match(/(?:마사지사|Therapist|마)\s*(\d+)/i);
+      return {
+        ...o,
+        label: match ? `마사지사${match[1]}` : o.label.split("(")[0].trim() || o.label
+      };
+    });
+  }, [options.therapists]);
+
+  const shortTherapistOptions = useMemo(() => {
+    return options.therapists.map((o) => ({
+      ...o,
+      label: shortTherapistLabel(o.label)
+    }));
+  }, [options.therapists]);
+
   function updateDraft<Key extends keyof ServiceCallAutosaveInput>(key: Key, value: ServiceCallAutosaveInput[Key]) {
     setDraft((current) => ({ ...current, [key]: value }));
   }
@@ -1135,9 +1256,10 @@ function EditableCallRow({
     const hh = String(now.getHours()).padStart(2, "0");
     const mm = String(Math.floor(now.getMinutes() / 10) * 10).padStart(2, "0");
     const currentEntry = `${hh}:${mm}`;
+    const nextStatus = resolveStatusOptionValue(options.statuses, "IN_USE");
     const nextDraft = {
       ...draft,
-      status: "사용중",
+      status: nextStatus,
       actualEntryTime: currentEntry
     };
     setDraft(nextDraft);
@@ -1151,9 +1273,10 @@ function EditableCallRow({
     const finishTime = `${hh}:${mm}`;
     const cleanNote = (draft.note ?? "").replace(/\[종료\s*(([01]\d|2[0-3]):[0-5]\d)\]/g, "").trim();
     const nextNote = cleanNote ? `${cleanNote} [종료 ${finishTime}]` : `[종료 ${finishTime}]`;
+    const nextStatus = resolveStatusOptionValue(options.statuses, "CLEANING");
     const nextDraft = {
       ...draft,
-      status: "청소중",
+      status: nextStatus,
       note: nextNote
     };
     setDraft(nextDraft);
@@ -1162,9 +1285,10 @@ function EditableCallRow({
 
   function handleUndoFinish() {
     const nextNote = (draft.note ?? "").replace(/\[종료\s*(([01]\d|2[0-3]):[0-5]\d)\]/g, "").trim() || null;
+    const nextStatus = resolveStatusOptionValue(options.statuses, "IN_USE");
     const nextDraft = {
       ...draft,
-      status: "사용중",
+      status: nextStatus,
       note: nextNote
     };
     setDraft(nextDraft);
@@ -1172,6 +1296,7 @@ function EditableCallRow({
   }
 
   function handleFinishCleaning() {
+    const completedStatus = resolveStatusOptionValue(options.statuses, "COMPLETED");
     startTransition(() => {
       void (async () => {
         const result = await finishCleaningCallAction({
@@ -1179,8 +1304,8 @@ function EditableCallRow({
           operatingMonthId: draft.operatingMonthId ?? row.operatingMonthId ?? ""
         });
         if (result.ok) {
-          setDraft((prev) => ({ ...prev, status: "방문완료" }));
-          setServerRow((prev) => ({ ...prev, status: "방문완료" }));
+          setDraft((prev) => ({ ...prev, status: completedStatus }));
+          setServerRow((prev) => ({ ...prev, status: completedStatus }));
         }
       })();
     });
@@ -1237,36 +1362,38 @@ function EditableCallRow({
     focusLedgerCell(nextCell.rowIndex, nextCell.columnId);
   }
 
+  const currentStatus = normalizeCallStatus(draft.status);
+  const statusBadge = statusBadgeInfo(draft.status);
+
   // Parse early finish time in note e.g. [종료 15:10]
   const noteText = draft.note ?? serverRow.note ?? "";
   const earlyFinishMatch = noteText.match(/\[종료\s*(([01]\d|2[0-3]):[0-5]\d)\]/);
   let displayEndTimeContent = null;
-  if (earlyFinishMatch) {
+  if (currentStatus === "RESERVED") {
+    displayEndTimeContent = <span className="text-gray-400 font-medium">-</span>;
+  } else if (earlyFinishMatch) {
     displayEndTimeContent = (
-      <div className="flex items-center justify-center gap-1">
-        <span className="font-bold text-rose-600 dark:text-rose-400">{earlyFinishMatch[1]}</span>
-        <span className="rounded border border-rose-200 bg-rose-50 px-1 text-[10px] font-bold text-rose-600 dark:border-rose-900/60 dark:bg-rose-950/60 dark:text-rose-400">
-          종료
-        </span>
-      </div>
+      <span className="font-bold text-sm text-gray-900 tabular-nums">
+        {earlyFinishMatch[1]}
+      </span>
     );
-  } else if (serverRow.displayEnd && draft.status !== "예약") {
+  } else if (serverRow.displayEnd) {
     displayEndTimeContent = (
-      <span className="font-bold text-foreground tabular-nums">{serverRow.displayEnd}</span>
+      <span className="font-bold text-sm text-gray-900 tabular-nums">{serverRow.displayEnd}</span>
     );
   } else {
-    displayEndTimeContent = <span className="text-muted">-</span>;
+    displayEndTimeContent = <span className="text-gray-400 font-medium">-</span>;
   }
 
   return (
     <tr
-      className={`align-top border-b border-border/70 transition-colors cursor-pointer ${
+      className={`align-middle border-b border-[#F0EAE1] transition-colors cursor-pointer ${
         isSelected
-          ? "bg-blue-50/90 dark:bg-blue-950/60 ring-2 ring-inset ring-blue-500"
+          ? "bg-[#EBF3FF] ring-2 ring-inset ring-[#0066FF]"
           : rowIndex % 2 === 0
-            ? "bg-surface hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40"
-            : "bg-surface-float/30 hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40"
-      } target:bg-readonly [&:target>td:first-child]:[box-shadow:inset_3px_0_0_var(--brand)]`}
+            ? "bg-white hover:bg-[#F7F3EB]"
+            : "bg-[#FAF7F2] hover:bg-[#F2ECE0]"
+      }`}
       data-service-call-id={row.id}
       id={ledgerCallAnchorId(row.id)}
       onClick={(e) => {
@@ -1278,7 +1405,7 @@ function EditableCallRow({
       }}
     >
       {/* 1. 예약시간 */}
-      <td className="border-b border-border px-2 py-2.5">
+      <td className="px-2 py-3 text-center align-middle">
         <SelectCell
           columnId="startTime"
           disabled={isLocked || saveStatus === "saving"}
@@ -1298,21 +1425,30 @@ function EditableCallRow({
       </td>
 
       {/* 2. 상태 */}
-      <td className="border-b border-border px-2 py-2.5">
-        <SelectCell
-          columnId="status"
-          disabled={isLocked || saveStatus === "saving"}
-          label={t("calls.column.status")}
-          name="status"
-          onBlur={() => commit()}
-          onChange={(value) => updateDraft("status", value)}
-          onCommitValue={(value) => updateDraftAndCommit("status", value)}
-          onGridKeyDown={(event) => handleGridKeyDown("status", event)}
-          options={options.statuses}
-          required
-          rowIndex={rowIndex}
-          value={draft.status}
-        />
+      <td className="px-2 py-3 text-center align-middle">
+        <div className="inline-flex items-center justify-center">
+          <span
+            className={`inline-flex items-center justify-center min-w-[64px] px-3.5 py-1.5 rounded-lg text-xs font-bold ${statusBadge.className}`}
+          >
+            {statusBadge.label}
+          </span>
+          <div className="sr-only">
+            <SelectCell
+              columnId="status"
+              disabled={isLocked || saveStatus === "saving"}
+              label={t("calls.column.status")}
+              name="status"
+              onBlur={() => commit()}
+              onChange={(value) => updateDraft("status", value)}
+              onCommitValue={(value) => updateDraftAndCommit("status", value)}
+              onGridKeyDown={(event) => handleGridKeyDown("status", event)}
+              options={options.statuses}
+              required
+              rowIndex={rowIndex}
+              value={draft.status}
+            />
+          </div>
+        </div>
       </td>
 
       {/* 3. 고객정보 */}
@@ -1354,68 +1490,99 @@ function EditableCallRow({
       </td>
 
       {/* 4. 코스 */}
-      <td className="border-b border-border px-2 py-2.5">
-        <SelectCell
-          columnId="courseId"
-          disabled={isLocked || saveStatus === "saving"}
-          label={t("calls.column.course")}
-          name="courseId"
-          onBlur={() => commit()}
-          onChange={(value) => updateDraft("courseId", value)}
-          onCommitValue={(value) => updateDraftAndCommit("courseId", value)}
-          onGridKeyDown={(event) => handleGridKeyDown("courseId", event)}
-          options={options.courses}
-          required
-          rowIndex={rowIndex}
-          value={draft.courseId}
-        />
+      <td className="border-b border-border px-2.5 py-2.5">
+        <div className="flex flex-col justify-center min-w-0">
+          {draft.courseId ? (
+            (() => {
+              const selectedCourse = options.courses.find((c) => c.value === draft.courseId);
+              const { line1, line2 } = parseCourseDisplay(selectedCourse?.label);
+              return (
+                <div className="flex flex-col justify-center leading-tight">
+                  <span className="font-bold text-xs text-foreground truncate" title={line1}>
+                    {line1}
+                  </span>
+                  {line2 ? (
+                    <span className="text-[11px] text-muted truncate" title={line2}>
+                      {line2}
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })()
+          ) : (
+            <span className="text-muted text-xs font-medium">-</span>
+          )}
+          <div className="sr-only">
+            <SelectCell
+              columnId="courseId"
+              disabled={isLocked || saveStatus === "saving"}
+              label={t("calls.column.course")}
+              name="courseId"
+              onBlur={() => commit()}
+              onChange={(value) => updateDraft("courseId", value)}
+              onCommitValue={(value) => updateDraftAndCommit("courseId", value)}
+              onGridKeyDown={(event) => handleGridKeyDown("courseId", event)}
+              options={options.courses}
+              required
+              rowIndex={rowIndex}
+              value={draft.courseId}
+            />
+          </div>
+        </div>
       </td>
 
       {/* 5. 관리사 */}
       <td className="border-b border-border px-2 py-2.5">
         {isDualTherapist ? (
           <div className="flex items-center gap-1 w-full">
-            <SelectCell
-              columnId="therapist1Id"
-              disabled={isLocked || saveStatus === "saving"}
-              label={t("calls.column.therapist1")}
-              name="therapist1Id"
-              onBlur={() => commit()}
-              onChange={(value) => updateDraft("therapist1Id", nullableValue(value))}
-              onCommitValue={(value) => updateDraftAndCommit("therapist1Id", nullableValue(value))}
-              onGridKeyDown={(event) => handleGridKeyDown("therapist1Id", event)}
-              options={options.therapists}
-              rowIndex={rowIndex}
-              value={draft.therapist1Id ?? ""}
-            />
-            <SelectCell
-              columnId="therapist2Id"
-              disabled={isLocked || saveStatus === "saving"}
-              errorId={`call-${row.id}-therapist2-error`}
-              errorMessage={firstFieldError(fieldErrors, "therapist2Id")}
-              label={t("calls.column.therapist2")}
-              name="therapist2Id"
-              onBlur={() => commit()}
-              onChange={(value) => updateDraft("therapist2Id", nullableValue(value))}
-              onCommitValue={(value) => updateDraftAndCommit("therapist2Id", nullableValue(value))}
-              onGridKeyDown={(event) => handleGridKeyDown("therapist2Id", event)}
-              options={options.therapists}
-              rowIndex={rowIndex}
-              value={draft.therapist2Id ?? ""}
-            />
+            <div className="w-1/2 min-w-0">
+              <SelectCell
+                columnId="therapist1Id"
+                disabled={isLocked || saveStatus === "saving"}
+                emptyLabel="선택"
+                label={t("calls.column.therapist1")}
+                name="therapist1Id"
+                onBlur={() => commit()}
+                onChange={(value) => updateDraft("therapist1Id", nullableValue(value))}
+                onCommitValue={(value) => updateDraftAndCommit("therapist1Id", nullableValue(value))}
+                onGridKeyDown={(event) => handleGridKeyDown("therapist1Id", event)}
+                options={shortTherapistOptions}
+                rowIndex={rowIndex}
+                value={draft.therapist1Id ?? ""}
+              />
+            </div>
+            <div className="w-1/2 min-w-0">
+              <SelectCell
+                columnId="therapist2Id"
+                disabled={isLocked || saveStatus === "saving"}
+                emptyLabel="선택"
+                errorId={`call-${row.id}-therapist2-error`}
+                errorMessage={firstFieldError(fieldErrors, "therapist2Id")}
+                label={t("calls.column.therapist2")}
+                name="therapist2Id"
+                onBlur={() => commit()}
+                onChange={(value) => updateDraft("therapist2Id", nullableValue(value))}
+                onCommitValue={(value) => updateDraftAndCommit("therapist2Id", nullableValue(value))}
+                onGridKeyDown={(event) => handleGridKeyDown("therapist2Id", event)}
+                options={shortTherapistOptions}
+                rowIndex={rowIndex}
+                value={draft.therapist2Id ?? ""}
+              />
+            </div>
           </div>
         ) : (
-          <div className="w-full">
+          <div className="w-full min-w-0">
             <SelectCell
               columnId="therapist1Id"
               disabled={isLocked || saveStatus === "saving"}
+              emptyLabel="선택"
               label={t("calls.column.therapist1")}
               name="therapist1Id"
               onBlur={() => commit()}
               onChange={(value) => updateDraft("therapist1Id", nullableValue(value))}
               onCommitValue={(value) => updateDraftAndCommit("therapist1Id", nullableValue(value))}
               onGridKeyDown={(event) => handleGridKeyDown("therapist1Id", event)}
-              options={options.therapists}
+              options={singleTherapistOptions}
               rowIndex={rowIndex}
               value={draft.therapist1Id ?? ""}
             />
@@ -1453,7 +1620,7 @@ function EditableCallRow({
       </td>
 
       {/* 7. 입장 */}
-      <td className="border-b border-border px-2 py-2.5">
+      <td className="border-b border-border px-2 py-2.5 text-center">
         <ActualEntryCell
           disabled={isLocked || saveStatus === "saving"}
           displayEnd={serverRow.displayEnd}
@@ -1474,28 +1641,28 @@ function EditableCallRow({
       </td>
 
       {/* 9. 결제 */}
-      <td className="border-b border-border px-2 py-2.5">
-        <div className="flex flex-col items-center gap-1">
+      <td className="px-2 py-3 text-center align-middle">
+        <div className="inline-flex items-center justify-center">
           <button
-            className={`inline-flex min-h-7 items-center justify-center px-3 rounded-full text-xs font-bold transition-all shadow-2xs cursor-pointer ${
+            className={`inline-flex items-center justify-center min-w-[70px] py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               draft.confirmationCode === "Y"
-                ? "bg-emerald-100/90 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300"
-                : "bg-surface-float text-neutral-600 border border-border hover:border-border-strong hover:text-foreground dark:text-neutral-400"
+                ? "bg-[#DCF5E3] text-[#1CA84C] hover:bg-[#cff0d7]"
+                : "bg-[#FDF3E7] text-[#C27D38] hover:bg-[#faebd8]"
             }`}
             onClick={handleTogglePayment}
             type="button"
           >
             {draft.confirmationCode === "Y"
-              ? (locale !== "vi" ? "✓ 결제완료" : "✓ Đã thanh toán")
+              ? (locale !== "vi" ? "결제완료" : "Đã thanh toán")
               : (locale !== "vi" ? "미확인" : "Chưa TT")}
           </button>
-          <PaymentAmountCell
-            onKeyDown={(event) => handleReadonlyKeyDown("paymentAmount", event)}
-            row={serverRow}
-            rowIndex={rowIndex}
-            saveStatus={saveStatus}
-          />
           <div className="sr-only">
+            <PaymentAmountCell
+              onKeyDown={(event) => handleReadonlyKeyDown("paymentAmount", event)}
+              row={serverRow}
+              rowIndex={rowIndex}
+              saveStatus={saveStatus}
+            />
             <SelectCell
               columnId="confirmationCode"
               disabled={isLocked || saveStatus === "saving"}
@@ -1510,10 +1677,11 @@ function EditableCallRow({
       </td>
 
       {/* 10. 할인 */}
-      <td className="border-b border-border px-2 py-2.5">
+      <td className="px-2 py-3 align-middle">
         <SelectCell
           columnId="discountTypeCode"
           disabled={isLocked || saveStatus === "saving"}
+          emptyLabel="없음"
           label={t("calls.column.discountType")}
           name="discountTypeCode"
           onBlur={() => commit()}
@@ -1571,78 +1739,88 @@ function EditableCallRow({
       </td>
 
       {/* 11. 조치 */}
-      <td className="border-b border-border px-2 py-2.5 text-center relative">
-        {draft.status === "예약" ? (
+      <td className="px-2 py-3 text-center align-middle relative">
+        {currentStatus === "RESERVED" ? (
           <button
-            className="inline-flex min-h-8 items-center justify-center rounded-full bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700 active:scale-95 transition-all shadow-xs cursor-pointer"
+            className="inline-flex h-9 w-full items-center justify-center rounded-xl bg-[#0066FF] px-3.5 text-xs font-bold text-white hover:bg-[#0052CC] active:scale-95 transition-all shadow-xs cursor-pointer"
             onClick={handleEnterService}
             type="button"
           >
             {locale !== "vi" ? "입장" : "Vào"}
           </button>
-        ) : draft.status === "사용중" ? (
+        ) : currentStatus === "IN_USE" ? (
           <button
-            className="inline-flex min-h-8 items-center justify-center rounded-full bg-rose-600 px-4 text-xs font-bold text-white hover:bg-rose-700 active:scale-95 transition-all shadow-xs cursor-pointer"
+            className="inline-flex h-9 w-full items-center justify-center rounded-xl bg-[#FF1F48] px-3.5 text-xs font-bold text-white hover:bg-[#E01038] active:scale-95 transition-all shadow-xs cursor-pointer"
             onClick={handleEarlyFinish}
             type="button"
           >
             {locale !== "vi" ? "종료" : "Kết thúc"}
           </button>
-        ) : draft.status === "청소중" ? (
-          <div className="relative inline-block">
+        ) : currentStatus === "CLEANING" ? (
+          <div className="relative inline-flex h-9 w-full rounded-xl overflow-hidden shadow-2xs border border-[#BED9FF] bg-[#E3EFFF]">
             <button
-              className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-full border border-sky-300 bg-sky-100 px-3.5 text-xs font-bold text-sky-800 hover:bg-sky-200 active:scale-95 transition-all shadow-2xs cursor-pointer"
+              className="flex-1 py-1.5 px-2 text-xs font-bold text-[#0055FF] hover:bg-[#D5E6FF] transition-colors cursor-pointer text-center"
+              onClick={handleFinishCleaning}
+              type="button"
+            >
+              {locale !== "vi" ? "청소 끝" : "Xong dọn"}
+            </button>
+            <button
+              className="px-2 border-l border-[#BED9FF] text-[#0055FF] hover:bg-[#D5E6FF] transition-colors cursor-pointer flex items-center justify-center"
               onClick={() => setActionMenuOpen(!actionMenuOpen)}
               type="button"
             >
-              <span>🧹 {locale !== "vi" ? "청소 끝" : "Xong dọn"}</span>
               <svg className={`w-3.5 h-3.5 transition-transform ${actionMenuOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
             {actionMenuOpen ? (
               <div
-                className="absolute right-0 top-full mt-1.5 z-40 w-36 overflow-hidden rounded-xl border border-border bg-surface py-1 text-left shadow-xl"
+                className="absolute right-0 top-full mt-1.5 z-50 w-36 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 text-left shadow-xl"
                 onMouseLeave={() => setActionMenuOpen(false)}
               >
                 <button
-                  className="flex w-full items-center gap-2 px-3.5 py-2 text-xs font-bold text-foreground hover:bg-readonly transition-colors cursor-pointer"
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
                   onClick={() => {
                     setActionMenuOpen(false);
                     handleFinishCleaning();
                   }}
                   type="button"
                 >
-                  <span>🧹</span>
-                  <span>{locale !== "vi" ? "청소 완료" : "Hoàn tất dọn"}</span>
+                  <span className="text-sm">🧹</span>
+                  <span>{locale !== "vi" ? "청소 끝" : "Xong dọn"}</span>
                 </button>
                 <button
-                  className="flex w-full items-center gap-2 border-t border-border px-3.5 py-2 text-xs font-bold text-muted hover:bg-readonly hover:text-foreground transition-colors cursor-pointer"
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                   onClick={() => {
                     setActionMenuOpen(false);
                     handleUndoFinish();
                   }}
                   type="button"
                 >
-                  <span>↺</span>
+                  <svg className="w-3.5 h-3.5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
                   <span>{locale !== "vi" ? "종료 취소" : "Hủy kết thúc"}</span>
                 </button>
               </div>
             ) : null}
           </div>
-        ) : draft.status === "방문완료" || draft.status === "VISIT_COMPLETE" ? (
+        ) : currentStatus === "COMPLETED" ? (
           <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600">
             ✓ {locale !== "vi" ? "완료" : "Hoàn tất"}
           </span>
-        ) : draft.status === "노쇼" || draft.status === "NO_SHOW" ? (
+        ) : currentStatus === "NO_SHOW" ? (
           <span className="inline-flex items-center gap-1 text-xs font-bold text-rose-600">
             ✕ {locale !== "vi" ? "노쇼" : "No-show"}
           </span>
-        ) : draft.status === "취소" || draft.status === "CANCELED" ? (
+        ) : currentStatus === "CANCELLED" ? (
           <span className="inline-flex items-center gap-1 text-xs font-bold text-neutral-500">
             ⊖ {locale !== "vi" ? "취소" : "Đã hủy"}
           </span>
-        ) : null}
+        ) : (
+          <span className="text-gray-400 text-xs">-</span>
+        )}
       </td>
 
       {/* 정산 열 (showSettlementColumns=true 일 때만 표시) */}
@@ -1777,39 +1955,39 @@ export function EditableCallGrid({
     getCoreRowModel: getCoreRowModel()
   });
 
-  const isCompletedStatus = (status: string) =>
-    ["방문완료", "VISIT_COMPLETE", "노쇼", "NO_SHOW", "취소", "CANCELED"].includes(status);
+  const isCompletedStatus = (status: string) => {
+    const norm = normalizeCallStatus(status);
+    return norm === "COMPLETED" || norm === "NO_SHOW" || norm === "CANCELLED";
+  };
   const activeRows = table.getRowModel().rows.filter((r) => !isCompletedStatus(r.original.status));
   const completedRows = table.getRowModel().rows.filter((r) => isCompletedStatus(r.original.status));
 
-  const completedCount = completedRows.filter((r) => ["방문완료", "VISIT_COMPLETE"].includes(r.original.status)).length;
-  const canceledCount = completedRows.filter((r) => ["취소", "CANCELED"].includes(r.original.status)).length;
-  const noShowCount = completedRows.filter((r) => ["노쇼", "NO_SHOW"].includes(r.original.status)).length;
+  const completedCount = completedRows.filter((r) => normalizeCallStatus(r.original.status) === "COMPLETED").length;
+  const canceledCount = completedRows.filter((r) => normalizeCallStatus(r.original.status) === "CANCELLED").length;
+  const noShowCount = completedRows.filter((r) => normalizeCallStatus(r.original.status) === "NO_SHOW").length;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-xs">
-      <div className="flex items-center justify-between border-b border-border bg-surface-float/40 px-4 py-3">
-        <div>
-          <h2 className="text-base font-bold text-foreground">{t("calls.grid.title")}</h2>
-          {isLocked ? (
-            <div className="mt-1 text-xs text-danger">
-              <p className="font-medium">{t("calls.grid.lockedTitle")}</p>
-              <p>{t("calls.grid.lockedCallDescription")}</p>
-            </div>
-          ) : null}
-        </div>
-        <span className="text-xs font-semibold text-muted">{t("calls.grid.rowCount", { count: rows.length })}</span>
+    <section className="w-full min-w-0">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-xl font-bold text-gray-900 tracking-tight">
+          원장 그리드
+          <span className="sr-only">콜 원장 그리드</span>
+        </h2>
+        {isLocked ? (
+          <div className="text-xs text-rose-600">
+            <span className="font-semibold">{t("calls.grid.lockedTitle")}: </span>
+            <span>{t("calls.grid.lockedCallDescription")}</span>
+          </div>
+        ) : null}
       </div>
 
-      {rows.length === 0 ? (
-        <div className="grid gap-3 px-4 py-8">
-          <div>
-            <p className="text-sm font-medium text-foreground">{t("calls.grid.empty.title")}</p>
-            <p className="mt-1 text-xs text-muted">{t("calls.grid.empty.description")}</p>
+      <div className="overflow-hidden rounded-2xl border border-[#E5E0D8] bg-white shadow-xs">
+        {rows.length === 0 ? (
+          <div className="grid gap-3 px-4 py-8 text-center">
+            <p className="text-sm font-medium text-gray-700">{t("calls.grid.empty.title")}</p>
+            <p className="mt-1 text-xs text-gray-500">{t("calls.grid.empty.description")}</p>
           </div>
-        </div>
-      ) : (
-        <>
+        ) : (
           <div className="relative overflow-x-auto">
             <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(showSettlementColumns) }}>
               <CallGridColgroup showSettlementColumns={showSettlementColumns} />
@@ -1832,71 +2010,72 @@ export function EditableCallGrid({
               </tbody>
             </table>
           </div>
+        )}
+      </div>
 
-          {activeRows.length > 0 && completedRows.length > 0 ? (
-            <div className="border-t border-border">
-              {/* Bottom Collapsible Bar (222.png) */}
-              <div className="flex items-center justify-between bg-surface-float/40 px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                    ✓ 완료 {completedCount}건
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-muted">
-                    ⊖ 취소 {canceledCount}건
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-800 dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
-                    ✕ 노쇼 {noShowCount}건
-                  </span>
-                </div>
-                <button
-                  className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-foreground transition-colors cursor-pointer"
-                  onClick={() => setShowCompletedSection((prev) => !prev)}
-                  type="button"
-                >
-                  <span>
-                    {showCompletedSection
-                      ? (locale !== "vi" ? "내역 접기" : "Thu gọn")
-                      : (locale !== "vi" ? "내역 펼치기" : "Xem chi tiết")}
-                  </span>
-                  <svg
-                    className={`h-4 w-4 transition-transform ${showCompletedSection ? "rotate-180" : ""}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
-                  </svg>
-                </button>
+      {completedRows.length > 0 ? (
+        <div className="mt-3">
+          {/* Bottom Collapsible Bar (222.png) */}
+          <div
+            className="flex items-center justify-between rounded-2xl border border-[#EADBCE] bg-[#FAF7F2] px-5 py-3.5 shadow-2xs hover:bg-[#F3EFE6] transition-colors cursor-pointer"
+            onClick={() => setShowCompletedSection((prev) => !prev)}
+            role="button"
+            tabIndex={0}
+          >
+            <div className="flex items-center gap-6">
+              <span className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#16A34A] text-white text-xs font-bold">✓</span>
+                <span>완료 {completedCount}건</span>
+              </span>
+              <span className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#DC2626] text-white text-xs font-bold">⊖</span>
+                <span>취소 {canceledCount}건</span>
+              </span>
+              <span className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#DC2626] text-white text-xs font-bold">✕</span>
+                <span>노쇼 {noShowCount}건</span>
+              </span>
+            </div>
+            <div className="text-gray-500">
+              <svg
+                className={`h-5 w-5 transition-transform duration-200 ${showCompletedSection ? "rotate-180" : ""}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} />
+              </svg>
+            </div>
+          </div>
+
+          {showCompletedSection ? (
+            <div className="mt-2 overflow-hidden rounded-2xl border border-[#E5E0D8] bg-white shadow-xs">
+              <div className="relative overflow-x-auto">
+                <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(showSettlementColumns) }}>
+                  <CallGridColgroup showSettlementColumns={showSettlementColumns} />
+                  <CallGridHead showSettlementColumns={showSettlementColumns} />
+                  <tbody>
+                    {completedRows.map((tableRow) => (
+                      <EditableCallRow
+                        customers={customers}
+                        isLocked={isLocked}
+                        isSelected={selectedCallId === tableRow.original.id}
+                        key={tableRow.original.id}
+                        onToggleRowDetail={onToggleRowDetail}
+                        options={options}
+                        row={tableRow.original}
+                        rowCount={table.getRowModel().rows.length + 1}
+                        rowIndex={tableRow.index}
+                        showSettlementColumns={showSettlementColumns}
+                      />
+                    ))}
+                  </tbody>
+                </table>
               </div>
-
-              {showCompletedSection ? (
-                <div className="relative overflow-x-auto border-t border-border bg-surface-float/10">
-                  <table className="w-full table-fixed border-collapse text-left text-sm" style={{ minWidth: callGridMinWidth(showSettlementColumns) }}>
-                    <CallGridColgroup showSettlementColumns={showSettlementColumns} />
-                    <CallGridHead showSettlementColumns={showSettlementColumns} />
-                    <tbody>
-                      {completedRows.map((tableRow) => (
-                        <EditableCallRow
-                          customers={customers}
-                          isLocked={isLocked}
-                          isSelected={selectedCallId === tableRow.original.id}
-                          key={tableRow.original.id}
-                          onToggleRowDetail={onToggleRowDetail}
-                          options={options}
-                          row={tableRow.original}
-                          rowCount={table.getRowModel().rows.length + 1}
-                          rowIndex={tableRow.index}
-                          showSettlementColumns={showSettlementColumns}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : null}
             </div>
           ) : null}
-        </>
-      )}
+        </div>
+      ) : null}
 
       <AddRowForm
         courseChoice={courseChoice}
