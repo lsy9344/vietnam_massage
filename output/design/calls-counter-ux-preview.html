@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>콜 원장 · 카운터 실시간 업무 화면 (Clarity Warm-Pastel)</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+  <style>
+    :root {
+      --background: #F1E8D7;
+      --surface: #FAF4E9;
+      --surface-float: #F6F5F1;
+      --readonly: #ECE3D0;
+      --text: #161513;
+      --muted: #57534C;
+      --faint: #68625A;
+      --border: #D8D0C1;
+      --border-strong: #857D6C;
+      --brand: #090909;
+      --brand-strong: #2B2824;
+      --brand-foreground: #FFFFFF;
+      --brand-secondary: oklch(0.47 0.105 76);
+      
+      --status-success: #0E7549;
+      --status-success-soft: #E6F4EA;
+      --status-success-border: #34A853;
+      
+      --status-info: #1A73E8;
+      --status-info-soft: #E8F0FE;
+      --status-info-border: #ABC8ED;
+      
+      --status-warning: #B85C00;
+      --status-warning-soft: #FEF7E0;
+      --status-warning-border: #FBBC04;
+      
+      --status-danger: #D2440E;
+      --status-danger-soft: #FCE8E6;
+      --status-danger-border: #EA4335;
+
+      --radius-dock: 24px;
+      --radius-card: 18px;
+      --radius-row: 14px;
+      --radius-input: 10px;
+      --radius-pill: 9999px;
+      
+      --shadow-float: 0 16px 36px -12px rgba(22, 21, 19, 0.18);
+      --font-body: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--background);
+      color: var(--text);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      padding: 16px 24px 60px;
+      line-height: 1.5;
+      font-size: 13.5px;
+      letter-spacing: -0.01em;
+    }
+
+    /* Screen Container */
+    .screen {
+      max-width: 1680px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Top Notice Bar */
+    .top-banner {
+      background: var(--surface-float);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-input);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+    }
+    .role-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+    }
+
+    /* Screen Toolbar */
+    .screen-toolbar {
+      background: var(--background);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 0;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .screen-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+    .date-capsule {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface-float);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      padding: 4px 12px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .date-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text);
+      font-weight: bold;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .date-btn:hover {
+      background: var(--readonly);
+    }
+
+    /* Buttons */
+    .btn {
+      height: 38px;
+      padding: 0 16px;
+      border-radius: var(--radius-pill);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+      font-family: inherit;
+    }
+    .btn-brand {
+      background: var(--brand);
+      color: var(--brand-foreground);
+    }
+    .btn-brand:hover {
+      background: var(--brand-strong);
+    }
+    .btn-outline {
+      background: var(--surface);
+      border-color: var(--border);
+      color: var(--text);
+    }
+    .btn-outline:hover {
+      background: var(--readonly);
+      border-color: var(--border-strong);
+    }
+    .btn-pill-sm {
+      height: 28px;
+      padding: 0 10px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      border: 1px solid var(--border);
+      background: var(--surface-float);
+      color: var(--text);
+      transition: all 0.15s ease;
+      font-family: inherit;
+    }
+    .btn-pill-sm:hover {
+      border-color: var(--border-strong);
+    }
+    .btn-pill-sm.active {
+      background: var(--brand);
+      color: var(--brand-foreground);
+      border-color: var(--brand);
+    }
+    .btn-action-enter {
+      background: var(--brand);
+      color: #FFFFFF;
+      height: 26px;
+      padding: 0 10px;
+      border-radius: var(--radius-pill);
+      font-size: 11.5px;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-action-enter:hover {
+      background: var(--brand-strong);
+    }
+    .btn-action-finish {
+      background: var(--status-danger-soft);
+      color: var(--status-danger);
+      border: 1px solid var(--status-danger-border);
+      height: 26px;
+      padding: 0 10px;
+      border-radius: var(--radius-pill);
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-action-finish:hover {
+      background: var(--status-danger);
+      color: #FFFFFF;
+    }
+    .btn-action-undo {
+      background: var(--readonly);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      height: 26px;
+      padding: 0 10px;
+      border-radius: var(--radius-pill);
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-action-undo:hover {
+      color: var(--text);
+      border-color: var(--border-strong);
+    }
+
+    /* Status Counts Bar */
+    .status-counts-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      padding: 10px 16px;
+    }
+    .count-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      font-size: 12.5px;
+      font-weight: 500;
+    }
+    .count-pill-total {
+      background: var(--brand);
+      color: var(--brand-foreground);
+      font-weight: 700;
+    }
+    .count-pill-reserved { background: var(--status-info-soft); color: var(--status-info); border: 1px solid var(--status-info-border); }
+    .count-pill-inuse { background: var(--status-info-soft); color: var(--status-info); font-weight: 700; border: 1px solid var(--status-info-border); }
+    .count-pill-cleaning { background: var(--status-warning-soft); color: var(--status-warning); border: 1px solid var(--status-warning-border); }
+    .count-pill-completed { background: var(--status-success-soft); color: var(--status-success); border: 1px solid var(--status-success-border); }
+    .count-pill-noshow { background: var(--readonly); color: var(--muted); }
+    .count-pill-canceled { background: var(--readonly); color: var(--muted); text-decoration: line-through; }
+
+    /* Therapist Status Overview */
+    .therapist-overview {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      padding: 14px 18px;
+    }
+    .overview-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .overview-title {
+      font-size: 14px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .overview-meta {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .sort-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .sort-label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-right: 2px;
+    }
+
+    .therapist-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 10px;
+    }
+    .therapist-card {
+      background: var(--surface-float);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-input);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 84px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+    .therapist-card:hover {
+      border-color: var(--brand);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(22, 21, 19, 0.06);
+    }
+    .therapist-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .therapist-name {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      border-radius: var(--radius-pill);
+      font-size: 10.5px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .badge-available {
+      background: var(--status-success-soft);
+      color: var(--status-success);
+      border: 1px solid var(--status-success-border);
+    }
+    .badge-inuse {
+      background: var(--status-info-soft);
+      color: var(--status-info);
+      border: 1px solid var(--status-info-border);
+    }
+    .badge-cleaning {
+      background: var(--status-warning-soft);
+      color: var(--status-warning);
+      border: 1px solid var(--status-warning-border);
+    }
+    .badge-scheduled {
+      background: var(--readonly);
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .therapist-card-middle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--muted);
+      margin: 4px 0 2px;
+      font-variant-numeric: tabular-nums;
+    }
+    .therapist-card-bottom {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Ledger Workspace */
+    .ledger-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      overflow: hidden;
+    }
+    .ledger-table-wrap {
+      overflow-x: auto;
+    }
+    .ledger-table {
+      width: 100%;
+      min-width: 1300px;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13px;
+    }
+    .ledger-table th {
+      background: var(--readonly);
+      color: var(--muted);
+      font-weight: 600;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .ledger-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+      font-variant-numeric: tabular-nums;
+    }
+    .ledger-table tr:hover {
+      background: rgba(246, 245, 241, 0.7);
+    }
+    .cell-time { font-weight: 700; width: 80px; }
+    .cell-entry { width: 100px; }
+    .cell-room { width: 110px; }
+    .cell-course { width: 140px; font-weight: 600; }
+    .cell-therapist { width: 150px; }
+    .cell-status { width: 140px; }
+    .cell-payment { width: 120px; }
+    .cell-confirm { width: 120px; text-align: center; }
+
+    /* Payment Toggle Pill */
+    .payment-pill {
+      height: 28px;
+      padding: 0 10px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1px solid;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s ease;
+      font-family: inherit;
+    }
+    .payment-pill.confirmed {
+      background: var(--status-success-soft);
+      color: var(--status-success);
+      border-color: var(--status-success-border);
+    }
+    .payment-pill.unconfirmed {
+      background: var(--readonly);
+      color: var(--muted);
+      border-color: var(--border);
+    }
+    .payment-pill:hover {
+      border-color: var(--border-strong);
+    }
+
+    /* Unassigned warning indicator */
+    .unassigned-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--status-warning-soft);
+      color: var(--status-warning);
+      border: 1px dashed var(--status-warning-border);
+    }
+
+    /* Collapsible Bottom Section */
+    .archived-section {
+      border-top: 2px solid var(--border);
+      background: rgba(236, 227, 208, 0.35);
+    }
+    .archived-summary {
+      padding: 12px 18px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      user-select: none;
+    }
+    .archived-summary:hover {
+      color: var(--text);
+      background: rgba(236, 227, 208, 0.5);
+    }
+
+    /* Slide-Over Quick Booking Drawer */
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(22, 21, 19, 0.25);
+      backdrop-filter: blur(2px);
+      z-index: 998;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    .drawer-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      max-width: 520px;
+      background: var(--surface-float);
+      border-left: 1px solid var(--border);
+      box-shadow: var(--shadow-float);
+      z-index: 999;
+      transform: translateX(100%);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+    }
+    .drawer.open {
+      transform: translateX(0);
+    }
+    .drawer-header {
+      padding: 16px 20px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .drawer-title {
+      font-size: 17px;
+      font-weight: 800;
+    }
+    .drawer-steps {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+    .step-label.active {
+      color: var(--brand);
+      font-weight: 700;
+      text-decoration: underline;
+      text-underline-offset: 4px;
+    }
+    .btn-close {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-close:hover {
+      background: var(--readonly);
+    }
+    .drawer-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .drawer-footer {
+      padding: 14px 20px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    /* Form Inputs */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .form-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .form-input, .form-select {
+      height: 42px;
+      padding: 0 12px;
+      border-radius: var(--radius-input);
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 13.5px;
+      font-family: inherit;
+      outline: none;
+    }
+    .form-input:focus, .form-select:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 2px var(--brand-secondary);
+    }
+
+    /* Path Buttons Grid */
+    .path-buttons {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .path-btn {
+      height: 38px;
+      border-radius: var(--radius-input);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+    .path-btn:hover {
+      border-color: var(--border-strong);
+      background: var(--readonly);
+    }
+    .path-btn.selected {
+      background: var(--brand);
+      color: var(--brand-foreground);
+      border-color: var(--brand);
+    }
+
+    /* Quota Card */
+    .quota-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-input);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .quota-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .quota-item-label {
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .quota-item-val {
+      font-size: 16px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--brand);
+      color: var(--brand-foreground);
+      padding: 12px 20px;
+      border-radius: var(--radius-pill);
+      font-weight: 700;
+      font-size: 13px;
+      box-shadow: var(--shadow-float);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 1000;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+<div class="screen">
+  <!-- Top Notice Bar with Role Toggle -->
+  <aside class="top-banner">
+    <div class="role-badge">
+      <span>🛡️ 접속 권한:</span>
+      <span id="role-display" style="color: var(--brand); font-weight: 800;">카운터 (Counter)</span>
+      <span style="color: var(--muted); font-size: 12px;">: 일일 수납 집중 모드 (월별 누적 시재 보호 적용)</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <button class="btn-pill-sm active" id="btn-role-counter" onclick="setRole('counter')">카운터 모드</button>
+      <button class="btn-pill-sm" id="btn-role-admin" onclick="setRole('admin')">관리자 모드</button>
+    </div>
+  </aside>
+
+  <!-- Screen Toolbar -->
+  <header class="screen-toolbar">
+    <div class="toolbar-left">
+      <h1 class="screen-title">콜 원장 관리</h1>
+      <div class="date-capsule">
+        <button class="date-btn" onclick="changeDate(-1)">‹</button>
+        <span id="current-date">2026-10-19 (월)</span>
+        <button class="date-btn" onclick="changeDate(1)">›</button>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <button class="btn btn-brand" onclick="openDrawer()">
+        <span>+</span> 빠른 예약 (Drawer)
+      </button>
+    </div>
+  </header>
+
+  <!-- Status Counts Bar -->
+  <section aria-label="상태별 건수" class="status-counts-bar">
+    <span class="count-pill count-pill-total" id="count-total">전체 18건</span>
+    <span class="count-pill count-pill-reserved" id="count-reserved">예약 5건</span>
+    <span class="count-pill count-pill-inuse" id="count-inuse">사용중 4건</span>
+    <span class="count-pill count-pill-cleaning" id="count-cleaning">청소중 2건</span>
+    <span class="count-pill count-pill-completed" id="count-completed">방문완료 5건</span>
+    <span class="count-pill count-pill-noshow" id="count-noshow">노쇼 1건</span>
+    <span class="count-pill count-pill-canceled" id="count-canceled">취소 1건</span>
+  </section>
+
+  <!-- Therapist Status Overview -->
+  <section aria-label="관리사별 현황" class="therapist-overview">
+    <div class="overview-header">
+      <div class="overview-title">
+        <span>👥 관리사별 실시간 현황</span>
+        <span class="overview-meta" id="therapist-summary-meta">(총 14명 · 출근 11명 · 지금 가용 4명)</span>
+      </div>
+      <div class="sort-group">
+        <span class="sort-label">정렬:</span>
+        <button class="btn-pill-sm active" id="sort-avail" onclick="sortTherapists('available')">지금 가능한 순</button>
+        <button class="btn-pill-sm" id="sort-least-call" onclick="sortTherapists('least_completed')">완료 콜 적은 순</button>
+        <button class="btn-pill-sm" id="sort-least-rem" onclick="sortTherapists('least_remaining')">남은 예약 적은 순</button>
+        <button class="btn-pill-sm" id="sort-num" onclick="sortTherapists('number')">번호순</button>
+      </div>
+    </div>
+
+    <!-- Dynamic Therapist Cards Grid -->
+    <div class="therapist-cards-grid" id="therapist-grid">
+      <!-- Populated by JS -->
+    </div>
+  </section>
+
+  <!-- Interactive Call Ledger Table -->
+  <main class="ledger-card">
+    <div class="ledger-table-wrap">
+      <table aria-label="콜 원장 목록" class="ledger-table" id="call-table">
+        <thead>
+          <tr>
+            <th class="cell-time">시작 시간</th>
+            <th class="cell-entry">실제 입장</th>
+            <th class="cell-room">호실</th>
+            <th class="cell-course">코스</th>
+            <th class="cell-therapist">마사지사 1</th>
+            <th class="cell-therapist">마사지사 2</th>
+            <th class="cell-status">상태 & 퀵 액션</th>
+            <th class="cell-payment">결제 수단</th>
+            <th>고객 및 비고</th>
+            <th class="cell-confirm">결제 확인</th>
+          </tr>
+        </thead>
+        <tbody id="active-rows-body">
+          <!-- Active Rows populated by JS -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Bottom Collapsible Section for Finished / Archived Calls -->
+    <details class="archived-section" id="archived-details">
+      <summary class="archived-summary">
+        <span id="archived-summary-text">📁 완료 및 취소 내역 (방문완료 5건 · 노쇼 1건 · 취소 1건)</span>
+        <span style="font-size: 11.5px; font-weight: normal; color: var(--faint);">클릭하여 펼치기/접기</span>
+      </summary>
+      <div class="ledger-table-wrap">
+        <table class="ledger-table">
+          <tbody id="archived-rows-body">
+            <!-- Archived Rows populated by JS -->
+          </tbody>
+        </table>
+      </div>
+    </details>
+  </main>
+</div>
+
+<!-- Slide-over Backdrop -->
+<div class="drawer-backdrop" id="drawer-backdrop" onclick="closeDrawer()"></div>
+
+<!-- 2-Step Quick Booking Slide-Over Drawer -->
+<aside aria-label="빠른 예약" class="drawer" id="booking-drawer">
+  <header class="drawer-header">
+    <div>
+      <h2 class="drawer-title">빠른 예약 등록</h2>
+      <div class="drawer-steps">
+        <span class="step-label active" id="step1-indicator">1. 예약 조건 & 가용성</span>
+        <span>→</span>
+        <span class="step-label" id="step2-indicator">2. 고객 정보 & 저장</span>
+      </div>
+    </div>
+    <button aria-label="닫기" class="btn-close" onclick="closeDrawer()">✕</button>
+  </header>
+
+  <!-- Step 1 Content -->
+  <div class="drawer-body" id="drawer-step1">
+    <!-- Quota Indicator Card -->
+    <div class="quota-card">
+      <div class="quota-item">
+        <span class="quota-item-label">총 관리사</span>
+        <span class="quota-item-val" id="drawer-quota-total">14명</span>
+      </div>
+      <div class="quota-item">
+        <span class="quota-item-label">지정 배정</span>
+        <span class="quota-item-val" style="color: var(--status-info);" id="drawer-quota-assigned">7명</span>
+      </div>
+      <div class="quota-item">
+        <span class="quota-item-label">미지정 예약</span>
+        <span class="quota-item-val" style="color: var(--status-warning);" id="drawer-quota-unassigned">2명</span>
+      </div>
+      <div class="quota-item">
+        <span class="quota-item-label">현재 가용 정원</span>
+        <span class="quota-item-val" style="color: var(--status-success);" id="drawer-quota-available">5명</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="book-time">시작 시각</label>
+      <select class="form-select" id="book-time" onchange="updateQuota()">
+        <option value="15:00">15:00</option>
+        <option value="15:30" selected>15:30</option>
+        <option value="16:00">16:00</option>
+        <option value="16:30">16:30</option>
+        <option value="17:00">17:00</option>
+        <option value="18:00">18:00</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">예약 인원 (동행 시 자동 분할)</label>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <button class="btn btn-outline" onclick="changePartySize(-1)" style="width: 44px; height: 44px; font-size: 18px;" type="button">-</button>
+        <span id="party-size-display" style="font-size: 18px; font-weight: 800; min-width: 40px; text-align: center;">1명</span>
+        <button class="btn btn-outline" onclick="changePartySize(1)" style="width: 44px; height: 44px; font-size: 18px;" type="button">+</button>
+        <span style="font-size: 12px; color: var(--muted); margin-left: 8px;">2명 이상 예약 시 [동행] 연동 행 자동 생성</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="book-course">코스 선택</label>
+      <select class="form-select" id="book-course">
+        <option value="course-a">A 누루60 (60분 · 1,500,000 VND)</option>
+        <option value="course-b" selected>B 90 (90분 · 2,000,000 VND)</option>
+        <option value="course-c">C 120 (120분 · 2,600,000 VND)</option>
+        <option value="course-d">D 2:1 90 (90분 · 관리사 2명 필수 · 3,200,000 VND)</option>
+        <option value="course-e">E 스페셜 (90분 · 2,200,000 VND)</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="book-therapist">마사지사 배정 (상단 카드 클릭 시 자동 반영)</label>
+      <select class="form-select" id="book-therapist">
+        <option value="">(미지정 풀 예약 - 방문 시 선착순 배정)</option>
+        <option value="01번 민아">01번 민아 (대기중 · 90분 가능)</option>
+        <option value="03번 하린">03번 하린 (대기중 · 60분 가능)</option>
+        <option value="07번 다은">07번 다은 (대기중 · 종일 가능)</option>
+        <option value="09번 지우">09번 지우 (대기중 · 종일 가능)</option>
+        <option value="02번 수진">02번 수진 (15:40 종료 예정)</option>
+        <option value="05번 채원">05번 채원 (16:00 종료 예정)</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Step 2 Content -->
+  <div class="drawer-body" id="drawer-step2" style="display: none;">
+    <div class="form-group">
+      <label class="form-label">예약 경로 (원터치 선택)</label>
+      <div class="path-buttons" id="path-selector">
+        <button class="path-btn selected" onclick="selectPath(this, '텔레그램')">텔레그램</button>
+        <button class="path-btn" onclick="selectPath(this, '카카오톡')">카카오톡</button>
+        <button class="path-btn" onclick="selectPath(this, '왓츠앱')">왓츠앱</button>
+        <button class="path-btn" onclick="selectPath(this, '잘로')">잘로</button>
+        <button class="path-btn" onclick="selectPath(this, '전화')">전화</button>
+        <button class="path-btn" onclick="selectPath(this, '워크인')">워크인</button>
+        <button class="path-btn" onclick="selectPath(this, '기타')">기타</button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="cust-name">고객명 / 닉네임</label>
+      <input class="form-input" id="cust-name" placeholder="고객명 또는 메신저 닉네임 입력 (예: 민준)" type="text" value="민준" />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="cust-memo">고객 요청 사항 및 비고</label>
+      <input class="form-input" id="cust-memo" placeholder="예: 압 세게, 시원한 음료 세팅 요청" type="text" value="압 세게 요청" />
+    </div>
+
+    <div id="companion-preview-box" style="display: none; background: var(--surface); border: 1px dashed var(--border-strong); border-radius: var(--radius-input); padding: 12px;">
+      <div style="font-weight: 700; font-size: 12.5px; color: var(--brand); margin-bottom: 4px;">👥 동행 예약 분할 안내</div>
+      <div id="companion-preview-text" style="font-size: 12px; color: var(--muted);"></div>
+    </div>
+  </div>
+
+  <!-- Drawer Footer Navigation -->
+  <footer class="drawer-footer">
+    <button class="btn btn-outline" id="btn-drawer-prev" onclick="goToStep(1)" style="display: none;" type="button">← 이전 단계</button>
+    <button class="btn btn-brand" id="btn-drawer-next" onclick="goToStep(2)" type="button">다음 (고객 정보 입력) →</button>
+    <button class="btn btn-brand" id="btn-drawer-submit" onclick="submitQuickBooking()" style="display: none; background: var(--status-success); border-color: var(--status-success);" type="button">✓ 빠른 예약 등록 완료</button>
+  </footer>
+</aside>
+
+<!-- Toast -->
+<div class="toast" id="toast-msg">✓ 작업이 완료되었습니다.</div>
+
+<script>
+  // Initial Mock Data
+  let role = 'counter';
+  let partySize = 1;
+  let selectedPath = '텔레그램';
+  let currentSort = 'available';
+
+  const therapistsData = [
+    { id: 't1', name: '01번 민아', status: 'available', statusLabel: '지금 가능', timeInfo: '90분 가능', badgeTone: 'badge-available', completed: 3, remaining: 1, sortNum: 1 },
+    { id: 't3', name: '03번 하린', status: 'available', statusLabel: '지금 가능', timeInfo: '60분 가능', badgeTone: 'badge-available', completed: 2, remaining: 1, sortNum: 3 },
+    { id: 't7', name: '07번 다은', status: 'available', statusLabel: '지금 가능', timeInfo: '종일 가능', badgeTone: 'badge-available', completed: 1, remaining: 0, sortNum: 7 },
+    { id: 't9', name: '09번 지우', status: 'available', statusLabel: '지금 가능', timeInfo: '종일 가능', badgeTone: 'badge-available', completed: 2, remaining: 0, sortNum: 9 },
+    { id: 't2', name: '02번 수진', status: 'inuse', statusLabel: '사용 중', timeInfo: '101호 B (15:40 종료)', badgeTone: 'badge-inuse', completed: 4, remaining: 2, sortNum: 2 },
+    { id: 't5', name: '05번 채원', status: 'inuse', statusLabel: '사용 중', timeInfo: '103호 A (16:00 종료)', badgeTone: 'badge-inuse', completed: 3, remaining: 2, sortNum: 5 },
+    { id: 't6', name: '06번 소희', status: 'inuse', statusLabel: '사용 중', timeInfo: '105호 D (16:15 종료)', badgeTone: 'badge-inuse', completed: 2, remaining: 3, sortNum: 6 },
+    { id: 't10', name: '10번 서연', status: 'inuse', statusLabel: '사용 중', timeInfo: '106호 A (16:00 종료)', badgeTone: 'badge-inuse', completed: 1, remaining: 2, sortNum: 10 },
+    { id: 't4', name: '04번 유진', status: 'cleaning', statusLabel: '청소 중', timeInfo: '102호 (15:20 조기종료)', badgeTone: 'badge-cleaning', completed: 3, remaining: 1, sortNum: 4 },
+    { id: 't8', name: '08번 윤아', status: 'cleaning', statusLabel: '청소 중', timeInfo: '107호 (15:10 종료)', badgeTone: 'badge-cleaning', completed: 2, remaining: 0, sortNum: 8 },
+    { id: 't11', name: '11번 예지', status: 'scheduled', statusLabel: '출근 예정', timeInfo: '16:00 출근', badgeTone: 'badge-scheduled', completed: 0, remaining: 1, sortNum: 11 },
+    { id: 't12', name: '12번 지아', status: 'scheduled', statusLabel: '출근 예정', timeInfo: '16:30 출근', badgeTone: 'badge-scheduled', completed: 0, remaining: 0, sortNum: 12 },
+    { id: 't13', name: '13번 나연', status: 'scheduled', statusLabel: '출근 예정', timeInfo: '17:00 출근', badgeTone: 'badge-scheduled', completed: 0, remaining: 0, sortNum: 13 },
+    { id: 't14', name: '14번 정화', status: 'scheduled', statusLabel: '출근 예정', timeInfo: '17:30 출근', badgeTone: 'badge-scheduled', completed: 0, remaining: 0, sortNum: 14 }
+  ];
+
+  let callsData = [
+    {
+      id: 'c1',
+      time: '15:00',
+      entry: '',
+      room: '102호',
+      course: 'A 누루60',
+      therapist1: '01번 민아',
+      therapist2: '-',
+      status: '예약',
+      payment: '현금',
+      memo: '[텔레그램] 김실장 / 음료 세팅',
+      confirmed: 'Y'
+    },
+    {
+      id: 'c2',
+      time: '15:30',
+      entry: '',
+      room: '미배정',
+      course: 'B 90',
+      therapist1: '미배정 (풀)',
+      therapist2: '-',
+      status: '예약',
+      payment: '계좌',
+      memo: '[카카오톡] 예약손님 1',
+      confirmed: 'N'
+    },
+    {
+      id: 'c3',
+      time: '14:30',
+      entry: '14:32',
+      room: '101호',
+      course: 'B 90',
+      therapist1: '02번 수진',
+      therapist2: '-',
+      status: '사용중',
+      payment: '카드',
+      memo: '[워크인] 단골 고객',
+      confirmed: 'Y'
+    },
+    {
+      id: 'c4',
+      time: '14:45',
+      entry: '14:48',
+      room: '103호',
+      course: 'A 누루60',
+      therapist1: '05번 채원',
+      therapist2: '-',
+      status: '사용중',
+      payment: '현금',
+      memo: '[전화] 압 강하게 요청',
+      confirmed: 'Y'
+    },
+    {
+      id: 'c5',
+      time: '14:15',
+      entry: '14:15',
+      room: '105호',
+      course: 'D 2:1 90',
+      therapist1: '06번 소희',
+      therapist2: '10번 서연',
+      status: '사용중',
+      payment: '계좌',
+      memo: '[텔레그램] VIP 2:1 예약',
+      confirmed: 'Y'
+    },
+    {
+      id: 'c6',
+      time: '14:00',
+      entry: '14:05',
+      room: '104호',
+      course: 'A 누루60',
+      therapist1: '04번 유진',
+      therapist2: '-',
+      status: '청소중',
+      payment: '현금',
+      memo: '[텔레그램] 닉네임 박대표 [종료 15:05]',
+      confirmed: 'Y'
+    },
+    {
+      id: 'c7',
+      time: '13:50',
+      entry: '13:55',
+      room: '107호',
+      course: 'A 누루60',
+      therapist1: '08번 윤아',
+      therapist2: '-',
+      status: '청소중',
+      payment: '카드',
+      memo: '[워크인] [종료 14:55]',
+      confirmed: 'Y'
+    }
+  ];
+
+  const archivedCallsData = [
+    { id: 'arc1', time: '12:00', entry: '12:05', room: '101호', course: 'A 누루60', therapist1: '01번 민아', therapist2: '-', status: '방문완료', payment: '현금', memo: '[전화] 완료 건', confirmed: 'Y' },
+    { id: 'arc2', time: '12:30', entry: '12:30', room: '103호', course: 'B 90', therapist1: '02번 수진', therapist2: '-', status: '방문완료', payment: '카드', memo: '[카카오톡] 완료 건', confirmed: 'Y' },
+    { id: 'arc3', time: '13:00', entry: '13:02', room: '102호', course: 'A 누루60', therapist1: '03번 하린', therapist2: '-', status: '방문완료', payment: '계좌', memo: '[워크인] 완료 건', confirmed: 'Y' },
+    { id: 'arc4', time: '13:15', entry: '13:20', room: '106호', course: 'A 누루60', therapist1: '05번 채원', therapist2: '-', status: '방문완료', payment: '현금', memo: '[텔레그램] 완료 건', confirmed: 'Y' },
+    { id: 'arc5', time: '13:30', entry: '13:30', room: '105호', course: 'B 90', therapist1: '07번 다은', therapist2: '-', status: '방문완료', payment: '카드', memo: '[왓츠앱] 완료 건', confirmed: 'Y' },
+    { id: 'arc6', time: '13:00', entry: '-', room: '미배정', course: 'A 누루60', therapist1: '09번 지우', therapist2: '-', status: '노쇼', payment: '-', memo: '[전화] 연락 두절 노쇼', confirmed: 'N' },
+    { id: 'arc7', time: '14:00', entry: '-', room: '미배정', course: 'B 90', therapist1: '미배정', therapist2: '-', status: '취소', payment: '-', memo: '[카카오톡] 손님 개인사정 취소', confirmed: 'N' }
+  ];
+
+  function showToast(text) {
+    const t = document.getElementById('toast-msg');
+    t.innerText = text;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  function setRole(r) {
+    role = r;
+    document.getElementById('btn-role-counter').classList.toggle('active', r === 'counter');
+    document.getElementById('btn-role-admin').classList.toggle('active', r === 'admin');
+    const disp = document.getElementById('role-display');
+    if (r === 'counter') {
+      disp.innerText = '카운터 (Counter)';
+      showToast('🛡️ 카운터 모드로 전환되었습니다. (월별 누적 시재 숨김)');
+    } else {
+      disp.innerText = '관리자 / 정산 매니저 (Administrator)';
+      showToast('🔑 관리자 모드로 전환되었습니다. (전체 정산 금액 및 월별 집계 열람)');
+    }
+  }
+
+  function renderTherapists() {
+    const container = document.getElementById('therapist-grid');
+    container.innerHTML = '';
+
+    const list = [...therapistsData];
+    if (currentSort === 'available') {
+      const rank = { available: 0, cleaning: 1, scheduled: 2, inuse: 3 };
+      list.sort((a, b) => (rank[a.status] - rank[b.status]) || (a.sortNum - b.sortNum));
+    } else if (currentSort === 'least_completed') {
+      list.sort((a, b) => (a.completed - b.completed) || (a.sortNum - b.sortNum));
+    } else if (currentSort === 'least_remaining') {
+      list.sort((a, b) => (a.remaining - b.remaining) || (a.sortNum - b.sortNum));
+    } else if (currentSort === 'number') {
+      list.sort((a, b) => a.sortNum - b.sortNum);
+    }
+
+    list.forEach(t => {
+      const card = document.createElement('div');
+      card.className = 'therapist-card';
+      card.onclick = () => selectTherapistForBooking(t.name);
+      card.innerHTML = `
+        <div class="therapist-card-top">
+          <span class="therapist-name">${t.name}</span>
+          <span class="status-badge ${t.badgeTone}">${t.statusLabel}</span>
+        </div>
+        <div class="therapist-card-middle">
+          <span>완료 ${t.completed}</span>
+          <span>·</span>
+          <span>예약 ${t.remaining}</span>
+        </div>
+        <div class="therapist-card-bottom">${t.timeInfo}</div>
+      `;
+      container.appendChild(card);
+    });
+
+    const availCount = therapistsData.filter(t => t.status === 'available').length;
+    const workingCount = therapistsData.filter(t => t.status !== 'scheduled').length;
+    document.getElementById('therapist-summary-meta').innerText = 
+      `(총 ${therapistsData.length}명 · 출근 ${workingCount}명 · 지금 가용 ${availCount}명)`;
+  }
+
+  function sortTherapists(mode) {
+    currentSort = mode;
+    document.getElementById('sort-avail').classList.toggle('active', mode === 'available');
+    document.getElementById('sort-least-call').classList.toggle('active', mode === 'least_completed');
+    document.getElementById('sort-least-rem').classList.toggle('active', mode === 'least_remaining');
+    document.getElementById('sort-num').classList.toggle('active', mode === 'number');
+    renderTherapists();
+  }
+
+  function renderLedger() {
+    const tbody = document.getElementById('active-rows-body');
+    tbody.innerHTML = '';
+
+    callsData.forEach(row => {
+      const tr = document.createElement('tr');
+      
+      // Action button based on status
+      let actionBtn = '';
+      if (row.status === '예약') {
+        actionBtn = `<button class="btn-action-enter" onclick="enterCall('${row.id}')">입장</button>`;
+      } else if (row.status === '사용중') {
+        actionBtn = `<button class="btn-action-finish" onclick="finishCall('${row.id}')">종료</button>`;
+      } else if (row.status === '청소중') {
+        actionBtn = `<button class="btn-action-undo" onclick="undoFinishCall('${row.id}')">종료 취소</button>`;
+      }
+
+      // Room & Therapist formatting
+      const roomHtml = row.room === '미배정' 
+        ? `<span class="unassigned-badge">미배정</span>` 
+        : `<strong>${row.room}</strong>`;
+      const t1Html = row.therapist1.includes('미배정') 
+        ? `<span class="unassigned-badge">미배정</span>` 
+        : row.therapist1;
+
+      // Status pill badge
+      let statusPillClass = 'count-pill-reserved';
+      if (row.status === '사용중') statusPillClass = 'count-pill-inuse';
+      if (row.status === '청소중') statusPillClass = 'count-pill-cleaning';
+
+      // Payment confirmation badge toggle
+      const confirmBadge = row.confirmed === 'Y'
+        ? `<button class="payment-pill confirmed" onclick="togglePayment('${row.id}')">✓ 결제완료</button>`
+        : `<button class="payment-pill unconfirmed" onclick="togglePayment('${row.id}')">결제 미확인</button>`;
+
+      tr.innerHTML = `
+        <td class="cell-time">${row.time}</td>
+        <td class="cell-entry">${row.entry || '<span style="color:var(--faint)">-</span>'}</td>
+        <td class="cell-room">${roomHtml}</td>
+        <td class="cell-course">${row.course}</td>
+        <td class="cell-therapist">${t1Html}</td>
+        <td class="cell-therapist" style="color:var(--muted);">${row.therapist2}</td>
+        <td class="cell-status">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="count-pill ${statusPillClass}" style="padding: 2px 8px; font-size: 11px;">${row.status}</span>
+            ${actionBtn}
+          </div>
+        </td>
+        <td class="cell-payment">${row.payment}</td>
+        <td>${row.memo}</td>
+        <td class="cell-confirm">${confirmBadge}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    // Render archived rows
+    const arcTbody = document.getElementById('archived-rows-body');
+    arcTbody.innerHTML = '';
+    archivedCallsData.forEach(row => {
+      const tr = document.createElement('tr');
+      tr.style.opacity = '0.75';
+      const statusPillClass = row.status === '방문완료' ? 'count-pill-completed' : 'count-pill-noshow';
+      tr.innerHTML = `
+        <td class="cell-time">${row.time}</td>
+        <td class="cell-entry">${row.entry}</td>
+        <td class="cell-room">${row.room}</td>
+        <td class="cell-course">${row.course}</td>
+        <td class="cell-therapist">${row.therapist1}</td>
+        <td class="cell-therapist">${row.therapist2}</td>
+        <td class="cell-status"><span class="count-pill ${statusPillClass}" style="padding: 2px 8px; font-size: 11px;">${row.status}</span></td>
+        <td class="cell-payment">${row.payment}</td>
+        <td>${row.memo}</td>
+        <td class="cell-confirm"><span style="font-size:12px; color:var(--muted);">${row.confirmed === 'Y' ? '완료' : '-'}</span></td>
+      `;
+      arcTbody.appendChild(tr);
+    });
+
+    updateCounts();
+  }
+
+  function updateCounts() {
+    const reserved = callsData.filter(c => c.status === '예약').length;
+    const inuse = callsData.filter(c => c.status === '사용중').length;
+    const cleaning = callsData.filter(c => c.status === '청소중').length;
+    const completed = archivedCallsData.filter(c => c.status === '방문완료').length;
+    const noshow = archivedCallsData.filter(c => c.status === '노쇼').length;
+    const canceled = archivedCallsData.filter(c => c.status === '취소').length;
+    const total = callsData.length + archivedCallsData.length;
+
+    document.getElementById('count-total').innerText = `전체 ${total}건`;
+    document.getElementById('count-reserved').innerText = `예약 ${reserved}건`;
+    document.getElementById('count-inuse').innerText = `사용중 ${inuse}건`;
+    document.getElementById('count-cleaning').innerText = `청소중 ${cleaning}건`;
+    document.getElementById('count-completed').innerText = `방문완료 ${completed}건`;
+    document.getElementById('count-noshow').innerText = `노쇼 ${noshow}건`;
+    document.getElementById('count-canceled').innerText = `취소 ${canceled}건`;
+  }
+
+  function enterCall(id) {
+    const row = callsData.find(c => c.id === id);
+    if (!row) return;
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    row.status = '사용중';
+    row.entry = `${hh}:${mm}`;
+    showToast(`✓ [입장 완료] ${row.time} ${row.course} 입장 처리되었습니다.`);
+    renderLedger();
+  }
+
+  function finishCall(id) {
+    const row = callsData.find(c => c.id === id);
+    if (!row) return;
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const finishTime = `${hh}:${mm}`;
+    row.status = '청소중';
+    row.memo = `${row.memo} [종료 ${finishTime}]`.trim();
+    
+    // Free up therapist if assigned
+    const th = therapistsData.find(t => t.name === row.therapist1);
+    if (th) {
+      th.status = 'available';
+      th.statusLabel = '지금 가능';
+      th.badgeTone = 'badge-available';
+      th.timeInfo = '종일 가능';
+      th.completed += 1;
+      th.remaining = Math.max(0, th.remaining - 1);
+    }
+    showToast(`✓ [종료] ${row.therapist1} 종료 처리되어 가용 상태로 즉시 복귀되었습니다.`);
+    renderTherapists();
+    renderLedger();
+  }
+
+  function undoFinishCall(id) {
+    const row = callsData.find(c => c.id === id);
+    if (!row) return;
+    row.status = '사용중';
+    row.memo = row.memo.replace(/\[종료\s*([0-2]?\d:[0-5]\d)\]/g, '').trim();
+    const th = therapistsData.find(t => t.name === row.therapist1);
+    if (th) {
+      th.status = 'inuse';
+      th.statusLabel = '사용 중';
+      th.badgeTone = 'badge-inuse';
+      th.timeInfo = `${row.room} ${row.course}`;
+      th.completed = Math.max(0, th.completed - 1);
+      th.remaining += 1;
+    }
+    showToast(`↩️ [종료 취소] ${row.time} 콜이 다시 '사용중' 상태로 복원되었습니다.`);
+    renderTherapists();
+    renderLedger();
+  }
+
+  function togglePayment(id) {
+    const row = callsData.find(c => c.id === id);
+    if (!row) return;
+    row.confirmed = row.confirmed === 'Y' ? 'N' : 'Y';
+    const statusText = row.confirmed === 'Y' ? '결제완료 (Y)' : '결제 미확인 (N)';
+    showToast(`💳 [수납 상태] ${statusText}로 변경되었습니다.`);
+    renderLedger();
+  }
+
+  // Drawer Controls
+  function openDrawer(preSelectedTherapist) {
+    document.getElementById('booking-drawer').classList.add('open');
+    document.getElementById('drawer-backdrop').classList.add('open');
+    goToStep(1);
+    partySize = 1;
+    document.getElementById('party-size-display').innerText = '1명';
+    document.getElementById('companion-preview-box').style.display = 'none';
+
+    if (preSelectedTherapist) {
+      document.getElementById('book-therapist').value = preSelectedTherapist;
+    } else {
+      document.getElementById('book-therapist').value = '';
+    }
+    updateQuota();
+  }
+
+  function closeDrawer() {
+    document.getElementById('booking-drawer').classList.remove('open');
+    document.getElementById('drawer-backdrop').classList.remove('open');
+  }
+
+  function selectTherapistForBooking(therapistName) {
+    openDrawer(therapistName);
+    showToast(`⚡ ${therapistName} 지정 빠른 예약을 시작합니다.`);
+  }
+
+  function goToStep(step) {
+    const s1 = document.getElementById('drawer-step1');
+    const s2 = document.getElementById('drawer-step2');
+    const ind1 = document.getElementById('step1-indicator');
+    const ind2 = document.getElementById('step2-indicator');
+    const prev = document.getElementById('btn-drawer-prev');
+    const next = document.getElementById('btn-drawer-next');
+    const submit = document.getElementById('btn-drawer-submit');
+
+    if (step === 1) {
+      s1.style.display = 'flex';
+      s2.style.display = 'none';
+      ind1.classList.add('active');
+      ind2.classList.remove('active');
+      prev.style.display = 'none';
+      next.style.display = 'inline-flex';
+      submit.style.display = 'none';
+    } else {
+      s1.style.display = 'none';
+      s2.style.display = 'flex';
+      ind1.classList.remove('active');
+      ind2.classList.add('active');
+      prev.style.display = 'inline-flex';
+      next.style.display = 'none';
+      submit.style.display = 'inline-flex';
+
+      // Update companion preview if partySize > 1
+      const compBox = document.getElementById('companion-preview-box');
+      if (partySize > 1) {
+        compBox.style.display = 'block';
+        const name = document.getElementById('cust-name').value.trim() || '손님';
+        document.getElementById('companion-preview-text').innerHTML = 
+          `총 ${partySize}명 예약:<br>` +
+          `• 1행: [${selectedPath}] ${name}<br>` +
+          Array.from({length: partySize - 1}, (_, i) => `• ${i + 2}행: [동행 ${i + 2}] [${selectedPath}] ${name} (일행)`).join('<br>');
+      } else {
+        compBox.style.display = 'none';
+      }
+    }
+  }
+
+  function changePartySize(delta) {
+    partySize = Math.max(1, Math.min(6, partySize + delta));
+    document.getElementById('party-size-display').innerText = `${partySize}명`;
+    updateQuota();
+  }
+
+  function updateQuota() {
+    const total = 14;
+    const assigned = callsData.filter(c => c.status === '사용중' || c.status === '예약').length;
+    const unassigned = 2;
+    const available = Math.max(0, total - assigned - unassigned);
+
+    document.getElementById('drawer-quota-total').innerText = `${total}명`;
+    document.getElementById('drawer-quota-assigned').innerText = `${assigned}명`;
+    document.getElementById('drawer-quota-unassigned').innerText = `${unassigned}명`;
+    document.getElementById('drawer-quota-available').innerText = `${available}명`;
+  }
+
+  function selectPath(btn, path) {
+    selectedPath = path;
+    document.querySelectorAll('.path-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+  }
+
+  function submitQuickBooking() {
+    const time = document.getElementById('book-time').value;
+    const courseSelect = document.getElementById('book-course');
+    const course = courseSelect.options[courseSelect.selectedIndex].text.split('(')[0].trim();
+    const therapist = document.getElementById('book-therapist').value || '미배정 (풀)';
+    const custName = document.getElementById('cust-name').value.trim() || '손님';
+    const memo = document.getElementById('cust-memo').value.trim();
+    const fullMemo = `[${selectedPath}] ${custName}${memo ? ' / ' + memo : ''}`;
+
+    // Add first row
+    const newId = 'new-' + Date.now();
+    callsData.unshift({
+      id: newId,
+      time: time,
+      entry: '',
+      room: '미배정',
+      course: course,
+      therapist1: therapist,
+      therapist2: '-',
+      status: '예약',
+      payment: '현금',
+      memo: fullMemo,
+      confirmed: 'N'
+    });
+
+    // Add companion rows if partySize > 1
+    for (let i = 2; i <= partySize; i++) {
+      callsData.unshift({
+        id: newId + '-' + i,
+        time: time,
+        entry: '',
+        room: '미배정',
+        course: course,
+        therapist1: '미배정 (풀)',
+        therapist2: '-',
+        status: '예약',
+        payment: '현금',
+        memo: `[동행 ${i}] ${fullMemo}`,
+        confirmed: 'N'
+      });
+    }
+
+    // Update therapist state if assigned
+    if (therapist && !therapist.includes('미배정')) {
+      const th = therapistsData.find(t => t.name === therapist);
+      if (th) {
+        th.remaining += 1;
+      }
+    }
+
+    closeDrawer();
+    renderTherapists();
+    renderLedger();
+    showToast(`🎉 [예약 완료] ${custName}님 외 ${partySize}명 빠른 예약이 등록되었습니다.`);
+  }
+
+  function changeDate(delta) {
+    showToast(`📅 날짜 변경: ${delta > 0 ? '다음 날' : '이전 날'} 장부를 불러옵니다.`);
+  }
+
+  // Initialize
+  renderTherapists();
+  renderLedger();
+</script>
+
+</body>
+</html>

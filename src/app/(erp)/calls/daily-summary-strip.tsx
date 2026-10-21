@@ -5,7 +5,7 @@ import { formatNumber } from "@/lib/i18n/format";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { SummaryCard, SummaryCards } from "@/components/ui/summary-card";
 import { calculationErrorMessageKey } from "@/app/(erp)/calls/calculation-status-message";
-import { ledgerCallHref } from "@/lib/ledger-address";
+import { ledgerCallHref } from "@/app/(erp)/calls/ledger-address";
 import type { CalculationWarningCallDto, DailyCallLedgerSummaryDto, TillBalanceDto } from "@/modules/calls/service-call-service";
 
 const cardClassName = "rounded-lg border border-border bg-surface p-4";
@@ -46,12 +46,14 @@ export function DailySummaryStrip({
   summary,
   warningCalls,
   showSettlementAmounts,
+  showMonthlyTotals = true,
   locale
 }: {
   summary: DailyCallLedgerSummaryDto;
   /** 계산 경고 건수를 펼치면 보이는 콜(calculationWarningCallsFromRows). */
   warningCalls: CalculationWarningCallDto[];
   showSettlementAmounts: boolean;
+  showMonthlyTotals?: boolean;
   locale: Locale;
 }) {
   const showTherapistAssignmentCount = showSettlementAmounts;
@@ -61,6 +63,8 @@ export function DailySummaryStrip({
   const amount = (value: number) => formatNumber(locale, value);
   const formatVnd = (value: number) => `${amount(value)} ${vndSuffix}`;
   const balance = (value: number, kind: "cash" | "bank") => balanceAmount(locale, value, kind);
+  const monthNote = (value: number, kind: "cash" | "bank") =>
+    t(locale, "calls.cashbook.monthNote", { amount: `${balance(value, kind)} ${vndSuffix}` });
 
   return (
     <section aria-label={t(locale, "calls.summary.aria")} className="grid grid-cols-1 gap-6">
@@ -70,12 +74,14 @@ export function DailySummaryStrip({
         <SummaryCard
           accent="blue"
           label={t(locale, "calls.summary.cashBalance")}
+          note={showMonthlyTotals ? monthNote(summary.till.month.cashBalance, "cash") : undefined}
           unit={vndSuffix}
           value={balance(summary.till.day.cashBalance, "cash")}
         />
         <SummaryCard
           accent="blue"
           label={t(locale, "calls.summary.bankBalance")}
+          note={showMonthlyTotals ? monthNote(summary.till.month.bankBalance, "bank") : undefined}
           unit={vndSuffix}
           value={balance(summary.till.day.bankBalance, "bank")}
         />
@@ -110,12 +116,15 @@ export function DailySummaryStrip({
             <AmountRow label={t(locale, "calls.summary.discountTotal")} value={formatVnd(summary.discountTotal)} />
             <AmountRow label={t(locale, "calls.summary.expenseTotal")} value={formatVnd(summary.expenseTotal)} />
             {showSettlementAmounts ? (
-              <AmountRow label={t(locale, "calls.summary.therapistCommission")} value={formatVnd(summary.therapistCommissionTotal)} />
+              <>
+                <AmountRow label={t(locale, "calls.summary.therapistCommission")} value={formatVnd(summary.therapistCommissionTotal)} />
+                <AmountRow label={t(locale, "calls.summary.earcarePool")} value={formatVnd(summary.earcarePoolTotal)} />
+              </>
             ) : null}
           </dl>
         </Card>
         <Card title={t(locale, "calls.cashbook.till")}>
-          <TillTable day={summary.till.day} locale={locale} />
+          <TillTable day={summary.till.day} locale={locale} month={summary.till.month} showMonth={showMonthlyTotals} />
         </Card>
       </div>
 
@@ -149,12 +158,14 @@ export function DailySummaryStrip({
   );
 }
 
-/** 시재는 오늘만 보인다. 이번 달 시재는 하루 수납 화면에 두지 않고 마감·보고 화면에서 본다(1018 스펙 D18). */
-function TillTable({ day, locale }: { day: TillBalanceDto; locale: Locale }) {
+function TillTable({ day, month, locale, showMonth = true }: { day: TillBalanceDto; month: TillBalanceDto; locale: Locale; showMonth?: boolean }) {
   const vndSuffix = t(locale, "calls.summary.vndSuffix");
   const formatVnd = (value: number) => `${formatNumber(locale, value)} ${vndSuffix}`;
   const formatBalance = (value: number, kind: "cash" | "bank") => `${balanceAmount(locale, value, kind)} ${vndSuffix}`;
-  const periods = [{ key: "today", label: t(locale, "calls.cashbook.till.today"), till: day }];
+  const periods = [
+    { key: "today", label: t(locale, "calls.cashbook.till.today"), till: day },
+    ...(showMonth ? [{ key: "month", label: t(locale, "calls.cashbook.till.month"), till: month }] : [])
+  ];
 
   return (
     <div className="mt-3 overflow-x-auto rounded-md border border-border">
@@ -236,7 +247,7 @@ function CalculationWarnings({
                 <td className={cellClassName}>{call.customerMemo || "—"}</td>
                 <td className={`${cellClassName} text-danger`}>{t(locale, calculationErrorMessageKey(call.calculationStatus))}</td>
                 <td className={`${cellClassName} text-right`}>
-                  {/* 주소의 call 매개변수로 원장 표의 그 행이 선택되고 콜 상세 패널이 열린다. */}
+                  {/* 주소의 #call-… 로 원장 표의 그 행에 바로 간다. 콜 상세 패널은 티켓 13. */}
                   <a className="screen-step" href={ledgerCallHref(call)}>
                     {t(locale, "calls.cashbook.warnings.open")}
                   </a>

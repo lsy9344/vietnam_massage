@@ -65,6 +65,7 @@ export function DateContextControls({
           ariaLabel={t("common.operatingMonth")}
           className="min-w-44"
           defaultValue={selectedMonth.id}
+          key={selectedMonth.id}
           name="operatingMonthId"
           options={months.map((month) => ({
             label: t("common.monthOption", { monthKey: month.monthKey, status: operatingMonthStatusLabel(locale, month.status) }),
@@ -77,10 +78,12 @@ export function DateContextControls({
         <>
           <label className="grid gap-1 text-xs font-medium text-muted">
             {t("common.queryDate")}
+            {/* 이전/다음 날 링크는 주소만 바꾼다. defaultValue는 첫 표시 값이라 키를 날짜에 묶지 않으면 칸이 이전 날짜에 남는다. */}
             <input
               aria-label={t("common.queryDate")}
               className="screen-field"
               defaultValue={date}
+              key={date}
               max={selectedMonth.endDate}
               min={selectedMonth.startDate}
               name={dateParam}

@@ -25,6 +25,7 @@ function summary(overrides: Partial<DailyCallLedgerSummaryDto> = {}): DailyCallL
     canceledCount: 1,
     paymentTotal: 2900000,
     therapistCommissionTotal: 700000,
+    earcarePoolTotal: 100000,
     discountTotal: 100000,
     expenseTotal: 50000,
     netSales: 2850000,
@@ -82,14 +83,14 @@ function summaryCards(html: string) {
 
 describe("하루 수납·지출 탭 요약", () => {
   it("puts payment total, net sales, cash balance and bank balance on separate pastel cards with the service values", () => {
-    const html = render({ showSettlementAmounts: true });
+    const html = render();
     assert.match(html, /<dl aria-label="하루 수납 요약"/);
     const cards = summaryCards(html);
 
     assert.match(text(cards), /결제합계 2,900,000 VND/);
     assert.match(text(cards), /순매출 2,850,000 VND/);
-    assert.match(text(cards), /현금 잔액 1,450,000 VND/);
-    assert.match(text(cards), /계좌 잔액 400,000 VND/);
+    assert.match(text(cards), /현금 잔액 1,450,000 VND 이번 달 8,700,000 VND/);
+    assert.match(text(cards), /계좌 잔액 400,000 VND 이번 달 1,900,000 VND/);
     // 순매출과 잔액은 다른 카드, 다른 색이다(ADR 0002).
     assert.equal((cards.match(/bg-accent-lavender/g) ?? []).length, 2);
     assert.equal((cards.match(/bg-accent-blue/g) ?? []).length, 2);
@@ -128,13 +129,12 @@ describe("하루 수납·지출 탭 요약", () => {
     assert.match(shown, /지출합계 50,000 VND/);
   });
 
-  it("shows the day till receipts, expenses and balances, marking a shortage in the table", () => {
+  it("shows the day and month till receipts, expenses and balances, marking a shortage in the table", () => {
     const html = render({
-      showSettlementAmounts: true,
       summary: summary({
         till: {
           day: { cashReceipts: 1000, cashExpenses: 51000, cashBalance: -50000, bankReceipts: 0, bankExpenses: 0, bankBalance: 0 },
-          month: zeroTill()
+          month: { cashReceipts: 9000000, cashExpenses: 300000, cashBalance: 8700000, bankReceipts: 2000000, bankExpenses: 100000, bankBalance: 1900000 }
         }
       })
     });
@@ -142,34 +142,30 @@ describe("하루 수납·지출 탭 요약", () => {
 
     assert.match(text(till), /오늘 현금 1,000 VND 51,000 VND 부족 50,000 VND/);
     assert.match(text(till), /계좌 0 VND 0 VND 0 VND/);
+    assert.match(text(till), /이번 달 현금 9,000,000 VND 300,000 VND 8,700,000 VND/);
+    assert.match(text(till), /계좌 2,000,000 VND 100,000 VND 1,900,000 VND/);
     assert.match(till, /text-danger[^"]*">부족 50,000 VND/);
   });
 
-  // 1018 스펙 D18(2026-10-19 고침): 하루 수납 화면은 오늘 숫자만 보인다. 이번 달은 누구에게도 보이지 않고, 마감·보고 화면에 남는다.
-  it("never shows this month's balances or till, even for settlement viewers", () => {
-    for (const showSettlementAmounts of [false, true]) {
-      const html = render({
-        showSettlementAmounts,
-        summary: summary({
-          till: {
-            day: { cashReceipts: 1000, cashExpenses: 0, cashBalance: 1000, bankReceipts: 0, bankExpenses: 0, bankBalance: 0 },
-            month: { cashReceipts: 9000000, cashExpenses: 300000, cashBalance: 8700000, bankReceipts: 2000000, bankExpenses: 100000, bankBalance: 1900000 }
-          }
-        })
-      });
+  it("hides monthly figures from the till table when showMonthlyTotals is false", () => {
+    const counterHtml = render({ showMonthlyTotals: false });
+    const till = counterHtml.match(/<table[^>]*aria-label="시재"[\s\S]*?<\/table>/)?.[0] ?? "";
+    assert.doesNotMatch(text(till), /이번 달/);
 
-      assert.doesNotMatch(html, /이번 달|8,700,000|9,000,000|1,900,000|2,000,000/);
-      assert.match(text(html.match(/<table[^>]*aria-label="시재"[\s\S]*?<\/table>/)?.[0] ?? ""), /오늘 현금 1,000 VND/);
-    }
+    const fullHtml = render({ showMonthlyTotals: true });
+    const fullTill = fullHtml.match(/<table[^>]*aria-label="시재"[\s\S]*?<\/table>/)?.[0] ?? "";
+    assert.match(text(fullTill), /이번 달/);
   });
 
   it("keeps settlement amounts and the therapist assignment column for settlement viewers only", () => {
     const counter = render();
     assert.doesNotMatch(counter, /마사지사정산/);
+    assert.doesNotMatch(counter, /귀케어풀/);
     assert.doesNotMatch(counter, /마사지사 담당 수/);
 
     const admin = text(render({ showSettlementAmounts: true }));
     assert.match(admin, /마사지사정산 700,000 VND/);
+    assert.match(admin, /귀케어풀 100,000 VND/);
     assert.match(admin, /마사지사 담당 수/);
     assert.match(admin, /B 1 0 2/);
   });
@@ -195,8 +191,8 @@ describe("하루 수납·지출 탭 요약", () => {
     assert.doesNotMatch(details, /수당 누락/);
     assert.match(text(details), /13:00 민준 마사지사 수당 정책을 찾을 수 없습니다\./);
     assert.match(text(details), /15:30 — D코스는 마사지사2 필수입니다\./);
-    assert.match(details, /href="\/calls\?operatingMonthId=m-2026-10&amp;serviceDate=2026-10-14&amp;call=call-rate"/);
-    assert.match(details, /href="\/calls\?operatingMonthId=m-2026-10&amp;serviceDate=2026-10-14&amp;call=call-second"/);
+    assert.match(details, /href="\/calls\?operatingMonthId=m-2026-10&amp;serviceDate=2026-10-14#call-call-rate"/);
+    assert.match(details, /href="\/calls\?operatingMonthId=m-2026-10&amp;serviceDate=2026-10-14#call-call-second"/);
 
     const admin = text(render({ showSettlementAmounts: true, warningCalls }));
     assert.match(admin, /정책 누락 1건, 수당 누락 1건, 마사지사2 필요 1건은 금액\/코스별 집계에서 제외됐다/);

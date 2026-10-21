@@ -3,7 +3,6 @@ import { requireRouteAccess } from "@/lib/authorization";
 import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import {
-  autoFinishOverdueCalls,
   calculationWarningCallsFromRows,
   getDailyCallLedgerSummary,
   ledgerStatusCountsFromRows,
@@ -12,17 +11,15 @@ import {
   listServiceCallFormOptions,
   listServiceCallsForDate,
   listTherapistAvailability,
-  redactServiceCallSettlementAmounts,
-  unassignedReservedCallCountFromRows
+  listTherapistStatusOverview,
+  redactServiceCallSettlementAmounts
 } from "@/modules/calls/service-call-service";
 import { AddExpensePanel, DailyExpensePanel } from "@/app/(erp)/calls/daily-expense-panel";
 import { DailySummaryStrip } from "@/app/(erp)/calls/daily-summary-strip";
 import { CallLedgerWorkspace } from "@/app/(erp)/calls/call-ledger-workspace";
+import { QuickBookingTrigger } from "@/app/(erp)/calls/quick-booking-drawer";
 import { LedgerStatusCounts } from "@/app/(erp)/calls/ledger-status-counts";
-import { QuickBookingTrigger } from "@/app/(erp)/calls/quick-booking-panel";
-import { TherapistStatusStrip } from "@/app/(erp)/calls/therapist-status-strip";
-import { CallLeaveGuard } from "@/app/(erp)/calls/unsaved-guard";
-import { ledgerHref, ledgerTabParams, parseLedgerTab, type LedgerTab } from "@/lib/ledger-address";
+import { ledgerHref, ledgerTabParams, parseLedgerTab, type LedgerTab } from "@/app/(erp)/calls/ledger-address";
 import { DateContextControls } from "@/components/shell/date-context-controls";
 import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-notice";
 import { ScreenToolbar } from "@/components/shell/screen-toolbar";
@@ -34,8 +31,6 @@ type CallsPageSearchParams = {
   operatingMonthId?: string;
   serviceDate?: string;
   tab?: string;
-  /** 옛 보기 전환(티켓 19)의 주소. 옛 링크가 깨지지 않게 받아서 버린다(스펙 D15). */
-  view?: string;
 };
 
 const ledgerTabs: Array<{ tab: LedgerTab; labelKey: "calls.tab.ledger" | "calls.tab.cashbook" }> = [
@@ -63,12 +58,10 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
   const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
   const tab = parseLedgerTab(params.tab);
   const ledgerDate = { operatingMonthId: selectedMonth.id, serviceDate };
-  // 자동 청소 중(1018 스펙 D14): 그 영업일을 읽기 전에 표시 종료를 지난 사용중 콜을 정리한다.
-  await autoFinishOverdueCalls(ledgerDate);
   const isLocked = isOperatingMonthPayoutLocked(selectedMonth.status);
   const canViewSettlementAmounts = account.role === "administrator" || account.role === "settlement_manager";
 
-  // 주요 행동은 탭마다 다르다. 하루 수납·지출은 지출 추가, 원장은 빠른 예약이다.
+  // 주요 행동은 탭마다 다르다. 하루 수납·지출은 지출 추가, 원장의 빠른 예약은 티켓 20에서 붙인다.
   const toolbar = (action?: ReactNode) => (
     <ScreenToolbar
       account={account}
@@ -88,11 +81,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
       path="/calls"
       screenTabs={{
         label: t("calls.tabs.aria"),
-        items: ledgerTabs.map((item) => ({
-          href: ledgerHref(ledgerDate, item.tab),
-          label: t(item.labelKey),
-          current: item.tab === tab
-        }))
+        items: ledgerTabs.map((item) => ({ href: ledgerHref(ledgerDate, item.tab), label: t(item.labelKey), current: item.tab === tab }))
       }}
       sticky
       title={t("calls.title")}
@@ -104,8 +93,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
       listServiceCallsForDate(ledgerDate),
       listServiceCallFormOptions({ operatingMonthId: selectedMonth.id, locale }),
       listDailyExpensesForDate({ operatingMonthId: selectedMonth.id, expenseDate: serviceDate }),
-      // 하루 수납 화면은 오늘 숫자만 보인다. 이번 달 시재는 누구에게도 읽어 보내지 않는다(1018 스펙 D18) — 마감·보고 화면에서 본다.
-      getDailyCallLedgerSummary({ ...ledgerDate, includeMonthTill: false })
+      getDailyCallLedgerSummary(ledgerDate)
     ]);
 
     return (
@@ -121,6 +109,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
         <div className="grid grid-cols-1 gap-10">
           <DailySummaryStrip
             locale={locale}
+            showMonthlyTotals={account.role !== "counter"}
             showSettlementAmounts={canViewSettlementAmounts}
             summary={summary}
             warningCalls={calculationWarningCallsFromRows(rows)}
@@ -137,10 +126,11 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
     );
   }
 
-  const [rows, options, customers] = await Promise.all([
+  const [rows, options, customers, therapistStatusOverview] = await Promise.all([
     listServiceCallsForDate(ledgerDate),
     listServiceCallFormOptions({ operatingMonthId: selectedMonth.id, locale }),
-    listCustomers()
+    listCustomers(),
+    listTherapistStatusOverview({ operatingMonthId: selectedMonth.id, serviceDate })
   ]);
   const availabilityTime = options.timeSlots[0]?.value ?? "";
   const availabilityRows = availabilityTime
@@ -150,37 +140,35 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="screen">
-      {/*
-        원장 탭을 저장하지 않은 입력이 있는 동안 떠나기 전 안내로 감싼다(스펙 B07, 티켓 18). 빠른 예약은 원장 탭 머리의
-        주요 버튼이고, 패널은 원장 옆 패널이라 CallLedgerWorkspace 안에 있다(1018 스펙 D19). 새 콜은 빠른 예약으로만
-        만든다(스펙 D22).
-      */}
-      <CallLeaveGuard>
-        {toolbar(<QuickBookingTrigger isLocked={isLocked} />)}
-        <LedgerStatusCounts
-          counts={ledgerStatusCountsFromRows(rows)}
-          customerHref={linkToScreen(account.role, "/customers", { operatingMonthId: selectedMonth.id, date: serviceDate })}
-          locale={locale}
-        />
-        {/* Therapist 현황 줄(1018 스펙 D17). 출근 상태·콜 수·지금 상태는 빠른 예약에 넘기는 가능 판정 행에 이미 있다. */}
-        <TherapistStatusStrip canBook={!isLocked} rows={availabilityRows} unassignedCount={unassignedReservedCallCountFromRows(rows)} />
-        <CallLedgerWorkspace
-          key={`${selectedMonth.id}:${serviceDate}`}
+      {toolbar(
+        <QuickBookingTrigger
+          courses={options.courses}
           customers={customers}
           isLocked={isLocked}
-          options={options}
-          quickBooking={{
-            initialAvailabilityRows: availabilityRows,
-            initialAvailabilityTime: availabilityTime,
-            monthEndDate: selectedMonth.endDate,
-            monthStartDate: selectedMonth.startDate,
-            operatingMonthId: selectedMonth.id,
-            serviceDate
-          }}
-          rows={visibleRows}
-          showSettlementColumns={canViewSettlementAmounts}
+          operatingMonthId={selectedMonth.id}
+          serviceDate={serviceDate}
+          timeSlots={options.timeSlots}
         />
-      </CallLeaveGuard>
+      )}
+      <LedgerStatusCounts
+        counts={ledgerStatusCountsFromRows(rows)}
+        customerHref={null}
+        locale={locale}
+      />
+      {/* 가능 코스 영역은 티켓 20에서 빠른 예약 패널로 옮길 때까지 원장 위에 둔다. */}
+      <CallLedgerWorkspace
+        key={`${selectedMonth.id}:${serviceDate}`}
+        availabilityRows={availabilityRows}
+        availabilityTime={availabilityTime}
+        customers={customers}
+        isLocked={isLocked}
+        operatingMonthId={selectedMonth.id}
+        options={options}
+        rows={visibleRows}
+        serviceDate={serviceDate}
+        showSettlementColumns={canViewSettlementAmounts}
+        therapistStatusOverview={therapistStatusOverview}
+      />
     </div>
   );
 }

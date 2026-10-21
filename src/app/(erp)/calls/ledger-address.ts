@@ -1,0 +1,39 @@
+/**
+ * 콜 원장 화면의 주소. 원장 탭과 "하루 수납·지출" 탭은 운영월·날짜를 함께 쓰고,
+ * 고른 탭은 주소의 tab 매개변수로 남아 새로고침과 뒤로 가기에서 복원된다(명세 F08 기준 3).
+ * 도크의 원장 메뉴도 같은 주소 값으로 두 탭을 연다(routes.ts의 원장 보기).
+ */
+export type LedgerTab = "ledger" | "cashbook";
+
+export type LedgerDate = {
+  operatingMonthId: string;
+  serviceDate: string;
+};
+
+export function parseLedgerTab(value: unknown): LedgerTab {
+  return value === "cashbook" ? "cashbook" : "ledger";
+}
+
+/** 날짜를 옮겨도 남길 탭 매개변수. 원장 탭은 주소를 비워 둔다. */
+export function ledgerTabParams(tab: LedgerTab): Record<string, string> {
+  return tab === "cashbook" ? { tab } : {};
+}
+
+export function ledgerHref(target: LedgerDate, tab: LedgerTab = "ledger") {
+  const params = new URLSearchParams({
+    operatingMonthId: target.operatingMonthId,
+    serviceDate: target.serviceDate,
+    ...ledgerTabParams(tab)
+  });
+  return `/calls?${params.toString()}`;
+}
+
+/** 원장 표의 콜 행 id. 다른 화면의 링크가 이 행으로 바로 간다. */
+export function ledgerCallAnchorId(serviceCallId: string) {
+  return `call-${serviceCallId}`;
+}
+
+/** 그 날짜 원장 탭의 그 콜. 콜 상세 패널은 티켓 13에서 주소의 콜 id로 연다. */
+export function ledgerCallHref(target: LedgerDate & { serviceCallId: string }) {
+  return `${ledgerHref(target)}#${ledgerCallAnchorId(target.serviceCallId)}`;
+}
