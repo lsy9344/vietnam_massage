@@ -215,11 +215,11 @@ export function BookingChannelIcon({
 }) {
   const norm = (channel || "").trim().toLowerCase();
 
-  if (norm.includes("텔레") || norm.includes("tele")) {
+  if (norm.includes("텔레") || norm.includes("tele") || /\btg\b/.test(norm)) {
     return <TelegramChannelIcon className={className} />;
   }
 
-  if (norm.includes("카카오") || norm.includes("kakao")) {
+  if (norm.includes("카카오") || norm.includes("kakao") || norm.includes("카톡") || norm.includes("ktalk")) {
     return <KakaoTalkChannelIcon className={className} />;
   }
 
@@ -227,23 +227,91 @@ export function BookingChannelIcon({
     return <ZaloChannelIcon className={className} />;
   }
 
-  if (norm.includes("왓츠") || norm.includes("whats")) {
+  if (norm.includes("왓츠") || norm.includes("whats") || norm.includes("whatsapp") || /\bwa\b/.test(norm)) {
     return <WhatsAppChannelIcon className={className} />;
   }
 
-  if (norm.includes("위챗") || norm.includes("wechat")) {
+  if (
+    norm.includes("위챗") ||
+    norm.includes("위쳇") ||
+    norm.includes("웨이신") ||
+    norm.includes("wechat") ||
+    norm.includes("weixin") ||
+    /\bwx\b/.test(norm)
+  ) {
     return <WeChatChannelIcon className={className} />;
   }
 
-  if (norm.includes("워크") || norm.includes("walk")) {
+  if (
+    norm.includes("워크") ||
+    norm.includes("walk") ||
+    norm.includes("현장") ||
+    norm.includes("직접") ||
+    norm.includes("로드")
+  ) {
     return <WalkinChannelIcon className={className} />;
   }
 
-  if (norm.includes("전화") || norm.includes("phone")) {
+  if (
+    norm.includes("전화") ||
+    norm.includes("phone") ||
+    norm.includes("call") ||
+    norm.includes("유선") ||
+    norm.includes("통화")
+  ) {
     return <PhoneChannelIcon className={className} />;
   }
 
   return <EtcChannelIcon className={className} />;
+}
+
+export function detectChannelKeyword(text: string): BookingChannelType | null {
+  const norm = text.toLowerCase();
+  if (norm.includes("텔레") || norm.includes("tele") || /\btg\b/.test(norm)) return "텔레그램";
+  if (norm.includes("카카오") || norm.includes("카톡") || norm.includes("kakao") || norm.includes("ktalk")) return "카카오톡";
+  if (norm.includes("잘로") || norm.includes("zalo")) return "잘로";
+  if (norm.includes("왓츠") || norm.includes("whatsapp") || /\bwhats\b/.test(norm) || /\bwa\b/.test(norm)) return "왓츠앱";
+  if (
+    norm.includes("위챗") ||
+    norm.includes("위쳇") ||
+    norm.includes("웨이신") ||
+    norm.includes("wechat") ||
+    norm.includes("weixin") ||
+    /\bwx\b/.test(norm)
+  ) {
+    return "위챗";
+  }
+  if (
+    norm.includes("워크") ||
+    norm.includes("walk") ||
+    norm.includes("현장") ||
+    norm.includes("직접") ||
+    norm.includes("로드")
+  ) {
+    return "워크인";
+  }
+  if (
+    norm.includes("전화") ||
+    norm.includes("유선") ||
+    norm.includes("통화") ||
+    norm.includes("phone") ||
+    norm.includes("call") ||
+    norm.includes("tel")
+  ) {
+    return "전화";
+  }
+  if (norm.includes("기타") || /\betc\b/.test(norm)) return "기타";
+  return null;
+}
+
+export function cleanChannelPrefix(name: string): string {
+  let cleaned = name.trim();
+  cleaned = cleaned.replace(/^\[[^\]]+\]\s*/, "").replace(/^\([^\)]+\)\s*/, "");
+  cleaned = cleaned.replace(
+    /^(?:텔레그램|텔레|telegram|tele|카카오톡|카카오|카톡|kakao|잘로|zalo|왓츠앱|왓츠|whatsapp|위챗|위쳇|웨이신|wechat|워크인|현장|walk-in|walkin|전화|유선|기타)\s*[:·-]?\s*/i,
+    ""
+  );
+  return cleaned.trim() || name;
 }
 
 export function parseCustomerCallInfo(
@@ -252,28 +320,60 @@ export function parseCustomerCallInfo(
     note?: string | null;
     customerId?: string | null;
     customer?: { name: string; phone?: string | null } | null;
+    bookingChannelCode?: string | null;
+    bookerName?: string | null;
   },
   customers?: CustomerDto[]
 ) {
-  let channel = "기타";
+  let channel: BookingChannelType = "기타";
   let name = "-";
   let contact = "-";
   let memo = "";
 
   const text = (row.customerMemo ?? "").trim();
+  const note = (row.note ?? "").trim();
+  const booker = (row.bookerName ?? "").trim();
+  const code = (row.bookingChannelCode ?? "").trim().toUpperCase();
 
-  // 1. Detect channel prefix [채널]
-  const channelMatch = text.match(/^\[([^\]]+)\]/);
-  if (channelMatch) {
-    channel = channelMatch[1].trim();
-  } else if (row.note) {
-    const noteMatch = row.note.match(/예약경로:\s*([^\s(]+)/);
-    if (noteMatch) {
-      channel = noteMatch[1].trim();
+  // 1. Direct match from bookingChannelCode
+  if (code) {
+    if (code === "TELEGRAM" || code.includes("TELE")) {
+      channel = "텔레그램";
+    } else if (code === "KAKAOTALK" || code === "KAKAO") {
+      channel = "카카오톡";
+    } else if (code === "ZALO") {
+      channel = "잘로";
+    } else if (code === "WHATSAPP" || code.includes("WHATS")) {
+      channel = "왓츠앱";
+    } else if (code === "WECHAT" || code.includes("WECHAT")) {
+      channel = "위챗";
+    } else if (code === "WALK_IN" || code === "WALKIN" || code.includes("WALK")) {
+      channel = "워크인";
+    } else if (code === "PHONE") {
+      channel = "전화";
+    } else if (code === "OTHER" || code === "ETC") {
+      channel = "기타";
     }
   }
 
-  // 2. Parse remainder
+  // 2. Detect channel prefix [채널] in text or note
+  const channelMatch = text.match(/^\[([^\]]+)\]/);
+  if (channelMatch) {
+    const detected = detectChannelKeyword(channelMatch[1].trim());
+    if (detected) {
+      channel = detected;
+    }
+  } else if (note) {
+    const noteMatch = note.match(/예약경로:\s*([^\s(]+)/);
+    if (noteMatch) {
+      const detected = detectChannelKeyword(noteMatch[1].trim());
+      if (detected) {
+        channel = detected;
+      }
+    }
+  }
+
+  // 3. Remainder from text
   let remainder = channelMatch ? text.slice(channelMatch[0].length).trim() : text;
 
   // Split memo if separated by '/'
@@ -283,14 +383,32 @@ export function parseCustomerCallInfo(
     memo = parts.slice(1).join("/").trim();
   }
 
-  // Split contact if separated by '|'
+  // 4. Check for linked customer
+  const linked = customers?.find((c) => c.id === row.customerId) ?? row.customer;
+  const linkedName = linked?.name?.trim() || "";
+  const linkedPhone = linked?.phone?.trim() || "";
+
+  // If channel is still "기타", check keywords in remainder, note, booker, linkedName
+  if (channel === "기타") {
+    const combined = `${remainder} ${note} ${booker} ${linkedName}`;
+    const detected = detectChannelKeyword(combined);
+    if (detected) {
+      channel = detected;
+    }
+  }
+
+  // 5. Parse name and contact from remainder
   if (remainder.includes("|")) {
     const [n, c] = remainder.split("|").map((s) => s.trim());
     name = n || "-";
     contact = c || "-";
+  } else if (remainder.includes("·")) {
+    const [n, c] = remainder.split("·").map((s) => s.trim());
+    name = n || "-";
+    contact = c || "-";
   } else {
-    // Check if phone or ID is attached: "홍길동 010-1234-5678" or "홍길동 @hong123"
-    const phoneOrIdMatch = remainder.match(/^(.+?)\s+(@[\w\d_.-]+|\+?\d{2,4}-?\d{3,4}-?\d{4})$/);
+    // Check if phone or ID is attached: "홍길동 010-1234-5678" or "홍길동 @hong123" or "David +84-90-123-4567"
+    const phoneOrIdMatch = remainder.match(/^(.+?)\s+(@[\w\d_.-]+|\+?\d{1,4}[- ]?\d{2,4}[- ]?\d{3,4}[- ]?\d{3,4})$/);
     if (phoneOrIdMatch) {
       name = phoneOrIdMatch[1].trim();
       contact = phoneOrIdMatch[2].trim();
@@ -299,17 +417,29 @@ export function parseCustomerCallInfo(
     }
   }
 
-  // 3. Check customer reference
-  const linked = customers?.find((c) => c.id === row.customerId) ?? row.customer;
-  if (linked) {
-    if ((name === "-" || !name) && linked.name) name = linked.name;
-    if ((contact === "-" || !contact) && linked.phone) contact = linked.phone;
+  // Clean channel prefix from name if name starts with a keyword (e.g. "텔레 jo jo", "카톡 이몽룡")
+  name = cleanChannelPrefix(name);
+
+  // If name is empty or "-", fallback to linked customer name or bookerName
+  if ((name === "-" || !name) && linkedName) {
+    name = cleanChannelPrefix(linkedName);
+  }
+  if ((name === "-" || !name) && booker) {
+    name = cleanChannelPrefix(booker);
   }
 
+  // If contact is empty or "-", fallback to linked phone
+  if ((contact === "-" || !contact) && linkedPhone) {
+    contact = linkedPhone;
+  }
+
+  // 6. Contact-based channel inference
   if (channel === "기타") {
     if (contact && contact !== "-") {
       if (contact.startsWith("@")) {
         channel = "텔레그램";
+      } else if (contact.startsWith("+84") || contact.startsWith("+")) {
+        channel = "왓츠앱";
       } else if (/^[\d-+() ]+$/.test(contact)) {
         channel = "전화";
       }
