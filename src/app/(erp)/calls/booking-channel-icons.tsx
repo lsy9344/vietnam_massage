@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import type { CustomerDto } from "@/modules/calls/service-call-service";
 
 export type BookingChannelType =
@@ -19,6 +18,11 @@ export const BOOKING_CHANNELS = [
   { id: "위챗", label: "위챗", color: "#039201" },
   { id: "워크인", label: "워크인", color: "#FE6E05" },
   { id: "기타", label: "기타", color: "#707882" }
+] as const;
+
+export const ALL_BOOKING_PATHS = [
+  { id: "전화", label: "전화", color: "#0066FF" },
+  ...BOOKING_CHANNELS
 ] as const;
 
 export function TelegramChannelIcon({ className = "w-7 h-7" }: { className?: string }) {

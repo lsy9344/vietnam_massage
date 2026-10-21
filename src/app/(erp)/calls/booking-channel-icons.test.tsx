@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
+  ALL_BOOKING_PATHS,
   BOOKING_CHANNELS,
   BookingChannelIcon,
   EtcChannelIcon,
   KakaoTalkChannelIcon,
+  PhoneChannelIcon,
   TelegramChannelIcon,
   WalkinChannelIcon,
   WeChatChannelIcon,
@@ -20,6 +22,11 @@ describe("BookingChannelIcon and customer info symbols", () => {
       BOOKING_CHANNELS.map((c) => c.id),
       ["텔레그램", "카카오톡", "잘로", "왓츠앱", "위챗", "워크인", "기타"]
     );
+  });
+
+  it("exports ALL_BOOKING_PATHS including 전화 for counter booking creation", () => {
+    assert.equal(ALL_BOOKING_PATHS[0].id, "전화");
+    assert.equal(ALL_BOOKING_PATHS.length, 8);
   });
 
   it("renders 텔레그램 icon with vibrant blue circle (#0186FF)", () => {

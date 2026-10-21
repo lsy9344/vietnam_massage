@@ -7,7 +7,7 @@ import { useLocale } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import { StatusIndicator } from "@/components/ui/status-indicator";
-import { BOOKING_CHANNELS, BookingChannelIcon } from "@/app/(erp)/calls/booking-channel-icons";
+import { ALL_BOOKING_PATHS, BookingChannelIcon } from "@/app/(erp)/calls/booking-channel-icons";
 import { createQuickBookingAction, loadQuotaAction, loadTherapistAvailabilityAction } from "@/app/(erp)/calls/actions";
 import type {
   CallLedgerQuotaDto,
@@ -539,7 +539,7 @@ export function QuickBookingDrawer({
                     {isKo ? "예약 경로" : "Kênh đặt chỗ"}
                   </label>
                   <div className="flex flex-wrap gap-2">
-                    {BOOKING_CHANNELS.map((path) => (
+                    {ALL_BOOKING_PATHS.map((path) => (
                       <button
                         className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
                           bookingPath === path.id
