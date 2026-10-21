@@ -1565,7 +1565,7 @@ function deriveRowWarnings(
     byCode.set("yield_to_reservation", {
       code: "yield_to_reservation",
       relatedTime: display.warningTime,
-      relatedCallIds: choice.yieldedToIds
+      relatedCallIds: choice.yieldedToIds ?? []
     });
   }
   if (isCalculationWarningStatus(calculationStatus)) {

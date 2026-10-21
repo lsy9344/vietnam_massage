@@ -115,7 +115,7 @@ export function TherapistAvailabilityView({
                       <td className="border-t border-border px-2 py-2">
                         <div className="flex flex-wrap gap-2">
                           {row.courses.map((course) =>
-                            course.possible ? (
+                            course.verdict === "possible" ? (
                               <button
                                 className={`${controlClassName} max-w-full whitespace-normal text-left`}
                                 data-course-id={course.courseId}

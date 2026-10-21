@@ -18,12 +18,97 @@ export const EDITABLE_CALL_FIELDS = [
   "confirmationCode"
 ] as const;
 
-export type EditableCallField = (typeof EDITABLE_CALL_FIELDS)[number];
+export const READONLY_CALL_FIELDS = [
+  "paymentAmount",
+  "discountAmount",
+  "therapist1Commission",
+  "therapist2Commission",
+  "calculationStatus"
+] as const;
 
-/**
- * 저장 상태의 되돌리기(callRowSaveReducer의 cancel): 보내고 있거나 마지막으로 저장된 초안으로 돌아간다.
- * 원장 표의 칸 이동(Tab·Enter·화살표)은 흐름별 목록(티켓 03)의 줄 이동(ledger-flow.ts의 ledgerListKey)으로 바뀌었다.
- */
+const NAVIGABLE_CALL_FIELDS = [...EDITABLE_CALL_FIELDS, ...READONLY_CALL_FIELDS] as const;
+
+export type EditableCallField = (typeof EDITABLE_CALL_FIELDS)[number];
+export type ReadonlyCallField = (typeof READONLY_CALL_FIELDS)[number];
+export type NavigableCallField = (typeof NAVIGABLE_CALL_FIELDS)[number];
+export type CellCoordinate = {
+  rowIndex: number;
+  columnId: string;
+};
+export type ArrowNavigationKey = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
+
+function boundedRowIndex(rowIndex: number, rowCount: number) {
+  if (rowCount <= 0) return 0;
+  return Math.min(Math.max(rowIndex, 0), rowCount - 1);
+}
+
+function fieldIndex(fields: readonly string[], columnId: string) {
+  const index = fields.indexOf(columnId);
+  return index === -1 ? 0 : index;
+}
+
+export function isEditableCallField(columnId: string): columnId is EditableCallField {
+  return (EDITABLE_CALL_FIELDS as readonly string[]).includes(columnId);
+}
+
+export function isReadonlyCallField(columnId: string): columnId is ReadonlyCallField {
+  return (READONLY_CALL_FIELDS as readonly string[]).includes(columnId);
+}
+
+export function moveTabCell(current: CellCoordinate, rowCount: number, backwards: boolean): CellCoordinate {
+  const rowIndex = boundedRowIndex(current.rowIndex, rowCount);
+  const columnIndex = fieldIndex(EDITABLE_CALL_FIELDS, current.columnId);
+  const direction = backwards ? -1 : 1;
+  const nextColumnIndex = columnIndex + direction;
+
+  if (nextColumnIndex >= 0 && nextColumnIndex < EDITABLE_CALL_FIELDS.length) {
+    return { rowIndex, columnId: EDITABLE_CALL_FIELDS[nextColumnIndex] };
+  }
+
+  const nextRowIndex = rowIndex + direction;
+  if (nextRowIndex < 0 || nextRowIndex >= rowCount) {
+    return { rowIndex, columnId: EDITABLE_CALL_FIELDS[columnIndex] };
+  }
+
+  return {
+    rowIndex: nextRowIndex,
+    columnId: backwards ? EDITABLE_CALL_FIELDS[EDITABLE_CALL_FIELDS.length - 1] : EDITABLE_CALL_FIELDS[0]
+  };
+}
+
+export function moveEnterCell(current: CellCoordinate, rowCount: number): CellCoordinate {
+  const rowIndex = boundedRowIndex(current.rowIndex, rowCount);
+  return {
+    rowIndex: boundedRowIndex(rowIndex + 1, rowCount),
+    columnId: current.columnId
+  };
+}
+
+export function moveAdjacentCell(
+  current: CellCoordinate,
+  rowCount: number,
+  key: ArrowNavigationKey,
+  fields: readonly string[] = NAVIGABLE_CALL_FIELDS
+): CellCoordinate {
+  const rowIndex = boundedRowIndex(current.rowIndex, rowCount);
+  const columnIndex = fieldIndex(fields, current.columnId);
+
+  if (key === "ArrowUp") {
+    return { rowIndex: boundedRowIndex(rowIndex - 1, rowCount), columnId: fields[columnIndex] };
+  }
+
+  if (key === "ArrowDown") {
+    return { rowIndex: boundedRowIndex(rowIndex + 1, rowCount), columnId: fields[columnIndex] };
+  }
+
+  const nextColumnIndex = key === "ArrowLeft" ? columnIndex - 1 : columnIndex + 1;
+  if (nextColumnIndex < 0 || nextColumnIndex >= fields.length) {
+    return { rowIndex, columnId: fields[columnIndex] };
+  }
+
+  return { rowIndex, columnId: fields[nextColumnIndex] };
+}
+
 export function cancelCellDraft<T extends Record<string, unknown>>(currentDraft: T, baselineDraft: T): T {
   void currentDraft;
   return { ...baselineDraft };

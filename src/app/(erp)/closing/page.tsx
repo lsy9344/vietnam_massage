@@ -1,3 +1,4 @@
+import { groupPayoutReconfirmationUnits } from "@/app/(erp)/closing/closing-payout-groups";
 import { canPerform, requireRouteAccess } from "@/lib/authorization";
 import { ClosingActionPanel, type ConfirmDialogSummary } from "@/app/(erp)/closing/closing-action-panel";
 import { selectedOperatingMonthFor } from "@/lib/operating-date";
@@ -520,27 +521,7 @@ function payoutUnitTypeHref(unitType: PayoutConfirmationUnitType, serviceDate: s
   return screenHref(route, serviceDate ? { ...context, date: serviceDate } : context);
 }
 
-/**
- * S12: unitType만으로 묶으면 같은 직군의 다른 날짜들이 한 건수로 합쳐져, 그 묶음의 링크가 특정 날짜로
- * 가지 못했다(마감 점검 전체의 기준 날짜로만 갔다). unitType·serviceDate로 묶어 그룹마다 하나의 날짜로
- * 바로 갈 수 있게 한다.
- */
-export function groupPayoutReconfirmationUnits(units: MonthlyClosingPayoutReconfirmationUnitDto[]) {
-  const groups = new Map<string, { unitType: PayoutConfirmationUnitType; serviceDate: string | null; count: number }>();
-  for (const unit of units) {
-    const key = `${unit.unitType}::${unit.serviceDate ?? ""}`;
-    const existing = groups.get(key);
-    if (existing) {
-      existing.count += 1;
-    } else {
-      groups.set(key, { unitType: unit.unitType, serviceDate: unit.serviceDate, count: 1 });
-    }
-  }
-  return [...groups.values()].sort((a, b) => {
-    const typeOrder = payoutConfirmationUnitTypes.indexOf(a.unitType) - payoutConfirmationUnitTypes.indexOf(b.unitType);
-    return typeOrder !== 0 ? typeOrder : (a.serviceDate ?? "").localeCompare(b.serviceDate ?? "");
-  });
-}
+
 
 function ChecklistCallErrorDetail({ t, call }: { t: Translator; call: MonthlyClosingChecklistCallDto }) {
   if (call.calculationStatus === "calculated" || call.calculationStatus === "not_completed") return null;

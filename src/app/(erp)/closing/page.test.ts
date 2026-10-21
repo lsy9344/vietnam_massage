@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { groupPayoutReconfirmationUnits } from "@/app/(erp)/closing/page";
+import { groupPayoutReconfirmationUnits } from "@/app/(erp)/closing/closing-payout-groups";
 import type { MonthlyClosingPayoutReconfirmationUnitDto } from "@/modules/closing/monthly-closing-checklist-service";
 import type { PayoutConfirmationDto } from "@/modules/settlements/payout-confirmation-service";
 
