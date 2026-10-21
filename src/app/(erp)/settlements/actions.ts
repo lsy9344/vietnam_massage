@@ -8,19 +8,22 @@ import { t } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
 import { getLocale } from "@/lib/i18n/server";
 import { resolveDomainErrorMessage } from "@/lib/i18n/errors";
-import { parseTherapistDailySettlementPaymentIsPaid } from "@/app/(erp)/settlements/payment-action-input";
-import { mapTherapistDailySettlementPaymentActionError } from "@/app/(erp)/settlements/payment-action-error";
+import { mapPayoutConfirmationActionError } from "@/app/(erp)/settlements/payout-confirmation-action-error";
 import {
   TherapistAttendanceDomainError,
   deactivateTherapistAttendance,
   upsertTherapistAttendance,
   type TherapistAttendanceDto
 } from "@/modules/settlements/therapist-attendance-service";
-import { setTherapistDailySettlementPayment } from "@/modules/settlements/therapist-daily-settlement-service";
+import {
+  confirmTherapistDailySettlementPayout,
+  reconfirmTherapistDailySettlementPayout,
+  releaseTherapistDailySettlementPayout,
+  type TherapistDailySettlementPayoutResultDto
+} from "@/modules/settlements/therapist-daily-settlement-service";
 
 export type TherapistAttendanceActionState = ActionResult<TherapistAttendanceDto> | null;
-type TherapistDailySettlementPaymentActionData = Awaited<ReturnType<typeof setTherapistDailySettlementPayment>>;
-export type TherapistDailySettlementPaymentActionState = ActionResult<TherapistDailySettlementPaymentActionData> | null;
+export type TherapistDailySettlementPayoutActionState = ActionResult<TherapistDailySettlementPayoutResultDto> | null;
 
 function formValue(formData: FormData, key: string) {
   return String(formData.get(key) ?? "");
@@ -90,10 +93,6 @@ function mapActionError(error: unknown, locale: Locale): ActionResult<TherapistA
   };
 }
 
-function mapPaymentActionError(error: unknown, locale: Locale): ActionResult<TherapistDailySettlementPaymentActionData> {
-  return mapTherapistDailySettlementPaymentActionError(error, locale);
-}
-
 export async function saveTherapistAttendanceAction(
   _previousState: TherapistAttendanceActionState,
   formData: FormData
@@ -107,6 +106,8 @@ export async function saveTherapistAttendanceAction(
       employeeId: formValue(formData, "employeeId"),
       checkInTime: formValue(formData, "checkInTime"),
       checkOutTime: formValue(formData, "checkOutTime"),
+      // 기존 출퇴근 화면(운영팀)에서 저장한 시각은 "대리 입력"이다(스펙 D16, 티켓 04).
+      method: "대리 입력",
       actorId: account.id
     });
     revalidatePath("/settlements");
@@ -136,23 +137,64 @@ export async function deactivateTherapistAttendanceAction(
   }
 }
 
-export async function setTherapistDailySettlementPaymentAction(
-  _previousState: TherapistDailySettlementPaymentActionState,
+export async function confirmTherapistDailySettlementPayoutAction(
+  _previousState: TherapistDailySettlementPayoutActionState,
   formData: FormData
-): Promise<TherapistDailySettlementPaymentActionState> {
+): Promise<TherapistDailySettlementPayoutActionState> {
   const locale = await getLocale();
   try {
     const account = await requirePermission("payout:write");
-    const data = await setTherapistDailySettlementPayment({
+    const data = await confirmTherapistDailySettlementPayout({
       operatingMonthId: formValue(formData, "operatingMonthId"),
       serviceDate: formValue(formData, "serviceDate"),
       employeeId: formValue(formData, "employeeId"),
-      isPaid: parseTherapistDailySettlementPaymentIsPaid(formValue(formData, "isPaid")),
       actorId: account.id
     });
     revalidatePath("/settlements");
     return { ok: true, data };
   } catch (error) {
-    return mapPaymentActionError(error, locale);
+    return mapPayoutConfirmationActionError(error, locale);
+  }
+}
+
+export async function reconfirmTherapistDailySettlementPayoutAction(
+  _previousState: TherapistDailySettlementPayoutActionState,
+  formData: FormData
+): Promise<TherapistDailySettlementPayoutActionState> {
+  const locale = await getLocale();
+  try {
+    const account = await requirePermission("payout:write");
+    const data = await reconfirmTherapistDailySettlementPayout({
+      operatingMonthId: formValue(formData, "operatingMonthId"),
+      serviceDate: formValue(formData, "serviceDate"),
+      employeeId: formValue(formData, "employeeId"),
+      reason: formValue(formData, "reason"),
+      actorId: account.id
+    });
+    revalidatePath("/settlements");
+    return { ok: true, data };
+  } catch (error) {
+    return mapPayoutConfirmationActionError(error, locale);
+  }
+}
+
+export async function releaseTherapistDailySettlementPayoutAction(
+  _previousState: TherapistDailySettlementPayoutActionState,
+  formData: FormData
+): Promise<TherapistDailySettlementPayoutActionState> {
+  const locale = await getLocale();
+  try {
+    const account = await requirePermission("payout:write");
+    const data = await releaseTherapistDailySettlementPayout({
+      operatingMonthId: formValue(formData, "operatingMonthId"),
+      serviceDate: formValue(formData, "serviceDate"),
+      employeeId: formValue(formData, "employeeId"),
+      reason: formValue(formData, "reason"),
+      actorId: account.id
+    });
+    revalidatePath("/settlements");
+    return { ok: true, data };
+  } catch (error) {
+    return mapPayoutConfirmationActionError(error, locale);
   }
 }

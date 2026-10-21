@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  earcareHasBasis,
   incentiveRuleHasBasis,
   payoutAmount,
   settlementAmount,
@@ -51,7 +50,7 @@ function settlement(overrides: Partial<TherapistDailySettlementDto> = {}): Thera
     courseBreakdown: { A: { courseCode: "A", callCount: 1, commissionAmount: 700000 }, B: emptyCourse("B"), C: emptyCourse("C"), D: emptyCourse("D"), E: emptyCourse("E") },
     assignmentEvidence: [evidence()],
     warningCounts: { zeroPolicy: 0, missingPolicy: 0 },
-    paymentStatus: { isPaid: false, paidAt: null, paidByAccountId: null, paidBy: null, history: [] },
+    payoutConfirmation: { status: "unconfirmed", currentAmount: 700000, lastConfirmedAmount: null, difference: null, requiresReconfirmation: false, history: [] },
     ...overrides
   };
 }
@@ -66,12 +65,15 @@ function attendance(overrides: Partial<TherapistAttendanceDto> = {}): TherapistA
     displayName: "Mai",
     sortOrder: 1,
     checkInTime: null,
+    checkInMethod: null,
     checkOutTime: null,
+    checkOutMethod: null,
     standbyMinutes: null,
     isFullAttendanceRecognized: false,
     isComplete: false,
     incompleteReason: null,
     isLocked: false,
+    warnings: [],
     ...overrides
   };
 }
@@ -89,11 +91,6 @@ describe("settlement amounts", () => {
     assert.deepEqual(payoutAmount(0, { isPayoutEligible: false, hasBasis: false }), { kind: "amount", value: 0 });
     assert.deepEqual(payoutAmount(0, { isPayoutEligible: true, hasBasis: false }), { kind: "noBasis" });
     assert.deepEqual(payoutAmount(250000, { isPayoutEligible: true, hasBasis: true }), { kind: "amount", value: 250000 });
-  });
-
-  it("treats an earcare pool without completed source calls as having no basis", () => {
-    assert.equal(earcareHasBasis({ sourceCallCount: 0 }), false);
-    assert.equal(earcareHasBasis({ sourceCallCount: 2 }), true);
   });
 
   it("treats a missing incentive policy as no basis, while a total below the threshold is a real 0", () => {

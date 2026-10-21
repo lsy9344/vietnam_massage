@@ -121,7 +121,7 @@ export function QuickBookingDrawer({
       .then(([quotaRes, availabilityRes]) => {
         if (!isMounted) return;
         setQuota(quotaRes);
-        setTherapistRows(availabilityRes);
+        setTherapistRows(availabilityRes.rows);
         setIsLoading(false);
       })
       .catch((err) => {

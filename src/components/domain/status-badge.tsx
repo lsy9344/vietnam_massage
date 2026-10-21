@@ -41,7 +41,8 @@ export function StatusBadge({
   state,
   label,
   ariaLabel,
-  className
+  className,
+  labelClassName
 }: {
   /** RoomDisplayStatus 한국어 stable key (색/glyph 조회 + 비교용). */
   state: StatusBadgeState;
@@ -50,6 +51,8 @@ export function StatusBadge({
   /** 접근성 라벨. 미지정 시 한국어 "상태: {state}"로 fallback. */
   ariaLabel?: string;
   className?: string;
+  /** 주면 라벨 글자를 이 클래스의 span으로 감싼다(평면도의 좁은 칸에서 글자만 숨길 때). */
+  labelClassName?: string;
 }) {
   const config = statusBadgeConfig[state];
   const displayLabel = label ?? state;
@@ -65,7 +68,7 @@ export function StatusBadge({
     >
       {/* U+FE0E: 기호를 늘 글자 모양으로 그린다(이모지로 바뀌지 않게). */}
       <span aria-hidden="true">{`${config.glyph}\uFE0E`}</span>
-      {displayLabel}
+      {labelClassName ? <span className={labelClassName}>{displayLabel}</span> : displayLabel}
     </span>
   );
 }

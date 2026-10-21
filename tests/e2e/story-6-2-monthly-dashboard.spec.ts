@@ -3,6 +3,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login, setLocaleCookie } from "./support/auth";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 
 
 type SeededData = {
@@ -143,14 +144,12 @@ async function upsertCodeItem(codeType: string, code: string, displayName: strin
   });
 }
 
-async function upsertCoursePolicy(courseId: string, monthKey: string, code: string, basePrice: number, earcarePoolAmount: number, requiresSecondTherapist = false) {
+async function upsertCoursePolicy(courseId: string, monthKey: string, code: string, basePrice: number, requiresSecondTherapist = false) {
   const existing = await (prisma as any).coursePolicy.findFirst({ where: { courseId, effectiveFromMonth: monthKey } });
   const data = {
     name: `Story 6.2 ${code}`,
     durationMinutes: requiresSecondTherapist ? 90 : 60,
     basePrice,
-    opsCallCredit: 1,
-    earcarePoolAmount,
     requiresSecondTherapist,
     tvDisplayName: `S62 ${code}`,
     effectiveToMonth: null,
@@ -199,18 +198,10 @@ function snapshotJson(input: { id: string; operatingMonthId: string; monthKey: s
       dailyIncentiveAmount: 300000,
       monthlyIncentiveAmount: 500000,
       totalOpsPayoutAmount: 800000,
-      monthlyOpsCallCredit: 12,
+      monthlyOpsCallCount: 12,
       appliedThresholdCallCount: null,
       ruleStatus: "not_applicable",
       warningMessages: [],
-      rows: []
-    },
-    earcare: {
-      earcarePoolTotal: 600000,
-      distributedAmount: 600000,
-      undistributedAmount: 0,
-      sourceCallCount: 4,
-      eligibleDayCount: 2,
       rows: []
     },
     financials: {
@@ -218,15 +209,13 @@ function snapshotJson(input: { id: string; operatingMonthId: string; monthKey: s
       netSales: 10650000,
       discountTotal: 100000,
       expenseTotal: 250000,
-      earcarePoolTotal: 600000,
       therapistCommissionTotal: 4350000
     },
     totals: {
       therapistPayoutAmount: 9100000,
       opsDailyIncentiveAmount: 300000,
       opsMonthlyIncentiveAmount: 500000,
-      earcarePayoutAmount: 600000,
-      grandPayoutAmount: 10500000
+      grandPayoutAmount: 9900000
     },
     warningCounts: { total: 1 },
     evidence: {
@@ -244,8 +233,7 @@ function snapshotJson(input: { id: string; operatingMonthId: string; monthKey: s
       representativeEvidence: {
         therapist: [],
         operationsDaily: [],
-        operationsMonthly: [],
-        earcare: []
+        operationsMonthly: []
       }
     },
     source: {
@@ -378,11 +366,11 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
   for (const code of ["A", "B", "C", "D", "E"] as const) {
     courses[code] = await (prisma as any).course.upsert({ where: { code }, update: { isActive: true }, create: { code, isActive: true } });
   }
-  await upsertCoursePolicy(courses.A.id, monthKeys.draft, "A", 1500000, 100000);
-  await upsertCoursePolicy(courses.B.id, monthKeys.draft, "B", 1800000, 200000);
-  await upsertCoursePolicy(courses.C.id, monthKeys.draft, "C", 2000000, 0);
-  await upsertCoursePolicy(courses.D.id, monthKeys.draft, "D", 3200000, 0, true);
-  await upsertCoursePolicy(courses.E.id, monthKeys.draft, "E", 3000000, 0);
+  await upsertCoursePolicy(courses.A.id, monthKeys.draft, "A", 1500000);
+  await upsertCoursePolicy(courses.B.id, monthKeys.draft, "B", 1800000);
+  await upsertCoursePolicy(courses.C.id, monthKeys.draft, "C", 2000000);
+  await upsertCoursePolicy(courses.D.id, monthKeys.draft, "D", 3200000, true);
+  await upsertCoursePolicy(courses.E.id, monthKeys.draft, "E", 3000000);
   await upsertTherapistRate(therapist1.id, courses.A.id, monthKeys.draft, 700000);
   await upsertTherapistRate(therapist1.id, courses.B.id, monthKeys.draft, 900000);
   await upsertTherapistRate(therapist1.id, courses.D.id, monthKeys.draft, 900000);
@@ -521,7 +509,8 @@ test.describe("Story 6.2 monthly dashboard", () => {
     await expect(page).toHaveURL(new RegExp(`/dashboard/monthly\\?operatingMonthId=${seededData.months.closed}`));
     await expect(page.getByRole("region", { name: "월간 KPI 기준", exact: true })).toContainText("확정 스냅샷 기준");
     await expect(page.getByRole("region", { name: "월간 KPI 기준", exact: true })).toContainText("마감 버전 2");
-    await expect(page.getByRole("region", { name: "월간 지급 정산 KPI", exact: true })).toContainText("10,500,000 VND");
+    // 확정 스냅샷 totals.grandPayoutAmount = 마사지사 9,100,000 + 운영팀 일일 300,000 + 운영팀 월 500,000.
+    await expect(page.getByRole("region", { name: "월간 지급 정산 KPI", exact: true })).toContainText("9,900,000 VND");
     await expect(page.getByRole("region", { name: "월간 상태 건수", exact: true })).toContainText("예약");
     await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("결제합계");
     // 요약 카드 밖의 금액은 "월간 금액 내역" 목록에 있다(티켓 06).
@@ -537,7 +526,7 @@ test.describe("Story 6.2 monthly dashboard", () => {
     await login(page, account.accountId, account.password);
     await page.goto(`/dashboard/monthly?operatingMonthId=${seededData.months.closed}`);
 
-    await page.getByLabel("운영월").selectOption(seededData.months.draft);
+    await pickListboxOptionByValue(page.getByLabel("운영월"), seededData.months.draft);
     await page.getByRole("button", { name: "조회" }).click();
 
     await expect(page).toHaveURL(new RegExp(`/dashboard/monthly\\?operatingMonthId=${seededData.months.draft}`));
@@ -545,7 +534,8 @@ test.describe("Story 6.2 monthly dashboard", () => {
     await expect(page.getByRole("region", { name: "월간 상태 건수", exact: true })).toContainText("방문완료");
     await expect(page.getByRole("region", { name: "월간 상태 건수", exact: true })).toContainText("6건");
     await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("10,900,000 VND");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("6,000,000 VND");
+    // 월간 순이익 = 결제합계 10,900,000 - 지출합계 300,000 - 마사지사 정산 4,300,000.
+    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("6,300,000 VND");
   });
 
   test("작성중 운영월은 월 전체 날짜 범위의 current KPI와 warning state를 표시한다", async ({ page }) => {
@@ -561,7 +551,7 @@ test.describe("Story 6.2 monthly dashboard", () => {
     await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("결제합계");
     await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("10,900,000 VND");
     await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("월간 순이익");
-    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("6,000,000 VND");
+    await expect(page.getByRole("region", { name: "월간 금액 KPI", exact: true })).toContainText("6,300,000 VND");
     // 요약 카드 밖의 금액은 "월간 금액 내역" 목록에 있다(티켓 06).
     await expect(page.getByRole("region", { name: "월간 금액 내역", exact: true })).toContainText("운영팀 월인센");
     await expect(page.getByRole("region", { name: "월간 금액 내역", exact: true })).toContainText("만근수당");
@@ -616,7 +606,7 @@ test.describe("Story 6.2 monthly dashboard", () => {
     await expect(page.getByRole("region", { name: "월간 KPI 기준", exact: true })).toContainText("미확정 현재 기준");
     await expect(page.getByRole("region", { name: "이전 확정 스냅샷", exact: true })).toContainText("현재 KPI 기준에는 섞지 않습니다");
     await expect(page.getByRole("region", { name: "이전 확정 스냅샷", exact: true })).toContainText("마감 버전 1");
-    await expect(page.getByRole("region", { name: "이전 확정 스냅샷", exact: true })).toContainText("10,500,000 VND");
+    await expect(page.getByRole("region", { name: "이전 확정 스냅샷", exact: true })).toContainText("9,900,000 VND");
     await expect(page.getByText("이 운영월의 콜이 없습니다")).toBeVisible();
   });
 

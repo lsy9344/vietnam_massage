@@ -1,20 +1,21 @@
 import type { KeyboardEvent } from "react";
 import { SidePanel } from "@/components/ui/panel";
+import { CustomerCandidateCompare, customerCandidateOptionId, isCustomerCandidateChosen } from "@/components/domain/customer-candidate-compare";
+import { CustomerVisitCounts } from "@/components/domain/customer-visit-counts";
+import { ScreenState } from "@/components/ui/screen-state";
 import { serviceStatusLabel } from "@/lib/i18n/codes";
 import { t } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
-import type { CustomerDto, CustomerVisitCandidateDto, CustomerVisitHistoryRowDto } from "@/modules/calls/service-call-service";
-import { ledgerCallHref } from "@/app/(erp)/calls/ledger-address";
+import type {
+  CustomerDto,
+  CustomerVisitCandidateDto,
+  CustomerVisitCountsDto,
+  CustomerVisitHistoryRowDto
+} from "@/modules/calls/service-call-service";
+import { ledgerCallHref } from "@/lib/ledger-address";
 import { CustomerEditForm } from "@/app/(erp)/customers/customer-forms";
 
 const cellClassName = "border-b border-border px-3 py-2";
-
-function isChosen(candidate: CustomerVisitCandidateDto, selectedCustomerId: string | null, selectedMemo: string | null) {
-  return (
-    (candidate.kind === "customer" && candidate.customerId !== null && candidate.customerId === selectedCustomerId) ||
-    (candidate.kind === "memo" && selectedMemo !== null && candidate.label === selectedMemo)
-  );
-}
 
 /**
  * 고객 화면: 검색 캡슐과 후보 목록, 옆에 고른 고객의 패널(고객 정보 정정, 방문 이력).
@@ -28,6 +29,8 @@ export function CustomerScreenView({
   activeIndex,
   customer,
   selectedMemo,
+  selectedSharedPhone,
+  visitCounts,
   history,
   onQueryChange,
   onQueryKeyDown,
@@ -44,6 +47,10 @@ export function CustomerScreenView({
   /** 고른 고객. 고객 기록이 없는 콜의 고객/메모를 골랐으면 null이고 selectedMemo가 있다. */
   customer: CustomerDto | null;
   selectedMemo: string | null;
+  /** S5: 검색 결과 밖(쿼리 없이 바로 연 고객)에서도 보일 같은 연락처 경고. */
+  selectedSharedPhone: boolean;
+  /** 열린 방문 이력의 건수(B09). 고른 고객·메모가 없으면 null이다. */
+  visitCounts: CustomerVisitCountsDto | null;
   history: CustomerVisitHistoryRowDto[];
   onQueryChange: (value: string) => void;
   onQueryKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
@@ -54,7 +61,7 @@ export function CustomerScreenView({
 }) {
   const label = t(locale, "calls.search.label");
   const showEmpty = settledQuery.trim() !== "" && query.trim() === settledQuery.trim() && candidates.length === 0;
-  const activeId = activeIndex >= 0 ? `customer-option-${activeIndex}` : undefined;
+  const activeId = activeIndex >= 0 ? customerCandidateOptionId("customer-candidates", activeIndex) : undefined;
   const panelOpen = customer !== null || selectedMemo !== null;
 
   return (
@@ -86,35 +93,48 @@ export function CustomerScreenView({
         </p>
         {showEmpty ? <p className="text-sm text-muted">{t(locale, "calls.search.empty")}</p> : null}
         {candidates.length > 0 ? (
-          <ul aria-label={label} className="grid gap-2" id="customer-candidates" role="listbox">
-            {candidates.map((candidate, index) => {
-              const chosen = isChosen(candidate, customer?.id ?? null, selectedMemo);
-              const active = index === activeIndex;
-              return (
-                <li key={`${candidate.kind}:${candidate.customerId ?? ""}:${candidate.label}`} role="presentation">
-                  <button
-                    aria-current={chosen ? "true" : undefined}
-                    aria-selected={active}
-                    className={`flex min-h-14 w-full flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md px-4 py-2 text-left transition-colors hover:bg-readonly ${
-                      chosen ? "bg-readonly [box-shadow:inset_3px_0_0_var(--brand)]" : "bg-surface"
-                    } ${active ? "outline-2 outline-offset-2 outline-brand-secondary" : ""}`}
-                    id={`customer-option-${index}`}
-                    onClick={() => onSelect(candidate)}
-                    role="option"
-                    tabIndex={-1}
-                    type="button"
-                  >
-                    <span className="text-sm font-semibold text-foreground">{candidate.label}</span>
-                    {candidate.latestVisitDate ? (
-                      <span className="inline-flex h-7 items-center rounded-full border border-border bg-surface-float px-2.5 text-xs font-semibold text-foreground">
-                        {t(locale, "calls.search.latestVisit", { date: candidate.latestVisitDate })}
-                      </span>
-                    ) : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          candidates.some((candidate) => candidate.sharedPhone) ? (
+            <CustomerCandidateCompare
+              activeIndex={activeIndex}
+              candidates={candidates}
+              label={label}
+              listboxId="customer-candidates"
+              locale={locale}
+              onSelect={onSelect}
+              selectedCustomerId={customer?.id ?? null}
+              selectedMemo={selectedMemo}
+            />
+          ) : (
+            <ul aria-label={label} className="grid gap-2" id="customer-candidates" role="listbox">
+              {candidates.map((candidate, index) => {
+                const chosen = isCustomerCandidateChosen(candidate, customer?.id ?? null, selectedMemo);
+                const active = index === activeIndex;
+                return (
+                  <li key={`${candidate.kind}:${candidate.customerId ?? ""}:${candidate.label}`} role="presentation">
+                    <button
+                      aria-current={chosen ? "true" : undefined}
+                      aria-selected={active}
+                      className={`flex min-h-14 w-full flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md px-4 py-2 text-left transition-colors hover:bg-readonly ${
+                        chosen ? "bg-readonly [box-shadow:inset_3px_0_0_var(--brand)]" : "bg-surface"
+                      } ${active ? "outline-2 outline-offset-2 outline-brand-secondary" : ""}`}
+                      id={customerCandidateOptionId("customer-candidates", index)}
+                      onClick={() => onSelect(candidate)}
+                      role="option"
+                      tabIndex={-1}
+                      type="button"
+                    >
+                      <span className="text-sm font-semibold text-foreground">{candidate.label}</span>
+                      {candidate.latestVisitDate ? (
+                        <span className="inline-flex h-7 items-center rounded-full border border-border bg-surface-float px-2.5 text-xs font-semibold text-foreground">
+                          {t(locale, "calls.search.latestVisit", { date: candidate.latestVisitDate })}
+                        </span>
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )
         ) : null}
       </section>
 
@@ -124,6 +144,9 @@ export function CustomerScreenView({
             {customer ? (
               <section aria-label={t(locale, "customers.detail.info")} className="grid gap-3">
                 <h3 className="text-[0.9375rem] font-semibold text-foreground">{t(locale, "customers.detail.info")}</h3>
+                {selectedSharedPhone ? (
+                  <ScreenState kind="warning" label={t(locale, "customers.duplicatePhone.chip")} title={t(locale, "customers.duplicatePhone.title")} />
+                ) : null}
                 <CustomerEditForm customer={customer} key={customer.id} />
               </section>
             ) : (
@@ -131,6 +154,7 @@ export function CustomerScreenView({
             )}
             <section aria-label={t(locale, "calls.search.history")} className="grid gap-3">
               <h3 className="text-[0.9375rem] font-semibold text-foreground">{t(locale, "calls.search.history")}</h3>
+              {visitCounts ? <CustomerVisitCounts counts={visitCounts} locale={locale} /> : null}
               {history.length === 0 ? (
                 <p className="text-sm text-muted">{t(locale, "customers.history.empty")}</p>
               ) : (

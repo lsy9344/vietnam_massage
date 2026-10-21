@@ -20,7 +20,7 @@ master data -> service calls -> room status -> daily settlements -> monthly clos
 | Masters | `src/modules/masters` | Operating month, employees, rooms, courses, codes, rates, and incentive policies |
 | Calls | `src/modules/calls` | Reservation and real-time service-call ledger |
 | Rooms | `src/modules/rooms` | Waiter room board and TV display state |
-| Settlements | `src/modules/settlements` | Therapist, earcare, and operations-team daily settlement rules |
+| Settlements | `src/modules/settlements` | Therapist and operations-team daily settlement rules |
 | Closing | `src/modules/closing` | Monthly close preview, confirmation, payout snapshots, and locks |
 | Dashboard | `src/modules/dashboard` | Today/monthly KPI summaries, graph report datasets, and dashboard state/color guardrails |
 | Migration verification | `src/modules/migration` | Story 7.1 source of truth for original sheet-to-ERP feature mapping, Story 7.2 calculation comparison checks, and Story 7.3 report/tracking |
@@ -37,7 +37,7 @@ Story 7.1 adds a source of truth mapping for the original workbook coverage. The
 
 The verification reference is `docs/modules/migration-verification.md`, and the executable data lives in `src/modules/migration/sheet-feature-mapping.ts`. Excel 셀 좌표 and ranges are evidence only; implementation and downstream joins must keep stable ID references such as `Room.id`, `Employee.id`, `Course.id`, `CodeItem.id`, and `TimeSlot.value`.
 
-Story 7.2 extends this with 계산 대조 fixture tests. `tests/fixtures/migration-calculation-comparison.ts` keeps expected results for `100000` VND discount, `THERAPIST_1`/`THERAPIST_2` assignment roles, D코스 2인 검증, `RoomStatusDto`, operations 30/40/50 and 1000/1100/1200/1300/1400/1500 thresholds, 귀케어 0명, 8시간, 20일, and 40콜 rules. Tests must reuse domain service boundaries instead of copying formulas into migration code, and 셀 좌표 remain source evidence only.
+Story 7.2 extends this with 계산 대조 fixture tests. `tests/fixtures/migration-calculation-comparison.ts` keeps expected results for `100000` VND discount, `THERAPIST_1`/`THERAPIST_2` assignment roles, D코스 2인 검증, `RoomStatusDto`, operations 30/40/50 and 1000/1100/1200/1300/1400/1500 thresholds, 8시간, 20일, and 40콜 rules. Tests must reuse domain service boundaries instead of copying formulas into migration code, and 셀 좌표 remain source evidence only.
 
 Story 7.3 adds the migration verification report DTO in `src/modules/migration/migration-verification-report.ts`. The DTO exposes `summary`, `sheetRows`, `calculationRows`, `openIssueRows`, `filters`, and `generatedAt`, and it consumes Story 7.1 mapping plus Story 7.2 `MigrationMismatchReport` evidence without runtime Excel parsing.
 

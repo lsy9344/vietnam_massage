@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -34,7 +35,7 @@ async function freeEmployeeSortOrder(employeeGroup: string, staffCode: string, p
 }
 
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, position: string) {
-  return (prisma as any).employee.upsert({
+  return testEmployees.upsert({
     where: { staffCode },
     update: { displayName, isActive: true },
     create: {
@@ -78,10 +79,10 @@ async function cleanup() {
     await (prisma as any).serviceCallAssignment.deleteMany({ where: { serviceCallId: { in: callIds } } });
     await (prisma as any).serviceCallStatusHistory.deleteMany({ where: { serviceCallId: { in: callIds } } });
     await (prisma as any).serviceCall.deleteMany({ where: { id: { in: callIds } } });
+    await (prisma as any).payoutConfirmationEvent.deleteMany({ where: { operatingMonthId: month.id } });
     await (prisma as any).therapistDailySettlementPaymentHistory.deleteMany({ where: { operatingMonthId: month.id } });
     await (prisma as any).therapistDailySettlementPayment.deleteMany({ where: { operatingMonthId: month.id } });
     await (prisma as any).therapistAttendance.deleteMany({ where: { operatingMonthId: month.id } });
-    await (prisma as any).earcareAttendance.deleteMany({ where: { operatingMonthId: month.id } });
     await (prisma as any).opsAttendance.deleteMany({ where: { operatingMonthId: month.id } });
     await (prisma as any).operatingMonth.delete({ where: { id: month.id } });
   }
@@ -114,8 +115,6 @@ async function seed() {
       name: "Ticket05 A60",
       durationMinutes: 60,
       basePrice: 1000000,
-      opsCallCredit: 1,
-      earcarePoolAmount: 100000,
       requiresSecondTherapist: false,
       tvDisplayName: "T05 A60",
       effectiveFromMonth: monthKey,
@@ -126,7 +125,6 @@ async function seed() {
 
   const mai = await seedEmployee("E2E-T05-THR-1", "T05 Mai", "THERAPIST", "마사지사");
   const linh = await seedEmployee("E2E-T05-THR-2", "T05 Linh", "THERAPIST", "마사지사");
-  await seedEmployee("E2E-T05-EAR-1", "T05 Hoa", "EARCARE", "귀케어");
   await seedEmployee("E2E-T05-OPS-1", "T05 Minh", "OPERATIONS", "카운터");
   seeded.maiId = mai.id;
   for (const therapist of [mai, linh]) {
@@ -163,7 +161,6 @@ async function seed() {
 
 const screens = {
   therapist: () => `/settlements?operatingMonthId=${seeded.monthId}&serviceDate=${serviceDate}`,
-  earcare: () => `/settlements/earcare?operatingMonthId=${seeded.monthId}&attendanceDate=${serviceDate}`,
   opsDaily: () => `/settlements/operations?operatingMonthId=${seeded.monthId}&attendanceDate=${serviceDate}`,
   opsMonthly: () => `/settlements/operations/monthly?operatingMonthId=${seeded.monthId}`
 };
@@ -185,6 +182,7 @@ test.describe("Ticket 05 settlement screens", () => {
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanup();
     await prisma.$disconnect();
   });
@@ -195,12 +193,14 @@ test.describe("Ticket 05 settlement screens", () => {
 
     await expect(employeeRow(page, "T05 Mai")).toContainText("800,000 VND");
     const panel = await openEmployeePanel(page, "T05 Mai");
-    await expect(panel.getByRole("link")).toHaveCount(2);
-    const firstCallLink = panel.getByRole("link").filter({ hasText: `${serviceDate} 14:00` });
+    // 패널에는 근거 콜 링크(원장에서 보기) 둘 외에, 티켓 32가 더한 월 명세서 링크("월 명세서 보기")도 있다.
+    // 이 테스트는 근거 콜 링크만 센다.
+    await expect(panel.getByRole("link", { name: "원장에서 보기" })).toHaveCount(2);
+    const firstCallLink = panel.getByRole("link", { name: "원장에서 보기" }).filter({ hasText: `${serviceDate} 14:00` });
     await expect(firstCallLink).toContainText("원장에서 보기");
 
     await firstCallLink.click();
-    await expect(page).toHaveURL(new RegExp(`/calls\\?operatingMonthId=${seeded.monthId}&serviceDate=${serviceDate}#call-${seeded.callIds[0]}$`));
+    await expect(page).toHaveURL(new RegExp(`/calls\\?operatingMonthId=${seeded.monthId}&serviceDate=${serviceDate}&call=${seeded.callIds[0]}$`));
     await expect(page.locator(`[id="call-${seeded.callIds[0]}"]`)).toBeAttached();
 
     // 월 총콜 근거 콜도 관리자에게는 원장 링크다(도크의 원장 링크와 구분해 목록 안에서 센다).
@@ -221,12 +221,6 @@ test.describe("Ticket 05 settlement screens", () => {
     await expect(therapistPanel.getByText("원장에서 보기")).toHaveCount(0);
     // 콜 요약에는 고객/메모와 연락처가 없다.
     await expect(page.getByText(memoPrefix)).toHaveCount(0);
-    await expect(page.locator('a[href^="/calls"]')).toHaveCount(0);
-
-    await page.goto(screens.earcare());
-    const earcarePanel = await openEmployeePanel(page, "T05 Hoa");
-    await expect(earcarePanel.getByRole("heading", { name: "풀 산출 근거" })).toBeVisible();
-    await expect(earcarePanel.getByRole("listitem").filter({ hasText: `${serviceDate} 16:30` })).toContainText("T05 Mai");
     await expect(page.locator('a[href^="/calls"]')).toHaveCount(0);
 
     await page.goto(screens.opsDaily());
@@ -255,7 +249,7 @@ test.describe("Ticket 05 settlement screens", () => {
     expect(await height(maiButton)).toBeGreaterThanOrEqual(44);
     expect(await height(panel.getByRole("button", { name: "닫기" }))).toBeGreaterThanOrEqual(44);
     expect(await height(panel.getByRole("button", { name: "저장" }))).toBeGreaterThanOrEqual(44);
-    expect(await height(panel.getByRole("button", { name: "지급완료" }))).toBeGreaterThanOrEqual(44);
+    expect(await height(panel.getByRole("button", { name: "지급 확인" }))).toBeGreaterThanOrEqual(44);
     expect(await height(panel.getByLabel("T05 Mai 출근시간"))).toBeGreaterThanOrEqual(44);
 
     await page.reload();

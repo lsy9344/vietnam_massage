@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login as loginAccount } from "./support/auth";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 
 
 type SeededData = {
@@ -88,14 +89,12 @@ async function upsertCodeItem(codeType: string, code: string, displayName: strin
   });
 }
 
-async function upsertPolicy(courseId: string, name: string, basePrice: number, requiresSecondTherapist: boolean, earcarePoolAmount = 0) {
+async function upsertPolicy(courseId: string, name: string, basePrice: number, requiresSecondTherapist: boolean) {
   const existing = await (prisma as any).coursePolicy.findFirst({ where: { courseId, effectiveFromMonth: "2033-06" } });
   const data = {
     name,
     durationMinutes: requiresSecondTherapist ? 90 : 60,
     basePrice,
-    opsCallCredit: 1,
-    earcarePoolAmount,
     requiresSecondTherapist,
     tvDisplayName: name,
     effectiveToMonth: null,
@@ -150,7 +149,7 @@ async function cleanupStoryData(openMonthId: string, lockedMonthId: string) {
 async function seedStoryData(): Promise<SeededData> {
   const handler = await seedEmployee("E2E25-OPS-001", "E2E25 카운터", "OPERATIONS", "카운터", 92500);
   const account = await seedAuthAccount(handler.id);
-  // 마사지사정산/귀케어풀 KPI는 관리자·정산 담당에게만 보이므로 요약 검증용 관리자 계정도 만든다.
+  // 마사지사정산 KPI는 관리자·정산 담당에게만 보이므로 요약 검증용 관리자 계정도 만든다.
   // UserAccount.employeeId는 unique라 전용 직원이 필요하다.
   const adminEmployee = await seedEmployee("E2E25-OPS-002", "E2E25 관리자", "OPERATIONS", "팀장", 92503);
   const adminAccount = await seedAuthAccount(adminEmployee.id, "story25_administrator", "administrator", "Story25!administrator");
@@ -173,7 +172,7 @@ async function seedStoryData(): Promise<SeededData> {
   const dCourse = await (prisma as any).course.upsert({ where: { code: "D" }, update: { isActive: true }, create: { code: "D", isActive: true } });
   const therapist1 = await seedEmployee("E2E25-THR-001", "E2E25 마사지사1", "THERAPIST", "마사지사", 92501);
   const therapist2 = await seedEmployee("E2E25-THR-002", "E2E25 마사지사2", "THERAPIST", "마사지사", 92502);
-  await upsertPolicy(aCourse.id, "Story25 A", 1500000, false, 100000);
+  await upsertPolicy(aCourse.id, "Story25 A", 1500000, false);
   await upsertPolicy(dCourse.id, "Story25 D", 3200000, true);
   await upsertRate(therapist1.id, aCourse.id, 700000);
   await upsertRate(therapist2.id, aCourse.id, 0);
@@ -282,7 +281,6 @@ test.describe("Story 2.5 일별 지출 입력과 요약 계산", () => {
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2033-06-05&tab=cashbook`);
     await expectSummaryAmount(page, "결제합계", "4,600,000 VND");
     await expectSummaryAmount(page, "마사지사정산", "2,500,000 VND");
-    await expectSummaryAmount(page, "귀케어풀", "100,000 VND");
     await expectSummaryAmount(page, "할인합계", "100,000 VND");
     await expectSummaryAmount(page, "지출합계", "0 VND");
     await expectSummaryAmount(page, "순매출", "4,600,000 VND");
@@ -296,7 +294,7 @@ test.describe("Story 2.5 일별 지출 입력과 요약 계산", () => {
     const drawer = page.getByRole("dialog", { name: "지출 추가" });
     await drawer.getByLabel("지출금액").fill("250000");
     await drawer.getByLabel("내용").fill("소모품");
-    await drawer.getByLabel("지출 담당자").selectOption(seededData.handlerId);
+    await pickListboxOptionByValue(drawer.getByLabel("지출 담당자"), seededData.handlerId);
     await drawer.getByRole("button", { name: "지출 추가" }).click();
     await expect(drawer).toHaveCount(0);
     await expect(expensePanel.getByRole("row", { name: /소모품/ })).toBeVisible();

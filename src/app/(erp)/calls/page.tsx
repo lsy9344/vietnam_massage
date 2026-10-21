@@ -109,7 +109,6 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
         <div className="grid grid-cols-1 gap-10">
           <DailySummaryStrip
             locale={locale}
-            showMonthlyTotals={account.role !== "counter"}
             showSettlementAmounts={canViewSettlementAmounts}
             summary={summary}
             warningCalls={calculationWarningCallsFromRows(rows)}

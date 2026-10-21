@@ -9,6 +9,11 @@ export type SettlementCourseCode = keyof TherapistDailySettlementDto["courseBrea
  */
 export const EMPLOYEE_PARAM = "employee";
 
+/** 직원 패널의 "월 명세서 보기" 링크 주소(티켓 32). 서버 페이지와 클라이언트 뷰가 함께 쓰므로 여기 둔다. */
+export function monthlyStatementHref(operatingMonthId: string, employeeId: string) {
+  return `/settlements/statement?operatingMonthId=${operatingMonthId}&employee=${employeeId}`;
+}
+
 /**
  * 정산 화면에 그릴 금액. 값은 서비스가 준 그대로이고, 계산 근거가 없으면 0 대신 "근거 없음"으로 그린다
  * (티켓 05, design.md 6.7). 0원 정책, 기준 미달, 근무상태 제외처럼 근거가 있는 0은 그대로 0이다.
@@ -24,11 +29,6 @@ export function settlementAmount(value: number, hasBasis: boolean): SettlementAm
 /** 근무상태로 제외된 직원의 0원은 판정 결과라 0이다. 지급 대상인데 계산 근거가 없으면 근거 없음이다. */
 export function payoutAmount(value: number, input: { isPayoutEligible: boolean; hasBasis: boolean }): SettlementAmount {
   return settlementAmount(value, !input.isPayoutEligible || input.hasBasis);
-}
-
-/** 귀케어 풀은 그날 계산된 방문완료 콜에서 나온다. 그런 콜이 없으면 풀과 배분에 근거가 없다. */
-export function earcareHasBasis(result: { sourceCallCount: number }) {
-  return result.sourceCallCount > 0;
 }
 
 /** 운영팀 인센 정책이 없으면 근거가 없다. 기준 미달의 0은 정책이 정한 결과다. */

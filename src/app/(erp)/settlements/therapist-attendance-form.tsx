@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { DetailRow } from "@/components/ui/detail-row";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import { StatusIndicator } from "@/components/ui/status-indicator";
+import { WarningList } from "@/components/ui/warning-summary";
 import { currentBusinessTimeHm } from "@/lib/business-time";
 import { useT } from "@/lib/i18n/client";
 import type { Translator } from "@/lib/i18n";
@@ -14,6 +15,10 @@ import {
   type TherapistAttendanceActionState
 } from "@/app/(erp)/settlements/actions";
 import type { TherapistAttendanceDto } from "@/modules/settlements/therapist-attendance-service";
+
+const warningKey = {
+  IN_SERVICE_CALL: "settlements.therapist.attendance.warning.inServiceCall"
+} as const;
 
 function inlineError(state: TherapistAttendanceActionState, field?: string) {
   if (!state || state.ok) return null;
@@ -187,6 +192,12 @@ export function TherapistAttendanceForm({
                       : t("settlements.therapist.attendance.status.waiting")}
         </span>
       </div>
+      {displayRow.warnings.length > 0 ? (
+        <WarningList
+          label={t("settlements.therapist.attendance.warning.label")}
+          warnings={displayRow.warnings.map((warning) => t(warningKey[warning.code]))}
+        />
+      ) : null}
       {formError ? (
         <p className="text-sm text-danger" role="alert">
           {t("settlements.therapist.attendance.saveFailed", { message: formError })}

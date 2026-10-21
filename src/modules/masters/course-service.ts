@@ -1,9 +1,11 @@
+import { businessTodayIsoDate } from "@/lib/operating-date";
 import { prisma } from "@/lib/prisma";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
 import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
 import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import {
   createCoursePolicySchema,
+  createCourseSchema,
   createOpsDailyIncentiveRuleSchema,
   createOpsMonthlyIncentiveRuleSchema,
   createTherapistCourseRateSchema,
@@ -12,6 +14,7 @@ import {
   defaultOpsDailyIncentiveSeeds,
   defaultOpsMonthlyIncentiveSeeds,
   endTherapistCourseRateSchema,
+  reactivateCourseSchema,
   updateCoursePolicySchema,
   updateOpsDailyIncentiveRuleSchema,
   updateOpsMonthlyIncentiveRuleSchema,
@@ -33,8 +36,6 @@ type CoursePolicyRecord = {
   name: string;
   durationMinutes: number;
   basePrice: number;
-  opsCallCredit: number;
-  earcarePoolAmount: number;
   requiresSecondTherapist: boolean;
   tvDisplayName: string;
   effectiveFromMonth: string;
@@ -141,8 +142,8 @@ export type CoursePolicyDto = Omit<CoursePolicyRecord, "createdAt" | "updatedAt"
   updatedAt: string;
 };
 
-export type CourseDto = Omit<CourseRecord, "code" | "createdAt" | "updatedAt"> & {
-  code: CourseCode;
+// 기본 코드는 A–E지만 기준정보에서 새 코드를 더할 수 있다(스펙 D9).
+export type CourseDto = Omit<CourseRecord, "createdAt" | "updatedAt"> & {
   currentPolicy: CoursePolicyDto | null;
   createdAt: string;
   updatedAt: string;
@@ -177,8 +178,6 @@ export type CreateCoursePolicyInput = MutationBase & {
   name: string;
   durationMinutes: number;
   basePrice: number;
-  opsCallCredit: number;
-  earcarePoolAmount: number;
   requiresSecondTherapist: boolean;
   tvDisplayName: string;
   effectiveFromMonth: string;
@@ -227,11 +226,11 @@ function normalizeParseError(message: string) {
   return new CourseDomainError(message, "INVALID_COURSE_INPUT");
 }
 
-function isCourseCode(value: string): value is CourseCode {
-  return ["A", "B", "C", "D", "E"].includes(value);
+function isCourseCode(value: string) {
+  return /^[A-Z0-9]{1,4}$/.test(value);
 }
 
-function assertCourseCode(value: string): asserts value is CourseCode {
+function assertCourseCode(value: string) {
   if (!isCourseCode(value)) {
     throw new CourseDomainError("코스 코드가 올바르지 않습니다.", "INVALID_COURSE_CODE");
   }
@@ -284,7 +283,6 @@ function toCourseDto(
   }
   return {
     ...record,
-    code: record.code as CourseCode,
     currentPolicy,
     createdAt: toIso(record.createdAt),
     updatedAt: toIso(record.updatedAt)
@@ -307,8 +305,6 @@ function policySnapshot(dto: CoursePolicyDto): AuditJsonSnapshot {
     name: dto.name,
     durationMinutes: dto.durationMinutes,
     basePrice: dto.basePrice,
-    opsCallCredit: dto.opsCallCredit,
-    earcarePoolAmount: dto.earcarePoolAmount,
     requiresSecondTherapist: dto.requiresSecondTherapist,
     tvDisplayName: dto.tvDisplayName,
     effectiveFromMonth: dto.effectiveFromMonth,
@@ -501,8 +497,6 @@ function policyValuesEqual(
     policy.name === input.name &&
     policy.durationMinutes === input.durationMinutes &&
     policy.basePrice === input.basePrice &&
-    policy.opsCallCredit === input.opsCallCredit &&
-    policy.earcarePoolAmount === input.earcarePoolAmount &&
     policy.requiresSecondTherapist === input.requiresSecondTherapist &&
     policy.tvDisplayName === input.tvDisplayName &&
     policy.effectiveFromMonth === input.effectiveFromMonth &&
@@ -587,8 +581,6 @@ export async function ensureDefaultCoursesAndPolicies(input: { actorId: string; 
             name: seed.name,
             durationMinutes: seed.durationMinutes,
             basePrice: seed.basePrice,
-            opsCallCredit: seed.opsCallCredit,
-            earcarePoolAmount: seed.earcarePoolAmount,
             requiresSecondTherapist: seed.requiresSecondTherapist,
             tvDisplayName: seed.tvDisplayName,
             effectiveFromMonth,
@@ -618,7 +610,7 @@ export async function ensureDefaultCoursesAndPolicies(input: { actorId: string; 
       const numericCode = Number(staffCode.slice(4));
       if (numericCode >= 1 && numericCode <= 4) {
         if (code === "A") return 700000;
-        if (code === "B" || code === "C") return 900000;
+        if (code === "C") return 900000;
       }
       return 0;
     };
@@ -707,8 +699,8 @@ export async function listCourses(options: { monthKey?: string; prismaClient?: C
       const currentPolicy = policies
         .filter((policy) => effectiveForMonth(policy, monthKey))
         .sort((a, b) => b.effectiveFromMonth.localeCompare(a.effectiveFromMonth))[0];
-      // 조회 경로는 코드가 표준 A~E가 아니어도 throw하지 않고 코스를 그대로 통과시킨다.
-      // 단일 비표준 코드 row가 전체 목록/페이지를 깨뜨리지 않게 하기 위함이며,
+      // 조회 경로는 코드 형식이 맞지 않아도 throw하지 않고 코스를 그대로 통과시킨다.
+      // 형식이 어긋난 코드 row 하나가 전체 목록/페이지를 깨뜨리지 않게 하기 위함이며,
       // 생성/수정 같은 쓰기 경로의 assertCourseCode 검증은 그대로 유지된다.
       return toCourseDto(course, currentPolicy ? toCoursePolicyDto(currentPolicy) : null, { tolerateInvalidCode: true });
     })
@@ -780,20 +772,25 @@ export async function createCoursePolicy(input: CreateCoursePolicyInput) {
 
   return runInTransaction(client, async (tx) => {
     await findCourseOrThrow(tx, parsed.data.courseId);
-    await assertNoClosedOperatingMonthOverlap(tx, parsed.data);
-    await assertNoCoursePolicyOverlap(tx, parsed.data);
-    const record = await tx.coursePolicy.create({ data: { ...parsed.data, isActive: true } });
-    const dto = toCoursePolicyDto(record);
-    await recordAudit(tx, {
-      actorId: input.actorId,
-      action: "course.policy_changed",
-      targetType: "course_policy",
-      targetId: dto.id,
-      beforeValue: null,
-      afterValue: policySnapshot(dto)
-    });
-    return dto;
+    return createPolicyRecord(tx, input.actorId, parsed.data);
   });
+}
+
+// 정책 한 건을 겹침·잠금 확인 뒤 만들고 감사 기록을 남긴다. 정책 추가, 코스 다시 사용, 새 코스 추가가 함께 쓴다.
+async function createPolicyRecord(tx: CoursePrismaClient, actorId: string, data: Omit<CreateCoursePolicyInput, "actorId" | "prismaClient">) {
+  await assertNoClosedOperatingMonthOverlap(tx, data);
+  await assertNoCoursePolicyOverlap(tx, data);
+  const record = await tx.coursePolicy.create({ data: { ...data, isActive: true } });
+  const dto = toCoursePolicyDto(record);
+  await recordAudit(tx, {
+    actorId,
+    action: "course.policy_changed",
+    targetType: "course_policy",
+    targetId: dto.id,
+    beforeValue: null,
+    afterValue: policySnapshot(dto)
+  });
+  return dto;
 }
 
 export async function updateCoursePolicy(input: UpdateCoursePolicyInput) {
@@ -812,8 +809,6 @@ export async function updateCoursePolicy(input: UpdateCoursePolicyInput) {
         name: parsed.data.name,
         durationMinutes: parsed.data.durationMinutes,
         basePrice: parsed.data.basePrice,
-        opsCallCredit: parsed.data.opsCallCredit,
-        earcarePoolAmount: parsed.data.earcarePoolAmount,
         requiresSecondTherapist: parsed.data.requiresSecondTherapist,
         tvDisplayName: parsed.data.tvDisplayName,
         effectiveFromMonth: parsed.data.effectiveFromMonth,
@@ -857,6 +852,92 @@ export async function deactivateCourse(input: { actorId: string; courseId: strin
       afterValue: courseSnapshot(after)
     });
     return after;
+  });
+}
+
+type CoursePolicyFields = Omit<CreateCoursePolicyInput, "actorId" | "courseId" | "prismaClient">;
+
+/**
+ * 다시 사용·새 코스 추가가 말하는 "그달"(스펙 D9): 오늘(Asia/Ho_Chi_Minh)이 속한 달. 화면의 기준 적용월(가장 이른
+ * 운영월)은 이미 마감확정일 수 있어, 그 달에 새 정책을 넣으라고 하면 잠금으로 거절된다.
+ */
+export function currentCourseMonthKey(now = new Date()) {
+  return businessTodayIsoDate(now).slice(0, 7);
+}
+
+/**
+ * 비활성 코스를 다시 켠다(스펙 D9). 그달에 적용되는 정책이 있으면 그대로 쓰고, 없으면 policy로 받은 정책을
+ * 함께 만든다. 받은 정책도 그달을 덮지 않으면 아무것도 쓰지 않고 COURSE_POLICY_REQUIRED로 거절한다.
+ * 이미 활성이면 아무것도 하지 않는다(감사 기록도 남기지 않는다).
+ */
+export async function reactivateCourse(input: {
+  actorId: string;
+  courseId: string;
+  policy?: CoursePolicyFields;
+  now?: Date;
+  prismaClient?: CoursePrismaClient;
+}) {
+  const parsed = reactivateCourseSchema.safeParse(input);
+  if (!parsed.success) throw normalizeParseError(parsed.error.issues[0]?.message ?? "코스 다시 사용 입력값이 올바르지 않습니다.");
+  const client = getClient(input.prismaClient);
+
+  return runInTransaction(client, async (tx) => {
+    const currentRecord = await findCourseOrThrow(tx, parsed.data.courseId);
+    const monthKey = currentCourseMonthKey(input.now);
+    let currentPolicy = await getCoursePolicyForMonth({ courseId: currentRecord.id, monthKey, prismaClient: tx }).catch(() => null);
+    const before = toCourseDto(currentRecord, currentPolicy);
+    if (before.isActive) return before;
+
+    if (!currentPolicy) {
+      const policy = parsed.data.policy;
+      if (!policy || !effectiveForMonth({ ...policy, isActive: true }, monthKey)) {
+        throw new CourseDomainError(`다시 사용하려면 ${monthKey}에 적용되는 코스 정책을 함께 입력하세요.`, "COURSE_POLICY_REQUIRED");
+      }
+      currentPolicy = await createPolicyRecord(tx, input.actorId, { ...policy, courseId: before.id });
+    }
+
+    await tx.course.updateMany({ where: { id: before.id }, data: { isActive: true } });
+    const after = toCourseDto(await findCourseOrThrow(tx, before.id), currentPolicy);
+    await recordAudit(tx, {
+      actorId: input.actorId,
+      action: "course.reactivated",
+      targetType: "course",
+      targetId: after.id,
+      beforeValue: courseSnapshot(before),
+      afterValue: courseSnapshot(after)
+    });
+    return after;
+  });
+}
+
+/**
+ * 새 코스를 첫 정책과 함께 만든다(스펙 D9). 코드는 대문자로 맞추고, 활성·비활성과 상관없이 이미 있는 코드는 거절한다
+ * (비활성 코스는 "다시 사용"으로 켠다). 새 코스는 Therapist 수당이 없어 수당을 넣기 전까지 가능 코스에서 "이 코스 불가"다.
+ */
+export async function createCourse(input: { actorId: string; code: string; now?: Date; prismaClient?: CoursePrismaClient } & CoursePolicyFields) {
+  const parsed = createCourseSchema.safeParse(input);
+  if (!parsed.success) throw normalizeParseError(parsed.error.issues[0]?.message ?? "코스 입력값이 올바르지 않습니다.");
+  const client = getClient(input.prismaClient);
+  const { code, ...policy } = parsed.data;
+
+  return runInTransaction(client, async (tx) => {
+    if (await tx.course.findUnique({ where: { code } })) {
+      throw new CourseDomainError("이미 있는 코스 코드입니다. 비활성 코스는 다시 사용으로 켜세요.", "COURSE_CODE_DUPLICATE");
+    }
+    // 정책이 잠금 운영월에 걸리면 코스 행을 만들기 전에 거절한다.
+    await assertNoClosedOperatingMonthOverlap(tx, policy);
+    const course = await tx.course.create({ data: { code, isActive: true } });
+    const created = toCourseDto(course, null);
+    await recordAudit(tx, {
+      actorId: input.actorId,
+      action: "course.created",
+      targetType: "course",
+      targetId: created.id,
+      beforeValue: null,
+      afterValue: courseSnapshot(created)
+    });
+    const currentPolicy = await createPolicyRecord(tx, input.actorId, { ...policy, courseId: course.id });
+    return { ...created, currentPolicy: effectiveForMonth(currentPolicy, currentCourseMonthKey(input.now)) ? currentPolicy : null };
   });
 }
 

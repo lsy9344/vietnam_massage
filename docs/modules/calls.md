@@ -40,32 +40,30 @@ The `/calls` page keeps `operatingMonthId` and `serviceDate` in URL search param
 - customer or operating memo
 - therapist 1
 - therapist 2
-- earcare staff
 - payment amount
 - therapist commissions
-- earcare pool amount
-- recognized call count
 - reservation status
 - discount type
 - payment method
 - confirmation flag
 - notes
 
-Story 2.3 displays payment amount, therapist commissions, earcare pool amount, and recognized call credit as server-derived readonly cells. The UI formats VND values but does not reimplement UI 계산 logic.
+Story 2.3 displays payment amount and therapist commissions as server-derived readonly cells. The UI formats VND values but does not reimplement UI 계산 logic.
 
 ## Story 2.2 Autosave Contract
 
 - Row autosave is scoped to one existing `ServiceCall` row and must require `serviceCallId`.
 - The status-history table is `service_call_status_histories` via `ServiceCallStatusHistory`.
-- The visible save state model is `idle`, `saving`, `saved`, and `error`; user-facing labels are `저장중`, `저장됨`, and `저장 보류`.
+- The visible save state model is `idle`, `saving`, `saved`, `failed`, and `conflict`; user-facing labels come from the shared `SaveStatus`: `저장 중`, `저장됨`, `저장 실패`, `충돌 확인 필요` (Ticket 15 replaced the Story 2.2 labels `저장중` and `저장 보류`). Existing-row saves carry `expectedUpdatedAt` and are rejected with `STALE_CALL` when another screen saved first.
 - Status transitions write `service_call.status_changed`; sensitive row changes such as payment method, discount type, assignments, and confirmation write `service_call.row_changed`.
 - Failed autosave keeps the draft on screen and exposes inline retry using the same draft payload.
 - Locked operating months and users without `call:write` are blocked by the Server Action/domain boundary and shown safe Korean errors.
+- New rows carry a per-draft `requestId` (Ticket 16). A repeat with the same request id returns the call already made with "이미 저장된 콜입니다." instead of a second call. When the new-row response is lost, the row shows `저장 여부 확인 중`, keeps its input, and retries with the same request id.
 
 ## Story 2.3 Completed-Call Calculation Contract
 
 - `calculateServiceCallCompletion()` is the calls service calculation boundary.
-- Only completed rows calculate payment, commission, `CoursePolicy.earcarePoolAmount`, and `CoursePolicy.opsCallCredit`; the service recognizes both legacy `방문완료` and stable code `VISIT_COMPLETE`. Other statuses are excluded as `not_completed`.
+- Only completed rows calculate payment and commission; the service recognizes both legacy `방문완료` and stable code `VISIT_COMPLETE`. Other statuses are excluded as `not_completed`.
 - Empty discount is `0`; any selected discount type is fixed `100,000` VND.
 - Payment is `CoursePolicy.basePrice - discountAmount`, clamped at zero.
 - Therapist commissions use `TherapistCourseRate.amount` by therapist ID, course ID, and operating month. Massage therapist 1 and 2 are calculated independently.
@@ -93,7 +91,7 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 - Daily expense deactivation is soft delete via `isActive=false`. Active expenses only contribute to `expenseTotal`.
 - Expense create/update/deactivate are blocked outside the operating month date range and blocked for locked months, reusing the same call-ledger guardrails.
 - Audit events are `daily_expense.created`, `daily_expense.changed`, and `daily_expense.deactivated`. Snapshots are plain JSON with `expenseDate` as `YYYY-MM-DD`, `amount` as number, and handler as employee ID.
-- `getDailyCallLedgerSummary()` calculates reservation, completed, no-show, canceled, payment, therapist commission, earcare pool, discount, expense, net sales, and course summary values from the selected operating month/date.
+- `getDailyCallLedgerSummary()` calculates reservation, completed, no-show, canceled, payment, therapist commission, discount, expense, net sales, and course summary values from the selected operating month/date.
 - `netSales = paymentTotal - expenseTotal`.
 - 완료 콜 monetary totals use only rows where `calculationStatus === "calculated"`. Non-completed rows, missing policy/rate rows, and invalid completed D rows with `second_therapist_required` are excluded from amount and course-code summaries.
 - Course summaries group by stable `Course.code` A-E and report completed count, discount count, and therapist assignment count.
@@ -128,11 +126,11 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 ## Story 2.6 Keyboard and Type-Ahead Contract
 
 - The call ledger uses `@tanstack/react-table` `8.21.3` as the headless table model through `useReactTable` and `getCoreRowModel`; it does not replace the semantic table with a div grid.
-- Editable field order is fixed: `startTime`, `actualEntryTime`, `roomId`, `courseId`, `customerMemo`, `customerId`, `therapist1Id`, `therapist2Id`, `earcareEmployeeId`, `status`, `discountTypeCode`, `paymentMethodCode`, `note`, and `confirmationCode`.
+- Editable field order is fixed (`EDITABLE_CALL_FIELDS`, also the conflict-compare order): `startTime`, `actualEntryTime`, `actualEndTime`, `roomId`, `courseId`, `customerMemo`, `customerId`, `therapist1Id`, `therapist2Id`, `status`, `discountTypeCode`, `paymentMethodCode`, `note`, `visitRequest`, `bookingChannelCode`, `bookerName`, and `confirmationCode`. `actualEndTime`, `bookingChannelCode`, and `bookerName` were added by 1018 스펙 D1.
 - `Tab` and `Shift+Tab` move through editable cells and wrap between rows. Computed readonly cells are skipped in tab order.
 - `Enter` commits the current row draft through the existing autosave action and moves to the same field on the next row.
 - Arrow keys move to adjacent ledger cells. Readonly computed cells can be focus targets for navigation semantics, but they do not open edit mode.
-- `Esc` cancels the active draft back to the last server row and must not call autosave.
+- `Esc` cancels the active draft back to the last server row (or to the draft being sent while a save is in flight) and must not call autosave. In the conflict state it leaves the draft as it is.
 - Type-ahead combobox cells filter by visible label and stable value. Hidden form/draft values remain stable IDs/codes such as `Room.id`, `Course.id`, `Employee.id`, code values, and `TimeSlot.value`.
 - Combobox accessibility uses a visible/sr-only label, `aria-expanded`, `aria-controls`, and `aria-activedescendant`. Dropdown options expose text labels even when a decorative swatch is shown.
 - Computed readonly cells keep `bg-readonly`, right-aligned tabular numbers, server-derived values, and stale-failed-draft handling (`저장 보류 계산 대기`).
@@ -140,18 +138,18 @@ Story 2.3 displays payment amount, therapist commissions, earcare pool amount, a
 
 ## Rules
 
-- Only `방문완료` calls count toward sales, commissions, earcare pool, and recognized calls.
+- Only `방문완료` calls count toward sales, commissions, and the operations-team call count.
 - Story 2.5 daily summary uses `방문완료` and `VISIT_COMPLETE` for completed counts, and only `calculated` completed rows for payment and course-code summary totals.
 - Any discount type currently means a fixed 100,000 discount.
 - D course requires a second therapist in the ERP even though Excel does not enforce it.
 - D course requirement is enforced from `CoursePolicy.requiresSecondTherapist`, not from mutable display text.
 - Commission values should be derived from effective therapist course rates.
-- Daily expenses reduce net sales only; they do not alter call payment, commission, discount, or earcare pool calculations.
+- Daily expenses reduce net sales only; they do not alter call payment, commission, or discount calculations.
 - Story 2.6 keyboard/type-ahead behavior must not persist display labels as downstream keys.
 - `Esc` in an existing call row is a cancel operation, not a save operation.
 - Status changes should be recorded.
 - Story 2.1 stores room/course/employee references as stable IDs and code selections as stable code values, never mutable display labels.
-- `ServiceCallAssignment.assignmentRole` is limited to `THERAPIST_1`, `THERAPIST_2`, and `EARCARE`.
+- `ServiceCallAssignment.assignmentRole` is limited to `THERAPIST_1` and `THERAPIST_2`.
 - Writes use a transaction so a call row and assignment rows are not partially saved.
 
 ## Handoffs

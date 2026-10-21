@@ -130,14 +130,12 @@ async function seedAccount(input: { accountId: string; password: string; role: s
   });
 }
 
-async function upsertCoursePolicy(courseId: string, monthKey: string, code: string, basePrice: number, earcarePoolAmount: number, requiresSecondTherapist = false) {
+async function upsertCoursePolicy(courseId: string, monthKey: string, code: string, basePrice: number, requiresSecondTherapist = false) {
   const existing = await (prisma as any).coursePolicy.findFirst({ where: { courseId, effectiveFromMonth: monthKey } });
   const data = {
     name: `Story 6.3 ${code}`,
     durationMinutes: requiresSecondTherapist ? 90 : 60,
     basePrice,
-    opsCallCredit: 1,
-    earcarePoolAmount,
     requiresSecondTherapist,
     tvDisplayName: `S63 ${code}`,
     effectiveToMonth: null,
@@ -215,11 +213,11 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
   for (const code of ["A", "B", "C", "D", "E"] as const) {
     courses[code] = await (prisma as any).course.upsert({ where: { code }, update: { isActive: true }, create: { code, isActive: true } });
   }
-  await upsertCoursePolicy(courses.A.id, monthKey, "A", 1500000, 100000);
-  await upsertCoursePolicy(courses.B.id, monthKey, "B", 1800000, 200000);
-  await upsertCoursePolicy(courses.C.id, monthKey, "C", 2000000, 0);
-  await upsertCoursePolicy(courses.D.id, monthKey, "D", 3200000, 0, true);
-  await upsertCoursePolicy(courses.E.id, monthKey, "E", 3000000, 0);
+  await upsertCoursePolicy(courses.A.id, monthKey, "A", 1500000);
+  await upsertCoursePolicy(courses.B.id, monthKey, "B", 1800000);
+  await upsertCoursePolicy(courses.C.id, monthKey, "C", 2000000);
+  await upsertCoursePolicy(courses.D.id, monthKey, "D", 3200000, true);
+  await upsertCoursePolicy(courses.E.id, monthKey, "E", 3000000);
   await upsertTherapistRate(therapist1.id, courses.A.id, monthKey, 700000);
   await upsertTherapistRate(therapist1.id, courses.B.id, monthKey, 900000);
   await upsertTherapistRate(therapist2.id, courses.A.id, monthKey, 700000);

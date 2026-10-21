@@ -3,6 +3,7 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 import { employeeRow, openEmployeePanel } from "./support/settlement";
+import { openListbox, pickListboxOptionByValue } from "./support/listbox-select";
 
 const summaryLabel = "운영팀 일일 인센 요약";
 
@@ -63,14 +64,12 @@ async function seedAttendanceCode(code: string, displayName: string, sortOrder: 
   });
 }
 
-async function upsertCoursePolicy(courseId: string, effectiveFromMonth: string, name: string, opsCallCredit: number) {
+async function upsertCoursePolicy(courseId: string, effectiveFromMonth: string, name: string) {
   const existing = await (prisma as any).coursePolicy.findFirst({ where: { courseId, effectiveFromMonth } });
   const data = {
     name,
     durationMinutes: 60,
     basePrice: 1500000,
-    opsCallCredit,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: false,
     tvDisplayName: name,
     effectiveToMonth: null,
@@ -108,6 +107,8 @@ async function cleanupStoryData(operatingMonthIds: string[]) {
     await (prisma as any).serviceCall.deleteMany({ where: { id: { in: callIds } } });
   }
   await (prisma as any).opsAttendance.deleteMany({ where: { operatingMonthId: { in: operatingMonthIds } } });
+  // 지급 확인(ADR 0004, 티켓 31)은 운영월이 고정 monthKey로 upsert되므로, 재실행 때 이전 사건이 남지 않게 함께 정리한다.
+  await (prisma as any).payoutConfirmationEvent.deleteMany({ where: { operatingMonthId: { in: operatingMonthIds } } });
 }
 
 async function createCall(input: {
@@ -200,38 +201,33 @@ async function seedStoryData(): Promise<SeededData> {
     create: { value: "16:00", sortOrder: 94501, isActive: true }
   });
   const aCourse = await (prisma as any).course.upsert({ where: { code: "A" }, update: { isActive: true }, create: { code: "A", isActive: true } });
-  const bCourse = await (prisma as any).course.upsert({ where: { code: "B" }, update: { isActive: true }, create: { code: "B", isActive: true } });
-  const cCourse = await (prisma as any).course.upsert({ where: { code: "C" }, update: { isActive: true }, create: { code: "C", isActive: true } });
-  await upsertCoursePolicy(aCourse.id, "2035-05", "Story45 A", 20);
-  await upsertCoursePolicy(bCourse.id, "2035-05", "Story45 B", 20);
-  await upsertCoursePolicy(cCourse.id, "2035-05", "Story45 C", 10);
-  await upsertCoursePolicy(aCourse.id, "2035-06", "Story45 A locked", 50);
-  await upsertCoursePolicy(aCourse.id, "1999-01", "Story45 A missing policy", 50);
+  await upsertCoursePolicy(aCourse.id, "2035-05", "Story45 A");
+  await upsertCoursePolicy(aCourse.id, "2035-06", "Story45 A locked");
+  await upsertCoursePolicy(aCourse.id, "1999-01", "Story45 A missing policy");
   await upsertRate(therapist.id, aCourse.id, "2035-05", 700000);
-  await upsertRate(therapist.id, bCourse.id, "2035-05", 900000);
-  await upsertRate(therapist.id, cCourse.id, "2035-05", 900000);
   await upsertRate(therapist.id, aCourse.id, "2035-06", 700000);
   await upsertRate(therapist.id, aCourse.id, "1999-01", 700000);
-  await upsertDailyRule(30, 50000, "2035-05");
-  await upsertDailyRule(40, 100000, "2035-05");
-  await upsertDailyRule(50, 200000, "2035-05");
-  await upsertDailyRule(30, 50000, "2035-06");
-  await upsertDailyRule(40, 100000, "2035-06");
-  await upsertDailyRule(50, 200000, "2035-06");
+  // 운영팀 일일 인센은 그날 방문완료 콜 수를 그대로 threshold와 비교한다.
+  await upsertDailyRule(2, 50000, "2035-05");
+  await upsertDailyRule(3, 100000, "2035-05");
+  await upsertDailyRule(4, 200000, "2035-05");
+  await upsertDailyRule(2, 50000, "2035-06");
+  await upsertDailyRule(3, 100000, "2035-06");
+  await upsertDailyRule(4, 200000, "2035-06");
 
-  for (const [serviceDate, courses] of [
-    ["2035-05-11", [aCourse, cCourse]],
-    ["2035-05-12", [aCourse, bCourse]],
-    ["2035-05-13", [aCourse]],
-    ["2035-05-14", [aCourse, bCourse, cCourse]]
+  for (const [serviceDate, callCount] of [
+    ["2035-05-11", 2],
+    ["2035-05-12", 3],
+    ["2035-05-13", 1],
+    ["2035-05-14", 4]
   ] as const) {
-    for (const course of courses) {
+    for (let index = 0; index < callCount; index += 1) {
       await createCall({
         operatingMonthId: writableOperatingMonth.id,
         serviceDate: new Date(`${serviceDate}T00:00:00.000Z`),
         roomId: room.id,
-        courseId: course.id,
-        memo: `Story 4.5 complete ${serviceDate} ${course.code}`,
+        courseId: aCourse.id,
+        memo: `Story 4.5 complete ${serviceDate} ${index}`,
         status: "VISIT_COMPLETE",
         therapist1Id: therapist.id
       });
@@ -246,15 +242,17 @@ async function seedStoryData(): Promise<SeededData> {
     status: "예약",
     therapist1Id: therapist.id
   });
-  await createCall({
-    operatingMonthId: lockedOperatingMonth.id,
-    serviceDate: new Date("2035-06-12T00:00:00.000Z"),
-    roomId: room.id,
-    courseId: aCourse.id,
-    memo: "Story 4.5 locked readable",
-    status: "VISIT_COMPLETE",
-    therapist1Id: therapist.id
-  });
+  for (let index = 0; index < 4; index += 1) {
+    await createCall({
+      operatingMonthId: lockedOperatingMonth.id,
+      serviceDate: new Date("2035-06-12T00:00:00.000Z"),
+      roomId: room.id,
+      courseId: aCourse.id,
+      memo: `Story 4.5 locked readable ${index}`,
+      status: "VISIT_COMPLETE",
+      therapist1Id: therapist.id
+    });
+  }
   await createCall({
     operatingMonthId: missingPolicyOperatingMonth.id,
     serviceDate: new Date("1999-01-12T00:00:00.000Z"),
@@ -320,13 +318,13 @@ test.describe("Story 4.5 operations daily incentive", () => {
     await page.goto(`/settlements/operations?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2035-05-12`);
 
     await expect(page.getByRole("heading", { name: "운영팀 근무/일일인센" })).toBeVisible();
-    await expect(page.getByLabel("운영월")).toHaveValue(seededData.writableOperatingMonthId);
+    await expect(page.locator('input[name="operatingMonthId"]')).toHaveValue(seededData.writableOperatingMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2035-05-12");
     // 같은 문구가 요약 카드와 직원 패널 양쪽에 나오므로 요약 카드 목록으로 좁힌다.
     const summary = page.getByLabel(summaryLabel);
     await expect(summary.getByText("일 총콜")).toBeVisible();
-    await expect(summary.getByText("40콜").first()).toBeVisible();
-    await expect(summary.getByText("40콜 이상")).toBeVisible();
+    await expect(summary.getByText("3콜").first()).toBeVisible();
+    await expect(summary.getByText("3콜 이상")).toBeVisible();
     await expect(summaryCard(page, "개인별 인센")).toContainText("100,000 VND");
     await expect(summaryCard(page, "지급 합계")).toContainText("300,000 VND");
     // 지급액과 제외 사유는 직원 비교 표에, 근무상태 정정과 근거 콜은 직원 패널에 있다(티켓 05).
@@ -335,10 +333,39 @@ test.describe("Story 4.5 operations daily incentive", () => {
     await expect(employeeRow(page, "E2E45 카운터2")).toContainText("제외: 휴무");
     await expect(employeeRow(page, "E2E45 웨이터1")).toContainText("제외: 지각");
     const leadPanel = await openEmployeePanel(page, "E2E45 팀장");
-    await expect(leadPanel.getByLabel("E2E45 팀장 근무상태").locator("option")).toContainText(["정상", "휴무", "지각", "조퇴", "결근"]);
+    // 근무상태 목록은 열 때만 그린다(공용 listbox). 펼쳐서 항목을 본다.
+    const statusListbox = await openListbox(leadPanel.getByLabel("E2E45 팀장 근무상태"));
+    await expect(statusListbox.getByRole("option")).toContainText(["정상", "휴무", "지각", "조퇴", "결근"]);
     await expect(leadPanel.getByRole("heading", { name: "일 총콜 산출 근거" })).toBeVisible();
     await expect(page.getByText("비완료 1, 정책없음 0, 수당없음 0, D코스누락 0").first()).toBeVisible();
-    await expect(page.getByRole("button", { name: /지급/ })).toHaveCount(0);
+  });
+
+  test("settlement manager can confirm payout, reconfirm, and release with a reason, reviewing actor history", async ({ page }) => {
+    await login(page, "story45_settlement", "Story45!settlement");
+    await page.goto(`/settlements/operations?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2035-05-12`);
+
+    // 지급 확인(ADR 0004, 티켓 30·31)은 직원 패널에서 한다. 표의 행에는 확인 상태만 보인다.
+    const leadPanel = await openEmployeePanel(page, "E2E45 팀장");
+    await expect(leadPanel).toContainText("미확인");
+    await leadPanel.getByRole("button", { name: "지급 확인" }).click();
+
+    await expect(leadPanel).toContainText("확인됨");
+    await expect(leadPanel).toContainText("확인 이력 1건");
+    await expect(leadPanel).toContainText("처리자: story45_settlement / E2E45 정산담당");
+    await expect(employeeRow(page, "E2E45 팀장")).toContainText("확인됨");
+
+    // 재확인은 사유가 필수다.
+    await leadPanel.getByLabel("사유").first().fill("근무상태 정정으로 다시 확인");
+    await leadPanel.getByRole("button", { name: "재확인" }).click();
+    await expect(leadPanel).toContainText("확인 이력 2건");
+    await expect(leadPanel).toContainText("근무상태 정정으로 다시 확인");
+
+    // 해제도 사유가 필수고, 해제 뒤에는 미확인으로 돌아간다.
+    await leadPanel.getByLabel("사유").last().fill("정산 오류로 확인 해제");
+    await leadPanel.getByRole("button", { name: "확인 해제" }).click();
+    await expect(leadPanel).toContainText("미확인");
+    await expect(leadPanel).toContainText("확인 이력 3건");
+    await expect(employeeRow(page, "E2E45 팀장")).toContainText("미확인");
   });
 
   test("attendance status change refreshes same-route payout summary", async ({ page }) => {
@@ -346,7 +373,7 @@ test.describe("Story 4.5 operations daily incentive", () => {
     await page.goto(`/settlements/operations?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2035-05-12`);
 
     const counter1Row = await openEmployeePanel(page, "E2E45 카운터1");
-    await counter1Row.getByLabel("E2E45 카운터1 근무상태").selectOption("DAY_OFF");
+    await pickListboxOptionByValue(counter1Row.getByLabel("E2E45 카운터1 근무상태"), "DAY_OFF");
     await counter1Row.getByRole("button", { name: "저장" }).click();
     await expect(counter1Row.getByText("저장됨")).toBeVisible();
 
@@ -361,20 +388,21 @@ test.describe("Story 4.5 operations daily incentive", () => {
     await login(page, "story45_settlement", "Story45!settlement");
     const bandSummary = page.getByLabel(summaryLabel);
     await page.goto(`/settlements/operations?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2035-05-13`);
-    await expect(bandSummary.getByText("20콜").first()).toBeVisible();
+    await expect(bandSummary.getByText("1콜").first()).toBeVisible();
+    // 기준 미달 안내는 정책값이 아니라 고정 문구("30콜 미만")다.
     await expect(bandSummary.getByText("30콜 미만")).toBeVisible();
     // 기준 미달의 0은 정책이 정한 결과라 근거 없음이 아니라 0이다.
     await expect(summaryCard(page, "지급 합계")).toContainText("0 VND");
 
     await page.goto(`/settlements/operations?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2035-05-11`);
-    await expect(bandSummary.getByText("30콜").first()).toBeVisible();
-    await expect(bandSummary.getByText("30콜 이상")).toBeVisible();
+    await expect(bandSummary.getByText("2콜").first()).toBeVisible();
+    await expect(bandSummary.getByText("2콜 이상")).toBeVisible();
     await expect(summaryCard(page, "개인별 인센")).toContainText("50,000 VND");
     await expect(summaryCard(page, "지급 합계")).toContainText("150,000 VND");
 
     await page.goto(`/settlements/operations?operatingMonthId=${seededData.writableOperatingMonthId}&attendanceDate=2035-05-14`);
-    await expect(bandSummary.getByText("50콜").first()).toBeVisible();
-    await expect(bandSummary.getByText("50콜 이상")).toBeVisible();
+    await expect(bandSummary.getByText("4콜").first()).toBeVisible();
+    await expect(bandSummary.getByText("4콜 이상")).toBeVisible();
     await expect(summaryCard(page, "개인별 인센")).toContainText("200,000 VND");
     await expect(summaryCard(page, "지급 합계")).toContainText("600,000 VND");
   });
@@ -384,7 +412,7 @@ test.describe("Story 4.5 operations daily incentive", () => {
     await page.goto(`/settlements/operations?operatingMonthId=${seededData.lockedOperatingMonthId}&attendanceDate=2035-06-12`);
 
     await expect(page.getByText("잠긴 운영월입니다").first()).toBeVisible();
-    await expect(page.getByLabel(summaryLabel).getByText("50콜").first()).toBeVisible();
+    await expect(page.getByLabel(summaryLabel).getByText("4콜").first()).toBeVisible();
     const lockedPanel = await openEmployeePanel(page, "E2E45 팀장");
     await expect(lockedPanel.getByLabel("E2E45 팀장 근무상태")).toBeDisabled();
   });

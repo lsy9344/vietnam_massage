@@ -6,7 +6,9 @@ import type { MessageKey } from "@/lib/i18n/types";
  * 도크, 구역 안 탭, 서버의 화면 접근 검사가 모두 이 목록에서 나온다
  * (docs/design/2026-10-14-workflow-information-architecture.md 7.2절).
  */
-export const zones = ["ledger", "floor", "customers", "settlements", "closing", "reports", "settings"] as const;
+// "therapist"는 Therapist 전용 구역이다(티켓 01). therapist 역할만 roles에 들어가므로
+// 운영팀 도크의 구역 계산(getDockZones 등을 ops 역할로 부르는 WorkflowDock)에는 섞이지 않는다.
+export const zones = ["ledger", "floor", "customers", "settlements", "closing", "reports", "settings", "therapist"] as const;
 
 export type Zone = (typeof zones)[number];
 
@@ -42,7 +44,7 @@ export type ScreenContext = {
 
 const reportRoles: Role[] = ["administrator", "counter", "settlement_manager", "read_only_viewer"];
 
-// 원장 화면의 보기 탭. 주소 값은 원장 화면의 것(src/app/(erp)/calls/ledger-address.ts)과 같다.
+// 원장 화면의 보기 탭. 주소 값은 원장 화면의 것(src/lib/ledger-address.ts)과 같다.
 const ledgerViews: readonly ScreenView[] = [
   { labelKey: "calls.tab.ledger", params: {} },
   { labelKey: "calls.tab.cashbook", params: { tab: "cashbook" } }
@@ -54,11 +56,24 @@ export const screenRoutes: readonly ScreenRoute[] = [
   { path: "/rooms", labelKey: "shell.tab.rooms", zone: "floor", roles: ["administrator", "counter", "waiter", "read_only_viewer"], dateContext: "serviceDate" },
   { path: "/live", labelKey: "shell.tab.live", zone: "floor", roles: ["administrator", "counter"], dateContext: "serviceDate" },
   { path: "/tv", labelKey: "shell.tab.tv", zone: "floor", roles: ["administrator", "counter", "read_only_viewer"], dateContext: "serviceDate", notATab: true },
+  // 출근 코드 크게 띄우기(티켓 05, 스펙 D13). 날짜 맥락이 없다 — 지금 시각으로만 코드를 계산한다.
+  // TV와 같은 이유로 구역 안 탭에는 두지 않는다(/rooms의 "출근 코드" 버튼으로 연다).
+  { path: "/clock-code", labelKey: "shell.tab.clockCode", zone: "floor", roles: ["administrator", "counter"], notATab: true },
   { path: "/customers", labelKey: "shell.tab.customers", zone: "customers", roles: ["administrator", "counter"] },
+  // 근무표는 운영월과 무관해 dateContext가 없다. 정산 업무의 주기 순서로 맨 앞에 둔다.
+  { path: "/settlements/schedule", labelKey: "shell.tab.schedule", zone: "settlements", roles: ["administrator", "settlement_manager"] },
   { path: "/settlements", labelKey: "shell.tab.therapist", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "serviceDate" },
-  { path: "/settlements/earcare", labelKey: "shell.tab.earcare", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "attendanceDate" },
   { path: "/settlements/operations", labelKey: "shell.tab.opsDaily", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "attendanceDate" },
   { path: "/settlements/operations/monthly", labelKey: "shell.tab.opsMonthly", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "month" },
+  // 월 명세서(티켓 32)는 각 정산 화면의 직원 패널에서 직원을 고르고 연다. TV와 같은 이유로 구역 안 탭에는 두지 않는다.
+  { path: "/settlements/statement", labelKey: "shell.tab.statement", zone: "settlements", roles: ["administrator", "settlement_manager"], dateContext: "month", notATab: true },
+  // Therapist 공지(티켓 10, 스펙 D25, M18). therapist:manage는 관리자 전용이라 settlement_manager는 들어가지 못한다.
+  { path: "/settlements/notices", labelKey: "shell.tab.therapistNotices", zone: "settlements", roles: ["administrator"] },
+  // 휴무 신청·정정 요청 승인함(티켓 08, 스펙 D24, M18). payout:write라 근무표·출퇴근을 고치는
+  // administrator·settlement_manager가 함께 연다(공지와 달리 settlement_manager도 들어간다).
+  { path: "/settlements/requests", labelKey: "shell.tab.therapistRequests", zone: "settlements", roles: ["administrator", "settlement_manager"] },
+  // 관리자 Therapist 현황(티켓 11, 스펙 D26, M18). 오늘 영역은 날짜 맥락이 없고, 운영월 영역만 고른다.
+  { path: "/settlements/therapist-overview", labelKey: "shell.tab.therapistOverview", zone: "settlements", roles: ["administrator"], dateContext: "month" },
   { path: "/closing", labelKey: "shell.tab.closing", zone: "closing", roles: ["administrator", "settlement_manager"], dateContext: "month" },
   { path: "/dashboard/today", labelKey: "shell.tab.dashboardToday", zone: "reports", roles: reportRoles, dateContext: "serviceDate" },
   { path: "/dashboard/monthly", labelKey: "shell.tab.dashboardMonthly", zone: "reports", roles: reportRoles, dateContext: "month" },
@@ -69,7 +84,14 @@ export const screenRoutes: readonly ScreenRoute[] = [
   { path: "/masters/employees", labelKey: "shell.tab.employees", zone: "settings", roles: ["administrator"] },
   { path: "/masters/courses", labelKey: "shell.tab.courses", zone: "settings", roles: ["administrator"] },
   { path: "/masters/sheet-mapping", labelKey: "shell.tab.sheetMapping", zone: "settings", roles: ["administrator", "read_only_viewer"] },
-  { path: "/audit", labelKey: "shell.tab.audit", zone: "settings", roles: ["administrator"] }
+  { path: "/audit", labelKey: "shell.tab.audit", zone: "settings", roles: ["administrator"] },
+  // Therapist 전용 화면(티켓 01, 스펙 M15). 운영월·날짜 맥락을 공유하지 않아 dateContext가 없다.
+  { path: "/therapist", labelKey: "therapist.nav.today", zone: "therapist", roles: ["therapist"] },
+  { path: "/therapist/attendance", labelKey: "therapist.nav.attendance", zone: "therapist", roles: ["therapist"] },
+  { path: "/therapist/payout", labelKey: "therapist.nav.payout", zone: "therapist", roles: ["therapist"] },
+  { path: "/therapist/notices", labelKey: "therapist.nav.notices", zone: "therapist", roles: ["therapist"] },
+  // 티켓 02: 첫 비밀번호 변경·"나" 메뉴의 비밀번호 변경. 탭 네 개와 같은 자리를 다투지 않는 별도 화면이다.
+  { path: "/therapist/password", labelKey: "therapist.nav.password", zone: "therapist", roles: ["therapist"], notATab: true }
 ];
 
 const roleLandingPath: Record<Role, string> = {
@@ -77,7 +99,8 @@ const roleLandingPath: Record<Role, string> = {
   counter: "/calls",
   settlement_manager: "/settlements",
   waiter: "/rooms",
-  read_only_viewer: "/rooms"
+  read_only_viewer: "/rooms",
+  therapist: "/therapist"
 };
 
 export function getRoleLandingPath(role: Role) {

@@ -3,6 +3,7 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
 import { openMasterPanelByRowText } from "./support/masters";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 
 
 const users = [
@@ -125,23 +126,22 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     await expect(page.getByRole("heading", { name: "직원", level: 1 })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "설정 화면" }).getByRole("link", { name: "직원" })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("heading", { name: /운영팀/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /귀케어팀/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: /마사지사/ })).toBeVisible();
     await expect(page.getByText("OPS-LEAD-001").first()).toBeVisible();
-    await expect(page.getByText("EAR-001").first()).toBeVisible();
     await expect(page.getByText("THR-050").first()).toBeVisible();
     await expect.poll(async () => (prisma as any).employee.count({ where: { employeeGroup: "OPERATIONS", staffCode: { startsWith: "OPS-" } } })).toBe(5);
-    await expect.poll(async () => (prisma as any).employee.count({ where: { employeeGroup: "EARCARE", staffCode: { startsWith: "EAR-" } } })).toBe(4);
-    await expect.poll(async () => (prisma as any).employee.count({ where: { employeeGroup: "THERAPIST", staffCode: { startsWith: "THR-" } } })).toBe(50);
+    // THR-E2E-001(티켓 01 시드 Therapist 계정)은 "THR-"로 시작해 기본 데이터 50명 집계에 섞이므로,
+    // 기본 데이터 번호 접두사(THR-0NN)로 좁혀 센다.
+    await expect.poll(async () => (prisma as any).employee.count({ where: { employeeGroup: "THERAPIST", staffCode: { startsWith: "THR-0" } } })).toBe(50);
 
     // 티켓 07: 직원 생성은 도구줄의 서랍이다. 범위를 서랍 안으로 좁힌다.
     await page.getByRole("button", { name: "직원 생성" }).click();
     const createForm = page.getByRole("dialog", { name: "직원 생성" });
     await createForm.getByLabel("이름").fill("테스트 직원");
     await createForm.getByLabel("staff code").fill(staffCode);
-    await createForm.getByLabel("그룹").selectOption("OPERATIONS");
+    await pickListboxOptionByValue(createForm.getByLabel("그룹"), "OPERATIONS");
     await createForm.getByLabel("직책").fill("카운터");
-    await createForm.getByLabel("주/야간").selectOption("주간");
+    await pickListboxOptionByValue(createForm.getByLabel("주/야간"), "주간");
     await createForm.getByLabel("기본급").fill("1000");
     await createForm.getByLabel("정렬 순서").fill(String(sortOrder));
     await createForm.getByRole("button", { name: "직원 생성" }).click();
@@ -173,7 +173,7 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
 
     await panel.getByLabel("계정 ID").fill(linkedAccountId);
     await panel.getByLabel("이메일").fill(linkedEmail);
-    await panel.getByLabel("역할").selectOption("counter");
+    await pickListboxOptionByValue(panel.getByLabel("역할"), "counter");
     await panel.getByLabel("초기 비밀번호").fill("Story17!linked");
     await panel.getByRole("button", { name: "계정 연결" }).click();
     // 계정 연결 server action 완료를 DB 폴링으로 먼저 확정해 revalidate race를 제거한다.
@@ -225,9 +225,9 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     const createForm = page.getByRole("dialog", { name: "직원 생성" });
     await createForm.getByLabel("이름").fill("오류 직원");
     await createForm.getByLabel("staff code").fill("bad-code");
-    await createForm.getByLabel("그룹").selectOption("OPERATIONS");
+    await pickListboxOptionByValue(createForm.getByLabel("그룹"), "OPERATIONS");
     await createForm.getByLabel("직책").fill("카운터");
-    await createForm.getByLabel("주/야간").selectOption("주간");
+    await pickListboxOptionByValue(createForm.getByLabel("주/야간"), "주간");
     await createForm.getByLabel("기본급").fill("1000");
     await createForm.getByLabel("정렬 순서").fill("9801");
     await createForm.getByRole("button", { name: "직원 생성" }).click();
@@ -237,9 +237,9 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     // 두 번째 제출 전에 필수 필드를 다시 채워야 zod 검증을 통과해 도메인 단계(중복 staff code)까지 도달한다.
     await createForm.getByLabel("이름").fill("오류 직원");
     await createForm.getByLabel("staff code").fill("OPS-LEAD-001");
-    await createForm.getByLabel("그룹").selectOption("OPERATIONS");
+    await pickListboxOptionByValue(createForm.getByLabel("그룹"), "OPERATIONS");
     await createForm.getByLabel("직책").fill("카운터");
-    await createForm.getByLabel("주/야간").selectOption("주간");
+    await pickListboxOptionByValue(createForm.getByLabel("주/야간"), "주간");
     await createForm.getByLabel("기본급").fill("1000");
     await createForm.getByLabel("정렬 순서").fill("9801");
     await createForm.getByRole("button", { name: "직원 생성" }).click();
@@ -249,7 +249,7 @@ test.describe("Story 1.7 직원 마스터와 계정 연결", () => {
     const panel = await openMasterPanelByRowText(page, "OPS-COUNTER-NIGHT-001");
     await panel.getByLabel("계정 ID").fill(`story17_no_secret_${suffix}`);
     await panel.getByLabel("이메일").fill(`story17_no_secret_${suffix}@example.local`);
-    await panel.getByLabel("역할").selectOption("counter");
+    await pickListboxOptionByValue(panel.getByLabel("역할"), "counter");
     await panel.getByRole("button", { name: "계정 연결" }).click();
     await expect(page.getByText("새 계정을 만들려면 초기 비밀번호가 필요합니다.")).toBeVisible();
   });

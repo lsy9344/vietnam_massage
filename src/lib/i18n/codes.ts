@@ -40,6 +40,15 @@ const SYSTEM_CODE_LABELS: Record<CodeType, Record<string, Record<Locale, string>
   CONFIRMATION: {
     Y: { ko: "Y", vi: "Y" },
     N: { ko: "N", vi: "N" }
+  },
+  BOOKING_CHANNEL: {
+    TELEGRAM: { ko: "텔레그램", vi: "Telegram" },
+    KAKAOTALK: { ko: "카카오톡", vi: "KakaoTalk" },
+    WHATSAPP: { ko: "왓츠앱", vi: "WhatsApp" },
+    ZALO: { ko: "잘로", vi: "Zalo" },
+    PHONE: { ko: "전화", vi: "Điện thoại" },
+    WALK_IN: { ko: "워크인", vi: "Khách vãng lai" },
+    OTHER: { ko: "기타", vi: "Khác" }
   }
 };
 
@@ -103,4 +112,34 @@ export function serviceStatusLabel(locale: Locale, status: string): string {
   const fromCode = codeLabel(locale, "SERVICE_STATUS", status, true);
   if (fromCode !== status) return fromCode;
   return codeLabelFromKoreanLabel(locale, "SERVICE_STATUS", status);
+}
+
+/**
+ * 근무표 칸 상태(근무 예정/휴무/미입력)를 화면 라벨로 번역한다. 근무표(27)와 가능 코스 표시(29)가 함께 쓴다.
+ */
+export function scheduleStatusLabel(locale: Locale, status: "근무 예정" | "휴무" | "미입력"): string {
+  return t(locale, `scheduleStatus.${status}`);
+}
+
+/**
+ * 출퇴근에 찍힌 방식(직접/대리 입력/정정 승인/이전 기록, 스펙 D16)을 화면 라벨로 번역한다.
+ * 근태 달력(06)과 관리자 현황(11)이 함께 쓴다.
+ */
+export function therapistAttendanceMethodLabel(locale: Locale, method: "직접" | "대리 입력" | "정정 승인" | "이전 기록"): string {
+  return t(locale, `attendanceMethod.${method}`);
+}
+
+/**
+ * 신청 종류(휴무/정정, 스펙 M24)를 화면 라벨로 번역한다. 승인함(08)과 근태 탭이 함께 쓴다.
+ */
+export function therapistRequestKindLabel(locale: Locale, kind: "day_off" | "special_day_off" | "correction"): string {
+  return t(locale, `therapistRequestKind.${kind}`);
+}
+
+/**
+ * 신청 상태(대기/승인/거절/취소/기한 지남)를 화면 라벨로 번역한다. "기한 지남"은 저장값이 아니라
+ * 읽을 때 계산한 값이다(M24). 승인함(08)과 근태 탭이 함께 쓴다.
+ */
+export function therapistRequestStatusLabel(locale: Locale, status: "pending" | "approved" | "rejected" | "canceled" | "expired"): string {
+  return t(locale, `therapistRequestStatus.${status}`);
 }

@@ -113,7 +113,7 @@ export default async function OperationsAttendancePage({ searchParams }: { searc
                 accent="mint"
                 label={t("settlements.ops.summary.dailyTotalCalls")}
                 note={t("settlements.ops.summary.dailyTotalCallsBasis", { count: incentiveResult.sourceCallCount })}
-                value={`${incentiveResult.dailyOpsCallCredit}${t("settlements.callSuffix")}`}
+                value={`${incentiveResult.dailyOpsCallCount}${t("settlements.callSuffix")}`}
               />
               <SummaryCard
                 accent="peach"
@@ -154,6 +154,7 @@ export default async function OperationsAttendancePage({ searchParams }: { searc
             <OpsDailyView
               attendance={attendance}
               canOpenLedger={linkToScreen(account.role, "/calls", context) !== null}
+              canOpenStatement={linkToScreen(account.role, "/settlements/statement", context) !== null}
               initialEmployeeId={params[EMPLOYEE_PARAM] ?? null}
               key={`${selectedMonth.id}:${attendanceDate}`}
               result={incentiveResult}

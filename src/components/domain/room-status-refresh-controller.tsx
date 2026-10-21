@@ -8,6 +8,7 @@ import { StatusIndicator } from "@/components/ui/status-indicator";
 import { cn } from "@/lib/utils";
 import { defaultLocale, type Locale } from "@/lib/i18n/config";
 import { createTranslator } from "@/lib/i18n";
+import { intlLocale } from "@/lib/i18n/format";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-time";
 import { roomStatusRefreshState } from "@/modules/rooms/room-status-refresh";
 
@@ -15,7 +16,7 @@ const REFRESH_INTERVAL_MS = 30_000;
 const STALE_AFTER_MS = 90_000;
 
 function formatLastUpdated(locale: Locale, value: string) {
-  return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "ko-KR", {
+  return new Intl.DateTimeFormat(intlLocale(locale), {
     timeZone: BUSINESS_TIME_ZONE,
     hour: "2-digit",
     minute: "2-digit",

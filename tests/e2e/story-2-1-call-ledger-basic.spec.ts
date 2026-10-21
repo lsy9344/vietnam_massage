@@ -2,6 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { selectGridOptionByValue } from "./support/call-grid";
+import { checkInTherapist, chooseConditions, fillBooking, goToCustomerStep, openQuickBooking, pickGuest, saveQuickBooking } from "./support/quick-booking";
 
 
 const users = [
@@ -17,7 +19,6 @@ type SeededData = {
   courseId: string;
   therapist1Id: string;
   therapist2Id: string;
-  earcareEmployeeId: string;
 };
 
 let seededData: SeededData;
@@ -71,14 +72,6 @@ async function seedAuthAccount(input: { accountId: string; email: string; staffC
       lockedUntil: null,
       failedLoginCount: 0
     }
-  });
-}
-
-async function upsertCodeItem(codeType: string, code: string, displayName: string, sortOrder: number) {
-  await (prisma as any).codeItem.upsert({
-    where: { codeType_code: { codeType, code } },
-    update: { displayName, isActive: true },
-    create: { codeType, code, displayName, sortOrder, isSystemDefault: false, isActive: true }
   });
 }
 
@@ -140,8 +133,6 @@ async function seedStoryData(): Promise<SeededData> {
         name: "E2E 기본60",
         durationMinutes: 60,
         basePrice: 1500000,
-        opsCallCredit: 1,
-        earcarePoolAmount: 0,
         requiresSecondTherapist: false,
         tvDisplayName: "E2E 기본60",
         effectiveToMonth: null,
@@ -155,8 +146,6 @@ async function seedStoryData(): Promise<SeededData> {
         name: "E2E 기본60",
         durationMinutes: 60,
         basePrice: 1500000,
-        opsCallCredit: 1,
-        earcarePoolAmount: 0,
         requiresSecondTherapist: false,
         tvDisplayName: "E2E 기본60",
         effectiveFromMonth: "2032-01",
@@ -167,18 +156,28 @@ async function seedStoryData(): Promise<SeededData> {
   }
   const therapist1 = await seedEmployee("E2E21-THR-001", "E2E 마사지사1", "THERAPIST", 92101);
   const therapist2 = await seedEmployee("E2E21-THR-002", "E2E 마사지사2", "THERAPIST", 92102);
-  const earcare = await seedEmployee("E2E21-EAR-001", "E2E 귀케어1", "EARCARE", 92101);
+
+  // 빠른 예약의 가능 코스 칩이 바로 "가능"으로 뜨려면 코스 수당이 있어야 한다(없으면 "불가"+경고 확인
+  // 경로가 되는데, 그 경로는 티켓 21 스펙이 전담해서 본다).
+  const existingRate = await (prisma as any).therapistCourseRate.findFirst({
+    where: { therapistId: therapist1.id, courseId: course.id, effectiveFromMonth: "2032-01" }
+  });
+  const rateData = { amount: 700000, effectiveToMonth: null, isActive: true };
+  if (existingRate) {
+    await (prisma as any).therapistCourseRate.update({ where: { id: existingRate.id }, data: rateData });
+  } else {
+    await (prisma as any).therapistCourseRate.create({
+      data: { therapistId: therapist1.id, courseId: course.id, effectiveFromMonth: "2032-01", ...rateData }
+    });
+  }
 
   await (prisma as any).timeSlot.upsert({
     where: { value: "11:00" },
     update: { isActive: true },
     create: { value: "11:00", sortOrder: 92101, isActive: true }
   });
-  await upsertCodeItem("SERVICE_STATUS", "예약", "예약", 92101);
-  await upsertCodeItem("SERVICE_STATUS", "취소", "취소", 92102);
-  await upsertCodeItem("DISCOUNT_TYPE", "생일자", "생일자", 92101);
-  await upsertCodeItem("PAYMENT_METHOD", "현금", "현금", 92101);
-  await upsertCodeItem("CONFIRMATION", "Y", "Y", 92101);
+  // 상태/할인/결제수단/확인값 코드는 공용 마스터 시드(defaultCodeItems)가 이미 제공한다. 같은 표시명으로
+  // 한국어 code를 또 만들면 콤보박스에 같은 라벨이 두 개 뜨고 다른 스펙의 드롭다운도 함께 오염된다.
 
   return {
     openMonthId: openMonth.id,
@@ -186,8 +185,7 @@ async function seedStoryData(): Promise<SeededData> {
     roomId: room.id,
     courseId: course.id,
     therapist1Id: therapist1.id,
-    therapist2Id: therapist2.id,
-    earcareEmployeeId: earcare.id
+    therapist2Id: therapist2.id
   };
 }
 
@@ -213,7 +211,7 @@ async function seedEmployee(staffCode: string, displayName: string, employeeGrou
     update: {
       displayName,
       employeeGroup,
-      position: employeeGroup === "EARCARE" ? "귀케어" : "마사지사",
+      position: "마사지사",
       shiftType: "전체",
       baseSalary: 0,
       employmentStatus: "재직",
@@ -224,7 +222,7 @@ async function seedEmployee(staffCode: string, displayName: string, employeeGrou
       staffCode,
       displayName,
       employeeGroup,
-      position: employeeGroup === "EARCARE" ? "귀케어" : "마사지사",
+      position: "마사지사",
       shiftType: "전체",
       baseSalary: 0,
       employmentStatus: "재직",
@@ -234,35 +232,31 @@ async function seedEmployee(staffCode: string, displayName: string, employeeGrou
   });
 }
 
-/**
- * Story 2.6 type-ahead 콤보박스 셀을 stable value로 선택한다.
- * 셀은 `<select>`가 아니라 `role="combobox"` 입력이고, 각 옵션 `<li>`는
- * `id={...}-option-${value}`로 렌더된다. 클릭으로 목록을 연 뒤 value로 옵션을 클릭한다.
- * (과거 `selectOption(value)`와 동일하게 stable value 기준으로 선택)
- */
-function addRowCell(page: Page, columnId: string) {
-  return page.locator(`[data-call-cell-row="0"][data-call-cell-column="${columnId}"]`);
+/** 티켓 03: 날짜 clamp·잠금 테스트는 화면 입력 없이 그냥 보일 콜을 직접 시드한다(새 콜은 빠른 예약으로만 만든다). */
+async function seedCall(input: { operatingMonthId: string; serviceDate: string; memo: string }) {
+  const call = await (prisma as any).serviceCall.create({
+    data: {
+      operatingMonthId: input.operatingMonthId,
+      serviceDate: new Date(`${input.serviceDate}T00:00:00.000Z`),
+      startTime: "11:00",
+      roomId: seededData.roomId,
+      courseId: seededData.courseId,
+      customerMemo: input.memo,
+      status: "RESERVED"
+    }
+  });
+  await (prisma as any).serviceCallAssignment.create({
+    data: { serviceCallId: call.id, assignmentRole: "THERAPIST_1", employeeId: seededData.therapist1Id }
+  });
+  return call;
 }
 
-async function selectCombobox(page: Page, columnId: string, value: string) {
-  const combobox = addRowCell(page, columnId);
-  await combobox.click();
-  await page.locator(`[role="option"][id$="-option-${value}"]`).click();
+function line(page: Page, callId: string) {
+  return page.locator(`[data-ledger-line][data-service-call-id="${callId}"]`);
 }
 
-async function fillBasicCallRow(page: Page, memo: string) {
-  await selectCombobox(page, "startTime", "11:00");
-  await selectCombobox(page, "roomId", seededData.roomId);
-  await selectCombobox(page, "courseId", seededData.courseId);
-  await addRowCell(page, "customerMemo").fill(memo);
-  await selectCombobox(page, "therapist1Id", seededData.therapist1Id);
-  await selectCombobox(page, "therapist2Id", seededData.therapist2Id);
-  await selectCombobox(page, "earcareEmployeeId", seededData.earcareEmployeeId);
-  await selectCombobox(page, "status", "예약");
-  await selectCombobox(page, "discountTypeCode", "생일자");
-  await selectCombobox(page, "paymentMethodCode", "현금");
-  await addRowCell(page, "note").fill("E2E 비고");
-  await selectCombobox(page, "confirmationCode", "Y");
+function panel(page: Page) {
+  return page.getByRole("complementary", { name: /^콜 상세/ });
 }
 
 test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력", () => {
@@ -280,9 +274,11 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
     }
     seededData = await seedStoryData();
     await cleanupStoryCalls(seededData.openMonthId);
+    // 빠른 예약 ①의 Therapist 줄은 출근 기록이 있는 사람만 기본으로 보인다(1018 스펙 D23).
+    await checkInTherapist({ operatingMonthId: seededData.openMonthId, serviceDate: "2032-01-05", employeeId: seededData.therapist1Id });
   });
 
-  test("counter는 날짜별 빈 상태를 보고 기본 콜 행을 입력하면 stable ID와 담당자 row가 저장된다", async ({ page }) => {
+  test("counter는 날짜별 빈 상태를 보고, 빠른 예약으로 만든 콜에 stable ID와 담당자 row가 저장된다", async ({ page }) => {
     const memo = `E2E story 2.1 memo ${Date.now().toString(36)}`;
 
     await login(page, "story21_counter", "Story21!counter");
@@ -290,39 +286,64 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
 
     await expect(page.getByRole("heading", { name: /콜|예약|원장/, level: 1 })).toBeVisible();
     await expect(page.getByText("이 날짜의 콜이 없습니다")).toBeVisible();
-    await expect(page.getByRole("button", { name: "새 콜 행 추가" })).toBeEnabled();
-    // 티켓 03: 코스 요약 표는 "하루 수납·지출" 탭으로 옮겨, 원장 탭의 첫 "코스" 머리가 원장 표다.
-    await expect(page.getByRole("columnheader", { name: "코스" }).first()).toBeVisible();
-    await expect(page.getByLabel("운영월")).toHaveValue(seededData.openMonthId);
+    await expect(page.getByRole("button", { name: "빠른 예약" })).toBeEnabled();
+    // 티켓 03: 콜이 없으면 표 자체가 숨고(빈 상태 문구만 보인다) 콜이 생겨야 머리글이 뜬다 —
+    // "코스" 머리 확인은 빠른 예약으로 콜을 만든 뒤로 옮긴다.
+    await expect(page.locator('input[name="operatingMonthId"]')).toHaveValue(seededData.openMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2032-01-05");
 
-    await fillBasicCallRow(page, memo);
-    await page.getByRole("button", { name: "새 콜 행 추가" }).click();
-
-    await expect(page.getByText("저장됨").first()).toBeVisible();
-    await expect(page.getByText(memo)).toBeVisible();
-    const savedRow = page.getByRole("row", { name: new RegExp(memo) });
-    await expect(savedRow.getByRole("combobox", { name: "객실" })).toHaveValue("E2E 921 호실");
-    await expect(savedRow.getByRole("combobox", { name: "마사지사1" })).toHaveValue(/E2E 마사지사1/);
-    await expect(savedRow.getByRole("combobox", { name: "귀케어 담당" })).toHaveValue(/E2E 귀케어1/);
-    // REQ-007: 결제수단을 고른 순간 선결제 매출로 잡히므로 예약 행도 "계산됨"이다.
-    await expect(savedRow.getByText("계산됨")).toBeVisible();
+    // 티켓 03: 새 콜은 표 아래 "새 콜 행 추가"가 아니라 빠른 예약으로만 만든다. 1018 티켓 05: 5단계 모달 대신
+    // 원장 옆의 비모달 패널에서 ① 조건(날짜·시간·코스 칩으로 손님 담기) → ② 고객(예약자명·저장) 두 단계다.
+    const booking = await openQuickBooking(page);
+    await chooseConditions(booking, { time: "11:00" });
+    await pickGuest(page, booking, { therapistId: seededData.therapist1Id, courseId: seededData.courseId });
+    await goToCustomerStep(booking);
+    await fillBooking(booking, { bookerName: memo });
+    await expect(booking.locator("[data-quick-booking-summary]")).toContainText(memo);
+    await saveQuickBooking(page, booking);
 
     const savedCall = await (prisma as any).serviceCall.findFirst({
       where: { customerMemo: memo },
       include: { assignments: true }
     });
-    expect(savedCall).toMatchObject({
+    expect(savedCall).toBeTruthy();
+    // 저장 직후 그 줄이 선택되고 패널이 열린다(1018 스펙 D19·티켓 20).
+    await expect(page).toHaveURL(new RegExp(`call=${savedCall.id}$`));
+    await expect(line(page, savedCall.id)).toContainText(memo);
+    expect(savedCall.assignments.map((assignment: any) => assignment.assignmentRole)).toEqual(["THERAPIST_1"]);
+    // 콜이 생기면 원장 목록이 보인다.
+    await expect(page.getByRole("list", { name: "콜 원장 목록" })).toBeVisible();
+
+    // 마사지사2·객실·할인구분·결제수단·확인값·비고는 빠른 예약에 없다 — 편집 패널에서 고친다(1018 스펙 D19).
+    const edit = panel(page);
+    await expect(edit).toBeVisible();
+    await selectGridOptionByValue(page, edit, "마사지사2", seededData.therapist2Id);
+    await selectGridOptionByValue(page, edit, "객실", seededData.roomId);
+    await selectGridOptionByValue(page, edit, "할인구분", "BIRTHDAY");
+    await edit.getByRole("region", { name: "결제" }).getByText("현금", { exact: true }).click();
+    await edit.getByLabel("비고").fill("E2E 비고");
+    await edit.getByLabel("비고").press("Tab");
+    await edit.getByText("더 보기").click();
+    await selectGridOptionByValue(page, edit, "확인값", "Y");
+    await expect(edit.locator('[data-save-state="saved"]')).toContainText("저장됨");
+    // REQ-007: 결제수단을 고른 순간 선결제 매출로 잡히므로 예약 상태도 "계산됨"이다.
+    await expect(edit.getByRole("region", { name: "결제" }).getByText("계산됨")).toBeVisible();
+
+    const updatedCall = await (prisma as any).serviceCall.findUnique({
+      where: { id: savedCall.id },
+      include: { assignments: true }
+    });
+    expect(updatedCall).toMatchObject({
       operatingMonthId: seededData.openMonthId,
       roomId: seededData.roomId,
       courseId: seededData.courseId,
-      status: "예약",
-      discountTypeCode: "생일자",
-      paymentMethodCode: "현금",
-      confirmationCode: "Y"
+      status: "RESERVED",
+      discountTypeCode: "BIRTHDAY",
+      paymentMethodCode: "CASH",
+      confirmationCode: "Y",
+      note: "E2E 비고"
     });
-    expect(savedCall.assignments.map((assignment: any) => assignment.assignmentRole).sort()).toEqual([
-      "EARCARE",
+    expect(updatedCall.assignments.map((assignment: any) => assignment.assignmentRole).sort()).toEqual([
       "THERAPIST_1",
       "THERAPIST_2"
     ]);
@@ -330,6 +351,8 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
 
   test("administrator가 운영월 밖 날짜로 들어와도 조회날짜가 운영월 안으로 고정된다", async ({ page }) => {
     const memo = `E2E story 2.1 clamp ${Date.now().toString(36)}`;
+    const call = await seedCall({ operatingMonthId: seededData.openMonthId, serviceDate: "2032-01-31", memo });
+
     await login(page, "story21_administrator", "Story21!administrator");
     await page.goto(`/calls?operatingMonthId=${seededData.openMonthId}&serviceDate=2032-02-01`);
 
@@ -337,24 +360,23 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
     // 서버 가드("운영월 범위를 벗어난 날짜입니다." / OPERATING_MONTH_DATE_OUT_OF_RANGE)는
     // service 단위 테스트가 검증한다.
     await expect(page.getByLabel("조회날짜")).toHaveValue("2032-01-31");
-
-    await fillBasicCallRow(page, memo);
-    await page.getByRole("button", { name: "새 콜 행 추가" }).click();
-    await expect(page.getByText("저장됨").first()).toBeVisible();
-
-    const saved = await (prisma as any).serviceCall.findFirst({ where: { customerMemo: memo } });
-    expect(saved?.serviceDate.toISOString().slice(0, 10)).toBe("2032-01-31");
+    await expect(line(page, call.id)).toContainText(memo);
   });
 
-  test("잠금 운영월은 read-only로 보이고 새 콜 행 추가가 차단된다", async ({ page }) => {
+  test("잠금 운영월은 read-only로 보이고 패널 칸과 빠른 예약이 잠긴다", async ({ page }) => {
+    const memo = `E2E story 2.1 locked ${Date.now().toString(36)}`;
+    const call = await seedCall({ operatingMonthId: seededData.lockedMonthId, serviceDate: "2032-02-03", memo });
+
     await login(page, "story21_counter", "Story21!counter");
-    await page.goto(`/calls?operatingMonthId=${seededData.lockedMonthId}&serviceDate=2032-02-03`);
+    await page.goto(`/calls?operatingMonthId=${seededData.lockedMonthId}&serviceDate=2032-02-03&call=${call.id}`);
 
     // 잠금 안내는 콜 그리드와 지출 패널 두 곳에 뜬다.
     await expect(page.getByText("잠긴 운영월입니다.").first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "새 콜 행 추가" })).toBeDisabled();
-    await expect(page.getByLabel("시간")).toBeDisabled();
-    await expect(page.getByLabel("객실")).toBeDisabled();
+    await expect(page.getByRole("button", { name: "빠른 예약" })).toBeDisabled();
+    const edit = panel(page);
+    await expect(edit).toBeVisible();
+    await expect(edit.getByRole("combobox", { name: "시간" })).toBeDisabled();
+    await expect(edit.getByRole("combobox", { name: "객실" })).toBeDisabled();
   });
 
   test("non-write role은 /calls direct access와 원장 링크에서 제외된다", async ({ page }) => {
@@ -366,6 +388,10 @@ test.describe("Story 2.1 날짜별 콜 원장 그리드 조회와 기본 입력"
   });
 
   test.afterAll(async () => {
+    // 빠른 예약 확인용으로 넣은 출근 기록은 다른 스펙의 출근 화면·지급에 남지 않게 지운다.
+    await (prisma as any).therapistAttendance.deleteMany({
+      where: { operatingMonthId: seededData.openMonthId, employeeId: seededData.therapist1Id, attendanceDate: new Date("2032-01-05T00:00:00.000Z") }
+    });
     await prisma.$disconnect();
   });
 });

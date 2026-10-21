@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
 import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
 import {
+  codeTypes,
   createCodeItemSchema,
   createTimeSlotSchema,
   deactivateCodeItemSchema,
@@ -143,7 +144,7 @@ function normalizeParseError(message: string) {
 }
 
 function assertCodeType(value: string): asserts value is CodeType {
-  if (!["SERVICE_STATUS", "PAYMENT_METHOD", "DISCOUNT_TYPE", "ATTENDANCE_STATUS", "CONFIRMATION"].includes(value)) {
+  if (!(codeTypes as readonly string[]).includes(value)) {
     throw new CodeDomainError("코드 유형이 올바르지 않습니다.", "INVALID_CODE_TYPE");
   }
 }

@@ -2,6 +2,8 @@ import { requireRouteAccess } from "@/lib/authorization";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 import {
+  customerSharedPhone,
+  customerVisitCountsFromRows,
   listCustomerVisitHistory,
   listCustomers,
   searchCustomerVisitCandidates,
@@ -42,6 +44,9 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const customer = visitCustomer ? (customers.find((item) => item.id === visitCustomer) ?? null) : null;
   // 없는 고객 id는 고르지 않은 것으로 본다.
   const openSelection = visitCustomer ? customer !== null : visitMemo !== null;
+  const visibleHistory = openSelection ? history : [];
+  // S5: 검색 결과 없이 바로 고른 고객에게도 같은 연락처 경고를 준다(스펙 F08).
+  const selectedSharedPhone = customer ? await customerSharedPhone({ customerId: customer.id }) : false;
 
   return (
     <div className="screen">
@@ -49,8 +54,10 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       <CustomerScreen
         candidates={candidates}
         customer={customer}
-        history={openSelection ? history : []}
+        history={visibleHistory}
         query={customerQuery}
+        selectedSharedPhone={selectedSharedPhone}
+        visitCounts={openSelection ? customerVisitCountsFromRows(visibleHistory) : null}
         visitMemo={visitCustomer ? null : visitMemo}
       />
     </div>

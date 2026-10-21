@@ -413,6 +413,41 @@ select {
   }
 }
 
+/* Therapist 전용 화면(티켓 01). 아래 탭 네 개는 업무 흐름 도크와 같은 떠 있는 섬 모양(.shell-dock*)을
+   그대로 쓰고, 넷을 늘 고르게 벌린다(도크의 840px 미만 전용 규칙은 폭과 무관하게 적용한다). */
+.therapist-main {
+  display: block;
+  min-height: 100vh;
+  padding-bottom: calc(var(--dock-space) + 1rem);
+}
+
+.therapist-main:focus,
+.therapist-tab-bar:focus {
+  outline: none;
+}
+
+.therapist-tab-bar .shell-dock-zones {
+  justify-content: space-around;
+}
+
+/* 공지 탭의 읽지 않은 수 자리(스펙 D7). 숫자가 없으면 그리지 않는다. */
+.therapist-tab-badge {
+  display: inline-flex;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  margin-left: 0.375rem;
+  padding: 0 0.3125rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--danger);
+  color: var(--danger-foreground);
+  /* design.md §3: 가장 작은 글자는 12px다(R14, 이전 11px). */
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 .screen {
   padding: 1rem;
 }
@@ -501,6 +536,469 @@ select {
 
 .screen-step:hover {
   background: var(--readonly);
+}
+
+/* 객실 평면도(실시간·TV): .scratch/room-floor-plan/spec.md D2–D4, 확정 시안 mockup/c3-pencil.html.
+   층 카드 안에 연필로 쓱 그린 벽(src/modules/rooms/floor-plan.ts의 흔든 선)을 깔고, 방 자리에 이름표를 둔다.
+   가구·바닥색·무늬·문 열림 호는 없다. 새 색 토큰 없이 --text, --muted, 객실 상태색만 쓴다. */
+.floor-plan-free {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.floor-plan-free-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.floor-plan-free-label:not(:first-child) {
+  margin-left: 16px;
+}
+
+.floor-plan-free-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 2.75rem;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 700;
+  transition: background-color 200ms;
+}
+
+button.floor-plan-free-chip {
+  cursor: pointer;
+}
+
+button.floor-plan-free-chip:hover {
+  background: var(--readonly);
+}
+
+.floor-plan-free-chip-extra {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.floor-plan-free-none {
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.floor-plan {
+  display: grid;
+  gap: 16px;
+}
+
+.floor-plan-floors {
+  display: grid;
+  gap: 16px;
+}
+
+@media (min-width: 1200px) {
+  .floor-plan-floors {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.floor-plan-floor {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.floor-plan-floor-title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.floor-plan-canvas {
+  position: relative;
+  aspect-ratio: 1165 / 400;
+}
+
+.floor-plan-canvas > svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* 손으로 그린 두 겹 연필 선. 도면이 늘어나도 선 굵기는 그대로다. */
+.floor-plan-pencil {
+  fill: none;
+  stroke: var(--text);
+  stroke-opacity: 0.82;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.floor-plan-pencil--soft {
+  stroke-opacity: 0.55;
+  stroke-width: 1.25;
+}
+
+/* 복도·엘리베이터 이름. 엘리베이터는 왼쪽 띠가 좁아 세로로 쓴다. */
+.floor-plan-zone {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--muted);
+  text-align: center;
+}
+
+.floor-plan-zone--vertical .floor-plan-zone-text {
+  writing-mode: vertical-rl;
+}
+
+/* 방 하나가 이름표 하나(실시간은 버튼 하나). 글자는 왼쪽 위에 둔다. */
+.floor-plan-room {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  transition: background-color 200ms, box-shadow 200ms;
+}
+
+.floor-plan-room--placed {
+  position: absolute;
+}
+
+/* 칸이 줄어도(TV 한 화면 맞춤) 글자를 깎지 않고 넘쳐 보이게 한다. */
+.floor-plan-room > * {
+  flex-shrink: 0;
+}
+
+.floor-plan-others .floor-plan-room {
+  width: 10.5rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+button.floor-plan-room {
+  cursor: pointer;
+}
+
+button.floor-plan-room:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.floor-plan-room:focus-visible,
+.floor-plan-free-chip:focus-visible {
+  outline: 2px solid var(--brand-secondary);
+  outline-offset: 2px;
+}
+
+.floor-plan-room--placed:focus-visible {
+  outline-offset: -3px;
+}
+
+/* 서랍이 열린 방: 안쪽 3px 검정 테두리. */
+.floor-plan-room[aria-expanded="true"] {
+  box-shadow: inset 0 0 0 3px var(--brand);
+}
+
+.floor-plan-room-number {
+  position: relative;
+  padding: 0 2px;
+  font-size: 1.375rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+/* 종료임박·종료확인 방 번호의 손그림 고리. 글자가 아닌 표시라 상태색을 쓴다(design.md 2.5). 움직이지 않는다. */
+.floor-plan-marker {
+  position: absolute;
+  top: -10px;
+  left: -14px;
+  width: calc(100% + 28px);
+  height: calc(100% + 20px);
+  overflow: visible;
+  pointer-events: none;
+}
+
+.floor-plan-marker path {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.floor-plan-marker--ending-soon path {
+  stroke: var(--status-ending-soon);
+}
+
+.floor-plan-marker--complete-check path {
+  stroke: var(--status-complete-check);
+}
+
+.floor-plan-badge {
+  height: auto;
+  min-height: 26px;
+  max-width: 100%;
+  gap: 4px;
+  padding: 3px 9px;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  white-space: normal;
+}
+
+.floor-plan-room-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+  margin-top: 2px;
+}
+
+.floor-plan-room-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.floor-plan-room-value {
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.floor-plan-room-value--text {
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.floor-plan-room-who {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.floor-plan-others {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.floor-plan-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.floor-plan-legend-label {
+  margin-right: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.floor-plan-legend-badge {
+  height: 28px;
+  gap: 4px;
+  padding: 0 10px;
+  font-size: 0.75rem;
+}
+
+/* 좁은 칸(휴대폰): 배지는 기호만, 라벨·담당자는 숨긴다. 범례가 기호의 뜻을 준다. */
+@container (max-width: 140px) {
+  .floor-plan-room-number {
+    font-size: 0.9375rem;
+  }
+
+  .floor-plan-badge {
+    min-height: 22px;
+    padding: 2px 6px;
+  }
+
+  .floor-plan-badge-label,
+  .floor-plan-room-label,
+  .floor-plan-room-who {
+    display: none;
+  }
+
+  .floor-plan-room-value {
+    font-size: 0.875rem;
+  }
+
+  .floor-plan-room-value--text {
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 599px) {
+  .floor-plan-room {
+    gap: 3px;
+    padding: 5px 6px;
+    border-radius: var(--radius-sm);
+  }
+
+  .floor-plan-zone-text {
+    display: none;
+  }
+}
+
+/* TV: 2×2, 큰 글자, 범례 없음(D4). 풀HD급 TV 폭(1600px 이상)에서 쓰고, 그보다 좁은 창은 실시간과 같은 크기다. */
+@media (min-width: 1600px) {
+  .floor-plan--tv .floor-plan-floors {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .floor-plan--tv .floor-plan-floor-title {
+    font-size: 1.875rem;
+    font-weight: 900;
+  }
+
+  .floor-plan--tv .floor-plan-pencil {
+    stroke-width: 2.2;
+  }
+
+  .floor-plan--tv .floor-plan-pencil--soft {
+    stroke-width: 1.6;
+  }
+
+  .floor-plan--tv .floor-plan-zone {
+    font-size: 1rem;
+  }
+
+  .floor-plan--tv .floor-plan-room {
+    gap: 8px;
+    padding: 14px 18px;
+  }
+
+  .floor-plan--tv .floor-plan-room-number {
+    font-size: 2.5rem;
+    font-weight: 900;
+  }
+
+  .floor-plan--tv .floor-plan-marker path {
+    stroke-width: 4;
+  }
+
+  .floor-plan--tv .floor-plan-badge {
+    min-height: 36px;
+    gap: 6px;
+    padding: 4px 12px;
+    font-size: 1.375rem;
+    font-weight: 800;
+  }
+
+  .floor-plan--tv .floor-plan-room-who {
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .floor-plan--tv .floor-plan-room-label {
+    font-size: 1.125rem;
+    font-weight: 700;
+  }
+
+  .floor-plan--tv .floor-plan-room-value {
+    font-size: 2.125rem;
+    font-weight: 900;
+  }
+
+  .floor-plan--tv .floor-plan-room-value--text {
+    font-size: 1.5rem;
+    font-weight: 800;
+  }
+
+  .floor-plan--tv .floor-plan-others .floor-plan-room {
+    width: 16rem;
+  }
+
+  .floor-plan--tv .floor-plan-free {
+    gap: 10px;
+  }
+
+  .floor-plan--tv .floor-plan-free-label {
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .floor-plan--tv .floor-plan-free-label:not(:first-child) {
+    margin-left: 24px;
+  }
+
+  .floor-plan--tv .floor-plan-free-chip {
+    min-height: 52px;
+    padding: 0 20px;
+    font-size: 1.625rem;
+    font-weight: 900;
+  }
+
+  .floor-plan--tv .floor-plan-free-chip-extra {
+    font-size: 1.375rem;
+    font-weight: 700;
+  }
+}
+
+/* TV 한 화면(1920×1080 등)에 세로 스크롤 없이 들어가게, 층 도면은 남은 높이에 맞춰 줄어든다.
+   늘어날 때는 도면 비율(1165:400)까지만 늘어난다(100cqw = 층 카드 안쪽 폭). 더 작은 창은 세로로 스크롤한다. */
+@media (min-width: 1600px) and (min-height: 900px) {
+  .floor-plan-tv-screen {
+    height: 100vh;
+  }
+
+  .floor-plan--tv {
+    flex: 1;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+    grid-auto-rows: auto;
+  }
+
+  .floor-plan--tv .floor-plan-floors {
+    min-height: 0;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+
+  .floor-plan--tv .floor-plan-floor {
+    container-type: inline-size;
+    min-height: 0;
+    grid-template-rows: auto minmax(0, 1fr);
+    align-content: start;
+  }
+
+  .floor-plan--tv .floor-plan-canvas {
+    aspect-ratio: auto;
+    min-height: 0;
+    max-height: calc(100cqw * 400 / 1165);
+  }
 }
 
 .status-attention {

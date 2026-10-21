@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ListboxSelect } from "@/components/ui/listbox-select";
 import { createTranslator } from "@/lib/i18n";
 import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
 import type { Locale } from "@/lib/i18n/config";
@@ -60,19 +61,18 @@ export function DateContextControls({
       ))}
       <label className="grid gap-1 text-xs font-medium text-muted">
         {t("common.operatingMonth")}
-        <select
-          aria-label={t("common.operatingMonth")}
-          className="screen-field min-w-44"
+        <ListboxSelect
+          ariaLabel={t("common.operatingMonth")}
+          className="min-w-44"
           defaultValue={selectedMonth.id}
           key={selectedMonth.id}
           name="operatingMonthId"
-        >
-          {months.map((month) => (
-            <option key={month.id} value={month.id}>
-              {t("common.monthOption", { monthKey: month.monthKey, status: operatingMonthStatusLabel(locale, month.status) })}
-            </option>
-          ))}
-        </select>
+          options={months.map((month) => ({
+            label: t("common.monthOption", { monthKey: month.monthKey, status: operatingMonthStatusLabel(locale, month.status) }),
+            value: month.id
+          }))}
+          variant="capsule"
+        />
       </label>
       {dateParam && date ? (
         <>

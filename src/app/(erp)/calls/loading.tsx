@@ -12,9 +12,9 @@ export default function CallsLoading() {
           <Skeleton className="h-11 w-36 rounded-full" />
         </div>
       </div>
-      <div className="mb-4 flex flex-wrap gap-3">
+      <div className="mb-4 flex flex-wrap gap-1.5">
         {Array.from({ length: 6 }).map((_, index) => (
-          <Skeleton className="h-7 w-24 rounded-full" key={index} />
+          <Skeleton className="h-9 w-28 rounded-full" key={index} />
         ))}
       </div>
       <section className="rounded-md border border-border bg-surface">

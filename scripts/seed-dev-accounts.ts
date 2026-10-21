@@ -50,6 +50,15 @@ const localAccounts: Array<{
     staffCode: "ROV-001",
     role: "read_only_viewer",
     localOnlySecret: "Story12!read_only_viewer"
+  },
+  {
+    // 티켓 01: Therapist 역할 E2E 시드 계정. 다른 역할 계정과 같은 방식으로 더한다.
+    accountId: "therapist",
+    email: "therapist@example.local",
+    displayName: "Therapist",
+    staffCode: "THR-E2E-001",
+    role: "therapist",
+    localOnlySecret: "Story12!therapist"
   }
 ];
 
@@ -58,7 +67,10 @@ const localEmployeeDefaults: Record<Role, { employeeGroup: string; position: str
   counter: { employeeGroup: "OPERATIONS", position: "카운터", shiftType: "주간", baseSalary: 0, sortOrder: 9010 },
   settlement_manager: { employeeGroup: "OPERATIONS", position: "팀장", shiftType: "전체", baseSalary: 0, sortOrder: 9020 },
   waiter: { employeeGroup: "OPERATIONS", position: "웨이터", shiftType: "주간", baseSalary: 0, sortOrder: 9030 },
-  read_only_viewer: { employeeGroup: "OPERATIONS", position: "팀장", shiftType: "전체", baseSalary: 0, sortOrder: 9040 }
+  read_only_viewer: { employeeGroup: "OPERATIONS", position: "팀장", shiftType: "전체", baseSalary: 0, sortOrder: 9040 },
+  // M17은 employeeGroup === "THERAPIST"와 퇴사가 아님을 본다. 기본 50명(THR-001..050)과 겹치지 않는
+  // 전용 staffCode·sortOrder를 쓴다.
+  therapist: { employeeGroup: "THERAPIST", position: "마사지사", shiftType: null, baseSalary: 0, sortOrder: 9050 }
 };
 
 async function main() {

@@ -33,11 +33,11 @@ function createDashboardPrisma(options: { operatingMonthMissing?: boolean; noCal
     ["course-e", { id: "course-e", code: "E", isActive: true, createdAt, updatedAt }]
   ]);
   const policies = [
-    policy("policy-a", "course-a", "A 누루60", 1500000, 100000, false),
-    policy("policy-b", "course-b", "B 귀청소90", 1800000, 200000, false),
-    policy("policy-c", "course-c", "C 때밀이90", 2000000, 0, false),
-    policy("policy-d", "course-d", "D 2:1 90", 3200000, 0, true),
-    policy("policy-e", "course-e", "E 풀코스120", 3000000, 0, false)
+    policy("policy-a", "course-a", "A 누루60", 1500000, false),
+    policy("policy-b", "course-b", "B 귀청소90", 1800000, false),
+    policy("policy-c", "course-c", "C 때밀이90", 2000000, false),
+    policy("policy-d", "course-d", "D 2:1 90", 3200000, true),
+    policy("policy-e", "course-e", "E 풀코스120", 3000000, false)
   ];
   const employees = new Map<string, any>([
     ["therapist-1", employee("therapist-1", "마사지사1", "THR-001", 1)],
@@ -87,15 +87,13 @@ function createDashboardPrisma(options: { operatingMonthMissing?: boolean; noCal
         }
       ];
 
-  function policy(id: string, courseId: string, name: string, basePrice: number, earcarePoolAmount: number, requiresSecondTherapist: boolean) {
+  function policy(id: string, courseId: string, name: string, basePrice: number, requiresSecondTherapist: boolean) {
     return {
       id,
       courseId,
       name,
       durationMinutes: requiresSecondTherapist ? 90 : 60,
       basePrice,
-      opsCallCredit: 1,
-      earcarePoolAmount,
       requiresSecondTherapist,
       tvDisplayName: name,
       effectiveFromMonth: "2026-06",
@@ -265,12 +263,10 @@ function countingPrisma(client: any) {
   return { proxy, counts };
 }
 
-function todayCostDependencies(overrides: { opsDailyIncentiveTotal?: number; earcarePayoutTotal?: number } = {}) {
+function todayCostDependencies(overrides: { opsDailyIncentiveTotal?: number } = {}) {
   const opsDailyIncentiveTotal = overrides.opsDailyIncentiveTotal ?? 100000;
-  const earcarePayoutTotal = overrides.earcarePayoutTotal ?? 300000;
   return {
-    listOpsDailyIncentives: async () => ({ distributedAmount: opsDailyIncentiveTotal }),
-    listEarcareDailySettlements: async () => ({ distributedAmount: earcarePayoutTotal })
+    listOpsDailyIncentives: async () => ({ distributedAmount: opsDailyIncentiveTotal })
   } as any;
 }
 
@@ -296,18 +292,16 @@ describe("getTodayDashboardMetrics", () => {
       netSales: 10600000,
       discountTotal: 100000,
       expenseTotal: 300000,
-      earcarePoolTotal: 300000,
-      earcarePayoutTotal: 300000,
       opsDailyIncentiveTotal: 100000,
       opsMonthlyIncentiveTotal: 0,
       fullAttendanceAllowanceTotal: 0,
       countKingBonusTotal: 0,
       therapistCommissionTotal: 4300000,
       therapistPayoutTotal: 4300000,
-      dailyCostTotal: 5000000,
+      dailyCostTotal: 4700000,
       monthlyCostTotal: 0,
-      settlementPayoutTotal: 4700000,
-      netProfit: 5900000
+      settlementPayoutTotal: 4400000,
+      netProfit: 6200000
     });
     assert.equal(result.therapistSummary.totalAssignedCallCount, 7);
     assert.equal(result.therapistSummary.totalCommissionAmount, 4300000);
@@ -382,7 +376,7 @@ describe("getTodayDashboardMetrics", () => {
       operatingMonthId: "month-2026-06",
       serviceDate: "2026-06-10",
       prismaClient: createDashboardPrisma({ noCalls: true }),
-      dependencies: todayCostDependencies({ opsDailyIncentiveTotal: 0, earcarePayoutTotal: 0 })
+      dependencies: todayCostDependencies({ opsDailyIncentiveTotal: 0 })
     });
 
     assert.deepEqual(result.statusCounts, {
@@ -436,18 +430,10 @@ function monthlyPreview(overrides: any = {}) {
       dailyIncentiveAmount: 100000,
       monthlyIncentiveAmount: 200000,
       totalOpsPayoutAmount: 300000,
-      monthlyOpsCallCredit: 4,
+      monthlyOpsCallCount: 4,
       appliedThresholdCallCount: null,
       ruleStatus: "not_applicable",
       warningMessages: [],
-      rows: []
-    },
-    earcare: {
-      earcarePoolTotal: 300000,
-      distributedAmount: 300000,
-      undistributedAmount: 0,
-      sourceCallCount: 2,
-      eligibleDayCount: 1,
       rows: []
     },
     financials: {
@@ -455,15 +441,13 @@ function monthlyPreview(overrides: any = {}) {
       netSales: 10650000,
       discountTotal: 100000,
       expenseTotal: 250000,
-      earcarePoolTotal: 300000,
       therapistCommissionTotal: 4350000
     },
     totals: {
       therapistPayoutAmount: 4300000,
       opsDailyIncentiveAmount: 100000,
       opsMonthlyIncentiveAmount: 200000,
-      earcarePayoutAmount: 300000,
-      grandPayoutAmount: 4900000
+      grandPayoutAmount: 4600000
     },
     warningCounts: {
       total: 0
@@ -477,8 +461,7 @@ function monthlyPreview(overrides: any = {}) {
       representativeEvidence: {
         therapist: [],
         operationsDaily: [],
-        operationsMonthly: [],
-        earcare: []
+        operationsMonthly: []
       }
     },
     ...overrides
@@ -513,18 +496,10 @@ function monthlySnapshot(overrides: any = {}) {
         dailyIncentiveAmount: 300000,
         monthlyIncentiveAmount: 500000,
         totalOpsPayoutAmount: 800000,
-        monthlyOpsCallCredit: 12,
+        monthlyOpsCallCount: 12,
         appliedThresholdCallCount: null,
         ruleStatus: "not_applicable",
         warningMessages: [],
-        rows: []
-      },
-      earcare: {
-        earcarePoolTotal: 600000,
-        distributedAmount: 600000,
-        undistributedAmount: 0,
-        sourceCallCount: 4,
-        eligibleDayCount: 2,
         rows: []
       },
       financials: {
@@ -532,15 +507,13 @@ function monthlySnapshot(overrides: any = {}) {
         netSales: 10650000,
         discountTotal: 100000,
         expenseTotal: 250000,
-        earcarePoolTotal: 600000,
         therapistCommissionTotal: 4350000
       },
       totals: {
         therapistPayoutAmount: 9100000,
         opsDailyIncentiveAmount: 300000,
         opsMonthlyIncentiveAmount: 500000,
-        earcarePayoutAmount: 600000,
-        grandPayoutAmount: 10500000
+        grandPayoutAmount: 9900000
       },
       warningCounts: { total: 1 },
       evidence: {
@@ -552,8 +525,7 @@ function monthlySnapshot(overrides: any = {}) {
         representativeEvidence: {
           therapist: [],
           operationsDaily: [],
-          operationsMonthly: [],
-          earcare: []
+          operationsMonthly: []
         }
       },
       source: {
@@ -589,11 +561,11 @@ describe("getMonthlyDashboardMetrics", () => {
     assert.equal(result.financials.discountTotal, 100000);
     assert.equal(result.financials.opsDailyIncentiveTotal, 100000);
     assert.equal(result.financials.opsMonthlyIncentiveTotal, 200000);
-    assert.equal(result.financials.dailyCostTotal, 5000000);
+    assert.equal(result.financials.dailyCostTotal, 4700000);
     assert.equal(result.financials.monthlyCostTotal, 200000);
     assert.equal(result.financials.fullAttendanceAllowanceTotal, 0);
     assert.equal(result.financials.countKingBonusTotal, 0);
-    assert.equal(result.financials.netProfit, 5700000);
+    assert.equal(result.financials.netProfit, 6000000);
     assert.deepEqual(
       result.courseCompletions.map((course) => [course.courseCode, course.completedCount, course.therapistAssignmentCount]),
       [
@@ -611,7 +583,7 @@ describe("getMonthlyDashboardMetrics", () => {
     });
     assert.equal(result.sourceBasis.kind, "current_recalculation");
     assert.equal(result.sourceBasis.label, "미확정 현재 기준");
-    assert.equal(result.settlementSummary?.grandPayoutAmount, 4900000);
+    assert.equal(result.settlementSummary?.grandPayoutAmount, 4600000);
     assert.equal(result.settlementSummary?.fullAttendanceAllowanceTotal, 0);
     assert.equal(result.settlementSummary?.countKingBonusTotal, 0);
     assert.equal(result.emptyState.kind, "warnings_excluded");
@@ -648,8 +620,7 @@ describe("getMonthlyDashboardMetrics", () => {
               therapistPayoutAmount: 4800000,
               opsDailyIncentiveAmount: 100000,
               opsMonthlyIncentiveAmount: 200000,
-              earcarePayoutAmount: 300000,
-              grandPayoutAmount: 5400000
+              grandPayoutAmount: 5100000
             }
           })
       }
@@ -697,7 +668,7 @@ describe("getMonthlyDashboardMetrics", () => {
     assert.equal(result.sourceBasis.label, "확정 스냅샷 기준");
     assert.equal(result.sourceBasis.closeVersion, 2);
     assert.equal(result.sourceBasis.confirmedAt, "2026-06-30T15:00:00.000Z");
-    assert.equal(result.settlementSummary?.grandPayoutAmount, 10500000);
+    assert.equal(result.settlementSummary?.grandPayoutAmount, 9900000);
     assert.equal(result.settlementSummary?.fullAttendanceAllowanceTotal, 200000);
     assert.equal(result.settlementSummary?.countKingBonusTotal, 200000);
     assert.equal(result.financials?.monthlyCostTotal, 900000);
@@ -712,7 +683,6 @@ describe("getMonthlyDashboardMetrics", () => {
       netSales: 3750000,
       discountTotal: 100000,
       expenseTotal: 250000,
-      earcarePoolTotal: 200000,
       therapistCommissionTotal: 1200000
     };
 
@@ -728,8 +698,8 @@ describe("getMonthlyDashboardMetrics", () => {
     assert.equal(result.financials?.paymentTotal, 4000000);
     assert.equal(result.financials?.expenseTotal, 250000);
     assert.equal(result.financials?.therapistCommissionTotal, 1200000);
-    assert.equal(result.financials?.dailyCostTotal, 2350000);
-    assert.equal(result.financials?.netProfit, -6750000);
+    assert.equal(result.financials?.dailyCostTotal, 1750000);
+    assert.equal(result.financials?.netProfit, -6150000);
   });
 
   it("마감확정/잠금 운영월은 snapshot dashboardFinancials가 있으면 최종 손익과 비용도 그대로 사용한다", async () => {
@@ -739,8 +709,6 @@ describe("getMonthlyDashboardMetrics", () => {
       netSales: 3750000,
       discountTotal: 100000,
       expenseTotal: 250000,
-      earcarePoolTotal: 200000,
-      earcarePayoutTotal: 333000,
       opsDailyIncentiveTotal: 444000,
       opsMonthlyIncentiveTotal: 555000,
       fullAttendanceAllowanceTotal: 666000,
@@ -806,7 +774,7 @@ describe("getMonthlyDashboardMetrics", () => {
 
     assert.equal(result.sourceBasis.kind, "closed_snapshot");
     assert.equal(result.sourceBasis.label, "확정 스냅샷 기준");
-    assert.equal(result.settlementSummary?.grandPayoutAmount, 10500000);
+    assert.equal(result.settlementSummary?.grandPayoutAmount, 9900000);
     assert.equal(result.snapshot?.kind, "latest");
     assert.equal(result.snapshot?.closeVersion, 2);
     assert.equal(result.financials, null);
@@ -825,7 +793,7 @@ describe("getMonthlyDashboardMetrics", () => {
 
     assert.equal(result.sourceBasis.kind, "current_recalculation");
     assert.equal(result.sourceBasis.label, "미확정 현재 기준");
-    assert.equal(result.settlementSummary?.grandPayoutAmount, 4900000);
+    assert.equal(result.settlementSummary?.grandPayoutAmount, 4600000);
     assert.equal(result.snapshot?.kind, "previous");
     assert.equal(result.snapshot?.label, "이전 확정 스냅샷");
     assert.equal(result.snapshot?.closeVersion, 1);
@@ -855,7 +823,6 @@ function graphDailySummary(overrides: any = {}) {
     canceledCount: 0,
     paymentTotal: 0,
     therapistCommissionTotal: 0,
-    earcarePoolTotal: 0,
     discountTotal: 0,
     expenseTotal: 0,
     netSales: 0,
@@ -940,8 +907,6 @@ describe("getDashboardGraphReport", () => {
             basePrice: 1500000,
             paymentAmount: 1500000,
             discountAmount: 0,
-            earcarePoolAmount: 100000,
-            opsCallCredit: 1,
             therapistAssignments: [{ role: "THERAPIST_1", employeeId: "therapist-1", commissionAmount: 700000 }]
           },
           {
@@ -952,8 +917,6 @@ describe("getDashboardGraphReport", () => {
             basePrice: 1800000,
             paymentAmount: 1800000,
             discountAmount: 0,
-            earcarePoolAmount: 200000,
-            opsCallCredit: 1,
             therapistAssignments: [
               { role: "THERAPIST_1", employeeId: "therapist-1", commissionAmount: 900000 },
               { role: "THERAPIST_2", employeeId: "therapist-1", commissionAmount: 900000 }
@@ -1233,10 +1196,6 @@ describe("월 단위 조회 비용", () => {
       (counts.get("dailyExpense.findMany") ?? 0) <= 1,
       `dailyExpense.findMany=${counts.get("dailyExpense.findMany")}`
     );
-    assert.ok(
-      (counts.get("therapistCourseRate.findMany") ?? 0) <= 1,
-      `therapistCourseRate.findMany=${counts.get("therapistCourseRate.findMany")} (하루 1회를 넘으면 행 단위 N+1이다)`
-    );
     assert.equal(counts.get("timeSlot.findMany"), 1);
   });
 
@@ -1261,10 +1220,6 @@ describe("월 단위 조회 비용", () => {
     assert.ok(
       (counts.get("dailyExpense.findMany") ?? 0) <= 1,
       `dailyExpense.findMany=${counts.get("dailyExpense.findMany")}`
-    );
-    assert.ok(
-      (counts.get("therapistCourseRate.findMany") ?? 0) <= 1,
-      `therapistCourseRate.findMany=${counts.get("therapistCourseRate.findMany")}`
     );
     assert.equal(counts.get("timeSlot.findMany"), 1);
   });

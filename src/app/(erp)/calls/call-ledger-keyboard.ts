@@ -1,17 +1,20 @@
 export const EDITABLE_CALL_FIELDS = [
   "startTime",
   "actualEntryTime",
+  "actualEndTime",
   "roomId",
   "courseId",
   "customerMemo",
   "customerId",
   "therapist1Id",
   "therapist2Id",
-  "earcareEmployeeId",
   "status",
   "discountTypeCode",
   "paymentMethodCode",
   "note",
+  "visitRequest",
+  "bookingChannelCode",
+  "bookerName",
   "confirmationCode"
 ] as const;
 
@@ -20,8 +23,6 @@ export const READONLY_CALL_FIELDS = [
   "discountAmount",
   "therapist1Commission",
   "therapist2Commission",
-  "earcarePoolAmount",
-  "opsCallCredit",
   "calculationStatus"
 ] as const;
 
@@ -47,11 +48,11 @@ function fieldIndex(fields: readonly string[], columnId: string) {
 }
 
 export function isEditableCallField(columnId: string): columnId is EditableCallField {
-  return EDITABLE_CALL_FIELDS.includes(columnId as EditableCallField);
+  return (EDITABLE_CALL_FIELDS as readonly string[]).includes(columnId);
 }
 
 export function isReadonlyCallField(columnId: string): columnId is ReadonlyCallField {
-  return READONLY_CALL_FIELDS.includes(columnId as ReadonlyCallField);
+  return (READONLY_CALL_FIELDS as readonly string[]).includes(columnId);
 }
 
 export function moveTabCell(current: CellCoordinate, rowCount: number, backwards: boolean): CellCoordinate {

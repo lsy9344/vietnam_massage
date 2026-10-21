@@ -22,7 +22,7 @@ function readJson(path) {
   "src/modules/calls/service-call-service.ts",
   "src/modules/calls/service-call-service.test.ts",
   "src/app/(erp)/calls/daily-summary-strip.tsx",
-  "src/app/(erp)/calls/editable-call-grid.tsx",
+  "src/app/(erp)/calls/call-edit-panel.tsx",
   "tests/e2e/story-2-3-completed-call-calculation.spec.ts",
   "src/modules/calls/README.md",
   "docs/modules/calls.md",
@@ -47,8 +47,6 @@ for (const required of [
   "hasRevenue && record.discountTypeCode !== null ? 100000 : 0",
   "Math.max(policy.basePrice - discountAmount, 0)",
   "basePrice",
-  "earcarePoolAmount",
-  "opsCallCredit",
   "therapistCourseRate",
   "THERAPIST_RATE_NOT_FOUND",
   "listCompletedServiceCallCalculationsForDate",
@@ -57,18 +55,20 @@ for (const required of [
 ]) {
   if (!service.includes(required)) errors.push(`service-call-service.ts missing ${required}`);
 }
-if (/paymentAmount\s*:\s*null/.test(service) || /opsCallCredit\s*:\s*null/.test(service)) {
+if (/paymentAmount\s*:\s*null/.test(service)) {
   errors.push("service-call-service.ts must not keep Story 2.1 null calculation placeholders");
 }
 
 // 계산 상태 문구 키는 원장 표와 하루 수납·지출이 함께 쓰도록 calculation-status-message.ts로 옮겼다(티켓 03).
-const grid = `${read("src/app/(erp)/calls/editable-call-grid.tsx")}\n${read("src/app/(erp)/calls/calculation-status-message.ts")}`;
+// 계산값은 원장 편집 패널의 결제 묶음(call-edit-panel.tsx)이 보인다(콜 원장 흐름 재구성 티켓 03).
+const grid = `${read("src/app/(erp)/calls/call-edit-panel.tsx")}\n${read("src/app/(erp)/calls/calculation-status-message.ts")}`;
 for (const required of [
-  "ComputedCell",
-  "bg-readonly",
+  "PaymentAmounts",
+  "line-through",
   "[font-variant-numeric:tabular-nums]",
-  "formatVnd",
-  "saveStatus === \"error\"",
+  "formatNumber",
+  // 티켓 15: 저장 실패나 충돌로 남은 초안이면 계산값 대신 대기 표시를 한다.
+  "isSaveHeld(status)",
   "calculationStatus",
   // i18n 전환: 계산/컬럼 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
   "calls.calc.errorPending",
@@ -77,14 +77,12 @@ for (const required of [
   "calls.calc.policyMissing",
   "calls.column.paymentAmount",
   "calls.column.therapist1Commission",
-  "calls.column.therapist2Commission",
-  "calls.column.earcarePool",
-  "calls.column.opsCallCredit"
+  "calls.column.therapist2Commission"
 ]) {
-  if (!grid.includes(required)) errors.push(`editable-call-grid.tsx missing ${required}`);
+  if (!grid.includes(required)) errors.push(`call ledger list/panel missing ${required}`);
 }
 const koMessages = read("src/lib/i18n/messages/ko.ts");
-for (const label of ["저장 보류 계산 대기", "계산됨", "비완료 제외", "정책 없음", "결제금액", "마사지사1수당", "마사지사2수당", "귀케어풀", "콜인정"]) {
+for (const label of ["저장 보류 계산 대기", "계산됨", "비완료 제외", "정책 없음", "결제금액", "마사지사1수당", "마사지사2수당"]) {
   if (!koMessages.includes(label)) errors.push(`messages/ko.ts missing calls grid label: ${label}`);
 }
 
@@ -111,9 +109,7 @@ for (const required of [
   "computed readonly values",
   "both therapist roles as separate 담당 records",
   "listCompletedServiceCallCalculationsForDate",
-  "therapist2Commission",
-  "earcarePoolAmount",
-  "opsCallCredit"
+  "therapist2Commission"
 ]) {
   if (!unitTest.includes(required)) errors.push(`service-call-service.test.ts missing ${required}`);
 }
@@ -141,8 +137,6 @@ for (const required of [
   "방문완료",
   "100,000",
   "CoursePolicy.basePrice",
-  "CoursePolicy.earcarePoolAmount",
-  "CoursePolicy.opsCallCredit",
   "TherapistCourseRate.amount",
   "listCompletedServiceCallCalculationsForDate",
   "derived amount columns",

@@ -6,6 +6,7 @@ import { argon2idOptions, login } from "./support/auth";
 
 type SeededData = {
   adminLockedMonth: { id: string; monthKey: string };
+  adminConfirmedMonth: { id: string; monthKey: string };
   blankReasonMonth: { id: string; monthKey: string };
   settlementLockedMonth: { id: string; monthKey: string };
   accounts: {
@@ -34,7 +35,7 @@ function story55WorkerSuffix(workerIndex: number) {
 }
 
 function story55MonthKey(workerIndex: number, offset: number) {
-  const monthNumber = workerIndex * 3 + offset;
+  const monthNumber = workerIndex * 4 + offset;
   const year = 2062 + Math.floor((monthNumber - 1) / 12);
   const month = ((monthNumber - 1) % 12) + 1;
   return `${year}-${String(month).padStart(2, "0")}`;
@@ -97,11 +98,11 @@ async function seedAuthAccount(input: { accountId: string; password: string; rol
   });
 }
 
-async function seedLockedMonth(monthKey: string, confirmedByAccountId: string) {
+async function seedClosedMonth(monthKey: string, confirmedByAccountId: string, status: "마감확정" | "잠금" = "잠금") {
   const month = await (prisma as any).operatingMonth.upsert({
     where: { monthKey },
-    update: { startDate: utcDate(monthKey), endDate: utcDate(monthKey), status: "잠금" },
-    create: { monthKey, startDate: utcDate(monthKey), endDate: utcDate(monthKey), status: "잠금" }
+    update: { startDate: utcDate(monthKey), endDate: utcDate(monthKey), status },
+    create: { monthKey, startDate: utcDate(monthKey), endDate: utcDate(monthKey), status }
   });
   const existingClosing = await (prisma as any).monthlyClosing.findFirst({
     where: { operatingMonthId: month.id },
@@ -137,22 +138,20 @@ async function seedLockedMonth(monthKey: string, confirmedByAccountId: string) {
           dailyIncentiveAmount: 0,
           monthlyIncentiveAmount: 0,
           totalOpsPayoutAmount: 0,
-          monthlyOpsCallCredit: 0,
+          monthlyOpsCallCount: 0,
           appliedThresholdCallCount: null,
           ruleStatus: "missing_policy",
           warningMessages: [],
           rows: []
         },
-        earcare: { earcarePoolTotal: 0, distributedAmount: 0, undistributedAmount: 0, sourceCallCount: 0, eligibleDayCount: 0, rows: [] },
         financials: {
           paymentTotal: 0,
           netSales: 0,
           discountTotal: 0,
           expenseTotal: 0,
-          earcarePoolTotal: 0,
           therapistCommissionTotal: 0
         },
-        totals: { therapistPayoutAmount: 0, opsDailyIncentiveAmount: 0, opsMonthlyIncentiveAmount: 0, earcarePayoutAmount: 0, grandPayoutAmount: 0 },
+        totals: { therapistPayoutAmount: 0, opsDailyIncentiveAmount: 0, opsMonthlyIncentiveAmount: 0, grandPayoutAmount: 0 },
         warningCounts: { total: 0 },
         evidence: { period: `${monthKey}-01 ~ ${monthKey}-01`, sourceDayCount: 1 },
         source: { serviceVersion: "monthly-closing-service:5.3", previewBasis: "listMonthlyClosingPreview", snapshotCreatedAt: "2026-06-10T05:00:00.000Z" }
@@ -182,12 +181,14 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
     employeeId: settlementEmployee.id
   });
 
-  const adminLocked = await seedLockedMonth(story55MonthKey(workerIndex, 1), adminAccount.id);
-  const blankReason = await seedLockedMonth(story55MonthKey(workerIndex, 2), adminAccount.id);
-  const settlementLocked = await seedLockedMonth(story55MonthKey(workerIndex, 3), adminAccount.id);
+  const adminLocked = await seedClosedMonth(story55MonthKey(workerIndex, 1), adminAccount.id);
+  const blankReason = await seedClosedMonth(story55MonthKey(workerIndex, 2), adminAccount.id);
+  const settlementLocked = await seedClosedMonth(story55MonthKey(workerIndex, 3), adminAccount.id);
+  const adminConfirmed = await seedClosedMonth(story55MonthKey(workerIndex, 4), adminAccount.id, "마감확정");
 
   return {
     adminLockedMonth: { id: adminLocked.month.id, monthKey: adminLocked.month.monthKey },
+    adminConfirmedMonth: { id: adminConfirmed.month.id, monthKey: adminConfirmed.month.monthKey },
     blankReasonMonth: { id: blankReason.month.id, monthKey: blankReason.month.monthKey },
     settlementLockedMonth: { id: settlementLocked.month.id, monthKey: settlementLocked.month.monthKey },
     accounts,
@@ -243,6 +244,46 @@ test.describe("Story 5.5 monthly close reopen", () => {
     });
     expect(closings).toHaveLength(2);
     expect(closings[0].closeVersion).toBe(1);
+    expect(closings[1].closeVersion).toBe(2);
+  });
+
+  test("administrator reopens a 마감확정 month directly (without locking first) and reconfirm creates closeVersion 2", async ({ page }) => {
+    await login(page, seededData.accounts.admin, "Story55!admin");
+
+    await page.goto(`/closing?operatingMonthId=${seededData.adminConfirmedMonth.id}`);
+    await expect(page.getByText("운영월 상태: 마감확정").first()).toBeVisible();
+    await expect(page.getByText("확정 기록", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "재오픈" })).toBeEnabled();
+    await page.getByLabel("재오픈 사유").fill("Story 5.5 마감확정 상태에서 바로 재오픈");
+    await page.getByRole("button", { name: "재오픈" }).click();
+    await expect(page.getByText("운영월 상태: 검토중").first()).toBeVisible();
+    await expect(page.getByText("이전 확정 기록")).toBeVisible();
+
+    const reopenedMonth = await (prisma as any).operatingMonth.findUnique({ where: { id: seededData.adminConfirmedMonth.id }, select: { status: true } });
+    expect(reopenedMonth?.status).toBe("검토중");
+    const previousClosing = await (prisma as any).monthlyClosing.findFirst({
+      where: { operatingMonthId: seededData.adminConfirmedMonth.id },
+      orderBy: { closeVersion: "desc" }
+    });
+    expect(previousClosing?.closeVersion).toBe(1);
+    expect(previousClosing?.reopenReason).toBe("Story 5.5 마감확정 상태에서 바로 재오픈");
+
+    const reopenAudit = await (prisma as any).auditLog.findFirst({
+      where: { action: "monthly_close.reopened", targetType: "monthly_close", targetId: previousClosing.id }
+    });
+    expect(reopenAudit?.actorId).toBe(seededData.accountRecordIds.admin);
+    expect((reopenAudit?.beforeValue as any).status).toBe("마감확정");
+    expect((reopenAudit?.afterValue as any).status).toBe("검토중");
+
+    await confirmMonthlyCloseThroughDialog(page);
+    await expect(page.getByText("운영월 상태: 마감확정").first()).toBeVisible();
+    const closings = await (prisma as any).monthlyClosing.findMany({
+      where: { operatingMonthId: seededData.adminConfirmedMonth.id },
+      orderBy: { closeVersion: "asc" }
+    });
+    expect(closings).toHaveLength(2);
+    expect(closings[0].closeVersion).toBe(1);
+    expect(closings[0].snapshotJson).toEqual(previousClosing.snapshotJson);
     expect(closings[1].closeVersion).toBe(2);
   });
 

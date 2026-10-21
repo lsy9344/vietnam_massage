@@ -11,8 +11,14 @@ import {
   lockMonthlyCloseAction,
   reopenMonthlyCloseAction,
   startMonthlyCloseReviewAction,
+  type ConfirmMonthlyCloseActionState,
   type MonthlyClosingActionState
 } from "@/app/(erp)/closing/actions";
+import type { MonthlyClosingChecklistCallDto } from "@/modules/closing/monthly-closing-checklist-service";
+import { EvidenceCallItem, EvidenceCallList } from "@/app/(erp)/settlements/settlement-parts";
+import { Button } from "@/components/ui/button";
+import { inputFieldClassName } from "@/components/ui/input-field";
+import { StatusIndicator } from "@/components/ui/status-indicator";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +30,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
+
+const CONFIRM_MONTHLY_CLOSE_FORM_ID = "confirm-monthly-close-form";
 
 export type ConfirmDialogSummary = {
   monthKey: string;
@@ -37,8 +45,6 @@ export type ConfirmDialogSummary = {
   operationsCount: number;
   opsDailyIncentiveAmount: number;
   opsMonthlyIncentiveAmount: number;
-  earcarePayoutAmount: number;
-  earcareCount: number;
   warningCount: number;
 };
 
@@ -46,7 +52,7 @@ function formatVnd(locale: Locale, t: Translator, amount: number) {
   return `${formatCurrencyVnd(locale, amount)} ${t("settlements.vndSuffix")}`;
 }
 
-function InlineResult({ t, state }: { t: Translator; state: MonthlyClosingActionState }) {
+function InlineResult({ t, state }: { t: Translator; state: MonthlyClosingActionState | ConfirmMonthlyCloseActionState }) {
   if (!state) return null;
 
   if (state.ok) {
@@ -64,9 +70,10 @@ function InlineResult({ t, state }: { t: Translator; state: MonthlyClosingAction
   );
 }
 
-function disabledReason(t: Translator, status: string, canWrite: boolean, hasConfirmSummary: boolean) {
+function disabledReason(t: Translator, status: string, canWrite: boolean, hasConfirmSummary: boolean, checklistBlocked: boolean) {
   if (!canWrite) return t("closing.disabled.noPermission");
   if (status === "검토중" && !hasConfirmSummary) return t("closing.disabled.needPreview");
+  if (status === "검토중" && checklistBlocked) return t("closing.checklist.blockedNotice");
   if (status === "작성중" || status === "검토중") return t("closing.disabled.needConfirmFirst");
   if (status === "잠금") return t("closing.disabled.locked");
   return t("closing.disabled.noAction");
@@ -87,31 +94,66 @@ export function ClosingActionPanel({
   status,
   canWrite,
   canReopen,
-  confirmSummary
+  confirmSummary,
+  checklistBlocked,
+  pendingCloseCalls,
+  canOpenLedger
 }: {
   operatingMonthId: string;
   status: string;
   canWrite: boolean;
   canReopen: boolean;
   confirmSummary: ConfirmDialogSummary | null;
+  /** F07: 마감 전 점검에 계산 오류나 지급 재확인 미처리가 남아 있으면 확정을 막는다(서버가 다시 검사). */
+  checklistBlocked: boolean;
+  /** F07/ADR 0005(티켓 34): 예약·사용중·청소중 콜. 확정 다이얼로그에서 확인·사유를 받는다. */
+  pendingCloseCalls: MonthlyClosingChecklistCallDto[];
+  /** 점검 항목에서 원본으로 가는 동작은 역할을 따른다(관리자만 원장 링크). */
+  canOpenLedger: boolean;
 }) {
   const t = useT();
   const locale = useLocale();
   const [reviewState, reviewAction, reviewPending] = useActionState<MonthlyClosingActionState, FormData>(startMonthlyCloseReviewAction, null);
-  const [confirmState, confirmAction, confirmPending] = useActionState<MonthlyClosingActionState, FormData>(confirmMonthlyCloseAction, null);
+  const [confirmState, confirmAction, confirmPending] = useActionState<ConfirmMonthlyCloseActionState, FormData>(confirmMonthlyCloseAction, null);
   const [lockState, lockAction, lockPending] = useActionState<MonthlyClosingActionState, FormData>(lockMonthlyCloseAction, null);
   const [reopenState, reopenAction, reopenPending] = useActionState<MonthlyClosingActionState, FormData>(reopenMonthlyCloseAction, null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [displayedPendingCloseCalls, setDisplayedPendingCloseCalls] = useState(pendingCloseCalls);
+  const [pendingCloseAcknowledged, setPendingCloseAcknowledged] = useState(false);
+  const [exceptionReason, setExceptionReason] = useState("");
   const confirmCancelRef = useRef<HTMLButtonElement>(null);
   const canStartReview = canWrite && status === "작성중";
-  const canConfirm = canWrite && status === "검토중" && Boolean(confirmSummary);
+  const canConfirm = canWrite && status === "검토중" && Boolean(confirmSummary) && !checklistBlocked;
   const canLock = canWrite && status === "마감확정";
-  const reason = disabledReason(t, status, canWrite, Boolean(confirmSummary));
+  const reason = disabledReason(t, status, canWrite, Boolean(confirmSummary), checklistBlocked);
+  // F07/ADR 0005(티켓 34): 마감 확인 대상 콜이 있으면 전부 확인하고 사유를 적어야 확정 제출을 할 수 있다.
+  // 서버가 트랜잭션 안에서 다시 검사하므로 이 비활성화는 안내일 뿐이다.
+  const pendingCloseRequiresException = displayedPendingCloseCalls.length > 0;
+  const pendingCloseReady = !pendingCloseRequiresException || (pendingCloseAcknowledged && exceptionReason.trim().length > 0);
   const reasonHasError = Boolean(reopenState && !reopenState.ok && reopenState.fieldErrors?.reason?.[0]);
 
   useEffect(() => {
-    if (confirmState?.ok) setConfirmDialogOpen(false);
+    if (confirmState?.ok) {
+      setConfirmDialogOpen(false);
+      return;
+    }
+    // F07/ADR 0005(티켓 34): 확인한 목록 이후 새 대상이 생겨 거절되면, 서버가 돌려준 지금의 목록으로
+    // 다이얼로그를 갱신하고 확인 체크를 다시 받는다(다이얼로그는 열어 둔다).
+    // domainErrorCode는 두 분기 모두 string으로 넓어 narrowing이 안 되므로, 실제 들고 있는 필드로 가린다.
+    if (confirmState && !confirmState.ok && "currentPendingCloseCalls" in confirmState) {
+      setDisplayedPendingCloseCalls(confirmState.currentPendingCloseCalls);
+      setPendingCloseAcknowledged(false);
+    }
   }, [confirmState]);
+
+  function handleConfirmDialogOpenChange(open: boolean) {
+    if (open) {
+      setDisplayedPendingCloseCalls(pendingCloseCalls);
+      setPendingCloseAcknowledged(false);
+      setExceptionReason("");
+    }
+    setConfirmDialogOpen(open);
+  }
 
   return (
     <section className="mb-4 border border-border bg-surface px-4 py-3" aria-label={t("closing.actionPanel.aria")}>
@@ -125,26 +167,26 @@ export function ClosingActionPanel({
         <div className="flex flex-wrap items-start gap-2">
           <form action={reviewAction} className="grid gap-1">
             <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
-            <button
-              className="h-9 border border-border bg-background px-3 text-sm font-semibold text-foreground hover:bg-readonly disabled:cursor-not-allowed disabled:opacity-50"
+            <Button
+              variant="secondary"
               disabled={!canStartReview || reviewPending}
               type="submit"
             >
               {reviewPending ? t("closing.action.processing") : t("closing.action.startReview")}
-            </button>
+            </Button>
             <InlineResult t={t} state={reviewState} />
           </form>
           <div className="grid gap-1">
             {/* Story 5.6: first click opens this AlertDialog; only the second confirmation submits the server action. */}
-            <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+            <AlertDialog open={confirmDialogOpen} onOpenChange={handleConfirmDialogOpenChange}>
               <AlertDialogTrigger asChild>
-                <button
-                  className="h-9 border border-brand bg-brand px-3 text-sm font-semibold text-brand-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                <Button
+
                   disabled={!canConfirm || confirmPending}
                   type="button"
                 >
                   {confirmPending ? t("closing.action.confirming") : t("closing.action.confirm")}
-                </button>
+                </Button>
               </AlertDialogTrigger>
               {confirmSummary ? (
                 <AlertDialogContent
@@ -155,7 +197,7 @@ export function ClosingActionPanel({
                 >
                   <AlertDialogCancel
                     aria-label={t("closing.action.close")}
-                    className="absolute right-3 top-3 h-8 w-8 px-0 text-base leading-none"
+                    className="absolute right-3 top-3 size-11 justify-center px-0 text-base leading-none"
                     disabled={confirmPending}
                   >
                     ×
@@ -183,7 +225,7 @@ export function ClosingActionPanel({
                         <div className="mt-1 text-lg font-semibold text-foreground tabular-nums">{confirmSummary.warningCount}{t("settlements.countSuffix")}</div>
                       </div>
                     </div>
-                    <dl className="grid gap-2 text-sm sm:grid-cols-3">
+                    <dl className="grid gap-2 text-sm sm:grid-cols-2">
                       <div className="border border-border bg-background px-3 py-2">
                         <dt className="text-xs text-muted">{t("closing.confirmDialog.therapist")}</dt>
                         <dd className="mt-1 font-semibold tabular-nums">{formatVnd(locale, t, confirmSummary.therapistPayoutAmount)}</dd>
@@ -200,22 +242,79 @@ export function ClosingActionPanel({
                           })}
                         </dd>
                       </div>
-                      <div className="border border-border bg-background px-3 py-2">
-                        <dt className="text-xs text-muted">{t("closing.confirmDialog.earcare")}</dt>
-                        <dd className="mt-1 font-semibold tabular-nums">{formatVnd(locale, t, confirmSummary.earcarePayoutAmount)}</dd>
-                        <dd className="mt-1 text-xs text-muted">{confirmSummary.earcareCount}{t("settlements.peopleSuffix")}</dd>
-                      </div>
                     </dl>
+                    {pendingCloseRequiresException ? (
+                      <div className="grid gap-2 border border-border bg-background px-3 py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-sm font-semibold text-foreground">{t("closing.confirmDialog.pendingCloseCalls.title")}</span>
+                          <StatusIndicator
+                            label={t("closing.checklist.pendingCloseCalls.count", { count: displayedPendingCloseCalls.length })}
+                            tone="warning"
+                          />
+                        </div>
+                        <p className="text-sm text-muted">{t("closing.confirmDialog.pendingCloseCalls.description")}</p>
+                        <EvidenceCallList label={t("closing.confirmDialog.pendingCloseCalls.title")}>
+                          {displayedPendingCloseCalls.map((call) => (
+                            <EvidenceCallItem
+                              amount={null}
+                              call={call}
+                              canOpenLedger={canOpenLedger}
+                              key={call.serviceCallId}
+                              locale={locale}
+                              serviceDate={call.serviceDate}
+                            />
+                          ))}
+                        </EvidenceCallList>
+                        {pendingCloseAcknowledged
+                          ? displayedPendingCloseCalls.map((call) => (
+                              <input
+                                form={CONFIRM_MONTHLY_CLOSE_FORM_ID}
+                                key={call.serviceCallId}
+                                name="confirmedPendingCloseCallIds"
+                                type="hidden"
+                                value={call.serviceCallId}
+                              />
+                            ))
+                          : null}
+                        <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
+                          <input
+                            checked={pendingCloseAcknowledged}
+                            className="size-5 accent-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary"
+                            disabled={confirmPending}
+                            form={CONFIRM_MONTHLY_CLOSE_FORM_ID}
+                            onChange={(event) => setPendingCloseAcknowledged(event.target.checked)}
+                            type="checkbox"
+                          />
+                          {t("closing.confirmDialog.pendingCloseCalls.ackLabel", { count: displayedPendingCloseCalls.length })}
+                        </label>
+                        <div className="grid gap-1">
+                          <label className="text-sm font-semibold text-foreground" htmlFor="pending-close-exception-reason">
+                            {t("closing.confirmDialog.pendingCloseCalls.reasonLabel")}
+                          </label>
+                          <textarea
+                            className={inputFieldClassName({ className: "h-auto min-h-16 py-2" })}
+                            disabled={confirmPending}
+                            form={CONFIRM_MONTHLY_CLOSE_FORM_ID}
+                            id="pending-close-exception-reason"
+                            name="exceptionReason"
+                            onChange={(event) => setExceptionReason(event.target.value)}
+                            placeholder={t("closing.confirmDialog.pendingCloseCalls.reasonPlaceholder")}
+                            value={exceptionReason}
+                          />
+                          <p className="text-xs text-muted">{t("closing.confirmDialog.pendingCloseCalls.reasonHelp")}</p>
+                        </div>
+                      </div>
+                    ) : null}
                     <InlineResult t={t} state={confirmState} />
                   </div>
                   <AlertDialogFooter>
                     <AlertDialogCancel disabled={confirmPending} ref={confirmCancelRef}>
                       {t("closing.action.cancel")}
                     </AlertDialogCancel>
-                    <form action={confirmAction}>
+                    <form action={confirmAction} id={CONFIRM_MONTHLY_CLOSE_FORM_ID}>
                       <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
                       <AlertDialogAction
-                        disabled={confirmPending}
+                        disabled={confirmPending || !pendingCloseReady}
                         onClick={(event: MouseEvent<HTMLButtonElement>) => {
                           event.preventDefault();
                           event.currentTarget.form?.requestSubmit();
@@ -234,19 +333,19 @@ export function ClosingActionPanel({
           {status === "마감확정" ? (
             <form action={lockAction} className="grid gap-1">
               <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
-              <button
-                className="h-9 border border-danger bg-danger px-3 text-sm font-semibold text-danger-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              <Button
+                className="bg-danger text-danger-foreground hover:bg-danger"
                 disabled={!canLock || lockPending}
                 type="submit"
               >
                 {lockPending ? t("closing.action.locking") : t("closing.action.lock")}
-              </button>
+              </Button>
               <InlineResult t={t} state={lockState} />
             </form>
           ) : null}
         </div>
       </div>
-      {status === "잠금" ? (
+      {status === "잠금" || status === "마감확정" ? (
         <form action={reopenAction} className="mt-4 grid gap-2 border-t border-border pt-4">
           <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
           <div className="grid gap-1">
@@ -256,7 +355,7 @@ export function ClosingActionPanel({
             <textarea
               aria-describedby={reasonHasError ? "reopen-reason-error" : "reopen-help"}
               aria-invalid={reasonHasError}
-              className="min-h-20 border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-brand disabled:cursor-not-allowed disabled:bg-readonly disabled:text-muted"
+              className={inputFieldClassName({ invalid: reasonHasError, className: "h-auto min-h-20 py-2" })}
               disabled={!canReopen || reopenPending}
               id="reopen-reason"
               name="reason"
@@ -268,13 +367,13 @@ export function ClosingActionPanel({
             <ReopenFieldError state={reopenState} />
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              className="h-9 border border-brand bg-brand px-3 text-sm font-semibold text-brand-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            <Button
+
               disabled={!canReopen || reopenPending}
               type="submit"
             >
               {reopenPending ? t("closing.action.reopening") : t("closing.action.reopen")}
-            </button>
+            </Button>
             {!canReopen ? <p className="text-sm text-muted">{t("closing.reopen.adminOnly")}</p> : null}
           </div>
           <InlineResult t={t} state={reopenState} />

@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 
 
 type SeededData = {
@@ -12,7 +13,6 @@ type SeededData = {
   lockedStartDate: string;
   memoPrefix: string;
   therapistLabel: string;
-  earcareLabel: string;
   accounts: {
     admin: string;
     settlement: string;
@@ -191,14 +191,12 @@ async function seedTimeSlot(value: string, sortOrder: number) {
   }
 }
 
-async function upsertCoursePolicy(courseId: string, effectiveFromMonth: string, name: string, opsCallCredit: number, earcarePoolAmount: number) {
+async function upsertCoursePolicy(courseId: string, effectiveFromMonth: string, name: string) {
   const existing = await (prisma as any).coursePolicy.findFirst({ where: { courseId, effectiveFromMonth } });
   const data = {
     name,
     durationMinutes: 60,
     basePrice: 1500000,
-    opsCallCredit,
-    earcarePoolAmount,
     requiresSecondTherapist: false,
     tvDisplayName: name,
     effectiveToMonth: null,
@@ -259,7 +257,6 @@ async function createCall(input: {
   memo: string;
   status: string;
   therapist1Id: string;
-  earcareId?: string;
 }) {
   const call = await (prisma as any).serviceCall.create({
     data: {
@@ -279,14 +276,9 @@ async function createCall(input: {
   await (prisma as any).serviceCallAssignment.create({
     data: { serviceCallId: call.id, assignmentRole: "THERAPIST_1", employeeId: input.therapist1Id, isActive: true }
   });
-  if (input.earcareId) {
-    await (prisma as any).serviceCallAssignment.create({
-      data: { serviceCallId: call.id, assignmentRole: "EARCARE", employeeId: input.earcareId, isActive: true }
-    });
-  }
 }
 
-async function seedAttendance(table: "opsAttendance" | "earcareAttendance", operatingMonthId: string, attendanceDate: Date, employeeId: string, statusCode: string) {
+async function seedAttendance(table: "opsAttendance", operatingMonthId: string, attendanceDate: Date, employeeId: string, statusCode: string) {
   return (prisma as any)[table].upsert({
     where: {
       operatingMonthId_attendanceDate_employeeId: {
@@ -337,9 +329,7 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
   // 표시명에 worker suffix를 붙인다. 테스트가 실패하면 Playwright가 worker를 새로 띄우고 다음
   // workerIndex로 다시 시드하므로, 표시명이 같으면 행 locator가 strict 위반으로 연쇄 실패한다.
   const therapistLabel = `E2E51 마사지사 ${suffix}`;
-  const earcareLabel = `E2E51 귀케어 ${suffix}`;
   const therapist = await seedEmployee(`E2E51-${suffix}-THR-001`, therapistLabel, "THERAPIST", "마사지사", sortBase + 20);
-  const earcare = await seedEmployee(`E2E51-${suffix}-EAR-001`, earcareLabel, "EARCARE", "귀케어", sortBase + 30);
 
   const previewOperatingMonth = await (prisma as any).operatingMonth.upsert({
     where: { monthKey: previewMonthKey },
@@ -362,14 +352,14 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
   await seedTimeSlot("17:00", sortBase + 2);
   const courseCode = `E2E51-${suffix}-A`;
   const course = await (prisma as any).course.upsert({ where: { code: courseCode }, update: { isActive: true }, create: { code: courseCode, isActive: true } });
-  await upsertCoursePolicy(course.id, previewMonthKey, `Story51 ${suffix} A`, 1100, 100000);
-  await upsertCoursePolicy(course.id, lockedMonthKey, `Story51 ${suffix} A locked`, 1100, 100000);
+  await upsertCoursePolicy(course.id, previewMonthKey, `Story51 ${suffix} A`);
+  await upsertCoursePolicy(course.id, lockedMonthKey, `Story51 ${suffix} A locked`);
   await upsertRate(therapist.id, course.id, previewMonthKey, 700000);
   await upsertRate(therapist.id, course.id, lockedMonthKey, 700000);
   await upsertDailyRule(30, 50000, previewMonthKey);
   await upsertDailyRule(30, 50000, lockedMonthKey);
-  await upsertMonthlyRule(1000, 3000000, previewMonthKey);
-  await upsertMonthlyRule(1000, 3000000, lockedMonthKey);
+  await upsertMonthlyRule(2, 3000000, previewMonthKey);
+  await upsertMonthlyRule(2, 3000000, lockedMonthKey);
 
   await createCall({
     operatingMonthId: previewOperatingMonth.id,
@@ -378,18 +368,16 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
     courseId: course.id,
     memo: `${memoPrefix} complete preview`,
     status: "VISIT_COMPLETE",
-    therapist1Id: therapist.id,
-    earcareId: earcare.id
+    therapist1Id: therapist.id
   });
   await createCall({
     operatingMonthId: previewOperatingMonth.id,
     serviceDate: utcDate(previewEndDate),
     roomId: room.id,
     courseId: course.id,
-    memo: `${memoPrefix} complete undistributed earcare`,
+    memo: `${memoPrefix} complete preview second`,
     status: "VISIT_COMPLETE",
-    therapist1Id: therapist.id,
-    earcareId: earcare.id
+    therapist1Id: therapist.id
   });
   await createCall({
     operatingMonthId: previewOperatingMonth.id,
@@ -407,22 +395,12 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
     courseId: course.id,
     memo: `${memoPrefix} locked complete`,
     status: "방문완료",
-    therapist1Id: therapist.id,
-    earcareId: earcare.id
+    therapist1Id: therapist.id
   });
 
   for (const employee of await (prisma as any).employee.findMany({ where: { employeeGroup: "OPERATIONS", isActive: true } })) {
     await seedAttendance("opsAttendance", previewOperatingMonth.id, utcDate(previewStartDate), employee.id, "NORMAL");
     await seedAttendance("opsAttendance", lockedOperatingMonth.id, utcDate(lockedStartDate), employee.id, "NORMAL");
-  }
-  // 출근 입력이 없는 귀케어 직원은 정상근무로 간주되어 그날 귀케어 풀을 나눠 갖는다. 공용 마스터 시드가
-  // 만드는 기본 귀케어 직원까지 모두 상태를 명시해야 "하루는 이 스펙 직원 단독 분배, 하루는 미분배"라는
-  // 시나리오가 기본 직원 수와 무관하게 고정된다.
-  for (const earcareEmployee of await (prisma as any).employee.findMany({ where: { employeeGroup: "EARCARE", isActive: true } })) {
-    const workingStatus = earcareEmployee.id === earcare.id ? "NORMAL" : "OFF";
-    await seedAttendance("earcareAttendance", previewOperatingMonth.id, utcDate(previewStartDate), earcareEmployee.id, workingStatus);
-    await seedAttendance("earcareAttendance", previewOperatingMonth.id, utcDate(previewEndDate), earcareEmployee.id, "OFF");
-    await seedAttendance("earcareAttendance", lockedOperatingMonth.id, utcDate(lockedStartDate), earcareEmployee.id, workingStatus);
   }
 
   return {
@@ -433,7 +411,6 @@ async function seedStoryData(workerIndex: number): Promise<SeededData> {
     lockedStartDate,
     memoPrefix,
     therapistLabel,
-    earcareLabel,
     accounts
   };
 }
@@ -463,12 +440,9 @@ test.describe("Story 5.1 monthly closing preview", () => {
     await expect(page.getByText("운영팀 일일인센")).toBeVisible();
     await expect(previewSummary.getByText("운영팀 월인센")).toBeVisible();
     await expect(previewSummary).toContainText("3,000,000 VND");
-    await expect(previewSummary.getByText("귀케어 지급 합계")).toBeVisible();
-    await expect(previewSummary).toContainText("100,000 VND");
     await expect(page.getByText("전체 지급 합계")).toBeVisible();
     await expect(page.getByRole("heading", { name: "마사지사" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "운영팀" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "귀케어" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "이번 달 계산 기준" })).toBeVisible();
 
     const therapistRow = page.getByRole("row").filter({ hasText: seededData.therapistLabel });
@@ -478,13 +452,8 @@ test.describe("Story 5.1 monthly closing preview", () => {
     // Story 5.2에서 보너스 계산이 들어오며 마사지사 표 설명이 "Story 5.2 대기"에서 합산 문구로 바뀌었다.
     await expect(page.getByText("최종지급액은 월 정산액에 만근수당과 갯수왕 수당을 더한 금액입니다.", { exact: false })).toBeVisible();
 
-    const earcareRow = page.getByRole("row").filter({ hasText: seededData.earcareLabel });
-    await expect(earcareRow).toContainText("1일");
-    await expect(earcareRow).toContainText("100,000 VND");
     await expect(page.getByText(`기간 ${seededData.previewStartDate} ~ ${seededData.previewEndDate} (2일).`)).toBeVisible();
     await expect(page.getByText("마사지사 정산에서 뺀 콜 1건.")).toBeVisible();
-    await expect(page.getByText("귀케어 정상 근무자가 없는 날 1일.")).toBeVisible();
-    await expect(page.getByText("귀케어 금액을 나누지 못한 날 1일.")).toBeVisible();
     await expect(page.getByText("대표 evidence")).toHaveCount(0);
 
     await expect(page.getByRole("button", { name: /마감확정|잠금|재오픈|저장|수정/ })).toHaveCount(0);
@@ -494,7 +463,7 @@ test.describe("Story 5.1 monthly closing preview", () => {
     await login(page, seededData.accounts.settlement, "Story51!settlement");
     await page.goto(`/closing?operatingMonthId=${seededData.previewOperatingMonthId}`);
 
-    await page.getByLabel("운영월").selectOption(seededData.lockedOperatingMonthId);
+    await pickListboxOptionByValue(page.getByLabel("운영월"), seededData.lockedOperatingMonthId);
     await page.getByRole("button", { name: "조회" }).click();
 
     await expect(page).toHaveURL(new RegExp(`operatingMonthId=${seededData.lockedOperatingMonthId}`));

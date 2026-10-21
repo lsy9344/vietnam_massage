@@ -3,9 +3,10 @@ import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login as loginAccount } from "./support/auth";
 import { expect, test, type Page } from "@playwright/test";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 
 
-const story73OpenIssueKey = "calculation:earcare.zero-worker-pool:earcare-zero-worker";
+const story73OpenIssueKey = "calculation:calls.payment:story73-open-issue";
 
 type StoryAccount = {
   accountId: string;
@@ -119,7 +120,7 @@ async function seedOpenTrackingIssue() {
     where: { itemKey: story73OpenIssueKey },
     update: {
       kind: "calculation_comparison",
-      sourceSheet: "귀케어일정산",
+      sourceSheet: "실시간콜입력",
       relatedRequirement: "FR-37",
       relatedStory: "Story 7.2",
       status: "재검증 필요",
@@ -129,7 +130,7 @@ async function seedOpenTrackingIssue() {
     create: {
       itemKey: story73OpenIssueKey,
       kind: "calculation_comparison",
-      sourceSheet: "귀케어일정산",
+      sourceSheet: "실시간콜입력",
       relatedRequirement: "FR-37",
       relatedStory: "Story 7.2",
       status: "재검증 필요",
@@ -286,8 +287,8 @@ test.describe("Story 7.3 migration verification report browser access", () => {
     // 각 이슈 행에도 name="status" 추적 선택이 있어 라벨/이름만으로는 필터를 특정할 수 없다.
     // 필터 form으로 범위를 좁힌다.
     const filterForm = page.locator('form[action="/masters/sheet-mapping"]');
-    await filterForm.locator('select[name="status"]').selectOption("재검증 필요");
-    await filterForm.locator('select[name="kind"]').selectOption("calculation_comparison");
+    await pickListboxOptionByValue(filterForm.locator("#sheet-mapping-filter-status"), "재검증 필요");
+    await pickListboxOptionByValue(filterForm.locator("#sheet-mapping-filter-kind"), "calculation_comparison");
     await page.getByRole("button", { name: "필터 적용" }).click();
 
     await expect(page).toHaveURL(/status=%EC%9E%AC%EA%B2%80%EC%A6%9D\+%ED%95%84%EC%9A%94/);
@@ -298,7 +299,7 @@ test.describe("Story 7.3 migration verification report browser access", () => {
     // 티켓 07: 추적 상태·담당자 메모 저장은 행을 고르면 열리는 이슈 상세 패널에 있다.
     await issueRow.getByRole("button").first().click();
     const issuePanel = page.getByRole("complementary");
-    await expect(issuePanel.getByLabel("추적 상태")).toHaveValue("재검증 필요");
+    await expect(issuePanel.getByLabel("추적 상태")).toContainText("재검증 필요");
     await expect(issuePanel.getByLabel("담당자 메모")).toHaveValue("수정 배포 후 재검증 예정");
     await expect(issuePanel.getByRole("button", { name: "저장" })).toBeVisible();
   });

@@ -17,6 +17,11 @@ model UserAccount {
   isActive       Boolean    @default(true) @map("is_active")
   lockedUntil                                DateTime?                           @map("locked_until")
   failedLoginCount                           Int                                 @default(0) @map("failed_login_count")
+  // 출근 코드 실패 잠금(스펙 D14, M11, 티켓 05). 로그인 잠금과 같은 기준(5회, 15분)이고 칸 모양도 같다.
+  clockInCodeFailedCount                     Int                                 @default(0) @map("clock_in_code_failed_count")
+  clockInCodeLockedUntil                     DateTime?                           @map("clock_in_code_locked_until")
+  // 티켓 02(D29): 발급·초기화가 켜고, 본인 비밀번호 변경이 지운다(M21). 더하기만 하는 칸이라 기본값 false다.
+  passwordChangeRequired                     Boolean                             @default(false) @map("password_change_required")
   createdAt                                  DateTime                            @default(now()) @map("created_at")
   updatedAt                                  DateTime                            @updatedAt @map("updated_at")
   loginAttempts                              LoginAttempt[]
@@ -25,6 +30,11 @@ model UserAccount {
   changedMigrationVerificationIssueHistories MigrationVerificationIssueHistory[]
   therapistDailySettlementPayments TherapistDailySettlementPayment[]
   changedTherapistDailySettlementPaymentHistories TherapistDailySettlementPaymentHistory[]
+  payoutConfirmationEvents PayoutConfirmationEvent[]
+  authoredTherapistNotices TherapistNotice[] @relation("TherapistNoticeAuthor")
+  withdrawnTherapistNotices TherapistNotice[] @relation("TherapistNoticeWithdrawnBy")
+  authoredTherapistInternalMemos TherapistInternalMemo[]
+  resolvedTherapistRequests TherapistRequest[]
 
   @@map("user_accounts")
 }
@@ -49,10 +59,15 @@ model Employee {
   therapistRates         TherapistCourseRate[]
   serviceCallAssignments ServiceCallAssignment[]
   handledDailyExpenses   DailyExpense[]
-  earcareAttendances     EarcareAttendance[]
   opsAttendances         OpsAttendance[]
   therapistAttendances   TherapistAttendance[]
   therapistDailySettlementPayments TherapistDailySettlementPayment[]
+  plannedWorkingDays     PlannedWorkingDay[]
+  payoutConfirmationEvents PayoutConfirmationEvent[]
+  targetedTherapistNotices TherapistNotice[]
+  therapistNoticeRecipients TherapistNoticeRecipient[]
+  therapistInternalMemos TherapistInternalMemo[]
+  therapistRequests      TherapistRequest[]
 
   @@unique([employeeGroup, sortOrder], map: "uq_employees_employee_group_sort_order")
   @@map("employees")
@@ -132,11 +147,11 @@ model OperatingMonth {
   updatedAt          DateTime            @updatedAt @map("updated_at")
   serviceCalls ServiceCall[]
   dailyExpenses DailyExpense[]
-  earcareAttendances EarcareAttendance[]
   opsAttendances OpsAttendance[]
   therapistAttendances TherapistAttendance[]
   therapistDailySettlementPayments TherapistDailySettlementPayment[]
   monthlyClosings MonthlyClosing[]
+  payoutConfirmationEvents PayoutConfirmationEvent[]
 
   @@map("operating_months")
 }
@@ -217,13 +232,15 @@ model Course {
 }
 
 model Customer {
-  id           String        @id @default(cuid())
-  name         String
-  phone        String?
-  memo         String?
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
-  serviceCalls ServiceCall[]
+  id             String        @id @default(cuid())
+  name           String
+  phone          String?
+  memo           String?
+  // 고객 공통 선호·주의사항(F06, 티켓 23). 기존 memo(고객 메모)와는 다른 칸이고, 콜의 비고(note)와도 다르다.
+  preferenceNote String?       @map("preference_note")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  serviceCalls   ServiceCall[]
 
   @@map("customers")
 }
@@ -235,6 +252,8 @@ model ServiceCall {
   serviceDate       DateTime                   @map("service_date") @db.Date
   startTime         String                     @map("start_time")
   actualEntryTime   String?                    @map("actual_entry_time")
+  // 실제 종료(1018 스펙 D1·D2, HH:mm). 있으면 Therapist가 이 콜에 묶이는 끝이고, 없으면 표시 종료가 끝이다.
+  actualEndTime     String?                    @map("actual_end_time")
   roomId            String?                    @map("room_id")
   room              Room?                      @relation(fields: [roomId], references: [id])
   courseId          String                     @map("course_id")
@@ -246,7 +265,16 @@ model ServiceCall {
   discountTypeCode  String?                    @map("discount_type_code")
   paymentMethodCode String?                    @map("payment_method_code")
   note              String?
+  // 이번 콜의 방문별 요청(F06, 티켓 23). note(비고)와는 다른 칸이다.
+  visitRequest      String?                    @map("visit_request")
+  // 예약 경로(BOOKING_CHANNEL 코드)와 메신저의 예약자명(1018 스펙 D1). 둘 다 비어도 된다.
+  bookingChannelCode String?                   @map("booking_channel_code")
+  bookerName        String?                    @map("booker_name")
   confirmationCode  String?                    @map("confirmation_code")
+  requestId         String?                    @unique @map("request_id")
+  // 빠른 예약 일행(스펙 D13, ADR 0007). 일행이 아닌 콜은 둘 다 비어 있다. 순번은 1부터이고 1번이 대표 콜이다.
+  partyId           String?                    @map("party_id")
+  partyPosition     Int?                       @map("party_position")
   createdAt         DateTime                   @default(now()) @map("created_at")
   updatedAt         DateTime                   @updatedAt @map("updated_at")
   assignments       ServiceCallAssignment[]
@@ -256,6 +284,7 @@ model ServiceCall {
   @@index([roomId, serviceDate], map: "idx_service_calls_room_date")
   @@index([status, serviceDate], map: "idx_service_calls_status_date")
   @@index([customerId], map: "idx_service_calls_customer_id")
+  @@index([partyId], map: "idx_service_calls_party_id")
   @@map("service_calls")
 }
 
@@ -311,23 +340,6 @@ model DailyExpense {
   @@map("daily_expenses")
 }
 
-model EarcareAttendance {
-  id               String         @id @default(cuid())
-  operatingMonthId String         @map("operating_month_id")
-  operatingMonth   OperatingMonth @relation(fields: [operatingMonthId], references: [id])
-  attendanceDate    DateTime       @map("attendance_date") @db.Date
-  employeeId        String         @map("employee_id")
-  employee         Employee       @relation(fields: [employeeId], references: [id])
-  statusCode        String         @map("status_code")
-  isActive         Boolean        @default(true) @map("is_active")
-  createdAt        DateTime       @default(now()) @map("created_at")
-  updatedAt        DateTime       @updatedAt @map("updated_at")
-
-  @@unique([operatingMonthId, attendanceDate, employeeId], map: "uq_earcare_attendances_month_date_employee")
-  @@index([employeeId, attendanceDate], map: "idx_earcare_attendances_employee_date")
-  @@map("earcare_attendances")
-}
-
 model OpsAttendance {
   id               String         @id @default(cuid())
   operatingMonthId String         @map("operating_month_id")
@@ -359,7 +371,11 @@ model TherapistAttendance {
   employeeId                 String         @map("employee_id")
   employee                   Employee       @relation(fields: [employeeId], references: [id])
   checkInMinute              Int            @map("check_in_minute")
+  // 출근·퇴근에 찍힌 방식(스펙 D16, M23): 직접, 대리 입력, 정정 승인, 이전 기록. 이 칸이 생기기 전
+  // 기록은 "이전 기록"이다(가정, D16, 20261020120400 마이그레이션 백필). 퇴근이 없으면 퇴근 방식도 비어 있다.
+  checkInMethod              String         @default("이전 기록") @map("check_in_method")
   checkOutMinute             Int?           @map("check_out_minute")
+  checkOutMethod             String?        @map("check_out_method")
   standbyMinutes             Int?           @map("standby_minutes")
   isFullAttendanceRecognized Boolean        @map("is_full_attendance_recognized")
   isActive                   Boolean        @default(true) @map("is_active")
@@ -369,6 +385,24 @@ model TherapistAttendance {
   @@unique([operatingMonthId, attendanceDate, employeeId], map: "uq_therapist_attendances_month_date_employee")
   @@index([employeeId, attendanceDate], map: "idx_therapist_attendances_employee_date")
   @@map("therapist_attendances")
+}
+
+// 근무표: (직원, 날짜) 한 칸의 근무 예정/휴무 계획. 행이 없으면 미입력이다. 운영월과
+// 무관하며(F04), 실제 출퇴근 기록(TherapistAttendance 등)을 만들거나 바꾸지 않는다.
+model PlannedWorkingDay {
+  id         String   @id @default(cuid())
+  employeeId String   @map("employee_id")
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  workDate   DateTime @map("work_date") @db.Date
+  planStatus String   @map("plan_status")
+  // 출근 예정 시각(1018 스펙 D1·D28, HH:mm). 비어 있으면 종일 근무로 본다.
+  plannedStartTime String? @map("planned_start_time")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([employeeId, workDate], map: "uq_planned_working_days_employee_date")
+  @@index([workDate], map: "idx_planned_working_days_work_date")
+  @@map("planned_working_days")
 }
 
 model TherapistDailySettlementPayment {
@@ -413,6 +447,46 @@ model TherapistDailySettlementPaymentHistory {
   @@map("therapist_daily_settlement_payment_histories")
 }
 
+// 지급 확인(ADR 0004, 티켓 30): 두 직군(Therapist·운영팀)의 정산 행 지급 확인을 사건으로 쌓는 공통 저장소.
+// 단위는 (unitType, operatingMonthId, serviceDate?, employeeId)이고, serviceDate는 월 단위(운영팀 월 인센)에서 null이다.
+// 기존 TherapistDailySettlementPayment(History)의 데이터는 금액 없는 confirm/release 사건으로 이 표에 옮겼다
+// (티켓 30 마이그레이션). 옛 표는 과거 기록 보존을 위해 그대로 둔다.
+model PayoutConfirmationEvent {
+  id               String         @id @default(cuid())
+  unitType         String         @map("unit_type")
+  operatingMonthId String         @map("operating_month_id")
+  operatingMonth   OperatingMonth @relation(fields: [operatingMonthId], references: [id])
+  serviceDate      DateTime?      @map("service_date") @db.Date
+  employeeId       String         @map("employee_id")
+  employee         Employee       @relation(fields: [employeeId], references: [id])
+  eventType        String         @map("event_type")
+  amount           Int?
+  reason           String?
+  actorAccountId   String         @map("actor_account_id")
+  actorAccount     UserAccount    @relation(fields: [actorAccountId], references: [id])
+  occurredAt       DateTime       @map("occurred_at")
+  createdAt        DateTime       @default(now()) @map("created_at")
+
+  @@index([unitType, operatingMonthId, serviceDate, employeeId, occurredAt], map: "idx_payout_confirmation_events_unit_occurred")
+  @@index([actorAccountId, occurredAt], map: "idx_payout_confirmation_events_actor_occurred")
+  @@map("payout_confirmation_events")
+}
+
+// 티켓 12: 직원 화면의 Therapist 패널에 쌓는 내부 메모(스펙 D27, M24). 관리자만 읽고 쓰고, 추가만 한다
+// (수정·삭제 없음). 더하기만 하는 새 표(D29), 운영 DB 적용은 사용자 확인 뒤에 한다.
+model TherapistInternalMemo {
+  id              String      @id @default(cuid())
+  employeeId      String      @map("employee_id")
+  employee        Employee    @relation(fields: [employeeId], references: [id])
+  authorAccountId String      @map("author_account_id")
+  authorAccount   UserAccount @relation(fields: [authorAccountId], references: [id])
+  body            String
+  createdAt       DateTime    @default(now()) @map("created_at")
+
+  @@index([employeeId, createdAt], map: "idx_therapist_internal_memos_employee_created_at")
+  @@map("therapist_internal_memos")
+}
+
 model CoursePolicy {
   id                      String   @id @default(cuid())
   courseId                String   @map("course_id")
@@ -420,8 +494,6 @@ model CoursePolicy {
   name                    String
   durationMinutes         Int      @map("duration_minutes")
   basePrice               Int      @map("base_price")
-  opsCallCredit           Int      @map("ops_call_credit")
-  earcarePoolAmount       Int      @map("earcare_pool_amount")
   requiresSecondTherapist Boolean  @default(false) @map("requires_second_therapist")
   tvDisplayName           String   @map("tv_display_name")
   effectiveFromMonth      String   @map("effective_from_month")
@@ -480,4 +552,71 @@ model OpsMonthlyIncentiveRule {
 
   @@index([thresholdCallCount, effectiveFromMonth], map: "idx_ops_monthly_incentive_rules_lookup")
   @@map("ops_monthly_incentive_rules")
+}
+
+// Therapist 공지(스펙 D25, M24, 티켓 10). 관리자가 Therapist 전체나 특정 Therapist 한 명에게 보낸다.
+// 보낸 공지는 고칠 수 없고 내리기만 한다(withdrawnAt). 받는 사람 줄은 TherapistNoticeRecipient에
+// 보낼 때 고정한다 — 더하기만 하는 마이그레이션이다(D29).
+model TherapistNotice {
+  id                   String                     @id @default(cuid())
+  authorAccountId      String                     @map("author_account_id")
+  authorAccount        UserAccount                @relation("TherapistNoticeAuthor", fields: [authorAccountId], references: [id])
+  body                 String
+  // "전체" | "특정"(CONTEXT.md 공지 용어). "특정"일 때만 targetEmployeeId가 있다.
+  targetType           String                     @map("target_type")
+  targetEmployeeId     String?                    @map("target_employee_id")
+  targetEmployee       Employee?                  @relation(fields: [targetEmployeeId], references: [id])
+  sentAt               DateTime                   @default(now()) @map("sent_at")
+  withdrawnAt          DateTime?                   @map("withdrawn_at")
+  withdrawnByAccountId String?                     @map("withdrawn_by_account_id")
+  withdrawnByAccount   UserAccount?               @relation("TherapistNoticeWithdrawnBy", fields: [withdrawnByAccountId], references: [id])
+  createdAt            DateTime                   @default(now()) @map("created_at")
+  recipients           TherapistNoticeRecipient[]
+
+  @@index([sentAt], map: "idx_therapist_notices_sent_at")
+  @@map("therapist_notices")
+}
+
+// 공지 받는 사람 줄: 보낼 때의 활성 Therapist 계정 기준으로 한 번 만들고 바뀌지 않는다.
+// readAt이 비어 있으면 안 읽음이다(스펙 D25).
+model TherapistNoticeRecipient {
+  id         String          @id @default(cuid())
+  noticeId   String          @map("notice_id")
+  notice     TherapistNotice @relation(fields: [noticeId], references: [id])
+  employeeId String          @map("employee_id")
+  employee   Employee        @relation(fields: [employeeId], references: [id])
+  readAt     DateTime?       @map("read_at")
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  @@unique([noticeId, employeeId], map: "uq_therapist_notice_recipients_notice_employee")
+  @@index([employeeId, readAt], map: "idx_therapist_notice_recipients_employee_read")
+  @@map("therapist_notice_recipients")
+}
+
+// 티켓 08: 휴무 신청과 정정 요청을 한 표에 담는다(스펙 D22–D24, M24). 09가 kind="정정"으로 이 표를
+// 그대로 쓴다. "기한 지남"은 저장하지 않고 읽을 때 정한다(status는 대기/승인/거절/취소만 가진다).
+// 더하기만 하는 새 표(D29), 운영 DB 적용은 사용자 확인 뒤에 한다.
+model TherapistRequest {
+  id         String   @id @default(cuid())
+  employeeId String   @map("employee_id")
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  // "휴무" | "소중한날 휴가" | "정정"
+  kind       String
+  targetDate DateTime @map("target_date") @db.Date
+  // 정정 요청만 쓴다(HH:mm). 휴무 신청은 항상 null이다.
+  requestedCheckInTime  String? @map("requested_check_in_time")
+  requestedCheckOutTime String? @map("requested_check_out_time")
+  reason     String?
+  // "대기" | "승인" | "거절" | "취소"
+  status           String    @default("대기")
+  resolutionReason String?   @map("resolution_reason")
+  resolvedByAccountId String? @map("resolved_by_account_id")
+  resolvedByAccount   UserAccount? @relation(fields: [resolvedByAccountId], references: [id])
+  resolvedAt       DateTime? @map("resolved_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([employeeId, targetDate], map: "idx_therapist_requests_employee_target_date")
+  @@index([status, targetDate], map: "idx_therapist_requests_status_target_date")
+  @@map("therapist_requests")
 }

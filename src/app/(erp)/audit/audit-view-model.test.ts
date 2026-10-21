@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  auditActorName,
   auditChangeSummary,
   auditFieldChanges,
   auditReason,
@@ -129,10 +130,8 @@ describe("auditSourcePath", () => {
       auditSourcePath(entry("therapist_attendance", attendance)),
       "/settlements?operatingMonthId=m-2026-10&serviceDate=2026-10-12&employee=e-7"
     );
-    assert.equal(
-      auditSourcePath(entry("earcare_attendance", attendance)),
-      "/settlements/earcare?operatingMonthId=m-2026-10&attendanceDate=2026-10-12&employee=e-7"
-    );
+    // 폐기된 귀케어 출근의 옛 기록은 원본 화면이 없어 링크하지 않는다.
+    assert.equal(auditSourcePath(entry("earcare_attendance", attendance)), null);
     assert.equal(
       auditSourcePath(entry("ops_attendance", attendance)),
       "/settlements/operations?operatingMonthId=m-2026-10&attendanceDate=2026-10-12&employee=e-7"
@@ -182,6 +181,15 @@ describe("auditSourcePath", () => {
     assert.equal(auditSourcePath(entry("monthly_close", null)), "/closing");
   });
 
+  it("opens the day-off/correction approval inbox for a therapist_request entry (티켓 08)", () => {
+    assert.equal(auditSourcePath(entry("therapist_request", { kind: "휴무", status: "승인" })), "/settlements/requests");
+  });
+
+  // R9: 형제 target(therapist_request·therapist_internal_memo)처럼 therapist_notice도 원본 화면으로 열려야 한다.
+  it("opens the notices workspace for a therapist_notice entry (R9)", () => {
+    assert.equal(auditSourcePath(entry("therapist_notice", { targetType: "전체" })), "/settlements/notices");
+  });
+
   it("has no source screen for an unknown target", () => {
     assert.equal(auditSourcePath(entry("missing_story13_target", {})), null);
   });
@@ -202,5 +210,14 @@ describe("auditTargetLabel", () => {
     assert.equal(auditTargetLabel("ko", "service_call"), "콜");
     assert.equal(auditTargetLabel("vi", "monthly_close"), "Chốt tháng");
     assert.equal(auditTargetLabel("ko", "missing_story13_target"), "missing_story13_target");
+  });
+});
+
+describe("auditActorName", () => {
+  it("names the system actor of automatic changes, and otherwise the account's name or its raw id", () => {
+    assert.equal(auditActorName("ko", "system", undefined), "시스템(자동)");
+    assert.equal(auditActorName("vi", "system", undefined), "Hệ thống (tự động)");
+    assert.equal(auditActorName("ko", "acc-1", { name: "카운터" }), "카운터");
+    assert.equal(auditActorName("ko", "legacy-id", undefined), "legacy-id");
   });
 });

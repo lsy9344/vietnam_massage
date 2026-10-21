@@ -60,7 +60,6 @@ test.describe("Story 7.2 migration calculation comparison source guardrails", ()
       "listRoomStatuses",
       "listOpsDailyIncentives",
       "listOpsMonthlyIncentivePreview",
-      "listEarcareDailySettlements",
       "listTherapistDailySettlements",
       "listMonthlyClosingPreview",
       "mismatchReport",
@@ -98,7 +97,6 @@ test.describe("Story 7.2 migration calculation comparison source guardrails", ()
       "serviceCallAssignment",
       "dailyExpense",
       "opsAttendance",
-      "earcareAttendance",
       "opsDailyIncentiveRule",
       "opsMonthlyIncentiveRule",
       "YYYY-MM-DD"

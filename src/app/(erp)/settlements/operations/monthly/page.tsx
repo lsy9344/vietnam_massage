@@ -135,7 +135,7 @@ function SnapshotSummary({ locale, t, closing, currentStatus }: { locale: Locale
         <DetailRow label={t("settlements.opsMonthly.snapshot.monthlyIncentive")} value={vnd(locale, operations.monthlyIncentiveAmount)} />
         <DetailRow
           label={t("settlements.opsMonthly.snapshot.monthlyTotalCalls")}
-          value={`${operations.monthlyOpsCallCredit}${t("settlements.callSuffix")}`}
+          value={`${operations.monthlyOpsCallCount}${t("settlements.callSuffix")}`}
         />
       </dl>
     </section>
@@ -225,6 +225,7 @@ export default async function OperationsMonthlyIncentivePage({
 
   const context = { operatingMonthId: selectedMonth.id, date: null };
   const canOpenLedger = linkToScreen(account.role, "/calls", context) !== null;
+  const canOpenStatement = linkToScreen(account.role, "/settlements/statement", context) !== null;
   const hasBasis = result ? incentiveRuleHasBasis(result.ruleStatus) : false;
   const visibleEvidence = result ? result.callEvidence.slice(0, 50) : [];
 
@@ -261,7 +262,7 @@ export default async function OperationsMonthlyIncentivePage({
                 accent="mint"
                 label={t("settlements.opsMonthly.summary.monthlyTotalCalls")}
                 note={t("settlements.opsMonthly.summary.monthlyTotalCallsBasis", { count: result.sourceCallCount })}
-                value={`${result.monthlyOpsCallCredit}${t("settlements.callSuffix")}`}
+                value={`${result.monthlyOpsCallCount}${t("settlements.callSuffix")}`}
               />
               <SummaryCard
                 accent="peach"
@@ -301,7 +302,7 @@ export default async function OperationsMonthlyIncentivePage({
           </div>
           <ShareSummary locale={locale} result={result} t={t} />
           {result.rows.length > 0 ? (
-            <OpsMonthlyView initialEmployeeId={params[EMPLOYEE_PARAM] ?? null} key={selectedMonth.id} result={result} />
+            <OpsMonthlyView canOpenStatement={canOpenStatement} initialEmployeeId={params[EMPLOYEE_PARAM] ?? null} key={selectedMonth.id} result={result} />
           ) : (
             <SettlementEmptyNotice
               description={t("settlements.opsMonthly.employeeTable.empty.description")}
@@ -323,7 +324,7 @@ export default async function OperationsMonthlyIncentivePage({
                 {visibleEvidence.map((evidence) => (
                   <li key={evidence.serviceCallId}>
                     <EvidenceCallItem
-                      amount={`${evidence.opsCallCredit}${t("settlements.callSuffix")}`}
+                      amount={`1${t("settlements.callSuffix")}`}
                       call={evidence.call}
                       canOpenLedger={canOpenLedger}
                       locale={locale}

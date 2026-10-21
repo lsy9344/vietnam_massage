@@ -25,8 +25,6 @@ function readJson(path) {
   "src/app/(erp)/closing/closing-action-panel.tsx",
   "src/modules/calls/service-call-service.ts",
   "src/modules/calls/service-call-service.test.ts",
-  "src/modules/settlements/earcare-attendance-service.ts",
-  "src/modules/settlements/earcare-attendance-service.test.ts",
   "src/modules/settlements/ops-attendance-service.ts",
   "src/modules/settlements/ops-attendance-service.test.ts",
   "src/app/(erp)/settlements/operations/monthly/page.tsx",
@@ -133,7 +131,6 @@ for (const required of [
 if (calls.includes("month.status === \"잠금\"")) errors.push("service-call-service.ts must not use 잠금-only guards");
 
 for (const path of [
-  "src/modules/settlements/earcare-attendance-service.ts",
   "src/modules/settlements/ops-attendance-service.ts"
 ]) {
   const contents = read(path);
@@ -163,7 +160,6 @@ for (const required of [
 const tests = [
   read("src/modules/closing/monthly-closing-service.test.ts"),
   read("src/modules/calls/service-call-service.test.ts"),
-  read("src/modules/settlements/earcare-attendance-service.test.ts"),
   read("src/modules/settlements/ops-attendance-service.test.ts"),
   read("src/modules/masters/course-service.test.ts")
 ].join("\n");

@@ -5,11 +5,18 @@ import type { Role } from "@/lib/authorization";
 import { t, type MessageKey } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
 import { canAccessRoute } from "@/lib/routes";
+import { SYSTEM_AUDIT_ACTOR_ID } from "@/modules/audit/audit-event";
 
 /**
  * 감사 화면이 서버 페이지와 클라이언트 작업면에서 함께 쓰는 값과 규칙. "use client" 모듈에 두면
  * 서버 페이지에서 값이 아니라 클라이언트 참조가 되므로 여기에 둔다.
  */
+
+/** 처리자 이름: 서버가 한 일(자동 종료)은 시스템, 계정이면 그 이름, 풀 수 없는 옛 기록은 저장된 id 그대로다. */
+export function auditActorName(locale: Locale, actorId: string, actor: { name: string } | undefined) {
+  if (actorId === SYSTEM_AUDIT_ACTOR_ID) return t(locale, "audit.actor.system");
+  return actor?.name ?? actorId;
+}
 
 /** 고른 감사 기록의 id. 주소에 남아 새로고침과 링크로 같은 상세 패널이 열린다. */
 export const AUDIT_LOG_PARAM = "log";
@@ -122,6 +129,8 @@ const masterSources: Record<string, { path: string; item: (entry: AuditEntry) =>
   employee: { path: "/masters/employees", item: (entry) => entry.targetId },
   // 계정은 연결된 직원의 패널에서 다룬다.
   user_account: { path: "/masters/employees", item: (entry) => snapshotText(entry, "employeeId") },
+  // 내부 메모(티켓 12)도 그 Therapist의 패널에서 다룬다.
+  therapist_internal_memo: { path: "/masters/employees", item: (entry) => snapshotText(entry, "employeeId") },
   course: { path: "/masters/courses", item: (entry) => courseItem(entry.targetId) },
   course_policy: { path: "/masters/courses", item: (entry) => courseItem(snapshotText(entry, "courseId")) },
   therapist_course_rate: {
@@ -152,12 +161,16 @@ export function auditSourcePath(entry: AuditEntry): string | null {
       return withQuery("/customers", [["visitCustomer", entry.targetId]]);
     case "therapist_attendance":
       return withQuery("/settlements", [["operatingMonthId", month], ["serviceDate", snapshotText(entry, "attendanceDate")]], [employee]);
-    case "earcare_attendance":
-      return withQuery("/settlements/earcare", [["operatingMonthId", month], ["attendanceDate", snapshotText(entry, "attendanceDate")]], [employee]);
     case "ops_attendance":
       return withQuery("/settlements/operations", [["operatingMonthId", month], ["attendanceDate", snapshotText(entry, "attendanceDate")]], [employee]);
     case "monthly_close":
       return withQuery("/closing", [["operatingMonthId", month]]);
+    // 휴무 신청·정정 요청 승인함(티켓 08)은 운영월·직원 자리가 없는 평평한 목록이다.
+    case "therapist_request":
+      return "/settlements/requests";
+    // 공지(티켓 10, R9)도 운영월·직원 자리가 없는 평평한 목록이다.
+    case "therapist_notice":
+      return "/settlements/notices";
     default: {
       const source = masterSources[entry.targetType];
       return source ? withQuery(source.path, [[MASTER_ITEM_PARAM, source.item(entry)]]) : null;
@@ -177,6 +190,7 @@ const targetLabelKeys: Record<string, MessageKey> = {
   customer: "audit.target.customer",
   daily_expense: "audit.target.dailyExpense",
   therapist_attendance: "audit.target.therapistAttendance",
+  // 귀케어 담당 기능 폐기 후에도 과거 audit_logs 행의 대상 종류 라벨을 보이기 위해 남긴다.
   earcare_attendance: "audit.target.earcareAttendance",
   ops_attendance: "audit.target.opsAttendance",
   monthly_close: "audit.target.monthlyClose",
@@ -190,7 +204,10 @@ const targetLabelKeys: Record<string, MessageKey> = {
   course_policy: "audit.target.coursePolicy",
   therapist_course_rate: "audit.target.therapistCourseRate",
   ops_daily_incentive_rule: "audit.target.opsDailyIncentiveRule",
-  ops_monthly_incentive_rule: "audit.target.opsMonthlyIncentiveRule"
+  ops_monthly_incentive_rule: "audit.target.opsMonthlyIncentiveRule",
+  therapist_internal_memo: "audit.target.therapistInternalMemo",
+  therapist_request: "audit.target.therapistRequest",
+  therapist_notice: "audit.target.therapistNotice"
 };
 
 /** 화면이 이름을 아는 대상 종류. 필터 칸의 제안 목록에 쓴다. */

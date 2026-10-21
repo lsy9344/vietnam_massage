@@ -14,28 +14,151 @@ import {
 
 // 티켓 02 이전의 접두사 규칙(authorization.ts)이 허용하던 화면을 그대로 적는다.
 // 탐색 셸을 바꿔도 역할별 접근 범위는 넓어지지도 좁아지지도 않아야 한다.
-const accessMatrix: Record<string, Record<"administrator" | "counter" | "settlement_manager" | "waiter" | "read_only_viewer", boolean>> = {
-  "/live": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: false },
-  "/rooms": { administrator: true, counter: true, settlement_manager: false, waiter: true, read_only_viewer: true },
-  "/tv": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: true },
-  "/calls": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: false },
+// 티켓 01: therapist 열을 더한다. 운영팀 화면은 모두 거절되어야 한다(스펙 D2, M16).
+const accessMatrix: Record<
+  string,
+  Record<"administrator" | "counter" | "settlement_manager" | "waiter" | "read_only_viewer" | "therapist", boolean>
+> = {
+  "/live": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: false, therapist: false },
+  "/rooms": { administrator: true, counter: true, settlement_manager: false, waiter: true, read_only_viewer: true, therapist: false },
+  "/tv": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: true, therapist: false },
+  // 출근 코드 크게 띄우기(티켓 05, 스펙 D13): 카운터와 관리자만 연다.
+  "/clock-code": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: false, therapist: false },
+  "/calls": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: false, therapist: false },
   // 티켓 03: 고객 화면은 지금 콜 원장에 들어가는 역할에게만 연다(명세 F08 기준 6).
-  "/customers": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: false },
-  "/settlements": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
-  "/settlements/earcare": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
-  "/settlements/operations": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
-  "/settlements/operations/monthly": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
-  "/closing": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false },
-  "/dashboard/today": { administrator: true, counter: true, settlement_manager: true, waiter: false, read_only_viewer: true },
-  "/dashboard/monthly": { administrator: true, counter: true, settlement_manager: true, waiter: false, read_only_viewer: true },
-  "/dashboard/reports": { administrator: true, counter: true, settlement_manager: true, waiter: false, read_only_viewer: true },
-  "/masters/operating-months": { administrator: true, counter: false, settlement_manager: false, waiter: false, read_only_viewer: false },
-  "/masters/rooms": { administrator: true, counter: false, settlement_manager: false, waiter: false, read_only_viewer: false },
-  "/masters/codes": { administrator: true, counter: false, settlement_manager: false, waiter: false, read_only_viewer: false },
-  "/masters/employees": { administrator: true, counter: false, settlement_manager: false, waiter: false, read_only_viewer: false },
-  "/masters/courses": { administrator: true, counter: false, settlement_manager: false, waiter: false, read_only_viewer: false },
-  "/masters/sheet-mapping": { administrator: true, counter: false, settlement_manager: false, waiter: false, read_only_viewer: true },
-  "/audit": { administrator: true, counter: false, settlement_manager: false, waiter: false, read_only_viewer: false }
+  "/customers": { administrator: true, counter: true, settlement_manager: false, waiter: false, read_only_viewer: false, therapist: false },
+  "/settlements": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false, therapist: false },
+  "/settlements/operations": {
+    administrator: true,
+    counter: false,
+    settlement_manager: true,
+    waiter: false,
+    read_only_viewer: false,
+    therapist: false
+  },
+  "/settlements/operations/monthly": {
+    administrator: true,
+    counter: false,
+    settlement_manager: true,
+    waiter: false,
+    read_only_viewer: false,
+    therapist: false
+  },
+  // Therapist 공지(티켓 10): 관리자 전용. settlement_manager는 therapist:manage가 없어 거절된다(M18).
+  "/settlements/notices": {
+    administrator: true,
+    counter: false,
+    settlement_manager: false,
+    waiter: false,
+    read_only_viewer: false,
+    therapist: false
+  },
+  // 휴무 신청·정정 요청 승인함(티켓 08): payout:write라 settlement_manager도 들어간다(M18).
+  "/settlements/requests": {
+    administrator: true,
+    counter: false,
+    settlement_manager: true,
+    waiter: false,
+    read_only_viewer: false,
+    therapist: false
+  },
+  // 관리자 Therapist 현황(티켓 11): 관리자 전용. settlement_manager는 therapist:manage가 없어 거절된다(M18).
+  "/settlements/therapist-overview": {
+    administrator: true,
+    counter: false,
+    settlement_manager: false,
+    waiter: false,
+    read_only_viewer: false,
+    therapist: false
+  },
+  "/closing": { administrator: true, counter: false, settlement_manager: true, waiter: false, read_only_viewer: false, therapist: false },
+  "/dashboard/today": { administrator: true, counter: true, settlement_manager: true, waiter: false, read_only_viewer: true, therapist: false },
+  "/dashboard/monthly": {
+    administrator: true,
+    counter: true,
+    settlement_manager: true,
+    waiter: false,
+    read_only_viewer: true,
+    therapist: false
+  },
+  "/dashboard/reports": {
+    administrator: true,
+    counter: true,
+    settlement_manager: true,
+    waiter: false,
+    read_only_viewer: true,
+    therapist: false
+  },
+  "/masters/operating-months": {
+    administrator: true,
+    counter: false,
+    settlement_manager: false,
+    waiter: false,
+    read_only_viewer: false,
+    therapist: false
+  },
+  "/masters/rooms": { administrator: true, counter: false, settlement_manager: false, waiter: false, read_only_viewer: false, therapist: false },
+  "/masters/codes": { administrator: true, counter: false, settlement_manager: false, waiter: false, read_only_viewer: false, therapist: false },
+  "/masters/employees": {
+    administrator: true,
+    counter: false,
+    settlement_manager: false,
+    waiter: false,
+    read_only_viewer: false,
+    therapist: false
+  },
+  "/masters/courses": {
+    administrator: true,
+    counter: false,
+    settlement_manager: false,
+    waiter: false,
+    read_only_viewer: false,
+    therapist: false
+  },
+  "/masters/sheet-mapping": {
+    administrator: true,
+    counter: false,
+    settlement_manager: false,
+    waiter: false,
+    read_only_viewer: true,
+    therapist: false
+  },
+  "/audit": { administrator: true, counter: false, settlement_manager: false, waiter: false, read_only_viewer: false, therapist: false },
+  // Therapist 전용 화면(티켓 01). therapist만 들어가고, 운영팀 역할은 모두 거절된다.
+  "/therapist": { administrator: false, counter: false, settlement_manager: false, waiter: false, read_only_viewer: false, therapist: true },
+  "/therapist/attendance": {
+    administrator: false,
+    counter: false,
+    settlement_manager: false,
+    waiter: false,
+    read_only_viewer: false,
+    therapist: true
+  },
+  "/therapist/payout": {
+    administrator: false,
+    counter: false,
+    settlement_manager: false,
+    waiter: false,
+    read_only_viewer: false,
+    therapist: true
+  },
+  "/therapist/notices": {
+    administrator: false,
+    counter: false,
+    settlement_manager: false,
+    waiter: false,
+    read_only_viewer: false,
+    therapist: true
+  },
+  // 티켓 02: 탭이 아닌 Therapist 전용 화면(비밀번호 변경)도 다른 운영팀 역할은 모두 거절된다.
+  "/therapist/password": {
+    administrator: false,
+    counter: false,
+    settlement_manager: false,
+    waiter: false,
+    read_only_viewer: false,
+    therapist: true
+  }
 };
 
 describe("route list access", () => {
@@ -47,22 +170,42 @@ describe("route list access", () => {
     }
   });
 
-  it("keeps the role first screens: administrator live, counter ledger, settlement Therapist, waiter and viewer rooms", () => {
+  it("keeps the role first screens: administrator live, counter ledger, settlement Therapist, waiter and viewer rooms, therapist today", () => {
     assert.equal(getRoleLandingPath("administrator"), "/live");
     assert.equal(getRoleLandingPath("counter"), "/calls");
     assert.equal(getRoleLandingPath("settlement_manager"), "/settlements");
     assert.equal(getRoleLandingPath("waiter"), "/rooms");
     assert.equal(getRoleLandingPath("read_only_viewer"), "/rooms");
+    assert.equal(getRoleLandingPath("therapist"), "/therapist");
   });
 
   it("treats the root path as the role's first screen", () => {
     assert.equal(canAccessRoute("waiter", "/"), true);
     assert.equal(canAccessRoute("settlement_manager", "/"), true);
+    assert.equal(canAccessRoute("therapist", "/"), true);
   });
 
   it("denies paths that are not screens in the route list", () => {
     assert.equal(canAccessRoute("administrator", "/masters"), false);
     assert.equal(canAccessRoute("read_only_viewer", "/masters/sheet-mapping/details"), false);
+  });
+});
+
+describe("Therapist 전용 화면(티켓 01)", () => {
+  it("lists the four Therapist tabs in today → attendance → payout → notices order, with no dock (one zone)", () => {
+    assert.deepEqual(getZoneTabs("therapist", "therapist").map((route) => route.path), [
+      "/therapist",
+      "/therapist/attendance",
+      "/therapist/payout",
+      "/therapist/notices"
+    ]);
+    assert.deepEqual(getDockZones("therapist"), []);
+  });
+
+  it("gives no ops role any access to the Therapist zone's tabs", () => {
+    for (const role of ["administrator", "counter", "settlement_manager", "waiter", "read_only_viewer"] as const) {
+      assert.deepEqual(getZoneTabs(role, "therapist"), []);
+    }
   });
 });
 
@@ -108,7 +251,7 @@ describe("moving between zones with the dock", () => {
 
   it("carries the chosen operating month and date into dated zones", () => {
     assert.equal(firstScreenHref("counter", "floor", ledgerContext), "/rooms?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
-    assert.equal(firstScreenHref("administrator", "settlements", ledgerContext), "/settlements?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
+    assert.equal(firstScreenHref("administrator", "ledger", ledgerContext), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
     assert.equal(firstScreenHref("counter", "reports", ledgerContext), "/dashboard/today?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
   });
 
@@ -116,9 +259,9 @@ describe("moving between zones with the dock", () => {
     assert.equal(firstScreenHref("settlement_manager", "closing", ledgerContext), "/closing?operatingMonthId=m-2026-10");
   });
 
-  it("reads the attendance date of the earcare and operations screens as the date to carry", () => {
-    const earcareContext = readScreenContext(new URLSearchParams("operatingMonthId=m-2026-10&attendanceDate=2026-10-12"));
-    assert.equal(firstScreenHref("administrator", "ledger", earcareContext), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-12");
+  it("reads the attendance date of the operations screens as the date to carry", () => {
+    const opsContext = readScreenContext(new URLSearchParams("operatingMonthId=m-2026-10&attendanceDate=2026-10-12"));
+    assert.equal(firstScreenHref("administrator", "ledger", opsContext), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-12");
   });
 
   it("puts the ledger tab first in the ledger zone, dropping the ledger's own query state", () => {
@@ -149,10 +292,13 @@ describe("zone tabs", () => {
 
   it("lists the zone's screens the role can enter, in workflow order", () => {
     assert.deepEqual(tabPaths("administrator", "settlements"), [
+      "/settlements/schedule",
       "/settlements",
-      "/settlements/earcare",
       "/settlements/operations",
-      "/settlements/operations/monthly"
+      "/settlements/operations/monthly",
+      "/settlements/notices",
+      "/settlements/requests",
+      "/settlements/therapist-overview"
     ]);
     assert.deepEqual(tabPaths("administrator", "settings"), [
       "/masters/operating-months",
@@ -185,11 +331,14 @@ describe("zone menu in the dock", () => {
   const at = (path: string, query = "") => ({ path, params: new URLSearchParams(query) });
 
   it("lists the zone's screens the role can enter with the month and date, marking the screen you are on", () => {
-    assert.deepEqual(getZoneMenu("administrator", "settlements", context, at("/settlements/earcare")), [
+    assert.deepEqual(getZoneMenu("administrator", "settlements", context, at("/settlements/operations")), [
+      { labelKey: "shell.tab.schedule", href: "/settlements/schedule", current: false },
       { labelKey: "shell.tab.therapist", href: "/settlements?operatingMonthId=m-2026-10&serviceDate=2026-10-14", current: false },
-      { labelKey: "shell.tab.earcare", href: "/settlements/earcare?operatingMonthId=m-2026-10&attendanceDate=2026-10-14", current: true },
-      { labelKey: "shell.tab.opsDaily", href: "/settlements/operations?operatingMonthId=m-2026-10&attendanceDate=2026-10-14", current: false },
-      { labelKey: "shell.tab.opsMonthly", href: "/settlements/operations/monthly?operatingMonthId=m-2026-10", current: false }
+      { labelKey: "shell.tab.opsDaily", href: "/settlements/operations?operatingMonthId=m-2026-10&attendanceDate=2026-10-14", current: true },
+      { labelKey: "shell.tab.opsMonthly", href: "/settlements/operations/monthly?operatingMonthId=m-2026-10", current: false },
+      { labelKey: "shell.tab.therapistNotices", href: "/settlements/notices", current: false },
+      { labelKey: "shell.tab.therapistRequests", href: "/settlements/requests", current: false },
+      { labelKey: "shell.tab.therapistOverview", href: "/settlements/therapist-overview?operatingMonthId=m-2026-10", current: false }
     ]);
   });
 
@@ -217,7 +366,7 @@ describe("links between screens", () => {
 
   it("links to a screen with the month and date only when the role can enter it", () => {
     assert.equal(linkToScreen("counter", "/calls", context), "/calls?operatingMonthId=m-2026-10&serviceDate=2026-10-14");
-    assert.equal(linkToScreen("administrator", "/settlements/earcare", context), "/settlements/earcare?operatingMonthId=m-2026-10&attendanceDate=2026-10-14");
+    assert.equal(linkToScreen("administrator", "/settlements/operations", context), "/settlements/operations?operatingMonthId=m-2026-10&attendanceDate=2026-10-14");
   });
 
   it("gives no link to roles that cannot enter the screen", () => {

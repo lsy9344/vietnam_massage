@@ -24,7 +24,6 @@ Owns monthly close and payout snapshots.
 - It reuses `listTherapistDailySettlements()` for therapist monthly call and payout totals.
 - It reuses `listOpsDailyIncentives()` for operating team daily incentives.
 - It reuses `listOpsMonthlyIncentivePreview()` for operating team monthly incentive threshold, team split, employee rows, call evidence, and warning messages.
-- It reuses `listEarcareDailySettlements()` for earcare pool, distributed amount, undistributed amount, eligible day count, and normal-staff-zero warnings.
 - Row identity and downstream identifiers stay on `Employee.id`; `staffCode` and names are display evidence only.
 - `draft_current` means 작성중/검토중 current preview. `closed_current` means 마감확정/잠금 current preview, not a persisted closing snapshot.
 - Story 5.2 applies therapist bonus calculations in the preview DTO:
@@ -42,7 +41,7 @@ Owns monthly close and payout snapshots.
 - `startMonthlyCloseReview()` owns the `작성중 -> 검토중` transition for the closing workflow and records `operating_month.status_changed`.
 - `confirmMonthlyClose()` owns the `검토중 -> 마감확정` transition, calls `listMonthlyClosingPreview()` inside the transaction boundary, creates the `MonthlyClosing` snapshot, and records `monthly_close.confirmed`.
 - `getMonthlyClosingSnapshot()` returns the stored `snapshotJson`; it must not call the preview service and present recalculated current values as historical values.
-- The snapshot normalizes preview data into a confirmation DTO with month key/date range/status at confirmation, therapist rows, operations rows, earcare rows, totals, warning counts, evidence, and source basis.
+- The snapshot normalizes preview data into a confirmation DTO with month key/date range/status at confirmation, therapist rows, operations rows, totals, warning counts, evidence, and source basis.
 - Snapshot rows preserve stable identifiers (`Employee.id`, `staffCode`, `Course.code` where present), display labels, ISO dates/date-times, warning/evidence strings, and VND number amounts as plain JSON.
 - Confirmation uses a transaction across conditional `OperatingMonth.updateMany`, `MonthlyClosing.create`, and audit logging. Reconfirmation after reopen creates the next `closeVersion`; same-version races fail through the DB unique constraint.
 - `monthly_close.confirmed` uses `targetType: "monthly_close"`; operating-month review status changes use `targetType: "operating_month"`.
@@ -53,7 +52,7 @@ Owns monthly close and payout snapshots.
 
 `/closing` must not submit `confirmMonthlyCloseAction()` from the first `마감 확정` click. For `검토중` months with a ready preview, the first click opens a shadcn/Radix `AlertDialog`; only the second dialog action submits the existing Server Action with the same `operatingMonthId`.
 
-- The dialog summary is read-only preview DTO display: month key/date range/status, grand payout total, therapist payout/count, operations payout/count with daily/month incentive amounts, earcare payout/count, and warning count.
+- The dialog summary is read-only preview DTO display: month key/date range/status, grand payout total, therapist payout/count, operations payout/count with daily/month incentive amounts, and warning count.
 - The UI must not recalculate monthly closing payout totals. It reads `listMonthlyClosingPreview()` output passed from `/closing/page.tsx`.
 - The dialog must expose `role="alertdialog"` semantics with `AlertDialogTitle` and `AlertDialogDescription`; E2E coverage asserts `getByRole("alertdialog")`.
 - Initial focus goes to the safe `취소` control, not the destructive confirmation action. `Esc` and cancel close the dialog without status, snapshot, or audit side effects.
@@ -65,7 +64,7 @@ Owns monthly close and payout snapshots.
 `lockMonthlyClose()` owns the `마감확정 -> 잠금` transition. It does not create or overwrite a `MonthlyClosing` snapshot; it requires the existing snapshot row and records `monthly_close.locked` with `targetType: "monthly_close"`, `lockedAt`, `lockedByAccountId`, and operating-month before/after state as plain JSON.
 
 - Only `마감확정` can be locked. `작성중` and `검토중` return `MONTHLY_CLOSE_NOT_CONFIRMED`; duplicate `잠금` returns `MONTHLY_CLOSE_ALREADY_LOCKED` without a new audit event.
-- `마감확정` and `잠금` are both read-only states for payout-impacting writes. The shared `month-lock-guard` helpers define this rule for calls, daily expenses, earcare attendance, ops attendance, course policies, therapist rates, and ops incentive policy ranges.
+- `마감확정` and `잠금` are both read-only states for payout-impacting writes. The shared `month-lock-guard` helpers define this rule for calls, daily expenses, ops attendance, course policies, therapist rates, and ops incentive policy ranges.
 - `/closing` actions call `requirePermission("closing:write")` and delegate transition/audit work to the closing domain service. UI components only render forms and status copy.
 - `getMonthlyClosingSnapshot()` remains the historical source for closed or locked months and must return stored `snapshotJson`. Preview/current recalculation is labeled separately as `현재 기준 미리보기`.
 - Monthly payout views such as `/settlements/operations/monthly` must show the persisted snapshot in a distinct `확정 스냅샷` section for `마감확정` or `잠금` months before showing any `현재 기준 미리보기` recalculation.
@@ -73,14 +72,24 @@ Owns monthly close and payout snapshots.
 
 ## Story 5.5 Administrator Reopen
 
-`reopenMonthlyClose()` owns the `잠금 -> 검토중` transition. It requires an administrator-only `closing:reopen` permission at the Server Action boundary and a non-empty trimmed reason of at least five characters. `settlement_manager` keeps `closing:write` for review/confirm/lock but cannot reopen.
+`reopenMonthlyClose()` owns the `마감확정 -> 검토중` and `잠금 -> 검토중` transitions (ticket 35). It requires an administrator-only `closing:reopen` permission at the Server Action boundary and a non-empty trimmed reason of at least five characters. `settlement_manager` keeps `closing:write` for review/confirm/lock but cannot reopen.
 
-- Reopen is allowed only from `잠금`. `작성중`, `검토중`, and `마감확정` return `INVALID_MONTHLY_CLOSE_REOPEN_TRANSITION` without changing the operating month, snapshot metadata, or audit logs.
+- Reopen is allowed from `마감확정` or `잠금`. `작성중` and `검토중` return `INVALID_MONTHLY_CLOSE_REOPEN_TRANSITION` without changing the operating month, snapshot metadata, or audit logs.
 - The latest `MonthlyClosing` row is found by `operatingMonthId` ordered by `closeVersion desc`. The snapshot JSON is never overwritten. Optional reopen metadata (`reopenedAt`, `reopenedByAccountId`, `reopenReason`) is written to the latest row so the prior snapshot is distinguishable as historical.
 - `monthly_close.reopened` uses `targetType: "monthly_close"` and `targetId` equal to the latest snapshot id. The audit `afterValue` includes operating month id/monthKey, status `검토중`, reason, reopenedAt, reopenedByAccountId, snapshot id, and closeVersion as plain JSON.
 - After reopen, `검토중` is not a payout lock state. Payout-impacting writes are allowed or blocked only by each domain service boundary and must record their own domain audit events.
 - `/closing` labels the prior snapshot as `이전 확정 스냅샷` for reopened `검토중` months and keeps the current recalculation under `현재 기준 미리보기`.
 - Future dashboard/KPI readers must treat versioned snapshots the same way: `마감확정`/`잠금` reads use the latest saved snapshot, while reopened `검토중` months show current preview as the editable truth and prior snapshots only as historical reference.
+
+## Ticket 33 Pre-Close Checklist
+
+`monthly-closing-checklist-service.ts` (`listMonthlyClosingChecklist()`) is the F07/ADR 0002 pre-close checklist, separate from the preview service above. `confirmMonthlyClose()` recomputes it inside the confirmation transaction and rejects with `MONTHLY_CLOSE_CALCULATION_ERRORS_PENDING` or `MONTHLY_CLOSE_PAYOUT_RECONFIRMATION_PENDING` when either group is non-empty. Existing preview warnings (zero-VND policy, missing full-attendance source, missing ops policy, etc.) stay non-blocking.
+
+- `calculationErrorCalls`: operating-month `방문완료` calls whose `calculationStatus` is `course_policy_missing`, `therapist_rate_missing`, or `second_therapist_required`. Non-completed calls with the same calculation issue (e.g. a pre-paid reservation) are excluded; only completed calls count here.
+- `payoutReconfirmationUnits`: units across all three payout confirmation unit types (`THERAPIST_DAILY`, `OPS_DAILY`, `OPS_MONTHLY`) whose `payoutConfirmation.requiresReconfirmation` is true. `THERAPIST_DAILY` reuses the new `listTherapistDailyPayoutConfirmationsForMonth()` (mirrors the ops-daily "ForMonth" helper added in ticket 31); `OPS_MONTHLY` reuses `listOpsMonthlyIncentivePreview()`'s rows directly since that unit is already month-wide.
+- `pendingCloseCalls`: operating-month `예약`/`사용중`/`청소중` calls. This ticket only lists them; they do not block confirmation and call state is never touched. Ticket 34 adds the confirmed-call-id-list + reason requirement and ADR 0005's exception-close path on top of this list.
+- `financials`: reuses `getDailyCallLedgerSummary()` per day for payment-method totals, expense total, and net sales (summed across the month), plus one `includeMonthTill: true` call for the month-wide cash/bank balance (ADR 0002 — `till.month` does not depend on which date is queried, so one call is enough).
+- The checklist call summary shape (`serviceCallId, operatingMonthId, serviceDate, startTime, courseCode, therapistNames, status`) matches `SettlementEvidenceCallDto` plus `calculationStatus`, so `/closing`'s checklist section reuses the existing `EvidenceCallItem`/`EvidenceCallList` components unchanged: administrators get a ledger link, `settlement_manager` gets the same inline summary with no new call-write permission or ledger route.
 
 ## Downstream
 
@@ -92,3 +101,7 @@ Owns monthly close and payout snapshots.
 - daily attendance entry
 - room status
 - service-call UI state
+
+## Monthly Statements
+
+`monthly-statement-service.ts` composes settlement calculations and this module's closing snapshots. It belongs here to preserve settlements → closing dependency direction. The settlement statement route consumes it for both employee groups; see `../settlements/README.md` for payout-event handoff.

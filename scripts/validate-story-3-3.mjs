@@ -70,6 +70,7 @@ for (const forbidden of [
   "DailyExpensePanel",
   "autosaveServiceCallRow",
   "saveBasicServiceCallRow",
+  "createServiceCallRow",
   "createDailyExpense",
   "updateDailyExpense",
   "deactivateDailyExpense"
@@ -129,7 +130,6 @@ for (const required of [
   "status.course.tvDisplayName",
   "status.therapist1",
   "status.therapist2",
-  "status.earcare",
   "roomCard.guidance.empty",
   "status-attention",
   "data-testid=\"room-status-card\""

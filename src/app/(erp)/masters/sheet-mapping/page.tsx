@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { StatusBadge } from "@/components/domain/status-badge";
 import { Button } from "@/components/ui/button";
-import { inputFieldClassName } from "@/components/ui/input-field";
+import { ListboxSelect } from "@/components/ui/listbox-select";
 import { StatusIndicator, type StatusTone } from "@/components/ui/status-indicator";
 import { SummaryCard, SummaryCards } from "@/components/ui/summary-card";
 import { Cell, HeadCell, MasterTable } from "@/app/(erp)/masters/master-parts";
@@ -100,14 +100,13 @@ function FilterSelect({
       <label className="text-sm font-semibold text-foreground" htmlFor={id}>
         {label}
       </label>
-      <select className={inputFieldClassName({ className: "min-w-36" })} defaultValue={value ?? ""} id={id} name={name}>
-        <option value="">{allLabel}</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      <ListboxSelect
+        className="min-w-36"
+        defaultValue={value ?? ""}
+        id={id}
+        name={name}
+        options={[{ label: allLabel, value: "" }, ...options]}
+      />
     </div>
   );
 }

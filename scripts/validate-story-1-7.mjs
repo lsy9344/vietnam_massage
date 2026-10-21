@@ -71,19 +71,15 @@ for (const required of [
 const schema = read("src/modules/masters/employee-schema.ts");
 for (const required of [
   "OPERATIONS",
-  "EARCARE",
   "THERAPIST",
   "운영팀",
-  "귀케어팀",
   "마사지사",
   "OPS-LEAD-001",
   "OPS-COUNTER-DAY-001",
-  "EAR-001",
   "THR-050",
   "22000000",
   "12000000",
   "9000000",
-  "5000000",
   "createEmployeeSchema",
   "updateEmployeeProfileSchema",
   "deactivateEmployeeSchema",
@@ -186,7 +182,6 @@ for (const required of [
   "EmployeeManager",
   "masters.employees.title",
   "masters.employees.group.OPERATIONS",
-  "masters.employees.group.EARCARE",
   "masters.employees.group.THERAPIST",
   "masters.employees.employeeId",
   "masters.employees.field.staffCode",
@@ -203,7 +198,7 @@ for (const required of [
     errors.push(`employees page missing ${required}`);
   }
 }
-for (const ko of ["직원", "운영팀", "귀케어팀", "마사지사", "직원 ID", "주/야간", "기본급", "연결 계정", "비활성 처리"]) {
+for (const ko of ["직원", "운영팀", "마사지사", "직원 ID", "주/야간", "기본급", "연결 계정", "비활성 처리"]) {
   if (!koMessages17.includes(ko)) {
     errors.push(`messages/ko.ts missing employees string: ${ko}`);
   }
@@ -223,7 +218,7 @@ if (routes.includes("disabled")) {
 
 const unitTest = read("src/modules/masters/employee-service.test.ts");
 for (const required of [
-  "5 operations, 4 earcare, and 50 therapist",
+  "5 operations and 50 therapist",
   "idempotently",
   "stable staffCode",
   "display name changes",
@@ -252,7 +247,6 @@ for (const required of [
   "/masters/employees",
   "직원",
   "운영팀",
-  "귀케어팀",
   "마사지사",
   "비활성 처리",
   "user_account.linked_to_employee",
@@ -279,7 +273,7 @@ for (const required of ["Employee", "UserAccount", "employeeGroup", "staffCode",
 }
 
 const projectContext = read("_bmad-output/project-context.md");
-for (const required of ["Employee", "UserAccount", "OPERATIONS", "EARCARE", "THERAPIST", "staffCode", "employee.created", "user_account.linked_to_employee"]) {
+for (const required of ["Employee", "UserAccount", "OPERATIONS", "THERAPIST", "staffCode", "employee.created", "user_account.linked_to_employee"]) {
   if (!projectContext.includes(required)) {
     errors.push(`project-context.md missing employee/account fact: ${required}`);
   }

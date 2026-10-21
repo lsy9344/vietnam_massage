@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { displayEndInstantsForDate } from "@/modules/calls/service-call-service";
+import { roomFloorFactsForDate } from "@/modules/calls/service-call-service";
 import { listRoomStatuses } from "@/modules/rooms/room-status-service";
 import type { RoomStatusDto } from "@/modules/rooms/dtos";
 
@@ -65,8 +65,7 @@ function createMemoryPrisma() {
     ]
   ]);
   const employees = new Map<string, any>([
-    ["story31-therapist", { id: "story31-therapist", displayName: "E2E31 마사지사", staffCode: "E2E31-THR-001" }],
-    ["story31-earcare", { id: "story31-earcare", displayName: "E2E31 귀케어", staffCode: "E2E31-EAR-001" }]
+    ["story31-therapist", { id: "story31-therapist", displayName: "E2E31 마사지사", staffCode: "E2E31-THR-001" }]
   ]);
   const serviceCalls = new Map<string, any>();
   const assignments = new Map<string, any>();
@@ -180,7 +179,7 @@ function createMemoryPrisma() {
     });
   }
 
-  function addAssignment(serviceCallId: string, assignmentRole: "THERAPIST_1" | "THERAPIST_2" | "EARCARE", employeeId: string) {
+  function addAssignment(serviceCallId: string, assignmentRole: "THERAPIST_1" | "THERAPIST_2", employeeId: string) {
     assignments.set(`${serviceCallId}-${assignmentRole}`, {
       id: `${serviceCallId}-${assignmentRole}`,
       serviceCallId,
@@ -210,7 +209,6 @@ function createMemoryPrisma() {
   });
   addCall({ id: "story31-room02-cross-midnight", roomId: "story31-room-02", status: "사용중", startTime: "23:30", courseId: "story31-course-b" });
   addAssignment("story31-room02-cross-midnight", "THERAPIST_1", "story31-therapist");
-  addAssignment("story31-room02-cross-midnight", "EARCARE", "story31-earcare");
   addCall({ id: "story31-room03-elapsed", roomId: "story31-room-03", status: "IN_USE", startTime: "11:00", courseId: "story31-course-a" });
   addCall({ id: "story31-room04-cleaning", roomId: "story31-room-04", status: "CLEANING", startTime: "12:00", courseId: "story31-course-a" });
   addCall({ id: "story31-room05-complete-excluded", roomId: "story31-room-05", status: "VISIT_COMPLETE", startTime: "12:00", courseId: "story31-course-a" });
@@ -237,7 +235,7 @@ test.describe("Story 3.1 room status DTO service", () => {
         prismaClient: client
       })
     );
-    const displayEnds = await displayEndInstantsForDate({
+    const { displayEnds } = await roomFloorFactsForDate({
       operatingMonthId,
       serviceDate,
       prismaClient: client
@@ -265,7 +263,6 @@ test.describe("Story 3.1 room status DTO service", () => {
     });
     expect(statuses[1].remainingMinutes).toBeGreaterThanOrEqual(0);
     expect(statuses[1].therapist1?.staffCode).toBe("E2E31-THR-001");
-    expect(statuses[1].earcare?.displayName).toBe("E2E31 귀케어");
 
     expect(statuses[2]).toMatchObject({
       displayStatus: "종료확인",

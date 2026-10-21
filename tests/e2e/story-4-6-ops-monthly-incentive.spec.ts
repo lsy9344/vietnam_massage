@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
 import { argon2idOptions, login } from "./support/auth";
+import { employeeRow, openEmployeePanel } from "./support/settlement";
+import { pickListboxOptionByValue } from "./support/listbox-select";
 
 
 type SeededData = {
@@ -48,14 +50,12 @@ async function seedAuthAccount(input: { accountId: string; password: string; rol
   });
 }
 
-async function upsertCoursePolicy(courseId: string, effectiveFromMonth: string, name: string, opsCallCredit: number) {
+async function upsertCoursePolicy(courseId: string, effectiveFromMonth: string, name: string) {
   const existing = await (prisma as any).coursePolicy.findFirst({ where: { courseId, effectiveFromMonth } });
   const data = {
     name,
     durationMinutes: 60,
     basePrice: 1500000,
-    opsCallCredit,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: false,
     tvDisplayName: name,
     effectiveToMonth: null,
@@ -99,6 +99,8 @@ async function cleanupStoryData(operatingMonthIds: string[]) {
     await (prisma as any).serviceCallStatusHistory.deleteMany({ where: { serviceCallId: { in: callIds } } });
     await (prisma as any).serviceCall.deleteMany({ where: { id: { in: callIds } } });
   }
+  // 지급 확인(ADR 0004, 티켓 31)은 운영월이 고정 monthKey로 upsert되므로, 재실행 때 이전 사건이 남지 않게 함께 정리한다.
+  await (prisma as any).payoutConfirmationEvent.deleteMany({ where: { operatingMonthId: { in: operatingMonthIds } } });
 }
 
 async function createCall(input: {
@@ -180,31 +182,35 @@ async function seedStoryData(): Promise<SeededData> {
     create: { value: "17:00", sortOrder: 94601, isActive: true }
   });
   const course = await (prisma as any).course.upsert({ where: { code: "A" }, update: { isActive: true }, create: { code: "A", isActive: true } });
-  await upsertCoursePolicy(course.id, "2036-07", "Story46 A", 1100);
-  await upsertCoursePolicy(course.id, "2036-08", "Story46 A locked", 1100);
-  await upsertCoursePolicy(course.id, "2036-09", "Story46 A below threshold", 900);
-  await upsertCoursePolicy(course.id, "1999-02", "Story46 A missing monthly policy", 1100);
+  await upsertCoursePolicy(course.id, "2036-07", "Story46 A");
+  await upsertCoursePolicy(course.id, "2036-08", "Story46 A locked");
+  await upsertCoursePolicy(course.id, "2036-09", "Story46 A below threshold");
+  await upsertCoursePolicy(course.id, "1999-02", "Story46 A missing monthly policy");
   await upsertRate(therapist.id, course.id, "2036-07", 700000);
   await upsertRate(therapist.id, course.id, "2036-08", 700000);
   await upsertRate(therapist.id, course.id, "2036-09", 700000);
   await upsertRate(therapist.id, course.id, "1999-02", 700000);
-  await upsertMonthlyRule(1000, 3000000, "2036-07");
-  await upsertMonthlyRule(1100, 5000000, "2036-07");
-  await upsertMonthlyRule(1000, 3000000, "2036-08");
-  await upsertMonthlyRule(1100, 5000000, "2036-08");
+  // 운영팀 월 인센은 그달 방문완료 콜 수를 그대로 threshold와 비교한다.
+  await upsertMonthlyRule(2, 3000000, "2036-07");
+  await upsertMonthlyRule(3, 5000000, "2036-07");
+  await upsertMonthlyRule(2, 3000000, "2036-08");
+  await upsertMonthlyRule(3, 5000000, "2036-08");
   // 최저 구간 미달(2036-09) 시나리오도 규칙이 존재해야 "정책 없음"이 아니라 "최저 구간 미달"이 뜬다.
-  await upsertMonthlyRule(1000, 3000000, "2036-09");
-  await upsertMonthlyRule(1100, 5000000, "2036-09");
+  await upsertMonthlyRule(2, 3000000, "2036-09");
+  await upsertMonthlyRule(3, 5000000, "2036-09");
 
-  await createCall({
-    operatingMonthId: writableOperatingMonth.id,
-    serviceDate: new Date("2036-07-10T00:00:00.000Z"),
-    roomId: room.id,
-    courseId: course.id,
-    memo: "Story 4.6 complete writable",
-    status: "VISIT_COMPLETE",
-    therapist1Id: therapist.id
-  });
+  // 최상위 구간(3콜 이상)에 닿으려면 그달 방문완료 콜이 실제로 3건 있어야 한다.
+  for (const [index, serviceDate] of ["2036-07-10", "2036-07-12", "2036-07-13"].entries()) {
+    await createCall({
+      operatingMonthId: writableOperatingMonth.id,
+      serviceDate: new Date(`${serviceDate}T00:00:00.000Z`),
+      roomId: room.id,
+      courseId: course.id,
+      memo: `Story 4.6 complete writable ${index}`,
+      status: "VISIT_COMPLETE",
+      therapist1Id: therapist.id
+    });
+  }
   await createCall({
     operatingMonthId: writableOperatingMonth.id,
     serviceDate: new Date("2036-07-11T00:00:00.000Z"),
@@ -269,7 +275,7 @@ test.describe("Story 4.6 operations monthly incentive", () => {
   test("settlement manager previews monthly total, threshold, team split, employee distribution, and evidence", async ({ page }) => {
     await login(page, "story46_settlement", "Story46!settlement");
     await page.goto(`/settlements/operations/monthly?operatingMonthId=${seededData.missingPolicyOperatingMonthId}`);
-    await page.getByLabel("운영월").selectOption(seededData.writableOperatingMonthId);
+    await pickListboxOptionByValue(page.getByLabel("운영월"), seededData.writableOperatingMonthId);
     // 직원 이름도 버튼이라("조회 전용" 직원 등) 조회 버튼은 이름이 정확히 같은 것으로 고른다.
     await page.getByRole("button", { name: "조회", exact: true }).click();
 
@@ -279,7 +285,7 @@ test.describe("Story 4.6 operations monthly incentive", () => {
     // 같은 문구가 요약 카드와 직원 패널 양쪽에 나오므로 요약 카드 목록으로 좁힌다.
     const summary = page.getByLabel("운영팀 월 인센 요약");
     await expect(summary.getByText("월 총콜")).toBeVisible();
-    await expect(summary.getByText("1100콜 이상")).toBeVisible();
+    await expect(summary.getByText("3콜 이상")).toBeVisible();
     await expect(summary.getByText("5,000,000 VND").first()).toBeVisible();
     await expect(page.getByText("분배율 30%").first()).toBeVisible();
     await expect(page.getByText("분배율 35%")).toHaveCount(2);
@@ -291,17 +297,45 @@ test.describe("Story 4.6 operations monthly incentive", () => {
     await expect(page.getByText("월 총콜 산출 근거").first()).toBeVisible();
   });
 
+  test("settlement manager can confirm payout, reconfirm, and release with a reason, reviewing actor history", async ({ page }) => {
+    await login(page, "story46_settlement", "Story46!settlement");
+    await page.goto(`/settlements/operations/monthly?operatingMonthId=${seededData.writableOperatingMonthId}`);
+
+    // 지급 확인(ADR 0004, 티켓 30·31)은 직원 패널에서 한다. 월 단위라 날짜가 없다. 표의 행에는 확인 상태만 보인다.
+    const leadPanel = await openEmployeePanel(page, "E2E46 팀장");
+    await expect(leadPanel).toContainText("미확인");
+    await leadPanel.getByRole("button", { name: "지급 확인" }).click();
+
+    await expect(leadPanel).toContainText("확인됨");
+    await expect(leadPanel).toContainText("확인 이력 1건");
+    await expect(leadPanel).toContainText("처리자: story46_settlement / E2E46 정산담당");
+    await expect(employeeRow(page, "E2E46 팀장")).toContainText("확인됨");
+
+    // 재확인은 사유가 필수다.
+    await leadPanel.getByLabel("사유").first().fill("정책 정정으로 다시 확인");
+    await leadPanel.getByRole("button", { name: "재확인" }).click();
+    await expect(leadPanel).toContainText("확인 이력 2건");
+    await expect(leadPanel).toContainText("정책 정정으로 다시 확인");
+
+    // 해제도 사유가 필수고, 해제 뒤에는 미확인으로 돌아간다.
+    await leadPanel.getByLabel("사유").last().fill("정산 오류로 확인 해제");
+    await leadPanel.getByRole("button", { name: "확인 해제" }).click();
+    await expect(leadPanel).toContainText("미확인");
+    await expect(leadPanel).toContainText("확인 이력 3건");
+    await expect(employeeRow(page, "E2E46 팀장")).toContainText("미확인");
+  });
+
   test("shows below-threshold warning and zero monthly incentive", async ({ page }) => {
     await login(page, "story46_settlement", "Story46!settlement");
     await page.goto(`/settlements/operations/monthly?operatingMonthId=${seededData.belowThresholdOperatingMonthId}`);
 
     await expect(page.getByText("최저 구간 미달").first()).toBeVisible();
-    await expect(page.getByText("900콜").first()).toBeVisible();
+    await expect(page.getByText("1콜").first()).toBeVisible();
     // 기준 미달의 0은 정책이 정한 결과라 근거 없음이 아니라 0이다. 라벨과 값은 요약 카드의 다른 칸이다.
     await expect(
       page.getByLabel("운영팀 월 인센 요약").locator("div", { has: page.getByText("전체 월인센", { exact: true }) })
     ).toContainText("0 VND");
-    await expect(page.getByText("1000콜 미만으로 운영팀 월 인센이 없습니다.").first()).toBeVisible();
+    await expect(page.getByText("2콜 미만으로 운영팀 월 인센이 없습니다.").first()).toBeVisible();
   });
 
   test("shows missing monthly policy warning without assuming zero silently", async ({ page }) => {

@@ -2,9 +2,19 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import {
   completedServiceCallCalculationsFromRows,
-  listServiceCallsForOperatingMonth
+  listServiceCallsForOperatingMonth,
+  type ServiceCallRowDto
 } from "@/modules/calls/service-call-service";
 import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/modules/settlements/settlement-evidence-call";
+import {
+  confirmPayoutConfirmation,
+  listActivelyConfirmedUnitEmployeeIds,
+  attachPayoutConfirmationsToRows,
+  toPayoutConfirmationPrismaClient,
+  reconfirmPayoutConfirmation,
+  releasePayoutConfirmation,
+  type PayoutConfirmationDto
+} from "@/modules/settlements/payout-confirmation-service";
 
 type OperatingMonthRecord = {
   id: string;
@@ -42,9 +52,14 @@ type OpsMonthlyIncentivePrismaClient = {
   };
   employee: {
     findMany(args?: unknown): Promise<EmployeeRecord[]>;
+    findUnique?(args: unknown): Promise<EmployeeRecord | null>;
   };
   opsMonthlyIncentiveRule: {
     findMany(args?: unknown): Promise<OpsMonthlyIncentiveRuleRecord[]>;
+  };
+  payoutConfirmationEvent?: {
+    findMany(args?: unknown): Promise<unknown[]>;
+    create(args: unknown): Promise<unknown>;
   };
 };
 
@@ -80,12 +95,13 @@ export type OpsMonthlyIncentiveRowDto = {
   teamShareLabel: string;
   payoutAmount: number;
   calculationBasis: string;
+  /** 지급 확인(ADR 0004, 티켓 30·31). 이 값은 송금이 아니라 "확인했다는 사실"이다. 단위는 날짜 없이 운영월+직원이다. */
+  payoutConfirmation: PayoutConfirmationDto;
 };
 
 export type OpsMonthlyCallEvidenceDto = {
   serviceCallId: string;
   serviceDate: string;
-  opsCallCredit: number;
   call: SettlementEvidenceCallDto | null;
 };
 
@@ -96,7 +112,7 @@ export type OpsMonthlyIncentiveResultDto = {
   endDate: string;
   isClosedOrLocked: boolean;
   previewStatus: OpsMonthlyIncentivePreviewStatus;
-  monthlyOpsCallCredit: number;
+  monthlyOpsCallCount: number;
   sourceCallCount: number;
   appliedThresholdCallCount: number | null;
   totalMonthlyIncentiveAmount: number;
@@ -108,6 +124,13 @@ export type OpsMonthlyIncentiveResultDto = {
   callEvidence: OpsMonthlyCallEvidenceDto[];
 };
 
+/** 운영팀 월 인센 지급 확인 한 단위를 가리키는 서버 액션 결과. 월 단위라 날짜가 없다. */
+export type OpsMonthlyIncentivePayoutResultDto = {
+  operatingMonthId: string;
+  employeeId: string;
+  payoutConfirmation: PayoutConfirmationDto;
+};
+
 export class OpsMonthlyIncentiveDomainError extends Error {
   constructor(message: string, public readonly code: string) {
     super(message);
@@ -117,6 +140,11 @@ export class OpsMonthlyIncentiveDomainError extends Error {
 
 const previewQuerySchema = z.object({
   operatingMonthId: z.string().trim().min(1, "운영월을 선택하세요.")
+});
+
+const payoutUnitSchema = previewQuerySchema.extend({
+  employeeId: z.string().min(1, "운영팀 직원을 선택하세요."),
+  actorId: z.string().min(1, "처리자를 확인할 수 없습니다.")
 });
 
 function getClient(client?: OpsMonthlyIncentivePrismaClient) {
@@ -142,7 +170,7 @@ function isCompletedStatus(status: string) {
   return status === "방문완료" || status === "VISIT_COMPLETE";
 }
 
-function selectRule(input: { rules: OpsMonthlyIncentiveRuleRecord[]; monthKey: string; monthlyOpsCallCredit: number }) {
+function selectRule(input: { rules: OpsMonthlyIncentiveRuleRecord[]; monthKey: string; monthlyOpsCallCount: number }) {
   const effectiveRules = input.rules
     .filter((rule) => effectiveForMonth(rule, input.monthKey))
     .sort((a, b) => b.thresholdCallCount - a.thresholdCallCount || b.effectiveFromMonth.localeCompare(a.effectiveFromMonth));
@@ -157,7 +185,7 @@ function selectRule(input: { rules: OpsMonthlyIncentiveRuleRecord[]; monthKey: s
     };
   }
 
-  const appliedRule = effectiveRules.find((rule) => input.monthlyOpsCallCredit >= rule.thresholdCallCount);
+  const appliedRule = effectiveRules.find((rule) => input.monthlyOpsCallCount >= rule.thresholdCallCount);
   if (!appliedRule) {
     const minimumThreshold = Math.min(...effectiveRules.map((rule) => rule.thresholdCallCount));
     return {
@@ -354,9 +382,41 @@ function rowForEmployee(employee: EmployeeRecord, role: OpsMonthlyIncentiveTeamR
   };
 }
 
+
+/** 지급 확인을 쓰려는(확인/재확인/해제) 운영팀 직원이 활성 OPERATIONS인지 확인한다. */
+async function assertActiveOpsEmployee(input: { client: OpsMonthlyIncentivePrismaClient; employeeId: string }) {
+  if (!input.client.employee.findUnique) return;
+
+  const employee = await input.client.employee.findUnique({ where: { id: input.employeeId } });
+  if (!employee) {
+    throw new Error("운영팀 직원을 찾을 수 없습니다.");
+  }
+  if (!employee.isActive || employee.employeeGroup !== "OPERATIONS") {
+    throw new Error("활성 운영팀 직원만 지급 확인을 변경할 수 있습니다.");
+  }
+}
+
+/** 이 운영월 이 운영팀 직원의 행(현재 계산 금액)을 다시 읽는다. 확인/재확인은 이 금액을 사건에 남긴다. */
+async function opsMonthlyIncentiveRow(input: { client: OpsMonthlyIncentivePrismaClient; operatingMonthId: string; employeeId: string }) {
+  const result = await listOpsMonthlyIncentivePreview({
+    operatingMonthId: input.operatingMonthId,
+    prismaClient: input.client
+  });
+  return result.rows.find((row) => row.employeeId === input.employeeId) ?? null;
+}
+
+async function assertPayoutHasIncentiveRow(input: { client: OpsMonthlyIncentivePrismaClient; operatingMonthId: string; employeeId: string }) {
+  const row = await opsMonthlyIncentiveRow(input);
+  if (!row) {
+    throw new Error("해당 월의 운영팀 정산 대상을 찾을 수 없습니다.");
+  }
+  return row;
+}
+
 export async function listOpsMonthlyIncentivePreview(input: {
   operatingMonthId: string;
   prismaClient?: OpsMonthlyIncentivePrismaClient;
+  serviceCallRows?: ServiceCallRowDto[];
 }): Promise<OpsMonthlyIncentiveResultDto> {
   const parsed = previewQuerySchema.safeParse(input);
   if (!parsed.success) throw toFieldError(parsed.error);
@@ -378,12 +438,14 @@ export async function listOpsMonthlyIncentivePreview(input: {
       where: { employeeGroup: "OPERATIONS", isActive: true },
       orderBy: [{ sortOrder: "asc" }, { staffCode: "asc" }, { id: "asc" }]
     }),
-    listServiceCallsForOperatingMonth({
-      operatingMonthId: parsed.data.operatingMonthId,
-      startDate,
-      endDate,
-      prismaClient: client as unknown as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
-    }),
+    input.serviceCallRows
+      ? Promise.resolve(input.serviceCallRows)
+      : listServiceCallsForOperatingMonth({
+          operatingMonthId: parsed.data.operatingMonthId,
+          startDate,
+          endDate,
+          prismaClient: client as unknown as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
+        }),
     client.opsMonthlyIncentiveRule.findMany({
       where: { isActive: true },
       orderBy: [{ thresholdCallCount: "desc" }, { effectiveFromMonth: "desc" }]
@@ -392,14 +454,50 @@ export async function listOpsMonthlyIncentivePreview(input: {
 
   const completedCalculations = completedServiceCallCalculationsFromRows(callRows);
   const callRowsById = new Map(callRows.map((row) => [row.id, row]));
-  const monthlyOpsCallCredit = completedCalculations.reduce((sum, calculation) => sum + calculation.opsCallCredit, 0);
-  const ruleSelection = selectRule({ rules, monthKey: operatingMonth.monthKey, monthlyOpsCallCredit });
+  const monthlyOpsCallCount = completedCalculations.length;
+  const ruleSelection = selectRule({ rules, monthKey: operatingMonth.monthKey, monthlyOpsCallCount });
   const distribution = buildDistribution({
     employees,
     ruleStatus: ruleSelection.ruleStatus,
     appliedRule: ruleSelection.appliedRule
   });
   const isClosedOrLocked = operatingMonth.status === "마감확정" || operatingMonth.status === "잠금";
+
+  // S7(ADR 0004): 확인 사건이 있는 단위는 이 운영월에 활성 운영팀 직원이 아니게 되어도(비활성) 금액
+  // 0인 행으로 남긴다. 그래야 attachPayoutConfirmations가 "지급 재확인 필요"로 가리고, 마감 점검도
+  // 이 차이를 막을 수 있다.
+  if (client.payoutConfirmationEvent) {
+    const confirmedEmployeeIds = await listActivelyConfirmedUnitEmployeeIds({
+      unitType: "OPS_MONTHLY",
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate: null,
+      prismaClient: toPayoutConfirmationPrismaClient(client)
+    });
+    const presentIds = new Set(distribution.rows.map((row) => row.employeeId));
+    for (const employeeId of confirmedEmployeeIds) {
+      if (presentIds.has(employeeId)) continue;
+      const employee = await client.employee.findUnique?.({ where: { id: employeeId } });
+      const fallback: EmployeeRecord = employee ?? {
+        id: employeeId,
+        staffCode: employeeId,
+        displayName: employeeId,
+        employeeGroup: "OPERATIONS",
+        position: "",
+        sortOrder: 9999,
+        isActive: false
+      };
+      distribution.rows.push(rowForEmployee(fallback, teamRole(fallback), 0, "확인 사건은 있지만 이 운영월 계산 대상이 아닙니다."));
+    }
+  }
+
+  const rowsWithPayoutConfirmation = await attachPayoutConfirmationsToRows({
+      unitType: "OPS_MONTHLY",
+      currentAmount: (row) => row.payoutAmount,
+    client,
+    operatingMonthId: parsed.data.operatingMonthId,
+    operatingMonthStatus: operatingMonth.status,
+    rows: distribution.rows
+  });
 
   return {
     operatingMonthId: parsed.data.operatingMonthId,
@@ -408,23 +506,127 @@ export async function listOpsMonthlyIncentivePreview(input: {
     endDate,
     isClosedOrLocked,
     previewStatus: isClosedOrLocked ? "closed_current" : "draft_current",
-    monthlyOpsCallCredit,
+    monthlyOpsCallCount,
     sourceCallCount: completedCalculations.length,
     appliedThresholdCallCount: ruleSelection.appliedThresholdCallCount,
     totalMonthlyIncentiveAmount: ruleSelection.totalMonthlyIncentiveAmount,
     ruleStatus: ruleSelection.ruleStatus,
     warningMessage: mergeWarningMessages(ruleSelection.warningMessage, distribution.warningMessage),
     shares: distribution.shares,
-    rows: distribution.rows,
+    rows: rowsWithPayoutConfirmation,
     warningCounts: warningCounts(callRows),
     callEvidence: completedCalculations.map((calculation) => {
       const callRow = callRowsById.get(calculation.serviceCallId);
       return {
         serviceCallId: calculation.serviceCallId,
         serviceDate: calculation.serviceDate,
-        opsCallCredit: calculation.opsCallCredit,
         call: callRow ? settlementEvidenceCall(callRow) : null
       };
     })
   };
+}
+
+/** 확인: 이 운영월 현재 계산된 지급액을 지급 확인 사건으로 남긴다. 아직 확인된 사건이 없는 단위에만 쓸 수 있다. */
+export async function confirmOpsMonthlyIncentivePayout(input: {
+  operatingMonthId: string;
+  employeeId: string;
+  actorId: string;
+  reason?: string | null;
+  prismaClient?: OpsMonthlyIncentivePrismaClient;
+}): Promise<OpsMonthlyIncentivePayoutResultDto> {
+  const parsed = payoutUnitSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "지급 확인 입력값이 올바르지 않습니다.");
+  }
+
+  const client = getClient(input.prismaClient);
+  await assertActiveOpsEmployee({ client, employeeId: parsed.data.employeeId });
+  const row = await assertPayoutHasIncentiveRow({
+    client,
+    operatingMonthId: parsed.data.operatingMonthId,
+    employeeId: parsed.data.employeeId
+  });
+
+  const payoutConfirmation = await confirmPayoutConfirmation({
+    unitType: "OPS_MONTHLY",
+    operatingMonthId: parsed.data.operatingMonthId,
+    serviceDate: null,
+    employeeId: parsed.data.employeeId,
+    amount: row.payoutAmount,
+    actorId: parsed.data.actorId,
+    reason: input.reason ?? null,
+    prismaClient: toPayoutConfirmationPrismaClient(client)
+  });
+
+  return { operatingMonthId: parsed.data.operatingMonthId, employeeId: parsed.data.employeeId, payoutConfirmation };
+}
+
+/** 재확인: 금액이 바뀌어 지급 재확인 필요(또는 확인 금액 미기록)인 단위를 현재 지급액으로 다시 확인한다. 사유는 필수다. */
+export async function reconfirmOpsMonthlyIncentivePayout(input: {
+  operatingMonthId: string;
+  employeeId: string;
+  actorId: string;
+  reason: string;
+  prismaClient?: OpsMonthlyIncentivePrismaClient;
+}): Promise<OpsMonthlyIncentivePayoutResultDto> {
+  const parsed = payoutUnitSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "지급 재확인 입력값이 올바르지 않습니다.");
+  }
+
+  const client = getClient(input.prismaClient);
+  await assertActiveOpsEmployee({ client, employeeId: parsed.data.employeeId });
+  const row = await assertPayoutHasIncentiveRow({
+    client,
+    operatingMonthId: parsed.data.operatingMonthId,
+    employeeId: parsed.data.employeeId
+  });
+
+  const payoutConfirmation = await reconfirmPayoutConfirmation({
+    unitType: "OPS_MONTHLY",
+    operatingMonthId: parsed.data.operatingMonthId,
+    serviceDate: null,
+    employeeId: parsed.data.employeeId,
+    amount: row.payoutAmount,
+    actorId: parsed.data.actorId,
+    reason: input.reason,
+    prismaClient: toPayoutConfirmationPrismaClient(client)
+  });
+
+  return { operatingMonthId: parsed.data.operatingMonthId, employeeId: parsed.data.employeeId, payoutConfirmation };
+}
+
+/** 해제: 확인을 취소해 미확인으로 되돌린다. 정산 대상 행 여부와 무관하게 허용한다(잘못 확인한 기록 정리). 사유는 필수다. */
+export async function releaseOpsMonthlyIncentivePayout(input: {
+  operatingMonthId: string;
+  employeeId: string;
+  actorId: string;
+  reason: string;
+  prismaClient?: OpsMonthlyIncentivePrismaClient;
+}): Promise<OpsMonthlyIncentivePayoutResultDto> {
+  const parsed = payoutUnitSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "지급 확인 해제 입력값이 올바르지 않습니다.");
+  }
+
+  const client = getClient(input.prismaClient);
+  await assertActiveOpsEmployee({ client, employeeId: parsed.data.employeeId });
+  const row = await opsMonthlyIncentiveRow({
+    client,
+    operatingMonthId: parsed.data.operatingMonthId,
+    employeeId: parsed.data.employeeId
+  });
+
+  const payoutConfirmation = await releasePayoutConfirmation({
+    unitType: "OPS_MONTHLY",
+    operatingMonthId: parsed.data.operatingMonthId,
+    serviceDate: null,
+    employeeId: parsed.data.employeeId,
+    currentAmount: row?.payoutAmount ?? 0,
+    actorId: parsed.data.actorId,
+    reason: input.reason,
+    prismaClient: toPayoutConfirmationPrismaClient(client)
+  });
+
+  return { operatingMonthId: parsed.data.operatingMonthId, employeeId: parsed.data.employeeId, payoutConfirmation };
 }

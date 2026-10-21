@@ -3,7 +3,7 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { locales, localeLabels, LOCALE_COOKIE, type Locale } from "@/lib/i18n/config";
+import { localeCookieAssignment, locales, localeLabels, type Locale } from "@/lib/i18n/config";
 import { useLocale, useT } from "@/lib/i18n/client";
 
 /**
@@ -18,8 +18,7 @@ export function LocaleSwitcher({ className }: { className?: string }) {
 
   function selectLocale(next: Locale) {
     if (next === current) return;
-    // 1년 유지, 모든 route에서 공유.
-    document.cookie = `${LOCALE_COOKIE}=${next}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+    document.cookie = localeCookieAssignment(next);
     startTransition(() => {
       router.refresh();
     });

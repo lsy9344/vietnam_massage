@@ -4,6 +4,8 @@ import {
   TherapistAttendanceDomainError,
   deactivateTherapistAttendance,
   listTherapistAttendanceForDate,
+  listTherapistAttendanceForEmployeeInRange,
+  listTherapistAttendanceForEmployeesInRange,
   listTherapistFullAttendanceRecognitions,
   upsertTherapistAttendance
 } from "@/modules/settlements/therapist-attendance-service";
@@ -32,12 +34,21 @@ function createMemoryPrisma(
       employeeId: string;
       attendanceDate: string;
       checkInMinute: number;
+      checkInMethod?: string;
       checkOutMinute: number | null;
+      checkOutMethod?: string | null;
       standbyMinutes: number | null;
       isFullAttendanceRecognized: boolean;
       isActive?: boolean;
     }>;
     therapistCount?: number;
+    seedServiceCalls?: Array<{
+      id: string;
+      serviceDate: string;
+      startTime: string;
+      status: string;
+      assignments: Array<{ employeeId: string; assignmentRole: string; isActive?: boolean }>;
+    }>;
   } = {}
 ) {
   const createdAt = new Date("2026-06-10T00:00:00.000Z");
@@ -64,17 +75,20 @@ function createMemoryPrisma(
     employees.set(id, employee(id, `THR-${String(index).padStart(3, "0")}`, `마사지사${index}`, index, true));
   }
   employees.set("thr-inactive", employee("thr-inactive", "THR-999", "퇴사 마사지사", 998, false));
-  employees.set("ear-1", employee("ear-1", "EAR-001", "귀케어1", 999, true, "EARCARE"));
+  employees.set("ops-1", employee("ops-1", "OPS-001", "운영팀1", 999, true, "OPERATIONS"));
 
   const attendances = new Map<string, any>();
   for (const seed of options.seedAttendances ?? []) {
+    // 메모리 시드는 기본적으로 이 칸이 생기기 전 기존 줄("이전 기록")을 흉내낸다(스펙 D16).
     attendances.set(attendanceKey(operatingMonth.id, seed.attendanceDate, seed.employeeId), {
       id: seed.id,
       operatingMonthId: operatingMonth.id,
       attendanceDate: dbDate(seed.attendanceDate),
       employeeId: seed.employeeId,
       checkInMinute: seed.checkInMinute,
+      checkInMethod: seed.checkInMethod ?? "이전 기록",
       checkOutMinute: seed.checkOutMinute,
+      checkOutMethod: seed.checkOutMinute === null ? null : seed.checkOutMethod ?? "이전 기록",
       standbyMinutes: seed.standbyMinutes,
       isFullAttendanceRecognized: seed.isFullAttendanceRecognized,
       isActive: seed.isActive ?? true,
@@ -84,6 +98,12 @@ function createMemoryPrisma(
   }
   const auditEvents: any[] = [];
   const attendanceLocks: string[] = [];
+  const serviceCalls = (options.seedServiceCalls ?? []).map((call) => ({
+    ...call,
+    operatingMonthId: operatingMonth.id,
+    serviceDate: dbDate(call.serviceDate),
+    assignments: call.assignments.map((assignment) => ({ ...assignment, isActive: assignment.isActive ?? true }))
+  }));
 
   function cloneAttendances() {
     return new Map([...attendances.entries()].map(([key, value]) => [key, { ...value }]));
@@ -143,7 +163,8 @@ function createMemoryPrisma(
               return false;
             }
           }
-          if (where?.employeeId !== undefined && record.employeeId !== where.employeeId) return false;
+          if (typeof where?.employeeId === "string" && record.employeeId !== where.employeeId) return false;
+          if (where?.employeeId?.in && !where.employeeId.in.includes(record.employeeId)) return false;
           return true;
         });
       },
@@ -174,6 +195,18 @@ function createMemoryPrisma(
         return next;
       }
     },
+    serviceCall: {
+      async findMany({ where }: any = {}) {
+        return serviceCalls
+          .filter(
+            (call) =>
+              (where?.operatingMonthId === undefined || call.operatingMonthId === where.operatingMonthId) &&
+              (where?.serviceDate === undefined || toIsoDate(call.serviceDate) === toIsoDate(where.serviceDate)) &&
+              (where?.status?.in === undefined || where.status.in.includes(call.status))
+          )
+          .map((call) => ({ ...call, assignments: call.assignments.map((assignment) => ({ ...assignment })) }));
+      }
+    },
     auditLog: {
       async create({ data }: any) {
         if (options.failAudit) throw new Error("audit failed");
@@ -202,7 +235,8 @@ function createMemoryPrisma(
     },
     attendances,
     auditEvents,
-    attendanceLocks
+    attendanceLocks,
+    serviceCalls
   };
 
   return client;
@@ -224,9 +258,9 @@ describe("therapist attendance service", () => {
     assert.equal(result.rows[0].isComplete, false);
     assert.equal(result.rows[0].incompleteReason, "출퇴근 미입력");
     assert.equal(result.rows[0].isFullAttendanceRecognized, false);
-    // inactive therapist and earcare employee must be excluded
+    // inactive therapist and non-therapist employee must be excluded
     assert.equal(result.rows.some((row) => row.employeeId === "thr-inactive"), false);
-    assert.equal(result.rows.some((row) => row.employeeId === "ear-1"), false);
+    assert.equal(result.rows.some((row) => row.employeeId === "ops-1"), false);
   });
 
   it("returns stored minute values as HH:mm display strings and recognition flags for complete rows", async () => {
@@ -293,6 +327,7 @@ describe("therapist attendance service", () => {
       employeeId: "thr-1",
       checkInTime: "10:00",
       checkOutTime: "20:00",
+      method: "대리 입력",
       actorId: "account-1",
       prismaClient
     });
@@ -312,7 +347,9 @@ describe("therapist attendance service", () => {
       attendanceDate: "2026-06-10",
       employeeId: "thr-1",
       checkInMinute: 600,
+      checkInMethod: "대리 입력",
       checkOutMinute: 1200,
+      checkOutMethod: "대리 입력",
       standbyMinutes: 600,
       isFullAttendanceRecognized: true,
       isActive: true,
@@ -342,6 +379,7 @@ describe("therapist attendance service", () => {
       employeeId: "thr-1",
       checkInTime: "10:00",
       checkOutTime: "20:00",
+      method: "대리 입력",
       actorId: "account-1",
       prismaClient
     });
@@ -355,6 +393,75 @@ describe("therapist attendance service", () => {
     assert.equal(prismaClient.auditEvents[0].afterValue.isFullAttendanceRecognized, true);
   });
 
+  it("changes only the side whose time actually changed, leaving the other side's method as-is (스펙 M23)", async () => {
+    const prismaClient = createMemoryPrisma({
+      seedAttendances: [
+        {
+          id: "att-seed-1",
+          employeeId: "thr-1",
+          attendanceDate: "2026-06-10",
+          checkInMinute: 600,
+          checkInMethod: "직접",
+          checkOutMinute: 1200,
+          checkOutMethod: "직접",
+          standbyMinutes: 600,
+          isFullAttendanceRecognized: true
+        }
+      ]
+    });
+
+    // checkInTime만 바뀐다. checkOutTime은 저장된 값과 같다.
+    const dto = await upsertTherapistAttendance({
+      operatingMonthId: "month-2026-06",
+      attendanceDate: "2026-06-10",
+      employeeId: "thr-1",
+      checkInTime: "09:00",
+      checkOutTime: "20:00",
+      method: "정정 승인",
+      actorId: "account-1",
+      prismaClient
+    });
+
+    assert.equal(dto.checkInMethod, "정정 승인");
+    assert.equal(dto.checkOutMethod, "직접");
+  });
+
+  it("clears the checkout method when the checkout is removed, instead of assigning this call's method", async () => {
+    const prismaClient = createMemoryPrisma({
+      seedAttendances: [
+        {
+          id: "att-seed-1",
+          employeeId: "thr-1",
+          attendanceDate: "2026-06-10",
+          checkInMinute: 600,
+          checkInMethod: "직접",
+          checkOutMinute: 1200,
+          checkOutMethod: "직접",
+          standbyMinutes: 600,
+          isFullAttendanceRecognized: true
+        }
+      ]
+    });
+
+    const dto = await upsertTherapistAttendance({
+      operatingMonthId: "month-2026-06",
+      attendanceDate: "2026-06-10",
+      employeeId: "thr-1",
+      checkInTime: "10:00",
+      checkOutTime: "",
+      method: "대리 입력",
+      actorId: "account-1",
+      prismaClient
+    });
+
+    assert.equal(dto.checkOutTime, null);
+    assert.equal(dto.checkOutMethod, null);
+    // checkInTime은 그대로이니 출근 방식도 바뀌지 않는다(바뀐 쪽만 바뀐다).
+    assert.equal(dto.checkInMethod, "직접");
+    const stored = prismaClient.attendances.get("month-2026-06::2026-06-10::thr-1");
+    assert.equal(stored.checkOutMethod, null);
+  });
+
   it("stores a check-in-only row when the checkout is missing and defers the full-attendance judgment", async () => {
     const prismaClient = createMemoryPrisma();
 
@@ -364,6 +471,7 @@ describe("therapist attendance service", () => {
       employeeId: "thr-1",
       checkInTime: "10:00",
       checkOutTime: "",
+      method: "대리 입력",
       actorId: "account-1",
       prismaClient
     });
@@ -405,6 +513,7 @@ describe("therapist attendance service", () => {
       employeeId: "thr-1",
       checkInTime: "10:00",
       checkOutTime: "20:00",
+      method: "대리 입력",
       actorId: "account-1",
       prismaClient
     });
@@ -438,6 +547,7 @@ describe("therapist attendance service", () => {
       employeeId: "thr-1",
       checkInTime: "10:00",
       checkOutTime: "",
+      method: "대리 입력",
       actorId: "account-1",
       prismaClient
     });
@@ -456,6 +566,7 @@ describe("therapist attendance service", () => {
         employeeId: "thr-1",
         checkInTime: "10:00",
         checkOutTime: "25:00",
+        method: "대리 입력",
         actorId: "account-1",
         prismaClient
       }),
@@ -482,6 +593,7 @@ describe("therapist attendance service", () => {
         employeeId: "thr-1",
         checkInTime,
         checkOutTime,
+        method: "대리 입력",
         actorId: "account-1",
         prismaClient
       });
@@ -500,6 +612,7 @@ describe("therapist attendance service", () => {
           employeeId: "thr-1",
           checkInTime: badTime,
           checkOutTime: "18:00",
+        method: "대리 입력",
           actorId: "account-1",
           prismaClient
         }),
@@ -519,6 +632,7 @@ describe("therapist attendance service", () => {
         employeeId: "thr-1",
         checkInTime: "10:00",
         checkOutTime: "18:00",
+        method: "대리 입력",
         actorId: "account-1",
         prismaClient
       }),
@@ -537,6 +651,7 @@ describe("therapist attendance service", () => {
         employeeId: "thr-1",
         checkInTime: "10:00",
         checkOutTime: "18:00",
+        method: "대리 입력",
         actorId: "account-1",
         prismaClient
       }),
@@ -564,6 +679,7 @@ describe("therapist attendance service", () => {
         employeeId: "thr-1",
         checkInTime: "10:00",
         checkOutTime: "18:00",
+        method: "대리 입력",
         actorId: "account-1",
         prismaClient
       }),
@@ -581,6 +697,7 @@ describe("therapist attendance service", () => {
         employeeId: "thr-1",
         checkInTime: "10:00",
         checkOutTime: "18:00",
+        method: "대리 입력",
         actorId: "account-1",
         prismaClient
       }),
@@ -599,6 +716,7 @@ describe("therapist attendance service", () => {
         employeeId: "thr-1",
         checkInTime: "10:00",
         checkOutTime: "18:00",
+        method: "대리 입력",
         actorId: "account-1",
         prismaClient
       }),
@@ -617,6 +735,7 @@ describe("therapist attendance service", () => {
         employeeId: "thr-1",
         checkInTime: "10:00",
         checkOutTime: "18:00",
+        method: "대리 입력",
         actorId: "account-1",
         prismaClient
       }),
@@ -624,6 +743,45 @@ describe("therapist attendance service", () => {
     );
     assert.equal(prismaClient.attendances.size, 0);
     assert.equal(prismaClient.auditEvents.length, 0);
+  });
+
+  it("saves a checkout for a therapist with an in-use call and warns without touching the call", async () => {
+    const prismaClient = createMemoryPrisma({
+      seedServiceCalls: [
+        { id: "call-in-use", serviceDate: "2026-06-10", startTime: "19:00", status: "사용중", assignments: [{ employeeId: "thr-1", assignmentRole: "THERAPIST_2" }] },
+        { id: "call-reserved", serviceDate: "2026-06-10", startTime: "21:00", status: "예약", assignments: [{ employeeId: "thr-1", assignmentRole: "THERAPIST_1" }] },
+        { id: "call-other-day", serviceDate: "2026-06-11", startTime: "19:00", status: "사용중", assignments: [{ employeeId: "thr-1", assignmentRole: "THERAPIST_1" }] },
+        { id: "call-other-therapist", serviceDate: "2026-06-10", startTime: "19:00", status: "사용중", assignments: [{ employeeId: "thr-2", assignmentRole: "THERAPIST_1" }] },
+        { id: "call-removed", serviceDate: "2026-06-10", startTime: "18:00", status: "사용중", assignments: [{ employeeId: "thr-1", assignmentRole: "THERAPIST_1", isActive: false }] }
+      ]
+    });
+    const save = (employeeId: string, checkOutTime: string) =>
+      upsertTherapistAttendance({
+        operatingMonthId: "month-2026-06",
+        attendanceDate: "2026-06-10",
+        employeeId,
+        checkInTime: "10:00",
+        checkOutTime,
+        method: "대리 입력",
+        actorId: "account-1",
+        prismaClient
+      });
+
+    const checkInOnly = await save("thr-1", "");
+    assert.deepEqual(checkInOnly.warnings, []);
+
+    const checkedOut = await save("thr-1", "20:00");
+    assert.equal(checkedOut.checkOutTime, "20:00");
+    assert.deepEqual(checkedOut.warnings, [{ code: "IN_SERVICE_CALL", serviceCallIds: ["call-in-use"] }]);
+    assert.equal(prismaClient.serviceCalls.find((call: any) => call.id === "call-in-use")?.status, "사용중");
+
+    const otherTherapist = await save("thr-3", "20:00");
+    assert.deepEqual(otherTherapist.warnings, []);
+
+    // 저장 뒤 다시 읽어도 같은 경고가 남는다(직원 패널이 저장 결과로 다시 그려진다).
+    const listed = await listTherapistAttendanceForDate({ operatingMonthId: "month-2026-06", attendanceDate: "2026-06-10", prismaClient });
+    assert.deepEqual(listed.rows.find((row) => row.employeeId === "thr-1")?.warnings, [{ code: "IN_SERVICE_CALL", serviceCallIds: ["call-in-use"] }]);
+    assert.deepEqual(listed.rows.find((row) => row.employeeId === "thr-3")?.warnings, []);
   });
 
   it("deactivates an attendance row and records a deactivated audit event", async () => {
@@ -772,5 +930,127 @@ describe("therapist attendance service", () => {
       }),
       (error) => error instanceof TherapistAttendanceDomainError && error.code === "OPERATING_MONTH_DATE_OUT_OF_RANGE"
     );
+  });
+
+  describe("listTherapistAttendanceForEmployeeInRange", () => {
+    it("returns one employee's rows across a date range in ascending order, with HH:mm display and methods", async () => {
+      const prismaClient = createMemoryPrisma({
+        seedAttendances: [
+          { id: "a1", employeeId: "thr-1", attendanceDate: "2026-06-12", checkInMinute: 600, checkInMethod: "직접", checkOutMinute: 1200, checkOutMethod: "직접", standbyMinutes: 600, isFullAttendanceRecognized: true },
+          { id: "a2", employeeId: "thr-1", attendanceDate: "2026-06-10", checkInMinute: 601, checkInMethod: "대리 입력", checkOutMinute: null, checkOutMethod: null, standbyMinutes: null, isFullAttendanceRecognized: false },
+          // different employee, must be excluded
+          { id: "a3", employeeId: "thr-2", attendanceDate: "2026-06-11", checkInMinute: 600, checkOutMinute: 1200, standbyMinutes: 600, isFullAttendanceRecognized: true },
+          // inactive row, must be excluded
+          { id: "a4", employeeId: "thr-1", attendanceDate: "2026-06-11", checkInMinute: 600, checkOutMinute: 1200, standbyMinutes: 600, isFullAttendanceRecognized: true, isActive: false }
+        ]
+      });
+
+      const rows = await listTherapistAttendanceForEmployeeInRange({
+        employeeId: "thr-1",
+        startDate: "2026-06-01",
+        endDate: "2026-06-30",
+        prismaClient
+      });
+
+      assert.deepEqual(rows.map((row) => row.attendanceDate), ["2026-06-10", "2026-06-12"]);
+      assert.equal(rows[0].checkInTime, "10:01");
+      assert.equal(rows[0].checkInMethod, "대리 입력");
+      assert.equal(rows[0].checkOutTime, null);
+      assert.equal(rows[0].incompleteReason, "퇴근 미입력");
+      assert.equal(rows[1].checkInTime, "10:00");
+      assert.equal(rows[1].checkOutTime, "20:00");
+      assert.equal(rows[1].checkOutMethod, "직접");
+      assert.equal(rows[1].isFullAttendanceRecognized, true);
+    });
+
+    it("returns an empty array when the employee has no attendance in range", async () => {
+      const prismaClient = createMemoryPrisma();
+      const rows = await listTherapistAttendanceForEmployeeInRange({
+        employeeId: "thr-1",
+        startDate: "2026-06-01",
+        endDate: "2026-06-30",
+        prismaClient
+      });
+      assert.deepEqual(rows, []);
+    });
+
+    it("rejects an unknown or inactive employee id", async () => {
+      const prismaClient = createMemoryPrisma();
+      await assert.rejects(
+        listTherapistAttendanceForEmployeeInRange({ employeeId: "thr-inactive", startDate: "2026-06-01", endDate: "2026-06-30", prismaClient }),
+        (error) => error instanceof TherapistAttendanceDomainError && error.code === "THERAPIST_EMPLOYEE_NOT_FOUND"
+      );
+      await assert.rejects(
+        listTherapistAttendanceForEmployeeInRange({ employeeId: "no-such-id", startDate: "2026-06-01", endDate: "2026-06-30", prismaClient }),
+        (error) => error instanceof TherapistAttendanceDomainError && error.code === "THERAPIST_EMPLOYEE_NOT_FOUND"
+      );
+    });
+
+    it("rejects a reversed date range", async () => {
+      const prismaClient = createMemoryPrisma();
+      await assert.rejects(
+        listTherapistAttendanceForEmployeeInRange({ employeeId: "thr-1", startDate: "2026-06-30", endDate: "2026-06-01", prismaClient }),
+        (error) => error instanceof TherapistAttendanceDomainError && error.code === "INVALID_THERAPIST_ATTENDANCE_INPUT"
+      );
+    });
+
+    it("marks rows as locked when the owning operating month is locked", async () => {
+      const prismaClient = createMemoryPrisma({
+        locked: true,
+        seedAttendances: [
+          { id: "a1", employeeId: "thr-1", attendanceDate: "2026-06-12", checkInMinute: 600, checkOutMinute: 1200, standbyMinutes: 600, isFullAttendanceRecognized: true }
+        ]
+      });
+
+      const rows = await listTherapistAttendanceForEmployeeInRange({
+        employeeId: "thr-1",
+        startDate: "2026-06-01",
+        endDate: "2026-06-30",
+        prismaClient
+      });
+
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].isLocked, true);
+    });
+  });
+
+  // R7(비용): 관리자 운영월 현황(11)이 사람마다 listTherapistAttendanceForEmployeeInRange를 부르는
+  // 대신 한 번에 읽어 메모리에서 나눌 수 있는 자리. R6: 활성 여부를 보지 않아 퇴사한 Therapist도
+  // (listTherapistAttendanceForEmployeeInRange라면 거절될 사람도) 그대로 포함된다.
+  describe("listTherapistAttendanceForEmployeesInRange", () => {
+    it("groups rows by employeeId in one query, including a now-inactive employee's rows", async () => {
+      const prismaClient = createMemoryPrisma({
+        seedAttendances: [
+          { id: "a1", employeeId: "thr-1", attendanceDate: "2026-06-12", checkInMinute: 600, checkInMethod: "직접", checkOutMinute: 1200, checkOutMethod: "직접", standbyMinutes: 600, isFullAttendanceRecognized: true },
+          { id: "a2", employeeId: "thr-inactive", attendanceDate: "2026-06-10", checkInMinute: 540, checkInMethod: "직접", checkOutMinute: 1080, checkOutMethod: "직접", standbyMinutes: 540, isFullAttendanceRecognized: true }
+        ]
+      });
+
+      const byEmployeeId = await listTherapistAttendanceForEmployeesInRange({
+        employeeIds: ["thr-1", "thr-inactive", "thr-2"],
+        startDate: "2026-06-01",
+        endDate: "2026-06-30",
+        prismaClient
+      });
+
+      assert.deepEqual([...byEmployeeId.keys()].sort(), ["thr-1", "thr-2", "thr-inactive"]);
+      assert.equal(byEmployeeId.get("thr-1")?.length, 1);
+      assert.equal(byEmployeeId.get("thr-1")?.[0].checkInTime, "10:00");
+      assert.equal(byEmployeeId.get("thr-inactive")?.length, 1);
+      assert.equal(byEmployeeId.get("thr-inactive")?.[0].checkInTime, "09:00");
+      assert.deepEqual(byEmployeeId.get("thr-2"), []);
+    });
+
+    it("returns an empty-array map entry for every requested id when none have attendance", async () => {
+      const prismaClient = createMemoryPrisma();
+      const byEmployeeId = await listTherapistAttendanceForEmployeesInRange({
+        employeeIds: ["thr-1", "thr-2"],
+        startDate: "2026-06-01",
+        endDate: "2026-06-30",
+        prismaClient
+      });
+      assert.deepEqual(byEmployeeId.get("thr-1"), []);
+      assert.deepEqual(byEmployeeId.get("thr-2"), []);
+    });
   });
 });

@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { DateCapsule } from "@/components/ui/date-capsule";
 import { ScreenState } from "@/components/ui/screen-state";
 import { StatusIndicator } from "@/components/ui/status-indicator";
-import { ledgerCallHref } from "@/app/(erp)/calls/ledger-address";
+import { ledgerCallHref } from "@/lib/ledger-address";
 import type { SettlementAmount } from "@/app/(erp)/settlements/settlement-view-model";
 import { t } from "@/lib/i18n";
 import { operatingMonthStatusLabel, serviceStatusLabel } from "@/lib/i18n/codes";
@@ -175,6 +176,16 @@ export function EvidenceCallItem({
     </a>
   ) : (
     <div className={evidenceItemClassName}>{body}</div>
+  );
+}
+
+/** 직원 패널에서 월 명세서 화면으로 가는 링크(티켓 32). 받는 화면에 들어갈 수 없는 역할에게는 아예 주지 않는다. */
+export function StatementLink({ locale, href }: { locale: Locale; href: string | null }) {
+  if (!href) return null;
+  return (
+    <Link className="text-sm font-semibold text-brand-strong underline-offset-4 hover:underline" href={href}>
+      {t(locale, "settlements.statement.openLink")}
+    </Link>
   );
 }
 

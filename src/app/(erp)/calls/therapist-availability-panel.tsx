@@ -45,7 +45,7 @@ export function TherapistAvailabilityPanel({
     setPending(true);
     try {
       const nextRows = await loadTherapistAvailabilityAction({ operatingMonthId, serviceDate, time: next });
-      if (requestId.current === id) setRows(nextRows);
+      if (requestId.current === id) setRows(nextRows.rows);
     } catch (error) {
       unstable_rethrow(error);
       if (requestId.current === id) setFailed(true);

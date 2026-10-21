@@ -2,8 +2,14 @@
 
 import { DetailRow } from "@/components/ui/detail-row";
 import { EmployeeWorkspace, type ComparisonColumn } from "@/app/(erp)/settlements/employee-workspace";
-import { AmountText, PanelSection } from "@/app/(erp)/settlements/settlement-parts";
-import { incentiveRuleHasBasis, payoutAmount } from "@/app/(erp)/settlements/settlement-view-model";
+import {
+  confirmOpsMonthlyIncentivePayoutAction,
+  reconfirmOpsMonthlyIncentivePayoutAction,
+  releaseOpsMonthlyIncentivePayoutAction
+} from "@/app/(erp)/settlements/operations/monthly/actions";
+import { PayoutConfirmationPanel, PayoutStatusIndicator } from "@/app/(erp)/settlements/payout-confirmation-panel";
+import { AmountText, PanelSection, StatementLink } from "@/app/(erp)/settlements/settlement-parts";
+import { incentiveRuleHasBasis, monthlyStatementHref, payoutAmount } from "@/app/(erp)/settlements/settlement-view-model";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { Translator } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
@@ -39,7 +45,16 @@ function shareTeamPortionText(locale: Locale, t: Translator, shares: OpsMonthlyI
  * 운영팀 월 인센 미리보기의 작업면(티켓 05): 직원별 금액 표와 직원 패널(규칙 근거). 금액은 서비스 값을 그대로 그린다.
  * 정책이 없으면 팀 몫과 직원 금액은 0이 아니라 근거 없음이다.
  */
-export function OpsMonthlyView({ result, initialEmployeeId }: { result: OpsMonthlyIncentiveResultDto; initialEmployeeId: string | null }) {
+export function OpsMonthlyView({
+  result,
+  initialEmployeeId,
+  canOpenStatement
+}: {
+  result: OpsMonthlyIncentiveResultDto;
+  initialEmployeeId: string | null;
+  /** 월 명세서 화면에 들어갈 수 있는 역할(관리자·정산 담당)이면 패널에 그 링크를 둔다(티켓 32). */
+  canOpenStatement: boolean;
+}) {
   const t = useT();
   const locale = useLocale();
   const hasBasis = incentiveRuleHasBasis(result.ruleStatus);
@@ -63,6 +78,11 @@ export function OpsMonthlyView({ result, initialEmployeeId }: { result: OpsMonth
       header: t("settlements.opsMonthly.column.expectedPayout"),
       numeric: true,
       cell: (row) => <span className="font-semibold">{payout(row)}</span>
+    },
+    {
+      key: "payoutConfirmation",
+      header: t("settlements.opsMonthly.column.payoutConfirmation"),
+      cell: (row) => <PayoutStatusIndicator status={row.payoutConfirmation.status} t={t} />
     }
   ];
 
@@ -73,16 +93,32 @@ export function OpsMonthlyView({ result, initialEmployeeId }: { result: OpsMonth
       initialEmployeeId={initialEmployeeId}
       minTableWidth="min-w-[40rem]"
       renderPanel={(row) => (
-        <PanelSection title={t("settlements.opsMonthly.panel.basis")}>
-          <dl>
-            <DetailRow label={t("settlements.opsMonthly.column.teamRole")} value={teamRoleLabel(t, row.teamRole)} />
-            <DetailRow label={t("settlements.opsMonthly.column.shareTeamPortion")} value={portion(row)} />
-            <DetailRow label={t("settlements.opsMonthly.column.expectedPayout")} value={payout(row)} />
-          </dl>
-          <p className="text-sm text-muted">
-            {t("settlements.opsMonthly.column.basis")}: {settlementBasisText(locale, row.calculationBasis)}
-          </p>
-        </PanelSection>
+        <div className="grid gap-6">
+          <StatementLink href={canOpenStatement ? monthlyStatementHref(result.operatingMonthId, row.employeeId) : null} locale={locale} />
+
+          <PanelSection title={t("settlements.opsMonthly.panel.basis")}>
+            <dl>
+              <DetailRow label={t("settlements.opsMonthly.column.teamRole")} value={teamRoleLabel(t, row.teamRole)} />
+              <DetailRow label={t("settlements.opsMonthly.column.shareTeamPortion")} value={portion(row)} />
+              <DetailRow label={t("settlements.opsMonthly.column.expectedPayout")} value={payout(row)} />
+            </dl>
+            <p className="text-sm text-muted">
+              {t("settlements.opsMonthly.column.basis")}: {settlementBasisText(locale, row.calculationBasis)}
+            </p>
+          </PanelSection>
+
+          <PayoutConfirmationPanel
+            confirmAction={confirmOpsMonthlyIncentivePayoutAction}
+            locale={locale}
+            payout={row.payoutConfirmation}
+            payoutLocked={result.isClosedOrLocked}
+            reconfirmAction={reconfirmOpsMonthlyIncentivePayoutAction}
+            releaseAction={releaseOpsMonthlyIncentivePayoutAction}
+            t={t}
+            title={t("settlements.opsMonthly.column.payoutConfirmation")}
+            unit={{ operatingMonthId: result.operatingMonthId, serviceDate: "", employeeId: row.employeeId }}
+          />
+        </div>
       )}
       rows={result.rows}
       tableLabel={t("settlements.opsMonthly.employeeTable.title")}

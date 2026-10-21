@@ -132,8 +132,6 @@ const CALL_GRID_COLUMNS = [
   { id: "action", labelKey: "calls.column.action", width: "7.5rem" },
   { id: "therapist1Commission", labelKey: "calls.column.therapist1Commission", width: "7rem", settlement: true },
   { id: "therapist2Commission", labelKey: "calls.column.therapist2Commission", width: "7rem", settlement: true },
-  { id: "earcarePool", labelKey: "calls.column.earcarePool", width: "6.5rem", settlement: true },
-  { id: "opsCallCredit", labelKey: "calls.column.opsCallCredit", width: "6rem", settlement: true },
   { id: "saveStatus", labelKey: "calls.column.saveStatus", width: "10rem", settlement: true }
 ] as const satisfies ReadonlyArray<{ id: string; labelKey: MessageKey; width: string; settlement?: boolean }>;
 
@@ -983,7 +981,6 @@ function AddRowForm({
                   rowIndex={rowIndex}
                 />
                 <input name="paymentMethodCode" type="hidden" value="CASH" />
-                <input name="earcareEmployeeId" type="hidden" value="" />
                 <input name="note" type="hidden" value="" />
               </td>
 
@@ -1012,6 +1009,7 @@ function AddRowForm({
 function draftFromRow(row: ServiceCallRowDto): ServiceCallAutosaveInput {
   return {
     serviceCallId: row.id,
+    expectedUpdatedAt: row.savedAt,
     operatingMonthId: row.operatingMonthId,
     serviceDate: row.serviceDate,
     startTime: row.startTime,
@@ -1022,7 +1020,6 @@ function draftFromRow(row: ServiceCallRowDto): ServiceCallAutosaveInput {
     customerId: row.customerId ?? null,
     therapist1Id: row.therapist1?.id ?? null,
     therapist2Id: row.therapist2?.id ?? null,
-    earcareEmployeeId: row.earcare?.id ?? null,
     status: row.status,
     discountTypeCode: row.discountTypeCode ?? null,
     paymentMethodCode: row.paymentMethodCode ?? null,
@@ -1191,7 +1188,7 @@ function EditableCallRow({
       ...EDITABLE_CALL_FIELDS,
       "paymentAmount",
       "discountAmount",
-      ...(showSettlementColumns ? ["therapist1Commission", "therapist2Commission", "earcarePoolAmount", "opsCallCredit"] : []),
+      ...(showSettlementColumns ? ["therapist1Commission", "therapist2Commission"] : []),
       "calculationStatus"
     ],
     [showSettlementColumns]
@@ -1245,7 +1242,7 @@ function EditableCallRow({
         }
 
         setErrorMessage(result.formError ?? t("calls.save.autosaveFailed"));
-        setFieldErrors(result.fieldErrors ?? {});
+        setFieldErrors((result.fieldErrors as FieldErrors | undefined) ?? {});
         setSaveStatus("error");
       })();
     });
@@ -1726,15 +1723,6 @@ function EditableCallRow({
             rowIndex={rowIndex}
             value={draft.note ?? ""}
           />
-          <SelectCell
-            columnId="earcareEmployeeId"
-            disabled={isLocked || saveStatus === "saving"}
-            label={t("calls.column.earcare")}
-            name="earcareEmployeeId"
-            options={options.earcareEmployees}
-            rowIndex={rowIndex}
-            value={draft.earcareEmployeeId ?? ""}
-          />
         </div>
       </td>
 
@@ -1844,24 +1832,6 @@ function EditableCallRow({
             saveStatus={saveStatus}
             value={serverRow.therapist2Commission}
           />
-          <ComputedCell
-            columnId="earcarePoolAmount"
-            label={t("calls.column.earcarePool")}
-            onKeyDown={(event) => handleReadonlyKeyDown("earcarePoolAmount", event)}
-            row={serverRow}
-            rowIndex={rowIndex}
-            saveStatus={saveStatus}
-            value={serverRow.earcarePoolAmount}
-          />
-          <ComputedCell
-            columnId="opsCallCredit"
-            label={t("calls.column.opsCallCredit")}
-            onKeyDown={(event) => handleReadonlyKeyDown("opsCallCredit", event)}
-            row={serverRow}
-            rowIndex={rowIndex}
-            saveStatus={saveStatus}
-            value={serverRow.opsCallCredit}
-          />
         </>
       ) : null}
 
@@ -1940,8 +1910,6 @@ export function EditableCallGrid({
         ? [
             { accessorKey: "therapist1Commission", header: "therapist1Commission" },
             { accessorKey: "therapist2Commission", header: "therapist2Commission" },
-            { accessorKey: "earcarePoolAmount", header: "earcarePoolAmount" },
-            { accessorKey: "opsCallCredit", header: "opsCallCredit" }
           ]
         : []),
       { accessorKey: "calculationStatus", header: "calculationStatus" }

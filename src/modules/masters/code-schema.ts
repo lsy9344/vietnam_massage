@@ -5,7 +5,8 @@ export const codeTypes = [
   "PAYMENT_METHOD",
   "DISCOUNT_TYPE",
   "ATTENDANCE_STATUS",
-  "CONFIRMATION"
+  "CONFIRMATION",
+  "BOOKING_CHANNEL"
 ] as const;
 
 export type CodeType = (typeof codeTypes)[number];
@@ -37,7 +38,15 @@ export const defaultCodeItems: DefaultCodeItem[] = [
   { codeType: "ATTENDANCE_STATUS", code: "EARLY_LEAVE", displayName: "조퇴", sortOrder: 40 },
   { codeType: "ATTENDANCE_STATUS", code: "ABSENT", displayName: "결근", sortOrder: 50 },
   { codeType: "CONFIRMATION", code: "Y", displayName: "Y", sortOrder: 10 },
-  { codeType: "CONFIRMATION", code: "N", displayName: "N", sortOrder: 20 }
+  { codeType: "CONFIRMATION", code: "N", displayName: "N", sortOrder: 20 },
+  // 예약 경로(1018 스펙 D1). 기존 DB에는 마이그레이션 20261019120100이 같은 값과 감사를 넣는다.
+  { codeType: "BOOKING_CHANNEL", code: "TELEGRAM", displayName: "텔레그램", sortOrder: 10 },
+  { codeType: "BOOKING_CHANNEL", code: "KAKAOTALK", displayName: "카카오톡", sortOrder: 20 },
+  { codeType: "BOOKING_CHANNEL", code: "WHATSAPP", displayName: "왓츠앱", sortOrder: 30 },
+  { codeType: "BOOKING_CHANNEL", code: "ZALO", displayName: "잘로", sortOrder: 40 },
+  { codeType: "BOOKING_CHANNEL", code: "PHONE", displayName: "전화", sortOrder: 50 },
+  { codeType: "BOOKING_CHANNEL", code: "WALK_IN", displayName: "워크인", sortOrder: 60 },
+  { codeType: "BOOKING_CHANNEL", code: "OTHER", displayName: "기타", sortOrder: 70 }
 ];
 
 export const defaultTimeSlots = [

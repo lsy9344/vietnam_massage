@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>룸 평면도 시안 C3 — 연필 스케치</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="_shared.css">
+  <link rel="stylesheet" href="_minimal.css">
+  <link rel="stylesheet" href="_pencil.css">
+  <style>
+    /* C3: 크림 종이 위에 연필로 쓱 그린 듯한 벽(살짝 흔들리는 두 겹 선). 채움·가구 없음. */
+    .pencil { fill: none; stroke: var(--text); stroke-opacity: 0.82; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+    .pencil--soft { stroke-opacity: 0.55; stroke-width: 1.25; }
+    .tv .pencil { stroke-width: 2.2; }
+    .tv .pencil--soft { stroke-width: 1.6; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script src="_shared.js"></script>
+  <script src="_pencil.js"></script>
+  <script>
+    PencilPlan({
+      file: "c3-pencil.html",
+      drawing(L, { rand, wobble, outerSegments, liftSegments }) {
+        const lines = (segments, amp, extend) => segments.map(([x1, y1, x2, y2]) => wobble(x1, y1, x2, y2, rand, amp, extend)).join("");
+        const lift = liftSegments(L);
+        return `<path class="pencil" d="${lines(outerSegments(), 2.5)}${lines(L.walls, 2)}"/>
+          <path class="pencil pencil--soft" d="${lines(lift.box, 1.5)}${lines(lift.chevrons, 0.8)}"/>`;
+      },
+      note: `
+        <section><h2>모양</h2><ul>
+          <li>크림 종이 위에 연필로 쓱 그린 듯한 벽이다. 선이 살짝 흔들리고 모서리에서 조금 넘친다.</li>
+          <li>가구, 무늬, 바닥색이 없다. 왼쪽 띠는 엘리베이터와 복도, 아래는 복도다.</li>
+          <li>상태는 지금 배지 그대로다.</li>
+        </ul></section>
+        <section><h2>내 아이디어</h2><ul>
+          <li>마커 동그라미: 종료임박·종료확인 방은 방 번호에 상태색 동그라미를 친다. 실장님이 도면에 펜으로 표시한 느낌이다.</li>
+          <li>지금 빈방 / 곧 비는 방: 도면 위 한 줄에 빈방과 남은 분이 적은 방 3개를 둔다. 누르면 그 방 서랍이 열린다. TV에서는 맨 아래에 둔다.</li>
+        </ul></section>
+        <section><h2>구현</h2><ul>
+          <li>새 색 토큰이 없다. 흔들린 선은 고정 씨앗으로 만들어 새로고침해도 같은 모양이다.</li>
+          <li>"곧 비는 방"은 객실 상태의 남은 분으로 고른다. 새 계산 규칙이 아니다.</li>
+        </ul></section>`
+    });
+  </script>
+</body>
+</html>

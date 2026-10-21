@@ -56,7 +56,6 @@ for (const required of [
   "course: RoomStatusCourseDto | null",
   "therapist1: RoomStatusAssigneeDto | null",
   "therapist2: RoomStatusAssigneeDto | null",
-  "earcare: RoomStatusAssigneeDto | null",
   "guidanceText: string",
   "updatedAt: string"
 ]) {

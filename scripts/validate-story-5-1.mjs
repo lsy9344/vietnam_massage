@@ -46,7 +46,6 @@ for (const required of [
   "listTherapistDailySettlements",
   "listOpsDailyIncentives",
   "listOpsMonthlyIncentivePreview",
-  "listEarcareDailySettlements",
   "Employee.id",
   "draft_current",
   "closed_current",
@@ -56,12 +55,9 @@ for (const required of [
   "therapistPayoutAmount",
   "opsDailyIncentiveAmount",
   "opsMonthlyIncentiveAmount",
-  "earcarePayoutAmount",
   "grandPayoutAmount",
   "warningCounts",
-  "representativeEvidence",
-  "undistributedDays",
-  "normalStaffZeroDays"
+  "representativeEvidence"
 ]) {
   if (!service.includes(required)) errors.push(`monthly-closing-preview-service.ts missing ${required}`);
 }
@@ -103,11 +99,9 @@ requireMoved(page, "closing page.tsx", "common.operatingMonth", "운영월");
 requireMoved(page, "closing page.tsx", "closing.summary.therapistPayout", "마사지사 지급 합계");
 requireMoved(page, "closing page.tsx", "closing.summary.opsDaily", "운영팀 일일인센");
 requireMoved(page, "closing page.tsx", "closing.summary.opsMonthly", "운영팀 월인센");
-requireMoved(page, "closing page.tsx", "closing.summary.earcarePayout", "귀케어 지급 합계");
 requireMoved(page, "closing page.tsx", "closing.summary.grandPayout", "전체 지급 합계");
 requireMoved(page, "closing page.tsx", "closing.therapist.title", "마사지사");
 requireMoved(page, "closing page.tsx", "closing.operations.title", "운영팀");
-requireMoved(page, "closing page.tsx", "closing.earcare.title", "귀케어");
 requireMoved(page, "closing page.tsx", "closing.evidence.title", "이번 달 계산 기준");
 requireMoved(page, "closing page.tsx", "closing.preview.draftDescription", "미확정 미리보기");
 requireMoved(page, "closing page.tsx", "closing.preview.current", "현재 기준 미리보기");
@@ -128,11 +122,9 @@ for (const required of [
   "aggregates operating-month dates",
   "therapist:2026-06-01",
   "ops:2026-06-01",
-  "earcare:2026-06-01",
   "finalPayoutAmount",
   "totalOpsPayoutAmount",
   "grandPayoutAmount",
-  "earcareNormalStaffZeroDays",
   "closed_current",
   "INVALID_OPERATING_MONTH_DATE_RANGE",
   "OPERATING_MONTH_NOT_FOUND"
@@ -153,16 +145,11 @@ for (const required of [
   "마사지사 지급 합계",
   "운영팀 일일인센",
   "운영팀 월인센",
-  "귀케어 지급 합계",
   "전체 지급 합계",
   "E2E51 마사지사",
   "1,400,000 VND",
-  "E2E51 귀케어",
-  "100,000 VND",
   "(2일).",
   "마사지사 정산에서 뺀 콜 1건",
-  "귀케어 정상 근무자가 없는 날",
-  "귀케어 금액을 나누지 못한 날",
   "대표 evidence",
   "selectOption(seededData.lockedOperatingMonthId)",
   "미확정 미리보기",
@@ -182,7 +169,6 @@ for (const required of [
   "listTherapistDailySettlements",
   "listOpsDailyIncentives",
   "listOpsMonthlyIncentivePreview",
-  "listEarcareDailySettlements",
   "Employee.id",
   "read-only",
   "no persistence",

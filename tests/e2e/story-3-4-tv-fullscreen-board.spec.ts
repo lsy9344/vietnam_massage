@@ -219,8 +219,6 @@ async function seedStoryData(): Promise<SeededData> {
     name: "Story34 A",
     durationMinutes: 60,
     basePrice: 1500000,
-    opsCallCredit: 1,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: false,
     tvDisplayName: "S34 A60",
     effectiveToMonth: null,
@@ -232,8 +230,6 @@ async function seedStoryData(): Promise<SeededData> {
     name: "Story34 종료확인",
     durationMinutes: 0,
     basePrice: 0,
-    opsCallCredit: 0,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: false,
     tvDisplayName: "S34 종료",
     effectiveToMonth: null,
@@ -324,7 +320,9 @@ test.describe("Story 3.4 TV fullscreen board", () => {
     });
   });
 
-  test("allows read-only users to view /tv without ERP chrome and with 11 large cards", async ({ page }) => {
+  test("allows read-only users to view /tv without ERP chrome and with 11 large floor-plan rooms", async ({ page }) => {
+    // TV 큰 글자는 TV 화면(풀HD) 크기에서 쓴다.
+    await page.setViewportSize({ width: 1920, height: 1080 });
     await page.clock.install({ time: Date.now() });
     await login(page, "story34_readonly", "Story34!readonly");
     await page.goto(`/tv?operatingMonthId=${seededData.openMonthId}&serviceDate=${serviceDate}`);
@@ -334,16 +332,18 @@ test.describe("Story 3.4 TV fullscreen board", () => {
     // TV는 셸(도크, 건너뛰기 링크) 없는 전체 화면이다.
     await expect(page.getByRole("navigation", { name: "업무 이동" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "본문으로" })).toHaveCount(0);
-    await expect(page.getByTestId("room-status-card")).toHaveCount(11);
+    // TV 객실판은 층별 평면도다(.scratch/room-floor-plan D4). 기본 객실 11개가 층 카드 안 제자리에 있다.
+    const rooms = page.locator('[data-floor] [data-testid="floor-plan-room"]');
+    await expect(rooms).toHaveCount(11);
     await expect(page.getByLabel("상태: 예약").filter({ hasText: "◷" })).toBeVisible();
     await expect(page.getByLabel("상태: 사용중").filter({ hasText: "●" })).toBeVisible();
     await expect(page.getByLabel("상태: 종료확인").filter({ hasText: "⚠" })).toBeVisible();
     await expect(page.getByLabel("상태: 청소중").filter({ hasText: "◐" })).toBeVisible();
     await expect(page.getByLabel("상태: 빈방").filter({ hasText: "○" }).first()).toBeVisible();
-    await expect(page.getByText("S34 A60").first()).toBeVisible();
+    // TV 이름표는 번호·상태·한 줄·담당 Therapist다(코스는 확정 시안대로 두지 않는다).
     await expect(page.getByText("E2E34 마사지사").first()).toBeVisible();
     await expect(page.getByText("결제·확인 필요")).toBeVisible();
-    await expect(page.getByTestId("room-status-card").first().locator("h2")).toHaveClass(/text-\[40px\]/);
+    await expect(rooms.first().locator(".floor-plan-room-number")).toHaveCSS("font-size", "40px");
     await expect(page.getByLabel("실시간 갱신 상태")).toContainText(/마지막 갱신|갱신 중|갱신 지연/);
     await expect(page.getByLabel("실시간 갱신 상태")).toContainText(/갱신 지연|마지막 갱신|갱신 중/);
     await expect(page.getByRole("button", { name: "새로고침" })).toBeVisible();
@@ -351,7 +351,9 @@ test.describe("Story 3.4 TV fullscreen board", () => {
     await page.clock.fastForward(95_000);
     await expect(page.getByLabel("실시간 갱신 상태")).toContainText("갱신 지연");
 
-    await page.getByTestId("room-status-card").first().click();
+    await expect(page.getByTestId("room-floor-plan").getByRole("button")).toHaveCount(0);
+    await rooms.first().click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "콜 원장 그리드" })).toHaveCount(0);
     await expect(page.getByText("저장중")).toHaveCount(0);
     await expect(page.getByRole("button", { name: /저장|수정|입력|정산|마감/ })).toHaveCount(0);

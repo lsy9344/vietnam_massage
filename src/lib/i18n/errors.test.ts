@@ -28,9 +28,32 @@ describe("resolveDomainErrorMessage", () => {
     assert.equal(resolveDomainErrorMessage("vi", undefined, "오류입니다."), "오류입니다.");
   });
 
+  it("다른 화면이 먼저 저장한 콜의 거절 문구가 두 언어로 있다", () => {
+    const ko = "다른 화면에서 이 콜이 바뀌었습니다. 다시 불러온 뒤에 저장하세요.";
+    assert.equal(resolveDomainErrorMessage("ko", "STALE_CALL", ko), ko);
+    assert.equal(resolveDomainErrorMessage("vi", "STALE_CALL", ko), "Cuộc gọi này đã được thay đổi ở màn hình khác. Hãy tải lại rồi mới lưu.");
+  });
+
+  it("코스 다시 사용·새 코스 추가 거절 문구가 두 언어로 있다", () => {
+    assert.equal(hasDomainErrorTranslation("COURSE_POLICY_REQUIRED"), true);
+    assert.equal(hasDomainErrorTranslation("COURSE_CODE_DUPLICATE"), true);
+    assert.equal(resolveDomainErrorMessage("vi", "COURSE_CODE_DUPLICATE", "이미 있는 코스 코드입니다."), "Mã gói đã tồn tại. Gói đã ngừng thì bật lại bằng Dùng lại.");
+  });
+
   it("hasDomainErrorTranslation은 매핑 여부를 알려준다", () => {
     assert.equal(hasDomainErrorTranslation("ROOM_REQUIRED_FOR_STATUS"), true);
     assert.equal(hasDomainErrorTranslation("NOPE"), false);
+  });
+
+  it("S11: 월마감 확정 거절 code 4개가 vi 번역을 갖는다", () => {
+    assert.equal(hasDomainErrorTranslation("MONTHLY_CLOSE_CALCULATION_ERRORS_PENDING"), true);
+    assert.equal(hasDomainErrorTranslation("MONTHLY_CLOSE_PAYOUT_RECONFIRMATION_PENDING"), true);
+    assert.equal(hasDomainErrorTranslation("MONTHLY_CLOSE_PENDING_CLOSE_REASON_REQUIRED"), true);
+    assert.equal(hasDomainErrorTranslation("MONTHLY_CLOSE_PENDING_CALLS_CHANGED"), true);
+    assert.equal(
+      resolveDomainErrorMessage("vi", "MONTHLY_CLOSE_CALCULATION_ERRORS_PENDING", "계산 오류가 있는 콜이 남아 있어 마감 확정할 수 없습니다."),
+      "Không thể chốt tháng vì vẫn còn cuộc gọi bị lỗi tính toán."
+    );
   });
 });
 
@@ -38,5 +61,11 @@ describe("resolveKoreanMessage", () => {
   it("지출 수단 오류를 베트남어로 바꾸고 한국어는 그대로 둔다", () => {
     assert.equal(resolveKoreanMessage("vi", "수단은 현금 또는 계좌입니다."), "Hình thức là tiền mặt hoặc chuyển khoản.");
     assert.equal(resolveKoreanMessage("ko", "수단은 현금 또는 계좌입니다."), "수단은 현금 또는 계좌입니다.");
+  });
+
+  it("S11: 월 명세서의 마감 버전 근거 미저장 문구를 베트남어로 바꾼다", () => {
+    const ko = "이 마감 버전에는 해당 근거가 저장되지 않았습니다.";
+    assert.equal(resolveKoreanMessage("vi", ko), "Phiên bản chốt này không lưu căn cứ đó.");
+    assert.equal(resolveKoreanMessage("ko", ko), ko);
   });
 });

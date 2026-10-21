@@ -136,8 +136,8 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
               />
               <SummaryCard
                 accent="mint"
-                label={t("settlements.therapist.summary.paid")}
-                value={`${result.settlements.filter((row) => row.paymentStatus.isPaid).length} / ${result.settlements.length}${peopleSuffix}`}
+                label={t("settlements.therapist.summary.confirmed")}
+                value={`${result.settlements.filter((row) => row.payoutConfirmation.status === "confirmed").length} / ${result.settlements.length}${peopleSuffix}`}
               />
             </SummaryCards>
             {warningSummary(result) > 0 || result.excludedCallCount > 0 ? (
@@ -162,6 +162,7 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
             attendanceAvailable={attendance !== null}
             attendanceDisabled={attendance?.isLocked ?? true}
             canOpenLedger={linkToScreen(account.role, "/calls", context) !== null}
+            canOpenStatement={linkToScreen(account.role, "/settlements/statement", context) !== null}
             initialEmployeeId={params[EMPLOYEE_PARAM] ?? null}
             key={`${selectedMonth.id}:${serviceDate}`}
             operatingMonthId={selectedMonth.id}

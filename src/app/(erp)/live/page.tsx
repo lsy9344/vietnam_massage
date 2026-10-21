@@ -4,24 +4,20 @@ import { DateContextControls } from "@/components/shell/date-context-controls";
 import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-notice";
 import { OpenTvLink } from "@/components/shell/open-tv-link";
 import { ScreenToolbar } from "@/components/shell/screen-toolbar";
+import { LiveRoomFloorPlan } from "@/app/(erp)/live/live-room-floor-plan";
 import { LiveSummaryCards, LiveSummaryDetails } from "@/app/(erp)/live/live-summary";
-import { requireRouteAccess } from "@/lib/authorization";
+import { canAccessRoute, requireRouteAccess } from "@/lib/authorization";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
-import { getDailyCallLedgerSummary } from "@/modules/calls/service-call-service";
+import { autoFinishOverdueCalls, getDailyCallLedgerSummary } from "@/modules/calls/service-call-service";
 import { listOperatingMonths } from "@/modules/masters/operating-month-service";
 import { latestRoomStatusUpdatedAt } from "@/modules/rooms/room-status-refresh";
-import { roomFloorGroups } from "@/modules/rooms/room-floor-groups";
 import { listRoomStatuses } from "@/modules/rooms/room-status-service";
 
 type LivePageSearchParams = {
   operatingMonthId?: string;
   serviceDate?: string;
 };
-
-function floorGridClass(count: number) {
-  return count === 2 ? "grid grid-cols-1 gap-3 sm:grid-cols-2" : "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3";
-}
 
 export default async function LivePage({ searchParams }: { searchParams: Promise<LivePageSearchParams> }) {
   const account = await requireRouteAccess("/live");
@@ -40,6 +36,8 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
   }
 
   const serviceDate = clampDateToOperatingMonth(params.serviceDate, selectedMonth);
+  // 자동 청소 중(1018 스펙 D14): 그 영업일을 읽기 전에 표시 종료를 지난 사용중 콜을 정리한다.
+  await autoFinishOverdueCalls({ operatingMonthId: selectedMonth.id, serviceDate });
   const [roomStatuses, summary] = await Promise.all([
     listRoomStatuses({ operatingMonthId: selectedMonth.id, serviceDate }),
     getDailyCallLedgerSummary({ operatingMonthId: selectedMonth.id, serviceDate, includeMonthTill: false })
@@ -47,6 +45,8 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
   const lastUpdatedAt = latestRoomStatusUpdatedAt(roomStatuses, new Date().toISOString());
 
   const context = { operatingMonthId: selectedMonth.id, date: serviceDate };
+  // 원장의 콜 상세 링크는 원장에 들어갈 수 있는 역할(관리자·카운터)에게만 준다.
+  const ledgerOperatingMonthId = canAccessRoute(account.role, "/calls") ? selectedMonth.id : null;
 
   return (
     <RoomStatusRefresh lastUpdatedAt={lastUpdatedAt} locale={locale}>
@@ -67,15 +67,16 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
         <RoomStatusStaleNotice />
         <LiveSummaryCards locale={locale} summary={summary} />
 
-        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={t("common.roomStatusAria")}>
-          {roomFloorGroups(roomStatuses).map((group) => (
-            <div className={`col-span-full ${floorGridClass(group.statuses.length)}`} key={group.floor}>
-              {group.statuses.map((status) => (
-                <RoomStatusCard key={status.roomId} status={status} locale={locale} />
-              ))}
-            </div>
-          ))}
-        </section>
+        {/* 객실판은 실제 평면도다. 방을 누르면 서랍에 그 방의 객실 카드가 뜬다(.scratch/room-floor-plan/spec.md D3). */}
+        <LiveRoomFloorPlan
+          cards={Object.fromEntries(
+            roomStatuses.map((status) => [
+              status.roomId,
+              <RoomStatusCard key={status.roomId} ledgerOperatingMonthId={ledgerOperatingMonthId} locale={locale} status={status} />
+            ])
+          )}
+          statuses={roomStatuses}
+        />
 
         <LiveSummaryDetails locale={locale} summary={summary} />
       </div>

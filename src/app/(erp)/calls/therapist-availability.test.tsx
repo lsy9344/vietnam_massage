@@ -22,7 +22,7 @@ const options: ServiceCallFormOptions = {
   paymentMethods: [],
   confirmationCodes: [],
   therapists: [{ value: "therapist-1", label: "마사지사1" }],
-  earcareEmployees: [],
+  bookingChannels: [],
   expenseHandlers: []
 };
 
@@ -30,14 +30,19 @@ function row(overrides: Partial<TherapistAvailabilityRowDto> = {}): TherapistAva
   return {
     therapistId: "therapist-1",
     therapistName: "마사지사1",
-    attendance: "not_entered",
+    attendance: "before_check_in",
+    shiftCheck: false,
     available: true,
     freeFrom: null,
     nextReservationTime: "16:00",
     freeMinutes: 60,
+    plannedWorkingDayStatus: "미입력",
+    callCounts: { done: 0, finished: 0, reserved: 0 },
+    plannedStartTime: null,
+    current: { state: "available", expectedEnd: null, nextReservationTime: null, freeMinutes: null },
     courses: [
-      { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, possible: true },
-      { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, possible: false }
+      { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "possible", requiresSecondTherapist: false },
+      { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, verdict: "time_short", requiresSecondTherapist: false }
     ],
     ...overrides
   };
@@ -91,8 +96,8 @@ describe("therapist availability panel", () => {
           nextReservationTime: null,
           freeMinutes: null,
           courses: [
-            { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, possible: false },
-            { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, possible: false }
+            { courseId: "course-a", courseCode: "A", courseName: "A 누루60", durationMinutes: 60, verdict: "time_short", requiresSecondTherapist: false },
+            { courseId: "course-b", courseCode: "B", courseName: "B 90", durationMinutes: 90, verdict: "time_short", requiresSecondTherapist: false }
           ]
         })
       ]

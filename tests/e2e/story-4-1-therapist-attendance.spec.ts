@@ -145,7 +145,7 @@ test.describe("Story 4.1 therapist attendance", () => {
     await page.goto(`/settlements?operatingMonthId=${seededData.writableOperatingMonthId}&serviceDate=2035-03-12`);
 
     await expect(page.getByRole("heading", { name: "마사지사 일일정산" })).toBeVisible();
-    await expect(page.getByLabel("운영월")).toHaveValue(seededData.writableOperatingMonthId);
+    await expect(page.locator('input[name="operatingMonthId"]')).toHaveValue(seededData.writableOperatingMonthId);
     await expect(page.getByLabel("조회날짜")).toHaveValue("2035-03-12");
 
     await expect(page.getByText("E2E41 마사지사1", { exact: true })).toBeVisible();

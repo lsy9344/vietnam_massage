@@ -87,7 +87,7 @@ requireMoved(panel, "closing-action-panel.tsx", "closing.action.confirmSnapshot"
 if (panel.includes("<form action={confirmAction} className=\"grid gap-1\">")) {
   errors.push("ClosingActionPanel must not keep the old direct confirm submit form");
 }
-if (panel.includes("therapists.rows.reduce") || panel.includes("operations.rows.reduce") || panel.includes("earcare.rows.reduce")) {
+if (panel.includes("therapists.rows.reduce") || panel.includes("operations.rows.reduce")) {
   errors.push("ClosingActionPanel must not recalculate closing summary totals from rows");
 }
 
@@ -100,8 +100,6 @@ for (const required of [
   "therapistCount: result.therapists.rows.length",
   "operationsPayoutAmount: result.operations.totalOpsPayoutAmount",
   "operationsCount: result.operations.rows.length",
-  "earcarePayoutAmount: result.totals.earcarePayoutAmount",
-  "earcareCount: result.earcare.rows.length",
   "warningCount: result.warningCounts.total",
   "confirmSummary={result ? confirmSummaryFor(result) : null}"
 ]) {

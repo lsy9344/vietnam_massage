@@ -36,7 +36,7 @@ const mai: TherapistDailySettlementDto = {
     { serviceCallId: "call-2", courseId: "course-a", courseCode: "A", role: "THERAPIST_2", employeeId: "thr-1", commissionAmount: 0, rateStatus: "missing_policy", call: call("call-2", "16:30") }
   ],
   warningCounts: { zeroPolicy: 0, missingPolicy: 1 },
-  paymentStatus: { isPaid: false, paidAt: null, paidByAccountId: null, paidBy: null, history: [] }
+  payoutConfirmation: { status: "unconfirmed", currentAmount: 700000, lastConfirmedAmount: null, difference: null, requiresReconfirmation: false, history: [] }
 };
 
 const maiAttendance: TherapistAttendanceDto = {
@@ -48,12 +48,15 @@ const maiAttendance: TherapistAttendanceDto = {
   displayName: "Mai",
   sortOrder: 1,
   checkInTime: "10:00",
+  checkInMethod: "대리 입력",
   checkOutTime: "20:00",
+  checkOutMethod: "대리 입력",
   standbyMinutes: 600,
   isFullAttendanceRecognized: true,
   isComplete: true,
   incompleteReason: null,
-  isLocked: false
+  isLocked: false,
+  warnings: []
 };
 
 const thuAttendance: TherapistAttendanceDto = {
@@ -64,7 +67,9 @@ const thuAttendance: TherapistAttendanceDto = {
   displayName: "Thu",
   sortOrder: 2,
   checkInTime: null,
+  checkInMethod: null,
   checkOutTime: null,
+  checkOutMethod: null,
   standbyMinutes: null,
   isFullAttendanceRecognized: false,
   isComplete: false
@@ -77,6 +82,7 @@ function render(overrides: Partial<Parameters<typeof TherapistSettlementView>[0]
         attendanceAvailable
         attendanceDisabled={false}
         canOpenLedger={false}
+        canOpenStatement={false}
         initialEmployeeId="thr-1"
         operatingMonthId="m-2026-10"
         paymentLocked={false}
@@ -117,13 +123,14 @@ describe("therapist settlement view", () => {
     // 정책이 없어 0원으로 남은 담당 건은 0원이 아니라 근거 없음이다.
     assert.match(html, /2026-10-14 16:30[\s\S]*?근거 없음/);
     assert.match(html, /A 수량\/금액/);
-    assert.match(html, />지급완료<\/button>/);
+    assert.match(html, />미확인</);
+    assert.match(html, />지급 확인<\/button>/);
   });
 
   it("links each evidence call to that date and call in the ledger for an administrator", () => {
     const html = render({ canOpenLedger: true });
 
-    assert.match(html, /href="\/calls\?operatingMonthId=m-2026-10&amp;serviceDate=2026-10-14#call-call-1"/);
+    assert.match(html, /href="\/calls\?operatingMonthId=m-2026-10&amp;serviceDate=2026-10-14&amp;call=call-1"/);
     assert.match(html, /원장에서 보기/);
   });
 
@@ -139,12 +146,20 @@ describe("therapist settlement view", () => {
     assert.match(html, /방문완료/);
   });
 
+  it("says there is an in-service call when the saved checkout comes back with that warning", () => {
+    const warned = { ...maiAttendance, warnings: [{ code: "IN_SERVICE_CALL" as const, serviceCallIds: ["call-in-use"] }] };
+    const rows = therapistComparisonRows([mai], [warned, thuAttendance]);
+    assert.match(render({ rows }), /시술 중인 콜이 있습니다/);
+    assert.match(render({ rows }, "vi"), /Có ca đang làm/);
+    assert.doesNotMatch(render(), /시술 중인 콜이 있습니다/);
+  });
+
   it("keeps a locked month read-only: attendance inputs disabled and no payment change", () => {
     const html = render({ attendanceDisabled: true, paymentLocked: true });
 
     assert.match(html, /aria-label="Mai 출근시간"[^>]*disabled=""/);
     assert.equal(html.match(/<button[^>]*disabled=""[^>]*>현재 시간 입력<\/button>/g)?.length, 2);
-    assert.doesNotMatch(html, />지급완료<\/button>/);
+    assert.doesNotMatch(html, />지급 확인<\/button>/);
     assert.match(html, />잠금</);
   });
 

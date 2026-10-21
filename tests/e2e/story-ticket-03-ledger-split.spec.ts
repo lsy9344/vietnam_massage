@@ -1,3 +1,4 @@
+import { testEmployees } from "./support/test-employees";
 import { expect, test, type Page } from "@playwright/test";
 import { hash } from "@/lib/password-hash";
 import { prisma } from "./support/db";
@@ -23,9 +24,10 @@ let monthId = "";
 let customerId = "";
 let rateMissingCallId = "";
 let customerCallId = "";
+let reservedCallId = "";
 
 async function seedEmployee(staffCode: string, displayName: string, employeeGroup: string, sortOrder: number) {
-  return (prisma as any).employee.upsert({
+  return testEmployees.upsert({
     where: { staffCode },
     update: { displayName, employeeGroup, isActive: true },
     create: {
@@ -67,8 +69,6 @@ async function upsertPolicy(courseId: string) {
     name: "T03 A",
     durationMinutes: 60,
     basePrice: 1500000,
-    opsCallCredit: 1,
-    earcarePoolAmount: 0,
     requiresSecondTherapist: false,
     tvDisplayName: "T03 A",
     effectiveToMonth: null,
@@ -181,10 +181,11 @@ test.describe("티켓 03 콜 원장 화면 분리", () => {
       startTime: "13:00",
       paymentMethodCode: "CASH"
     });
-    await createCall({ therapistId: ratedTherapist.id, roomId: room.id, courseId: course.id, memo: "T03 예약", status: "RESERVED", startTime: "15:00" });
+    reservedCallId = await createCall({ therapistId: ratedTherapist.id, roomId: room.id, courseId: course.id, memo: "T03 예약", status: "RESERVED", startTime: "15:00" });
   });
 
   test.afterAll(async () => {
+    await testEmployees.deactivateAll();
     await cleanup();
     await prisma.$disconnect();
   });
@@ -199,7 +200,9 @@ test.describe("티켓 03 콜 원장 화면 분리", () => {
     await expect(counts).toContainText("예약 1건");
     await expect(counts).toContainText("방문완료 2건");
     await expect(page.getByRole("heading", { name: "콜 원장 그리드" })).toBeInViewport();
-    await expect(page.locator(`tr[data-service-call-id="${customerCallId}"]`)).toBeInViewport();
+    await expect(page.getByRole("list", { name: "콜 원장 목록" })).toBeInViewport();
+    // 완료·취소 묶음은 기본 접힘이다(스펙 D16, 티켓 03). 접히지 않는 예약 줄로 "첫 화면에 보인다"를 확인한다.
+    await expect(page.locator(`[data-ledger-line][data-service-call-id="${reservedCallId}"]`)).toBeInViewport();
 
     await expect(page.getByLabel("일별 지출")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "지출 추가" })).toHaveCount(0);
@@ -262,11 +265,12 @@ test.describe("티켓 03 콜 원장 화면 분리", () => {
     await expect(warnings.getByRole("row", { name: /13:00 T03 수당 없음 마사지사 수당 정책을 찾을 수 없습니다/ })).toBeVisible();
     await warnings.getByRole("link", { name: "원장에서 보기" }).click();
 
-    await expect(page).toHaveURL(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}#call-${rateMissingCallId}`);
+    await expect(page).toHaveURL(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}&call=${rateMissingCallId}`);
     await expect(toolbarTabs(page).getByRole("link", { name: "원장", exact: true })).toHaveAttribute("aria-current", "page");
-    const target = page.locator(`tr#call-${rateMissingCallId}`);
+    const target = page.locator(`[data-ledger-line]#call-${rateMissingCallId}`);
     await expect(target).toBeInViewport();
-    expect(await target.evaluate((row) => row.matches(":target"))).toBe(true);
+    await expect(target).toHaveAttribute("data-selected", "true");
+    await expect(page.getByRole("complementary", { name: /^콜 상세/ })).toBeVisible();
   });
 
   for (const role of ["administrator", "counter"] as const) {
@@ -314,8 +318,9 @@ test.describe("티켓 03 콜 원장 화면 분리", () => {
     await expect(page.getByRole("complementary", { name: customerName })).toBeVisible();
 
     await history.getByRole("link", { name: serviceDate }).click();
-    await expect(page).toHaveURL(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}#call-${customerCallId}`);
-    await expect(page.locator(`tr#call-${customerCallId}`)).toBeInViewport();
+    await expect(page).toHaveURL(`/calls?operatingMonthId=${monthId}&serviceDate=${serviceDate}&call=${customerCallId}`);
+    await expect(page.locator(`[data-ledger-line]#call-${customerCallId}`)).toBeInViewport();
+    await expect(page.locator(`[data-ledger-line]#call-${customerCallId}`)).toHaveAttribute("data-selected", "true");
   });
 
   test("고객 등록과 정정은 고객 화면에서 저장된다", async ({ page }) => {

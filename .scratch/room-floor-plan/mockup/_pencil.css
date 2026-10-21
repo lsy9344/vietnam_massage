@@ -1,0 +1,26 @@
+/* C3 계열 공용: 마커 동그라미, "지금 빈방 / 곧 비는 방" 줄. 선 모양은 각 페이지가 정한다. */
+.room__num { padding: 0 2px; }
+.loop { position: absolute; top: -10px; left: -14px; width: calc(100% + 28px); height: calc(100% + 20px); overflow: visible; pointer-events: none; }
+.loop path { fill: none; stroke: var(--loop); stroke-width: 2.5; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.tv .loop path { stroke-width: 4; }
+.room--ending { --loop: var(--status-ending-soon); }
+.room--check { --loop: var(--status-complete-check); }
+
+.soon { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+.soon__label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.soon__label:not(:first-child) { margin-left: 16px; }
+.soon__chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px;
+  border: 1px solid var(--border); border-radius: 9999px; background: var(--surface); font-size: 14px; font-weight: 700; cursor: pointer;
+  transition: background-color 200ms;
+}
+button.soon__chip:hover { background: var(--readonly); }
+.soon__chip span { font-weight: 600; color: var(--muted); }
+.soon__none { font-size: 14px; color: var(--muted); }
+.c3-legend { margin: 16px 0 0; }
+
+.tv .soon { margin: 16px 0 0; gap: 10px; }
+.tv .soon__label { font-size: 20px; font-weight: 700; }
+.tv .soon__label:not(:first-child) { margin-left: 24px; }
+.tv .soon__chip { min-height: 52px; padding: 0 20px; font-size: 26px; font-weight: 900; cursor: default; }
+.tv .soon__chip span { font-size: 22px; font-weight: 700; }

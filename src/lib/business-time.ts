@@ -1,6 +1,7 @@
 export const BUSINESS_TIME_ZONE = "Asia/Ho_Chi_Minh";
 export const BUSINESS_TIME_ZONE_OFFSET = "+07:00";
 export const BUSINESS_TIME_ZONE_OFFSET_MINUTES = 7 * 60;
+export const BUSINESS_DAY_START_TIME = "03:00";
 
 /** 지금 시각을 베트남 업무 시간대(Asia/Ho_Chi_Minh)의 HH:mm으로 돌려준다. */
 export function currentBusinessTimeHm(now: Date = new Date()): string {

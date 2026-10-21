@@ -26,18 +26,27 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   EMPLOYEE_NOT_ACTIVE_FOR_ROLE: "Vui lòng chọn nhân viên phụ trách đang hoạt động.",
   EMPLOYEE_NOT_ACTIVE: "Vui lòng chọn nhân viên phụ trách đang hoạt động.",
   D_COURSE_SECOND_THERAPIST_REQUIRED: "Gói D cần kỹ thuật viên thứ hai.",
+  D_QUICK_BOOKING_DUPLICATE_THERAPIST: "Kỹ thuật viên 1 và 2 phải là người khác nhau.",
+  D_QUICK_BOOKING_PARTY_DUPLICATE_THERAPIST: "Không thể chọn cùng một Therapist cho hai khách trong nhóm.",
+  SERVICE_CALL_PARTY_NOT_FOUND: "Không tìm thấy nhóm để thêm khách. Hãy tải lại sổ rồi thử lại.",
+  SERVICE_CALL_PARTY_CUSTOMER_LINK: "Khách thêm vào nhóm không liên kết với khách hàng. Chỉ cuộc gọi đại diện mới liên kết khách hàng.",
+  SERVICE_CALL_PARTY_TIME_MISMATCH: "Giờ đặt khác với nhóm. Khác giờ thì hãy lưu thành đặt chỗ riêng.",
   SERVICE_CALL_NOT_FOUND: "Không tìm thấy dòng sổ cuộc gọi.",
+  STALE_CALL: "Cuộc gọi này đã được thay đổi ở màn hình khác. Hãy tải lại rồi mới lưu.",
   CUSTOMER_NOT_FOUND: "Không tìm thấy khách.",
   INVALID_CUSTOMER_INPUT: "Dữ liệu khách không hợp lệ.",
+
+  // 콜 상세 패널: 고객 연결 정정(F06)
+  SERVICE_CALL_CUSTOMER_LINK_CORRECTION_REQUIRED: "Vui lòng chỉnh sửa liên kết khách trong chi tiết cuộc gọi và nhập lý do.",
+  SERVICE_CALL_CUSTOMER_LINK_REASON_REQUIRED: "Vui lòng nhập lý do chỉnh sửa.",
+  INVALID_SERVICE_CALL_CUSTOMER_LINK_INPUT: "Dữ liệu chỉnh sửa liên kết khách không hợp lệ.",
 
   // 일별 지출
   DAILY_EXPENSE_NOT_FOUND: "Không tìm thấy mục chi phí trong ngày.",
   DAILY_EXPENSE_NOT_ACTIVE: "Không thể sửa mục chi phí đã vô hiệu hóa.",
 
   // 근태/정산 입력
-  INVALID_EARCARE_ATTENDANCE_INPUT: "Ngày làm việc không hợp lệ.",
   THERAPIST_EMPLOYEE_NOT_FOUND: "Không tìm thấy kỹ thuật viên đang hoạt động.",
-  EARCARE_EMPLOYEE_NOT_FOUND: "Không tìm thấy nhân viên chăm sóc tai đang hoạt động.",
   OPS_EMPLOYEE_NOT_FOUND: "Không tìm thấy nhân viên vận hành đang hoạt động.",
   ATTENDANCE_STATUS_NOT_FOUND: "Vui lòng chọn mã trạng thái làm việc hợp lệ.",
 
@@ -50,6 +59,14 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   ACCOUNT_ID_ALREADY_LINKED: "ID tài khoản đã được liên kết với nhân viên khác.",
   EMAIL_ALREADY_LINKED: "Email đã được liên kết với nhân viên khác.",
   EMPLOYEE_NOT_FOUND: "Không tìm thấy nhân viên.",
+  ACCOUNT_NOT_FOUND: "Không tìm thấy tài khoản.",
+
+  // Therapist 계정 발급·초기화(티켓 02, 스펙 D2, D5, D26)
+  THERAPIST_EMPLOYEE_REQUIRES_DEDICATED_ACCOUNT_FLOW: "Nhân viên KTV chỉ được liên kết tài khoản ở màn hình cấp tài khoản KTV riêng.",
+  THERAPIST_ACCOUNT_REQUIRES_THERAPIST_EMPLOYEE: "Chỉ có thể cấp tài khoản KTV cho nhân viên nhóm KTV.",
+  THERAPIST_ACCOUNT_ALREADY_ISSUED: "Nhân viên này đã có tài khoản. Hãy dùng chức năng đặt lại mật khẩu.",
+  THERAPIST_ACCOUNT_RESET_REQUIRES_THERAPIST_ROLE: "Chỉ có thể đặt lại mật khẩu KTV bằng cách này cho tài khoản KTV.",
+  CURRENT_PASSWORD_INCORRECT: "Mật khẩu hiện tại không đúng.",
 
   // 직원/계정 마스터 입력 (직원정보·계정 연결 폼)
   INVALID_EMPLOYEE_INPUT: "Dữ liệu nhân viên không hợp lệ.",
@@ -63,7 +80,50 @@ const DOMAIN_ERROR_VI: Record<string, string> = {
   INVALID_ACCOUNT_LINK_INPUT: "Dữ liệu liên kết tài khoản không hợp lệ.",
   ACCOUNT_ID_CONFLICTS_WITH_EMPLOYEE_ACCOUNT: "ID tài khoản khác với tài khoản đã liên kết của nhân viên này.",
   EMAIL_CONFLICTS_WITH_EMPLOYEE_ACCOUNT: "Email khác với tài khoản đã liên kết của nhân viên này.",
-  ACCOUNT_ID_EMAIL_MISMATCH: "ID tài khoản và email thuộc về các tài khoản khác nhau."
+  ACCOUNT_ID_EMAIL_MISMATCH: "ID tài khoản và email thuộc về các tài khoản khác nhau.",
+
+  // 지급 확인(ADR 0004, 티켓 30)
+  PAYOUT_CONFIRMATION_ALREADY_CONFIRMED: "Đã xác nhận chi trả. Nếu số tiền thay đổi, hãy xác nhận lại.",
+  PAYOUT_CONFIRMATION_NOT_CONFIRMED: "Chưa có xác nhận chi trả nên không thể xác nhận lại hoặc hủy xác nhận.",
+
+  // Therapist 내부 메모(티켓 12, 스펙 D27)
+  THERAPIST_MEMO_EMPLOYEE_NOT_THERAPIST: "Chỉ có thể thêm ghi chú nội bộ cho nhân viên KTV.",
+
+  // 월 명세서(티켓 32)
+  INVALID_MONTHLY_STATEMENT_INPUT: "Dữ liệu tra cứu phiếu lương tháng không hợp lệ.",
+  UNSUPPORTED_EMPLOYEE_GROUP: "Không hỗ trợ phiếu lương tháng cho nhân viên này.",
+  MONTHLY_STATEMENT_VERSION_NOT_FOUND: "Không tìm thấy phiên bản chốt tháng đó.",
+  // S9: 마감확정·잠금인데 스냅샷이 없을 때(monthly-statement-service.ts, monthly-closing-service.ts와 같은 code)
+  MONTHLY_CLOSE_SNAPSHOT_NOT_FOUND: "Không tìm thấy bản ghi đã chốt.",
+
+  // S11: 마감 확정 거절(월마감 확정 흐름, 티켓 33·34)
+  MONTHLY_CLOSE_CALCULATION_ERRORS_PENDING: "Không thể chốt tháng vì vẫn còn cuộc gọi bị lỗi tính toán.",
+  MONTHLY_CLOSE_PAYOUT_RECONFIRMATION_PENDING: "Không thể chốt tháng vì vẫn còn mục cần xác nhận lại chi trả.",
+  MONTHLY_CLOSE_PENDING_CLOSE_REASON_REQUIRED: "Vui lòng nhập lý do ngoại lệ.",
+  MONTHLY_CLOSE_PENDING_CALLS_CHANGED:
+    "Sau khi bạn xác nhận danh sách, có thêm cuộc gọi mới cần xác nhận trước khi chốt tháng nên không thể chốt. Hãy xác nhận lại danh sách mới.",
+
+  // 코스 기준정보: 다시 사용, 새 코스 추가(콜 원장 흐름 재구성 D9)
+  COURSE_POLICY_REQUIRED: "Cần nhập chính sách áp dụng cho tháng này để dùng lại gói.",
+  COURSE_CODE_DUPLICATE: "Mã gói đã tồn tại. Gói đã ngừng thì bật lại bằng Dùng lại.",
+
+  // Therapist 공지(스펙 D25, 티켓 10)
+  INVALID_NOTICE_INPUT: "Vui lòng nhập nội dung thông báo.",
+  TARGET_EMPLOYEE_REQUIRED: "Vui lòng chọn KTV nhận thông báo.",
+  THERAPIST_ACCOUNT_NOT_FOUND: "Không tìm thấy tài khoản KTV đang hoạt động.",
+  NOTICE_NOT_FOUND: "Không tìm thấy thông báo.",
+
+  // 휴무 신청·승인함(스펙 D22–D24, 티켓 08)
+  INVALID_THERAPIST_REQUEST_INPUT: "Dữ liệu đơn không hợp lệ.",
+  THERAPIST_REQUEST_DATE_IN_PAST: "Không thể xin cho ngày đã qua.",
+  THERAPIST_DAY_OFF_ALREADY_SET: "Ngày này đã được xếp nghỉ.",
+  THERAPIST_DAY_OFF_REQUEST_ALREADY_PENDING: "Ngày này đã có đơn xin nghỉ đang chờ.",
+  THERAPIST_REQUEST_NOT_FOUND: "Không tìm thấy đơn xin.",
+  THERAPIST_REQUEST_NOT_CANCELABLE: "Không thể hủy đơn này.",
+  THERAPIST_REQUEST_ALREADY_RESOLVED: "Đơn này đã được xử lý.",
+  THERAPIST_REQUEST_EXPIRED: "Đơn này đã quá hạn xử lý.",
+  THERAPIST_REQUEST_KIND_NOT_SUPPORTED: "Loại đơn này chưa được hỗ trợ.",
+  THERAPIST_REQUEST_REJECTION_REASON_REQUIRED: "Vui lòng nhập lý do từ chối."
 };
 
 /**
@@ -88,25 +148,44 @@ export function hasDomainErrorTranslation(code: string): boolean {
  * 화이트리스트(한국어→vi)로 매핑한다. 매핑이 없으면 한국어 원문을 그대로 반환한다.
  */
 const KOREAN_MESSAGE_VI: Record<string, string> = {
-  // 지급완료(마사지사 일일정산) action 안전 메시지
+  // 지급 확인(ADR 0004, 티켓 30) action 안전 메시지
   "운영월을 선택하세요.": "Vui lòng chọn tháng vận hành.",
   "조회 날짜는 YYYY-MM-DD 형식이어야 합니다.": "Ngày tra cứu phải theo định dạng YYYY-MM-DD.",
   "마사지사를 선택하세요.": "Vui lòng chọn kỹ thuật viên.",
+  "직원을 선택하세요.": "Vui lòng chọn nhân viên.",
   "처리자를 확인할 수 없습니다.": "Không xác định được người xử lý.",
   "운영월을 찾을 수 없습니다.": "Không tìm thấy tháng vận hành.",
-  "마감확정 또는 잠금 운영월의 지급완료 상태는 변경할 수 없습니다.": "Không thể đổi trạng thái đã thanh toán của tháng đã chốt hoặc đã khóa.",
   "운영월 범위를 벗어난 날짜입니다.": "Ngày nằm ngoài phạm vi tháng vận hành.",
   "마사지사를 찾을 수 없습니다.": "Không tìm thấy kỹ thuật viên.",
-  "활성 마사지사만 지급완료 상태를 변경할 수 있습니다.": "Chỉ kỹ thuật viên đang hoạt động mới có thể đổi trạng thái đã thanh toán.",
-  "해당 날짜에 정산 대상 콜이 없는 마사지사는 지급완료로 표시할 수 없습니다.": "Không thể đánh dấu đã thanh toán cho kỹ thuật viên không có cuộc gọi cần đối soát trong ngày.",
-  "지급완료 상태값이 올바르지 않습니다.": "Giá trị trạng thái đã thanh toán không hợp lệ.",
+  "활성 마사지사만 지급 확인을 변경할 수 있습니다.": "Chỉ kỹ thuật viên đang hoạt động mới có thể thay đổi xác nhận chi trả.",
+  "해당 날짜에 정산 대상 콜이 없는 마사지사는 지급 확인을 할 수 없습니다.": "Không thể xác nhận chi trả cho kỹ thuật viên không có cuộc gọi cần đối soát trong ngày.",
+  // 지급 확인(티켓 31: 운영팀) action 안전 메시지
+  "운영팀 직원을 선택하세요.": "Vui lòng chọn nhân viên nhóm vận hành.",
+  "운영팀 직원을 찾을 수 없습니다.": "Không tìm thấy nhân viên nhóm vận hành.",
+  "활성 운영팀 직원만 지급 확인을 변경할 수 있습니다.": "Chỉ nhân viên nhóm vận hành đang hoạt động mới có thể thay đổi xác nhận chi trả.",
+  "해당 날짜의 운영팀 정산 대상을 찾을 수 없습니다.": "Không tìm thấy đối tượng đối soát nhóm vận hành cho ngày này.",
+  "해당 월의 운영팀 정산 대상을 찾을 수 없습니다.": "Không tìm thấy đối tượng đối soát nhóm vận hành cho tháng này.",
+  "이 지급 확인 단위에는 날짜가 필요합니다.": "Đơn vị xác nhận chi trả này cần có ngày.",
+  "월 단위 지급 확인에는 날짜를 지정할 수 없습니다.": "Không thể chỉ định ngày cho xác nhận chi trả theo tháng.",
+  "금액은 0 이상의 정수여야 합니다.": "Số tiền phải là số nguyên từ 0 trở lên.",
+  "사유는 500자 이하로 입력하세요.": "Vui lòng nhập lý do tối đa 500 ký tự.",
+  "재확인 사유를 입력하세요.": "Vui lòng nhập lý do xác nhận lại.",
+  "해제 사유를 입력하세요.": "Vui lòng nhập lý do hủy xác nhận.",
+  "지급 확인 입력값이 올바르지 않습니다.": "Dữ liệu xác nhận chi trả không hợp lệ.",
+  "지급 재확인 입력값이 올바르지 않습니다.": "Dữ liệu xác nhận lại chi trả không hợp lệ.",
+  "지급 확인 해제 입력값이 올바르지 않습니다.": "Dữ liệu hủy xác nhận chi trả không hợp lệ.",
   // 월마감 재오픈 등 Zod field-level 메시지
   "재오픈 사유를 5자 이상 입력하세요.": "Vui lòng nhập lý do mở lại từ 5 ký tự trở lên.",
+  // 콜 상세 패널: 고객 연결 정정 Zod field-level 메시지
+  "정정 사유를 입력하세요.": "Vui lòng nhập lý do chỉnh sửa.",
   // 콜 원장/일별 지출 Zod field-level 메시지 (inline 표시)
   "날짜는 YYYY-MM-DD 형식이어야 합니다.": "Ngày phải theo định dạng YYYY-MM-DD.",
   "시간은 HH:mm 형식이어야 합니다.": "Giờ phải theo định dạng HH:mm.",
-  "실제입장은 10분 단위이거나 비어 있어야 합니다.": "Giờ vào thực tế phải theo bước 10 phút hoặc để trống.",
+  "실제입장은 HH:mm 형식이거나 비어 있어야 합니다.": "Giờ vào thực tế phải có dạng HH:mm hoặc để trống.",
+  "실제 종료는 HH:mm 형식이거나 비어 있어야 합니다.": "Giờ kết thúc thực tế phải có dạng HH:mm hoặc để trống.",
   "코스를 선택하세요.": "Vui lòng chọn gói dịch vụ.",
+  "일행은 2명 이상이어야 합니다.": "Nhóm phải có từ 2 khách trở lên.",
+  "일행은 10명까지입니다.": "Nhóm tối đa 10 khách.",
   "상태를 선택하세요.": "Vui lòng chọn trạng thái.",
   "담당자를 선택하세요.": "Vui lòng chọn người phụ trách.",
   "내용을 입력하세요.": "Vui lòng nhập nội dung.",
@@ -119,6 +198,7 @@ const KOREAN_MESSAGE_VI: Record<string, string> = {
   "선택값이 올바르지 않습니다.": "Giá trị lựa chọn không hợp lệ.",
   "이름을 입력하세요.": "Vui lòng nhập tên.",
   "고객을 선택하세요.": "Vui lòng chọn khách.",
+  "저장 기준 시각이 올바르지 않습니다. 다시 불러온 뒤에 저장하세요.": "Thời điểm của bản đã đọc không hợp lệ. Hãy tải lại rồi mới lưu.",
   // 운영팀 월 인센/월마감 보너스 고정 warning (표시 직전 번역; 서비스는 한국어 원문 유지)
   "적용월에 활성 운영팀 월 인센 정책이 없습니다.": "Không có chính sách thưởng tháng nhóm vận hành đang hoạt động trong tháng áp dụng.",
   "활성 운영팀 직원이 없어 전체 월 인센을 미배분으로 남겼습니다.": "Không có nhân viên nhóm vận hành đang hoạt động nên toàn bộ thưởng tháng được để chưa phân bổ.",
@@ -126,7 +206,9 @@ const KOREAN_MESSAGE_VI: Record<string, string> = {
   "팀장 대상자가 2명 이상이라 deterministic order의 첫 번째 직원에게 팀장 몫을 배정했습니다.": "Có từ 2 đối tượng trưởng nhóm trở lên nên phần của trưởng nhóm được phân cho nhân viên đầu tiên theo deterministic order.",
   "카운터팀 대상자가 없어 카운터팀 몫을 미배분으로 남겼습니다.": "Không có đối tượng nhóm quầy nên phần của nhóm quầy được để chưa phân bổ.",
   "웨이터팀 대상자가 없어 웨이터팀 몫을 미배분으로 남겼습니다.": "Không có đối tượng nhóm phục vụ nên phần của nhóm phục vụ được để chưa phân bổ.",
-  "Story 4.1 마사지사 출퇴근/만근 인정 source가 없어 만근수당을 계산하지 않았습니다.": "Không có bản ghi chấm công nên không tính phụ cấp đủ công.",
+  "Story 4.1 마사지사 출퇴근/만근 인정 source가 없어 만근수당을 계산하지 않았습니다.": "Không có source chấm công/công nhận đủ công của KTV massage Story 4.1 nên không tính phụ cấp đủ công.",
+  // 월 명세서(S11, 티켓 32) 고정 문구 — 마감 버전을 보는 중일 때 날짜별 근거 자리에 쓴다.
+  "이 마감 버전에는 해당 근거가 저장되지 않았습니다.": "Phiên bản chốt này không lưu căn cứ đó.",
   // 운영팀 월 인센 calculationBasis 고정 문구 (표시 직전 번역)
   "월 인센 지급 조건 미충족": "Chưa đạt điều kiện chi thưởng tháng",
   "팀장 중복 대상 / deterministic order 후순위": "Trùng đối tượng trưởng nhóm / xếp sau theo deterministic order",

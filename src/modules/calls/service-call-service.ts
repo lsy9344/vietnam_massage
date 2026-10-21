@@ -1,30 +1,44 @@
+import { randomUUID } from "node:crypto";
+import { QuickBookingGuestError, ServiceCallDomainError } from "./service-call-domain-error";
+export { QuickBookingGuestError, ServiceCallDomainError } from "./service-call-domain-error";
+export { listAssignedServiceCallsForEmployeeFromDate } from "./assigned-service-call-query";
+
 import { prisma } from "@/lib/prisma";
 import { BUSINESS_TIME_ZONE_OFFSET_MINUTES } from "@/lib/business-time";
 import { defaultLocale, type Locale } from "@/lib/i18n/config";
 import { codeLabel } from "@/lib/i18n/codes";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
-import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
-import { assertOperatingMonthPayoutWritable } from "@/modules/closing/month-lock-guard";
+import { SYSTEM_AUDIT_ACTOR_ID, type AuditJsonSnapshot } from "@/modules/audit/audit-event";
+import { assertOperatingMonthPayoutWritable, isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import { listActiveCodeItems, listActiveTimeSlots } from "@/modules/masters/code-service";
 import { listActiveCourses } from "@/modules/masters/course-service";
 import { listActiveEmployees } from "@/modules/masters/employee-service";
 import { listActiveRooms } from "@/modules/masters/room-service";
+import { listPlannedWorkingDayStatusesForDate, type PlannedWorkingDayCellStatus } from "@/modules/masters/planned-working-day-query";
+import { seatTimeline, type SeatCall, type SeatPoint, type SeatTherapist } from "./seat-capacity";
 import {
-  assignmentRoles,
   customerInputSchema,
   customerUpdateSchema,
   dailyExpenseDeactivateSchema,
   dailyExpenseInputSchema,
   dailyExpenseUpdateSchema,
+  quickBookingPartyInputSchema,
+  savedVersionMessage,
   serviceCallAutosaveInputSchema,
+  serviceCallCreateInputSchema,
+  serviceCallCustomerLinkCorrectionSchema,
   serviceCallInputSchema,
   type CustomerInput,
   type CustomerUpdateInput,
   type DailyExpenseDeactivateInput,
   type DailyExpenseInput,
   type DailyExpenseUpdateInput,
+  type QuickBookingGuestInput,
+  type QuickBookingPartyInput,
   type ServiceCallAssignmentRole,
   type ServiceCallAutosaveInput,
+  type ServiceCallCreateInput,
+  type ServiceCallCustomerLinkCorrectionInput,
   type ServiceCallInput
 } from "@/modules/calls/service-call-schema";
 
@@ -55,8 +69,6 @@ type CoursePolicyRecord = {
   name: string;
   durationMinutes: number;
   basePrice: number;
-  opsCallCredit: number;
-  earcarePoolAmount: number;
   requiresSecondTherapist: boolean;
   tvDisplayName: string;
   effectiveFromMonth: string;
@@ -139,6 +151,7 @@ type CustomerRecord = {
   name: string;
   phone: string | null;
   memo: string | null;
+  preferenceNote: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -150,6 +163,7 @@ type ServiceCallRecord = {
   serviceDate: Date;
   startTime: string;
   actualEntryTime?: string | null;
+  actualEndTime?: string | null;
   roomId: string | null;
   room?: RoomRecord | null;
   courseId: string;
@@ -160,7 +174,12 @@ type ServiceCallRecord = {
   discountTypeCode: string | null;
   paymentMethodCode: string | null;
   note: string | null;
+  visitRequest: string | null;
+  bookingChannelCode?: string | null;
+  bookerName?: string | null;
   confirmationCode: string | null;
+  partyId?: string | null;
+  partyPosition?: number | null;
   createdAt: Date;
   updatedAt: Date;
   assignments?: ServiceCallAssignmentRecord[];
@@ -232,6 +251,11 @@ type ServiceCallPrismaClient = {
   therapistAttendance: {
     findMany(args?: unknown): Promise<TherapistAttendanceRecord[]>;
   };
+  // listPlannedWorkingDayStatusesForDate(masters/planned-working-day-query.ts)가 요구하는 좁은 모양만 둔다. 실제로는
+  // 같은 prisma 클라이언트라 근무표 서비스가 이 콜 테이블 조회와 함께 근무표 테이블을 읽을 수 있다(티켓 29).
+  plannedWorkingDay: {
+    findMany(args?: unknown): Promise<Array<{ employeeId: string; planStatus: string }>>;
+  };
   $transaction?<T>(callback: (tx: ServiceCallPrismaClient) => Promise<T>): Promise<T>;
 };
 
@@ -239,8 +263,8 @@ type TherapistAttendanceRecord = {
   employeeId: string;
   operatingMonthId: string;
   attendanceDate: Date;
-  checkInMinute?: number | null;
-  checkOutMinute?: number | null;
+  checkInMinute: number;
+  checkOutMinute: number | null;
   isActive: boolean;
 };
 
@@ -249,6 +273,8 @@ export type CustomerDto = {
   name: string;
   phone: string | null;
   memo: string | null;
+  /** 고객 공통 선호·주의사항(F06, 티켓 23). memo(고객 메모)와는 다른 칸이다. */
+  preferenceNote: string | null;
 };
 
 export type ServiceCallAssigneeDto = {
@@ -264,14 +290,39 @@ export type ServiceCallCalculationStatus =
   | "therapist_rate_missing"
   | "second_therapist_required";
 
+/**
+ * 원장 행 경고 코드. 배열 순서가 곧 우선순위다(스펙 B02): 앞 시술 미완료 → 객실 겹침 → 양보 → 계산 오류.
+ */
+export const CALL_ROW_WARNING_ORDER = [
+  "previous_service_unfinished",
+  "room_overlap",
+  "yield_to_reservation",
+  "calculation_error"
+] as const;
+
+export type CallRowWarningCode = (typeof CALL_ROW_WARNING_ORDER)[number];
+
+export type CallRowWarningDto = {
+  code: CallRowWarningCode;
+  /** 경고가 말하는 시각(HH:mm). 앞 시술 미완료는 앞 콜의 표시 종료, 객실 겹침은 가장 이른 상대의 예약시각, 양보는 다음 예약시각. */
+  relatedTime: string | null;
+  relatedCallIds: string[];
+};
+
 export type ServiceCallRowDto = {
   id: string;
   operatingMonthId: string;
   serviceDate: string;
   startTime: string;
   actualEntryTime: string | null;
+  /** 실제 종료(1018 스펙 D1·D2). 있으면 Therapist가 이 콜에 묶이는 끝이다. */
+  actualEndTime: string | null;
   displayEnd: string;
+  /** 예약 기준 예상 종료(1018 스펙 D10): 입장과 관계없이 예약시각 + 코스 길이다. */
+  reservedEnd: string;
   warningTime: string | null;
+  /** 우선순위 순서의 경고 목록. 비어 있으면 경고가 없다. */
+  warnings: CallRowWarningDto[];
   roomId: string | null;
   roomLabel: string;
   courseId: string;
@@ -281,19 +332,24 @@ export type ServiceCallRowDto = {
   customerMemo: string | null;
   therapist1: ServiceCallAssigneeDto | null;
   therapist2: ServiceCallAssigneeDto | null;
-  earcare: ServiceCallAssigneeDto | null;
   status: string;
   discountTypeCode: string | null;
   paymentMethodCode: string | null;
   note: string | null;
+  /** 이번 콜의 방문별 요청(F06, 티켓 23). note(비고)와는 다른 칸이다. */
+  visitRequest: string | null;
+  /** 예약 경로(BOOKING_CHANNEL 코드)와 메신저의 예약자명(1018 스펙 D1). */
+  bookingChannelCode: string | null;
+  bookerName: string | null;
   confirmationCode: string | null;
+  /** 일행(스펙 D13, 티켓 02·04). 일행이 아닌 콜은 둘 다 null이다. */
+  partyId: string | null;
+  partyPosition: number | null;
   basePrice: number;
   paymentAmount: number;
   discountAmount: number;
   therapist1Commission: number;
   therapist2Commission: number;
-  earcarePoolAmount: number;
-  opsCallCredit: number;
   calculationStatus: ServiceCallCalculationStatus;
   calculationErrorCode: string | null;
   calculationErrorMessage: string | null;
@@ -343,7 +399,6 @@ export type DailyCallLedgerSummaryDto = {
   canceledCount: number;
   paymentTotal: number;
   therapistCommissionTotal: number;
-  earcarePoolTotal: number;
   discountTotal: number;
   expenseTotal: number;
   netSales: number;
@@ -373,8 +428,6 @@ export type CompletedServiceCallCalculationDto = {
   basePrice: number;
   paymentAmount: number;
   discountAmount: number;
-  earcarePoolAmount: number;
-  opsCallCredit: number;
   therapistAssignments: Array<{
     role: "THERAPIST_1" | "THERAPIST_2";
     employeeId: string;
@@ -405,34 +458,70 @@ export type ServiceCallFormOptions = {
   discountTypes: ServiceCallOption[];
   paymentMethods: ServiceCallOption[];
   confirmationCodes: ServiceCallOption[];
+  /** 예약 경로(BOOKING_CHANNEL, 1018 스펙 D1). */
+  bookingChannels: ServiceCallOption[];
   therapists: ServiceCallOption[];
-  earcareEmployees: ServiceCallOption[];
   expenseHandlers: ServiceCallOption[];
 };
+
+// rate_missing: 이 운영월에 유효한 수당이 없다(두 명 코스는 수당을 가진 다른 활성 Therapist도 없다). 시간보다 앞선다.
+// time_short: 수당은 있으나 이 Therapist나 수당을 가진 짝이 코스 길이만큼 비어 있지 않다.
+export type TherapistAvailabilityCourseVerdict = "possible" | "time_short" | "rate_missing";
 
 export type TherapistAvailabilityCourseDto = {
   courseId: string;
   courseCode: string;
   courseName: string;
   durationMinutes: number;
-  possible: boolean;
+  verdict: TherapistAvailabilityCourseVerdict;
+  // 코스 정책상 두 번째 Therapist가 필요한지(티켓 21). 빠른 예약 패널이 두 번째 Therapist 선택을 보일지 정한다.
+  requiresSecondTherapist: boolean;
 };
 
 export type TherapistAvailabilityRowDto = {
   therapistId: string;
   therapistName: string;
-  attendance: "checked_in" | "not_entered";
+  // 그날의 출근 기록: 없으면 출근 전, 퇴근 시각이 없으면 출근, 있으면 퇴근(현재 퇴근). 출근 시각 전을 비는 시간으로 보지 않는 것
+  // (1018 스펙 D28) 말고는 판정과 코스 버튼을 바꾸지 않는다.
+  attendance: "before_check_in" | "checked_in" | "checked_out";
+  // 고른 날짜가 오늘이고 고른 시각이 지금보다 30분을 넘겨 뒤인데 출근 상태가 아니다.
+  shiftCheck: boolean;
   available: boolean;
   freeFrom: string | null;
   nextReservationTime: string | null;
   freeMinutes: number | null;
+  // 근무표(27)에 적힌 그날의 근무 예정. 실제 출근(attendance)과는 다른 테이블이라 서로 다른 값일 수 있고,
+  // 가능 판정·코스 버튼을 바꾸지 않는 안내일 뿐이다(스토리 12–13, 60, 104, V07).
+  plannedWorkingDayStatus: PlannedWorkingDayCellStatus;
+  // 그날 이 Therapist가 맡은 콜 수(원장 현황 줄, 빠른 예약 카드). done은 사용중·청소중·방문완료, finished는 서비스가 끝난
+  // 청소중·방문완료(현황 줄의 "완료", 1018 스펙 D17), reserved는 예약이다. 노쇼·취소는 세지 않는다. Therapist가 둘인 콜은
+  // 두 사람에게 각자 1개다(정산과 같은 방식). 가능 판정과는 무관하다.
+  callCounts: { done: number; finished: number; reserved: number };
+  /** 근무표의 출근 예정 시각(HH:MM). 적지 않았으면 null. 근무 예정이고 출근 기록이 없으면 이 시각 전은 비는 시간이 아니다(1018 스펙 D28). */
+  plannedStartTime: string | null;
+  // 원장 현황 줄의 지금 상태(1018 스펙 D17). 고른 날짜가 영업일 오늘이면 지금, 아니면 고른 시각 기준이다. 출근 기록이 먼저이고,
+  // 출근 중이면 점유(예약 포함)로 사용 중과 지금 가능을 나눈다. 사용 중이면 expectedEnd(점유 끝), 지금 가능이면 다음 예약과
+  // 그때까지 남은 분을 준다. 판정·코스 버튼과는 무관하다.
+  current: {
+    state: "available" | "in_use" | "before_check_in" | "checked_out";
+    expectedEnd: string | null;
+    nextReservationTime: string | null;
+    freeMinutes: number | null;
+  };
   courses: TherapistAvailabilityCourseDto[];
 };
 
-export class ServiceCallDomainError extends Error {
-  constructor(message: string, public readonly code: string) {
-    super(message);
-    this.name = "ServiceCallDomainError";
+/** 남은 자리 한 점(1018 스펙 D25). time은 그 점의 시각(HH:MM)이고, offsetMinutes는 고른 시각에서 지난 분이다. */
+export type SeatPointDto = SeatPoint & { time: string };
+
+/**
+ * 오래된 저장(STALE_CALL). 화면이 읽은 뒤에 다른 저장이 먼저 들어왔다. 아무것도 쓰지 않았고,
+ * 화면이 다시 불러올 수 있게 지금의 행(currentRow)을 함께 돌려준다.
+ */
+export class StaleServiceCallError extends ServiceCallDomainError {
+  constructor(public readonly currentRow: ServiceCallRowDto) {
+    super("다른 화면에서 이 콜이 바뀌었습니다. 다시 불러온 뒤에 저장하세요.", "STALE_CALL");
+    this.name = "StaleServiceCallError";
   }
 }
 
@@ -444,12 +533,23 @@ function isReservationStatus(status: string) {
   return status === "예약" || status === "RESERVED";
 }
 
+export const IN_USE_SERVICE_CALL_STATUSES: readonly string[] = ["사용중", "IN_USE", "USING"];
+
 function isInUseStatus(status: string) {
-  return status === "사용중" || status === "IN_USE" || status === "USING";
+  return IN_USE_SERVICE_CALL_STATUSES.includes(status);
 }
 
 function isCleaningStatus(status: string) {
   return status === "청소중" || status === "CLEANING";
+}
+
+/**
+ * 오늘 한 것(M7, 티켓 03): 사용중·청소중·방문완료. 원장 Therapist 현황 줄의 callCounts.done과 같은
+ * 판정이다(아래 listTherapistAvailabilityWithSeats의 루프가 이 함수로 센다). Therapist 모듈이 이
+ * 함수를 그대로 가져다 쓴다 — 상태 목록을 다시 적지 않는다.
+ */
+export function isDoneServiceCallStatus(status: string) {
+  return isInUseStatus(status) || isCleaningStatus(status) || isCompletedServiceCallStatus(status);
 }
 
 function isNoShowStatus(status: string) {
@@ -561,12 +661,6 @@ function toIsoDateOnly(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function assertAssignmentRole(value: string): asserts value is ServiceCallAssignmentRole {
-  if (!assignmentRoles.includes(value as ServiceCallAssignmentRole)) {
-    throw new ServiceCallDomainError("담당자 역할이 올바르지 않습니다.", "INVALID_ASSIGNMENT_ROLE");
-  }
-}
-
 function isDateWithinOperatingMonth(date: Date, month: OperatingMonthRecord) {
   return date.getTime() >= month.startDate.getTime() && date.getTime() <= month.endDate.getTime();
 }
@@ -594,8 +688,6 @@ function emptyCalculation(status: ServiceCallCalculationStatus, error?: { code: 
     discountAmount: 0,
     therapist1Commission: 0,
     therapist2Commission: 0,
-    earcarePoolAmount: 0,
-    opsCallCredit: 0,
     calculationStatus: status,
     calculationErrorCode: error?.code ?? null,
     calculationErrorMessage: error?.message ?? null
@@ -655,6 +747,10 @@ async function prefetchCalculationSources(
     current.push(policy);
     policiesByCourseId.set(policy.courseId, current);
   }
+  return { policiesByCourseId, ratesByTherapistCourse: groupRatesByTherapistCourse(rates) };
+}
+
+function groupRatesByTherapistCourse(rates: TherapistCourseRateRecord[]) {
   const ratesByTherapistCourse = new Map<string, TherapistCourseRateRecord[]>();
   for (const rate of rates) {
     const key = rateSourceKey(rate.therapistId, rate.courseId);
@@ -662,8 +758,7 @@ async function prefetchCalculationSources(
     current.push(rate);
     ratesByTherapistCourse.set(key, current);
   }
-
-  return { policiesByCourseId, ratesByTherapistCourse };
+  return ratesByTherapistCourse;
 }
 
 async function findCoursePolicyForCalculation(
@@ -731,8 +826,6 @@ async function calculateServiceCallCompletion(
     discountAmount,
     therapist1Commission: 0,
     therapist2Commission: 0,
-    earcarePoolAmount: policy.earcarePoolAmount,
-    opsCallCredit: policy.opsCallCredit,
     calculationStatus: "calculated" as ServiceCallCalculationStatus,
     calculationErrorCode: null,
     calculationErrorMessage: null
@@ -744,9 +837,7 @@ async function calculateServiceCallCompletion(
     return {
       ...baseCalculation,
       therapist1Commission: 0,
-      therapist2Commission: 0,
-      earcarePoolAmount: 0,
-      opsCallCredit: 0
+      therapist2Commission: 0
     };
   }
 
@@ -802,27 +893,27 @@ function toAssigneeDto(record: EmployeeRecord): ServiceCallAssigneeDto {
   };
 }
 
+// 마이그레이션 0006(ADR 0006)을 적용하기 전 DB에는 귀케어 담당(EARCARE) 배정이 남아 있다. 그 배정은 원장 칸이
+// 아니므로 거절하지 않고 지나친다(운영 DB에 0006 없이 프리뷰를 붙일 때).
 function assignmentByRole(record: ServiceCallRecord, role: ServiceCallAssignmentRole) {
-  return (record.assignments ?? []).find((assignment) => {
-    assertAssignmentRole(assignment.assignmentRole);
-    return assignment.assignmentRole === role && assignment.isActive !== false;
-  });
+  return (record.assignments ?? []).find((assignment) => assignment.assignmentRole === role && assignment.isActive !== false);
 }
 
 async function toRowDto(
   tx: ServiceCallPrismaClient,
   record: ServiceCallRecord,
   sources?: ServiceCallCalculationSources,
-  displayContext?: DisplayEndContext
+  displayContext?: DisplayEndContext,
+  now: Date = new Date()
 ): Promise<ServiceCallRowDto> {
   const operatingMonth = record.operatingMonth;
   const course = record.course;
   const policy = operatingMonth && course ? firstCurrentPolicy(course, operatingMonth.monthKey) : null;
   const therapist1 = assignmentByRole(record, "THERAPIST_1")?.employee ?? null;
   const therapist2 = assignmentByRole(record, "THERAPIST_2")?.employee ?? null;
-  const earcare = assignmentByRole(record, "EARCARE")?.employee ?? null;
   const calculation = await calculateServiceCallCompletion(tx, record, sources);
-  const display = deriveDisplayEnd(record, displayContext ?? (await displayEndContextFor(tx, record)));
+  const context = displayContext ?? (await displayEndContextFor(tx, record));
+  const display = deriveDisplayEnd(record, context);
 
   return {
     id: record.id,
@@ -830,8 +921,13 @@ async function toRowDto(
     serviceDate: toIsoDateOnly(record.serviceDate),
     startTime: record.startTime,
     actualEntryTime: display.actualEntryTime,
+    actualEndTime: storedActualEndTime(record),
     displayEnd: display.displayEnd,
+    reservedEnd: CLOCK_TIME.test(record.startTime)
+      ? formatBusinessMinute(businessMinute(record.startTime, context.dayStart) + courseDurationMinutes(record))
+      : display.displayEnd,
     warningTime: display.warningTime,
+    warnings: deriveRowWarnings(record, context, display, calculation.calculationStatus, now),
     roomId: record.roomId,
     roomLabel: record.room?.displayName ?? "미배정",
     courseId: record.courseId,
@@ -841,12 +937,16 @@ async function toRowDto(
     customerMemo: record.customerMemo,
     therapist1: therapist1 ? toAssigneeDto(therapist1) : null,
     therapist2: therapist2 ? toAssigneeDto(therapist2) : null,
-    earcare: earcare ? toAssigneeDto(earcare) : null,
     status: record.status,
     discountTypeCode: record.discountTypeCode,
     paymentMethodCode: record.paymentMethodCode,
     note: record.note,
+    visitRequest: record.visitRequest,
+    bookingChannelCode: record.bookingChannelCode ?? null,
+    bookerName: record.bookerName ?? null,
     confirmationCode: record.confirmationCode,
+    partyId: record.partyId ?? null,
+    partyPosition: record.partyId ? (record.partyPosition ?? null) : null,
     ...calculation,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
@@ -936,8 +1036,16 @@ async function assertActiveCourse(tx: ServiceCallPrismaClient, input: { courseId
   return policy;
 }
 
-function assertSecondTherapistRequirement(input: { policy: CoursePolicyRecord; therapist2Id: string | null | undefined }) {
-  if (!input.policy.requiresSecondTherapist || input.therapist2Id) {
+/**
+ * 두 명 코스는 두 번째 Therapist가 있어야 한다. 다만 Therapist를 아직 정하지 않은 미지명 예약(1018 스펙 D20)은 두 사람 다
+ * 비어 있어도 된다. 첫 Therapist를 정하면 두 번째도 함께 정해야 저장된다.
+ */
+function assertSecondTherapistRequirement(input: {
+  policy: CoursePolicyRecord;
+  therapist1Id: string | null | undefined;
+  therapist2Id: string | null | undefined;
+}) {
+  if (!input.policy.requiresSecondTherapist || input.therapist2Id || !input.therapist1Id) {
     return;
   }
 
@@ -968,9 +1076,8 @@ async function assertActiveEmployee(tx: ServiceCallPrismaClient, input: { employ
     return;
   }
 
-  const expectedGroup = input.role === "EARCARE" ? "EARCARE" : "THERAPIST";
   const employee = await tx.employee.findUnique({ where: { id: input.employeeId } });
-  if (!employee || !employee.isActive || employee.employeeGroup !== expectedGroup) {
+  if (!employee || !employee.isActive || employee.employeeGroup !== "THERAPIST") {
     throw new ServiceCallDomainError("활성 담당 직원을 선택하세요.", "EMPLOYEE_NOT_ACTIVE_FOR_ROLE");
   }
 }
@@ -1038,6 +1145,30 @@ async function findServiceCallWithRelations(tx: ServiceCallPrismaClient, id: str
   return record;
 }
 
+/**
+ * 기존 행을 화면이 읽은 버전(expectedUpdatedAt)일 때만 고친다. 버전 확인과 쓰기가 한 번의 조건부 갱신이라
+ * 그 사이에 다른 저장이 끼어들 수 없다. 고친 행이 없으면 행이 없는지, 다른 저장이 먼저 들어왔는지 가린다.
+ */
+async function updateServiceCallAtVersion(
+  tx: ServiceCallPrismaClient,
+  target: { serviceCallId: string; operatingMonthId: string; expectedUpdatedAt: string },
+  data: Record<string, unknown>
+) {
+  const updateResult = await tx.serviceCall.updateMany({
+    where: { id: target.serviceCallId, operatingMonthId: target.operatingMonthId, updatedAt: new Date(target.expectedUpdatedAt) },
+    data
+  });
+  if (updateResult.count === 1) {
+    return;
+  }
+
+  const current = await findServiceCallWithRelations(tx, target.serviceCallId);
+  if (current.operatingMonthId !== target.operatingMonthId) {
+    throw new ServiceCallDomainError("콜 원장 행을 찾을 수 없습니다.", "SERVICE_CALL_NOT_FOUND");
+  }
+  throw new StaleServiceCallError(await toRowDto(tx, current));
+}
+
 function assignmentEmployeeId(record: ServiceCallRecord, role: ServiceCallAssignmentRole) {
   return assignmentByRole(record, role)?.employeeId ?? null;
 }
@@ -1049,6 +1180,7 @@ function toAuditSnapshot(record: ServiceCallRecord): AuditJsonSnapshot {
     serviceDate: toIsoDateOnly(record.serviceDate),
     startTime: record.startTime,
     actualEntryTime: storedActualEntryTime(record),
+    actualEndTime: storedActualEndTime(record),
     roomId: record.roomId,
     courseId: record.courseId,
     customerId: linkedCustomerId(record),
@@ -1057,12 +1189,16 @@ function toAuditSnapshot(record: ServiceCallRecord): AuditJsonSnapshot {
     discountTypeCode: record.discountTypeCode,
     paymentMethodCode: record.paymentMethodCode,
     note: record.note,
+    visitRequest: record.visitRequest,
+    bookingChannelCode: record.bookingChannelCode ?? null,
+    bookerName: record.bookerName ?? null,
     confirmationCode: record.confirmationCode,
     assignments: {
       therapist1Id: assignmentEmployeeId(record, "THERAPIST_1"),
-      therapist2Id: assignmentEmployeeId(record, "THERAPIST_2"),
-      earcareEmployeeId: assignmentEmployeeId(record, "EARCARE")
+      therapist2Id: assignmentEmployeeId(record, "THERAPIST_2")
     },
+    // 일행 콜만 일행 칸을 남긴다(티켓 02). 일행이 아닌 콜의 감사 스냅샷 모양은 그대로다.
+    ...(record.partyId ? { partyId: record.partyId, partyPosition: record.partyPosition ?? null } : {}),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString()
   };
@@ -1114,9 +1250,9 @@ function hasSensitiveRowChange(before: ServiceCallRecord, after: ServiceCallReco
     before.confirmationCode !== after.confirmationCode ||
     assignmentEmployeeId(before, "THERAPIST_1") !== assignmentEmployeeId(after, "THERAPIST_1") ||
     assignmentEmployeeId(before, "THERAPIST_2") !== assignmentEmployeeId(after, "THERAPIST_2") ||
-    assignmentEmployeeId(before, "EARCARE") !== assignmentEmployeeId(after, "EARCARE") ||
     linkedCustomerId(before) !== linkedCustomerId(after) ||
-    storedActualEntryTime(before) !== storedActualEntryTime(after)
+    storedActualEntryTime(before) !== storedActualEntryTime(after) ||
+    storedActualEndTime(before) !== storedActualEndTime(after)
   );
 }
 
@@ -1129,7 +1265,8 @@ function toCustomerDto(record: CustomerRecord): CustomerDto {
     id: record.id,
     name: record.name,
     phone: record.phone,
-    memo: record.memo
+    memo: record.memo,
+    preferenceNote: record.preferenceNote
   };
 }
 
@@ -1138,7 +1275,8 @@ function toCustomerAuditSnapshot(record: CustomerRecord): AuditJsonSnapshot {
     id: record.id,
     name: record.name,
     phone: record.phone,
-    memo: record.memo
+    memo: record.memo,
+    preferenceNote: record.preferenceNote
   };
 }
 
@@ -1169,6 +1307,8 @@ async function resolveLinkedCustomerId(
 export async function listServiceCallsForDate(input: {
   operatingMonthId: string;
   serviceDate: string;
+  /** 앞 시술 미완료를 판정하는 지금 시각. 없으면 서버 시각이다. */
+  now?: Date;
   prismaClient?: ServiceCallPrismaClient;
 }) {
   const parsed = serviceCallInputSchema.pick({ operatingMonthId: true, serviceDate: true }).safeParse(input);
@@ -1204,12 +1344,14 @@ export async function listServiceCallsForDate(input: {
         const rightOrder = sortOrderByTime.get(b.startTime) ?? 9999;
         return leftOrder - rightOrder || a.createdAt.getTime() - b.createdAt.getTime();
       })
-      .map((record) => toRowDto(client, record, sources, displayContext))
+      .map((record) => toRowDto(client, record, sources, displayContext, input.now))
   );
 }
 
 const AVAILABILITY_DAY_MINUTES = 24 * 60;
 const AVAILABILITY_DEFAULT_DAY_START = 11 * 60;
+// 오늘 지금보다 이만큼을 넘겨 뒤의 시각이면 출근 상태가 아닌 Therapist에게 근무 확인 필요를 붙인다. 정확히 30분은 붙이지 않는다.
+const AVAILABILITY_SHIFT_CHECK_MINUTES = 30;
 
 function occupiesAvailability(status: string) {
   return isReservationStatus(status) || isInUseStatus(status) || isCleaningStatus(status) || isCompletedServiceCallStatus(status);
@@ -1222,7 +1364,10 @@ function clockMinutes(value: string) {
 
 // 영업일 슬롯은 저녁을 지나 다음 달력날 새벽까지 이어진다. 첫 슬롯보다 이른 시각은 그 영업일의 뒤로 본다.
 function businessMinute(value: string, dayStart: number) {
-  const minutes = clockMinutes(value);
+  return businessMinuteOfDay(clockMinutes(value), dayStart);
+}
+
+function businessMinuteOfDay(minutes: number, dayStart: number) {
   return minutes < dayStart ? minutes + AVAILABILITY_DAY_MINUTES : minutes;
 }
 
@@ -1233,7 +1378,7 @@ function formatBusinessMinute(value: number) {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
-const TEN_MINUTE_TIME = /^([01]\d|2[0-3]):(00|10|20|30|40|50)$/;
+const CLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 type DisplayEndContext = {
   dayCalls: ServiceCallRecord[];
@@ -1247,12 +1392,17 @@ function dayStartFromSlots(slots: TimeSlotRecord[]) {
 
 function storedActualEntryTime(record: { actualEntryTime?: string | null }) {
   const value = record.actualEntryTime?.trim() ?? "";
-  return TEN_MINUTE_TIME.test(value) ? value : null;
+  return CLOCK_TIME.test(value) ? value : null;
 }
 
 function actualEntryForWrite(requested: string | null | undefined, existing: string | null | undefined) {
   if (requested === undefined) return storedActualEntryTime({ actualEntryTime: existing });
   return requested;
+}
+
+// 저장 입력이 칸을 보내지 않았으면(undefined) 저장된 값을 지킨다. null은 지운다는 뜻이다.
+function keptWhenOmitted(requested: string | null | undefined, existing: string | null | undefined) {
+  return requested === undefined ? existing ?? null : requested;
 }
 
 function assignedTherapistIds(record: ServiceCallRecord) {
@@ -1288,6 +1438,7 @@ function displayEndChoice(record: ServiceCallRecord, context: DisplayEndContext)
     ? businessMinute(record.startTime, context.dayStart)
     : null;
   let next: number | null = null;
+  let nextIds: string[] = [];
   if (reservationStart !== null && therapists.size > 0) {
     for (const other of context.dayCalls) {
       if (other.id === record.id) continue;
@@ -1296,13 +1447,131 @@ function displayEndChoice(record: ServiceCallRecord, context: DisplayEndContext)
       if (!assignedTherapistIds(other).some((id) => therapists.has(id))) continue;
       const start = businessMinute(other.startTime, context.dayStart);
       if (start <= reservationStart) continue;
-      if (next === null || start < next) next = start;
+      if (next === null || start < next) {
+        next = start;
+        nextIds = [other.id];
+      } else if (start === next) {
+        nextIds.push(other.id);
+      }
     }
   }
   if (next !== null && next < proposed) {
-    return { actualEntryTime, minute: next, yielded: true };
+    return { actualEntryTime, minute: next, yielded: true, yieldedToIds: nextIds };
   }
-  return { actualEntryTime, minute: proposed, yielded: false };
+  return { actualEntryTime, minute: proposed, yielded: false, yieldedToIds: [] as string[] };
+}
+
+function storedActualEndTime(record: { actualEndTime?: string | null }) {
+  const value = record.actualEndTime?.trim() ?? "";
+  return CLOCK_TIME.test(value) ? value : null;
+}
+
+// 스펙 D2: Therapist가 콜에 묶이는 끝은 실제 종료가 있으면 실제 종료, 없으면 표시 종료(ADR 0001)다.
+// 청소와는 관계없고, 서비스 종료와 다음 예약 가능 사이에 버퍼는 없다.
+function therapistReleaseMinute(record: ServiceCallRecord, context: DisplayEndContext) {
+  const actualEndTime = storedActualEndTime(record);
+  return actualEndTime ? businessMinute(actualEndTime, context.dayStart) : displayEndChoice(record, context).minute;
+}
+
+// 같은 날 같은 Therapist(두 배정 역할 모두)의 사용중 콜이 이 콜의 예약시각까지 끝났어야 하는데
+// 지금이 그 표시 종료를 넘겼으면 앞 시술 미완료다. 이 콜의 표시 종료와 예약시각은 바꾸지 않는다.
+function previousServiceUnfinished(record: ServiceCallRecord, context: DisplayEndContext, now: Date): CallRowWarningDto | null {
+  if (isNoShowStatus(record.status) || isCanceledStatus(record.status)) return null;
+  if (!CLOCK_TIME.test(record.startTime)) return null;
+  const therapists = new Set(assignedTherapistIds(record));
+  if (therapists.size === 0) return null;
+  const reservationStart = businessMinute(record.startTime, context.dayStart);
+  const serviceDate = toIsoDateOnly(record.serviceDate);
+  const unfinished: Array<{ id: string; endMinute: number }> = [];
+  for (const other of context.dayCalls) {
+    if (other.id === record.id) continue;
+    if (!isInUseStatus(other.status)) continue;
+    if (!CLOCK_TIME.test(other.startTime)) continue;
+    if (!assignedTherapistIds(other).some((id) => therapists.has(id))) continue;
+    const endMinute = displayEndChoice(other, context).minute;
+    if (endMinute > reservationStart) continue;
+    if (now.getTime() <= instantFromBusinessMinute(serviceDate, endMinute).getTime()) continue;
+    unfinished.push({ id: other.id, endMinute });
+  }
+  if (unfinished.length === 0) return null;
+  const latestEnd = Math.max(...unfinished.map((item) => item.endMinute));
+  return {
+    code: "previous_service_unfinished",
+    relatedTime: formatBusinessMinute(latestEnd),
+    relatedCallIds: unfinished.map((item) => item.id)
+  };
+}
+
+/** 객실 겹침 판정 결과. 원장 행 경고와 객실 상태 서비스가 같은 값을 쓴다(스펙 B06). */
+export type RoomOverlapDto = {
+  callId: string;
+  roomId: string;
+  /** 가장 이른 상대의 예약시각(HH:mm). */
+  relatedTime: string;
+  /** 겹치는 상대 콜 id 전체. 예약시각이 이른 순서다. */
+  relatedCallIds: string[];
+};
+
+// 예약 점유 구간 [예약시각, 예약시각 + 코스 길이). 실제입장과 표시 종료는 쓰지 않는다.
+// 노쇼, 취소, 객실이 없는 콜은 점유하지 않는다. 운영월에 유효한 코스 정책이 없으면 길이를 몰라
+// 판정하지 않는다(가능 코스의 점유도 정책이 없는 콜을 세지 않는다).
+function roomReservationInterval(record: ServiceCallRecord, context: DisplayEndContext) {
+  if (!record.roomId) return null;
+  if (isNoShowStatus(record.status) || isCanceledStatus(record.status)) return null;
+  if (!CLOCK_TIME.test(record.startTime)) return null;
+  const duration = courseDurationMinutes(record);
+  if (duration <= 0) return null;
+  const start = businessMinute(record.startTime, context.dayStart);
+  return { roomId: record.roomId, start, end: start + duration };
+}
+
+// 같은 날 같은 객실의 반열린 구간이 겹치면 양쪽에 붙는다. 맞닿으면 겹치지 않는다. 어느 예약시각도 밀지 않는다.
+function roomOverlapFor(record: ServiceCallRecord, context: DisplayEndContext): RoomOverlapDto | null {
+  const own = roomReservationInterval(record, context);
+  if (!own) return null;
+  const partners: Array<{ id: string; start: number }> = [];
+  for (const other of context.dayCalls) {
+    if (other.id === record.id) continue;
+    const interval = roomReservationInterval(other, context);
+    if (!interval || interval.roomId !== own.roomId) continue;
+    if (interval.start < own.end && own.start < interval.end) partners.push({ id: other.id, start: interval.start });
+  }
+  if (partners.length === 0) return null;
+  partners.sort((left, right) => left.start - right.start || left.id.localeCompare(right.id));
+  return {
+    callId: record.id,
+    roomId: own.roomId,
+    relatedTime: formatBusinessMinute(partners[0].start),
+    relatedCallIds: partners.map((partner) => partner.id)
+  };
+}
+
+function deriveRowWarnings(
+  record: ServiceCallRecord,
+  context: DisplayEndContext,
+  display: { warningTime: string | null },
+  calculationStatus: ServiceCallCalculationStatus,
+  now: Date
+): CallRowWarningDto[] {
+  const byCode = new Map<CallRowWarningCode, CallRowWarningDto>();
+  const unfinished = previousServiceUnfinished(record, context, now);
+  if (unfinished) byCode.set(unfinished.code, unfinished);
+  const overlap = roomOverlapFor(record, context);
+  if (overlap) {
+    byCode.set("room_overlap", { code: "room_overlap", relatedTime: overlap.relatedTime, relatedCallIds: overlap.relatedCallIds });
+  }
+  const choice = displayEndChoice(record, context);
+  if (choice.yielded && display.warningTime) {
+    byCode.set("yield_to_reservation", {
+      code: "yield_to_reservation",
+      relatedTime: display.warningTime,
+      relatedCallIds: choice.yieldedToIds ?? []
+    });
+  }
+  if (isCalculationWarningStatus(calculationStatus)) {
+    byCode.set("calculation_error", { code: "calculation_error", relatedTime: null, relatedCallIds: [] });
+  }
+  return CALL_ROW_WARNING_ORDER.flatMap((code) => byCode.get(code) ?? []);
 }
 
 function deriveDisplayEnd(record: ServiceCallRecord, context: DisplayEndContext) {
@@ -1353,21 +1622,131 @@ async function loadDisplayEndContext(
   return { dayCalls, dayStart: dayStartFromSlots(slots) };
 }
 
-export async function displayEndInstantsForDate(input: {
+type DayFactsInput = {
   operatingMonthId: string;
   serviceDate: string;
   prismaClient?: DisplayEndReadClient;
-}): Promise<Map<string, Date>> {
+};
+
+/**
+ * 객실 상태 서비스가 쓰는 그 날짜의 표시 종료와 객실 겹침. 콜을 한 번 읽어 둘 다 판정한다.
+ * 겹침은 원장 행의 room_overlap 경고와 같은 판정이며, 겹침이 없는 콜은 roomOverlaps에서 빠진다.
+ * roomOverlaps는 영업일 예약시각 순서다(첫 슬롯보다 이른 시각은 그날의 뒤). 소비자는 이 순서를 그대로 쓴다.
+ */
+export async function roomFloorFactsForDate(
+  input: DayFactsInput
+): Promise<{ displayEnds: Map<string, Date>; roomOverlaps: Map<string, RoomOverlapDto> }> {
   const client = input.prismaClient ?? getClient();
   const context = await loadDisplayEndContext(client, {
     operatingMonthId: input.operatingMonthId,
     serviceDate: toDateOnly(input.serviceDate)
   });
-  const instants = new Map<string, Date>();
+  const displayEnds = new Map<string, Date>();
+  const roomOverlaps = new Map<string, RoomOverlapDto>();
   for (const record of context.dayCalls) {
-    instants.set(record.id, instantFromBusinessMinute(input.serviceDate, displayEndChoice(record, context).minute));
+    displayEnds.set(record.id, instantFromBusinessMinute(input.serviceDate, displayEndChoice(record, context).minute));
   }
-  return instants;
+  const byReservation = context.dayCalls
+    .map((record) => ({ record, interval: roomReservationInterval(record, context) }))
+    .filter((entry): entry is { record: ServiceCallRecord; interval: NonNullable<typeof entry.interval> } => entry.interval !== null)
+    .sort((left, right) => left.interval.start - right.interval.start || left.record.id.localeCompare(right.record.id));
+  for (const { record } of byReservation) {
+    const overlap = roomOverlapFor(record, context);
+    if (overlap) roomOverlaps.set(record.id, overlap);
+  }
+  return { displayEnds, roomOverlaps };
+}
+
+const AUTO_FINISH_REASON = "자동 종료";
+
+// 저장된 사용중 상태와 같은 갈래(한국어 값 또는 코드)의 청소중이다. 그 값이 활성 상태 코드가 아니면 다른 갈래를 쓴다.
+function cleaningStatusFor(inUseStatus: string, activeStatuses: string[]) {
+  const preferred = inUseStatus === "사용중" ? ["청소중", "CLEANING"] : ["CLEANING", "청소중"];
+  return preferred.find((status) => activeStatuses.includes(status)) ?? null;
+}
+
+/**
+ * 자동 청소 중(1018 스펙 D14, ADR 0008): 원장·객실·실시간·TV 화면과 가능 판정이 그 영업일을 읽기 전에 부른다.
+ * 실제입장이 있고 실제 종료가 없는 사용중 콜이 표시 종료를 지났으면 청소중으로 바꾸고 실제 종료 = 표시 종료로 저장한다.
+ * 사람이 한 일이 아니므로 감사("자동 종료")의 행위자는 시스템이다. 상태 이력은 계정이 있어야 해서 남기지 않고,
+ * 감사가 이전·이후 상태를 남긴다. 그 화면을 연 계정(읽기 전용 역할일 수도 있다)의 이름으로 쓰지 않는다.
+ * - 운영월이 잠겼거나, 입장이 없거나, 코스 길이를 모르면 건드리지 않는다.
+ * - 종료 취소(청소중 → 사용중)한 적이 있는 콜은 손님이 아직 있다는 뜻이라 다시 끝내지 않는다.
+ * - 읽은 버전(updatedAt)일 때만 고쳐서, 같은 요청이 동시에 와도 한 번만 쓴다.
+ * 바꾼 콜 id를 돌려준다.
+ */
+export async function autoFinishOverdueCalls(input: {
+  operatingMonthId: string;
+  serviceDate: string;
+  now?: Date;
+  prismaClient?: ServiceCallPrismaClient;
+}): Promise<string[]> {
+  const parsed = serviceCallInputSchema.pick({ operatingMonthId: true, serviceDate: true }).safeParse(input);
+  if (!parsed.success) {
+    throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "조회 조건이 올바르지 않습니다.", "INVALID_SERVICE_CALL_QUERY");
+  }
+  const client = getClient(input.prismaClient);
+  const where = { operatingMonthId: parsed.data.operatingMonthId, serviceDate: toDateOnly(parsed.data.serviceDate) };
+  // 대부분의 읽기는 끝낼 콜이 없다. 먼저 좁게 물어서 없으면 바로 돌아간다.
+  const open = await client.serviceCall.findMany({
+    where: { ...where, status: { in: [...IN_USE_SERVICE_CALL_STATUSES] }, actualEndTime: null, actualEntryTime: { not: null } },
+    select: { id: true }
+  });
+  if (open.length === 0) return [];
+  const month = await client.operatingMonth.findUnique({ where: { id: parsed.data.operatingMonthId } });
+  if (!month || isOperatingMonthPayoutLocked(month.status)) return [];
+
+  const now = input.now ?? new Date();
+  const context = await loadDisplayEndContext(client, where);
+  const overdue = context.dayCalls.filter((record) => {
+    if (!isInUseStatus(record.status) || storedActualEndTime(record) || !storedActualEntryTime(record)) return false;
+    if (courseDurationMinutes(record) <= 0) return false;
+    const end = displayEndChoice(record, context).minute;
+    return now.getTime() > instantFromBusinessMinute(parsed.data.serviceDate, end).getTime();
+  });
+  if (overdue.length === 0) return [];
+
+  const [histories, statusCodes] = await Promise.all([
+    client.serviceCallStatusHistory.findMany({ where: { serviceCallId: { in: overdue.map((record) => record.id) } } }),
+    client.codeItem.findMany({ where: { codeType: "SERVICE_STATUS", isActive: true } })
+  ]);
+  const reopened = new Set(
+    histories
+      .filter((history) => isCleaningStatus(history.previousStatus) && isInUseStatus(history.newStatus))
+      .map((history) => history.serviceCallId)
+  );
+  const activeStatuses = statusCodes.map((code) => code.code);
+
+  const finished: string[] = [];
+  for (const record of overdue) {
+    if (reopened.has(record.id)) continue;
+    const cleaning = cleaningStatusFor(record.status, activeStatuses);
+    if (!cleaning) continue;
+    const actualEndTime = formatBusinessMinute(displayEndChoice(record, context).minute);
+    const wrote = await runInTransaction(client, async (tx) => {
+      const result = await tx.serviceCall.updateMany({
+        where: { id: record.id, updatedAt: record.updatedAt, status: record.status, actualEndTime: null },
+        data: { status: cleaning, actualEndTime }
+      });
+      if (result.count !== 1) return false;
+      const after = await findServiceCallWithRelations(tx, record.id);
+      await recordAuditEvent(
+        {
+          actorId: SYSTEM_AUDIT_ACTOR_ID,
+          action: "service_call.auto_finished",
+          targetType: "service_call",
+          targetId: record.id,
+          beforeValue: toAuditSnapshot(record),
+          afterValue: toAuditSnapshot(after),
+          reason: AUTO_FINISH_REASON
+        },
+        { prismaClient: tx as any }
+      );
+      return true;
+    });
+    if (wrote) finished.push(record.id);
+  }
+  return finished;
 }
 
 async function displayEndContextFor(tx: ServiceCallPrismaClient, record: ServiceCallRecord): Promise<DisplayEndContext> {
@@ -1385,7 +1764,7 @@ function currentPolicyForCourse(policies: CoursePolicyRecord[], courseId: string
 
 type AvailabilityInterval = { start: number; end: number };
 
-// 점유는 [예약시각, 예약시각 + 코스 길이)다. 끝나는 시각과 같은 시작은 비어 있다.
+// 점유는 [예약시각, 실제 종료 또는 표시 종료)다(스펙 D2). 끝나는 시각과 같은 시작은 비어 있다.
 function coveringEnd(intervals: AvailabilityInterval[], at: number) {
   const sorted = [...intervals].sort((left, right) => left.start - right.start || left.end - right.end);
   let cursor = at;
@@ -1412,12 +1791,45 @@ function intervalOverlaps(intervals: AvailabilityInterval[], start: number, end:
   return intervals.some((interval) => interval.start < end && interval.end > start);
 }
 
-export async function listTherapistAvailability(input: {
+function currentTherapistState(
+  attendance: TherapistAvailabilityRowDto["attendance"],
+  intervals: AvailabilityInterval[],
+  at: number
+): TherapistAvailabilityRowDto["current"] {
+  const none = { expectedEnd: null, nextReservationTime: null, freeMinutes: null };
+  if (attendance !== "checked_in") return { state: attendance, ...none };
+  const occupiedUntil = coveringEnd(intervals, at);
+  if (occupiedUntil !== null) return { ...none, state: "in_use", expectedEnd: formatBusinessMinute(occupiedUntil) };
+  const nextStart = nextIntervalStart(intervals, at);
+  return {
+    ...none,
+    state: "available",
+    nextReservationTime: nextStart === null ? null : formatBusinessMinute(nextStart),
+    freeMinutes: nextStart === null ? null : nextStart - at
+  };
+}
+
+type TherapistAvailabilityInput = {
   operatingMonthId: string;
   serviceDate: string;
   time: string;
+  /** 원장 Therapist 칸 목록(1018 티켓 02): 다시 배정하는 그 콜의 점유는 빼고 본다. 콜 수는 그대로 센다. */
+  excludeCallId?: string;
+  now?: Date;
   prismaClient?: ServiceCallPrismaClient;
-}): Promise<TherapistAvailabilityRowDto[]> {
+};
+
+export async function listTherapistAvailability(input: TherapistAvailabilityInput): Promise<TherapistAvailabilityRowDto[]> {
+  return (await listTherapistAvailabilityWithSeats(input)).rows;
+}
+
+/**
+ * 가능 판정 행과 함께, 고른 시각부터 가장 긴 코스 길이까지의 자리 수와 남은 자리(1018 스펙 D24–D27)를 돌려준다. 빠른 예약 ①이
+ * `HH:MM 남은 자리 n / N`과 넘침 경고에 쓴다. 같은 조회 결과로 계산하므로 DB를 더 읽지 않는다.
+ */
+export async function listTherapistAvailabilityWithSeats(
+  input: TherapistAvailabilityInput
+): Promise<{ rows: TherapistAvailabilityRowDto[]; seats: SeatPointDto[] }> {
   const parsed = serviceCallInputSchema.pick({ operatingMonthId: true, serviceDate: true, startTime: true }).safeParse({
     operatingMonthId: input.operatingMonthId,
     serviceDate: input.serviceDate,
@@ -1429,13 +1841,21 @@ export async function listTherapistAvailability(input: {
 
   const client = getClient(input.prismaClient);
   const month = await requireOperatingMonth(client, parsed.data.operatingMonthId);
-  const [therapists, courses, policies, slots, attendances, calls] = await Promise.all([
+  const [therapists, courses, policies, rates, slots, attendances, calls] = await Promise.all([
     client.employee.findMany({
       where: { isActive: true, employeeGroup: "THERAPIST" },
       orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }]
     }),
     client.course.findMany(),
     client.coursePolicy.findMany({ where: { isActive: true } }),
+    client.therapistCourseRate.findMany({
+      where: {
+        isActive: true,
+        effectiveFromMonth: { lte: month.monthKey },
+        OR: [{ effectiveToMonth: null }, { effectiveToMonth: { gte: month.monthKey } }],
+        therapist: { isActive: true, employeeGroup: "THERAPIST" }
+      }
+    }),
     client.timeSlot.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }),
     client.therapistAttendance.findMany({
       where: {
@@ -1449,7 +1869,7 @@ export async function listTherapistAvailability(input: {
         operatingMonthId: month.id,
         serviceDate: toDateOnly(parsed.data.serviceDate)
       },
-      include: { assignments: true }
+      include: { operatingMonth: true, course: { include: { policies: true } }, assignments: true }
     })
   ]);
 
@@ -1457,7 +1877,10 @@ export async function listTherapistAvailability(input: {
   const dayStart = activeSlots[0] ? clockMinutes(activeSlots[0].value) : AVAILABILITY_DEFAULT_DAY_START;
   const dayEnd = activeSlots.length > 0 ? businessMinute(activeSlots[activeSlots.length - 1].value, dayStart) : null;
   const at = businessMinute(parsed.data.startTime, dayStart);
-  const checkedIn = new Set(attendances.filter((attendance) => attendance.isActive).map((attendance) => attendance.employeeId));
+  const activeAttendances = attendances.filter((attendance) => attendance.isActive);
+  const attendanceByTherapist = new Map(
+    activeAttendances.map((attendance) => [attendance.employeeId, attendance.checkOutMinute === null ? "checked_in" as const : "checked_out" as const])
+  );
   const offeredCourses = [...courses]
     .filter((course) => course.isActive)
     .sort((left, right) => left.code.localeCompare(right.code))
@@ -1474,57 +1897,145 @@ export async function listTherapistAvailability(input: {
     });
 
   const intervalsByTherapist = new Map<string, AvailabilityInterval[]>();
+  const seatCalls: SeatCall[] = [];
+  const releaseContext = { dayCalls: calls, dayStart };
   for (const call of calls) {
     if (!occupiesAvailability(call.status) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(call.startTime)) continue;
+    if (call.id === input.excludeCallId) continue;
     const policy = currentPolicyForCourse(policies, call.courseId, month.monthKey);
     if (!policy) continue;
     const start = businessMinute(call.startTime, dayStart);
-    const earlyMatch = call.note ? /\[종료\s*(([01]\d|2[0-3]):[0-5]\d)\]/.exec(call.note) : null;
-    const end = earlyMatch ? businessMinute(earlyMatch[1], dayStart) : start + policy.durationMinutes;
-    const interval = { start, end };
-    for (const assignment of call.assignments ?? []) {
-      if (assignment.isActive === false) continue;
-      if (assignment.assignmentRole !== "THERAPIST_1" && assignment.assignmentRole !== "THERAPIST_2") continue;
-      const current = intervalsByTherapist.get(assignment.employeeId) ?? [];
+    const interval = { start, end: therapistReleaseMinute(call, releaseContext) };
+    const therapistIds = assignedTherapistIds(call);
+    seatCalls.push({ ...interval, therapistIds, requiresSecondTherapist: policy.requiresSecondTherapist });
+    for (const therapistId of therapistIds) {
+      const current = intervalsByTherapist.get(therapistId) ?? [];
       current.push(interval);
-      intervalsByTherapist.set(assignment.employeeId, current);
+      intervalsByTherapist.set(therapistId, current);
     }
   }
+
+  // 근무 확인 필요(shiftCheck)는 고른 날짜가 영업일 오늘(첫 슬롯부터 다음 날 첫 슬롯 전까지, Asia/Ho_Chi_Minh)일 때만 본다.
+  // 표시 종료를 지난 사용중 콜은 자동 청소 중(스펙 D14)이 끝내므로 표시 종료 뒤를 더 잡지 않는다.
+  const now = input.now ?? new Date();
+  const nowMinute = Math.floor((now.getTime() - instantFromBusinessMinute(parsed.data.serviceDate, 0).getTime()) / 60_000);
+  const isToday = nowMinute >= dayStart && nowMinute < dayStart + AVAILABILITY_DAY_MINUTES;
+  const pastShiftCheckWindow = isToday && at - nowMinute > AVAILABILITY_SHIFT_CHECK_MINUTES;
+  const currentAt = isToday ? nowMinute : at;
+  const callCountsByTherapist = new Map<string, { done: number; finished: number; reserved: number }>();
+  for (const call of calls) {
+    const finished = isCleaningStatus(call.status) || isCompletedServiceCallStatus(call.status);
+    const done = isDoneServiceCallStatus(call.status);
+    if (!done && !isReservationStatus(call.status)) continue;
+    for (const therapistId of new Set(assignedTherapistIds(call))) {
+      const counts = callCountsByTherapist.get(therapistId) ?? { done: 0, finished: 0, reserved: 0 };
+      if (done) counts.done += 1;
+      else counts.reserved += 1;
+      if (finished) counts.finished += 1;
+      callCountsByTherapist.set(therapistId, counts);
+    }
+  }
+  const occupancyOf = (therapistId: string) => intervalsByTherapist.get(therapistId) ?? [];
 
   const activeTherapists = [...therapists]
     .filter((therapist) => therapist.isActive && therapist.employeeGroup === "THERAPIST")
     .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0) || left.displayName.localeCompare(right.displayName));
 
-  return activeTherapists.map((therapist) => {
-    const intervals = intervalsByTherapist.get(therapist.id) ?? [];
+  // 근무표(27)의 그날 근무 예정. 근무 예정·휴무는 가능 판정·코스 버튼을 바꾸지 않는다(티켓 29). 출근 예정 시각만 아래에서 쓴다.
+  const plannedWorkingDayStatuses = await listPlannedWorkingDayStatusesForDate({
+    employeeIds: activeTherapists.map((therapist) => therapist.id),
+    date: parsed.data.serviceDate,
+    prismaClient: client
+  });
+  const plannedWorkingDayByTherapist = new Map(plannedWorkingDayStatuses.map((status) => [status.employeeId, status]));
+  // 근무 시작(1018 스펙 D28): 출근 기록이 있으면 출근 시각, 없으면 근무 예정의 출근 예정 시각이다. 그 전은 비는 시간이 아니다
+  // (`18:00부터`). 마지막 슬롯보다 뒤로 읽히는 시각(첫 슬롯 전의 아침)은 영업 시작부터 일한 것으로 본다. 출근 기록이 없고 근무
+  // 예정이 아니거나 시각을 적지 않았으면 null이다(종일).
+  const activeAttendanceByTherapist = new Map(activeAttendances.map((attendance) => [attendance.employeeId, attendance]));
+  const workStartOf = (therapistId: string) => {
+    const attendance = activeAttendanceByTherapist.get(therapistId);
+    const planned = plannedWorkingDayByTherapist.get(therapistId);
+    const clock = attendance
+      ? attendance.checkInMinute
+      : planned?.status === "근무 예정" && planned.plannedStartTime && CLOCK_TIME.test(planned.plannedStartTime)
+        ? clockMinutes(planned.plannedStartTime)
+        : null;
+    if (clock === null) return null;
+    const minute = businessMinuteOfDay(clock, dayStart);
+    return dayEnd !== null && minute > dayEnd ? null : minute;
+  };
+  const availabilityOf = (therapistId: string) => {
+    const workStart = workStartOf(therapistId);
+    const holds = occupancyOf(therapistId);
+    return workStart !== null && workStart > dayStart ? [...holds, { start: dayStart, end: workStart }] : holds;
+  };
+
+  // 방문완료 금액 계산과 같은 firstCurrentRate로 고른다. 0 VND도 수당이다.
+  const ratesByTherapistCourse = groupRatesByTherapistCourse(rates);
+  const hasRate = (therapistId: string, courseId: string) =>
+    firstCurrentRate(ratesByTherapistCourse.get(rateSourceKey(therapistId, courseId)) ?? [], month.monthKey) !== undefined;
+  const rateHoldersByCourse = new Map(
+    offeredCourses.map((course) => [course.courseId, activeTherapists.filter((therapist) => hasRate(therapist.id, course.courseId))])
+  );
+
+  // 자리 수(1018 스펙 D25): 출근 기록이 있으면 출근 시각부터 퇴근 전까지, 출근 기록 없이 근무 예정이면 출근 예정 시각(비었으면
+  // 종일)부터 센다.
+  const seatTherapists = activeTherapists.flatMap((therapist): SeatTherapist[] => {
+    const attendance = activeAttendanceByTherapist.get(therapist.id);
+    if (!attendance && plannedWorkingDayByTherapist.get(therapist.id)?.status !== "근무 예정") return [];
+    const checkOut = attendance?.checkOutMinute ?? null;
+    return [{ therapistId: therapist.id, from: workStartOf(therapist.id), until: checkOut === null ? null : businessMinuteOfDay(checkOut, dayStart) }];
+  });
+  const longestCourse = Math.max(0, ...offeredCourses.map((course) => course.durationMinutes));
+  const seats = seatTimeline({ therapists: seatTherapists, calls: seatCalls }, at, longestCourse).map((point) => ({
+    ...point,
+    time: formatBusinessMinute(at + point.offsetMinutes)
+  }));
+
+  const rows = activeTherapists.map((therapist): TherapistAvailabilityRowDto => {
+    const intervals = availabilityOf(therapist.id);
     const occupiedUntil = coveringEnd(intervals, at);
     const available = occupiedUntil === null;
     const nextStart = nextIntervalStart(intervals, at);
     const freeMinutes = available ? Math.max((nextStart ?? dayEnd ?? at) - at, 0) : null;
+    const attendance = attendanceByTherapist.get(therapist.id) ?? "before_check_in";
+    const plannedWorkingDay = plannedWorkingDayByTherapist.get(therapist.id);
     return {
       therapistId: therapist.id,
       therapistName: therapist.displayName,
-      attendance: checkedIn.has(therapist.id) ? "checked_in" as const : "not_entered" as const,
+      attendance,
+      shiftCheck: pastShiftCheckWindow && attendance !== "checked_in",
       available,
       freeFrom: occupiedUntil === null ? null : formatBusinessMinute(occupiedUntil),
       nextReservationTime: nextStart === null ? null : formatBusinessMinute(nextStart),
       freeMinutes,
+      plannedWorkingDayStatus: plannedWorkingDay?.status ?? "미입력",
+      callCounts: callCountsByTherapist.get(therapist.id) ?? { done: 0, finished: 0, reserved: 0 },
+      plannedStartTime: plannedWorkingDay?.plannedStartTime ?? null,
+      current: currentTherapistState(attendance, occupancyOf(therapist.id), currentAt),
       courses: offeredCourses.map((course) => {
         const fits = available && freeMinutes !== null && course.durationMinutes <= freeMinutes;
-        const partnerFree = activeTherapists.some((other) => {
-          if (other.id === therapist.id) return false;
-          return !intervalOverlaps(intervalsByTherapist.get(other.id) ?? [], at, at + course.durationMinutes);
-        });
+        const rateHolders = rateHoldersByCourse.get(course.courseId) ?? [];
+        const partners = course.requiresSecondTherapist ? rateHolders.filter((other) => other.id !== therapist.id) : [];
+        const partnerFree = partners.some((other) => !intervalOverlaps(availabilityOf(other.id), at, at + course.durationMinutes));
+        const verdict: TherapistAvailabilityCourseVerdict =
+          !rateHolders.some((holder) => holder.id === therapist.id) || (course.requiresSecondTherapist && partners.length === 0)
+            ? "rate_missing"
+            : fits && (!course.requiresSecondTherapist || partnerFree)
+              ? "possible"
+              : "time_short";
         return {
           courseId: course.courseId,
           courseCode: course.courseCode,
           courseName: course.courseName,
           durationMinutes: course.durationMinutes,
-          possible: fits && (!course.requiresSecondTherapist || partnerFree)
+          verdict,
+          requiresSecondTherapist: course.requiresSecondTherapist
         };
       })
     };
   });
+  return { rows, seats };
 }
 
 async function listServiceCallsInOperatingMonth(
@@ -1597,108 +2108,424 @@ export async function listServiceCallsForOperatingMonth(input: {
   });
 }
 
+/** 콜 한 줄을 지금 저장된 그대로 읽는다. 저장이 거절된 화면이 "최신 내용으로 다시 불러오기"에 쓴다. */
+export async function getServiceCallRow(input: { serviceCallId: string; prismaClient?: ServiceCallPrismaClient }) {
+  const client = getClient(input.prismaClient);
+  return toRowDto(client, await findServiceCallWithRelations(client, input.serviceCallId));
+}
+
 export async function saveBasicServiceCallRow(input: ServiceCallInput & { actorId?: string; prismaClient?: ServiceCallPrismaClient }) {
   const parsed = serviceCallInputSchema.safeParse(input);
   if (!parsed.success) {
     throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "콜 원장 입력값이 올바르지 않습니다.", "INVALID_SERVICE_CALL_INPUT");
   }
-  assertRoomRequiredForStatus({ roomId: parsed.data.roomId, status: parsed.data.status });
+  // 기존 행을 고치는 저장은 화면이 읽은 버전을 함께 보내야 한다. 없으면 다른 저장을 덮을 수 있다.
+  if (parsed.data.serviceCallId && !parsed.data.expectedUpdatedAt) {
+    throw new ServiceCallDomainError(savedVersionMessage, "INVALID_SERVICE_CALL_INPUT");
+  }
 
   const client = getClient(input.prismaClient);
+  return runInTransaction(client, (tx) => writeServiceCallRow(tx, parsed.data, { actorId: input.actorId }));
+}
 
-  return runInTransaction(client, async (tx) => {
-    const { month, serviceDate } = await assertWritableDate(tx, {
-      operatingMonthId: parsed.data.operatingMonthId,
-      serviceDate: parsed.data.serviceDate
-    });
+export type ServiceCallCreateResult = {
+  row: ServiceCallRowDto;
+  /** 같은 요청 id로 이미 만든 콜을 돌려줬다. 이번 요청은 아무것도 쓰지 않았다. */
+  alreadySaved: boolean;
+};
 
-    const [, , coursePolicy] = await Promise.all([
-      assertActiveTimeSlot(tx, parsed.data.startTime),
-      assertActiveRoom(tx, parsed.data.roomId),
-      assertActiveCourse(tx, { courseId: parsed.data.courseId, monthKey: month.monthKey }),
-      assertActiveCode(tx, { codeType: "SERVICE_STATUS", code: parsed.data.status, required: true }),
-      assertActiveCode(tx, { codeType: "DISCOUNT_TYPE", code: parsed.data.discountTypeCode }),
-      assertActiveCode(tx, { codeType: "PAYMENT_METHOD", code: parsed.data.paymentMethodCode }),
-      assertActiveCode(tx, { codeType: "CONFIRMATION", code: parsed.data.confirmationCode }),
-      assertActiveEmployee(tx, { role: "THERAPIST_1", employeeId: parsed.data.therapist1Id }),
-      assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: parsed.data.therapist2Id }),
-      assertActiveEmployee(tx, { role: "EARCARE", employeeId: parsed.data.earcareEmployeeId })
-    ]);
-    assertSecondTherapistRequirement({ policy: coursePolicy, therapist2Id: parsed.data.therapist2Id });
+/**
+ * 원장 새 행을 만든다(스펙 B07). 같은 요청 id로 이미 만든 콜이 있으면 새로 만들지 않고 그 콜을 돌려준다.
+ * 같은 요청 id의 생성이 동시에 들어와 유일성 위반으로 실패한 쪽도 먼저 만든 콜을 같은 응답으로 받는다.
+ * 그래서 응답을 받지 못한 화면이 다시 보내도 콜과 생성 감사 기록은 하나다.
+ */
+export async function createServiceCallRow(
+  input: ServiceCallCreateInput & { actorId?: string; prismaClient?: ServiceCallPrismaClient }
+): Promise<ServiceCallCreateResult> {
+  const parsed = serviceCallCreateInputSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "콜 원장 입력값이 올바르지 않습니다.", "INVALID_SERVICE_CALL_INPUT");
+  }
+  const { requestId, newCustomer, partyId, ...row } = parsed.data;
+  const client = getClient(input.prismaClient);
 
-    const beforeRecord = parsed.data.serviceCallId
-      ? await tx.serviceCall.findUnique({ where: { id: parsed.data.serviceCallId } })
-      : null;
-    const beforeLinked = beforeRecord ? await findServiceCallWithRelations(tx, beforeRecord.id) : null;
-    const customerId = await resolveLinkedCustomerId(tx, parsed.data.customerId, beforeLinked?.customerId);
-    const linkChanged = linkedCustomerId(beforeLinked ?? {}) !== customerId;
-    // A link change is a sensitive call edit. Reject it before the write when no actor can be audited.
-    const actorId = linkChanged ? requireActor(input.actorId) : input.actorId?.trim() || "";
-    const data = {
-      operatingMonthId: parsed.data.operatingMonthId,
-      serviceDate,
-      startTime: parsed.data.startTime,
-      actualEntryTime: actualEntryForWrite(parsed.data.actualEntryTime, beforeLinked?.actualEntryTime),
-      roomId: parsed.data.roomId ?? null,
-      courseId: parsed.data.courseId,
-      customerId,
-      customerMemo: parsed.data.customerMemo ?? null,
-      status: parsed.data.status,
-      discountTypeCode: parsed.data.discountTypeCode ?? null,
-      paymentMethodCode: parsed.data.paymentMethodCode ?? null,
-      note: parsed.data.note ?? null,
-      confirmationCode: parsed.data.confirmationCode ?? null
-    };
-
-    let serviceCall: ServiceCallRecord;
-    if (parsed.data.serviceCallId) {
-      const updateResult = await tx.serviceCall.updateMany({
-        where: { id: parsed.data.serviceCallId, operatingMonthId: parsed.data.operatingMonthId },
-        data
-      });
-      if (updateResult.count !== 1) {
-        throw new ServiceCallDomainError("콜 원장 행을 찾을 수 없습니다.", "SERVICE_CALL_NOT_FOUND");
+  try {
+    return await runInTransaction(client, async (tx) => {
+      // 이미 만든 콜을 돌려주는 것은 쓰기가 아니다. 그 사이 운영월이 잠겼어도 같은 답을 준다. 이미 만든
+      // 콜이 있으면 새 고객도 만들지 않는다 — 다시 보낸 요청이 고객을 두 번 만들지 않게 하는 핵심이다.
+      const existing = await findServiceCallRowByRequestId(tx, requestId);
+      if (existing) {
+        return { row: existing, alreadySaved: true };
       }
-      serviceCall = await findServiceCallWithRelations(tx, parsed.data.serviceCallId);
-    } else {
-      serviceCall = await tx.serviceCall.create({ data });
+      const party = partyId ? await nextPartyPlace(tx, { partyId, row, newCustomer }) : undefined;
+      // 빠른 예약의 새 고객(F01, 티켓 24): 콜과 같은 트랜잭션에서 만든다. 뒤의 콜 생성이 실패하면(동시
+      // 요청의 유일성 위반 등) 트랜잭션 전체가 롤백되어 고객만 남는 부분 성공이 생기지 않는다.
+      const customerId = newCustomer
+        ? (await createCustomerRecord(tx, newCustomer, requireActor(input.actorId))).id
+        : row.customerId;
+      return { row: await writeServiceCallRow(tx, { ...row, customerId }, { actorId: input.actorId, requestId, party }), alreadySaved: false };
+    });
+  } catch (error) {
+    // 같은 요청 id의 생성이 동시에 들어와 이쪽이 유일성 위반으로 실패했다. 먼저 만든 콜을 같은 응답으로 돌려준다.
+    const existing = isUniqueConstraintError(error) ? await findServiceCallRowByRequestId(client, requestId) : null;
+    if (!existing) {
+      throw error;
     }
+    return { row: existing, alreadySaved: true };
+  }
+}
 
-    await Promise.all([
-      writeAssignment(tx, {
-        serviceCallId: serviceCall.id,
-        assignmentRole: "THERAPIST_1",
-        employeeId: parsed.data.therapist1Id
-      }),
-      writeAssignment(tx, {
-        serviceCallId: serviceCall.id,
-        assignmentRole: "THERAPIST_2",
-        employeeId: parsed.data.therapist2Id
-      }),
-      writeAssignment(tx, {
-        serviceCallId: serviceCall.id,
-        assignmentRole: "EARCARE",
-        employeeId: parsed.data.earcareEmployeeId
-      })
-    ]);
+/**
+ * 일행에 1명 추가(스펙 D14, 티켓 04)의 자리: 그 일행의 마지막 순번 다음이다. 일행은 같은 운영월·같은 날·같은 예약 시각의
+ * 콜이어야 하고(1018 스펙 D29), 고객 연결은 대표 콜(1번)에만 하므로(스펙 D12) 더하는 손님에게는 고객을 잇거나 새로 만들지
+ * 않는다. 같은 일행에 두 화면이 동시에 더하면 같은 순번이 나올 수 있다 — 순번은 표시 순서일 뿐이라 막지 않는다.
+ */
+async function nextPartyPlace(
+  tx: ServiceCallPrismaClient,
+  input: {
+    partyId: string;
+    row: { operatingMonthId: string; serviceDate: string; startTime: string; customerId?: string | null };
+    newCustomer?: unknown;
+  }
+) {
+  if (input.row.customerId || input.newCustomer) {
+    throw new ServiceCallDomainError("일행에 더하는 손님에게는 고객을 연결하지 않습니다. 고객은 대표 콜에만 연결합니다.", "SERVICE_CALL_PARTY_CUSTOMER_LINK");
+  }
+  const members = (await tx.serviceCall.findMany({ where: { partyId: input.partyId } })).filter(
+    (member) => member.operatingMonthId === input.row.operatingMonthId && toIsoDateOnly(member.serviceDate) === input.row.serviceDate
+  );
+  if (members.length === 0) {
+    throw new ServiceCallDomainError("더할 일행을 찾을 수 없습니다. 원장을 다시 불러온 뒤에 하세요.", "SERVICE_CALL_PARTY_NOT_FOUND");
+  }
+  // 시각이 다르면 일행이 아니라 별도 예약이다. 화면은 시각을 바꾸면 일행 id 없이 보낸다.
+  if (!members.some((member) => member.startTime === input.row.startTime)) {
+    throw new ServiceCallDomainError("일행과 예약 시각이 다릅니다. 시각이 다르면 별도 예약으로 저장하세요.", "SERVICE_CALL_PARTY_TIME_MISMATCH");
+  }
+  return { partyId: input.partyId, partyPosition: Math.max(...members.map((member) => member.partyPosition ?? 0)) + 1 };
+}
 
-    const after = await findServiceCallWithRelations(tx, serviceCall.id);
-    if (linkChanged) {
-      await recordAuditEvent(
-        {
-          actorId,
-          action: "service_call.row_changed",
-          targetType: "service_call",
-          targetId: after.id,
-          beforeValue: beforeLinked ? toAuditSnapshot(beforeLinked) : null,
-          afterValue: toAuditSnapshot(after)
-        },
-        { prismaClient: tx as any }
+// 같은 사람을 Therapist 1·2에 두 번 고르는 것은 빠른 예약에서만 저장 오류다(스펙 F01, 티켓 21).
+// 원장 직접 입력(createServiceCallRow를 그대로 쓰는 새 행 입력)과 과거 데이터에는 소급하지 않는다.
+function assertDistinctTherapists(input: { therapist1Id?: string | null; therapist2Id?: string | null }) {
+  const therapist1Id = input.therapist1Id?.trim() || null;
+  const therapist2Id = input.therapist2Id?.trim() || null;
+  if (therapist1Id && therapist2Id && therapist1Id === therapist2Id) {
+    throw new ServiceCallDomainError(
+      "Therapist 1과 Therapist 2는 서로 다른 사람이어야 합니다.",
+      "D_QUICK_BOOKING_DUPLICATE_THERAPIST"
+    );
+  }
+}
+
+/**
+ * 빠른 예약 저장(F01, 티켓 21). createServiceCallRow와 같은 콜 생성 하나이지만, 같은 사람을
+ * Therapist 1·2로 두 번 고르는 것을 빠른 예약에서만 저장 오류로 더 막는다. 필수인 두 번째
+ * Therapist가 비어 있는 검사는 createServiceCallRow(writeServiceCallRow)가 이미 원장 직접
+ * 입력과 똑같이 한다.
+ */
+export async function createQuickBookingServiceCall(
+  input: ServiceCallCreateInput & { actorId?: string; prismaClient?: ServiceCallPrismaClient }
+): Promise<ServiceCallCreateResult> {
+  assertDistinctTherapists(input);
+  return createServiceCallRow({ ...input, ...(await walkInNaming(getClient(input.prismaClient), input)) });
+}
+
+const WALK_IN_CHANNEL = "WALK_IN";
+const WALK_IN_NAME = /^워크인 (\d+)$/;
+
+/**
+ * 이름이 빈 워크인(1018 스펙 D22)은 `워크인 N` 임시 이름을 예약자명과 고객/메모에 쓴다. N은 그날 이미 붙은 워크인 번호의
+ * 다음이다. 고객 기록은 만들지 않는다. 두 화면이 동시에 저장하면 같은 번호가 날 수 있다 — 표시용 이름이라 막지 않는다.
+ */
+async function walkInNaming(
+  client: ServiceCallPrismaClient,
+  input: {
+    operatingMonthId: string;
+    serviceDate: string;
+    bookingChannelCode?: string | null;
+    bookerName?: string | null;
+    customerId?: string | null;
+    newCustomer?: unknown;
+    partyId?: string | null;
+  }
+) {
+  // 일행에 더하는 손님은 일행의 고객/메모를 그대로 쓴다.
+  if (input.bookingChannelCode !== WALK_IN_CHANNEL || input.bookerName?.trim() || input.customerId || input.newCustomer || input.partyId) return {};
+  const sameDay = await client.serviceCall.findMany({
+    where: { operatingMonthId: input.operatingMonthId, serviceDate: toDateOnly(input.serviceDate) },
+    select: { bookerName: true }
+  });
+  const taken = sameDay.map((call) => Number(WALK_IN_NAME.exec(call.bookerName ?? "")?.[1] ?? 0));
+  const name = `워크인 ${Math.max(0, ...taken) + 1}`;
+  return { bookerName: name, customerMemo: name };
+}
+
+export type QuickBookingPartyResult = {
+  /** 요청 id로 찾은 콜이 일행이 아니면(한 건 저장) null이다. */
+  partyId: string | null;
+  /** 일행 순번(1번 대표 콜부터) 순서다. */
+  rows: ServiceCallRowDto[];
+  /** 같은 요청 id로 이미 만든 일행을 돌려줬다. 이번 요청은 아무것도 쓰지 않았다. */
+  alreadySaved: boolean;
+};
+
+type QuickBookingGuestField = QuickBookingGuestError["field"];
+
+/** 손님 한 명의 검사 하나. 걸리면 그 손님·칸을 오류에 붙인다. */
+async function checkGuest<T>(position: number, field: QuickBookingGuestField, check: () => T | Promise<T>) {
+  try {
+    return await check();
+  } catch (error) {
+    if (error instanceof ServiceCallDomainError && !(error instanceof QuickBookingGuestError)) {
+      throw new QuickBookingGuestError(error, position, field);
+    }
+    throw error;
+  }
+}
+
+/**
+ * 손님 한 명을 쓰기 전에 검사한다. 저장(writeServiceCallRow)도 같은 검사를 하지만, 일행은 누구의 어느 칸이
+ * 걸렸는지 알려야 하고 한 명이라도 걸리면 아무것도 쓰지 않아야 해서 모두 먼저 본다.
+ */
+async function assertQuickBookingGuest(
+  tx: ServiceCallPrismaClient,
+  guest: QuickBookingGuestInput,
+  position: number,
+  context: { monthKey: string; status: string; earlierTherapistIds: ReadonlySet<string> }
+) {
+  await checkGuest(position, "roomId", () => assertRoomRequiredForStatus({ roomId: guest.roomId, status: context.status }));
+  await checkGuest(position, "roomId", () => assertActiveRoom(tx, guest.roomId));
+  const policy = await checkGuest(position, "courseId", () => assertActiveCourse(tx, { courseId: guest.courseId, monthKey: context.monthKey }));
+  await checkGuest(position, "therapist1Id", () => assertActiveEmployee(tx, { role: "THERAPIST_1", employeeId: guest.therapist1Id }));
+  await checkGuest(position, "therapist2Id", () => assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: guest.therapist2Id }));
+  await checkGuest(position, "therapist2Id", () => assertSecondTherapistRequirement({ policy, therapist1Id: guest.therapist1Id, therapist2Id: guest.therapist2Id }));
+  await checkGuest(position, "therapist2Id", () => assertDistinctTherapists(guest));
+  for (const field of ["therapist1Id", "therapist2Id"] as const) {
+    const therapistId = guest[field];
+    if (therapistId && context.earlierTherapistIds.has(therapistId)) {
+      throw new QuickBookingGuestError(
+        new ServiceCallDomainError("같은 Therapist를 일행의 두 손님에게 고를 수 없습니다.", "D_QUICK_BOOKING_PARTY_DUPLICATE_THERAPIST"),
+        position,
+        field
       );
     }
+  }
+}
 
-    return toRowDto(tx, after);
+async function findPartyByRequestId(client: ServiceCallPrismaClient, requestId: string) {
+  const record = await client.serviceCall.findUnique({ where: { requestId } });
+  if (!record) return null;
+  const members = record.partyId
+    ? [...(await client.serviceCall.findMany({ where: { partyId: record.partyId } }))].sort(
+        (a, b) => (a.partyPosition ?? 0) - (b.partyPosition ?? 0)
+      )
+    : [record];
+  const rows: ServiceCallRowDto[] = [];
+  for (const member of members) {
+    rows.push(await toRowDto(client, await findServiceCallWithRelations(client, member.id)));
+  }
+  return { partyId: record.partyId ?? null, rows };
+}
+
+/**
+ * 빠른 예약 일행 저장(스펙 D10–D13, 티켓 02). 손님마다 콜 하나를 한 트랜잭션에서 만든다. 손님 한 명이라도
+ * 검증에 걸리면 아무것도 만들지 않는다. 시각·고객/메모·비고·방문별 요청은 모든 콜에 같고, 고객 연결은 1번
+ * 콜에만 한다. 요청 id는 일행 저장 하나에 하나라 1번 콜에 적고, 같은 요청 id로 다시 오면 이미 만든 일행을
+ * 돌려준다. 권한·운영월 잠금·활성 여부 검사는 한 건 저장(createQuickBookingServiceCall)과 같다.
+ */
+export async function createQuickBookingParty(
+  input: QuickBookingPartyInput & { actorId?: string; prismaClient?: ServiceCallPrismaClient }
+): Promise<QuickBookingPartyResult> {
+  const parsed = quickBookingPartyInputSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ServiceCallDomainError(parsed.error.issues[0]?.message ?? "콜 원장 입력값이 올바르지 않습니다.", "INVALID_SERVICE_CALL_INPUT");
+  }
+  const { requestId, newCustomer, guests, ...rest } = parsed.data;
+  const client = getClient(input.prismaClient);
+  const shared = { ...rest, ...(await walkInNaming(client, { ...rest, newCustomer })) };
+
+  try {
+    return await runInTransaction(client, async (tx) => {
+      const existing = await findPartyByRequestId(tx, requestId);
+      if (existing) {
+        return { ...existing, alreadySaved: true };
+      }
+
+      // 일행이 함께 쓰는 값은 손님에 앞서 한 번 본다. 여기서 걸린 오류는 특정 손님의 것이 아니다.
+      const { month } = await assertWritableDate(tx, { operatingMonthId: shared.operatingMonthId, serviceDate: shared.serviceDate });
+      await Promise.all([
+        assertActiveTimeSlot(tx, shared.startTime),
+        assertActiveCode(tx, { codeType: "SERVICE_STATUS", code: shared.status, required: true }),
+        assertActiveCode(tx, { codeType: "DISCOUNT_TYPE", code: shared.discountTypeCode }),
+        assertActiveCode(tx, { codeType: "PAYMENT_METHOD", code: shared.paymentMethodCode }),
+        assertActiveCode(tx, { codeType: "CONFIRMATION", code: shared.confirmationCode })
+      ]);
+      const earlierTherapistIds = new Set<string>();
+      for (const [index, guest] of guests.entries()) {
+        await assertQuickBookingGuest(tx, guest, index + 1, { monthKey: month.monthKey, status: shared.status, earlierTherapistIds });
+        for (const therapistId of [guest.therapist1Id, guest.therapist2Id]) {
+          if (therapistId) earlierTherapistIds.add(therapistId);
+        }
+      }
+
+      const customerId = newCustomer ? (await createCustomerRecord(tx, newCustomer, requireActor(input.actorId))).id : shared.customerId;
+      const partyId = randomUUID();
+      for (const [index, guest] of guests.entries()) {
+        await writeServiceCallRow(
+          tx,
+          { ...shared, ...guest, customerId: index === 0 ? customerId : null },
+          { actorId: input.actorId, requestId: index === 0 ? requestId : undefined, party: { partyId, partyPosition: index + 1 } }
+        );
+      }
+      // 앞 손님의 행은 뒤 손님이 생기기 전에 읽혀 객실 겹침 같은 경고가 빠져 있다. 일행 전체를 다시 읽어 돌려준다.
+      const saved = await findPartyByRequestId(tx, requestId);
+      return { partyId, rows: saved?.rows ?? [], alreadySaved: false };
+    });
+  } catch (error) {
+    // 같은 요청 id의 일행 저장이 동시에 들어와 1번 콜의 요청 id 유일성 위반으로 이쪽이 실패했다(트랜잭션은
+    // 통째로 롤백된다). 먼저 만든 일행을 같은 응답으로 돌려준다.
+    const existing = isUniqueConstraintError(error) ? await findPartyByRequestId(client, requestId) : null;
+    if (!existing) {
+      throw error;
+    }
+    return { ...existing, alreadySaved: true };
+  }
+}
+
+async function findServiceCallRowByRequestId(client: ServiceCallPrismaClient, requestId: string) {
+  const record = await client.serviceCall.findUnique({ where: { requestId } });
+  return record ? toRowDto(client, await findServiceCallWithRelations(client, record.id)) : null;
+}
+
+function isUniqueConstraintError(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "P2002";
+}
+
+/** 기존 콜의 고객 연결은 사유를 기록하는 전용 정정 작업으로만 바꾼다. */
+async function assertCustomerLinkUnchanged(
+  client: ServiceCallPrismaClient,
+  before: ServiceCallRecord,
+  customerId: string | null | undefined,
+  expectedUpdatedAt?: string | null
+) {
+  if (customerId === undefined || (customerId ?? null) === linkedCustomerId(before)) return;
+  if (expectedUpdatedAt && before.updatedAt.toISOString() !== new Date(expectedUpdatedAt).toISOString()) {
+    throw new StaleServiceCallError(await toRowDto(client, before));
+  }
+  throw new ServiceCallDomainError("고객 연결은 콜 상세에서 사유와 함께 정정하세요.", "SERVICE_CALL_CUSTOMER_LINK_CORRECTION_REQUIRED");
+}
+
+/**
+ * 콜 한 줄을 검사하고 쓴다. serviceCallId가 있으면 화면이 읽은 버전일 때만 고치고, 없으면 새로 만든다.
+ * 새로 만들 때 요청 id가 있으면 함께 적는다.
+ */
+async function writeServiceCallRow(
+  tx: ServiceCallPrismaClient,
+  input: ServiceCallInput,
+  options: { actorId?: string; requestId?: string; party?: { partyId: string; partyPosition: number } }
+) {
+  assertRoomRequiredForStatus({ roomId: input.roomId, status: input.status });
+  const { month, serviceDate } = await assertWritableDate(tx, {
+    operatingMonthId: input.operatingMonthId,
+    serviceDate: input.serviceDate
   });
+
+  const [, , coursePolicy] = await Promise.all([
+    assertActiveTimeSlot(tx, input.startTime),
+    assertActiveRoom(tx, input.roomId),
+    assertActiveCourse(tx, { courseId: input.courseId, monthKey: month.monthKey }),
+    assertActiveCode(tx, { codeType: "SERVICE_STATUS", code: input.status, required: true }),
+    assertActiveCode(tx, { codeType: "DISCOUNT_TYPE", code: input.discountTypeCode }),
+    assertActiveCode(tx, { codeType: "PAYMENT_METHOD", code: input.paymentMethodCode }),
+    assertActiveCode(tx, { codeType: "CONFIRMATION", code: input.confirmationCode }),
+    assertActiveCode(tx, { codeType: "BOOKING_CHANNEL", code: input.bookingChannelCode }),
+    assertActiveEmployee(tx, { role: "THERAPIST_1", employeeId: input.therapist1Id }),
+    assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: input.therapist2Id })
+  ]);
+  assertSecondTherapistRequirement({ policy: coursePolicy, therapist1Id: input.therapist1Id, therapist2Id: input.therapist2Id });
+
+  const beforeRecord = input.serviceCallId
+    ? await tx.serviceCall.findUnique({ where: { id: input.serviceCallId } })
+    : null;
+  const beforeLinked = beforeRecord ? await findServiceCallWithRelations(tx, beforeRecord.id) : null;
+  if (beforeLinked) await assertCustomerLinkUnchanged(tx, beforeLinked, input.customerId, input.expectedUpdatedAt);
+  const customerId = await resolveLinkedCustomerId(tx, input.customerId, beforeLinked?.customerId);
+  const linkChanged = linkedCustomerId(beforeLinked ?? {}) !== customerId;
+  // 일행 콜은 고객 연결이 없어도 콜마다 생성 감사를 남긴다(티켓 02). 그 감사에 일행 id가 담긴다.
+  const audited = linkChanged || Boolean(options.party);
+  // A link change is a sensitive call edit. Reject it before the write when no actor can be audited.
+  const actorId = audited ? requireActor(options.actorId) : options.actorId?.trim() || "";
+  const data = {
+    operatingMonthId: input.operatingMonthId,
+    serviceDate,
+    startTime: input.startTime,
+    actualEntryTime: actualEntryForWrite(input.actualEntryTime, beforeLinked?.actualEntryTime),
+    actualEndTime: keptWhenOmitted(input.actualEndTime, beforeLinked?.actualEndTime),
+    roomId: input.roomId ?? null,
+    courseId: input.courseId,
+    customerId,
+    customerMemo: input.customerMemo ?? null,
+    status: input.status,
+    discountTypeCode: input.discountTypeCode ?? null,
+    paymentMethodCode: input.paymentMethodCode ?? null,
+    note: input.note ?? null,
+    visitRequest: input.visitRequest ?? null,
+    bookingChannelCode: keptWhenOmitted(input.bookingChannelCode, beforeLinked?.bookingChannelCode),
+    bookerName: keptWhenOmitted(input.bookerName, beforeLinked?.bookerName),
+    confirmationCode: input.confirmationCode ?? null
+  };
+
+  let serviceCall: ServiceCallRecord;
+  if (input.serviceCallId && input.expectedUpdatedAt) {
+    await updateServiceCallAtVersion(
+      tx,
+      {
+        serviceCallId: input.serviceCallId,
+        operatingMonthId: input.operatingMonthId,
+        expectedUpdatedAt: input.expectedUpdatedAt
+      },
+      data
+    );
+    serviceCall = await findServiceCallWithRelations(tx, input.serviceCallId);
+  } else {
+    serviceCall = await tx.serviceCall.create({
+      data: {
+        ...data,
+        requestId: options.requestId ?? null,
+        ...(options.party ? { partyId: options.party.partyId, partyPosition: options.party.partyPosition } : {})
+      }
+    });
+  }
+
+  await Promise.all([
+    writeAssignment(tx, {
+      serviceCallId: serviceCall.id,
+      assignmentRole: "THERAPIST_1",
+      employeeId: input.therapist1Id
+    }),
+    writeAssignment(tx, {
+      serviceCallId: serviceCall.id,
+      assignmentRole: "THERAPIST_2",
+      employeeId: input.therapist2Id
+    })
+  ]);
+
+  const after = await findServiceCallWithRelations(tx, serviceCall.id);
+  if (audited) {
+    await recordAuditEvent(
+      {
+        actorId,
+        action: "service_call.row_changed",
+        targetType: "service_call",
+        targetId: after.id,
+        beforeValue: beforeLinked ? toAuditSnapshot(beforeLinked) : null,
+        afterValue: toAuditSnapshot(after)
+      },
+      { prismaClient: tx as any }
+    );
+  }
+
+  return toRowDto(tx, after);
 }
 
 export async function autosaveServiceCallRow(
@@ -1731,19 +2558,21 @@ export async function autosaveServiceCallRow(
       assertActiveCode(tx, { codeType: "DISCOUNT_TYPE", code: parsed.data.discountTypeCode }),
       assertActiveCode(tx, { codeType: "PAYMENT_METHOD", code: parsed.data.paymentMethodCode }),
       assertActiveCode(tx, { codeType: "CONFIRMATION", code: parsed.data.confirmationCode }),
+      assertActiveCode(tx, { codeType: "BOOKING_CHANNEL", code: parsed.data.bookingChannelCode }),
       assertActiveEmployee(tx, { role: "THERAPIST_1", employeeId: parsed.data.therapist1Id }),
-      assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: parsed.data.therapist2Id }),
-      assertActiveEmployee(tx, { role: "EARCARE", employeeId: parsed.data.earcareEmployeeId })
+      assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: parsed.data.therapist2Id })
     ]);
-    assertSecondTherapistRequirement({ policy: coursePolicy, therapist2Id: parsed.data.therapist2Id });
+    assertSecondTherapistRequirement({ policy: coursePolicy, therapist1Id: parsed.data.therapist1Id, therapist2Id: parsed.data.therapist2Id });
 
     const before = await findServiceCallWithRelations(tx, parsed.data.serviceCallId);
+    await assertCustomerLinkUnchanged(tx, before, parsed.data.customerId, parsed.data.expectedUpdatedAt);
     const customerId = await resolveLinkedCustomerId(tx, parsed.data.customerId, before.customerId);
     const data = {
       operatingMonthId: parsed.data.operatingMonthId,
       serviceDate,
       startTime: parsed.data.startTime,
       actualEntryTime: actualEntryForWrite(parsed.data.actualEntryTime, before.actualEntryTime),
+      actualEndTime: keptWhenOmitted(parsed.data.actualEndTime, before.actualEndTime),
       roomId: parsed.data.roomId ?? null,
       courseId: parsed.data.courseId,
       customerId,
@@ -1752,16 +2581,13 @@ export async function autosaveServiceCallRow(
       discountTypeCode: parsed.data.discountTypeCode ?? null,
       paymentMethodCode: parsed.data.paymentMethodCode ?? null,
       note: parsed.data.note ?? null,
+      visitRequest: parsed.data.visitRequest ?? null,
+      bookingChannelCode: keptWhenOmitted(parsed.data.bookingChannelCode, before.bookingChannelCode),
+      bookerName: keptWhenOmitted(parsed.data.bookerName, before.bookerName),
       confirmationCode: parsed.data.confirmationCode ?? null
     };
 
-    const updateResult = await tx.serviceCall.updateMany({
-      where: { id: parsed.data.serviceCallId, operatingMonthId: parsed.data.operatingMonthId },
-      data
-    });
-    if (updateResult.count !== 1) {
-      throw new ServiceCallDomainError("콜 원장 행을 찾을 수 없습니다.", "SERVICE_CALL_NOT_FOUND");
-    }
+    await updateServiceCallAtVersion(tx, parsed.data, data);
 
     await Promise.all([
       writeAssignment(tx, {
@@ -1773,11 +2599,6 @@ export async function autosaveServiceCallRow(
         serviceCallId: parsed.data.serviceCallId,
         assignmentRole: "THERAPIST_2",
         employeeId: parsed.data.therapist2Id
-      }),
-      writeAssignment(tx, {
-        serviceCallId: parsed.data.serviceCallId,
-        assignmentRole: "EARCARE",
-        employeeId: parsed.data.earcareEmployeeId
       })
     ]);
 
@@ -1825,6 +2646,71 @@ export async function autosaveServiceCallRow(
   });
 }
 
+/**
+ * 잘못 연결된 콜의 고객을 사유와 함께 바로잡거나 연결을 해제한다(F06, ADR 0003, 스토리 81-83).
+ * 원장 행 저장(saveBasicServiceCallRow/autosaveServiceCallRow)과는 별개의 전용 작업이다: 콜의
+ * 고객/메모(customerMemo)는 건드리지 않고 customerId 연결만 바꾸며, 사유가 항상 필수이고 감사에
+ * 이전 고객·새 고객·사유·처리자가 남는다. 마감확정·잠금 운영월은 거절되고(관리자 재오픈 후에만
+ * 가능), 화면이 마지막으로 읽은 updatedAt이 아니면 STALE_CALL로 거절되며 이때는 쓰기와 감사가 없다.
+ */
+export async function correctServiceCallCustomerLink(
+  input: ServiceCallCustomerLinkCorrectionInput & { actorId?: string; prismaClient?: ServiceCallPrismaClient }
+) {
+  const parsed = serviceCallCustomerLinkCorrectionSchema.safeParse(input);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const code =
+      issue?.path[0] === "reason" ? "SERVICE_CALL_CUSTOMER_LINK_REASON_REQUIRED" : "INVALID_SERVICE_CALL_CUSTOMER_LINK_INPUT";
+    throw new ServiceCallDomainError(issue?.message ?? "고객 연결 정정 입력값이 올바르지 않습니다.", code);
+  }
+
+  const actorId = requireActor(input.actorId);
+  const client = getClient(input.prismaClient);
+
+  return runInTransaction(client, async (tx) => {
+    const before = await findServiceCallWithRelations(tx, parsed.data.serviceCallId);
+    const month = await requireOperatingMonth(tx, before.operatingMonthId);
+    try {
+      assertOperatingMonthPayoutWritable(month, "마감확정 또는 잠금 운영월입니다. 고객 연결을 정정할 수 없습니다.");
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "OPERATING_MONTH_LOCKED") {
+        throw new ServiceCallDomainError(error.message, "OPERATING_MONTH_LOCKED");
+      }
+      throw error;
+    }
+
+    const beforeCustomerId = linkedCustomerId(before);
+    const newCustomerId = parsed.data.customerId ? (await requireCustomer(tx, parsed.data.customerId)).id : null;
+
+    await updateServiceCallAtVersion(
+      tx,
+      {
+        serviceCallId: parsed.data.serviceCallId,
+        operatingMonthId: before.operatingMonthId,
+        expectedUpdatedAt: parsed.data.expectedUpdatedAt
+      },
+      { customerId: newCustomerId }
+    );
+
+    const after = await findServiceCallWithRelations(tx, parsed.data.serviceCallId);
+
+    await recordAuditEvent(
+      {
+        actorId,
+        action: "service_call.customer_link_corrected",
+        targetType: "service_call",
+        targetId: after.id,
+        beforeValue: { serviceCallId: after.id, customerId: beforeCustomerId },
+        afterValue: { serviceCallId: after.id, customerId: linkedCustomerId(after) },
+        reason: parsed.data.reason
+      },
+      { prismaClient: tx as any }
+    );
+
+    return toRowDto(tx, after);
+  });
+}
+
 async function findDailyExpenseWithRelations(tx: ServiceCallPrismaClient, id: string) {
   const record = await tx.dailyExpense.findUnique({
     where: { id },
@@ -1852,6 +2738,31 @@ function requireActor(actorId: string | null | undefined) {
   return id;
 }
 
+// 고객 레코드를 만들고 생성 감사를 남긴다. createCustomer(단독 등록)와 createServiceCallRow의 새 고객
+// 가져오기(F01, 티켓 24, 콜과 한 트랜잭션)가 같이 쓴다. 입력은 이미 검증된 값이어야 한다.
+async function createCustomerRecord(tx: ServiceCallPrismaClient, input: CustomerInput, actorId: string) {
+  const record = await tx.customer.create({
+    data: {
+      name: input.name,
+      phone: input.phone ?? null,
+      memo: input.memo ?? null,
+      preferenceNote: input.preferenceNote ?? null
+    }
+  });
+  await recordAuditEvent(
+    {
+      actorId,
+      action: "customer.created",
+      targetType: "customer",
+      targetId: record.id,
+      beforeValue: null,
+      afterValue: toCustomerAuditSnapshot(record)
+    },
+    { prismaClient: tx as any }
+  );
+  return record;
+}
+
 export async function createCustomer(input: CustomerInput & { actorId: string; prismaClient?: ServiceCallPrismaClient }) {
   const parsed = customerInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -1862,24 +2773,7 @@ export async function createCustomer(input: CustomerInput & { actorId: string; p
   const client = getClient(input.prismaClient);
 
   return runInTransaction(client, async (tx) => {
-    const record = await tx.customer.create({
-      data: {
-        name: parsed.data.name,
-        phone: parsed.data.phone ?? null,
-        memo: parsed.data.memo ?? null
-      }
-    });
-    await recordAuditEvent(
-      {
-        actorId,
-        action: "customer.created",
-        targetType: "customer",
-        targetId: record.id,
-        beforeValue: null,
-        afterValue: toCustomerAuditSnapshot(record)
-      },
-      { prismaClient: tx as any }
-    );
+    const record = await createCustomerRecord(tx, parsed.data, actorId);
     return toCustomerDto(record);
   });
 }
@@ -1898,7 +2792,8 @@ export async function updateCustomer(input: CustomerUpdateInput & { actorId: str
     const data = {
       name: parsed.data.name,
       phone: parsed.data.phone ?? null,
-      memo: parsed.data.memo ?? null
+      memo: parsed.data.memo ?? null,
+      preferenceNote: parsed.data.preferenceNote ?? null
     };
     const updated = await tx.customer.updateMany({ where: { id: before.id }, data });
     if (updated.count !== 1) {
@@ -1938,10 +2833,15 @@ export type CustomerVisitHistoryRowDto = {
   operatingMonthId: string;
   serviceDate: string;
   startTime: string;
+  courseId: string;
   courseLabel: string;
+  therapist1Id: string | null;
+  therapist2Id: string | null;
   therapistLabel: string;
   status: string;
   customerMemo: string | null;
+  /** 이 방문의 방문별 요청(F06, 티켓 23). 빠른 예약 고객 단계의 최근 방문 가져오기(티켓 24)가 쓴다. */
+  visitRequest: string | null;
 };
 
 export type CustomerVisitCandidateDto = {
@@ -1950,6 +2850,10 @@ export type CustomerVisitCandidateDto = {
   label: string;
   phone: string | null;
   latestVisitDate: string | null;
+  /** 이 후보의 방문완료 건수(0건 포함). 후보 비교 표(B09)가 이름·연락처·최근 방문일과 나란히 보인다. */
+  completedVisitCount: number;
+  /** 다른 후보와 연락처를 숫자만 비교했을 때 같으면 true다(국가번호는 해석하지 않는다). 연락처가 없으면 항상 false다. */
+  sharedPhone: boolean;
 };
 
 // 방문완료가 먼저다. 같은 상태 안에서는 늦은 날짜, 그다음 늦은 예약시각이 먼저다.
@@ -1997,10 +2901,14 @@ function toVisitHistoryRow(record: ServiceCallRecord): CustomerVisitHistoryRowDt
     operatingMonthId: record.operatingMonthId,
     serviceDate: toIsoDateOnly(record.serviceDate),
     startTime: record.startTime,
+    courseId: record.courseId,
     courseLabel: visitCourseLabel(record),
+    therapist1Id: assignmentEmployeeId(record, "THERAPIST_1"),
+    therapist2Id: assignmentEmployeeId(record, "THERAPIST_2"),
     therapistLabel: visitTherapistLabel(record),
     status: record.status,
-    customerMemo: record.customerMemo
+    customerMemo: record.customerMemo,
+    visitRequest: record.visitRequest
   };
 }
 
@@ -2032,8 +2940,72 @@ export async function listCustomerVisitHistory(
     .map(toVisitHistoryRow);
 }
 
+/**
+ * 시간 슬롯 값(HH:mm) → 정렬 순서. mostRecentCustomerVisit(S6)처럼 콜 레코드 없이 시간만 비교해야 하는
+ * 호출자가 listCustomerVisitHistory·compareVisitHistory와 같은 기준으로 비교하게 한다.
+ */
+export async function timeSlotSortOrderMap(input: { prismaClient?: ServiceCallPrismaClient } = {}): Promise<Map<string, number>> {
+  const client = getClient(input.prismaClient);
+  const timeSlots = await client.timeSlot.findMany();
+  return new Map(timeSlots.map((slot) => [slot.value, slot.sortOrder]));
+}
+
+export type CustomerVisitCountsDto = {
+  completedCount: number;
+  noShowCount: number;
+  canceledCount: number;
+};
+
+// 고객 화면의 열린 방문 이력 위 건수(B09, 스토리 76-77). 예약·사용중·청소중은 이 건수에 넣지 않지만 이력 표에는 그대로 남는다.
+export function customerVisitCountsFromRows(rows: CustomerVisitHistoryRowDto[]): CustomerVisitCountsDto {
+  const count = (matches: (status: string) => boolean) => rows.filter((row) => matches(row.status)).length;
+  return {
+    completedCount: count(isCompletedServiceCallStatus),
+    noShowCount: count(isNoShowStatus),
+    canceledCount: count(isCanceledStatus)
+  };
+}
+
+/**
+ * 날짜·예약시각 기준으로 가장 최근 방문(상태와 상관없이). 빠른 예약 고객 단계가 그 방문의 코스·Therapist·
+ * 방문별 요청 중 체크한 항목만 가져온다(B09, 스토리 71-73, 티켓 24). 방문 이력이 없으면 null이다.
+ *
+ * 시간은 글자가 아니라 시간 슬롯 정렬 순서(sortOrderByTime, compareVisitHistory와 같은 기준)로 비교한다
+ * (S6). 영업일은 자정을 넘어 이어져(selectNowSlot과 같은 개념) 같은 서비스 날짜의 "01:00"은 글자로는
+ * "15:00"보다 앞서 보이지만 실제로는 그 영업일의 더 늦은 슬롯이다.
+ */
+export function mostRecentCustomerVisit(
+  rows: CustomerVisitHistoryRowDto[],
+  sortOrderByTime: Map<string, number>
+): CustomerVisitHistoryRowDto | null {
+  let latest: CustomerVisitHistoryRowDto | null = null;
+  for (const row of rows) {
+    if (!latest) {
+      latest = row;
+      continue;
+    }
+    if (row.serviceDate !== latest.serviceDate) {
+      if (row.serviceDate > latest.serviceDate) latest = row;
+      continue;
+    }
+    const rowOrder = sortOrderByTime.get(row.startTime) ?? -1;
+    const latestOrder = sortOrderByTime.get(latest.startTime) ?? -1;
+    if (rowOrder > latestOrder) latest = row;
+  }
+  return latest;
+}
+
 function textIncludes(value: string | null | undefined, query: string) {
   return (value ?? "").toLowerCase().includes(query.toLowerCase());
+}
+
+function completedVisitCount(records: ServiceCallRecord[]) {
+  return records.filter((record) => isCompletedServiceCallStatus(record.status)).length;
+}
+
+// 연락처를 숫자만 남겨 비교한다(공백·하이픈 등 서식은 무시, 국가번호는 해석하지 않는다). 숫자가 없으면 비교 대상이 아니다.
+function phoneDigits(phone: string | null) {
+  return (phone ?? "").replace(/\D/g, "");
 }
 
 function latestVisitDate(records: ServiceCallRecord[]) {
@@ -2120,17 +3092,36 @@ export async function searchCustomerVisitCandidates(input: {
       customerId: customer.id,
       label: memo || customer.name,
       phone: customer.phone,
-      latestVisitDate: latestVisitDate(calls)
+      latestVisitDate: latestVisitDate(calls),
+      completedVisitCount: completedVisitCount(calls),
+      sharedPhone: false
     });
   }
   for (const key of memoKeys) {
+    const calls = unlinkedByMemo.get(key) ?? [];
     candidates.push({
       kind: "memo",
       customerId: null,
       label: key,
       phone: null,
-      latestVisitDate: latestVisitDate(unlinkedByMemo.get(key) ?? [])
+      latestVisitDate: latestVisitDate(calls),
+      completedVisitCount: completedVisitCount(calls),
+      sharedPhone: false
     });
+  }
+
+  // 숫자만 비교한 연락처가 둘 이상의 후보에서 같으면 모두 표시한다(B09, 스토리 78-80). 빈 연락처는 비교하지 않는다.
+  const candidatesByPhoneDigits = new Map<string, CustomerVisitCandidateDto[]>();
+  for (const candidate of candidates) {
+    const digits = phoneDigits(candidate.phone);
+    if (!digits) continue;
+    const group = candidatesByPhoneDigits.get(digits) ?? [];
+    group.push(candidate);
+    candidatesByPhoneDigits.set(digits, group);
+  }
+  for (const group of candidatesByPhoneDigits.values()) {
+    if (group.length < 2) continue;
+    for (const candidate of group) candidate.sharedPhone = true;
   }
 
   candidates.sort((left, right) => {
@@ -2142,6 +3133,21 @@ export async function searchCustomerVisitCandidates(input: {
     return left.latestVisitDate < right.latestVisitDate ? 1 : -1;
   });
   return candidates;
+}
+
+/**
+ * 고객을 이미 고른 상태(고객 화면 visitCustomer= 직접 진입, 빠른 예약 고객 선택 후)에서도 같은 연락처
+ * 경고를 보이기 위한 질의다(S5, 스펙 F08·F01 단계 1). searchCustomerVisitCandidates의 sharedPhone은
+ * 그 검색 결과 안에서만 비교해, 쿼리 없이 바로 연 고객에게는 경고를 줄 수 없었다 — 여기서는 전체 고객을
+ * 대상으로 숫자만 비교한다(phoneDigits와 같은 기준).
+ */
+export async function customerSharedPhone(input: { customerId: string; prismaClient?: ServiceCallPrismaClient }): Promise<boolean> {
+  const client = getClient(input.prismaClient);
+  const customers = await client.customer.findMany();
+  const target = customers.find((customer) => customer.id === input.customerId);
+  const digits = phoneDigits(target?.phone ?? null);
+  if (!digits) return false;
+  return customers.some((customer) => customer.id !== input.customerId && phoneDigits(customer.phone) === digits);
 }
 
 export async function createDailyExpense(input: DailyExpenseInput & { actorId: string; prismaClient?: ServiceCallPrismaClient }) {
@@ -2359,7 +3365,6 @@ function summarizeCallLedgerDay(rows: ServiceCallRowDto[], expenses: DailyExpens
 
   let paymentTotal = 0;
   let therapistCommissionTotal = 0;
-  let earcarePoolTotal = 0;
   let discountTotal = 0;
   const warningCounts = {
     coursePolicyMissing: 0,
@@ -2387,7 +3392,6 @@ function summarizeCallLedgerDay(rows: ServiceCallRowDto[], expenses: DailyExpens
     }
 
     therapistCommissionTotal += row.therapist1Commission + row.therapist2Commission;
-    earcarePoolTotal += row.earcarePoolAmount;
 
     const courseSummary = courseSummaryByCode.get(row.courseCode as DailyCourseSummaryDto["courseCode"]);
     if (courseSummary) {
@@ -2408,7 +3412,6 @@ function summarizeCallLedgerDay(rows: ServiceCallRowDto[], expenses: DailyExpens
     canceledCount: rows.filter((row) => isCanceledStatus(row.status)).length,
     paymentTotal,
     therapistCommissionTotal,
-    earcarePoolTotal,
     discountTotal,
     expenseTotal,
     netSales: paymentTotal - expenseTotal,
@@ -2448,15 +3451,18 @@ export async function listDailyCallLedgerSummariesForOperatingMonth(input: {
   startDate: string;
   endDate: string;
   prismaClient?: ServiceCallPrismaClient;
+  serviceCallRows?: ServiceCallRowDto[];
 }): Promise<DailyCallLedgerSummaryDto[]> {
   const client = getClient(input.prismaClient);
   const [rows, expenses] = await Promise.all([
-    listServiceCallsForOperatingMonth({
-      operatingMonthId: input.operatingMonthId,
-      startDate: input.startDate,
-      endDate: input.endDate,
-      prismaClient: client
-    }),
+    input.serviceCallRows
+      ? Promise.resolve(input.serviceCallRows)
+      : listServiceCallsForOperatingMonth({
+          operatingMonthId: input.operatingMonthId,
+          startDate: input.startDate,
+          endDate: input.endDate,
+          prismaClient: client
+        }),
     findActiveExpenses(client, {
       operatingMonthId: input.operatingMonthId,
       expenseDate: { gte: toDateOnly(input.startDate), lte: toDateOnly(input.endDate) }
@@ -2491,8 +3497,6 @@ export function completedServiceCallCalculationsFromRows(rows: ServiceCallRowDto
       basePrice: row.basePrice,
       paymentAmount: row.paymentAmount,
       discountAmount: row.discountAmount,
-      earcarePoolAmount: row.earcarePoolAmount,
-      opsCallCredit: row.opsCallCredit,
       therapistAssignments: [
         ...(row.therapist1
           ? [
@@ -2540,6 +3544,11 @@ export function ledgerStatusCountsFromRows(rows: ServiceCallRowDto[]): LedgerSta
   };
 }
 
+// 원장 현황 줄 끝의 "미지명 N"(1018 스펙 D17): 예약 상태인데 첫 번째 Therapist가 비어 있는 콜 수.
+export function unassignedReservedCallCountFromRows(rows: ServiceCallRowDto[]) {
+  return rows.filter((row) => isReservationStatus(row.status) && row.therapist1 === null).length;
+}
+
 export type CalculationWarningStatus = Extract<
   ServiceCallCalculationStatus,
   "course_policy_missing" | "therapist_rate_missing" | "second_therapist_required"
@@ -2580,9 +3589,7 @@ export function redactServiceCallSettlementAmounts(row: ServiceCallRowDto): Serv
   return {
     ...row,
     therapist1Commission: 0,
-    therapist2Commission: 0,
-    earcarePoolAmount: 0,
-    opsCallCredit: 0
+    therapist2Commission: 0
   };
 }
 
@@ -2634,7 +3641,7 @@ export async function listServiceCallFormOptions(
     : operatingMonths[0];
   const monthKey = selectedMonth?.monthKey;
 
-  const [rooms, timeSlots, courses, statuses, discountTypes, paymentMethods, confirmationCodes, therapists, earcareEmployees, expenseHandlers] = await Promise.all([
+  const [rooms, timeSlots, courses, statuses, discountTypes, paymentMethods, confirmationCodes, bookingChannels, therapists, expenseHandlers] = await Promise.all([
     listActiveRooms({ prismaClient: client as any }),
     listActiveTimeSlots({ prismaClient: client as any }),
     monthKey ? listActiveCourses({ monthKey, prismaClient: client as any }) : Promise.resolve([]),
@@ -2642,8 +3649,8 @@ export async function listServiceCallFormOptions(
     listActiveCodeItems({ codeType: "DISCOUNT_TYPE", prismaClient: client as any }),
     listActiveCodeItems({ codeType: "PAYMENT_METHOD", prismaClient: client as any }),
     listActiveCodeItems({ codeType: "CONFIRMATION", prismaClient: client as any }),
+    listActiveCodeItems({ codeType: "BOOKING_CHANNEL", prismaClient: client as any }),
     listActiveEmployees({ employeeGroup: "THERAPIST", prismaClient: client as any }),
-    listActiveEmployees({ employeeGroup: "EARCARE", prismaClient: client as any }),
     listActiveEmployees({ prismaClient: client as any })
   ]);
 
@@ -2655,10 +3662,74 @@ export async function listServiceCallFormOptions(
     discountTypes: discountTypes.map((code) => option(code.code, codeLabel(locale, code.codeType, code.code, code.isSystemDefault, code.displayName))),
     paymentMethods: paymentMethods.map((code) => option(code.code, codeLabel(locale, code.codeType, code.code, code.isSystemDefault, code.displayName))),
     confirmationCodes: confirmationCodes.map((code) => option(code.code, codeLabel(locale, code.codeType, code.code, code.isSystemDefault, code.displayName))),
+    bookingChannels: bookingChannels.map((code) => option(code.code, codeLabel(locale, code.codeType, code.code, code.isSystemDefault, code.displayName))),
     therapists: therapists.map((employee) => option(employee.id, `${employee.displayName} (${employee.staffCode})`)),
-    earcareEmployees: earcareEmployees.map((employee) => option(employee.id, `${employee.displayName} (${employee.staffCode})`)),
     expenseHandlers: expenseHandlers.map((employee) => option(employee.id, `${employee.displayName} (${employee.staffCode})`))
   } satisfies ServiceCallFormOptions;
+}
+
+/** 근무표(28)가 휴무 영향 콜을 보여줄 때 쓰는 콜 하나의 요약. 고객/메모, 연락처, 금액은 담지 않는다. */
+export type AssignedServiceCallSummaryDto = {
+  serviceCallId: string;
+  operatingMonthId: string;
+  serviceDate: string;
+  startTime: string;
+  courseCode: string;
+  status: string;
+};
+
+type AssignedCallRecord = {
+  id: string;
+  operatingMonthId: string;
+  serviceDate: Date;
+  startTime: string;
+  status: string;
+  course?: { code: string } | null;
+  assignments?: Array<{ employeeId: string; isActive?: boolean }>;
+};
+
+// roomFloorFactsForDate(DisplayEndReadClient)와 같은 방식: 근무표 서비스가 자기 클라이언트를
+// 그대로 넘길 수 있도록 serviceCall.findMany만 요구하는 좁은 타입이다.
+type AssignedCallReadClient = {
+  serviceCall: { findMany(args?: unknown): Promise<unknown[]> };
+};
+
+/**
+ * 그 직원이 그 날짜에 어느 배정 역할로든 배정된 콜(노쇼·취소 제외) 요약. 근무표(28)가 칸을 휴무로
+ * 바꿀 때 영향받는 콜을 보여주는 데 쓴다(스토리 102). 조회만 하며 콜의 예약시각·배정·상태는
+ * 건드리지 않는다.
+ */
+export async function listAssignedServiceCallsForEmployeeOnDate(input: {
+  employeeId: string;
+  date: string;
+  prismaClient?: AssignedCallReadClient;
+}): Promise<AssignedServiceCallSummaryDto[]> {
+  const employeeId = input.employeeId.trim();
+  if (!employeeId) {
+    throw new ServiceCallDomainError("직원을 선택하세요.", "INVALID_SERVICE_CALL_QUERY");
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) {
+    throw new ServiceCallDomainError("날짜는 YYYY-MM-DD 형식이어야 합니다.", "INVALID_SERVICE_CALL_QUERY");
+  }
+
+  const client = input.prismaClient ?? getClient();
+  const records = (await client.serviceCall.findMany({
+    where: { serviceDate: toDateOnly(input.date) },
+    include: { course: true, assignments: true }
+  })) as AssignedCallRecord[];
+
+  return records
+    .filter((record) => (record.assignments ?? []).some((assignment) => assignment.employeeId === employeeId && assignment.isActive !== false))
+    .filter((record) => !isNoShowStatus(record.status) && !isCanceledStatus(record.status))
+    .map((record) => ({
+      serviceCallId: record.id,
+      operatingMonthId: record.operatingMonthId,
+      serviceDate: toIsoDateOnly(record.serviceDate),
+      startTime: record.startTime,
+      courseCode: record.course?.code ?? "",
+      status: record.status
+    }))
+    .sort((a, b) => a.startTime.localeCompare(b.startTime) || a.serviceCallId.localeCompare(b.serviceCallId));
 }
 
 export type TherapistStatusOverviewDto = {

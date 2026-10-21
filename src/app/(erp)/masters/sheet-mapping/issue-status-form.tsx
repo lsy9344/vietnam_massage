@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { inputFieldClassName } from "@/components/ui/input-field";
+import { ListboxSelect } from "@/components/ui/listbox-select";
 import {
   updateMigrationVerificationIssueStatusAction,
   type MigrationVerificationIssueActionState
@@ -57,13 +58,14 @@ export function MigrationIssueStatusForm({ issue }: { issue: MigrationVerificati
         <label className="text-sm font-semibold text-foreground" htmlFor={`${issue.itemKey}-status`}>
           {t("masters.issueStatus.status")}
         </label>
-        <select className={inputFieldClassName({ className: "w-full" })} defaultValue={issue.status} disabled={pending} id={`${issue.itemKey}-status`} name="status">
-          {statusOptions.map((status) => (
-            <option key={status.value} value={status.value}>
-              {t(status.labelKey)}
-            </option>
-          ))}
-        </select>
+        <ListboxSelect
+          className="w-full"
+          defaultValue={issue.status}
+          disabled={pending}
+          id={`${issue.itemKey}-status`}
+          name="status"
+          options={statusOptions.map((status) => ({ label: t(status.labelKey), value: status.value }))}
+        />
       </div>
       <div className="grid gap-1.5">
         <label className="text-sm font-semibold text-foreground" htmlFor={`${issue.itemKey}-note`}>

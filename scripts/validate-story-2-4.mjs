@@ -22,7 +22,9 @@ function readJson(path) {
   "src/modules/calls/service-call-service.ts",
   "src/modules/calls/service-call-service.test.ts",
   "src/app/(erp)/calls/actions.ts",
-  "src/app/(erp)/calls/editable-call-grid.tsx",
+  "src/app/(erp)/calls/call-ledger-list.tsx",
+  "src/app/(erp)/calls/call-edit-panel.tsx",
+  "src/app/(erp)/calls/call-ledger-fields.tsx",
   "tests/e2e/story-2-4-d-course-second-therapist.spec.ts",
   "src/modules/calls/README.md",
   "docs/modules/calls.md",
@@ -58,7 +60,18 @@ for (const required of ["D_COURSE_SECOND_THERAPIST_REQUIRED", "fieldErrors: { th
   if (!actions.includes(required)) errors.push(`calls actions missing ${required}`);
 }
 
-const grid = read("src/app/(erp)/calls/editable-call-grid.tsx");
+// 행 저장 순서와 저장 상태 표시는 티켓 15에서 call-row-save.ts·call-row-save-status.tsx·공통 SaveStatus로 옮겼다.
+const grid = [
+  "src/app/(erp)/calls/call-ledger-list.tsx",
+  "src/app/(erp)/calls/call-edit-panel.tsx",
+  "src/app/(erp)/calls/call-ledger-fields.tsx",
+  "src/app/(erp)/calls/call-row-save.ts",
+  "src/app/(erp)/calls/calculation-status-message.ts",
+  "src/app/(erp)/calls/call-row-save-status.tsx",
+  "src/components/ui/save-status.tsx"
+]
+  .map(read)
+  .join("\n");
 for (const required of [
   "aria-invalid",
   "aria-describedby",
@@ -68,12 +81,13 @@ for (const required of [
   "!",
   "therapist2Id",
   // i18n 전환: 저장/계산 문구는 t() key로 참조하고, 원문은 messages/ko.ts에 보존한다.
-  "calls.save.error",
+  // 티켓 15: 저장 실패 문구는 공통 SaveStatus(common.saveState.failed)가 그린다.
+  "common.saveState.",
   "calls.save.retry",
   "calls.calc.errorPending",
   "second_therapist_required"
 ]) {
-  if (!grid.includes(required)) errors.push(`editable-call-grid.tsx missing ${required}`);
+  if (!grid.includes(required)) errors.push(`call ledger list/panel missing ${required}`);
 }
 const koMessages = read("src/lib/i18n/messages/ko.ts");
 for (const label of ["저장 보류", "재시도", "저장 보류 계산 대기"]) {

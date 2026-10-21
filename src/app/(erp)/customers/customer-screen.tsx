@@ -6,20 +6,30 @@ import { useRouter } from "next/navigation";
 import { CustomerScreenView } from "@/app/(erp)/customers/customer-screen-view";
 import { CUSTOMER_SEARCH_DEBOUNCE_MS, customerScreenHref, moveCandidateIndex } from "@/app/(erp)/customers/customer-search";
 import { useLocale } from "@/lib/i18n/client";
-import type { CustomerDto, CustomerVisitCandidateDto, CustomerVisitHistoryRowDto } from "@/modules/calls/service-call-service";
+import type {
+  CustomerDto,
+  CustomerVisitCandidateDto,
+  CustomerVisitCountsDto,
+  CustomerVisitHistoryRowDto
+} from "@/modules/calls/service-call-service";
 
 export function CustomerScreen({
   query,
   candidates,
   customer,
   visitMemo,
-  history
+  visitCounts,
+  history,
+  selectedSharedPhone
 }: {
   query: string;
   candidates: CustomerVisitCandidateDto[];
   customer: CustomerDto | null;
   visitMemo: string | null;
+  visitCounts: CustomerVisitCountsDto | null;
   history: CustomerVisitHistoryRowDto[];
+  /** S5: 검색 결과 없이 바로 고른 고객의 같은 연락처 경고. */
+  selectedSharedPhone: boolean;
 }) {
   const router = useRouter();
   const locale = useLocale();
@@ -94,7 +104,9 @@ export function CustomerScreen({
       onSelect={select}
       query={draft}
       selectedMemo={customer ? null : visitMemo}
+      selectedSharedPhone={selectedSharedPhone}
       settledQuery={query}
+      visitCounts={visitCounts}
     />
   );
 }

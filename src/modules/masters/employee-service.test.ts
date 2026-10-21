@@ -16,6 +16,14 @@ function createMemoryPrisma() {
   const employees = new Map<string, any>();
   const accounts = new Map<string, any>();
   const auditEvents: any[] = [];
+  const serviceCalls: any[] = [];
+  // 영업일은 12:00에 시작해 다음 날 01:00 슬롯까지 이어진다.
+  const timeSlots = [
+    { value: "12:00", sortOrder: 1, isActive: true },
+    { value: "14:00", sortOrder: 2, isActive: true },
+    { value: "23:00", sortOrder: 3, isActive: true },
+    { value: "01:00", sortOrder: 4, isActive: true }
+  ];
   let employeeSeq = 1;
   let accountSeq = 1;
 
@@ -139,12 +147,40 @@ function createMemoryPrisma() {
         return record;
       }
     },
+    serviceCall: {
+      async findMany({ where, select }: any) {
+        return serviceCalls
+          .filter((call) => {
+            if (where.serviceDate?.gte && call.serviceDate.getTime() < where.serviceDate.gte.getTime()) return false;
+            if (where.status?.notIn?.includes(call.status)) return false;
+            const some = where.assignments?.some;
+            if (
+              some &&
+              !call.assignments.some(
+                (assignment: any) =>
+                  assignment.employeeId === some.employeeId &&
+                  (typeof some.isActive !== "boolean" || (assignment.isActive ?? true) === some.isActive)
+              )
+            ) {
+              return false;
+            }
+            return true;
+          })
+          .map((call) => (select ? Object.fromEntries(Object.keys(select).map((key) => [key, call[key]])) : call));
+      }
+    },
+    timeSlot: {
+      async findMany({ where }: any = {}) {
+        return [...timeSlots].filter((slot) => where?.isActive === undefined || slot.isActive === where.isActive).sort((a, b) => a.sortOrder - b.sortOrder);
+      }
+    },
     async $transaction(callback: (tx: any) => Promise<unknown>) {
       return callback(client);
     },
     employees,
     accounts,
-    auditEvents
+    auditEvents,
+    serviceCalls
   };
 
   return client;
@@ -178,19 +214,18 @@ describe("employee service", () => {
     assert.equal(impossibleDate.error.issues[0]?.message, "유효한 날짜를 입력하세요.");
   });
 
-  it("seeds 5 operations, 4 earcare, and 50 therapist employees idempotently by stable staffCode", async () => {
+  it("seeds 5 operations and 50 therapist employees idempotently by stable staffCode", async () => {
     const prismaClient = createMemoryPrisma();
 
     const firstRun = await ensureDefaultEmployees({ actorId: "admin-1", prismaClient });
     const secondRun = await ensureDefaultEmployees({ actorId: "admin-1", prismaClient });
     const employees = await listEmployees({ prismaClient });
 
-    assert.equal(firstRun.length, 59);
+    assert.equal(firstRun.length, 55);
     assert.equal(secondRun.length, 0);
     assert.equal(employees.filter((employee) => employee.employeeGroup === "OPERATIONS").length, 5);
-    assert.equal(employees.filter((employee) => employee.employeeGroup === "EARCARE").length, 4);
     assert.equal(employees.filter((employee) => employee.employeeGroup === "THERAPIST").length, 50);
-    assert.equal(prismaClient.auditEvents.filter((event: any) => event.action === "employee.created").length, 59);
+    assert.equal(prismaClient.auditEvents.filter((event: any) => event.action === "employee.created").length, 55);
   });
 
   it("preserves employee id and staffCode when display name changes", async () => {
@@ -363,14 +398,14 @@ describe("employee service", () => {
   it("filters inactive employees without physical delete and avoids no-op audit noise", async () => {
     const prismaClient = createMemoryPrisma();
     await ensureDefaultEmployees({ actorId: "admin-1", prismaClient });
-    const target = (await listEmployees({ prismaClient })).find((employee) => employee.staffCode === "EAR-001");
+    const target = (await listEmployees({ prismaClient })).find((employee) => employee.staffCode === "THR-001");
     assert.ok(target);
 
     await deactivateEmployee({ actorId: "admin-1", employeeId: target.id, prismaClient });
     const auditCount = prismaClient.auditEvents.length;
     await deactivateEmployee({ actorId: "admin-1", employeeId: target.id, prismaClient });
 
-    assert.equal((await listActiveEmployees({ employeeGroup: "EARCARE", prismaClient })).some((employee) => employee.id === target.id), false);
+    assert.equal((await listActiveEmployees({ employeeGroup: "THERAPIST", prismaClient })).some((employee) => employee.id === target.id), false);
     assert.equal(prismaClient.employees.has(target.id), true);
     assert.equal(prismaClient.auditEvents.length, auditCount);
     assert.equal(prismaClient.auditEvents.at(-1).action, "employee.deactivated");
@@ -498,5 +533,200 @@ describe("employee service", () => {
         }),
       /계정 ID와 이메일이 서로 다른 계정에 속합니다./
     );
+  });
+});
+
+describe("employee deactivation with future calls", () => {
+  // 2026-10-15 00:30 Asia/Ho_Chi_Minh = 2026-10-14 17:30 UTC. 호찌민 날짜와 UTC 날짜가 다른 시각이다.
+  const now = new Date("2026-10-14T17:30:00.000Z");
+
+  function addCall(
+    prismaClient: any,
+    call: { id: string; serviceDate: string; startTime: string; status: string; assignments: { employeeId: string; assignmentRole: string; isActive?: boolean }[] }
+  ) {
+    prismaClient.serviceCalls.push({ ...call, serviceDate: new Date(`${call.serviceDate}T00:00:00.000Z`) });
+  }
+
+  async function seededTherapist() {
+    const prismaClient = createMemoryPrisma();
+    await ensureDefaultEmployees({ actorId: "admin-1", prismaClient });
+    const target = (await listEmployees({ prismaClient })).find((employee) => employee.staffCode === "THR-001");
+    assert.ok(target);
+    return { prismaClient, target };
+  }
+
+  it("rejects with HAS_FUTURE_CALLS when the employee is Therapist 2 on a call after today", async () => {
+    const { prismaClient, target } = await seededTherapist();
+    addCall(prismaClient, {
+      id: "call-1",
+      serviceDate: "2026-10-16",
+      startTime: "14:00",
+      status: "예약",
+      assignments: [
+        { employeeId: "someone-else", assignmentRole: "THERAPIST_1" },
+        { employeeId: target.id, assignmentRole: "THERAPIST_2" }
+      ]
+    });
+    const auditCount = prismaClient.auditEvents.length;
+
+    await assert.rejects(
+      () => deactivateEmployee({ actorId: "admin-1", employeeId: target.id, now, prismaClient }),
+      (error: any) => {
+        assert.equal(error.code, "HAS_FUTURE_CALLS");
+        assert.deepEqual(error.futureCalls, [{ serviceCallId: "call-1", serviceDate: "2026-10-16", startTime: "14:00" }]);
+        return true;
+      }
+    );
+    assert.equal(prismaClient.employees.get(target.id).isActive, true);
+    assert.equal(prismaClient.auditEvents.length, auditCount);
+  });
+
+  it("S10: counts today's completed call and any assignment role, using the service date of the business day now falls in (not the calendar day)", async () => {
+    const { prismaClient, target } = await seededTherapist();
+    // now(2026-10-14T17:30:00.000Z)는 호찌민 달력날로 10-15 00:30이지만, 영업일은 첫 활성 슬롯(12:00)
+    // 부터 다음 날 그 슬롯 전까지라서 00:30은 아직 10-14 영업일 안이다 — 그래서 10-14 서비스 날짜가
+    // "오늘"이고, 이 23:00 콜도 오늘(차단 대상)이다(스펙 226줄, 티켓 10 결정).
+    addCall(prismaClient, { id: "today-business-day", serviceDate: "2026-10-14", startTime: "23:00", status: "예약", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+    addCall(prismaClient, { id: "today-done", serviceDate: "2026-10-15", startTime: "12:00", status: "방문완료", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_2" }] });
+    addCall(prismaClient, { id: "later", serviceDate: "2026-10-17", startTime: "15:00", status: "예약", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+
+    await assert.rejects(
+      () => deactivateEmployee({ actorId: "admin-1", employeeId: target.id, now, prismaClient }),
+      (error: any) => {
+        assert.equal(error.code, "HAS_FUTURE_CALLS");
+        assert.deepEqual(error.futureCalls, [
+          { serviceCallId: "today-business-day", serviceDate: "2026-10-14", startTime: "23:00" },
+          { serviceCallId: "today-done", serviceDate: "2026-10-15", startTime: "12:00" },
+          { serviceCallId: "later", serviceDate: "2026-10-17", startTime: "15:00" }
+        ]);
+        return true;
+      }
+    );
+  });
+
+  it("deactivates when only no-show, canceled, released, past or other staff's calls remain, and keeps the past assignment", async () => {
+    const { prismaClient, target } = await seededTherapist();
+    addCall(prismaClient, { id: "no-show", serviceDate: "2026-10-16", startTime: "14:00", status: "노쇼", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+    addCall(prismaClient, { id: "canceled", serviceDate: "2026-10-16", startTime: "15:00", status: "취소", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_2" }] });
+    addCall(prismaClient, { id: "released", serviceDate: "2026-10-16", startTime: "16:00", status: "예약", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1", isActive: false }] });
+    // S10: 영업일은 전날 첫 활성 슬롯부터 이어지므로(now=2026-10-14T17:30Z는 호찌민 10-15 00:30이고
+    // 오늘의 서비스 날짜는 10-14다), 확실히 지난 날로 보려면 10-13으로 둔다.
+    addCall(prismaClient, { id: "past", serviceDate: "2026-10-13", startTime: "14:00", status: "방문완료", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+    addCall(prismaClient, { id: "other-staff", serviceDate: "2026-10-16", startTime: "17:00", status: "예약", assignments: [{ employeeId: "someone-else", assignmentRole: "THERAPIST_1" }] });
+
+    const after = await deactivateEmployee({ actorId: "admin-1", employeeId: target.id, now, prismaClient });
+
+    assert.equal(after.isActive, false);
+    assert.equal(prismaClient.auditEvents.at(-1).action, "employee.deactivated");
+    const past = prismaClient.serviceCalls.find((call: any) => call.id === "past");
+    assert.deepEqual(past.assignments, [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }]);
+  });
+
+  it("returns an already inactive employee as is, even with future calls", async () => {
+    const { prismaClient, target } = await seededTherapist();
+    await deactivateEmployee({ actorId: "admin-1", employeeId: target.id, now, prismaClient });
+    addCall(prismaClient, { id: "future", serviceDate: "2026-10-16", startTime: "14:00", status: "예약", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+    const auditCount = prismaClient.auditEvents.length;
+
+    const again = await deactivateEmployee({ actorId: "admin-1", employeeId: target.id, now, prismaClient });
+
+    assert.equal(again.isActive, false);
+    assert.equal(prismaClient.auditEvents.length, auditCount);
+  });
+
+  it("lists the blocking calls by date and then by the time slot order, so 01:00 comes last in its service date", async () => {
+    const { prismaClient, target } = await seededTherapist();
+    addCall(prismaClient, { id: "late", serviceDate: "2026-10-16", startTime: "01:00", status: "예약", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+    addCall(prismaClient, { id: "next-day", serviceDate: "2026-10-17", startTime: "12:00", status: "예약", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+    addCall(prismaClient, { id: "early", serviceDate: "2026-10-16", startTime: "14:00", status: "사용중", assignments: [{ employeeId: target.id, assignmentRole: "THERAPIST_1" }] });
+
+    await assert.rejects(
+      () => deactivateEmployee({ actorId: "admin-1", employeeId: target.id, now, prismaClient }),
+      (error: any) => {
+        assert.deepEqual(
+          error.futureCalls.map((call: any) => call.serviceCallId),
+          ["early", "late", "next-day"]
+        );
+        return true;
+      }
+    );
+  });
+});
+
+describe("retirement auto-suspends the linked account in the same transaction (M20, 티켓 02)", () => {
+  // Therapist 계정은 전용 발급(issueTherapistAccount, account-service.ts)만 만들 수 있어, 여기서는 그
+  // 결과 모양을 메모리에 직접 흉내 낸다(linkUserAccountToEmployee는 D26로 THERAPIST 직원을 거절한다).
+  async function seededTherapistWithAccount() {
+    const prismaClient = createMemoryPrisma();
+    await ensureDefaultEmployees({ actorId: "admin-1", prismaClient });
+    const target = (await listEmployees({ prismaClient })).find((employee) => employee.staffCode === "THR-001");
+    assert.ok(target);
+    const account = await prismaClient.userAccount.create({
+      data: { email: "thr-001@therapist.internal", accountId: "thr-001", passwordHash: "hash", role: "therapist", employeeId: target.id, isActive: true }
+    });
+    return { prismaClient, target, account };
+  }
+
+  function profilePayload(employee: any, overrides: Record<string, unknown>) {
+    return {
+      actorId: "admin-1",
+      employeeId: employee.id,
+      displayName: employee.displayName,
+      staffCode: employee.staffCode,
+      employeeGroup: employee.employeeGroup,
+      position: employee.position,
+      shiftType: employee.shiftType,
+      baseSalary: employee.baseSalary,
+      phone: employee.phone,
+      birthday: employee.birthday,
+      hireDate: employee.hireDate,
+      employmentStatus: employee.employmentStatus,
+      sortOrder: employee.sortOrder,
+      ...overrides
+    };
+  }
+
+  it("suspends the linked account and audits user_account.deactivated when employmentStatus moves to 퇴사", async () => {
+    const { prismaClient, target, account } = await seededTherapistWithAccount();
+
+    const after = await updateEmployeeProfile({ ...profilePayload(target, { employmentStatus: "퇴사" }), prismaClient });
+
+    assert.equal(after.employmentStatus, "퇴사");
+    assert.equal(prismaClient.accounts.get(account.id).isActive, false);
+    assert.equal(prismaClient.auditEvents.at(-1).action, "user_account.deactivated");
+    assert.equal(prismaClient.auditEvents.at(-1).targetType, "user_account");
+  });
+
+  it("leaves the linked account alone when employmentStatus moves to 휴직 (D4: 휴직은 그대로 둔다)", async () => {
+    const { prismaClient, target, account } = await seededTherapistWithAccount();
+
+    await updateEmployeeProfile({ ...profilePayload(target, { employmentStatus: "휴직" }), prismaClient });
+
+    assert.equal(prismaClient.accounts.get(account.id).isActive, true);
+    assert.equal(prismaClient.auditEvents.at(-1).action, "employee.profile_changed");
+  });
+
+  it("does not throw when a retiring employee has no linked account", async () => {
+    const prismaClient = createMemoryPrisma();
+    await ensureDefaultEmployees({ actorId: "admin-1", prismaClient });
+    const target = (await listEmployees({ prismaClient })).find((employee) => employee.staffCode === "THR-002");
+    assert.ok(target);
+
+    const after = await updateEmployeeProfile({ ...profilePayload(target, { employmentStatus: "퇴사" }), prismaClient });
+
+    assert.equal(after.employmentStatus, "퇴사");
+    assert.equal(prismaClient.auditEvents.at(-1).action, "employee.profile_changed");
+  });
+
+  it("stays idempotent (no duplicate account audit) when the account was already suspended", async () => {
+    const { prismaClient, target, account } = await seededTherapistWithAccount();
+    prismaClient.accounts.set(account.id, { ...prismaClient.accounts.get(account.id), isActive: false });
+    const auditCountBefore = prismaClient.auditEvents.length;
+
+    await updateEmployeeProfile({ ...profilePayload(target, { employmentStatus: "퇴사" }), prismaClient });
+
+    // 직원 프로필 변경 감사 하나만 늘고, 이미 정지된 계정이라 계정 쪽 감사는 늘지 않는다.
+    assert.equal(prismaClient.auditEvents.length, auditCountBefore + 1);
+    assert.equal(prismaClient.auditEvents.at(-1).action, "employee.profile_changed");
   });
 });

@@ -146,7 +146,8 @@ export function WorkflowDockView({
   };
 
   return (
-    <nav aria-label={t("shell.dock.aria")} className="shell-dock" id={WORKFLOW_DOCK_ID} tabIndex={-1}>
+    // print:hidden: 월 명세서(티켓 32) 같은 인쇄 화면에서 업무 흐름 도크가 인쇄물에 찍히지 않게 한다.
+    <nav aria-label={t("shell.dock.aria")} className="shell-dock print:hidden" id={WORKFLOW_DOCK_ID} tabIndex={-1}>
       {/* 840px 미만에서는 구역 라벨이 한 줄에 들어갈 자리가 없어 빼고, 로고는 나 메뉴에서 보인다. */}
       <Link
         aria-label={t("shell.dock.home", { brand: BRAND_NAME })}

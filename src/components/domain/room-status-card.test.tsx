@@ -20,9 +20,9 @@ function roomStatus(overrides: Partial<RoomStatusDto> = {}): RoomStatusDto {
     course: { id: "course-a", code: "A", name: "아로마 바디 60", tvDisplayName: "A60 아로마", durationMinutes: 60 },
     therapist1: { id: "t1", displayName: "Mai", staffCode: "T1" },
     therapist2: { id: "t2", displayName: "Linh", staffCode: "T2" },
-    earcare: null,
     guidanceText: "서비스가 진행 중입니다.",
     updatedAt: "2026-10-14T12:01:00.000Z",
+    overlappingCalls: [],
     ...overrides
   };
 }
@@ -143,5 +143,81 @@ describe("객실 카드", () => {
 
     assert.match(html, /aria-label="Trạng thái: Đang sử dụng"/);
     assert.match(text(html), /Gói dịch vụ A60 아로마 Người phụ trách Mai \/ Linh Bắt đầu 18:40 Dự kiến kết thúc 19:40 Số phút còn lại 39 phút/);
+  });
+});
+
+describe("객실 카드의 겹친 콜", () => {
+  const overlapping = roomStatus({
+    activeCallId: "call-2",
+    overlappingCalls: [
+      {
+        callId: "call-1",
+        startTime: "14:00",
+        course: { id: "course-c", code: "C", name: "C 귀청소90", tvDisplayName: "C90", durationMinutes: 90 },
+        therapists: [{ id: "t1", displayName: "Mai", staffCode: "T1" }],
+        status: "방문완료",
+        // 15:30 (UTC+7)
+        displayEndAt: "2026-10-14T08:30:00.000Z"
+      },
+      {
+        callId: "call-2",
+        startTime: "15:00",
+        course: null,
+        therapists: [
+          { id: "t2", displayName: "Linh", staffCode: "T2" },
+          { id: "t3", displayName: "Hoa", staffCode: "T3" }
+        ],
+        status: "사용중",
+        displayEndAt: "2026-10-14T09:00:00.000Z"
+      }
+    ]
+  });
+  const ledger = "month-2026-10";
+
+  it("shows the count and a list to open with reservation time, course, therapist, status, and display end", () => {
+    const html = renderToStaticMarkup(<RoomStatusCard status={overlapping} showOverlaps locale="ko" />);
+    const listed = text(html);
+
+    assert.match(html, /<details/);
+    assert.match(listed, /겹친 콜 2건/);
+    assert.match(listed, /14:00 C90 · Mai · 방문완료 표시 종료 15:30/);
+    assert.match(listed, /15:00 - · Linh, Hoa · 사용중 표시 종료 16:00/);
+    // 웨이터와 조회 전용 사용자: 원장 링크가 없다.
+    assert.doesNotMatch(html, /href=/);
+  });
+
+  it("links each item to the call detail on the ledger for those who can open the ledger", () => {
+    const html = renderToStaticMarkup(<RoomStatusCard ledgerOperatingMonthId={ledger} status={overlapping} showOverlaps locale="ko" />);
+
+    assert.match(html, /href="\/calls\?operatingMonthId=month-2026-10&amp;serviceDate=2026-10-14&amp;call=call-1"/);
+    assert.match(html, /href="\/calls\?operatingMonthId=month-2026-10&amp;serviceDate=2026-10-14&amp;call=call-2"/);
+  });
+
+  it("has no overlap list for a room without overlaps", () => {
+    const html = renderToStaticMarkup(<RoomStatusCard status={roomStatus()} showOverlaps locale="ko" />);
+    assert.doesNotMatch(html, /<details|겹친 콜/);
+  });
+
+  it("speaks Vietnamese", () => {
+    const listed = text(renderToStaticMarkup(<RoomStatusCard status={overlapping} showOverlaps locale="vi" />));
+    assert.match(listed, /2 cuộc gọi trùng phòng/);
+    assert.match(listed, /Kết thúc hiển thị 15:30/);
+  });
+
+  it("leaves the overlap list off the live and TV cards", () => {
+    const live = renderToStaticMarkup(<RoomStatusCard ledgerOperatingMonthId={ledger} status={overlapping} locale="ko" />);
+    const tv = renderToStaticMarkup(<RoomStatusCard status={overlapping} variant="tv" locale="ko" />);
+
+    for (const html of [live, tv]) {
+      assert.doesNotMatch(html, /<details|겹친 콜|이 객실에/);
+    }
+  });
+
+  it("links the live card to the room's call detail on the ledger", () => {
+    const html = renderToStaticMarkup(<RoomStatusCard ledgerOperatingMonthId={ledger} status={overlapping} locale="ko" />);
+    assert.match(html, /href="\/calls\?operatingMonthId=month-2026-10&amp;serviceDate=2026-10-14&amp;call=call-2"/);
+    assert.match(text(html), /원장에서 콜 상세 열기/);
+    assert.doesNotMatch(renderToStaticMarkup(<RoomStatusCard ledgerOperatingMonthId={ledger} status={emptyRoom} locale="ko" />), /href=/);
+    assert.doesNotMatch(renderToStaticMarkup(<RoomStatusCard status={overlapping} variant="tv" locale="ko" />), /href=/);
   });
 });

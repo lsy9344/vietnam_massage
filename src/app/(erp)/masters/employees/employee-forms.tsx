@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DateCapsule } from "@/components/ui/date-capsule";
 import { DetailRow } from "@/components/ui/detail-row";
 import { ModalPanel, SidePanel } from "@/components/ui/panel";
 import {
@@ -13,7 +14,7 @@ import {
   type EmploymentStatus,
   type ShiftType
 } from "@/modules/masters/employee-schema";
-import type { EmployeeDto } from "@/modules/masters/employee-service";
+import type { EmployeeDto, FutureCallSummary } from "@/modules/masters/employee-service";
 import {
   createEmployeeAction,
   deactivateEmployeeAction,
@@ -21,11 +22,15 @@ import {
   updateEmployeeProfileAction,
   updateEmployeeSortOrderAction,
   type AccountLinkActionState,
+  type DeactivateEmployeeActionState,
   type EmployeeActionState
 } from "@/app/(erp)/masters/employees/actions";
 import { SaveRow, SelectField, TextField } from "@/app/(erp)/masters/master-fields";
 import { ActiveStatus, Cell, HeadCell, ImpactNotice, MasterSectionHeading, MasterTable, PanelSection, masterDateTime } from "@/app/(erp)/masters/master-parts";
+import { TherapistAccountPanel } from "@/app/(erp)/masters/employees/therapist-account-panel";
 import { MasterSplit, SelectableRow, useMasterSelection, useSelectCreatedItem } from "@/app/(erp)/masters/master-workspace";
+import { TherapistMemoPanel } from "@/app/(erp)/masters/employees/therapist-memo-panel";
+import type { TherapistMemoDto } from "@/modules/therapists/therapist-memo-service";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { Translator } from "@/lib/i18n";
 import { formatNumber } from "@/lib/i18n/format";
@@ -33,7 +38,6 @@ import type { MessageKey } from "@/lib/i18n/types";
 
 const groupLabelKeys: Record<EmployeeGroup, MessageKey> = {
   OPERATIONS: "masters.employees.group.OPERATIONS",
-  EARCARE: "masters.employees.group.EARCARE",
   THERAPIST: "masters.employees.group.THERAPIST"
 };
 
@@ -67,33 +71,36 @@ function ProfileFields({ employee, state }: { employee?: EmployeeDto; state: Emp
   const t = useT();
   return (
     <>
-      <SelectField defaultValue={employee?.employeeGroup} label={t("masters.employees.field.group")} name="employeeGroup" required state={state}>
-        {employeeGroups.map((group) => (
-          <option key={group} value={group}>
-            {t(groupLabelKeys[group])}
-          </option>
-        ))}
-      </SelectField>
+      <SelectField
+        defaultValue={employee?.employeeGroup}
+        label={t("masters.employees.field.group")}
+        name="employeeGroup"
+        options={employeeGroups.map((group) => ({ label: t(groupLabelKeys[group]), value: group }))}
+        required
+        state={state}
+      />
       <TextField defaultValue={employee?.position} label={t("masters.employees.field.position")} name="position" required state={state} />
-      <SelectField defaultValue={employee?.shiftType ?? ""} label={t("masters.employees.field.shiftType")} name="shiftType" state={state}>
-        <option value="">{t("masters.employees.field.notEntered")}</option>
-        {shiftTypes.map((shiftType) => (
-          <option key={shiftType} value={shiftType}>
-            {t(shiftLabelKeys[shiftType])}
-          </option>
-        ))}
-      </SelectField>
+      <SelectField
+        defaultValue={employee?.shiftType ?? ""}
+        label={t("masters.employees.field.shiftType")}
+        name="shiftType"
+        options={[
+          { label: t("masters.employees.field.notEntered"), value: "" },
+          ...shiftTypes.map((shiftType) => ({ label: t(shiftLabelKeys[shiftType]), value: shiftType }))
+        ]}
+        state={state}
+      />
       <TextField defaultValue={employee?.baseSalary} label={t("masters.employees.field.baseSalary")} min={0} name="baseSalary" required state={state} type="number" />
       <TextField defaultValue={employee?.phone ?? ""} label={t("masters.employees.field.phone")} name="phone" state={state} />
       <TextField defaultValue={employee?.birthday ?? ""} label={t("masters.employees.field.birthday")} name="birthday" state={state} type="date" />
       <TextField defaultValue={employee?.hireDate ?? ""} label={t("masters.employees.field.hireDate")} name="hireDate" state={state} type="date" />
-      <SelectField defaultValue={employee?.employmentStatus} label={t("masters.employees.field.employmentStatus")} name="employmentStatus" state={state}>
-        {employmentStatuses.map((status) => (
-          <option key={status} value={status}>
-            {t(employmentLabelKeys[status])}
-          </option>
-        ))}
-      </SelectField>
+      <SelectField
+        defaultValue={employee?.employmentStatus}
+        label={t("masters.employees.field.employmentStatus")}
+        name="employmentStatus"
+        options={employmentStatuses.map((status) => ({ label: t(employmentLabelKeys[status]), value: status }))}
+        state={state}
+      />
     </>
   );
 }
@@ -172,13 +179,14 @@ function AccountLinkForm({ employee }: { employee: EmployeeDto }) {
       <div className="grid gap-4 min-[1200px]:grid-cols-2">
         <TextField defaultValue={employee.account?.accountId ?? ""} label={t("masters.employees.field.accountId")} name="accountId" state={state} />
         <TextField defaultValue={employee.account?.email ?? ""} label={t("masters.employees.field.email")} name="email" state={state} type="email" />
-        <SelectField defaultValue={employee.account?.role ?? "counter"} hint={t("masters.employees.role.tvHint")} label={t("masters.employees.field.role")} name="role" state={state}>
-          {accountRoles.map((role) => (
-            <option key={role} value={role}>
-              {t(roleLabelKeys[role])}
-            </option>
-          ))}
-        </SelectField>
+        <SelectField
+          defaultValue={employee.account?.role ?? "counter"}
+          hint={t("masters.employees.role.tvHint")}
+          label={t("masters.employees.field.role")}
+          name="role"
+          options={accountRoles.map((role) => ({ label: t(roleLabelKeys[role]), value: role }))}
+          state={state}
+        />
         <TextField hint={t("masters.employees.initialSecretHint")} label={t("masters.employees.field.initialSecret")} name="initialSecret" state={state} type="password" />
       </div>
       <SaveRow label={t("masters.employees.linkAccount")} pending={pending} savedMessage={t("masters.employees.savedNotice")} state={state} />
@@ -186,9 +194,33 @@ function AccountLinkForm({ employee }: { employee: EmployeeDto }) {
   );
 }
 
+/** 비활성 거절(HAS_FUTURE_CALLS): 사유와, 서비스가 돌려준 콜의 날짜·예약시각을 그대로 보인다. */
+export function FutureCallsRejection({ calls }: { calls: FutureCallSummary[] }) {
+  const t = useT();
+  const locale = useLocale();
+  return (
+    <div className="grid gap-3 rounded-md bg-danger-soft px-4 py-3" role="alert">
+      <p className="text-sm font-semibold text-danger">
+        <span aria-hidden="true">{"■︎ "}</span>
+        {t("masters.employees.futureCalls.reason", { count: formatNumber(locale, calls.length) })}
+      </p>
+      <p className="text-sm text-foreground">{t("masters.employees.futureCalls.hint")}</p>
+      <ul aria-label={t("masters.employees.futureCalls.listLabel")} className="grid gap-2">
+        {calls.map((call) => (
+          <li className="flex min-h-14 flex-wrap items-center gap-1.5 rounded-md border border-border bg-surface px-4" key={call.serviceCallId}>
+            <DateCapsule>{call.serviceDate}</DateCapsule>
+            <DateCapsule>{call.startTime}</DateCapsule>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function DeactivateForm({ employee }: { employee: EmployeeDto }) {
   const t = useT();
-  const [state, formAction, pending] = useActionState<EmployeeActionState, FormData>(deactivateEmployeeAction, null);
+  const [state, formAction, pending] = useActionState<DeactivateEmployeeActionState, FormData>(deactivateEmployeeAction, null);
+  const futureCalls = state && "futureCalls" in state ? state.futureCalls : undefined;
 
   if (!employee.isActive) {
     return <p className="text-sm text-muted">{t("masters.common.alreadyInactive")}</p>;
@@ -198,61 +230,101 @@ function DeactivateForm({ employee }: { employee: EmployeeDto }) {
     <form action={formAction} className="grid gap-3">
       <input name="employeeId" type="hidden" value={employee.id} />
       <p className="text-sm text-muted">{t("masters.employees.deactivateNote")}</p>
-      <SaveRow label={t("masters.common.deactivate")} pending={pending} state={state} />
+      <SaveRow label={t("masters.common.deactivate")} pending={pending} state={futureCalls ? null : state} />
+      {futureCalls ? <FutureCallsRejection calls={futureCalls} /> : null}
     </form>
   );
 }
 
-function EmployeePanel({ employee, onClose }: { employee: EmployeeDto; onClose: () => void }) {
+function EmployeePanel({
+  employee,
+  onClose,
+  therapistMemos
+}: {
+  employee: EmployeeDto;
+  onClose: () => void;
+  /** 티켓 12: null이면 이 계정에는 메모가 아예 안 보내진 것이고(therapist:manage 없음), 섹션도 그리지 않는다. */
+  therapistMemos: TherapistMemoDto[] | null;
+}) {
   const t = useT();
   const locale = useLocale();
   return (
     <SidePanel onClose={onClose} title={`${employee.displayName} (${employee.staffCode})`}>
       <div className="grid gap-6" key={employee.id}>
-        <ActiveStatus inactiveNote={t("masters.employees.inactiveNote")} isActive={employee.isActive} locale={locale} />
-        <ImpactNotice
-          items={[t("masters.employees.impact.name"), t("masters.employees.impact.inactive"), t("masters.employees.impact.account")]}
-          locale={locale}
-        />
-        <PanelSection title={t("masters.employees.column.profile")}>
-          <ProfileForm employee={employee} />
-        </PanelSection>
-        <SortOrderForm employee={employee} />
-        <PanelSection title={t("masters.employees.column.linkedAccount")}>
-          {employee.account ? (
-            <p className="text-sm text-foreground">{t("masters.employees.currentRole", { role: roleDisplayName(t, employee.account.role) })}</p>
-          ) : (
-            <p className="text-sm text-muted">{t("masters.employees.accountNotLinked")}</p>
-          )}
-          <AccountLinkForm employee={employee} />
-        </PanelSection>
-        <PanelSection title={t("masters.common.details")}>
-          <dl>
-            <DetailRow label={t("masters.employees.employeeId")} value={employee.id} />
-            <DetailRow label={t("masters.employees.field.staffCode")} value={employee.staffCode} />
-            <DetailRow label={t("masters.common.createdAt")} value={masterDateTime(locale, employee.createdAt)} />
-            <DetailRow label={t("masters.common.updatedAt")} value={masterDateTime(locale, employee.updatedAt)} />
-          </dl>
-        </PanelSection>
-        <PanelSection title={t("masters.common.deactivateTitle")}>
-          <DeactivateForm employee={employee} />
-        </PanelSection>
+        {/* 티켓 02: Therapist 계정 섹션(아래)은 발급 직후 인쇄용 안내 쪽지를 그 자리에 보이므로,
+            그 쪽지만 인쇄되도록 패널의 다른 내용은 print:hidden으로 뺀다. */}
+        <div className="grid gap-6 print:hidden">
+          <ActiveStatus inactiveNote={t("masters.employees.inactiveNote")} isActive={employee.isActive} locale={locale} />
+          <ImpactNotice
+            items={[t("masters.employees.impact.name"), t("masters.employees.impact.inactive"), t("masters.employees.impact.account")]}
+            locale={locale}
+          />
+          <PanelSection title={t("masters.employees.column.profile")}>
+            <ProfileForm employee={employee} />
+          </PanelSection>
+          <SortOrderForm employee={employee} />
+        </div>
+        {employee.employeeGroup === "THERAPIST" ? (
+          <TherapistAccountPanel employee={employee} />
+        ) : (
+          <PanelSection title={t("masters.employees.column.linkedAccount")}>
+            {employee.account ? (
+              <p className="text-sm text-foreground">{t("masters.employees.currentRole", { role: roleDisplayName(t, employee.account.role) })}</p>
+            ) : (
+              <p className="text-sm text-muted">{t("masters.employees.accountNotLinked")}</p>
+            )}
+            <AccountLinkForm employee={employee} />
+          </PanelSection>
+        )}
+        <div className="grid gap-6 print:hidden">
+          {employee.employeeGroup === "THERAPIST" && therapistMemos ? (
+            <TherapistMemoPanel employeeId={employee.id} memos={therapistMemos} />
+          ) : null}
+          <PanelSection title={t("masters.common.details")}>
+            <dl>
+              <DetailRow label={t("masters.employees.employeeId")} value={employee.id} />
+              <DetailRow label={t("masters.employees.field.staffCode")} value={employee.staffCode} />
+              <DetailRow label={t("masters.common.createdAt")} value={masterDateTime(locale, employee.createdAt)} />
+              <DetailRow label={t("masters.common.updatedAt")} value={masterDateTime(locale, employee.updatedAt)} />
+            </dl>
+          </PanelSection>
+          <PanelSection title={t("masters.common.deactivateTitle")}>
+            <DeactivateForm employee={employee} />
+          </PanelSection>
+        </div>
       </div>
     </SidePanel>
   );
 }
 
 /** 직원 마스터: 직군별 직원 목록과, 고른 직원의 변경 영향·프로필·계정 연결·비활성 처리 패널. */
-export function EmployeeManager({ employees, initialItem }: { employees: EmployeeDto[]; initialItem: string | null }) {
+export function EmployeeManager({
+  employees,
+  initialItem,
+  therapistMemosByEmployeeId = null
+}: {
+  employees: EmployeeDto[];
+  initialItem: string | null;
+  /** 티켓 12: therapist:manage가 없는 계정에는 page.tsx가 이 prop 자체를 null로 보낸다. */
+  therapistMemosByEmployeeId?: Record<string, TherapistMemoDto[]> | null;
+}) {
   const t = useT();
   const locale = useLocale();
   const { selected, select, panelRef } = useMasterSelection(initialItem);
-  const selectedEmployee = employees.find((employee) => employee.id === selected) ?? null;
+  const selectedEmployee = employees.find((employee) => employee.id === selected && employeeGroups.includes(employee.employeeGroup)) ?? null;
 
   return (
     <MasterSplit
       hint={t("masters.common.panelHint")}
-      panel={selectedEmployee ? <EmployeePanel employee={selectedEmployee} onClose={() => select(null)} /> : null}
+      panel={
+        selectedEmployee ? (
+          <EmployeePanel
+            employee={selectedEmployee}
+            onClose={() => select(null)}
+            therapistMemos={therapistMemosByEmployeeId?.[selectedEmployee.id] ?? null}
+          />
+        ) : null
+      }
       panelRef={panelRef}
     >
       {employeeGroups.map((group) => {
@@ -260,7 +332,8 @@ export function EmployeeManager({ employees, initialItem }: { employees: Employe
         const title = t(groupLabelKeys[group]);
         const headingId = `employee-group-${group}`;
         return (
-          <section aria-labelledby={headingId} className="grid gap-3" key={group}>
+          // print:hidden: 선택한 직원의 Therapist 안내 쪽지를 인쇄할 때(티켓 02) 목록이 같이 찍히지 않게 한다.
+          <section aria-labelledby={headingId} className="grid gap-3 print:hidden" key={group}>
             <MasterSectionHeading count={`${formatNumber(locale, groupEmployees.length)}${t("masters.employees.peopleSuffix")}`} id={headingId} title={title} />
             <MasterTable
               head={

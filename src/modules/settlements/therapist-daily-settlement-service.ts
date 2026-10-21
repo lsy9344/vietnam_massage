@@ -1,13 +1,24 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { mapWithConcurrency } from "@/lib/concurrency";
 import {
   listServiceCallsForDate,
   listServiceCallsForOperatingMonth,
   type ServiceCallAssigneeDto,
   type ServiceCallRowDto
 } from "@/modules/calls/service-call-service";
-import { assertOperatingMonthPayoutWritable } from "@/modules/closing/month-lock-guard";
 import { settlementEvidenceCall, type SettlementEvidenceCallDto } from "@/modules/settlements/settlement-evidence-call";
+import {
+  confirmPayoutConfirmation,
+  listActivelyConfirmedUnitEmployeeIds,
+  derivePayoutConfirmationStatus,
+  attachPayoutConfirmationsToRows,
+  listPayoutConfirmationHistoriesByDate,
+  toPayoutConfirmationPrismaClient,
+  reconfirmPayoutConfirmation,
+  releasePayoutConfirmation,
+  type PayoutConfirmationDto
+} from "@/modules/settlements/payout-confirmation-service";
 
 const courseCodes = ["A", "B", "C", "D", "E"] as const;
 const assignmentRoles = ["THERAPIST_1", "THERAPIST_2"] as const;
@@ -43,27 +54,6 @@ type EmployeeRecord = {
   isActive: boolean;
 };
 
-type PaymentActorRecord = {
-  accountId: string;
-  employee?: {
-    displayName: string;
-    staffCode: string;
-  } | null;
-};
-
-type TherapistDailySettlementPaymentRecord = {
-  id: string;
-  operatingMonthId: string;
-  serviceDate: Date;
-  employeeId: string;
-  isPaid: boolean;
-  paidAt: Date | null;
-  paidByAccountId: string | null;
-  paidByAccount?: PaymentActorRecord | null;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
 type TherapistDailySettlementPrismaClient = {
   $transaction?<T>(callback: (tx: TherapistDailySettlementPrismaClient) => Promise<T>, options?: unknown): Promise<T>;
   operatingMonth: {
@@ -76,29 +66,10 @@ type TherapistDailySettlementPrismaClient = {
     findMany(args?: unknown): Promise<EmployeeRecord[]>;
     findUnique?(args: unknown): Promise<EmployeeRecord | null>;
   };
-  therapistDailySettlementPayment?: {
-    findMany(args?: unknown): Promise<TherapistDailySettlementPaymentRecord[]>;
-    findUnique(args: unknown): Promise<TherapistDailySettlementPaymentRecord | null>;
-    upsert(args: unknown): Promise<TherapistDailySettlementPaymentRecord>;
+  payoutConfirmationEvent?: {
+    findMany(args?: unknown): Promise<unknown[]>;
+    create(args: unknown): Promise<unknown>;
   };
-  therapistDailySettlementPaymentHistory?: {
-    findMany?(args?: unknown): Promise<TherapistDailySettlementPaymentHistoryRecord[]>;
-    create(args: unknown): Promise<TherapistDailySettlementPaymentHistoryRecord>;
-  };
-};
-
-type TherapistDailySettlementPaymentHistoryRecord = {
-  id: string;
-  paymentId: string;
-  operatingMonthId: string;
-  serviceDate: Date;
-  employeeId: string;
-  previousIsPaid: boolean | null;
-  newIsPaid: boolean;
-  changedByAccountId: string;
-  changedByAccount?: PaymentActorRecord | null;
-  changedAt: Date;
-  createdAt: Date;
 };
 
 type TherapistRateLookup = Map<string, TherapistCourseRateRecord[]>;
@@ -120,20 +91,6 @@ export type TherapistAssignmentEvidenceDto = {
   call: SettlementEvidenceCallDto;
 };
 
-export type TherapistDailySettlementPaymentActorDto = {
-  accountId: string;
-  employeeDisplayName: string | null;
-  employeeStaffCode: string | null;
-};
-
-export type TherapistDailySettlementPaymentHistoryDto = {
-  previousIsPaid: boolean | null;
-  newIsPaid: boolean;
-  changedAt: string;
-  changedByAccountId: string;
-  changedBy: TherapistDailySettlementPaymentActorDto | null;
-};
-
 export type TherapistDailySettlementDto = {
   employeeId: string;
   displayName: string;
@@ -147,13 +104,8 @@ export type TherapistDailySettlementDto = {
     zeroPolicy: number;
     missingPolicy: number;
   };
-  paymentStatus: {
-    isPaid: boolean;
-    paidAt: string | null;
-    paidByAccountId: string | null;
-    paidBy: TherapistDailySettlementPaymentActorDto | null;
-    history: TherapistDailySettlementPaymentHistoryDto[];
-  };
+  /** 지급 확인(ADR 0004, 티켓 30). 이 값은 송금이 아니라 "확인했다는 사실"이다. */
+  payoutConfirmation: PayoutConfirmationDto;
 };
 
 export type TherapistDailySettlementResultDto = {
@@ -168,14 +120,21 @@ export type TherapistDailySettlementResultDto = {
   excludedCallCount: number;
 };
 
+/** Therapist 일별 지급 확인 한 단위를 가리키는 서버 액션 결과. */
+export type TherapistDailySettlementPayoutResultDto = {
+  operatingMonthId: string;
+  serviceDate: string;
+  employeeId: string;
+  payoutConfirmation: PayoutConfirmationDto;
+};
+
 const settlementQuerySchema = z.object({
   operatingMonthId: z.string().min(1, "운영월을 선택하세요."),
   serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "조회 날짜는 YYYY-MM-DD 형식이어야 합니다.")
 });
 
-const settlementPaymentSchema = settlementQuerySchema.extend({
+const payoutUnitSchema = settlementQuerySchema.extend({
   employeeId: z.string().min(1, "마사지사를 선택하세요."),
-  isPaid: z.boolean(),
   actorId: z.string().min(1, "처리자를 확인할 수 없습니다.")
 });
 
@@ -185,6 +144,10 @@ function getClient(client?: TherapistDailySettlementPrismaClient) {
 
 function toDateOnly(isoDate: string) {
   return new Date(`${isoDate}T00:00:00.000Z`);
+}
+
+function toIsoDate(value: Date) {
+  return value.toISOString().slice(0, 10);
 }
 
 function isDateWithinOperatingMonth(serviceDate: Date, month: OperatingMonthRecord) {
@@ -258,6 +221,18 @@ function employeeFallback(assignee: ServiceCallAssigneeDto): EmployeeRecord {
   };
 }
 
+/** S7: 확인 사건은 있는데 직원 조회(findUnique)조차 없는(그 double이 흉내 내지 않는) 드문 자리에서 id만으로 행을 만든다. */
+function fallbackEmployeeForId(employeeId: string): EmployeeRecord {
+  return {
+    id: employeeId,
+    displayName: employeeId,
+    staffCode: employeeId,
+    employeeGroup: "THERAPIST",
+    sortOrder: 9999,
+    isActive: false
+  };
+}
+
 function createSettlement(employee: EmployeeRecord): TherapistDailySettlementDto {
   return {
     employeeId: employee.id,
@@ -272,108 +247,26 @@ function createSettlement(employee: EmployeeRecord): TherapistDailySettlementDto
       zeroPolicy: 0,
       missingPolicy: 0
     },
-    paymentStatus: {
-      isPaid: false,
-      paidAt: null,
-      paidByAccountId: null,
-      paidBy: null,
-      history: []
-    }
+    // attachPayoutConfirmations가 실제 지급 확인으로 덮어쓴다. 여기 값은 그 전까지만 쓰는 자리표시자다.
+    payoutConfirmation: derivePayoutConfirmationStatus([], 0, "작성중")
   };
 }
 
-function toPaymentActor(record: PaymentActorRecord | null | undefined): TherapistDailySettlementPaymentActorDto | null {
-  if (!record) return null;
-  return {
-    accountId: record.accountId,
-    employeeDisplayName: record.employee?.displayName ?? null,
-    employeeStaffCode: record.employee?.staffCode ?? null
-  };
-}
+/** 지급 확인을 쓰려는(확인/재확인/해제) 마사지사가 활성 THERAPIST인지 확인한다. */
+async function assertActiveTherapist(input: { client: TherapistDailySettlementPrismaClient; employeeId: string }) {
+  if (!input.client.employee.findUnique) return;
 
-function toPaymentHistory(record: TherapistDailySettlementPaymentHistoryRecord): TherapistDailySettlementPaymentHistoryDto {
-  return {
-    previousIsPaid: record.previousIsPaid,
-    newIsPaid: record.newIsPaid,
-    changedAt: record.changedAt.toISOString(),
-    changedByAccountId: record.changedByAccountId,
-    changedBy: toPaymentActor(record.changedByAccount)
-  };
-}
-
-function toPaymentStatus(
-  record: TherapistDailySettlementPaymentRecord | null,
-  history: TherapistDailySettlementPaymentHistoryRecord[] = []
-): TherapistDailySettlementDto["paymentStatus"] {
-  return {
-    isPaid: record?.isPaid ?? false,
-    paidAt: record?.paidAt?.toISOString() ?? null,
-    paidByAccountId: record?.paidByAccountId ?? null,
-    paidBy: toPaymentActor(record?.paidByAccount),
-    history: history.map(toPaymentHistory)
-  };
-}
-
-const PAYMENT_TRANSACTION_OPTIONS = { isolationLevel: "Serializable" } as const;
-const MAX_PAYMENT_TRANSACTION_ATTEMPTS = 3;
-
-function isRetryablePaymentTransactionError(error: unknown) {
-  const code = (error as { code?: unknown })?.code;
-  return code === "P2034" || code === "40001";
-}
-
-async function runPaymentTransaction<T>(
-  client: TherapistDailySettlementPrismaClient,
-  callback: (tx: TherapistDailySettlementPrismaClient) => Promise<T>
-) {
-  if (!client.$transaction) {
-    throw new Error("지급완료 트랜잭션을 사용할 수 없습니다.");
+  const employee = await input.client.employee.findUnique({ where: { id: input.employeeId } });
+  if (!employee) {
+    throw new Error("마사지사를 찾을 수 없습니다.");
   }
-
-  for (let attempt = 1; attempt <= MAX_PAYMENT_TRANSACTION_ATTEMPTS; attempt += 1) {
-    try {
-      return await client.$transaction(callback, PAYMENT_TRANSACTION_OPTIONS);
-    } catch (error) {
-      if (attempt === MAX_PAYMENT_TRANSACTION_ATTEMPTS || !isRetryablePaymentTransactionError(error)) {
-        throw error;
-      }
-    }
+  if (!employee.isActive || employee.employeeGroup !== "THERAPIST") {
+    throw new Error("활성 마사지사만 지급 확인을 변경할 수 있습니다.");
   }
-
-  throw new Error("지급완료 트랜잭션을 완료할 수 없습니다.");
 }
 
-async function assertPaymentWritableContext(input: {
-  client: TherapistDailySettlementPrismaClient;
-  operatingMonthId: string;
-  serviceDate: string;
-  employeeId: string;
-}) {
-  const operatingMonth = await input.client.operatingMonth.findUnique({ where: { id: input.operatingMonthId } });
-  if (!operatingMonth) {
-    throw new Error("운영월을 찾을 수 없습니다.");
-  }
-  assertOperatingMonthPayoutWritable(operatingMonth, "마감확정 또는 잠금 운영월의 지급완료 상태는 변경할 수 없습니다.");
-
-  const serviceDate = toDateOnly(input.serviceDate);
-  if (!isDateWithinOperatingMonth(serviceDate, operatingMonth)) {
-    throw new Error("운영월 범위를 벗어난 날짜입니다.");
-  }
-
-  if (input.client.employee.findUnique) {
-    const employee = await input.client.employee.findUnique({ where: { id: input.employeeId } });
-    if (!employee) {
-      throw new Error("마사지사를 찾을 수 없습니다.");
-    }
-    if (!employee.isActive || employee.employeeGroup !== "THERAPIST") {
-      throw new Error("활성 마사지사만 지급완료 상태를 변경할 수 있습니다.");
-    }
-  }
-
-  return serviceDate;
-}
-
-async function assertPaymentHasSettlement(input: {
+/** 그날 이 마사지사의 담당 콜 정산(현재 계산 금액)을 다시 읽는다. 확인/재확인은 이 금액을 사건에 남긴다. */
+async function therapistDailySettlement(input: {
   client: TherapistDailySettlementPrismaClient;
   operatingMonthId: string;
   serviceDate: string;
@@ -384,72 +277,22 @@ async function assertPaymentHasSettlement(input: {
     serviceDate: input.serviceDate,
     prismaClient: input.client
   });
-  const hasSettlement = settlements.some((settlement) => settlement.employeeId === input.employeeId && settlement.totalCallCount > 0);
-  if (!hasSettlement) {
-    throw new Error("해당 날짜에 정산 대상 콜이 없는 마사지사는 지급완료로 표시할 수 없습니다.");
-  }
+  return settlements.find((settlement) => settlement.employeeId === input.employeeId) ?? null;
 }
 
-async function attachPaymentStatuses(input: {
+async function assertPayoutHasSettlement(input: {
   client: TherapistDailySettlementPrismaClient;
   operatingMonthId: string;
   serviceDate: string;
-  settlements: TherapistDailySettlementDto[];
+  employeeId: string;
 }) {
-  if (!input.client.therapistDailySettlementPayment || input.settlements.length === 0) {
-    return input.settlements;
+  const settlement = await therapistDailySettlement(input);
+  if (!settlement || settlement.totalCallCount === 0) {
+    throw new Error("해당 날짜에 정산 대상 콜이 없는 마사지사는 지급 확인을 할 수 없습니다.");
   }
-
-  const employeeIds = input.settlements.map((settlement) => settlement.employeeId);
-  const serviceDate = toDateOnly(input.serviceDate);
-  const [records, histories] = await Promise.all([
-    input.client.therapistDailySettlementPayment.findMany({
-      where: {
-        operatingMonthId: input.operatingMonthId,
-        serviceDate,
-        employeeId: { in: employeeIds }
-      },
-      include: {
-        paidByAccount: {
-          select: {
-            accountId: true,
-            employee: { select: { displayName: true, staffCode: true } }
-          }
-        }
-      }
-    }),
-    input.client.therapistDailySettlementPaymentHistory?.findMany
-      ? input.client.therapistDailySettlementPaymentHistory.findMany({
-          where: {
-            operatingMonthId: input.operatingMonthId,
-            serviceDate,
-            employeeId: { in: employeeIds }
-          },
-          include: {
-            changedByAccount: {
-              select: {
-                accountId: true,
-                employee: { select: { displayName: true, staffCode: true } }
-              }
-            }
-          },
-          orderBy: [{ changedAt: "desc" }]
-        })
-      : Promise.resolve([])
-  ]);
-  const byEmployeeId = new Map(records.map((record) => [record.employeeId, record]));
-  const historiesByEmployeeId = new Map<string, TherapistDailySettlementPaymentHistoryRecord[]>();
-  for (const history of histories) {
-    const employeeHistories = historiesByEmployeeId.get(history.employeeId) ?? [];
-    employeeHistories.push(history);
-    historiesByEmployeeId.set(history.employeeId, employeeHistories);
-  }
-
-  return input.settlements.map((settlement) => ({
-    ...settlement,
-    paymentStatus: toPaymentStatus(byEmployeeId.get(settlement.employeeId) ?? null, historiesByEmployeeId.get(settlement.employeeId) ?? [])
-  }));
+  return settlement;
 }
+
 
 function evidenceForRole(input: {
   rateLookup: TherapistRateLookup;
@@ -535,6 +378,16 @@ export async function listTherapistDailySettlements(input: {
   operatingMonthId: string;
   serviceDate: string;
   prismaClient?: TherapistDailySettlementPrismaClient;
+  serviceCallRows?: ServiceCallRowDto[];
+  rateLookup?: Awaited<ReturnType<typeof loadApplicableRates>>;
+  /** 월간 집계는 금액만 쓴다. 지급 확인 조회를 날짜마다 하지 않는다. */
+  skipPayoutReads?: boolean;
+  /**
+   * 운영월·Therapist 목록은 달 안에서 바뀌지 않는 값이다. 날짜를 여러 번 돌 때(월간 집계) 매번 다시 읽으면
+   * 운영월 31회 + 직원 목록 31회씩 왕복이 생긴다. 읽어 둔 값을 넘기면 그 왕복이 사라진다.
+   */
+  operatingMonth?: OperatingMonthRecord;
+  therapistEmployees?: EmployeeRecord[];
 }): Promise<TherapistDailySettlementResultDto> {
   const parsed = settlementQuerySchema.safeParse(input);
   if (!parsed.success) {
@@ -543,13 +396,16 @@ export async function listTherapistDailySettlements(input: {
 
   const client = getClient(input.prismaClient);
   const [operatingMonth, therapistEmployees, rows] = await Promise.all([
-    client.operatingMonth.findUnique({ where: { id: parsed.data.operatingMonthId } }),
-    client.employee.findMany({ where: { employeeGroup: "THERAPIST", isActive: true }, orderBy: [{ sortOrder: "asc" }, { staffCode: "asc" }] }),
-    listServiceCallsForDate({
-      operatingMonthId: parsed.data.operatingMonthId,
-      serviceDate: parsed.data.serviceDate,
-      prismaClient: client as Parameters<typeof listServiceCallsForDate>[0]["prismaClient"]
-    })
+    input.operatingMonth ?? client.operatingMonth.findUnique({ where: { id: parsed.data.operatingMonthId } }),
+    input.therapistEmployees ??
+      client.employee.findMany({ where: { employeeGroup: "THERAPIST", isActive: true }, orderBy: [{ sortOrder: "asc" }, { staffCode: "asc" }] }),
+    input.serviceCallRows
+      ? Promise.resolve(input.serviceCallRows)
+      : listServiceCallsForDate({
+          operatingMonthId: parsed.data.operatingMonthId,
+          serviceDate: parsed.data.serviceDate,
+          prismaClient: client as Parameters<typeof listServiceCallsForDate>[0]["prismaClient"]
+        })
   ]);
 
   if (!operatingMonth) {
@@ -557,49 +413,7 @@ export async function listTherapistDailySettlements(input: {
   }
 
   const employeesById = new Map(therapistEmployees.map((employee) => [employee.id, employee]));
-  const rateLookup = await loadApplicableRates(client, rows);
-  const settled = settleTherapistDay({
-    operatingMonthId: parsed.data.operatingMonthId,
-    serviceDate: parsed.data.serviceDate,
-    monthKey: operatingMonth.monthKey,
-    rows,
-    employeesById,
-    rateLookup
-  });
-
-  return {
-    ...settled,
-    settlements: await attachPaymentStatuses({
-      client,
-      operatingMonthId: parsed.data.operatingMonthId,
-      serviceDate: parsed.data.serviceDate,
-      settlements: settled.settlements
-    })
-  };
-}
-
-function eachIsoDate(startDate: string, endDate: string) {
-  const dates: string[] = [];
-  let cursor = new Date(`${startDate}T00:00:00.000Z`);
-  const end = new Date(`${endDate}T00:00:00.000Z`);
-  while (cursor <= end) {
-    const year = cursor.getUTCFullYear();
-    const month = String(cursor.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(cursor.getUTCDate()).padStart(2, "0");
-    dates.push(`${year}-${month}-${day}`);
-    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
-  }
-  return dates;
-}
-
-function settleTherapistDay(input: {
-  operatingMonthId: string;
-  serviceDate: string;
-  monthKey: string;
-  rows: ServiceCallRowDto[];
-  employeesById: Map<string, EmployeeRecord>;
-  rateLookup: Awaited<ReturnType<typeof loadApplicableRates>>;
-}): TherapistDailySettlementResultDto {
+  const rateLookup = input.rateLookup ?? (await loadApplicableRates(client, rows));
   const settlementsByEmployeeId = new Map<string, TherapistDailySettlementDto>();
   const warningCounts = {
     coursePolicyMissing: 0,
@@ -608,7 +422,7 @@ function settleTherapistDay(input: {
   };
   let excludedCallCount = 0;
 
-  for (const row of input.rows) {
+  for (const row of rows) {
     if (!isCompletedStatus(row.status)) {
       excludedCallCount += 1;
       continue;
@@ -632,7 +446,7 @@ function settleTherapistDay(input: {
       const assignee = assigneeForRole(row, role);
       if (!assignee) continue;
 
-      const employee = input.employeesById.get(assignee.id) ?? employeeFallback(assignee);
+      const employee = employeesById.get(assignee.id) ?? employeeFallback(assignee);
       if (!settlementsByEmployeeId.has(employee.id)) {
         settlementsByEmployeeId.set(employee.id, createSettlement(employee));
       }
@@ -641,8 +455,8 @@ function settleTherapistDay(input: {
       if (!settlement) continue;
 
       const evidence = evidenceForRole({
-        rateLookup: input.rateLookup,
-        monthKey: input.monthKey,
+        rateLookup,
+        monthKey: operatingMonth.monthKey,
         row,
         role,
         assignee
@@ -661,41 +475,82 @@ function settleTherapistDay(input: {
     }
   }
 
+  // S7(ADR 0004): 확인 사건이 있는 단위는 그날 완료 콜이 없어도(콜이 취소·노쇼로 정정되거나 마사지사가
+  // 비활성되어도) 금액 0인 행으로 남긴다. 그래야 attachPayoutConfirmations가 "지급 재확인 필요"로
+  // 가리고, 마감 점검도 이 차이를 막을 수 있다.
+  if (!input.skipPayoutReads && client.payoutConfirmationEvent) {
+    const confirmedEmployeeIds = await listActivelyConfirmedUnitEmployeeIds({
+      unitType: "THERAPIST_DAILY",
+      operatingMonthId: parsed.data.operatingMonthId,
+      serviceDate: parsed.data.serviceDate,
+      prismaClient: toPayoutConfirmationPrismaClient(client)
+    });
+    for (const employeeId of confirmedEmployeeIds) {
+      if (settlementsByEmployeeId.has(employeeId)) continue;
+      const employee = employeesById.get(employeeId) ?? (await client.employee.findUnique?.({ where: { id: employeeId } })) ?? null;
+      settlementsByEmployeeId.set(employeeId, createSettlement(employee ?? fallbackEmployeeForId(employeeId)));
+    }
+  }
+
   const settlements = [...settlementsByEmployeeId.values()].sort((a, b) => a.sortOrder - b.sortOrder || a.staffCode.localeCompare(b.staffCode));
+  const settlementsWithPayout = input.skipPayoutReads
+    ? settlements
+    : await attachPayoutConfirmationsToRows({
+        unitType: "THERAPIST_DAILY",
+        currentAmount: (row) => row.totalCommissionAmount,
+        client,
+        operatingMonthId: parsed.data.operatingMonthId,
+        serviceDate: parsed.data.serviceDate,
+        operatingMonthStatus: operatingMonth.status,
+        rows: settlements
+      });
+
   return {
-    operatingMonthId: input.operatingMonthId,
-    serviceDate: input.serviceDate,
-    settlements,
+    operatingMonthId: parsed.data.operatingMonthId,
+    serviceDate: parsed.data.serviceDate,
+    settlements: settlementsWithPayout,
     warningCounts,
     excludedCallCount
   };
 }
 
-// 그래프 리포트의 마사지사 순위는 지급 상태가 필요 없다. 날짜마다 콜과 수당을 다시 읽지 않는다.
+function eachIsoDate(startDate: string, endDate: string) {
+  const dates: string[] = [];
+  let cursor = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+  while (cursor <= end) {
+    const year = cursor.getUTCFullYear();
+    const month = String(cursor.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(cursor.getUTCDate()).padStart(2, "0");
+    dates.push(`${year}-${month}-${day}`);
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return dates;
+}
+
+// 그래프와 월마감은 지급 확인을 유지한 채, 콜 원장만 운영월에 한 번 읽는다.
 export async function listTherapistDailySettlementsForOperatingMonth(input: {
   operatingMonthId: string;
   startDate: string;
   endDate: string;
   prismaClient?: TherapistDailySettlementPrismaClient;
+  serviceCallRows?: ServiceCallRowDto[];
 }): Promise<TherapistDailySettlementResultDto[]> {
   const client = getClient(input.prismaClient);
-  const [operatingMonth, therapistEmployees, rows] = await Promise.all([
-    client.operatingMonth.findUnique({ where: { id: input.operatingMonthId } }),
-    client.employee.findMany({ where: { employeeGroup: "THERAPIST", isActive: true }, orderBy: [{ sortOrder: "asc" }, { staffCode: "asc" }] }),
-    listServiceCallsForOperatingMonth({
+  const rows =
+    input.serviceCallRows ??
+    (await listServiceCallsForOperatingMonth({
       operatingMonthId: input.operatingMonthId,
       startDate: input.startDate,
       endDate: input.endDate,
-      prismaClient: client as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
-    })
-  ]);
-
-  if (!operatingMonth) {
-    throw new Error("운영월을 찾을 수 없습니다.");
-  }
-
-  const employeesById = new Map(therapistEmployees.map((employee) => [employee.id, employee]));
+      prismaClient: client as unknown as Parameters<typeof listServiceCallsForOperatingMonth>[0]["prismaClient"]
+    }));
   const rateLookup = await loadApplicableRates(client, rows);
+  // 운영월과 Therapist 목록은 달 안에서 바뀌지 않는다. 날짜마다 다시 읽지 않고 한 번 읽은 값을 넘긴다.
+  const [operatingMonth, therapistEmployees] = await Promise.all([
+    client.operatingMonth.findUnique({ where: { id: input.operatingMonthId } }),
+    client.employee.findMany({ where: { employeeGroup: "THERAPIST", isActive: true }, orderBy: [{ sortOrder: "asc" }, { staffCode: "asc" }] })
+  ]);
   const rowsByDate = new Map<string, ServiceCallRowDto[]>();
   for (const row of rows) {
     const bucket = rowsByDate.get(row.serviceDate) ?? [];
@@ -703,150 +558,201 @@ export async function listTherapistDailySettlementsForOperatingMonth(input: {
     rowsByDate.set(row.serviceDate, bucket);
   }
 
-  return eachIsoDate(input.startDate, input.endDate).map((serviceDate) =>
-    settleTherapistDay({
+  return mapWithConcurrency(eachIsoDate(input.startDate, input.endDate), 5, (serviceDate) =>
+    listTherapistDailySettlements({
       operatingMonthId: input.operatingMonthId,
       serviceDate,
-      monthKey: operatingMonth.monthKey,
-      rows: rowsByDate.get(serviceDate) ?? [],
-      employeesById,
-      rateLookup
+      prismaClient: client,
+      serviceCallRows: rowsByDate.get(serviceDate) ?? [],
+      rateLookup,
+      operatingMonth: operatingMonth ?? undefined,
+      therapistEmployees,
+      skipPayoutReads: true
     })
   );
 }
 
-export async function setTherapistDailySettlementPayment(input: {
-  operatingMonthId: string;
+/** 운영월의 날짜 하나와 그 날짜의 마사지사별 지급 확인 상태(월 전체 집계용, 티켓 32·33). */
+export type TherapistDailyPayoutConfirmationDto = {
   serviceDate: string;
   employeeId: string;
-  isPaid: boolean;
-  actorId: string;
+  payoutConfirmation: PayoutConfirmationDto;
+};
+
+/**
+ * 이 운영월의 모든 날짜·마사지사 지급 확인 상태를 한 번에 돌려준다. 월 명세서(티켓 32)와 마감 점검의
+ * "지급 재확인 미처리" 집계(티켓 33)가 쓴다. 날짜마다 listTherapistDailySettlements를 다시 계산해 현재
+ * 지급액과 비교하므로(지급 재확인 필요 판정에 필요) 운영월 전체를 도는 비용이 있다(운영팀의
+ * listOpsDailyPayoutConfirmationsForMonth와 같은 패턴, 티켓 31).
+ */
+export async function listTherapistDailyPayoutConfirmationsForMonth(input: {
+  operatingMonthId: string;
   prismaClient?: TherapistDailySettlementPrismaClient;
-}) {
-  const parsed = settlementPaymentSchema.safeParse(input);
+}): Promise<TherapistDailyPayoutConfirmationDto[]> {
+  const parsed = z.object({ operatingMonthId: z.string().trim().min(1, "운영월을 선택하세요.") }).safeParse(input);
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "지급완료 입력값이 올바르지 않습니다.");
+    throw new Error(parsed.error.issues[0]?.message ?? "운영월을 선택하세요.");
   }
 
   const client = getClient(input.prismaClient);
-  if (!client.therapistDailySettlementPayment) {
-    throw new Error("지급완료 저장소를 사용할 수 없습니다.");
+  const operatingMonth = await client.operatingMonth.findUnique({ where: { id: parsed.data.operatingMonthId } });
+  if (!operatingMonth) {
+    throw new Error("운영월을 찾을 수 없습니다.");
   }
 
-  const serviceDate = await assertPaymentWritableContext({
+  const startDate = toIsoDate(operatingMonth.startDate);
+  const endDate = toIsoDate(operatingMonth.endDate);
+  const [dayResults, historiesByDate] = await Promise.all([
+    listTherapistDailySettlementsForOperatingMonth({
+      operatingMonthId: parsed.data.operatingMonthId,
+      startDate,
+      endDate,
+      prismaClient: client
+    }),
+    listPayoutConfirmationHistoriesByDate({
+      unitType: "THERAPIST_DAILY",
+      operatingMonthId: parsed.data.operatingMonthId,
+      startDate,
+      endDate,
+      prismaClient: toPayoutConfirmationPrismaClient(client)
+    })
+  ]);
+
+  const results: TherapistDailyPayoutConfirmationDto[] = [];
+  for (const dayResult of dayResults) {
+    const histories = historiesByDate.get(dayResult.serviceDate) ?? new Map<string, PayoutConfirmationDto["history"]>();
+    const seen = new Set<string>();
+    for (const settlement of dayResult.settlements) {
+      seen.add(settlement.employeeId);
+      results.push({
+        serviceDate: dayResult.serviceDate,
+        employeeId: settlement.employeeId,
+        payoutConfirmation: derivePayoutConfirmationStatus(
+          histories.get(settlement.employeeId) ?? [],
+          settlement.totalCommissionAmount,
+          operatingMonth.status
+        )
+      });
+    }
+    for (const [employeeId, history] of histories) {
+      if (seen.has(employeeId) || history[0]?.eventType === "release") continue;
+      results.push({
+        serviceDate: dayResult.serviceDate,
+        employeeId,
+        payoutConfirmation: derivePayoutConfirmationStatus(history, 0, operatingMonth.status)
+      });
+    }
+  }
+  return results;
+}
+
+/** 확인: 그날 계산된 금액을 지급 확인 사건으로 남긴다. 아직 확인된 사건이 없는 단위에만 쓸 수 있다. */
+export async function confirmTherapistDailySettlementPayout(input: {
+  operatingMonthId: string;
+  serviceDate: string;
+  employeeId: string;
+  actorId: string;
+  reason?: string | null;
+  prismaClient?: TherapistDailySettlementPrismaClient;
+}): Promise<TherapistDailySettlementPayoutResultDto> {
+  const parsed = payoutUnitSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "지급 확인 입력값이 올바르지 않습니다.");
+  }
+
+  const client = getClient(input.prismaClient);
+  await assertActiveTherapist({ client, employeeId: parsed.data.employeeId });
+  const settlement = await assertPayoutHasSettlement({
     client,
     operatingMonthId: parsed.data.operatingMonthId,
     serviceDate: parsed.data.serviceDate,
     employeeId: parsed.data.employeeId
   });
 
-  // 지급완료(true)는 해당 날짜에 실제 정산 대상(담당 방문완료 콜)이 있는 마사지사에만 허용한다.
-  // 정산 행이 없는 직원에게 지급완료가 미리 찍히는 것을 막는다.
-  // 해제(false)는 잘못 저장된 기록 정리를 위해 정산 행 여부와 무관하게 허용한다.
-  if (parsed.data.isPaid) {
-    await assertPaymentHasSettlement({
-      client,
-      operatingMonthId: parsed.data.operatingMonthId,
-      serviceDate: parsed.data.serviceDate,
-      employeeId: parsed.data.employeeId
-    });
-  }
-
-  if (!client.therapistDailySettlementPaymentHistory) {
-    throw new Error("지급완료 변경 이력 저장소를 사용할 수 없습니다.");
-  }
-
-  const record = await runPaymentTransaction(client, async (tx) => {
-    if (!tx.therapistDailySettlementPayment) {
-      throw new Error("지급완료 저장소를 사용할 수 없습니다.");
-    }
-    if (!tx.therapistDailySettlementPaymentHistory) {
-      throw new Error("지급완료 변경 이력 저장소를 사용할 수 없습니다.");
-    }
-
-    await assertPaymentWritableContext({
-      client: tx,
-      operatingMonthId: parsed.data.operatingMonthId,
-      serviceDate: parsed.data.serviceDate,
-      employeeId: parsed.data.employeeId
-    });
-    if (parsed.data.isPaid) {
-      await assertPaymentHasSettlement({
-        client: tx,
-        operatingMonthId: parsed.data.operatingMonthId,
-        serviceDate: parsed.data.serviceDate,
-        employeeId: parsed.data.employeeId
-      });
-    }
-
-    // 변경 이력을 남기기 위해 이전 지급완료 상태를 먼저 읽는다(없으면 최초 기록).
-    const previous = await tx.therapistDailySettlementPayment.findUnique({
-      where: {
-        operatingMonthId_serviceDate_employeeId: {
-          operatingMonthId: parsed.data.operatingMonthId,
-          serviceDate,
-          employeeId: parsed.data.employeeId
-        }
-      }
-    });
-
-    if (previous && previous.isPaid === parsed.data.isPaid) {
-      return previous;
-    }
-
-    if (!previous && !parsed.data.isPaid) {
-      return null;
-    }
-
-    const now = new Date();
-    const nextRecord = await tx.therapistDailySettlementPayment.upsert({
-      where: {
-        operatingMonthId_serviceDate_employeeId: {
-          operatingMonthId: parsed.data.operatingMonthId,
-          serviceDate,
-          employeeId: parsed.data.employeeId
-        }
-      },
-      update: {
-        isPaid: parsed.data.isPaid,
-        paidAt: parsed.data.isPaid ? now : null,
-        paidByAccountId: parsed.data.isPaid ? parsed.data.actorId : null
-      },
-      create: {
-        operatingMonthId: parsed.data.operatingMonthId,
-        serviceDate,
-        employeeId: parsed.data.employeeId,
-        isPaid: parsed.data.isPaid,
-        paidAt: parsed.data.isPaid ? now : null,
-        paidByAccountId: parsed.data.isPaid ? parsed.data.actorId : null
-      }
-    });
-
-    // REQ-010 확인필요#4: 지급완료/해제는 분쟁·확인 가능성이 있어 변경 이력(처리자·시점)을 남긴다.
-    // 실제 상태가 바뀐 경우(또는 최초 기록)에만 한 줄을 추가한다.
-    const previousIsPaid = previous?.isPaid ?? null;
-    if (previousIsPaid !== parsed.data.isPaid) {
-      await tx.therapistDailySettlementPaymentHistory.create({
-        data: {
-          paymentId: nextRecord.id,
-          operatingMonthId: parsed.data.operatingMonthId,
-          serviceDate,
-          employeeId: parsed.data.employeeId,
-          previousIsPaid,
-          newIsPaid: parsed.data.isPaid,
-          changedByAccountId: parsed.data.actorId,
-          changedAt: now
-        }
-      });
-    }
-
-    return nextRecord;
-  });
-
-  return {
+  const payoutConfirmation = await confirmPayoutConfirmation({
+    unitType: "THERAPIST_DAILY",
     operatingMonthId: parsed.data.operatingMonthId,
     serviceDate: parsed.data.serviceDate,
     employeeId: parsed.data.employeeId,
-    paymentStatus: toPaymentStatus(record)
-  };
+    amount: settlement.totalCommissionAmount,
+    actorId: parsed.data.actorId,
+    reason: input.reason ?? null,
+    prismaClient: toPayoutConfirmationPrismaClient(client)
+  });
+
+  return { operatingMonthId: parsed.data.operatingMonthId, serviceDate: parsed.data.serviceDate, employeeId: parsed.data.employeeId, payoutConfirmation };
+}
+
+/** 재확인: 금액이 바뀌어 지급 재확인 필요(또는 확인 금액 미기록)인 단위를 현재 금액으로 다시 확인한다. 사유는 필수다. */
+export async function reconfirmTherapistDailySettlementPayout(input: {
+  operatingMonthId: string;
+  serviceDate: string;
+  employeeId: string;
+  actorId: string;
+  reason: string;
+  prismaClient?: TherapistDailySettlementPrismaClient;
+}): Promise<TherapistDailySettlementPayoutResultDto> {
+  const parsed = payoutUnitSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "지급 재확인 입력값이 올바르지 않습니다.");
+  }
+
+  const client = getClient(input.prismaClient);
+  await assertActiveTherapist({ client, employeeId: parsed.data.employeeId });
+  const settlement = await assertPayoutHasSettlement({
+    client,
+    operatingMonthId: parsed.data.operatingMonthId,
+    serviceDate: parsed.data.serviceDate,
+    employeeId: parsed.data.employeeId
+  });
+
+  const payoutConfirmation = await reconfirmPayoutConfirmation({
+    unitType: "THERAPIST_DAILY",
+    operatingMonthId: parsed.data.operatingMonthId,
+    serviceDate: parsed.data.serviceDate,
+    employeeId: parsed.data.employeeId,
+    amount: settlement.totalCommissionAmount,
+    actorId: parsed.data.actorId,
+    reason: input.reason,
+    prismaClient: toPayoutConfirmationPrismaClient(client)
+  });
+
+  return { operatingMonthId: parsed.data.operatingMonthId, serviceDate: parsed.data.serviceDate, employeeId: parsed.data.employeeId, payoutConfirmation };
+}
+
+/** 해제: 확인을 취소해 미확인으로 되돌린다. 정산 대상 콜 여부와 무관하게 허용한다(잘못 확인한 기록 정리). 사유는 필수다. */
+export async function releaseTherapistDailySettlementPayout(input: {
+  operatingMonthId: string;
+  serviceDate: string;
+  employeeId: string;
+  actorId: string;
+  reason: string;
+  prismaClient?: TherapistDailySettlementPrismaClient;
+}): Promise<TherapistDailySettlementPayoutResultDto> {
+  const parsed = payoutUnitSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "지급 확인 해제 입력값이 올바르지 않습니다.");
+  }
+
+  const client = getClient(input.prismaClient);
+  await assertActiveTherapist({ client, employeeId: parsed.data.employeeId });
+  const settlement = await therapistDailySettlement({
+    client,
+    operatingMonthId: parsed.data.operatingMonthId,
+    serviceDate: parsed.data.serviceDate,
+    employeeId: parsed.data.employeeId
+  });
+
+  const payoutConfirmation = await releasePayoutConfirmation({
+    unitType: "THERAPIST_DAILY",
+    operatingMonthId: parsed.data.operatingMonthId,
+    serviceDate: parsed.data.serviceDate,
+    employeeId: parsed.data.employeeId,
+    currentAmount: settlement?.totalCommissionAmount ?? 0,
+    actorId: parsed.data.actorId,
+    reason: input.reason,
+    prismaClient: toPayoutConfirmationPrismaClient(client)
+  });
+
+  return { operatingMonthId: parsed.data.operatingMonthId, serviceDate: parsed.data.serviceDate, employeeId: parsed.data.employeeId, payoutConfirmation };
 }

@@ -9,7 +9,6 @@ import {
 } from "@/modules/calls/service-call-service";
 import { listMonthlyClosingPreview } from "@/modules/closing/monthly-closing-preview-service";
 import { listRoomStatuses } from "@/modules/rooms/room-status-service";
-import { listEarcareDailySettlements } from "@/modules/settlements/earcare-daily-settlement-service";
 import { listOpsDailyIncentives } from "@/modules/settlements/ops-daily-incentive-service";
 import { listOpsMonthlyIncentivePreview } from "@/modules/settlements/ops-monthly-incentive-service";
 import { listTherapistDailySettlements } from "@/modules/settlements/therapist-daily-settlement-service";
@@ -79,7 +78,7 @@ function emptyOpsDay(serviceDate: string) {
   return {
     operatingMonthId: monthId,
     serviceDate,
-    dailyOpsCallCredit: 0,
+    dailyOpsCallCount: 0,
     sourceCallCount: 0,
     appliedThresholdCallCount: null,
     personalIncentiveAmount: 0,
@@ -90,23 +89,6 @@ function emptyOpsDay(serviceDate: string) {
     warningCounts: { notCompleted: 0, coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
     rows: [],
     callEvidence: []
-  };
-}
-
-function emptyEarcareDay(serviceDate: string) {
-  return {
-    operatingMonthId: monthId,
-    serviceDate,
-    earcarePoolTotal: 0,
-    sourceCallCount: 0,
-    eligibleCount: 0,
-    baseShareAmount: 0,
-    remainderAmount: 0,
-    distributedAmount: 0,
-    undistributedAmount: 0,
-    warningCounts: { notCompleted: 0, coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
-    rows: [],
-    poolEvidence: []
   };
 }
 
@@ -158,11 +140,9 @@ describe("Story 7.2 migration calculation comparison", () => {
         actual: {
           basePrice: actual.basePrice,
           discountAmount: actual.discountAmount,
-          paymentAmount: actual.paymentAmount,
-          earcarePoolAmount: actual.earcarePoolAmount,
-          opsCallCredit: actual.opsCallCredit
+          paymentAmount: actual.paymentAmount
         },
-        message: "코스 기본판매가, 할인, 결제금액, 귀케어풀, 콜인정 대조가 실패했습니다."
+        message: "코스 기본판매가, 할인, 결제금액 대조가 실패했습니다."
       });
     }
 
@@ -193,7 +173,6 @@ describe("Story 7.2 migration calculation comparison", () => {
         canceledCount: summary.canceledCount,
         paymentTotal: summary.paymentTotal,
         discountTotal: summary.discountTotal,
-        earcarePoolTotal: summary.earcarePoolTotal,
         therapistCommissionTotal: summary.therapistCommissionTotal,
         expenseTotal: summary.expenseTotal,
         netSales: summary.netSales
@@ -218,7 +197,6 @@ describe("Story 7.2 migration calculation comparison", () => {
         paymentMethodCode: "CASH",
         therapist1Id: "therapist-thr-001",
         therapist2Id: null,
-        earcareEmployeeId: null,
         prismaClient
       }),
       (error) => error instanceof ServiceCallDomainError && error.code === "D_COURSE_SECOND_THERAPIST_REQUIRED"
@@ -247,38 +225,38 @@ describe("Story 7.2 migration calculation comparison", () => {
 
   it("대조: 운영팀 일일/월 인센은 30/40/50 및 1000~1500 threshold와 정상 근무자 조건을 따른다", async () => {
     const daily = await listOpsDailyIncentives({ operatingMonthId: monthId, serviceDate: comparisonDate, prismaClient: createMigrationCalculationPrisma() });
-    assert.equal(daily.dailyOpsCallCredit, MIGRATION_EXPECTED_RESULTS.operations.dailyThreshold.dailyOpsCallCredit);
+    assert.equal(daily.dailyOpsCallCount, MIGRATION_EXPECTED_RESULTS.operations.dailyThreshold.dailyOpsCallCount);
     assert.equal(daily.appliedThresholdCallCount, MIGRATION_EXPECTED_RESULTS.operations.dailyThreshold.appliedThresholdCallCount);
     assert.equal(daily.personalIncentiveAmount, MIGRATION_EXPECTED_RESULTS.operations.dailyThreshold.personalIncentiveAmount);
     assert.equal(daily.eligibleCount, MIGRATION_EXPECTED_RESULTS.operations.dailyThreshold.eligibleCount);
     assert.equal(daily.distributedAmount, MIGRATION_EXPECTED_RESULTS.operations.dailyThreshold.distributedAmount);
     assert.ok(daily.rows.every((row) => row.statusDisplayName === "정상" || row.payoutAmount === 0));
 
+    const dailyAtTopThreshold = await listOpsDailyIncentives({
+      operatingMonthId: monthId,
+      serviceDate: comparisonDate,
+      prismaClient: createMigrationCalculationPrisma({ dailyOpsCallCount: 50 })
+    });
+    assert.equal(dailyAtTopThreshold.dailyOpsCallCount, MIGRATION_EXPECTED_RESULTS.operations.dailyTopThreshold.dailyOpsCallCount);
+    assert.equal(dailyAtTopThreshold.appliedThresholdCallCount, MIGRATION_EXPECTED_RESULTS.operations.dailyTopThreshold.appliedThresholdCallCount);
+    assert.equal(dailyAtTopThreshold.personalIncentiveAmount, MIGRATION_EXPECTED_RESULTS.operations.dailyTopThreshold.personalIncentiveAmount);
+    assert.equal(dailyAtTopThreshold.distributedAmount, MIGRATION_EXPECTED_RESULTS.operations.dailyTopThreshold.distributedAmount);
+
     const monthly = await listOpsMonthlyIncentivePreview({
       operatingMonthId: monthId,
-      prismaClient: createMigrationCalculationPrisma({ monthlyOpsCredit: 1500 })
+      prismaClient: createMigrationCalculationPrisma({ monthlyOpsCallCount: 1500 })
     });
     assert.deepEqual(
       MIGRATION_CALCULATION_FIXTURE.incentiveRules.opsMonthly.map((rule) => rule.thresholdCallCount),
       MIGRATION_EXPECTED_RESULTS.operations.monthlyThresholds
     );
-    assert.equal(monthly.monthlyOpsCallCredit, MIGRATION_EXPECTED_RESULTS.operations.monthlyPreview.monthlyOpsCallCredit);
+    assert.equal(monthly.monthlyOpsCallCount, MIGRATION_EXPECTED_RESULTS.operations.monthlyPreview.monthlyOpsCallCount);
     assert.equal(monthly.appliedThresholdCallCount, MIGRATION_EXPECTED_RESULTS.operations.monthlyPreview.appliedThresholdCallCount);
     assert.equal(monthly.totalMonthlyIncentiveAmount, MIGRATION_EXPECTED_RESULTS.operations.monthlyPreview.totalMonthlyIncentiveAmount);
   });
 
-  it("대조: 귀케어와 마사지사 일정산은 stable Employee.id/staffCode, 역할, 0명 분배 조건을 사용한다", async () => {
+  it("대조: 마사지사 일정산은 stable Employee.id/staffCode와 역할 분리 조건을 사용한다", async () => {
     const prismaClient = createMigrationCalculationPrisma();
-    const earcare = await listEarcareDailySettlements({ operatingMonthId: monthId, serviceDate: comparisonDate, prismaClient });
-    assert.equal(earcare.earcarePoolTotal, MIGRATION_EXPECTED_RESULTS.earcareDaily.normalDay.earcarePoolTotal);
-    assert.equal(earcare.eligibleCount, MIGRATION_EXPECTED_RESULTS.earcareDaily.normalDay.eligibleCount);
-    assert.equal(earcare.distributedAmount, MIGRATION_EXPECTED_RESULTS.earcareDaily.normalDay.distributedAmount);
-
-    const zeroWorker = await listEarcareDailySettlements({ operatingMonthId: monthId, serviceDate: "2034-06-16", prismaClient });
-    assert.equal(zeroWorker.earcarePoolTotal, MIGRATION_EXPECTED_RESULTS.earcareDaily.zeroWorkerDay.earcarePoolTotal);
-    assert.equal(zeroWorker.eligibleCount, MIGRATION_EXPECTED_RESULTS.earcareDaily.zeroWorkerDay.eligibleCount);
-    assert.equal(zeroWorker.distributedAmount, MIGRATION_EXPECTED_RESULTS.earcareDaily.zeroWorkerDay.distributedAmount);
-
     const therapist = await listTherapistDailySettlements({ operatingMonthId: monthId, serviceDate: comparisonDate, prismaClient });
     const byTherapist = new Map(therapist.settlements.map((row) => [row.employeeId, row]));
     assert.equal(byTherapist.get("therapist-thr-001")?.totalCallCount, MIGRATION_EXPECTED_RESULTS.therapistDaily["therapist-thr-001"].totalCallCount);
@@ -307,8 +285,8 @@ describe("Story 7.2 migration calculation comparison", () => {
           endDate: "2034-06-30",
           isClosedOrLocked: false,
           previewStatus: "draft_current",
-          monthlyOpsCallCredit: 1500,
-          sourceCallCount: 1,
+          monthlyOpsCallCount: 1500,
+          sourceCallCount: 1500,
           appliedThresholdCallCount: 1500,
           totalMonthlyIncentiveAmount: 25000000,
           ruleStatus: "applied",
@@ -316,11 +294,8 @@ describe("Story 7.2 migration calculation comparison", () => {
           shares: { leadShare: 0.3, counterTeamShare: 0.35, waiterTeamShare: 0.35, leadAmount: 7500000, counterTeamAmount: 8750000, waiterTeamAmount: 8750000, undistributedAmount: 0 },
           rows: [],
           warningCounts: { notCompleted: 0, coursePolicyMissing: 0, therapistRateMissing: 0, secondTherapistRequired: 0 },
-          callEvidence: [{ serviceCallId: "call-monthly-ops-1500", serviceDate: comparisonDate, opsCallCredit: 1500 }]
+          callEvidence: [{ serviceCallId: "call-monthly-ops-0", serviceDate: comparisonDate, call: null }]
         } as any;
-      },
-      async listEarcareDailySettlements({ serviceDate }: { serviceDate: string }) {
-        return emptyEarcareDay(serviceDate) as any;
       },
       listCompletedServiceCallCalculationsForOperatingMonth
     };

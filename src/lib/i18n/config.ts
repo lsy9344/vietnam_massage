@@ -21,6 +21,19 @@ export const localeLabels: Record<Locale, string> = {
   ko: "한국어"
 };
 
+/** 언어 쿠키 한 줄(document.cookie에 대입). 1년 유지, 모든 route에서 공유. */
+export function localeCookieAssignment(locale: Locale) {
+  return `${LOCALE_COOKIE}=${locale}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+}
+
+/**
+ * 로그인 직후 바꿀 화면 언어. Therapist는 베트남 현지 직원이라 로그인하면 늘 베트남어로 시작한다(사용자 요청,
+ * 2026-10-20). 그 뒤 나 메뉴에서 한국어로 바꾸면 다음 로그인 전까지 그대로다. 다른 역할은 고른 언어를 둔다(null).
+ */
+export function signInLocaleFor(role: string | undefined): Locale | null {
+  return role === "therapist" ? "vi" : null;
+}
+
 /** 임의 문자열이 지원 locale인지 좁혀준다. */
 export function isLocale(value: unknown): value is Locale {
   return value === "vi" || value === "ko";

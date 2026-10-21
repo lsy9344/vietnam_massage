@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const employeeGroups = ["OPERATIONS", "EARCARE", "THERAPIST"] as const;
+export const employeeGroups = ["OPERATIONS", "THERAPIST"] as const;
 export const shiftTypes = ["전체", "주간", "야간"] as const;
 export const employmentStatuses = ["재직", "퇴사", "휴직"] as const;
 export const accountRoles = ["administrator", "counter", "waiter", "settlement_manager", "read_only_viewer"] as const;
@@ -11,7 +11,6 @@ export type EmploymentStatus = (typeof employmentStatuses)[number];
 
 export const employeeGroupLabels: Record<EmployeeGroup, string> = {
   OPERATIONS: "운영팀",
-  EARCARE: "귀케어팀",
   THERAPIST: "마사지사"
 };
 
@@ -84,17 +83,6 @@ const operationsEmployees: DefaultEmployee[] = [
   }
 ];
 
-const earcareEmployees: DefaultEmployee[] = Array.from({ length: 4 }, (_, index) => ({
-  displayName: `귀케어${index + 1}`,
-  staffCode: `EAR-${String(index + 1).padStart(3, "0")}`,
-  employeeGroup: "EARCARE",
-  position: "귀케어사",
-  shiftType: null,
-  baseSalary: 5000000,
-  employmentStatus: "재직",
-  sortOrder: (index + 1) * 10
-}));
-
 const therapistEmployees: DefaultEmployee[] = Array.from({ length: 50 }, (_, index) => ({
   displayName: `마사지사${index + 1}`,
   staffCode: `THR-${String(index + 1).padStart(3, "0")}`,
@@ -106,9 +94,9 @@ const therapistEmployees: DefaultEmployee[] = Array.from({ length: 50 }, (_, ind
   sortOrder: (index + 1) * 10
 }));
 
-// Static anchors for the generated boundary defaults: EAR-001, THR-050.
+// Static anchor for the generated boundary default: THR-050.
 
-export const defaultEmployees: DefaultEmployee[] = [...operationsEmployees, ...earcareEmployees, ...therapistEmployees];
+export const defaultEmployees: DefaultEmployee[] = [...operationsEmployees, ...therapistEmployees];
 
 const optionalTrimmedTextSchema = z.preprocess(
   (value) => (value === undefined || (typeof value === "string" && value.trim() === "") ? null : value),
@@ -189,4 +177,28 @@ export const linkUserAccountToEmployeeSchema = z.object({
     (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
     z.string().min(8, "비밀번호는 8자 이상이어야 합니다.").optional()
   )
+});
+
+const userAccountIdSchema = z.string().trim().min(1, "계정을 찾을 수 없습니다.");
+
+// 티켓 02: Therapist 패널의 전용 발급·초기화·정지·잠금 해제 폼. 역할은 항상 therapist로 고정이라 입력에
+// 역할 칸이 없다(D26) — accountRoles에 "therapist"를 넣지 않는 이유와 같다.
+export const issueTherapistAccountSchema = z.object({
+  employeeId: employeeIdSchema,
+  accountId: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().min(1, "계정 ID를 입력하세요.").max(80, "계정 ID는 80자 이하여야 합니다.").optional()
+  )
+});
+
+export const resetTherapistAccountPasswordSchema = z.object({
+  userAccountId: userAccountIdSchema
+});
+
+export const suspendTherapistAccountSchema = z.object({
+  userAccountId: userAccountIdSchema
+});
+
+export const unlockTherapistAccountSchema = z.object({
+  userAccountId: userAccountIdSchema
 });

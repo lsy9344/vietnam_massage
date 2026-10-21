@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { businessTodayServiceDateFromActiveSlots } from "@/lib/operating-date";
+import { listAssignedServiceCallsForEmployeeFromDate } from "@/modules/calls/assigned-service-call-query";
 import { recordAuditEvent } from "@/modules/audit/audit-service";
 import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
 import {
@@ -13,6 +15,7 @@ import {
 } from "@/modules/masters/employee-schema";
 
 export { linkUserAccountToEmployee } from "@/modules/masters/account-service";
+import { deactivateUserAccount } from "@/modules/masters/account-service";
 
 type AccountSummary = {
   id: string;
@@ -21,6 +24,7 @@ type AccountSummary = {
   role: string;
   isActive: boolean;
   lockedUntil: Date | null;
+  passwordChangeRequired: boolean;
 };
 
 type EmployeeRecord = {
@@ -49,6 +53,17 @@ type EmployeePrismaClient = {
     findUnique(args: unknown): Promise<EmployeeRecord | null>;
     findFirst(args: unknown): Promise<EmployeeRecord | null>;
     updateMany(args: unknown): Promise<{ count: number }>;
+  };
+  // 티켓 02(M20): 퇴사 저장과 같은 트랜잭션에서 연결된 계정을 찾아 정지하는 데만 쓴다.
+  userAccount: {
+    findUnique(args: unknown): Promise<{ id: string } | null>;
+    update(args: unknown): Promise<unknown>;
+  };
+  serviceCall: {
+    findMany(args: unknown): Promise<{ id: string; serviceDate: Date; startTime: string }[]>;
+  };
+  timeSlot: {
+    findMany(args?: unknown): Promise<{ value: string; sortOrder: number }[]>;
   };
   auditLog: {
     create(args: unknown): Promise<unknown>;
@@ -79,6 +94,7 @@ export type EmployeeDto = {
     role: string;
     isActive: boolean;
     lockedUntil: string | null;
+    passwordChangeRequired: boolean;
   } | null;
 };
 
@@ -114,11 +130,63 @@ export type EmployeeMutationInput = EmployeeMutationBase & {
   employeeId: string;
 };
 
+export type DeactivateEmployeeInput = EmployeeMutationInput & {
+  /** 오늘(Asia/Ho_Chi_Minh 달력날)을 정하는 지금 시각. 없으면 서버 시각을 쓴다. */
+  now?: Date;
+};
+
+/** 비활성을 막은 콜 하나: 날짜와 예약시각. */
+export type FutureCallSummary = {
+  serviceCallId: string;
+  serviceDate: string;
+  startTime: string;
+};
+
 export class EmployeeDomainError extends Error {
   constructor(message: string, public readonly code: string) {
     super(message);
     this.name = "EmployeeDomainError";
   }
+}
+
+/** 오늘 이후의 콜에 배정된 직원은 비활성으로 바꿀 수 없다(B08). futureCalls.length가 건수다. */
+export class EmployeeHasFutureCallsError extends EmployeeDomainError {
+  constructor(public readonly futureCalls: FutureCallSummary[]) {
+    super("앞으로 잡힌 콜에 배정된 직원은 비활성으로 바꿀 수 없습니다.", "HAS_FUTURE_CALLS");
+    this.name = "EmployeeHasFutureCallsError";
+  }
+}
+
+/**
+ * S10: "오늘"은 달력날이 아니라 지금이 들어 있는 영업일의 서비스 날짜다(스펙 226줄, 티켓 10 결정) —
+ * 자정부터 첫 활성 슬롯 전까지는 전날 서비스 날짜가 오늘이다(운영팀 쪽 기준, R0로 되돌림). 원장
+ * 직접 조회와 노쇼·취소 상태 복제도 콜 서비스의 질의 함수
+ * (listAssignedServiceCallsForEmployeeFromDate)로 옮긴다(src/modules/README.md).
+ */
+async function findFutureCalls(tx: EmployeePrismaClient, employeeId: string, now: Date): Promise<FutureCallSummary[]> {
+  const timeSlots = await tx.timeSlot.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
+  const today = businessTodayServiceDateFromActiveSlots(timeSlots, now);
+  const records = await listAssignedServiceCallsForEmployeeFromDate({
+    employeeId,
+    fromDate: today,
+    prismaClient: tx as unknown as Parameters<typeof listAssignedServiceCallsForEmployeeFromDate>[0]["prismaClient"]
+  });
+  if (records.length === 0) {
+    return [];
+  }
+  // 원장처럼 같은 날 안에서는 시간 슬롯 순서로 놓는다(01:00 슬롯은 그 서비스 날짜의 끝이다).
+  const sortOrderByTime = new Map(timeSlots.map((slot) => [slot.value, slot.sortOrder]));
+  const slotOrder = (startTime: string) => sortOrderByTime.get(startTime) ?? Number.MAX_SAFE_INTEGER;
+  return [...records]
+    .sort(
+      (a, b) =>
+        a.serviceDate.localeCompare(b.serviceDate) || slotOrder(a.startTime) - slotOrder(b.startTime) || a.startTime.localeCompare(b.startTime)
+    )
+    .map((record) => ({
+      serviceCallId: record.serviceCallId,
+      serviceDate: record.serviceDate,
+      startTime: record.startTime
+    }));
 }
 
 function getClient(client?: EmployeePrismaClient) {
@@ -146,7 +214,7 @@ function toIsoDate(value: Date | null) {
 }
 
 function assertEmployeeGroup(value: string): asserts value is EmployeeGroup {
-  if (!["OPERATIONS", "EARCARE", "THERAPIST"].includes(value)) {
+  if (!["OPERATIONS", "THERAPIST"].includes(value)) {
     throw new EmployeeDomainError("직원 그룹이 올바르지 않습니다.", "INVALID_EMPLOYEE_GROUP");
   }
 }
@@ -195,7 +263,9 @@ function toDto(record: EmployeeRecord, options: { tolerateInvalidEnums?: boolean
           email: record.account.email,
           role: record.account.role,
           isActive: record.account.isActive,
-          lockedUntil: record.account.lockedUntil ? record.account.lockedUntil.toISOString() : null
+          lockedUntil: record.account.lockedUntil ? record.account.lockedUntil.toISOString() : null,
+          // 기존 메모리 테스트 더미 계정은 이 칸을 채우지 않으므로, 없으면 false로 본다.
+          passwordChangeRequired: Boolean(record.account.passwordChangeRequired)
         }
       : null
   };
@@ -487,6 +557,20 @@ export async function updateEmployeeProfile(input: UpdateEmployeeProfileInput) {
       afterValue: toAuditSnapshot(after)
     });
 
+    // M20(D4, 티켓 02): 재직상태가 퇴사로 바뀌면, 연결된 계정을(있으면) 같은 트랜잭션에서 정지하고
+    // 감사에 남긴다. 휴직은 건드리지 않는다. deactivateUserAccount는 이미 정지된 계정이면 조용히
+    // 그대로 둔다(멱등) — 관리자가 먼저 수동으로 정지해 둔 경우에도 중복 감사가 남지 않는다.
+    if (before.employmentStatus !== "퇴사" && after.employmentStatus === "퇴사") {
+      const linkedAccount = await tx.userAccount.findUnique({ where: { employeeId: after.id } });
+      if (linkedAccount) {
+        await deactivateUserAccount({
+          actorId: input.actorId,
+          userAccountId: linkedAccount.id,
+          prismaClient: tx as unknown as Parameters<typeof deactivateUserAccount>[0]["prismaClient"]
+        });
+      }
+    }
+
     return after;
   });
 }
@@ -533,7 +617,7 @@ export async function updateEmployeeSortOrder(input: UpdateEmployeeSortOrderInpu
   });
 }
 
-export async function deactivateEmployee(input: EmployeeMutationInput) {
+export async function deactivateEmployee(input: DeactivateEmployeeInput) {
   const parsed = deactivateEmployeeSchema.safeParse(input);
   if (!parsed.success) {
     throw normalizeParseError(parsed.error.issues[0]?.message ?? "직원 비활성 입력값이 올바르지 않습니다.");
@@ -546,6 +630,11 @@ export async function deactivateEmployee(input: EmployeeMutationInput) {
     const before = toDto(currentRecord, { tolerateInvalidEnums: true });
     if (!before.isActive) {
       return before;
+    }
+
+    const futureCalls = await findFutureCalls(tx, parsed.data.employeeId, input.now ?? new Date());
+    if (futureCalls.length > 0) {
+      throw new EmployeeHasFutureCallsError(futureCalls);
     }
 
     const updateResult = await tx.employee.updateMany({

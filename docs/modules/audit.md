@@ -19,7 +19,7 @@ The audit module owns immutable change history for sensitive ERP operations.
 
 - service-call status changes
 - payment and discount changes
-- therapist or earcare assignment changes
+- therapist assignment changes
 - shift time changes
 - rate and incentive policy changes
 - employee changes

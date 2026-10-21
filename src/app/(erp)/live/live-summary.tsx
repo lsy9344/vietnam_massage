@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
+import { CallStatusChip, type CallStatusKey } from "@/components/domain/call-status-chip";
 import { DetailRow } from "@/components/ui/detail-row";
-import { StatusIndicator, type StatusTone } from "@/components/ui/status-indicator";
+import { StatusIndicator } from "@/components/ui/status-indicator";
 import { SummaryCard, SummaryCards } from "@/components/ui/summary-card";
 import { createTranslator } from "@/lib/i18n";
 import { codeLabel } from "@/lib/i18n/codes";
@@ -65,13 +66,13 @@ export function LiveSummaryCards({ summary, locale }: { summary: DailyCallLedger
 /** 객실판 아래의 나머지 숫자: 상태별 건수 전체, 결제수단별 합계, 코스별 방문완료. */
 export function LiveSummaryDetails({ summary, locale }: { summary: DailyCallLedgerSummaryDto; locale: Locale }) {
   const { t, count, vnd } = formatters(locale);
-  const statusRows: Array<{ labelKey: MessageKey; value: number; tone: StatusTone | null }> = [
-    { labelKey: "live.summary.reservationCount", value: summary.reservationCount, tone: null },
-    { labelKey: "live.summary.inUse", value: summary.inUseCount, tone: "info" },
-    { labelKey: "live.summary.cleaning", value: summary.cleaningCount, tone: "info" },
-    { labelKey: "live.summary.completed", value: summary.completedCount, tone: "success" },
-    { labelKey: "live.summary.noShow", value: summary.noShowCount, tone: "warning" },
-    { labelKey: "live.summary.canceled", value: summary.canceledCount, tone: "neutral" }
+  const statusRows: Array<{ labelKey: MessageKey; value: number; status: CallStatusKey | null }> = [
+    { labelKey: "live.summary.reservationCount", value: summary.reservationCount, status: null },
+    { labelKey: "live.summary.inUse", value: summary.inUseCount, status: "inUse" },
+    { labelKey: "live.summary.cleaning", value: summary.cleaningCount, status: "cleaning" },
+    { labelKey: "live.summary.completed", value: summary.completedCount, status: "completed" },
+    { labelKey: "live.summary.noShow", value: summary.noShowCount, status: "noShow" },
+    { labelKey: "live.summary.canceled", value: summary.canceledCount, status: "canceled" }
   ];
 
   return (
@@ -83,7 +84,7 @@ export function LiveSummaryDetails({ summary, locale }: { summary: DailyCallLedg
             return (
               <DetailRow
                 key={row.labelKey}
-                label={row.tone ? <StatusIndicator label={label} tone={row.tone} /> : label}
+                label={row.status ? <CallStatusChip count={{ value: row.value }} label={label} status={row.status} /> : label}
                 value={count(row.value)}
               />
             );

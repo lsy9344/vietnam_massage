@@ -27,8 +27,8 @@ The masters module owns all configurable data used by operational modules:
 - `TimeSlot` with stable `id`, canonical `value` in `HH:mm`, `sortOrder`, and `isActive`
 - `Employee` with stable `id`, stable `staffCode`, `employeeGroup`, `position`, `shiftType`, integer `baseSalary`, optional `phone`, `birthday`, `hireDate`, `employmentStatus`, `sortOrder`, and `isActive`
 - `UserAccount` remains the login identity model and connects to `Employee` through optional unique `employeeId`
-- `Course` with stable `id`, stable code `A` through `E`, `isActive`, and audit timestamps
-- `CoursePolicy` with `courseId`, display name, minutes, VND base price, operations call credit, earcare pool amount, D-course second-therapist flag, TV display name, effective month range, and `isActive`
+- `Course` with stable `id`, stable code `A` through `E`, `isActive`, and audit timestamps. `B` is seeded only as a legacy inactive row for historical calls; default seeding no longer creates or revives it.
+- `CoursePolicy` with `courseId`, display name, minutes, VND base price, D-course second-therapist flag, TV display name, effective month range, and `isActive`
 - `TherapistCourseRate` with stable `Employee.id`, stable `Course.id`, VND amount, effective month range, and `isActive`
 - `OpsDailyIncentiveRule` with daily call threshold, personal VND amount, effective month range, and `isActive`
 - `OpsMonthlyIncentiveRule` with monthly call threshold, total VND amount, lead/counter/waiter share ratios, effective month range, and `isActive`
@@ -44,7 +44,7 @@ The masters module owns all configurable data used by operational modules:
 - Story 1.6 default time slots are exactly 29 values from `11:00` through `01:00`; workbook values after `01:00` are not ERP input defaults.
 - Code items and time slots that may be referenced by operational rows become 비활성 instead of being physically removed.
 - Employee references use stable `Employee.id` 고유 ID; display names, positions, account IDs, and workbook row numbers are not stable keys.
-- Story 1.7 default employees are 5 `OPERATIONS`, 4 `EARCARE`, and 50 `THERAPIST` rows keyed by stable `staffCode` values such as `OPS-LEAD-001`, `EAR-001`, and `THR-001`.
+- Default employees are 5 `OPERATIONS` and 50 `THERAPIST` rows keyed by stable `staffCode` values such as `OPS-LEAD-001` and `THR-001`. The `EARCARE` employee group was removed with the earcare feature; any remaining `employeeGroup="EARCARE"` rows are legacy and inactive.
 - Employee `baseSalary` is stored as a VND whole-number integer. `birthday` and `hireDate` are optional date values and service DTOs expose ISO `YYYY-MM-DD` strings or `null`.
 - Employee inactive selection state (`Employee.isActive`) and employment status (`재직`, `퇴사`, `휴직`) are separate from account login state (`UserAccount.isActive`, `lockedUntil`, `failedLoginCount`).
 - Employee rows that may be referenced by calls, settlements, audit logs, or monthly-close snapshots become 비활성 instead of being physically removed.
