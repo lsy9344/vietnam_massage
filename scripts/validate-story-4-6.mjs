@@ -36,7 +36,7 @@ const callsService = read("src/modules/calls/service-call-service.ts");
 for (const required of [
   "export async function listServiceCallsForOperatingMonth",
   "export async function listCompletedServiceCallCalculationsForOperatingMonth",
-  "serviceDate: {",
+  "serviceDate?: { gte: Date; lte: Date }",
   "gte:",
   "lte:",
   "calculationStatus === \"calculated\""
@@ -184,7 +184,7 @@ for (const required of [
   "/settlements/operations/monthly?operatingMonthId",
   "운영팀 월인센",
   "월 총콜",
-  "1100콜 이상",
+  "3콜 이상",
   "5,000,000 VND",
   "분배율 30%",
   "분배율 35%",

@@ -462,7 +462,9 @@ function CallLedgerLine({
   const therapistName = (id: string | null | undefined, assigned: ServiceCallRowDto["therapist1"]) =>
     !id ? null : assigned?.id === id ? assigned.displayName : (therapistChoices?.find((choice) => choice.therapistId === id)?.therapistName ?? (optionLabel(options.therapists, id) || id));
   const therapist1Text = therapistName(draft.therapist1Id, serverRow.therapist1) ?? t("calls.cell.unassigned");
-  const therapist2Text = therapistName(draft.therapist2Id, serverRow.therapist2);
+  // 두 명 코스면 두 번째 Therapist가 비어 있어도 칸을 둔다(빈 칸은 미지명). 다른 코스는 사람이 있을 때만 둔다.
+  const showSecondTherapist = Boolean(draft.therapist2Id) || options.secondTherapistCourseIds.includes(draft.courseId);
+  const therapist2Text = showSecondTherapist ? (therapistName(draft.therapist2Id, serverRow.therapist2) ?? t("calls.cell.unassigned")) : null;
   const roomLabel = draft.roomId ? optionLabel(options.rooms, draft.roomId) || serverRow.roomLabel : null;
   const statusKey = callStatusKeyOf(draft.status);
   const statusLabel = optionLabel(options.statuses, draft.status) || draft.status;
@@ -613,7 +615,7 @@ function CallLedgerLine({
             >
               {therapist1Text}
             </LedgerCellPicker>
-            {therapist2Text ? (
+            {showSecondTherapist ? (
               <LedgerCellPicker
                 className={`${pickerFieldClass} px-2`}
                 disabled={isLocked}
@@ -625,7 +627,7 @@ function CallLedgerLine({
                 onOpen={() => void loadTherapistChoices()}
                 onPick={(value) => pickTherapist(value, "therapist2Id")}
                 options={therapistOptions?.filter((option) => !option.value || option.value !== draft.therapist1Id) ?? null}
-                title={therapist2Text}
+                title={therapist2Text ?? undefined}
                 value={draft.therapist2Id ?? ""}
               >
                 {therapist2Text}
@@ -1094,6 +1096,7 @@ export function CallLedgerList({
   options,
   panelFocus = null,
   panelHost = null,
+  phoneWidth,
   rows,
   selectedCallId = null,
   showSettlementAmounts,
@@ -1101,6 +1104,8 @@ export function CallLedgerList({
 }: {
   /** 시계를 정해 줄 때(테스트). 없으면 이 기기의 시계를 영업 시간대로 읽는다. */
   clock?: LedgerClock | null;
+  /** 휴대폰 폭인지 정해 줄 때(테스트). 없으면 이 기기의 화면 폭을 읽는다. */
+  phoneWidth?: boolean;
   customers?: CustomerDto[];
   isLocked: boolean;
   onOpen?: OpenCall;
@@ -1122,7 +1127,8 @@ export function CallLedgerList({
   const filteredOut = (row: ServiceCallRowDto) =>
     therapistFilter !== null && row.id !== selectedCallId && row.therapist1?.id !== therapistFilter && row.therapist2?.id !== therapistFilter;
   // 휴대폰 폭(600px 미만)은 같은 목록을 읽기 전용으로 쓴다(스펙 D23, 티켓 26의 규칙).
-  const isPhoneWidth = usePhoneWidth();
+  const livePhoneWidth = usePhoneWidth();
+  const isPhoneWidth = phoneWidth ?? livePhoneWidth;
   const liveClock = useLedgerClock(options.timeSlots, clockOverride === undefined);
   const clock = clockOverride === undefined ? liveClock : clockOverride;
   const dayStart = options.timeSlots[0]?.value ?? "00:00";

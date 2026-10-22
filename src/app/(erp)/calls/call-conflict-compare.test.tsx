@@ -24,6 +24,7 @@ const options: ServiceCallFormOptions = {
   discountTypes: [{ value: "discount-vip", label: "VIP 할인" }],
   paymentMethods: [{ value: "카드", label: "카드" }],
   confirmationCodes: [{ value: "code-1", label: "확인1" }],
+  secondTherapistCourseIds: [],
   bookingChannels: [{ value: "TELEGRAM", label: "텔레그램" }],
   therapists: [
     { value: "therapist-1", label: "Therapist 1" },

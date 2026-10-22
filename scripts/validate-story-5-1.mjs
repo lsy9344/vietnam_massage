@@ -151,7 +151,7 @@ for (const required of [
   "(2일).",
   "마사지사 정산에서 뺀 콜 1건",
   "대표 evidence",
-  "selectOption(seededData.lockedOperatingMonthId)",
+  "pickListboxOptionByValue(page.getByLabel(\"운영월\"), seededData.lockedOperatingMonthId)",
   "미확정 미리보기",
   "현재 기준 미리보기",
   "확정값은 월마감 확정 기록 기준",

@@ -15,7 +15,6 @@ import {
   type ServiceCallCustomerLinkCorrectionActionState
 } from "@/app/(erp)/calls/actions";
 import { CUSTOMER_SEARCH_DEBOUNCE_MS, customerScreenHref, moveCandidateIndex } from "@/app/(erp)/customers/customer-search";
-import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
 
 /**
  * 편집 패널 "더 보기"의 고객 연결 정정(F06, ADR 0003, 스토리 81-83). 원장 행 저장과는 별개의 전용 작업이라
@@ -32,17 +31,19 @@ import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
 export function CallCustomerLinkCorrection({
   customers,
   isLocked,
+  readOnly,
   row,
   onCorrected
 }: {
   customers: CustomerDto[];
   isLocked: boolean;
+  /** 휴대폰 폭의 읽기 전용 패널(티켓 26)이면 정정 폼을 그리지 않는다. */
+  readOnly: boolean;
   row: ServiceCallRowDto;
   onCorrected: (row: ServiceCallRowDto) => void;
 }) {
   const t = useT();
   const locale = useLocale();
-  const isPhoneWidth = usePhoneWidth();
   const linkedCustomer = row.customerId ? customers.find((customer) => customer.id === row.customerId) ?? null : null;
   const customerScreenTarget = linkedCustomer
     ? customerScreenHref({ customerQuery: "", visitCustomer: linkedCustomer.id })
@@ -148,7 +149,7 @@ export function CallCustomerLinkCorrection({
         {t("calls.detail.customerLink.goToCustomerScreen")}
       </a>
 
-      {isPhoneWidth ? null : isLocked ? (
+      {readOnly ? null : isLocked ? (
         <ScreenState kind="locked" label={t("common.screenState.locked")} title={t("calls.detail.customerLink.locked")} />
       ) : (
         <form action={formAction} className="grid gap-3" noValidate>

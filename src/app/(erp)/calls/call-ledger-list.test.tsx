@@ -17,7 +17,10 @@ const options: ServiceCallFormOptions = {
     { value: "11:00", label: "11:00" },
     { value: "15:00", label: "15:00" }
   ],
-  courses: [{ value: "course-a", label: "A 누루60" }],
+  courses: [
+    { value: "course-a", label: "A 누루60" },
+    { value: "course-d", label: "D 2:1" }
+  ],
   statuses: [
     { value: "RESERVED", label: "예약" },
     { value: "IN_USE", label: "사용중" },
@@ -31,6 +34,7 @@ const options: ServiceCallFormOptions = {
     { value: "CARD", label: "카드" }
   ],
   confirmationCodes: [{ value: "Y", label: "Y" }],
+  secondTherapistCourseIds: ["course-d"],
   bookingChannels: [{ value: "TELEGRAM", label: "텔레그램" }],
   therapists: [{ value: "therapist-1", label: "Therapist 1 (THR-001)" }],
   expenseHandlers: []
@@ -98,18 +102,20 @@ function renderList(
     isLocked = false,
     selectedCallId = null,
     clock = null,
+    phoneWidth = false,
     therapistFilter = null
   }: {
     locale?: "ko" | "vi";
     isLocked?: boolean;
     selectedCallId?: string | null;
     clock?: { today: string; time: string } | null;
+    phoneWidth?: boolean;
     therapistFilter?: string | null;
   } = {}
 ) {
   return render(
     locale,
-    createElement(CallLedgerList, { clock, customers: [], isLocked, options, rows, selectedCallId, showSettlementAmounts: false, therapistFilter })
+    createElement(CallLedgerList, { clock, customers: [], isLocked, options, phoneWidth, rows, selectedCallId, showSettlementAmounts: false, therapistFilter })
   );
 }
 
@@ -136,21 +142,6 @@ function text(markup: string) {
 
 function buttons(markup: string) {
   return [...markup.matchAll(/<button[^>]*>([\s\S]*?)<\/button>/g)].map((match) => match[1].replace(/<[^>]+>/g, ""));
-}
-
-// usePhoneWidth()의 초기 useState는 렌더 중에 window.matchMedia를 읽는다. 전역 window를 흉내 내면 실제 폭을
-// 바꾼 것과 같은 결과를 renderToStaticMarkup로 볼 수 있다.
-function withWindowWidth(minWidth600Matches: boolean, run: () => string) {
-  const original = (globalThis as { window?: unknown }).window;
-  (globalThis as { window?: unknown }).window = {
-    matchMedia: () => ({ matches: minWidth600Matches, addEventListener: () => {}, removeEventListener: () => {} })
-  };
-  try {
-    return run();
-  } finally {
-    if (original === undefined) delete (globalThis as { window?: unknown }).window;
-    else (globalThis as { window?: unknown }).window = original;
-  }
 }
 
 describe("parties on the two-line ledger (ticket 04, 1018 ticket 02)", () => {
@@ -311,6 +302,16 @@ describe("two-line ledger (1018 ticket 02)", () => {
     assert.ok(pickers(line(renderList(rows, { isLocked: true }), "reserved-12")).every((picker) => /disabled=""/.test(picker)));
   });
 
+  it("shows a second Therapist cell on a two-Therapist course even before anyone is in it, and only there", () => {
+    const html = renderList([
+      ledgerRow({ id: "two-empty", startTime: "12:00", courseId: "course-d", courseCode: "D", courseLabel: "D 2:1" }),
+      ledgerRow({ id: "one", startTime: "13:00" })
+    ]);
+    const second = (callId: string) => cell(line(html, callId), "therapist").match(/<button[^>]*aria-label="\d\d:00 콜 두 번째 Therapist 고르기"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? "";
+    assert.match(second("two-empty"), /미지명/);
+    assert.equal(second("one"), "");
+  });
+
   it("lets the entry and end times be corrected in place, and locks them in a locked month (1018 spec D11)", () => {
     const html = renderList([ledgerRow({ id: "ended", status: "CLEANING", actualEntryTime: "14:02", actualEndTime: "14:58" })]);
     assert.match(cell(line(html, "ended"), "entry"), /<button[^>]*aria-label="16:00 콜 실제입장 고치기"[^>]*>[\s\S]*?14:02/);
@@ -433,14 +434,14 @@ describe("phone width (ticket 26, 1018 ticket 02)", () => {
   ];
 
   it("draws the same rows on a phone, with no separate card list", () => {
-    const html = withWindowWidth(false, () => renderList(rows));
+    const html = renderList(rows, { phoneWidth: true });
     assert.doesNotMatch(html, /원장 카드 목록/);
     assert.equal((html.match(/<ol/g) ?? []).length, 1);
     assert.match(line(html, "in-use-13"), /data-line-cell="time"[\s\S]*data-line-cell="who"/);
   });
 
   it("keeps the phone read-only: no entry, pay, cell lists or party buttons", () => {
-    const phone = withWindowWidth(false, () => renderList(rows));
+    const phone = renderList(rows, { phoneWidth: true });
     // 줄에는 패널을 여는 시간 버튼만 남는다.
     assert.deepEqual(buttons(line(phone, "reserved-12")), ["12:00"]);
     assert.deepEqual(buttons(line(phone, "in-use-13")), ["13:00"]);
@@ -448,7 +449,7 @@ describe("phone width (ticket 26, 1018 ticket 02)", () => {
     assert.match(phone, /정 대표 일행 2명/);
     assert.match(text(line(phone, "in-use-13")), /Therapist 1/);
 
-    const wide = withWindowWidth(true, () => renderList(rows));
+    const wide = renderList(rows, { phoneWidth: false });
     assert.deepEqual(buttons(cell(line(wide, "in-use-13"), "action")), ["종료"]);
     assert.match(wide, /일행 입장/);
   });
@@ -457,10 +458,10 @@ describe("phone width (ticket 26, 1018 ticket 02)", () => {
   it("shows exactly one empty-day message, without the quick booking hint on a phone", () => {
     const count = (html: string) => (html.match(/이 날짜의 콜이 없습니다/g) ?? []).length;
     assert.equal(count(renderList([])), 1);
-    assert.equal(count(withWindowWidth(false, () => renderList([]))), 1);
-    assert.equal(count(withWindowWidth(true, () => renderList([]))), 1);
+    assert.equal(count(renderList([], { phoneWidth: true })), 1);
+    assert.equal(count(renderList([], { phoneWidth: false })), 1);
     assert.match(renderList([]), /빠른 예약으로 새 콜을 만든다/);
-    assert.doesNotMatch(withWindowWidth(false, () => renderList([])), /빠른 예약으로 새 콜을 만든다/);
+    assert.doesNotMatch(renderList([], { phoneWidth: true }), /빠른 예약으로 새 콜을 만든다/);
   });
 });
 
@@ -620,7 +621,7 @@ describe("call edit panel (ticket 03)", () => {
   });
 
   it("only reads at phone width: no input at all", () => {
-    const html = withWindowWidth(false, () => renderPanel(ledgerRow(), { readOnly: true }));
+    const html = renderPanel(ledgerRow(), { readOnly: true });
     assert.doesNotMatch(html, /<input|<select|<textarea/);
     assert.match(html, /고객 화면으로 이동/);
   });

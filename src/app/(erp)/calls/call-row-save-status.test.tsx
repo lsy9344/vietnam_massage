@@ -17,6 +17,7 @@ const options: ServiceCallFormOptions = {
   discountTypes: [],
   paymentMethods: [],
   confirmationCodes: [],
+  secondTherapistCourseIds: [],
   bookingChannels: [],
   therapists: [{ value: "therapist-1", label: "Therapist 1" }],
   expenseHandlers: []

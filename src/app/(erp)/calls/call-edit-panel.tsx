@@ -154,6 +154,7 @@ export function CallEditPanel({
         isLocked={isLocked}
         key={row.id}
         onCorrected={setLinkRow}
+        readOnly={readOnly}
         row={linkRow ?? warningsRow}
       />
     </PanelSection>

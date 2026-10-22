@@ -41,6 +41,7 @@ const options: ServiceCallFormOptions = {
   discountTypes: [],
   paymentMethods: [],
   confirmationCodes: [],
+  secondTherapistCourseIds: [],
   bookingChannels: [
     { value: "TELEGRAM", label: "텔레그램" },
     { value: "WALK_IN", label: "워크인" }

@@ -462,6 +462,8 @@ export type ServiceCallFormOptions = {
   bookingChannels: ServiceCallOption[];
   therapists: ServiceCallOption[];
   expenseHandlers: ServiceCallOption[];
+  /** 두 명 코스(지금 정책이 Therapist 둘을 쓰는 코스)의 id. 원장 줄은 이 코스면 두 번째 Therapist 칸을 늘 보인다. */
+  secondTherapistCourseIds: string[];
 };
 
 // rate_missing: 이 운영월에 유효한 수당이 없다(두 명 코스는 수당을 가진 다른 활성 Therapist도 없다). 시간보다 앞선다.
@@ -3653,6 +3655,7 @@ export async function listServiceCallFormOptions(
     rooms: rooms.map((room) => option(room.id, room.displayName)),
     timeSlots: timeSlots.map((slot) => option(slot.value, slot.value)),
     courses: courses.map((course) => option(course.id, `${course.code} ${course.currentPolicy.name}`)),
+    secondTherapistCourseIds: courses.filter((course) => course.currentPolicy.requiresSecondTherapist).map((course) => course.id),
     statuses: statuses.map((code) => option(code.code, codeLabel(locale, code.codeType, code.code, code.isSystemDefault, code.displayName))),
     discountTypes: discountTypes.map((code) => option(code.code, codeLabel(locale, code.codeType, code.code, code.isSystemDefault, code.displayName))),
     paymentMethods: paymentMethods.map((code) => option(code.code, codeLabel(locale, code.codeType, code.code, code.isSystemDefault, code.displayName))),

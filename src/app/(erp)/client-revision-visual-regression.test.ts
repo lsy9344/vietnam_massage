@@ -28,6 +28,7 @@ const callGridOptions: ServiceCallFormOptions = {
   discountTypes: singleOption("BIRTHDAY", "생일자"),
   paymentMethods: singleOption("CASH", "현금"),
   confirmationCodes: singleOption("Y"),
+  secondTherapistCourseIds: [],
   bookingChannels: [],
   therapists: singleOption("therapist-1", "마사지사1"),
   expenseHandlers: singleOption("handler-1", "담당자1")
