@@ -452,6 +452,7 @@ export const ko = {
   "calls.quickBooking.namedHeading": "지명 (Therapist를 골라 담기)",
   "calls.quickBooking.namedTag": "지명",
   "calls.quickBooking.schedule.now": "지금",
+  "calls.quickBooking.schedule.timeNone": "시간 선택",
   "calls.quickBooking.customer.partySize": "인원",
   "calls.quickBooking.customer.partySizeOption": "{count}명",
   "calls.quickBooking.pickList": "손님 담기",

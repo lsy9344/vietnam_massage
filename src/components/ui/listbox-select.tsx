@@ -15,7 +15,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { inputFieldClassName } from "@/components/ui/input-field";
-import { measureListboxPosition, type ListboxPosition } from "@/components/ui/listbox-position";
+import { measureListboxPosition, measureScrollbarWidth, type ListboxPosition } from "@/components/ui/listbox-position";
 import { cn } from "@/lib/utils";
 
 /**
@@ -123,13 +123,21 @@ export function ListboxSelect({
 
   // 열려 있는 동안 기준 앵커가 움직이면(스크롤·화면 크기·레이아웃 변화) 목록도 따라간다.
   // 목록이 얼마나 높은지(내용 높이)를 함께 재서, 아래에 다 들어갈 자리가 있으면 아래에 연다.
+  // 내용 폭도 재서, 기준 칸이 좁아도(빠른 예약의 시간 칸 83px 등) 가장 긴 항목이 잘리지 않게 목록을 넓힌다.
+  // 처음 그릴 때는 폭을 주지 않은 숨은 상태라 목록이 내용만큼 자연스럽게 펴진다.
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) return;
     const update = () => {
       const anchor = triggerRef.current;
       if (!anchor) return;
-      const contentHeight = listRef.current?.scrollHeight ?? 0;
-      setPosition(measureListboxPosition(anchor, contentHeight));
+      const list = listRef.current;
+      setPosition(
+        measureListboxPosition(
+          anchor,
+          list?.scrollHeight ?? 0,
+          list ? { width: list.scrollWidth, scrollbar: measureScrollbarWidth() } : undefined
+        )
+      );
     };
     update();
     window.addEventListener("scroll", update, true);

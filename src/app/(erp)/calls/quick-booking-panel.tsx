@@ -532,7 +532,7 @@ export function ConditionsStep({
               id="quick-booking-time"
               invalid={Boolean(fieldErrors.startTime?.[0])}
               onChange={(next) => onScheduleChange(draft.serviceDate, next)}
-              options={[{ label: t("calls.placeholder.searchEmpty"), value: "" }, ...timeOptionsWith(options.timeSlots, draft.startTime)]}
+              options={[{ label: t("calls.quickBooking.schedule.timeNone"), value: "" }, ...timeOptionsWith(options.timeSlots, draft.startTime)]}
               value={draft.startTime}
             />
           </Field>

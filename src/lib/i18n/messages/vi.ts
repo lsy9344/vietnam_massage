@@ -447,6 +447,7 @@ export const vi: Messages = {
   "calls.quickBooking.namedHeading": "Chỉ định (chọn Therapist)",
   "calls.quickBooking.namedTag": "Chỉ định",
   "calls.quickBooking.schedule.now": "Ngay bây giờ",
+  "calls.quickBooking.schedule.timeNone": "Chọn giờ",
   "calls.quickBooking.customer.partySize": "Số khách",
   "calls.quickBooking.customer.partySizeOption": "{count} khách",
   "calls.quickBooking.pickList": "Thêm khách",
