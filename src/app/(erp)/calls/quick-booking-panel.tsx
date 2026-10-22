@@ -300,6 +300,7 @@ function PickLine({
   name,
   note,
   onPick,
+  picked,
   preset = false,
   tag,
   therapistId,
@@ -313,6 +314,8 @@ function PickLine({
   name: string;
   note?: ReactNode;
   onPick: (column: QuickBookingCourseColumn, verdict: Exclude<ChipVerdict, null>) => void;
+  /** 이 줄에서 그 코스로 담은 손님 수. 담은 칩은 눌린 칩(검정 + ✓)으로 남는다(2026-10-22 고객 요청: 눌렸는지 안 보임). */
+  picked: (courseId: string) => number;
   preset?: boolean;
   tag?: string | null;
   therapistId: string | null;
@@ -320,15 +323,19 @@ function PickLine({
   unassigned?: boolean;
 }) {
   const t = useT();
+  const linePicked = columns.some((column) => picked(column.courseId) > 0);
   return (
     <li
       aria-current={preset ? "true" : undefined}
       className={cn(
         "flex min-w-max items-center gap-1.5 py-1.5",
         unassigned ? "rounded-md border border-dashed border-border-strong bg-readonly px-2" : "border-b border-border last:border-b-0",
-        preset && "rounded-md bg-readonly px-1"
+        preset && "rounded-md bg-readonly px-1",
+        // 담은 줄은 원장의 고른 줄과 같은 표시(회색 면 + 왼쪽 3px 검정 막대, design.md 6.6)다.
+        linePicked && "rounded-md bg-readonly px-1 [box-shadow:inset_3px_0_0_var(--brand)]"
       )}
       data-quick-booking-line={therapistId ?? "unassigned"}
+      data-quick-booking-line-picked={linePicked ? "true" : undefined}
     >
       <span className={nameColumnClassName}>
         <span className="flex items-baseline gap-1.5 text-sm">
@@ -344,10 +351,22 @@ function PickLine({
         if (!verdict) return <span aria-hidden="true" className="w-[4.5rem] shrink-0" key={column.courseId} />;
         const text = t("calls.quickBooking.chip", { code: column.code, minutes: column.minutes });
         const possible = verdict === "possible";
+        const pickedCount = picked(column.courseId);
         return (
           <Button
             aria-label={t(possible ? "calls.quickBooking.pickPossible" : "calls.quickBooking.pickImpossible", { name, course: text })}
-            className={cn(chipClassName, possible ? "border-border-strong" : "border-dashed text-muted")}
+            aria-pressed={pickedCount > 0}
+            className={cn(
+              chipClassName,
+              pickedCount > 0
+                ? // 담은 칩: 검정으로 채우고, 인원이 차서 줄이 꺼져도 흐리지 않는다.
+                  "border-brand bg-brand text-brand-foreground hover:bg-brand-strong disabled:opacity-100"
+                : cn(
+                    possible ? "border-border-strong" : "border-dashed text-muted",
+                    // 누르는 순간 검정으로 바뀌어 눌린 것을 바로 보인다(움직임 없이 색만, design.md 5).
+                    "active:border-brand active:bg-brand active:text-brand-foreground"
+                  )
+            )}
             data-course-id={column.courseId}
             data-therapist-id={therapistId ?? ""}
             disabled={disabled}
@@ -355,8 +374,10 @@ function PickLine({
             onClick={() => onPick(column, verdict)}
             variant="secondary"
           >
-            {possible ? null : <span aria-hidden="true">{"○︎"}</span>}
+            {/* 72px 칩에 ✓·코스·×N이 다 들어가지 않아, 둘 이상 담으면 ✓ 대신 ×N만 붙인다(검정 채움이 이미 담음 표시다). */}
+            {pickedCount === 1 ? <span aria-hidden="true">{"✓︎"}</span> : pickedCount > 1 || possible ? null : <span aria-hidden="true">{"○︎"}</span>}
             <span className="truncate text-sm font-semibold">{text}</span>
+            {pickedCount > 1 ? <span className="text-xs font-semibold">{`×${pickedCount}`}</span> : null}
           </Button>
         );
       })}
@@ -435,6 +456,8 @@ export function ConditionsStep({
   const text = guestTextOf(t, rows, options);
   const verdictOf = (row: TherapistAvailabilityRowDto) => (courseId: string) =>
     row.courses.find((course) => course.courseId === courseId)?.verdict ?? null;
+  const pickedCountFor = (therapistId: string | null) => (courseId: string) =>
+    guests.filter((guest) => guest.therapist1Id === therapistId && guest.courseId === courseId).length;
 
   const seatsNow = seats[0] ?? null;
   const shortage = quickBookingSeatShortage(seats, columns, guests);
@@ -459,6 +482,7 @@ export function ConditionsStep({
       name={row.therapistName}
       note={<FreeTimeText row={row} />}
       onPick={pickFor(row)}
+      picked={pickedCountFor(row.therapistId)}
       preset={row.therapistId === presetTherapistId}
       tag={
         taken.has(row.therapistId)
@@ -577,6 +601,7 @@ export function ConditionsStep({
                 name={t("calls.quickBooking.unassigned")}
                 note={<span className="text-xs text-muted">{t("calls.quickBooking.unassignedNote")}</span>}
                 onPick={(column) => onAddGuest({ courseId: column.courseId, therapist1Id: null })}
+                picked={pickedCountFor(null)}
                 therapistId={null}
                 unassigned
               />

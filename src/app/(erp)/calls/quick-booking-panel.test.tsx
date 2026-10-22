@@ -263,6 +263,21 @@ describe("빠른 예약 ① 조건(1018 스펙 D20·D23)", () => {
     assert.match(html, /<button class="[^"]*"[^>]*type="button">다음<\/button>/);
   });
 
+  it("담은 칩은 눌린 칩(✓, aria-pressed)으로 남고 그 줄도 고른 줄로 보인다. 미지명 같은 코스를 여럿 담으면 ×N이다", () => {
+    const html = conditions("ko", { partySize: 3, guests: [guest("course-c", "therapist-7"), guest("course-a", null), guest("course-a", null)] });
+    const picked = line(html, "therapist-7");
+    assert.match(picked, /aria-pressed="true"[^>]*data-course-id="course-c"/);
+    assert.match(picked, /aria-pressed="false"[^>]*data-course-id="course-a"/);
+    assert.match(picked, /✓/);
+    assert.match(picked, /data-quick-booking-line-picked="true"/);
+    // 담은 칩은 줄이 꺼져도 흐려지지 않는다.
+    assert.match(picked, /disabled:opacity-100[^"]*"[^>]*aria-pressed="true"|aria-pressed="true"[^>]*class="[^"]*disabled:opacity-100/);
+    const unassigned = line(html, "unassigned");
+    assert.match(unassigned, /aria-pressed="true"[^>]*data-course-id="course-a"/);
+    assert.match(unassigned, /×2/);
+    assert.doesNotMatch(line(html, "therapist-12"), /aria-pressed="true"|✓|data-quick-booking-line-picked/);
+  });
+
   it("인원만큼 담기 전에는 [다음]이 꺼져 있다", () => {
     const html = conditions("ko", { partySize: 2, guests: [guest("course-c", "therapist-7")] });
     assert.match(html, /<button[^>]*disabled=""[^>]*>다음<\/button>/);
