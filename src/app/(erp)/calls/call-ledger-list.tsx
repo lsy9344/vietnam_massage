@@ -13,7 +13,8 @@ import { StatusIndicator } from "@/components/ui/status-indicator";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
 import { autosaveServiceCallRowAction, loadTherapistAvailabilityAction, reloadServiceCallRowAction } from "@/app/(erp)/calls/actions";
-import { businessClockString, businessTodayServiceDateFromActiveSlots } from "@/lib/operating-date";
+import { useLedgerClock, type LedgerClock } from "@/app/(erp)/calls/ledger-clock";
+import { businessClockString } from "@/lib/operating-date";
 import { ledgerCallAnchorId } from "@/lib/ledger-address";
 import { callRowSaveReducer, initialCallRowSave, isSaveHeld, type CallRowDraft, type RowSaveStatus } from "@/app/(erp)/calls/call-row-save";
 import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
@@ -68,22 +69,6 @@ const LEDGER_HEAD_KEYS = [
   "calls.list.head.payment",
   "calls.list.head.action"
 ] as const;
-
-/** 오늘 영업일과 지금 시각(영업 시간대). `지금` 구분선과 `N분 늦음`(스펙 D5)은 오늘 원장에서만 보인다. */
-export type LedgerClock = { today: string; time: string };
-
-/** 서버 렌더와 첫 화면이 같도록 붙은 뒤에 시계를 읽고, 30초마다 다시 읽는다. */
-function useLedgerClock(timeSlots: ServiceCallFormOptions["timeSlots"], enabled: boolean) {
-  const [clock, setClock] = useState<LedgerClock | null>(null);
-  useEffect(() => {
-    if (!enabled) return;
-    const tick = () => setClock({ today: businessTodayServiceDateFromActiveSlots(timeSlots), time: businessClockString() });
-    tick();
-    const timer = window.setInterval(tick, 30_000);
-    return () => window.clearInterval(timer);
-  }, [timeSlots, enabled]);
-  return clock;
-}
 
 /** 완료 묶음을 펼쳐 둔 상태는 이 기기에 남긴다(스펙 D16). 저장소를 못 쓰면 접힌 기본값이다. */
 const DONE_EXPANDED_STORAGE_KEY = "calls.ledger.doneExpanded";

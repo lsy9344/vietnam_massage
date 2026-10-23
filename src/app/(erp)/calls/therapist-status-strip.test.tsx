@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { renderInShell } from "@/components/shell/test-harness";
 import { TherapistStatusStrip } from "@/app/(erp)/calls/therapist-status-strip";
-import { sortTherapistStatusRows, therapistStatusRows, THERAPIST_STATUS_SORTS } from "@/app/(erp)/calls/therapist-status";
+import { liveTherapistCurrent, sortTherapistStatusRows, therapistStatusRows, THERAPIST_STATUS_SORTS } from "@/app/(erp)/calls/therapist-status";
 import type { Locale } from "@/lib/i18n/config";
 import type { TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
 
@@ -102,6 +102,45 @@ describe("Therapist 현황 줄 정렬 (1018 스펙 D17)", () => {
 
   it("sorts by Therapist number", () => {
     assert.deepEqual(names(sortTherapistStatusRows(rows, "number")), ["2", "5", "9", "12", "19"]);
+  });
+});
+
+// 2026-10-23 고객 요청: 현황 줄은 서버가 그린 시각에 머물지 않고 이 기기의 시계로 지금 가능·곧 예약과 남은 분을 다시 맞춘다.
+describe("Therapist 현황 줄의 지금 상태를 지금 시각으로 다시 맞추기", () => {
+  const course = (durationMinutes: number, verdict: "possible" | "time_short" | "rate_missing") => ({
+    courseId: `c-${durationMinutes}-${verdict}`,
+    courseCode: "X",
+    courseName: "X",
+    durationMinutes,
+    verdict,
+    requiresSecondTherapist: false
+  });
+  const courses = [course(60, "possible"), course(90, "time_short")];
+
+  it("reads reserved soon at 14:03 for a 15:00 reservation when the shortest course is 60 minutes, though the page was drawn at 13:50", () => {
+    const drawnAt1350 = row("12", free("15:00", 70), {}, { courses });
+    assert.deepEqual(liveTherapistCurrent(drawnAt1350, "14:03", "11:00"), {
+      state: "reserved_soon",
+      expectedEnd: null,
+      nextReservationTime: "15:00",
+      freeMinutes: 57
+    });
+  });
+
+  it("stays free now while the gap still fits the shortest course, counting the minutes down", () => {
+    assert.deepEqual(liveTherapistCurrent(row("12", free("15:00", 70), {}, { courses }), "14:00", "11:00"), free("15:00", 60));
+  });
+
+  it("measures only courses this Therapist has a rate for, and counts across midnight from the day start", () => {
+    const longOnly = [course(60, "rate_missing"), course(90, "possible")];
+    assert.equal(liveTherapistCurrent(row("12", free("00:30", 120), {}, { courses: longOnly }), "23:10", "11:00").state, "reserved_soon");
+  });
+
+  it("leaves other states and free rows without a next reservation as the server drew them", () => {
+    const busy = row("17", inUse("18:30"), {}, { courses });
+    const open = row("9", free(), {}, { courses });
+    assert.equal(liveTherapistCurrent(busy, "14:03", "11:00"), busy.current);
+    assert.equal(liveTherapistCurrent(open, "14:03", "11:00"), open.current);
   });
 });
 

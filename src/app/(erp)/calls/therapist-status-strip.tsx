@@ -10,14 +10,16 @@ import type { MessageKey } from "@/lib/i18n/types";
 import { replaceAddressParam, THERAPIST_FILTER_PARAM } from "@/lib/ledger-address";
 import { cn } from "@/lib/utils";
 import { requestQuickBookingWithTherapist } from "@/app/(erp)/calls/quick-booking-party-join";
+import { useLedgerClock } from "@/app/(erp)/calls/ledger-clock";
 import {
   isTherapistStatusSort,
+  liveTherapistCurrent,
   sortTherapistStatusRows,
   THERAPIST_STATUS_SORTS,
   therapistStatusRows,
   type TherapistStatusSort
 } from "@/app/(erp)/calls/therapist-status";
-import type { TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
+import type { ServiceCallFormOptions, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
 
 /** 줄을 접었는지 기기에 기억한다(1018 스펙 D17). */
 const COLLAPSED_STORAGE_KEY = "calls.therapistStatus.collapsed";
@@ -61,11 +63,17 @@ function writeCollapsed(collapsed: boolean) {
  */
 export function TherapistStatusStrip({
   canBook,
+  ledger,
   rows,
   unassignedCount
 }: {
   /** 빠른 예약을 열 수 있는지. 잠긴 운영월이면 카드는 누를 수 없는 글자다. */
   canBook: boolean;
+  /**
+   * 원장 날짜와 시간 슬롯. 그 날짜가 영업일 오늘이면 지금 가능·곧 예약과 남은 분을 이 기기의 시계로 30초마다 다시 맞춘다
+   * (2026-10-23 고객 요청). 없으면(정적 렌더 테스트) 서버가 그린 상태를 그대로 보인다.
+   */
+  ledger?: { serviceDate: string; timeSlots: ServiceCallFormOptions["timeSlots"] };
   /** 원장 날짜의 가능 판정 행. 출근 상태·콜 수·지금 상태를 쓴다. */
   rows: TherapistAvailabilityRowDto[];
   /** 예약 상태인데 첫 번째 Therapist가 빈 콜 수. */
@@ -82,7 +90,11 @@ export function TherapistStatusStrip({
     setCollapsed(readCollapsed());
   }, []);
 
-  const stripRows = sortTherapistStatusRows(therapistStatusRows(rows), sort);
+  const clock = useLedgerClock(ledger?.timeSlots ?? [], Boolean(ledger));
+  const dayStart = ledger?.timeSlots[0]?.value ?? "00:00";
+  const liveRows =
+    ledger && clock?.today === ledger.serviceDate ? rows.map((row) => ({ ...row, current: liveTherapistCurrent(row, clock.time, dayStart) })) : rows;
+  const stripRows = sortTherapistStatusRows(therapistStatusRows(liveRows), sort);
   if (stripRows.length === 0 && unassignedCount === 0) return null;
 
   const count = (value: number) => formatNumber(locale, value);

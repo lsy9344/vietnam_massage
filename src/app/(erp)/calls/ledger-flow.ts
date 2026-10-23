@@ -26,7 +26,7 @@ export function ledgerTimeline<Row extends { status: string }>(rows: readonly Ro
 }
 
 /** 영업일 안의 분(첫 슬롯 시각 dayStart보다 이른 시계 값은 자정을 넘긴 다음 날로 본다). */
-function businessMinuteOf(clock: string, dayStart: string) {
+export function businessMinuteOf(clock: string, dayStart: string) {
   const minutes = clockMinutes(clock);
   return minutes < clockMinutes(dayStart) ? minutes + 24 * 60 : minutes;
 }

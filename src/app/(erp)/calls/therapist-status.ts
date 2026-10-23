@@ -1,3 +1,4 @@
+import { businessMinuteOf } from "@/app/(erp)/calls/ledger-flow";
 import type { TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
 
 // "use client"가 없는 모듈이다. 원장 Therapist 현황 줄(1018 스펙 D17)의 대상 고르기와 정렬을 순수 함수로 둔다.
@@ -48,4 +49,23 @@ export function sortTherapistStatusRows<Row extends StatusRow>(rows: Row[], sort
     number: numberOrder
   };
   return [...rows].sort(compare[sort]);
+}
+
+/**
+ * 서버가 화면을 그린 시각에 정한 지금 상태를 이 기기의 지금 시각(now, 영업 시간대 HH:MM)으로 다시 맞춘다(2026-10-23 고객 요청).
+ * 원장 화면은 저장이 없으면 다시 그려지지 않아, 13:50에 그린 "지금 가능 ~15:00 (70분)"이 14:03에도 남았다. 지금 가능·곧 예약이고
+ * 다음 예약이 있으면 남은 분을 다시 재고, 서버와 같은 기준(그 사람이 수당을 가진 가장 짧은 코스)으로 곧 예약인지 정한다.
+ * 다른 상태는 다음 저장·새로 고침까지 서버 값을 그대로 둔다.
+ */
+export function liveTherapistCurrent(
+  row: Pick<TherapistAvailabilityRowDto, "current" | "courses">,
+  now: string,
+  dayStart: string
+): TherapistAvailabilityRowDto["current"] {
+  const { current } = row;
+  if ((current.state !== "available" && current.state !== "reserved_soon") || !current.nextReservationTime) return current;
+  const freeMinutes = Math.max(businessMinuteOf(current.nextReservationTime, dayStart) - businessMinuteOf(now, dayStart), 0);
+  const rated = row.courses.filter((course) => course.verdict !== "rate_missing").map((course) => course.durationMinutes);
+  const shortestCourse = rated.length === 0 ? 0 : Math.min(...rated);
+  return { ...current, state: freeMinutes < shortestCourse ? "reserved_soon" : "available", freeMinutes };
 }
