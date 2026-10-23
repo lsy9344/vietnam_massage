@@ -54,19 +54,26 @@ async function cleanup() {
   await (prisma as any).serviceCall.deleteMany({ where: { id: { in: ids } } });
 }
 
-/** 보이는 원장 줄마다 칸의 왼쪽 x. 칸이 없는 줄(주 버튼이 없는 줄 등)은 null이다. */
+/**
+ * 보이는 원장 줄마다 칸의 가로 위치. 칸이 없는 줄(주 버튼이 없는 줄 등)은 null이다. 두 줄 배치는 칸을 왼쪽부터 채우므로 왼쪽 x를,
+ * 한 줄 11칸 표는 칸 안의 내용을 가운데로 세우므로(2026-10-23 시안 123.png) 가운데 x를 본다 — 상태·결제 칩은 글자 길이만큼
+ * 폭이 달라 왼쪽 x는 줄마다 다르다.
+ */
 async function pickerColumns(page: Page) {
-  return page.evaluate(() =>
-    [...document.querySelectorAll<HTMLElement>("[data-ledger-line]")]
+  return page.evaluate(() => {
+    const oneLine = document.querySelector<HTMLElement>("[data-ledger-head]")?.offsetParent != null;
+    return [...document.querySelectorAll<HTMLElement>("[data-ledger-line]")]
       .filter((line) => line.offsetParent !== null)
       .map((line) => {
-        const left = (field: string) => {
+        const x = (field: string) => {
           const picker = line.querySelector(`[data-cell-picker="${field}"]`);
-          return picker ? Math.round(picker.getBoundingClientRect().left) : null;
+          if (!picker) return null;
+          const rect = picker.getBoundingClientRect();
+          return Math.round(oneLine ? rect.left + rect.width / 2 : rect.left);
         };
-        return { status: left("status"), therapist: left("therapist1Id"), room: left("roomId"), payment: left("paymentMethodCode"), discount: left("discountTypeCode") };
-      })
-  );
+        return { status: x("status"), therapist: x("therapist1Id"), room: x("roomId"), payment: x("paymentMethodCode"), discount: x("discountTypeCode") };
+      });
+  });
 }
 
 async function expectNoPageOverflow(page: Page) {
@@ -78,9 +85,9 @@ async function expectAlignedColumns(page: Page) {
   const columns = await pickerColumns(page);
   expect(columns.length).toBe(6);
   for (const field of ["status", "therapist", "room", "payment", "discount"] as const) {
-    const lefts = columns.map((column) => column[field]);
-    expect(lefts, `${field} 칸이 모든 줄에 있다`).not.toContain(null);
-    expect(new Set(lefts), `${field} 칸의 왼쪽 x: ${JSON.stringify(lefts)}`).toEqual(new Set([lefts[0]]));
+    const xs = columns.map((column) => column[field]);
+    expect(xs, `${field} 칸이 모든 줄에 있다`).not.toContain(null);
+    expect(new Set(xs), `${field} 칸의 x: ${JSON.stringify(xs)}`).toEqual(new Set([xs[0]]));
   }
   await expectNoPageOverflow(page);
 }
@@ -202,7 +209,15 @@ test.describe("1018 후속 원장 줄의 칸 열 맞춤", () => {
             return {
               input: box(`[data-line-cell="${field}"] input[type="time"]`),
               cell: box(`[data-line-cell="${field}"]`),
-              next: box(`[data-line-cell="${field === "entry" ? "end" : "pay"}"]`)
+              // 같은 줄(세로로 겹치는)에서 이 칸 바로 오른쪽 칸. 한 줄 11칸이면 종료 다음은 고객 정보, 두 줄 배치면 상태다.
+              next: (() => {
+                const own = element.querySelector(`[data-line-cell="${field}"]`)!.getBoundingClientRect();
+                const right = [...element.querySelectorAll(":scope > [data-line-cell]")]
+                  .map((cell) => cell.getBoundingClientRect())
+                  .filter((rect) => rect.left >= own.right - 0.5 && rect.top < own.bottom && rect.bottom > own.top)
+                  .sort((x, y) => x.left - y.left)[0];
+                return right ? { left: right.left, right: right.right, top: right.top, bottom: right.bottom } : null;
+              })()
             };
           },
           kind
@@ -222,7 +237,7 @@ test.describe("1018 후속 원장 줄의 칸 열 맞춤", () => {
       expect(await using.locator('[data-line-cell="entry"] input[type="time"]').evaluate((input) => input.scrollWidth - input.clientWidth)).toBeLessThanOrEqual(0);
       await page.keyboard.press("Escape");
 
-      // 종료: 16:00 줄(청소중, 종료 16:58) → 결제 칸(한 줄 11칸일 때)을 덮지 않는다.
+      // 종료: 16:00 줄(청소중, 종료 16:58) → 오른쪽 칸(한 줄 11칸이면 고객 정보)을 덮지 않는다.
       const cleaning = lineAt("16:00");
       await cleaning.locator('[data-line-cell="end"] button').click();
       await expect(cleaning.locator('[data-line-cell="end"] input[type="time"]')).toBeFocused();
@@ -306,6 +321,37 @@ test.describe("1018 후속 원장 줄의 칸 열 맞춤", () => {
     }
   });
 
+  // 2026-10-23 고객 시안 123.png: 한 줄 표는 칸 안의 내용을 가로 가운데에 둔다. 두 줄 배치는 왼쪽부터 채운다.
+  test("1600px 한 줄 표: 시각·칸 목록·조치 버튼이 각 칸의 가로 가운데에 있다", async ({ page }) => {
+    await openLedger(page, 1600);
+    const offsets = await page.evaluate(() => {
+      const selectors: Record<string, string> = {
+        time: '[data-line-cell="time"] button',
+        entry: '[data-line-cell="entry"] > *',
+        status: '[data-cell-picker="status"]',
+        therapist: '[data-cell-picker="therapist1Id"]',
+        room: '[data-cell-picker="roomId"]',
+        discount: '[data-cell-picker="discountTypeCode"]',
+        pay: '[data-cell-picker="paymentMethodCode"]',
+        action: '[data-line-cell="action"] > *'
+      };
+      return [...document.querySelectorAll<HTMLElement>("[data-ledger-line]")]
+        .filter((line) => line.offsetParent !== null)
+        .flatMap((line) =>
+          Object.entries(selectors).flatMap(([name, selector]) => {
+            const content = line.querySelector<HTMLElement>(selector);
+            const cell = content?.closest<HTMLElement>("[data-line-cell]");
+            if (!content || !cell) return [];
+            const a = content.getBoundingClientRect();
+            const b = cell.getBoundingClientRect();
+            return [{ name, offset: Math.round(a.left + a.width / 2 - (b.left + b.width / 2)) }];
+          })
+        );
+    });
+    expect(offsets.length).toBeGreaterThan(20);
+    for (const { name, offset } of offsets) expect(Math.abs(offset), `${name} 칸 가운데에서 ${offset}px`).toBeLessThanOrEqual(1);
+  });
+
   // 2026-10-23: 결제 칸의 "Chưa xác nhận thanh toán"이 잘리고 상태 칩 "Đang sử dụng"이 말줄임이 됐다. 가장 긴 베트남어도 다 보인다.
   for (const width of [1366, 1600]) {
     test(`${width}px 베트남어: 상태·결제 칩 글자가 칸 안에서 잘리지 않는다`, async ({ page }) => {
@@ -330,6 +376,24 @@ test.describe("1018 후속 원장 줄의 칸 열 맞춤", () => {
     });
   }
 
+  // 2026-10-23 시안 123.png 순서로 두 줄 배치의 상태 칸이 옮겨졌다: 편집 패널이 열려 좁아진 원장에서도 베트남어 상태 칩이 잘리지 않는다.
+  test("1280px 편집 패널 열림(두 줄) 베트남어: 상태 칩 글자가 칸 안에서 잘리지 않는다", async ({ page }) => {
+    await openLedger(page, 1280);
+    await setLocaleCookie(page, "vi");
+    await page.reload();
+    await expect(page.getByRole("list", { name: "Danh sách sổ cuộc gọi" })).toBeVisible();
+    await page.locator("[data-call-open]").first().click();
+    await expect(page).toHaveURL(/[?&]call=/);
+    await expect(page.locator("[data-ledger-head]")).toBeHidden();
+    const clipped = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('[data-ledger-line] [data-line-cell="status"] .truncate')]
+        .filter((element) => element.offsetParent !== null && element.scrollWidth > element.clientWidth)
+        .map((element) => element.textContent)
+    );
+    expect(clipped).toEqual([]);
+    await expect(page.locator('[data-ledger-line] [data-line-cell="status"]').filter({ hasText: "Đang sử dụng" }).first()).toBeVisible();
+  });
+
   // 1366px 노트북(가장 흔한 매장 PC 폭)도 원장이 81rem을 넘어 한 줄 11칸과 머리 줄을 쓴다(2026-10-23 열 폭 재조정).
   test("1366px: 머리 줄이 보이고 줄마다 11칸이 한 줄에 놓인다", async ({ page }) => {
     await openLedger(page, 1366);
@@ -353,16 +417,25 @@ test.describe("1018 후속 원장 줄의 칸 열 맞춤", () => {
       await expect(list.getByRole("option").first()).toBeVisible();
       const result = await list.evaluate((element, triggerBox) => ({
         width: element.getBoundingClientRect().width,
+        // 가장 긴 항목 글자의 오른쪽 끝에서 목록 오른쪽 끝까지(항목·목록 안쪽 여백만 남아야 한다).
+        rightBand: Math.round(
+          element.getBoundingClientRect().right -
+            Math.max(...[...element.querySelectorAll<HTMLElement>('[role="option"] .truncate')].map((label) => label.getBoundingClientRect().left + label.scrollWidth))
+        ),
         trigger: triggerBox,
         truncated: [...element.querySelectorAll<HTMLElement>('[role="option"] .truncate')].filter((label) => label.scrollWidth > label.clientWidth).map((label) => label.textContent)
       }), (await trigger.boundingBox())!.width);
       await page.keyboard.press("Escape");
       return result;
     };
-    // 할인 항목은 모두 칸보다 짧다: 목록이 칸과 같은 폭이다(오른쪽에 빈 띠가 없다).
+    // 할인 목록은 칸 폭 이상이고 가장 긴 항목만큼이다(할인 칸은 시안 123.png 비율이라 좁아 목록이 칸보다 넓을 수 있다).
     const discount = await measure("discountTypeCode");
-    expect(Math.abs(discount.width - discount.trigger)).toBeLessThanOrEqual(1);
+    expect(discount.width).toBeGreaterThanOrEqual(discount.trigger - 1);
     expect(discount.truncated).toEqual([]);
+    if (discount.width > discount.trigger + 1) {
+      // 칸보다 넓어졌다면 가장 긴 항목만큼만 넓어졌다: 오른쪽에 빈 띠가 없다(예전 256px 고정 목록은 100px 넘게 비었다).
+      expect(discount.rightBand, `할인 목록 오른쪽 여백 ${discount.rightBand}px`).toBeLessThanOrEqual(40);
+    }
     // Therapist 목록은 이름 옆에 부가 정보가 붙는다: 칸보다 넓어질 수 있지만 24rem을 넘지 않고 글자가 다 보인다.
     const therapist = await measure("therapist1Id");
     expect(therapist.width).toBeGreaterThanOrEqual(therapist.trigger - 1);

@@ -457,6 +457,37 @@ describe("ledger line warnings", () => {
   });
 });
 
+// 2026-10-23 고객 요청(시안 123.png): 원장 표의 칸 순서는 예약시간 · 입장 · 종료 · 고객 정보 · 코스 · Therapist · 객실 · 상태 ·
+// 할인 · 결제 · 조치이고, 머리 글자는 가운데 정렬·굵게다. 줄의 칸도 같은 순서라 Tab 순서와 칸 사이 세로줄이 머리와 맞는다.
+describe("ledger column order (2026-10-23 customer mockup)", () => {
+  const expectedOrder = ["time", "entry", "end", "who", "course", "therapist", "room", "status", "discount", "pay", "action"];
+
+  it("lays out every line's cells in the requested order", () => {
+    const html = renderList([ledgerRow({ id: "in-use-13", startTime: "13:00", status: "IN_USE" })]);
+    const order = [...line(html, "in-use-13").matchAll(/data-line-cell="([a-z]+)"/g)].map((match) => match[1]);
+    assert.deepEqual(order, expectedOrder);
+  });
+
+  it("puts the head labels in the same order, centered and bold", () => {
+    const html = renderList([ledgerRow({ id: "in-use-13", startTime: "13:00", status: "IN_USE" })]);
+    const head = html.match(/<div[^>]*data-ledger-head=""[^>]*>[\s\S]*?<\/div>/)?.[0] ?? "";
+    assert.deepEqual(
+      [...head.matchAll(/<span[^>]*>([^<]*)<\/span>/g)].map((match) => match[1]),
+      ["예약시간", "입장", "종료", "고객 정보", "코스", "Therapist", "객실", "상태", "할인", "결제", "조치"]
+    );
+    for (const span of head.match(/<span[^>]*>/g) ?? []) {
+      assert.match(span, /text-center/);
+      assert.match(span, /font-bold/);
+    }
+  });
+
+  it("uses the same order in the one-line grid template", () => {
+    const html = renderList([ledgerRow({ id: "in-use-13", startTime: "13:00", status: "IN_USE" })]);
+    // React가 클래스 안의 '를 &#x27;로 적는다.
+    assert.match(line(html, "in-use-13"), /\[grid-template-areas:(?:'|&#x27;)time_entry_end_who_course_therapist_room_status_discount_pay_action(?:'|&#x27;)\]/);
+  });
+});
+
 describe("phone width (ticket 26, 1018 ticket 02)", () => {
   const rows = [
     ledgerRow({ id: "reserved-12", startTime: "12:00", status: "RESERVED", customerMemo: "정 대표", partyId: "party-jung", partyPosition: 1 }),
