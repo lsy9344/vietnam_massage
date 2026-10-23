@@ -113,8 +113,7 @@ export function TherapistSettlementView({
     {
       key: "policy",
       header: t("settlements.therapist.column.policyStatus"),
-      // 바로 앞 열(당일정산)이 오른쪽 정렬 금액이라, "—"나 상태 칩이 그 숫자에 붙어 보이지 않게 띈다.
-      padStart: true,
+      // 바로 앞 열(당일정산)은 오른쪽 정렬 금액이지만, 칸 사이 세로선이 둘을 가르므로 pl-8(padStart)은 두지 않는다.
       cell: (row) => (row.settlement ? policyStatus(row.settlement, t) : null) ?? "—"
     },
     {
@@ -126,6 +125,7 @@ export function TherapistSettlementView({
 
   return (
     <EmployeeWorkspace
+      columnDividers
       columns={columns}
       employeeHeader={t("settlements.therapist.column.therapist")}
       initialEmployeeId={initialEmployeeId}

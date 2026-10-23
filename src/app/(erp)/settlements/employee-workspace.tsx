@@ -64,6 +64,7 @@ export function EmployeeWorkspace<Row extends EmployeeRow>({
   columns,
   rows,
   minTableWidth,
+  columnDividers = false,
   initialEmployeeId,
   renderPanel
 }: {
@@ -73,12 +74,15 @@ export function EmployeeWorkspace<Row extends EmployeeRow>({
   rows: Row[];
   /** 표가 좁아지지 않을 최소 폭(Tailwind 클래스). 넘치면 표 상자만 가로로 스크롤한다. */
   minTableWidth: string;
+  /** 칸 사이에 1px 세로선을 긋는다(직원 이름 열 앞은 표 테두리라 빼고). 칸이 많은 Therapist 정산 표가 쓴다(2026-10-23 고객 요청). */
+  columnDividers?: boolean;
   initialEmployeeId: string | null;
   renderPanel: (row: Row) => ReactNode;
 }) {
   const t = useT();
   const { selectedId, select, panelRef } = useEmployeeSelection(initialEmployeeId);
   const selectedRow = rows.find((row) => row.employeeId === selectedId) ?? null;
+  const dividerClassName = columnDividers && "border-l border-border";
 
   return (
     <div className={selectedRow ? "grid grid-cols-1 items-start gap-6 min-[840px]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : "grid gap-6"}>
@@ -97,7 +101,8 @@ export function EmployeeWorkspace<Row extends EmployeeRow>({
                       cellClassName,
                       column.numeric && tableShrinkClassName,
                       column.numeric && "text-right",
-                      column.padStart && "pl-8"
+                      column.padStart && "pl-8",
+                      dividerClassName
                     )}
                     key={column.key}
                     scope="col"
@@ -136,7 +141,8 @@ export function EmployeeWorkspace<Row extends EmployeeRow>({
                         className={cn(
                           cellClassName,
                           column.numeric && "whitespace-nowrap text-right tabular-nums",
-                          column.padStart && "pl-8"
+                          column.padStart && "pl-8",
+                          dividerClassName
                         )}
                         key={column.key}
                       >

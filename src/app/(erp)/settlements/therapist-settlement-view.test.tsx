@@ -103,12 +103,28 @@ describe("therapist settlement view", () => {
     assert.match(html, /10:00–20:00/);
     assert.match(html, /만근 인정 \(600분\)/);
     // 숫자 칸은 오른쪽 정렬에 줄바꿈 없이 자릿수가 흔들리지 않는다(design.md 6.6, src/components/ui/table.ts).
-    assert.match(html, /<td class="[^"]*text-right tabular-nums"><span class="font-semibold">700,000 VND<\/span><\/td>/);
+    assert.match(html, /<td class="[^"]*text-right tabular-nums[^"]*"><span class="font-semibold">700,000 VND<\/span><\/td>/);
     // Thu는 그날 방문완료 담당 콜이 없다: 0 VND가 아니라 근거 없음.
     assert.match(html, /Thu[\s\S]*0건[\s\S]*근거 없음/);
     assert.doesNotMatch(html, /Thu[\s\S]*0 VND/);
     assert.match(html, /직원을 고르면 옆에 그 직원의 계산 근거가 보입니다/);
     assert.doesNotMatch(html, /<aside/);
+  });
+
+  // 2026-10-23 고객 요청: 칸이 많은 비교 표라 칸 사이에 세로선을 긋는다(원장 한 줄 표와 같은 1px --border).
+  it("draws a vertical line between columns, in the head and every row, but not before the therapist column", () => {
+    const html = render({ initialEmployeeId: null });
+    const table = html.slice(html.indexOf("<table"), html.indexOf("</table>"));
+    const rows = [...table.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)].map(([, row]) =>
+      [...row.matchAll(/<t[hd] class="([^"]*)"/g)].map(([, className]) => className.split(" "))
+    );
+    assert.equal(rows.length, 3); // 머리 + Mai + Thu
+    for (const cells of rows) {
+      assert.equal(cells.length, 7);
+      const [therapist, ...rest] = cells;
+      assert.equal(therapist.includes("border-l"), false);
+      for (const className of rest) assert.ok(className.includes("border-l"), className.join(" "));
+    }
   });
 
   it("shows the selected therapist's attendance, evidence calls, course amounts, and payment in the panel", () => {
