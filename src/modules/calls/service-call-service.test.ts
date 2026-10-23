@@ -6778,6 +6778,58 @@ describe("therapist availability current state for the ledger strip (1018 spec D
     assert.equal(rows.find((row) => row.therapistId === "therapist-1")?.available, true);
   });
 
+  it("reads reserved soon, not free now, when the next reservation comes before the shortest course could end (2026-10-23 고객 요청)", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-1", checkOutMinute: null });
+    // 지금은 15:20이고 가장 짧은 코스는 60분이다. 16:00 예약까지 40분이라 새 손님을 받을 수 없다.
+    addAvailabilityCall(prismaClient, {
+      id: "call-1600-reserved",
+      startTime: "16:00",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const rows = await availabilityAtNow(prismaClient, "11:00");
+
+    assert.deepEqual(currentOf(rows, "therapist-1"), { state: "reserved_soon", expectedEnd: null, nextReservationTime: "16:00", freeMinutes: 40 });
+  });
+
+  it("measures the gap against the shortest course this Therapist has a rate for", async () => {
+    const prismaClient = createMemoryPrisma();
+    prismaClient.therapistCourseRates.delete("rate-therapist-2-a");
+    // therapist-2는 이제 D(90분) 수당만 있다. 15:20부터 16:30 예약까지 70분이면 A(60분)는 들어가도 그 사람이 받을 코스는 없다.
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-2", checkOutMinute: null });
+    addAvailabilityCall(prismaClient, {
+      id: "call-1630-reserved",
+      startTime: "16:30",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-2" }]
+    });
+
+    const rows = await availabilityAtNow(prismaClient, "11:00");
+
+    assert.equal(currentOf(rows, "therapist-2")?.state, "reserved_soon");
+  });
+
+  it("still reads free now when the gap is exactly the shortest course", async () => {
+    const prismaClient = createMemoryPrisma();
+    addAvailabilityAttendance(prismaClient, { employeeId: "therapist-1", checkOutMinute: null });
+    // 15:20부터 16:20 예약까지 60분이면 60분 코스가 맞닿아 들어간다.
+    addAvailabilityCall(prismaClient, {
+      id: "call-1620-reserved",
+      startTime: "16:20",
+      courseId: "course-a",
+      status: "예약",
+      assignments: [{ role: "THERAPIST_1", employeeId: "therapist-1" }]
+    });
+
+    const rows = await availabilityAtNow(prismaClient, "11:00");
+
+    assert.deepEqual(currentOf(rows, "therapist-1"), { state: "available", expectedEnd: null, nextReservationTime: "16:20", freeMinutes: 60 });
+  });
+
   it("reads before check-in with the planned start time from the schedule, and checked out after check-out", async () => {
     const prismaClient = createMemoryPrisma();
     addPlannedWorkingDay(prismaClient, { employeeId: "therapist-1", status: "근무 예정", plannedStartTime: "18:00" });

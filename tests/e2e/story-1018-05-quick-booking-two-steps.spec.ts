@@ -305,37 +305,35 @@ test.describe("1018 티켓 05: 빠른 예약 옆 패널과 2단계", () => {
     expect(await (prisma as any).customer.count({ where: { name: { in: ["워크인 1", "워크인 2"] } } })).toBe(0);
   });
 
-  // 2026-10-23 고객 요청: 예약 경로에 위챗을 더하고, 메신저 경로를 고르면 예약자명 아래 ID 칸에 메신저 ID를 적는다.
-  // 전화·워크인은 ID 칸이 없고, 다른 경로에서 적어 둔 ID는 저장하지 않는다. 저장한 ID는 원장 줄 고객 칸 둘째 줄에 보인다.
-  test("위챗을 고르면 예약자명 아래 ID 칸이 생기고, 저장한 ID가 원장 줄 고객 칸에 보인다(전화로 바꾸면 칸과 값이 빠진다)", async ({ page }) => {
+  // 2026-10-23 고객 요청: 예약 경로에 위챗을 더하고, 예약자명 아래 ID / 연락처 칸에 메신저 ID를 적는다. 같은 날 후속 요청으로
+  // 전화·워크인도 같은 칸을 보이고 전화 예약은 번호를 적는다. 저장한 값은 원장 줄 고객 칸 둘째 줄에 보인다.
+  test("모든 경로에서 예약자명 아래 ID / 연락처 칸이 있고, 전화 예약의 번호와 위챗 ID가 저장되어 원장 줄 고객 칸에 보인다", async ({ page }) => {
     test.setTimeout(60_000);
     await page.setViewportSize({ width: 1600, height: 900 });
     const bookerName = `${NEW_CUSTOMER_PREFIX} 위챗 ${Date.now().toString(36)}`;
     await login(page, account.accountId, account.password);
 
-    // 전화로 바꾸면 ID 칸이 사라지고, 앞서 적은 ID는 저장되지 않는다.
+    // 전화 예약도 같은 칸에 번호를 적어 저장한다.
     await openLedger(page, DATE_HANDLE);
     let panel = await openQuickBooking(page);
     await chooseConditions(panel, { time: "13:00" });
     await pickGuest(page, panel, { therapistId: null, courseId });
     await goToCustomerStep(panel);
-    await fillBooking(panel, { channel: "위챗", bookerName: `${bookerName} 전화` });
-    const handle = panel.getByLabel("ID", { exact: true });
-    await handle.fill("wx_dropped");
-    await fillBooking(panel, { channel: "전화" });
-    await expect(handle).toHaveCount(0);
+    await fillBooking(panel, { channel: "전화", bookerName: `${bookerName} 전화` });
+    const handle = panel.getByLabel("ID / 연락처", { exact: true });
+    await handle.fill("+62 811-3116-8866");
     await saveQuickBooking(page, panel);
     const phoneCall = await (prisma as any).serviceCall.findFirst({ where: { operatingMonthId: monthId, bookerName: `${bookerName} 전화` } });
     expect(phoneCall.bookingChannelCode).toBe("PHONE");
-    expect(phoneCall.bookerHandle).toBeNull();
+    expect(phoneCall.bookerHandle).toBe("+62 811-3116-8866");
 
     await openLedger(page, DATE_HANDLE);
     panel = await openQuickBooking(page);
     await chooseConditions(panel, { time: "14:00" });
     await pickGuest(page, panel, { therapistId: null, courseId });
     await goToCustomerStep(panel);
-    // 예약자명 바로 아래에 ID 칸이 생긴다.
-    await expect(panel.getByLabel("ID", { exact: true })).toHaveCount(0);
+    // 경로를 고르기 전에도 예약자명 바로 아래에 ID / 연락처 칸이 있다.
+    await expect(handle).toBeVisible();
     await fillBooking(panel, { channel: "위챗", bookerName });
     const nameBox = (await panel.getByLabel("예약자명", { exact: true }).boundingBox())!;
     const handleBox = (await handle.boundingBox())!;

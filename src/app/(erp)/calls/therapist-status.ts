@@ -29,9 +29,10 @@ export function therapistStatusRows<Row extends StatusRow>(rows: Row[]) {
 
 const stateRank: Record<TherapistAvailabilityRowDto["current"]["state"], number> = {
   available: 0,
-  in_use: 1,
-  before_check_in: 2,
-  checked_out: 3
+  reserved_soon: 1,
+  in_use: 2,
+  before_check_in: 3,
+  checked_out: 4
 };
 
 const numberOrder = (left: StatusRow, right: StatusRow) =>

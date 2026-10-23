@@ -506,9 +506,10 @@ export type TherapistAvailabilityRowDto = {
   plannedStartTime: string | null;
   // 원장 현황 줄의 지금 상태(1018 스펙 D17). 고른 날짜가 영업일 오늘이면 지금, 아니면 고른 시각 기준이다. 출근 기록이 먼저이고,
   // 출근 중이면 점유(예약 포함)로 사용 중과 지금 가능을 나눈다. 사용 중이면 expectedEnd(점유 끝), 지금 가능이면 다음 예약과
-  // 그때까지 남은 분을 준다. 판정·코스 버튼과는 무관하다.
+  // 그때까지 남은 분을 준다. 비어 있어도 다음 예약까지가 그 사람이 수당을 가진 가장 짧은 코스보다 짧으면 새 손님을 받을 수 없어 곧 예약
+  // (reserved_soon)이다(2026-10-23 고객 요청). 판정·코스 버튼과는 무관하다.
   current: {
-    state: "available" | "in_use" | "before_check_in" | "checked_out";
+    state: "available" | "reserved_soon" | "in_use" | "before_check_in" | "checked_out";
     expectedEnd: string | null;
     nextReservationTime: string | null;
     freeMinutes: number | null;
@@ -1797,7 +1798,8 @@ function intervalOverlaps(intervals: AvailabilityInterval[], start: number, end:
 function currentTherapistState(
   attendance: TherapistAvailabilityRowDto["attendance"],
   intervals: AvailabilityInterval[],
-  at: number
+  at: number,
+  shortestCourseMinutes: number
 ): TherapistAvailabilityRowDto["current"] {
   const none = { expectedEnd: null, nextReservationTime: null, freeMinutes: null };
   if (attendance !== "checked_in") return { state: attendance, ...none };
@@ -1806,7 +1808,7 @@ function currentTherapistState(
   const nextStart = nextIntervalStart(intervals, at);
   return {
     ...none,
-    state: "available",
+    state: nextStart !== null && nextStart - at < shortestCourseMinutes ? "reserved_soon" : "available",
     nextReservationTime: nextStart === null ? null : formatBusinessMinute(nextStart),
     freeMinutes: nextStart === null ? null : nextStart - at
   };
@@ -1990,6 +1992,11 @@ export async function listTherapistAvailabilityWithSeats(
     return [{ therapistId: therapist.id, from: workStartOf(therapist.id), until: checkOut === null ? null : businessMinuteOfDay(checkOut, dayStart) }];
   });
   const longestCourse = Math.max(0, ...offeredCourses.map((course) => course.durationMinutes));
+  // 곧 예약(2026-10-23 고객 요청)은 그 Therapist가 수당을 가진 코스 가운데 가장 짧은 것과 비교한다. 수당이 하나도 없으면 비교하지 않는다.
+  const shortestCourseOf = (therapistId: string) => {
+    const minutes = offeredCourses.filter((course) => hasRate(therapistId, course.courseId)).map((course) => course.durationMinutes);
+    return minutes.length === 0 ? 0 : Math.min(...minutes);
+  };
   const seats = seatTimeline({ therapists: seatTherapists, calls: seatCalls }, at, longestCourse).map((point) => ({
     ...point,
     time: formatBusinessMinute(at + point.offsetMinutes)
@@ -2015,7 +2022,7 @@ export async function listTherapistAvailabilityWithSeats(
       plannedWorkingDayStatus: plannedWorkingDay?.status ?? "미입력",
       callCounts: callCountsByTherapist.get(therapist.id) ?? { done: 0, finished: 0, reserved: 0 },
       plannedStartTime: plannedWorkingDay?.plannedStartTime ?? null,
-      current: currentTherapistState(attendance, occupancyOf(therapist.id), currentAt),
+      current: currentTherapistState(attendance, occupancyOf(therapist.id), currentAt, shortestCourseOf(therapist.id)),
       courses: offeredCourses.map((course) => {
         const fits = available && freeMinutes !== null && course.durationMinutes <= freeMinutes;
         const rateHolders = rateHoldersByCourse.get(course.courseId) ?? [];

@@ -242,6 +242,7 @@ function CallLedgerLine({
   onClose,
   onOpen,
   onPartyOutcome,
+  onSaved,
   onSelectRelated,
   options,
   panelFocus,
@@ -266,6 +267,8 @@ function CallLedgerLine({
   onOpen: OpenCall;
   /** 일행 동작을 받아 저장한 결과를 머리 줄에 알린다(실패한 손님과 이유를 머리 줄이 보인다). */
   onPartyOutcome: (callId: string, outcome: PartyCommandOutcome) => void;
+  /** 저장이 받아들여졌다. 저장 응답은 이 줄만 돌려주므로 작업면이 나머지 화면을 새로 고친다. */
+  onSaved: () => void;
   onSelectRelated: (callId: string) => void;
   options: ServiceCallFormOptions;
   panelFocus: CallPanelFocusRequest | null;
@@ -307,6 +310,7 @@ function CallLedgerLine({
           const result = await autosaveServiceCallRowAction(request);
           if (result.ok) {
             dispatch({ type: "saved", row: result.data });
+            onSaved();
           } else if ("currentRow" in result) {
             dispatch({ type: "stale", row: result.currentRow, message: result.formError });
             // 충돌 확인 필요가 되면 편집 패널에 비교 화면이 열린다(스펙 B07, 티켓 17).
@@ -516,7 +520,7 @@ function CallLedgerLine({
     options.bookingChannels,
     customers
   );
-  // 고객 칸 둘째 줄(고객 시안 111.png): 메신저 예약자 ID(2026-10-23), 없으면 이은 고객의 전화번호, 그것도 없으면 예약 경로 이름.
+  // 고객 칸 둘째 줄(고객 시안 111.png): 예약자 ID / 연락처(2026-10-23, 전화 예약은 번호), 없으면 이은 고객의 전화번호, 그것도 없으면 예약 경로 이름.
   const contact =
     draft.bookerHandle?.trim() || (draft.customerId ? customers.find((customer) => customer.id === draft.customerId)?.phone : null) || who.channel;
   const roomText = roomLabel ?? t("calls.placeholder.roomUnassigned");
@@ -1146,6 +1150,7 @@ export function CallLedgerList({
   isLocked,
   onClose = () => {},
   onOpen = () => {},
+  onRowSaved = () => {},
   onSelectRelated = () => {},
   options,
   panelFocus = null,
@@ -1165,6 +1170,8 @@ export function CallLedgerList({
   /** 열린 편집 패널을 닫는다(고른 줄을 다시 누를 때). */
   onClose?: () => void;
   onOpen?: OpenCall;
+  /** 한 줄의 저장이 받아들여졌을 때. 현황 줄 같은 나머지 화면을 새로 고치는 데 쓴다. */
+  onRowSaved?: () => void;
   /** 패널의 관련 콜로 옮길 때. 그 줄이 보이게 스크롤한다. */
   onSelectRelated?: (callId: string) => void;
   options: ServiceCallFormOptions;
@@ -1227,6 +1234,7 @@ export function CallLedgerList({
       onClose={onClose}
       onOpen={onOpen}
       onPartyOutcome={reportPartyOutcome}
+      onSaved={onRowSaved}
       onSelectRelated={onSelectRelated}
       options={options}
       panelFocus={row.id === selectedCallId ? panelFocus : null}

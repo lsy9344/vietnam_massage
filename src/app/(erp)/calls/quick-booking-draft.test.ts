@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  bookingChannelTakesHandle,
   guestFieldErrors,
   initialQuickBookingState,
   quickBookingGuestFieldKey,
@@ -52,21 +51,6 @@ describe("quick booking: two steps (1018 스펙 D19)", () => {
     assert.equal(quickBookingStepOfField("bookingChannelCode"), "customer");
     assert.equal(quickBookingStepOfField("visitRequest"), "customer");
     assert.equal(quickBookingStepOfField("newCustomer"), "customer");
-  });
-});
-
-describe("quick booking: which booking channels take a messenger ID (2026-10-23 고객 요청)", () => {
-  it("takes an ID for every messenger channel, including a custom one added later", () => {
-    for (const code of ["TELEGRAM", "KAKAOTALK", "WHATSAPP", "ZALO", "WECHAT", "OTHER", "LINE"]) {
-      assert.equal(bookingChannelTakesHandle(code), true, code);
-    }
-  });
-
-  it("does not take an ID for phone, walk-in, or no channel at all", () => {
-    assert.equal(bookingChannelTakesHandle("PHONE"), false);
-    assert.equal(bookingChannelTakesHandle("WALK_IN"), false);
-    assert.equal(bookingChannelTakesHandle(null), false);
-    assert.equal(bookingChannelTakesHandle(undefined), false);
   });
 });
 
@@ -186,7 +170,7 @@ describe("quick booking: saving (1018 스펙 D21–D22)", () => {
     assert.equal(request.visitRequest, "창가 자리");
   });
 
-  it("sends the messenger ID only when the booking channel takes one, trimmed", () => {
+  it("sends the booker's ID or contact trimmed", () => {
     const state = run(
       fresh(),
       { type: "edit", changes: { bookingChannelCode: "ZALO", bookerName: "Nguyen", bookerHandle: " @nguyen88 " } },
@@ -196,15 +180,16 @@ describe("quick booking: saving (1018 스펙 D21–D22)", () => {
     assert.equal(state.save.inFlight!.bookerHandle, "@nguyen88");
   });
 
-  it("sends a null messenger ID for phone, walk-in, and no channel, even if an ID was typed before switching away", () => {
+  // 2026-10-23 고객 요청: 전화 예약도 ID / 연락처 칸에 번호를 적는다. 모든 경로가 같은 칸을 보낸다.
+  it("sends the ID or contact for phone, walk-in, and no channel too", () => {
     for (const bookingChannelCode of ["PHONE", "WALK_IN", null]) {
       const state = run(
         fresh(),
-        { type: "edit", changes: { bookingChannelCode, bookerName: "손님", bookerHandle: "@stale" } },
+        { type: "edit", changes: { bookingChannelCode, bookerName: "찰스", bookerHandle: " +62 811-3116-8866 " } },
         { type: "addGuest", guest: c90 },
         { type: "submit" }
       );
-      assert.equal(state.save.inFlight!.bookerHandle, null, String(bookingChannelCode));
+      assert.equal(state.save.inFlight!.bookerHandle, "+62 811-3116-8866", String(bookingChannelCode));
     }
   });
 

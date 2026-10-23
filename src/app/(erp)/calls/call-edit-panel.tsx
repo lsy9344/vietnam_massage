@@ -15,7 +15,6 @@ import { ActualEntryField, ClockTimeField, firstFieldError, nullableValue, optio
 import { isSaveHeld, type CallRowDraft, type CallRowSave } from "@/app/(erp)/calls/call-row-save";
 import { CallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
 import { callWarningLabel } from "@/app/(erp)/calls/call-warning-label";
-import { bookingChannelTakesHandle } from "@/app/(erp)/calls/quick-booking-draft";
 import { timeOptionsWith } from "@/app/(erp)/calls/quick-booking-now-slot";
 
 /** 패널을 열며 옮길 자리. 목록의 Enter는 첫 칸이다. token이 바뀔 때마다 다시 옮긴다. */
@@ -222,10 +221,8 @@ export function CallEditPanel({
           <SelectField {...selectProps("courseId", false)} label={t("calls.column.course")} options={options.courses} required />
         </div>
         <TextField {...textProps("customerMemo")} label={t("calls.column.customerMemo")} />
-        {/* 빠른 예약에서 적은 메신저 ID를 여기서 고친다(2026-10-23 고객 요청). 메신저 예약이거나 이미 ID가 있을 때만 보인다. */}
-        {bookingChannelTakesHandle(draft.bookingChannelCode) || draft.bookerHandle ? (
-          <TextField {...textProps("bookerHandle")} label={t("calls.column.bookerHandle")} />
-        ) : null}
+        {/* 빠른 예약에서 적은 ID / 연락처를 여기서 고친다(2026-10-23 고객 요청). 예약 경로와 상관없이 보인다. */}
+        <TextField {...textProps("bookerHandle")} label={t("calls.column.bookerHandle")} />
         <div className="grid gap-3 @lg:grid-cols-2">
           <SelectField {...selectProps("therapist1Id")} label={t("calls.column.therapist1")} options={options.therapists} />
           <SelectField

@@ -579,6 +579,7 @@ describe("call edit panel (ticket 03)", () => {
       "startTime",
       "courseId",
       "customerMemo",
+      "bookerHandle",
       "therapist1Id",
       "therapist2Id",
       "actualEntryTime",
@@ -593,16 +594,14 @@ describe("call edit panel (ticket 03)", () => {
   });
 
   // 2026-10-23: 빠른 예약에서 적은 메신저 ID는 콜 상세에서 고친다(오타가 원장 고객 칸 둘째 줄에 그대로 남지 않게).
-  it("lets the booker's messenger ID be corrected in the booking group, only for a messenger booking or one that has an ID", () => {
+  it("lets the booker's ID or contact be corrected in the booking group for every booking channel", () => {
     const wechat = renderPanel(ledgerRow({ bookingChannelCode: "WECHAT", bookerName: "민수", bookerHandle: "minsu88" }));
     const booking = wechat.slice(wechat.indexOf('aria-label="예약"'), wechat.indexOf('aria-label="입장"'));
     assert.match(booking, /<input[^>]*data-call-field="bookerHandle"[^>]*value="minsu88"/);
-    assert.match(booking, /예약자 ID/);
-    // 메신저로 바꿔 아직 ID가 없어도 칸이 있다.
-    assert.match(renderPanel(ledgerRow({ bookingChannelCode: "TELEGRAM" })), /data-call-field="bookerHandle"/);
-    // 전화·워크인·경로 없음은 ID 칸이 없다.
-    for (const bookingChannelCode of ["PHONE", "WALK_IN", null]) {
-      assert.doesNotMatch(renderPanel(ledgerRow({ bookingChannelCode })), /data-call-field="bookerHandle"/);
+    assert.match(booking, /예약자 ID \/ 연락처/);
+    // 2026-10-23 고객 요청: 전화·워크인·경로 없음도 같은 칸이 있다(전화 예약은 번호를 적는다).
+    for (const bookingChannelCode of ["TELEGRAM", "PHONE", "WALK_IN", null]) {
+      assert.match(renderPanel(ledgerRow({ bookingChannelCode })), /data-call-field="bookerHandle"/, String(bookingChannelCode));
     }
   });
 

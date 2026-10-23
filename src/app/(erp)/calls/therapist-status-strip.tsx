@@ -24,6 +24,7 @@ const COLLAPSED_STORAGE_KEY = "calls.therapistStatus.collapsed";
 
 const stateDisplay: Record<TherapistAvailabilityRowDto["current"]["state"], { labelKey: MessageKey; tone: StatusTone }> = {
   available: { labelKey: "calls.therapistStatus.state.available", tone: "success" },
+  reserved_soon: { labelKey: "calls.therapistStatus.state.reservedSoon", tone: "warning" },
   in_use: { labelKey: "calls.therapistStatus.state.inUse", tone: "info" },
   before_check_in: { labelKey: "calls.therapistStatus.state.beforeCheckIn", tone: "neutral" },
   checked_out: { labelKey: "calls.therapistStatus.state.checkedOut", tone: "neutral" }
@@ -96,6 +97,9 @@ export function TherapistStatusStrip({
     const { current } = row;
     if (current.state === "available" && current.nextReservationTime && current.freeMinutes !== null) {
       return t("calls.therapistStatus.freeUntil", { time: current.nextReservationTime, minutes: count(current.freeMinutes) });
+    }
+    if (current.state === "reserved_soon" && current.nextReservationTime && current.freeMinutes !== null) {
+      return t("calls.therapistStatus.reservedAt", { time: current.nextReservationTime, minutes: count(current.freeMinutes) });
     }
     if (current.state === "in_use" && current.expectedEnd) return t("calls.therapistStatus.expectedEnd", { time: current.expectedEnd });
     if (current.state === "before_check_in") return row.plannedStartTime;

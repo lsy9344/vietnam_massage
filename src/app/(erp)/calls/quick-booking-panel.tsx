@@ -33,7 +33,6 @@ import {
 } from "@/app/(erp)/calls/quick-booking-conditions";
 import {
   QUICK_BOOKING_STEPS,
-  bookingChannelTakesHandle,
   guestFieldErrors,
   initialQuickBookingState,
   isQuickBookingLocked,
@@ -844,20 +843,19 @@ export function CustomerStep({
           value={draft.bookerName ?? ""}
         />
       </Field>
-      {bookingChannelTakesHandle(draft.bookingChannelCode) ? (
-        <Field error={fieldErrors.bookerHandle?.[0] ?? null} label={t("calls.quickBooking.bookerHandle")}>
-          <input
-            autoComplete="off"
-            className={inputFieldClassName({ className: "w-full", invalid: Boolean(fieldErrors.bookerHandle?.[0]) })}
-            disabled={disabled}
-            maxLength={500}
-            onChange={(event) => onEdit("bookerHandle", event.target.value === "" ? null : event.target.value)}
-            placeholder={t("calls.quickBooking.bookerHandlePlaceholder")}
-            type="text"
-            value={draft.bookerHandle ?? ""}
-          />
-        </Field>
-      ) : null}
+      {/* 경로와 상관없이 같은 칸이다. 전화 예약은 번호를 적는다(2026-10-23 고객 요청). */}
+      <Field error={fieldErrors.bookerHandle?.[0] ?? null} label={t("calls.quickBooking.bookerHandle")}>
+        <input
+          autoComplete="off"
+          className={inputFieldClassName({ className: "w-full", invalid: Boolean(fieldErrors.bookerHandle?.[0]) })}
+          disabled={disabled}
+          maxLength={500}
+          onChange={(event) => onEdit("bookerHandle", event.target.value === "" ? null : event.target.value)}
+          placeholder={t("calls.quickBooking.bookerHandlePlaceholder")}
+          type="text"
+          value={draft.bookerHandle ?? ""}
+        />
+      </Field>
       {!joining && !linked && bookerCandidates.length > 0 ? (
         <ul aria-label={t("calls.quickBooking.sameNameCustomers")} className="grid gap-1.5">
           {bookerCandidates.map((candidate) => (

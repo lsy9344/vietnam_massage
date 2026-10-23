@@ -289,7 +289,9 @@ export async function autosaveServiceCallRowAction(input: ServiceCallAutosaveInp
       ...parsed.data,
       actorId: account.id
     });
-    revalidatePath("/calls");
+    // revalidatePath를 부르지 않는다. 부르면 원장 화면 전체를 다시 그린 뒤에야 응답이 와서 줄의 "저장 중"이 그만큼 늦게
+    // 걷히고, 서버 액션은 한 번에 하나씩 보내져 일행 입장처럼 여러 줄을 함께 저장하면 그 대기가 줄마다 쌓인다. 줄은 돌려받은
+    // 행으로 바로 바뀌고, 나머지 화면(현황 줄·상태 칸)은 작업면이 저장 뒤에 한 번 새로 고친다(2026-10-23 고객 요청).
     return { ok: true, data: visibleServiceCallRowForRole(data, account.role) };
   } catch (error) {
     if (error instanceof StaleServiceCallError && role) {

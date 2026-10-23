@@ -15,6 +15,7 @@ const free = (nextReservationTime: string | null = null, freeMinutes: number | n
   nextReservationTime,
   freeMinutes
 });
+const soon = (nextReservationTime: string, freeMinutes: number): Current => ({ state: "reserved_soon", expectedEnd: null, nextReservationTime, freeMinutes });
 const inUse = (expectedEnd: string): Current => ({ state: "in_use", expectedEnd, nextReservationTime: null, freeMinutes: null });
 const off = (state: "before_check_in" | "checked_out"): Current => ({ state, expectedEnd: null, nextReservationTime: null, freeMinutes: null });
 
@@ -29,7 +30,7 @@ function row(
   return {
     therapistId: `t-${therapistName}`,
     therapistName,
-    attendance: current.state === "available" || current.state === "in_use" ? "checked_in" : current.state,
+    attendance: current.state === "before_check_in" || current.state === "checked_out" ? current.state : "checked_in",
     shiftCheck: false,
     available: true,
     freeFrom: null,
@@ -87,6 +88,10 @@ describe("Therapist 현황 줄 정렬 (1018 스펙 D17)", () => {
     assert.deepEqual(names(sortTherapistStatusRows(rows, "available")), ["9", "2", "12", "19", "5"]);
   });
 
+  it("puts reserved soon right after free now (2026-10-23 고객 요청)", () => {
+    assert.deepEqual(names(sortTherapistStatusRows([row("12", inUse("18:30")), row("17", soon("15:00", 26)), row("9", free())], "available")), ["9", "17", "12"]);
+  });
+
   it("sorts by fewer finished today, keeping the given order among equals", () => {
     assert.deepEqual(names(sortTherapistStatusRows(rows, "finished")), ["19", "9", "12", "2", "5"]);
   });
@@ -118,6 +123,13 @@ describe("Therapist 현황 줄 (1018 스펙 D17)", () => {
     // 퇴근한 사람은 흐리게 보인다.
     assert.match(card(html, "21"), /^<li[^>]*class="[^"]*text-muted/);
     assert.match(text(card(html, "21")), /퇴근/);
+  });
+
+  it("does not call someone free now when the next reservation comes before the shortest course could end (2026-10-23 고객 요청)", () => {
+    const html = render("ko", [row("17", soon("15:00", 26), { finished: 1, reserved: 3 })]);
+
+    assert.equal(text(card(html, "17")), "17 완료 1 · 예약 3 ▲︎ 곧 예약 15:00 예약 (26분 후) 콜만");
+    assert.doesNotMatch(card(html, "17"), /지금 가능/);
   });
 
   it("puts the unassigned reservations at the end and leaves rooms and cleaning out", () => {

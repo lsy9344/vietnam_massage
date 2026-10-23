@@ -36,15 +36,6 @@ export const QUICK_BOOKING_STEP_OF_FIELD: Record<string, QuickBookingStep> = {
   guests: "conditions"
 };
 
-/** 전화·워크인, 경로를 아직 안 고른 상태만 메신저 ID(ID 칸)를 받지 않는다(2026-10-23 고객 요청). */
-const BOOKING_CHANNELS_WITHOUT_HANDLE = new Set(["PHONE", "WALK_IN"]);
-
-/** 이 예약 경로가 메신저 ID(ID 칸)를 받는지. 빠른 예약 ②와 저장 요청 만들기가 함께 쓴다. */
-export function bookingChannelTakesHandle(code: string | null | undefined): boolean {
-  if (!code) return false;
-  return !BOOKING_CHANNELS_WITHOUT_HANDLE.has(code);
-}
-
 /** 손님 한 명이 고르는 칸(스펙 D10, 티켓 02). 손님 1은 저장 초안의 같은 칸을 쓴다. */
 export type QuickBookingGuest = { courseId: string; therapist1Id: string | null; therapist2Id: string | null; roomId: string | null };
 export type QuickBookingGuestField = keyof QuickBookingGuest;
@@ -190,13 +181,13 @@ export function takenTherapistIds(guests: QuickBookingGuest[], exceptIndex = -1)
  * 저장할 초안(1018 스펙 D21–D22). 예약자명은 고객/메모 칸에도 넣어 객실·TV 같은 다른 화면이 지금처럼 이름을 보인다.
  * 기존 고객을 고르지 않았고 예약자명이 있으면 그 이름으로 새 고객을 만든다. 일행에 더하는 손님은 고객을 잇지 않는다
  * (스펙 D12). "1명 추가"에서 시각을 바꾼 손님은 일행 id 없이 보통 예약과 같이 저장하고, 일행에서는 경로·예약자명만
- * 이어받는다(D29). 이름이 빈 워크인의 임시 이름은 서버가 붙인다. 메신저 ID(bookerHandle)는 그 예약 경로가 메신저일
- * 때만 보내고, 아니면 전에 다른 경로에서 입력해 둔 ID가 남지 않게 null로 지운다(2026-10-23 고객 요청).
+ * 이어받는다(D29). 이름이 빈 워크인의 임시 이름은 서버가 붙인다. ID / 연락처(bookerHandle)는 예약 경로와 상관없이
+ * 보낸다 — 전화 예약은 여기에 번호를 적는다(2026-10-23 고객 요청).
  */
 function bookingDraft(state: QuickBookingState) {
   const { draft } = state.save;
   const bookerName = draft.bookerName?.trim() || null;
-  const bookerHandle = bookingChannelTakesHandle(draft.bookingChannelCode) ? draft.bookerHandle?.trim() || null : null;
+  const bookerHandle = draft.bookerHandle?.trim() || null;
   const joining = joinsParty(state);
   // 별도 예약은 일행의 고객/메모(join 때 채운 값)를 쓰지 않는다.
   const separate = state.joinParty !== null && !joining;

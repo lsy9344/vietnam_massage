@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { SidePanel } from "@/components/ui/panel";
 import { useT } from "@/lib/i18n/client";
 import { CallLedgerList } from "@/app/(erp)/calls/call-ledger-list";
@@ -62,6 +62,31 @@ function useCallSelection() {
   return { selected, select };
 }
 
+/** 줄 저장이 잇따라 끝나면(일행 입장) 마지막 저장 뒤 이만큼 기다렸다가 한 번만 새로 고친다. */
+const REFRESH_AFTER_SAVE_MS = 300;
+
+/**
+ * 줄 저장은 그 줄의 행만 돌려받는다(서버가 원장 화면을 다시 그리지 않아 "저장 중"이 바로 걷힌다). 현황 줄·상태 칸·다른 줄의
+ * 경고는 저장이 잦아든 뒤 화면을 한 번 새로 고쳐 맞춘다(2026-10-23 고객 요청).
+ */
+function useRefreshAfterSave() {
+  const router = useRouter();
+  const timer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current !== null) window.clearTimeout(timer.current);
+    },
+    []
+  );
+  return () => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      timer.current = null;
+      router.refresh();
+    }, REFRESH_AFTER_SAVE_MS);
+  };
+}
+
 /** 입력칸 안에서는 원장 단축키가 글자 입력을 막지 않는다(스펙 D21). */
 const FIELD_SELECTOR = 'input, textarea, select, [contenteditable="true"], [role="combobox"]';
 
@@ -93,6 +118,7 @@ export function CallLedgerWorkspace({
 }) {
   const t = useT();
   const { selected, select } = useCallSelection();
+  const refreshAfterSave = useRefreshAfterSave();
   const selectedRow = selected ? (rows.find((row) => row.id === selected) ?? null) : null;
   // 현황 줄 카드의 "콜만" 버튼(1018 스펙 D17)이 주소에 남긴 Therapist. 목록은 그 Therapist가 맡은 콜과 열린 콜만 보인다.
   const therapistFilter = useSearchParams()?.get(THERAPIST_FILTER_PARAM) ?? null;
@@ -216,6 +242,7 @@ export function CallLedgerWorkspace({
           isLocked={isLocked}
           onClose={() => select(null)}
           onOpen={open}
+          onRowSaved={refreshAfterSave}
           onSelectRelated={(id) => {
             select(id, { scrollToRow: true });
             setPanelFocus(null);
