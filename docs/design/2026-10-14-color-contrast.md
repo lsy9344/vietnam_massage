@@ -52,6 +52,8 @@
 | `--brand-secondary`(포커스 링·골드 표식) | `--background` / `--surface` / `--surface-float` / `--readonly` | 5.71 / 6.34 / 6.36 / 5.44 | 통과 |
 | `--border` | `--background` / `--surface` | 1.26 / 1.40 | 장식선 전용(조작 경계에 쓰지 않음) |
 | `--border-strong` | `--background` / `--surface` / `--surface-float` / `--readonly` | 3.35 / 3.73 / 3.74 / 3.20 | 조작 경계 통과 |
+| `--grid-line`(원장 머리 줄 아래 선·칸 사이 세로줄, 2026-10-23) | `--surface` / `--readonly` | 1.77 / 1.52 | 장식선 전용(`--border`보다 진하게) |
+| `--surface-field`(원장 선택 칸 바탕, 2026-10-23) | `--surface` / `--readonly` | 1.08 / 1.26 | 면 구분용. 칸 경계는 `--border-strong` 4.02:1, 글자 `--text` 17.96:1 |
 | `--text` | `--accent-lavender` / `-peach` / `-blue` / `-mint` / `-butter` | 9.19 / 10.57 / 9.93 / 13.21 / 14.81 | 통과 |
 | `--danger` | `--background` / `--surface` / `--danger-soft` | 4.99 / 5.54 / 5.10 | 통과 |
 | `--danger-foreground` | `--danger` | 5.81 | 통과 |

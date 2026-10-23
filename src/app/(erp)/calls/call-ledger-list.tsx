@@ -123,7 +123,7 @@ const ledgerLineAreas = [
 ].join(" ");
 /**
  * 한 줄 11칸일 때 칸은 줄 높이를 다 채우고(위아래 여백은 줄이 아니라 칸이 갖는다), 둘째 칸부터 왼쪽 간격 가운데에 1px 세로줄을
- * 긋는다(2026-10-23 고객 요청, 시안 111.png). 두 줄·휴대폰 배치에는 선이 없다. 칸 안의 내용은 각 칸이 세로·가로 가운데로
+ * 긋는다(2026-10-23 고객 요청, 시안 111.png). 선은 행 구분선보다 진한 --grid-line이다. 두 줄·휴대폰 배치에는 선이 없다. 칸 안의 내용은 각 칸이 세로·가로 가운데로
  * 세운다(가로 가운데는 시안 123.png, 한 줄 표에서만 — 두 줄 배치는 왼쪽부터 읽는다).
  */
 const wideCellClass = "@[81rem]:self-stretch @[81rem]:py-2.5";
@@ -133,15 +133,22 @@ const wideCellClass = "@[81rem]:self-stretch @[81rem]:py-2.5";
  */
 const wideCenterFlex = "@[81rem]:justify-center";
 const wideCenterGrid = "@[81rem]:justify-items-center @[81rem]:text-center";
+/**
+ * 고객 정보 칸만 한 줄 표에서도 왼쪽부터 쓴다(2026-10-23 고객 요청 ledger-grid-request-1023.png ①). 가운데 정렬이면 예약자 글자
+ * 길이에 따라 경로 기호가 줄마다 옆으로 밀렸다. 칸 왼쪽에서 고정 여백만 두어 모든 줄의 기호와 글자가 같은 자리에서 시작하고,
+ * 머리 글자도 같은 여백에서 시작한다. 칸 안 내용은 justify 기본값(왼쪽)이라 왼쪽 여백만 준다.
+ */
+const wideStartPadding = "@[81rem]:pl-3";
+const wideStartHeadClass = `@[81rem]:text-left ${wideStartPadding}`;
 const wideDividerClass =
-  "relative @[81rem]:before:absolute @[81rem]:before:inset-y-0 @[81rem]:before:-left-[5px] @[81rem]:before:w-px @[81rem]:before:bg-border @[81rem]:before:content-['']";
+  "relative @[81rem]:before:absolute @[81rem]:before:inset-y-0 @[81rem]:before:-left-[5px] @[81rem]:before:w-px @[81rem]:before:bg-grid-line @[81rem]:before:content-['']";
 const lineCellClass = `${wideCellClass} ${wideDividerClass}`;
 const headCellClass = "truncate py-2 text-center font-bold";
 /**
  * 원장 줄 안의 선택 칸: 칸 폭을 채우고 ▾를 오른쪽 끝에 둔다(시안의 드롭다운 칸). 아주 넓은 화면에서도 글자 옆이 비지 않게 12rem에서
- * 멈춘다(2026-10-23 "드롭다운 여백").
+ * 멈춘다(2026-10-23 "드롭다운 여백"). 바탕은 거의 흰 --surface-field라 베이지 줄 위에서 조작 칸이 드러난다(2026-10-23 고객 요청).
  */
-const pickerFieldClass = "h-10 w-full max-w-48 justify-between rounded-sm bg-surface px-2.5";
+const pickerFieldClass = "h-10 w-full max-w-48 justify-between rounded-sm bg-surface-field px-2.5";
 /** 조치 칸의 입장·종료 버튼(시안 111.png): 칸 폭을 채우는 채운 알약. */
 const actionButtonClass = "w-full max-w-36 justify-center";
 type TherapistSlot = "therapist1Id" | "therapist2Id";
@@ -597,7 +604,7 @@ function CallLedgerLine({
           </LedgerTimeEdit>
         )}
       </span>
-      <span className={`flex w-full min-w-0 items-center gap-2.5 ${wideCenterFlex} [grid-area:who] ${lineCellClass}`} data-line-cell="who" data-line-who="">
+      <span className={`flex w-full min-w-0 items-center gap-2.5 ${wideStartPadding} [grid-area:who] ${lineCellClass}`} data-line-cell="who" data-line-who="">
         <BookingChannelIcon channel={draft.bookingChannelCode ?? who.channel ?? ""} className="h-9 w-9 shrink-0" />
         <span className="grid min-w-0">
           <span className="flex min-w-0 items-baseline gap-1.5">
@@ -686,41 +693,46 @@ function CallLedgerLine({
         </>
       )}
       <span className={`flex min-w-0 flex-wrap content-center items-center gap-1 @[81rem]:flex-col @[81rem]:flex-nowrap @[81rem]:justify-center [grid-area:status] ${lineCellClass}`} data-line-cell="status">
-        {readOnly ? (
-          statusChip
-        ) : (
-          <LedgerCellPicker
-            className="h-10 border-transparent px-1"
-            disabled={isLocked}
-            emptyText={t("calls.cell.empty")}
-            field="status"
-            label={t("calls.cell.statusAria", { time })}
-            loadingText={t("calls.cell.loading")}
-            onPick={changeStatus}
-            options={options.statuses}
-            title={statusLabel}
-            value={draft.status}
-          >
-            {statusChip}
-          </LedgerCellPicker>
-        )}
-        {warnings.length > 0 ? (
-          // 누르는 영역은 44px(design.md 4.3)이고, 보이는 칩은 그 안의 작은 경고 칩이다.
-          <button
-            aria-label={t("calls.list.warningsAria", { count: warnings.length, first: warnings[0] })}
-            className="inline-flex min-h-11 items-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-secondary"
-            onClick={() => onOpen(row.id)}
-            title={warnings.join("\n")}
-            type="button"
-          >
-            <span className="inline-flex min-h-7 items-center gap-1 rounded-full bg-warning-soft px-2 text-xs font-semibold text-warning">
-              <span aria-hidden="true">▲︎</span>
-              <span className="[font-variant-numeric:tabular-nums]">{warnings.length}</span>
-            </span>
-          </button>
-        ) : null}
-        {/* 한 줄 표는 상태 칩을 칸 가운데에 두므로(세로로 쌓은 칸에서 items-center가 가로 가운데다), 경고 칩·저장 표시가 칩 옆에
-            붙으면 칩이 줄마다(저장할 때마다) 옆으로 밀린다. 그래서 한 줄 표에서는 칩 아래에 둔다. 저장 표시가 없으면 자리도 비우지 않는다. */}
+        {/* 경고 칩은 상태 칩 오른쪽에 한 줄로 붙고, 둘을 한 묶음으로 칸 가운데에 둔다(2026-10-23 고객 요청 ledger-grid-request-1023.png).
+            예전에는 칩 아래에 두어 경고가 있는 줄만 높아졌다. 가장 긴 베트남어 칩("Đang sử dụng ▾" 133px)과 경고 칩은 상태 칸 최소 폭
+            (8.5rem)에 함께 들어가지 않아, 그때만 경고가 아래로 내려간다(칩 글자를 말줄임으로 자르지 않는다). */}
+        <span className="inline-flex min-w-0 max-w-full flex-wrap items-center justify-center gap-1" data-line-status-group="">
+          {readOnly ? (
+            statusChip
+          ) : (
+            <LedgerCellPicker
+              className="h-10 border-transparent px-1"
+              disabled={isLocked}
+              emptyText={t("calls.cell.empty")}
+              field="status"
+              label={t("calls.cell.statusAria", { time })}
+              loadingText={t("calls.cell.loading")}
+              onPick={changeStatus}
+              options={options.statuses}
+              title={statusLabel}
+              value={draft.status}
+            >
+              {statusChip}
+            </LedgerCellPicker>
+          )}
+          {warnings.length > 0 ? (
+            // 누르는 영역은 44px(design.md 4.3)이고, 보이는 칩은 그 안의 작은 경고 칩이다.
+            <button
+              aria-label={t("calls.list.warningsAria", { count: warnings.length, first: warnings[0] })}
+              className="inline-flex min-h-11 items-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-secondary"
+              onClick={() => onOpen(row.id)}
+              title={warnings.join("\n")}
+              type="button"
+            >
+              <span className="inline-flex min-h-7 items-center gap-1 rounded-full bg-warning-soft px-2 text-xs font-semibold text-warning">
+                <span aria-hidden="true">▲︎</span>
+                <span className="[font-variant-numeric:tabular-nums]">{warnings.length}</span>
+              </span>
+            </button>
+          ) : null}
+        </span>
+        {/* 한 줄 표는 상태 묶음을 칸 가운데에 두므로(세로로 쌓은 칸에서 items-center가 가로 가운데다), 저장 표시가 칩 옆에
+            붙으면 칩이 저장할 때마다 옆으로 밀린다. 그래서 한 줄 표에서는 묶음 아래에 둔다. 저장 표시가 없으면 자리도 비우지 않는다. */}
         <span className="@[81rem]:empty:hidden" data-line-save-state={saveStatus}>
           {saveStatus === "saving" || isSaveHeld(saveStatus) ? <SaveStatus locale={locale} state={saveStatus === "saving" ? "saving" : saveStatus} /> : null}
         </span>
@@ -1348,12 +1360,16 @@ export function CallLedgerList({
       {rows.length > 0 ? (
         <div
           aria-hidden="true"
-          className={`hidden border-b border-border bg-readonly text-xs text-foreground @[81rem]:grid ${ledgerWideColumns} ${ledgerWideSpacing}`}
+          className={`hidden border-b border-grid-line bg-readonly text-xs text-foreground @[81rem]:grid ${ledgerWideColumns} ${ledgerWideSpacing}`}
           data-ledger-head=""
         >
           {LEDGER_HEAD_KEYS.map((key, index) => (
-            // 머리 글자는 가운데 정렬·굵게(2026-10-23 시안 123.png).
-            <span className={index === 0 ? headCellClass : `${headCellClass} ${wideDividerClass}`} key={key} title={t(key)}>
+            // 머리 글자는 가운데 정렬·굵게(2026-10-23 시안 123.png). 고객 정보만 그 칸처럼 왼쪽 여백에서 시작한다.
+            <span
+              className={[headCellClass, index > 0 ? wideDividerClass : "", key === "calls.list.head.customer" ? wideStartHeadClass : ""].filter(Boolean).join(" ")}
+              key={key}
+              title={t(key)}
+            >
               {t(key)}
             </span>
           ))}

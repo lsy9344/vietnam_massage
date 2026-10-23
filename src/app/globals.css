@@ -4,8 +4,10 @@
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-float: var(--surface-float);
+  --color-surface-field: var(--surface-field);
   --color-foreground: var(--text);
   --color-border: var(--border);
+  --color-grid-line: var(--grid-line);
   --color-muted: var(--muted);
   --color-faint: var(--faint);
   --color-danger: var(--danger);
@@ -58,6 +60,8 @@
   --background: #F1E8D7;
   --surface: #FAF4E9;
   --surface-float: #F6F5F1;
+  /* 원장 표 안의 선택 칸 바탕. 베이지 줄 위에서 조작 칸만 거의 흰색으로 띄운다(흰색 #FFFFFF 면은 쓰지 않는다). */
+  --surface-field: #FFFDF9;
   --readonly: #ECE3D0;
   --text: #161513;
   --muted: #57534C;
@@ -65,6 +69,8 @@
   --faint: #68625A;
   /* 장식선. 조작 영역의 경계에는 쓰지 않는다. */
   --border: #D8D0C1;
+  /* 원장 표의 머리 줄 아래 선과 칸 사이 세로줄. 행 구분선(--border)보다 한 단계 진한 장식선이다. */
+  --grid-line: #C4B9A6;
   /* 입력칸처럼 경계가 곧 조작 영역인 곳의 테두리(WCAG 1.4.11, 3:1 이상). */
   --border-strong: #857D6C;
   --muted-line: oklch(0.712 0.043 85);

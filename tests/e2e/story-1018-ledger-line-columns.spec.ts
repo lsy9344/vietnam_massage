@@ -57,7 +57,8 @@ async function cleanup() {
 /**
  * 보이는 원장 줄마다 칸의 가로 위치. 칸이 없는 줄(주 버튼이 없는 줄 등)은 null이다. 두 줄 배치는 칸을 왼쪽부터 채우므로 왼쪽 x를,
  * 한 줄 11칸 표는 칸 안의 내용을 가운데로 세우므로(2026-10-23 시안 123.png) 가운데 x를 본다 — 상태·결제 칩은 글자 길이만큼
- * 폭이 달라 왼쪽 x는 줄마다 다르다.
+ * 폭이 달라 왼쪽 x는 줄마다 다르다. 상태 칸은 경고 칩이 칩 오른쪽에 붙은 묶음을 가운데에 두므로(2026-10-23 고객 요청) 칩이 아니라
+ * 묶음(data-line-status-group)을 잰다.
  */
 async function pickerColumns(page: Page) {
   return page.evaluate(() => {
@@ -68,7 +69,7 @@ async function pickerColumns(page: Page) {
         const x = (field: string) => {
           const picker = line.querySelector(`[data-cell-picker="${field}"]`);
           if (!picker) return null;
-          const rect = picker.getBoundingClientRect();
+          const rect = ((field === "status" && oneLine && picker.closest("[data-line-status-group]")) || picker).getBoundingClientRect();
           return Math.round(oneLine ? rect.left + rect.width / 2 : rect.left);
         };
         return { status: x("status"), therapist: x("therapist1Id"), room: x("roomId"), payment: x("paymentMethodCode"), discount: x("discountTypeCode") };
@@ -328,7 +329,7 @@ test.describe("1018 후속 원장 줄의 칸 열 맞춤", () => {
       const selectors: Record<string, string> = {
         time: '[data-line-cell="time"] button',
         entry: '[data-line-cell="entry"] > *',
-        status: '[data-cell-picker="status"]',
+        status: "[data-line-status-group]",
         therapist: '[data-cell-picker="therapist1Id"]',
         room: '[data-cell-picker="roomId"]',
         discount: '[data-cell-picker="discountTypeCode"]',
@@ -351,6 +352,46 @@ test.describe("1018 후속 원장 줄의 칸 열 맞춤", () => {
     expect(offsets.length).toBeGreaterThan(20);
     for (const { name, offset } of offsets) expect(Math.abs(offset), `${name} 칸 가운데에서 ${offset}px`).toBeLessThanOrEqual(1);
   });
+
+  // 2026-10-23 고객 요청(ledger-grid-request-1023.png): 고객 정보 칸만 왼쪽 고정 여백에서 시작하고, 경고 칩은 상태 칩 오른쪽
+  // 같은 줄에 붙어 경고가 있는 줄도 높아지지 않는다. 결제수단이 적힌 결제 칸과 청소 끝 알약은 원래 조금 더 높아 줄 높이는
+  // 줄마다 다를 수 있으므로, 상태 묶음이 한 줄(경고 버튼 44px) 높이인지를 본다.
+  for (const width of [1366, 1600]) {
+    test(`${width}px 한 줄 표: 고객 정보는 모든 줄에서 같은 x에서 시작하고, 경고는 상태 칩 옆이며 줄 높이가 같다`, async ({ page }) => {
+      await openLedger(page, width);
+      const geometry = await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>("[data-ledger-line]")]
+          .filter((line) => line.offsetParent !== null)
+          .map((line) => {
+            const who = line.querySelector<HTMLElement>('[data-line-cell="who"]');
+            const icon = who?.children[0]?.getBoundingClientRect();
+            const name = who?.children[1]?.getBoundingClientRect();
+            const chip = line.querySelector<HTMLElement>('[data-cell-picker="status"]')?.getBoundingClientRect();
+            const group = line.querySelector<HTMLElement>("[data-line-status-group]")?.getBoundingClientRect();
+            const warning = line.querySelector<HTMLElement>('[data-line-cell="status"] button[aria-label^="경고 "]')?.getBoundingClientRect();
+            if (!who || !icon || !name || !chip || !group) return null;
+            const cellLeft = who.getBoundingClientRect().left;
+            return {
+              iconInset: Math.round(icon.left - cellLeft),
+              textInset: Math.round(name.left - cellLeft),
+              groupHeight: Math.round(group.height),
+              warning: warning ? { beside: warning.left >= chip.right - 1, sameLine: Math.abs(warning.top + warning.height / 2 - (chip.top + chip.height / 2)) <= 1 } : null
+            };
+          })
+      );
+      expect(geometry.length).toBe(6);
+      expect(geometry, "고객 정보·상태 칸이 모든 줄에 있다").not.toContain(null);
+      const lines = geometry.flatMap((line) => (line ? [line] : []));
+      expect(new Set(lines.map((line) => line.iconInset)), "경로 기호의 칸 안 x").toEqual(new Set([12]));
+      expect(new Set(lines.map((line) => line.textInset)).size, "예약자 글자의 칸 안 시작 x").toBe(1);
+      const warned = lines.filter((line) => line.warning);
+      expect(warned.length, "11:00·11:30은 같은 객실이라 경고가 붙는다").toBe(2);
+      for (const line of warned) {
+        expect(line.warning).toEqual({ beside: true, sameLine: true });
+        expect(line.groupHeight, "상태 묶음은 한 줄 높이다").toBeLessThanOrEqual(44);
+      }
+    });
+  }
 
   // 2026-10-23: 결제 칸의 "Chưa xác nhận thanh toán"이 잘리고 상태 칩 "Đang sử dụng"이 말줄임이 됐다. 가장 긴 베트남어도 다 보인다.
   for (const width of [1366, 1600]) {

@@ -446,6 +446,25 @@ describe("ledger line warnings", () => {
     assert.doesNotMatch(warning, /저장/);
   });
 
+  // 2026-10-23 고객 요청(ledger-grid-request-1023.png ②③): 경고 칩은 상태 칩 아래가 아니라 오른쪽에 한 줄로 붙고, 그 묶음이
+  // 칸 가운데에 온다. 경고가 없는 줄도 같은 묶음 안에 상태 칩만 둔다. 묶음은 가로로 놓고, 칸에 다 들어가지 않을 때만 경고가
+  // 아래로 내려간다(가장 긴 베트남어 칩, 브라우저 검사는 story-1018-ledger-line-columns).
+  it("puts the warning chip on the status chip's line, as one centered group", () => {
+    const html = renderList([
+      ledgerRow({ id: "warned", status: "CLEANING", warnings: [unfinished] }),
+      ledgerRow({ id: "calm", status: "CLEANING" })
+    ]);
+    const group = (id: string) => cell(line(html, id), "status").match(/<span[^>]*data-line-status-group=""[^>]*>/)?.[0] ?? "";
+    for (const id of ["warned", "calm"]) {
+      assert.ok(group(id), `${id}: 상태 묶음이 없다`);
+      assert.match(group(id), /inline-flex/);
+      assert.match(group(id), /justify-center/);
+    }
+    const warned = cell(line(html, "warned"), "status");
+    const inGroup = warned.slice(warned.indexOf("data-line-status-group"));
+    assert.match(inGroup, /data-cell-picker="status"[\s\S]*aria-label="경고 1건: 앞 시술이 아직 끝나지 않았습니다"/);
+  });
+
   it("shows no warning button on a line without warnings", () => {
     assert.doesNotMatch(renderList([ledgerRow()]), /경고 \d+건/);
   });
@@ -479,6 +498,37 @@ describe("ledger column order (2026-10-23 customer mockup)", () => {
       assert.match(span, /text-center/);
       assert.match(span, /font-bold/);
     }
+  });
+
+  // 2026-10-23 고객 요청(ledger-grid-request-1023.png ①): 고객 정보 칸만 왼쪽부터 쓴다. 예약자 글자 길이가 달라도 경로 기호와
+  // 글자가 모든 줄에서 같은 자리에서 시작한다. 머리 글자도 같은 왼쪽 여백에서 시작한다.
+  it("starts the customer cell and its head from the same fixed left inset, and keeps the other cells centered", () => {
+    const html = renderList([
+      ledgerRow({ id: "short", startTime: "13:00", status: "IN_USE", bookerName: "JY" }),
+      ledgerRow({ id: "long", startTime: "14:00", status: "IN_USE", bookerName: "김부장 가이드 ★★" })
+    ]);
+    const openTag = (markup: string) => markup.match(/<[^>]*>/)?.[0] ?? "";
+    for (const id of ["short", "long"]) {
+      const who = openTag(cell(line(html, id), "who"));
+      assert.match(who, /@\[81rem\]:pl-3/);
+      assert.doesNotMatch(who, /justify-center/);
+      assert.match(openTag(cell(line(html, id), "course")), /@\[81rem\]:text-center/);
+    }
+    const customerHead = html.match(/<span[^>]*title="고객 정보"[^>]*>/)?.[0] ?? "";
+    assert.match(customerHead, /@\[81rem\]:text-left/);
+    assert.match(customerHead, /@\[81rem\]:pl-3/);
+  });
+
+  // 2026-10-23 고객 요청(ledger-grid-request-1023.png): 베이지 바탕은 그대로 두고 선택 칸만 거의 흰 바탕으로 띄우며, 머리 줄
+  // 아래 선과 칸 사이 세로줄은 행 구분선보다 조금 진하게 긋는다.
+  it("lifts the cell pickers onto the field surface and draws the head and column lines darker", () => {
+    const html = renderList([ledgerRow({ id: "in-use-13", startTime: "13:00", status: "IN_USE" })]);
+    const pickers = line(html, "in-use-13").match(/<button[^>]*data-cell-picker="(?:therapist1Id|roomId|discountTypeCode)"[^>]*>/g) ?? [];
+    assert.equal(pickers.length, 3);
+    for (const picker of pickers) assert.match(picker, /bg-surface-field/);
+    const head = html.match(/<div[^>]*data-ledger-head=""[^>]*>/)?.[0] ?? "";
+    assert.match(head, /border-grid-line/);
+    assert.match(cell(line(html, "in-use-13"), "entry"), /before:bg-grid-line/);
   });
 
   it("uses the same order in the one-line grid template", () => {
