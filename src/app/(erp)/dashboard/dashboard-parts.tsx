@@ -4,6 +4,7 @@ import { CallStatusChip, type CallStatusKey } from "@/components/domain/call-sta
 import { DetailRow } from "@/components/ui/detail-row";
 import { ScreenState } from "@/components/ui/screen-state";
 import { StatusIndicator } from "@/components/ui/status-indicator";
+import { tableCellClassName, tableHeadCellClassName, tableNumberCellClassName } from "@/components/ui/table";
 import { createTranslator } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
 import { formatNumber } from "@/lib/i18n/format";
@@ -143,10 +144,10 @@ export function NoCallsState({ title, description, ledgerHref, locale }: { title
 
 // 카드 안의 표(design.md 6.6): 머리는 읽기 전용 바탕, 행은 아래 선만, 숫자 열은 오른쪽 정렬.
 export const tableHeadClassName = "bg-readonly text-left text-xs font-semibold text-muted";
-export const headCellClassName = "px-3 py-2";
-export const cellClassName = "border-b border-border px-3 py-2";
+export const headCellClassName = tableHeadCellClassName;
+export const cellClassName = tableCellClassName;
 /** 금액·건수 칸: 오른쪽 정렬, 단위가 다음 줄로 넘어가지 않는다. */
-export const numberCellClassName = "whitespace-nowrap border-b border-border px-3 py-2 text-right";
+export const numberCellClassName = tableNumberCellClassName;
 
 /** 계산 근거가 없어 0 대신 비워 둔 자리(design.md 6.7). */
 export function NoBasis({ message, locale }: { message: string; locale: Locale }) {
@@ -189,10 +190,10 @@ export function CourseCompletionCard({
               <th className={headCellClassName} scope="col">
                 {t("dashboard.course.column.course")}
               </th>
-              <th className={cn(headCellClassName, "text-right")} scope="col">
+              <th className={cn(headCellClassName, "whitespace-nowrap text-right")} scope="col">
                 {t("dashboard.course.column.completed")}
               </th>
-              <th className={cn(headCellClassName, "text-right")} scope="col">
+              <th className={cn(headCellClassName, "whitespace-nowrap text-right")} scope="col">
                 {t("dashboard.course.column.assignment")}
               </th>
             </tr>

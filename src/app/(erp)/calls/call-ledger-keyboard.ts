@@ -15,6 +15,7 @@ export const EDITABLE_CALL_FIELDS = [
   "visitRequest",
   "bookingChannelCode",
   "bookerName",
+  "bookerHandle",
   "confirmationCode"
 ] as const;
 

@@ -1004,6 +1004,101 @@ describe("service call service", () => {
     });
   });
 
+  describe("booker handle (2026-10-23 고객 요청)", () => {
+    const base = {
+      operatingMonthId: "month-2026-06",
+      serviceDate: "2026-06-10",
+      startTime: "11:00",
+      roomId: "room-101",
+      courseId: "course-a",
+      therapist1Id: "therapist-1"
+    };
+
+    it("saves and reloads the messenger ID, and autosave changes it", async () => {
+      const prismaClient = createMemoryPrisma();
+      const row = await saveBasicServiceCallRow({
+        ...base,
+        status: "청소중",
+        bookingChannelCode: "TELEGRAM",
+        bookerName: "Minh",
+        bookerHandle: "@minh_spa",
+        prismaClient
+      });
+
+      assert.equal(row.bookerHandle, "@minh_spa");
+      const reloaded = await getServiceCallRow({ serviceCallId: row.id, prismaClient });
+      assert.equal(reloaded.bookerHandle, "@minh_spa");
+
+      const saved = await autosaveServiceCallRow({
+        ...base,
+        serviceCallId: row.id,
+        expectedUpdatedAt: row.updatedAt,
+        status: "사용중",
+        bookingChannelCode: "ZALO",
+        bookerName: "Lan",
+        bookerHandle: "@lan88",
+        actorId: "counter-account",
+        prismaClient
+      });
+      assert.equal(saved.bookerHandle, "@lan88");
+    });
+
+    it("keeps the stored messenger ID when a save leaves it out", async () => {
+      const prismaClient = createMemoryPrisma();
+      const row = await saveBasicServiceCallRow({
+        ...base,
+        status: "청소중",
+        bookingChannelCode: "TELEGRAM",
+        bookerName: "Minh",
+        bookerHandle: "@minh_spa",
+        prismaClient
+      });
+
+      const saved = await autosaveServiceCallRow({
+        ...base,
+        serviceCallId: row.id,
+        expectedUpdatedAt: row.updatedAt,
+        status: "청소중",
+        note: "다른 칸만 고친다",
+        actorId: "counter-account",
+        prismaClient
+      });
+      assert.equal(saved.note, "다른 칸만 고친다");
+      assert.equal(saved.bookerHandle, "@minh_spa");
+    });
+
+    it("carries the messenger ID in a row-change audit triggered by another sensitive field, like the booking channel and booker name beside it", async () => {
+      const prismaClient = createMemoryPrisma();
+      const row = await saveBasicServiceCallRow({
+        ...base,
+        status: "청소중",
+        actualEntryTime: "11:00",
+        bookingChannelCode: "TELEGRAM",
+        bookerName: "Minh",
+        bookerHandle: "@minh_spa",
+        prismaClient
+      });
+
+      await autosaveServiceCallRow({
+        ...base,
+        serviceCallId: row.id,
+        expectedUpdatedAt: row.updatedAt,
+        status: "청소중",
+        actualEntryTime: "11:00",
+        actualEndTime: "11:58",
+        bookingChannelCode: "TELEGRAM",
+        bookerName: "Minh",
+        bookerHandle: "@minh_new",
+        actorId: "counter-account",
+        prismaClient
+      });
+
+      const rowChanged = prismaClient.auditEvents.find((event: { action: string }) => event.action === "service_call.row_changed");
+      assert.equal(rowChanged.beforeValue.bookerHandle, "@minh_spa");
+      assert.equal(rowChanged.afterValue.bookerHandle, "@minh_new");
+    });
+  });
+
   it("allows reservation rows to be saved without assigning a room yet", async () => {
     const prismaClient = createMemoryPrisma();
 
@@ -4948,6 +5043,7 @@ function ledgerRow(overrides: Partial<ServiceCallRowDto>): ServiceCallRowDto {
     visitRequest: null,
     bookingChannelCode: null,
     bookerName: null,
+    bookerHandle: null,
     confirmationCode: null,
     partyId: null,
     partyPosition: null,

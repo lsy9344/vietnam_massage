@@ -103,6 +103,7 @@ function draft(overrides: Partial<NewCallRowDraft> = {}): NewCallRowDraft {
     visitRequest: null,
     bookingChannelCode: null,
     bookerName: null,
+    bookerHandle: null,
     confirmationCode: null,
     newCustomer: null,
     ...overrides
@@ -310,7 +311,7 @@ describe("빠른 예약 ① 조건(1018 스펙 D20·D23)", () => {
 function customerStep(
   locale: Locale,
   changes: Partial<NewCallRowDraft> = {},
-  extra: { bookerCandidates?: CustomerVisitCandidateDto[]; joining?: boolean; summary?: string } = {}
+  extra: { bookerCandidates?: CustomerVisitCandidateDto[]; fieldErrors?: Record<string, string[]>; joining?: boolean; summary?: string } = {}
 ) {
   return render(
     locale,
@@ -319,7 +320,7 @@ function customerStep(
       customers={customers}
       disabled={false}
       draft={draft(changes)}
-      fieldErrors={{}}
+      fieldErrors={extra.fieldErrors ?? {}}
       joining={extra.joining ?? false}
       locale={locale}
       message={null}
@@ -383,6 +384,32 @@ describe("빠른 예약 ② 고객(1018 스펙 D21)", () => {
     assert.match(html, />예약 저장</);
     // 객실 단계와 확인 단계는 없다.
     assert.doesNotMatch(html, /객실/);
+  });
+
+  it("메신저 경로를 고르면 예약자명 바로 아래에 ID 칸이 생긴다(2026-10-23 고객 요청)", () => {
+    const html = customerStep("ko", { bookingChannelCode: "ZALO", bookerHandle: "@nguyen88" });
+    assert.match(html, />ID</);
+    assert.match(html, /value="@nguyen88"/);
+    assert.match(html, /메신저 ID \(예: @jihoon123\)/);
+    // 예약자명 다음, 같은 이름 고객 후보보다 앞이다.
+    assert.ok(html.indexOf("예약자명") < html.indexOf(">ID<") && html.indexOf(">ID<") < html.indexOf("기존 고객 검색"));
+  });
+
+  it("전화·워크인·경로를 안 고른 상태는 ID 칸이 없다", () => {
+    assert.doesNotMatch(customerStep("ko", { bookingChannelCode: "PHONE" }), />ID</);
+    assert.doesNotMatch(customerStep("ko", { bookingChannelCode: "WALK_IN" }), />ID</);
+    assert.doesNotMatch(customerStep("ko", { bookingChannelCode: null }), />ID</);
+  });
+
+  it("ID 칸의 저장 거절 오류를 보인다", () => {
+    const html = customerStep("ko", { bookingChannelCode: "TELEGRAM" }, { fieldErrors: { bookerHandle: ["ID를 입력하세요."] } });
+    assert.match(html, /ID를 입력하세요\./);
+  });
+
+  it("베트남어에서도 메신저 경로를 고르면 ID 칸을 보인다", () => {
+    const html = customerStep("vi", { bookingChannelCode: "TELEGRAM" });
+    assert.match(html, />ID</);
+    assert.match(html, /ID nhắn tin \(vd: @jihoon123\)/);
   });
 
   it("예약자명과 같은 이름 고객을 최근 방문 날짜와 함께 후보로 보인다", () => {

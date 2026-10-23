@@ -3,6 +3,7 @@ import { SidePanel } from "@/components/ui/panel";
 import { CustomerCandidateCompare, customerCandidateOptionId, isCustomerCandidateChosen } from "@/components/domain/customer-candidate-compare";
 import { CustomerVisitCounts } from "@/components/domain/customer-visit-counts";
 import { ScreenState } from "@/components/ui/screen-state";
+import { tableCellClassName, tableShrinkClassName } from "@/components/ui/table";
 import { serviceStatusLabel } from "@/lib/i18n/codes";
 import { t } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
@@ -14,8 +15,11 @@ import type {
 } from "@/modules/calls/service-call-service";
 import { ledgerCallHref } from "@/lib/ledger-address";
 import { CustomerEditForm } from "@/app/(erp)/customers/customer-forms";
+import { cn } from "@/lib/utils";
 
-const cellClassName = "border-b border-border px-3 py-2";
+const cellClassName = tableCellClassName;
+/** 날짜·시각·상태처럼 짧고 고정된 칸: 폭을 내용에 맞춰 줄여 남는 폭이 코스·메모 열로 가게 한다. */
+const shrinkCellClassName = cn(cellClassName, tableShrinkClassName);
 
 /**
  * 고객 화면: 검색 캡슐과 후보 목록, 옆에 고른 고객의 패널(고객 정보 정정, 방문 이력).
@@ -162,18 +166,18 @@ export function CustomerScreenView({
                   <table className="w-full min-w-[40rem] border-collapse text-left text-sm">
                     <thead className="bg-readonly text-xs font-semibold text-muted">
                       <tr>
-                        <th className={cellClassName} scope="col">{t(locale, "calls.search.column.date")}</th>
-                        <th className={cellClassName} scope="col">{t(locale, "calls.search.column.time")}</th>
+                        <th className={shrinkCellClassName} scope="col">{t(locale, "calls.search.column.date")}</th>
+                        <th className={shrinkCellClassName} scope="col">{t(locale, "calls.search.column.time")}</th>
                         <th className={cellClassName} scope="col">{t(locale, "calls.search.column.course")}</th>
                         <th className={cellClassName} scope="col">{t(locale, "calls.search.column.therapist")}</th>
-                        <th className={cellClassName} scope="col">{t(locale, "calls.search.column.status")}</th>
+                        <th className={shrinkCellClassName} scope="col">{t(locale, "calls.search.column.status")}</th>
                         <th className={cellClassName} scope="col">{t(locale, "calls.search.column.customerMemo")}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {history.map((visit) => (
                         <tr className="hover:bg-readonly" key={visit.serviceCallId}>
-                          <td className={cellClassName}>
+                          <td className={shrinkCellClassName}>
                             {/* 그 날짜 원장의 그 콜로 간다. 콜 상세 패널은 티켓 13. */}
                             <a
                               className="inline-flex min-h-11 items-center font-semibold text-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-secondary"
@@ -182,10 +186,10 @@ export function CustomerScreenView({
                               {visit.serviceDate}
                             </a>
                           </td>
-                          <td className={cellClassName}>{visit.startTime}</td>
+                          <td className={shrinkCellClassName}>{visit.startTime}</td>
                           <td className={cellClassName}>{visit.courseLabel}</td>
                           <td className={cellClassName}>{visit.therapistLabel}</td>
-                          <td className={cellClassName}>{serviceStatusLabel(locale, visit.status)}</td>
+                          <td className={shrinkCellClassName}>{serviceStatusLabel(locale, visit.status)}</td>
                           <td className={cellClassName}>{visit.customerMemo}</td>
                         </tr>
                       ))}

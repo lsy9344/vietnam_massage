@@ -65,6 +65,8 @@ export const serviceCallInputSchema = z.object({
   // 예약 경로(BOOKING_CHANNEL 코드)와 메신저의 예약자명(1018 스펙 D1).
   bookingChannelCode: optionalCode,
   bookerName: optionalText,
+  // 예약 경로가 메신저일 때 그 메신저의 예약자 ID(2026-10-23 고객 요청). 전화·워크인은 쓰지 않는다.
+  bookerHandle: optionalText,
   confirmationCode: optionalCode,
   /** serviceCallId가 있으면(기존 행 저장) 서비스가 필수로 요구한다. */
   expectedUpdatedAt: z.preprocess(emptyToNull, savedVersion.nullable().optional())

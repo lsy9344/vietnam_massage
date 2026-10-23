@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PanelSection } from "@/app/(erp)/settlements/settlement-parts";
+import { tableCellClassName, tableShrinkClassName } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/client";
 import type { MessageKey } from "@/lib/i18n/types";
 import type { CustomerDto, ServiceCallFormOptions, ServiceCallOption, ServiceCallRowDto } from "@/modules/calls/service-call-service";
@@ -29,6 +31,7 @@ const FIELD_LABEL_KEY: Record<EditableCallField, MessageKey> = {
   visitRequest: "calls.column.visitRequest",
   bookingChannelCode: "calls.column.bookingChannel",
   bookerName: "calls.column.bookerName",
+  bookerHandle: "calls.column.bookerHandle",
   confirmationCode: "calls.column.confirmation"
 };
 
@@ -84,6 +87,8 @@ function fieldValue(
       return optionLabel(options.bookingChannels, draft.bookingChannelCode) ?? "-";
     case "bookerName":
       return draft.bookerName ?? "-";
+    case "bookerHandle":
+      return draft.bookerHandle ?? "-";
     case "confirmationCode":
       return optionLabel(options.confirmationCodes, draft.confirmationCode) ?? "-";
   }
@@ -131,7 +136,9 @@ export type CallConflictCompareData = {
   onReloadLatest: () => void;
 };
 
-const cellClassName = "border-b border-border px-3 py-2 align-top";
+const cellClassName = cn(tableCellClassName, "align-top");
+/** 칸 이름처럼 짧고 고정된 열: 폭을 내용에 맞춰 줄여 남는 폭이 값(내 초안·최신) 열로 가게 한다. */
+const shrinkCellClassName = cn(cellClassName, tableShrinkClassName);
 
 /**
  * 비교 표와 "다시 반영하고 저장"·"최신 내용으로 다시 불러오기" 버튼. CallConflictCompare(비모달 구역)의
@@ -180,7 +187,7 @@ export function CallConflictCompareFields({
         <table className="w-full min-w-[28rem] border-collapse text-left text-sm">
           <thead className="bg-readonly text-xs font-semibold text-muted">
             <tr>
-              <th className={cellClassName} scope="col">
+              <th className={shrinkCellClassName} scope="col">
                 {t("calls.conflict.columnField")}
               </th>
               <th className={cellClassName} scope="col">
@@ -189,7 +196,7 @@ export function CallConflictCompareFields({
               <th className={cellClassName} scope="col">
                 {t("calls.conflict.columnLatest")}
               </th>
-              <th className={`${cellClassName} text-center`} scope="col">
+              <th className={cn(shrinkCellClassName, "text-center")} scope="col">
                 {t("calls.conflict.useMine")}
               </th>
             </tr>
@@ -197,12 +204,12 @@ export function CallConflictCompareFields({
           <tbody>
             {rows.map((row) => (
               <tr className={row.differs ? "bg-readonly [box-shadow:inset_3px_0_0_var(--warning)]" : undefined} key={row.field}>
-                <th className={`${cellClassName} font-semibold text-foreground`} scope="row">
+                <th className={cn(shrinkCellClassName, "font-semibold text-foreground")} scope="row">
                   {row.label}
                 </th>
                 <td className={cellClassName}>{row.mine}</td>
                 <td className={cellClassName}>{row.latest}</td>
-                <td className={`${cellClassName} text-center`}>
+                <td className={cn(shrinkCellClassName, "text-center")}>
                   {row.differs ? (
                     <label className="inline-flex min-h-11 items-center justify-center gap-2">
                       <span className="sr-only">{t("calls.conflict.useMineAria", { field: row.label })}</span>

@@ -132,13 +132,13 @@ function RevenueTrendCard({ report, locale }: ViewProps) {
               <th className={headCellClassName} scope="col">
                 {t("dashboard.reports.revenue.column.date")}
               </th>
-              <th className={cn(headCellClassName, "text-right")} scope="col">
+              <th className={cn(headCellClassName, "whitespace-nowrap text-right")} scope="col">
                 {t("dashboard.reports.revenue.column.payment")}
               </th>
-              <th className={cn(headCellClassName, "text-right")} scope="col">
+              <th className={cn(headCellClassName, "whitespace-nowrap text-right")} scope="col">
                 {t("dashboard.reports.revenue.column.netSales")}
               </th>
-              <th className={cn(headCellClassName, "text-right")} scope="col">
+              <th className={cn(headCellClassName, "whitespace-nowrap text-right")} scope="col">
                 {t("dashboard.reports.revenue.column.completed")}
               </th>
             </tr>
@@ -335,10 +335,10 @@ function NoShowCancelCard({ report, locale }: ViewProps) {
               <th className={headCellClassName} scope="col">
                 {t("dashboard.reports.noShow.column.date")}
               </th>
-              <th className={cn(headCellClassName, "text-right")} scope="col">
+              <th className={cn(headCellClassName, "whitespace-nowrap text-right")} scope="col">
                 {t("dashboard.reports.noShow.column.noShow")}
               </th>
-              <th className={cn(headCellClassName, "text-right")} scope="col">
+              <th className={cn(headCellClassName, "whitespace-nowrap text-right")} scope="col">
                 {t("dashboard.reports.noShow.column.canceled")}
               </th>
             </tr>

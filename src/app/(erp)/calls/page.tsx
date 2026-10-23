@@ -28,7 +28,6 @@ import { NoOperatingMonthNotice } from "@/components/shell/no-operating-month-no
 import { ScreenToolbar } from "@/components/shell/screen-toolbar";
 import { clampDateToOperatingMonth, selectedOperatingMonthFor } from "@/lib/operating-date";
 import { getServerTranslator } from "@/lib/i18n/server";
-import { linkToScreen } from "@/lib/routes";
 
 type CallsPageSearchParams = {
   operatingMonthId?: string;
@@ -160,7 +159,6 @@ export default async function CallsPage({ searchParams }: { searchParams: Promis
         <LedgerStatusCounts
           action={<QuickBookingTrigger isLocked={isLocked} large />}
           counts={ledgerStatusCountsFromRows(rows)}
-          customerHref={linkToScreen(account.role, "/customers", { operatingMonthId: selectedMonth.id, date: serviceDate })}
           locale={locale}
         />
         {/* Therapist 현황 줄(1018 스펙 D17). 출근 상태·콜 수·지금 상태는 빠른 예약에 넘기는 가능 판정 행에 이미 있다. */}

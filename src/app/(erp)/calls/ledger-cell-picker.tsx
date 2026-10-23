@@ -3,6 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { measureListboxPosition } from "@/app/(erp)/calls/call-ledger-fields";
+import { measureScrollbarWidth } from "@/components/ui/listbox-position";
 import { cn } from "@/lib/utils";
 
 export type LedgerPickOption = {
@@ -14,16 +15,29 @@ export type LedgerPickOption = {
   muted?: boolean;
 };
 
-const LIST_WIDTH = 256; // px
+type Position = { left: number; top?: number; bottom?: number; width?: number; maxHeight: number };
 
-type Position = { left: number; top?: number; bottom?: number; maxHeight: number };
+/** 목록이 폭에 묶이지 않았을 때의 안쪽 폭(가장 긴 항목과 부가 정보). 잠깐 폭을 풀어 재고 되돌린다(그리기 전이라 보이지 않는다). */
+function naturalWidth(list: HTMLElement) {
+  const previous = list.style.width;
+  list.style.width = "max-content";
+  const width = list.scrollWidth;
+  list.style.width = previous;
+  return width;
+}
 
-// 위아래 자리는 편집 패널의 선택칸과 같이 잰다(measureListboxPosition). 목록이 칸보다 넓으므로 오른쪽 끝을 넘지
-// 않게 왼쪽으로 당긴다.
-function measure(anchor: HTMLElement): Position {
-  const { left, top, maxHeight, placement } = measureListboxPosition(anchor);
-  const clamped = Math.max(8, Math.min(left, window.innerWidth - LIST_WIDTH - 8));
-  return placement === "above" ? { left: clamped, bottom: window.innerHeight - top, maxHeight } : { left: clamped, top, maxHeight };
+// 위아래 자리와 폭은 공용 선택 칸과 같이 잰다(measureListboxPosition, design.md 6.4): 폭은 칸 폭 이상이고 가장 긴 항목에
+// 맞춰 넓어지며(최대 24rem) 화면 가장자리 안쪽으로 밀어 넣는다. 예전에는 256px로 고정해 "301 호실"·"없음" 같은 짧은 목록의
+// 오른쪽이 비었다(2026-10-23 "드롭다운 여백"). 목록이 아직 없으면(처음 열 때) 폭을 주지 않아 내용만큼 펴진 뒤 다시 잰다.
+// contentWidth는 그렇게 잰 안쪽 폭이다. 스크롤·화면 크기에 따라 다시 잴 때는 잰 값을 그대로 써 레이아웃을 매번 다시 계산하지 않는다.
+function measure(anchor: HTMLElement, list: HTMLElement | null, contentWidth?: number): Position {
+  const { left, top, width, maxHeight, placement } = measureListboxPosition(
+    anchor,
+    list?.scrollHeight ?? 0,
+    list ? { width: contentWidth ?? naturalWidth(list), scrollbar: measureScrollbarWidth() } : undefined
+  );
+  const across = list ? { left, width } : { left };
+  return placement === "above" ? { ...across, bottom: window.innerHeight - top, maxHeight } : { ...across, top, maxHeight };
 }
 
 /**
@@ -71,17 +85,21 @@ export function LedgerCellPicker({
   const [position, setPosition] = useState<Position | null>(null);
   const items = options ?? [];
 
+  // 열린 뒤(그리고 목록을 다 받아 항목이 바뀐 뒤) 내용 폭·높이로 다시 잰다. 열려 있는 동안 칸이 움직이면 따라간다.
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) return;
     const anchor = triggerRef.current;
-    const update = () => setPosition(measure(anchor));
+    const list = listRef.current;
+    const contentWidth = list ? naturalWidth(list) : undefined;
+    const update = () => setPosition(measure(anchor, list, contentWidth));
+    update();
     window.addEventListener("scroll", update, true);
     window.addEventListener("resize", update);
     return () => {
       window.removeEventListener("scroll", update, true);
       window.removeEventListener("resize", update);
     };
-  }, [open]);
+  }, [open, options, failedText]);
 
   useEffect(() => {
     if (open) listRef.current?.focus();
@@ -153,7 +171,7 @@ export function LedgerCellPicker({
           onOpen?.();
           setMoved(null);
           // 처음 그릴 때 이미 제자리여야 포커스가 들어간다(숨긴 목록에는 포커스가 가지 않는다).
-          if (triggerRef.current) setPosition(measure(triggerRef.current));
+          if (triggerRef.current) setPosition(measure(triggerRef.current, null));
           setOpen(true);
         }}
         ref={triggerRef}
@@ -182,7 +200,7 @@ export function LedgerCellPicker({
               onKeyDown={handleKeyDown}
               ref={listRef}
               role="listbox"
-              style={position ? { ...position, width: LIST_WIDTH } : { visibility: "hidden", top: 0, left: 0, width: LIST_WIDTH }}
+              style={position ?? { visibility: "hidden", top: 0, left: 0 }}
               tabIndex={-1}
             >
               {options === null ? <li className="flex min-h-11 items-center px-3 text-muted">{loadingText}</li> : null}

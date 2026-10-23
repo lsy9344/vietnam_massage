@@ -68,6 +68,8 @@ export function OpsDailyView({
     {
       key: "payoutConfirmation",
       header: t("settlements.ops.column.payoutConfirmation"),
+      // 바로 앞 열(지급액)이 오른쪽 정렬 금액이라 붙어 보이지 않게 띈다.
+      padStart: true,
       cell: (row) => <PayoutStatusIndicator status={row.payoutConfirmation.status} t={t} />
     }
   ];

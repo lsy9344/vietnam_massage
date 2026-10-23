@@ -20,6 +20,7 @@ test("Esc cancel restores the last server draft without changing object identity
     visitRequest: null,
     bookingChannelCode: null,
     bookerName: null,
+    bookerHandle: null,
     confirmationCode: null
   };
   const editedDraft: Record<EditableCallField, string | null> = {

@@ -10,6 +10,7 @@ import type { CallPanelFocusRequest } from "@/app/(erp)/calls/call-edit-panel";
 import { ledgerListKey } from "@/app/(erp)/calls/ledger-flow";
 import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
 import { QuickBookingPanel } from "@/app/(erp)/calls/quick-booking-panel";
+import { requestQuickBookingOpen } from "@/app/(erp)/calls/quick-booking-party-join";
 import { CALL_PARAM, replaceAddressParam, THERAPIST_FILTER_PARAM } from "@/lib/ledger-address";
 import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
 
@@ -148,7 +149,8 @@ export function CallLedgerWorkspace({
           const trigger = firstVisible<HTMLButtonElement>("[data-quick-booking-trigger]");
           if (!trigger || trigger.disabled || trigger.offsetParent === null) return;
           event.preventDefault();
-          trigger.click();
+          // 머리 버튼은 패널이 보이면 닫는다(2026-10-23). N은 늘 여는 키라 버튼을 누르지 않고 열기만 요청한다.
+          requestQuickBookingOpen();
           return;
         }
         case "next":
@@ -212,6 +214,7 @@ export function CallLedgerWorkspace({
         <CallLedgerList
           customers={customers}
           isLocked={isLocked}
+          onClose={() => select(null)}
           onOpen={open}
           onSelectRelated={(id) => {
             select(id, { scrollToRow: true });

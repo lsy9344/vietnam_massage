@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { SidePanel } from "@/components/ui/panel";
+import { tableCellClassName, tableShrinkClassName } from "@/components/ui/table";
 import { EMPLOYEE_PARAM } from "@/app/(erp)/settlements/settlement-view-model";
 import { useT } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
@@ -15,12 +16,14 @@ export type EmployeeRow = {
 export type ComparisonColumn<Row> = {
   key: string;
   header: string;
-  /** 숫자·금액 열은 오른쪽 정렬이다. */
+  /** 숫자·금액 열은 오른쪽 정렬이고 내용 폭대로 줄어든다(남는 폭은 글자 열들이 나눠 갖는다, design.md 6.6). */
   numeric?: boolean;
+  /** 바로 앞 열이 오른쪽 정렬 숫자라, 숫자와 이 글자가 한 칸처럼 붙어 보이지 않게 왼쪽을 더 띈다. */
+  padStart?: boolean;
   cell: (row: Row) => ReactNode;
 };
 
-const cellClassName = "border-b border-border px-3 py-2 align-middle";
+const cellClassName = cn(tableCellClassName, "align-middle");
 
 /**
  * 고른 직원을 화면 상태로 들고, 주소는 history.replaceState로만 맞춘다. 행을 옮겨 다닐 때마다
@@ -89,7 +92,16 @@ export function EmployeeWorkspace<Row extends EmployeeRow>({
                   {employeeHeader}
                 </th>
                 {columns.map((column) => (
-                  <th className={cn(cellClassName, column.numeric && "text-right")} key={column.key} scope="col">
+                  <th
+                    className={cn(
+                      cellClassName,
+                      column.numeric && tableShrinkClassName,
+                      column.numeric && "text-right",
+                      column.padStart && "pl-8"
+                    )}
+                    key={column.key}
+                    scope="col"
+                  >
                     {column.header}
                   </th>
                 ))}
@@ -120,7 +132,14 @@ export function EmployeeWorkspace<Row extends EmployeeRow>({
                       </button>
                     </th>
                     {columns.map((column) => (
-                      <td className={cn(cellClassName, column.numeric && "text-right")} key={column.key}>
+                      <td
+                        className={cn(
+                          cellClassName,
+                          column.numeric && "whitespace-nowrap text-right tabular-nums",
+                          column.padStart && "pl-8"
+                        )}
+                        key={column.key}
+                      >
                         {column.cell(row)}
                       </td>
                     ))}

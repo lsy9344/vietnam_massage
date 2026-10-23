@@ -237,6 +237,7 @@ export function BookingChannelIcon({
     norm.includes("웨이신") ||
     norm.includes("wechat") ||
     norm.includes("weixin") ||
+    norm.includes("微信") ||
     /\bwx\b/.test(norm)
   ) {
     return <WeChatChannelIcon className={className} />;
@@ -277,6 +278,7 @@ export function detectChannelKeyword(text: string): BookingChannelType | null {
     norm.includes("웨이신") ||
     norm.includes("wechat") ||
     norm.includes("weixin") ||
+    norm.includes("微信") ||
     /\bwx\b/.test(norm)
   ) {
     return "위챗";

@@ -112,24 +112,41 @@ const selectedPartyBarClass = "data-[selected=true]:[box-shadow:inset_4px_0_0_va
 /**
  * 원장 줄의 칸 배치(2026-10-22 고객 시안 111.png). 모든 줄이 같은 열을 써서 예약자·코스 글자 길이가 달라도 칸이 줄마다 같은
  * 자리에 오고, 넘치는 글자는 칸 안에서 말줄임으로 자른다. 열은 화면 폭이 아니라 원장 폭(컨테이너 쿼리)을 따른다.
- * - 80rem 이상: 예약시간 · 상태 · 고객 정보 · 코스 · 관리사 · 객실 · 입장 · 종료 · 결제 · 할인 · 조치 한 줄(머리 줄과 같은 열).
+ * - 81rem 이상: 예약시간 · 상태 · 고객 정보 · 코스 · 관리사 · 객실 · 입장 · 종료 · 결제 · 할인 · 조치 한 줄(머리 줄과 같은 열),
+ *   칸 사이에 세로줄을 긋는 표다(2026-10-23 고객 요청).
+ *   81rem은 열의 최소 폭 합계(칸 사이 간격 10px×10, 줄 안쪽 여백 0.5rem×2 포함)라 1366px 화면에서도 한 줄이다. 최소 폭은 가장
+ *   긴 베트남어로 쟀다(2026-10-23): 상태 칩 "Đang sử dụng ▾"와 결제 칩 "Chưa xác nhận ▾"가 133px라 8.5rem, 입장·종료 칸은
+ *   시각 칸(LedgerTimeEdit)이 들어가는 5.5rem이다.
+ *   남는 폭은 시안의 비율대로 모든 칸이 나눠 갖는다. 예전에는 선택 칸 열만 늘어나 ▾ 칸 안이 비었다(2026-10-23 "드롭다운 여백").
  * - 48rem 이상(편집·빠른 예약 패널이 열려 좁아졌을 때): 윗줄 예약시간 · 상태 · 입장 · 종료 · 조치, 아랫줄 고객 · 코스 · 관리사 · 객실 · 결제 · 할인.
  * - 그보다 좁으면(휴대폰 읽기 전용) 세 칸씩 여러 줄.
  */
 const ledgerWideColumns =
-  "@7xl:grid-cols-[4rem_7.5rem_minmax(9rem,1.2fr)_minmax(7rem,1fr)_minmax(9rem,1.2fr)_minmax(5.5rem,0.6fr)_5rem_5.5rem_6.5rem_minmax(6rem,0.7fr)_8.5rem]";
+  "@[81rem]:grid-cols-[3.5rem_minmax(8.5rem,0.7fr)_minmax(8.5rem,1.3fr)_minmax(5.75rem,1.1fr)_minmax(8rem,1.1fr)_minmax(6rem,0.75fr)_minmax(5.5rem,0.55fr)_minmax(5.5rem,0.55fr)_minmax(8.5rem,0.7fr)_minmax(6rem,0.8fr)_minmax(8rem,0.7fr)]";
+/** 한 줄 11칸의 칸 사이 간격과 줄 안쪽 여백. 머리 줄과 원장 줄이 같아야 열이 맞는다. */
+const ledgerWideSpacing = "@[81rem]:gap-x-2.5 @[81rem]:px-2";
 const ledgerLineAreas = [
   "grid-cols-3 [grid-template-areas:'time_status_status'_'entry_end_end'_'who_who_who'_'course_course_course'_'therapist_room_pay'_'discount_action_action']",
   "@3xl:grid-cols-[4rem_minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,0.7fr)_minmax(0,0.9fr)_minmax(0,0.9fr)]",
   "@3xl:[grid-template-areas:'time_status_entry_end_._action_action'_'who_who_course_therapist_room_pay_discount']",
   ledgerWideColumns,
-  "@7xl:[grid-template-areas:'time_status_who_course_therapist_room_entry_end_pay_discount_action']"
+  "@[81rem]:[grid-template-areas:'time_status_who_course_therapist_room_entry_end_pay_discount_action']"
 ].join(" ");
-/** 원장 줄 안의 선택 칸: 칸 폭을 채우고 ▾를 오른쪽 끝에 둔다(시안의 드롭다운 칸). */
-const pickerFieldClass = "h-10 w-full justify-between rounded-sm bg-surface px-3";
+/**
+ * 한 줄 11칸일 때 칸은 줄 높이를 다 채우고(위아래 여백은 줄이 아니라 칸이 갖는다), 둘째 칸부터 왼쪽 간격 가운데에 1px 세로줄을
+ * 긋는다(2026-10-23 고객 요청, 시안 111.png). 두 줄·휴대폰 배치에는 선이 없다. 칸 안의 내용은 각 칸이 가운데로 세운다.
+ */
+const wideCellClass = "@[81rem]:self-stretch @[81rem]:py-2.5";
+const wideDividerClass =
+  "relative @[81rem]:before:absolute @[81rem]:before:inset-y-0 @[81rem]:before:-left-[5px] @[81rem]:before:w-px @[81rem]:before:bg-border @[81rem]:before:content-['']";
+const lineCellClass = `${wideCellClass} ${wideDividerClass}`;
+/**
+ * 원장 줄 안의 선택 칸: 칸 폭을 채우고 ▾를 오른쪽 끝에 둔다(시안의 드롭다운 칸). 아주 넓은 화면에서도 글자 옆이 비지 않게 12rem에서
+ * 멈춘다(2026-10-23 "드롭다운 여백").
+ */
+const pickerFieldClass = "h-10 w-full max-w-48 justify-between rounded-sm bg-surface px-2.5";
 /** 조치 칸의 입장·종료 버튼(시안 111.png): 칸 폭을 채우는 채운 알약. */
 const actionButtonClass = "w-full max-w-36 justify-center";
-
 type TherapistSlot = "therapist1Id" | "therapist2Id";
 
 /** 예약시각부터 예약 종료까지의 분(코스 길이). 자정을 넘으면 다음 날로 센다. */
@@ -140,6 +157,8 @@ function clockSpanMinutes(from: string, to: string) {
 /**
  * 윗줄의 입장·종료 시각(1018 스펙 D11): 누르면 그 자리에서 분 단위 시각 칸이 되고, Enter나 칸을 떠나면 저장한다.
  * Esc는 고치지 않고 닫는다(원장 키보드에 넘기지 않는다). 비우거나 같은 값이면 저장하지 않는다.
+ * 시각 칸은 칸 폭 안에 들어간다(2026-10-22: 112px 고정이라 5rem 입장 칸을 넘어 종료 칸을 덮었다). 12시간제 브라우저의
+ * "오전 11:05"가 가장 넓은데, 시계 아이콘을 숨기고 좌우 여백을 줄이면 86px라 5.5rem(88px) 칸에 들어간다.
  */
 function LedgerTimeEdit({
   children,
@@ -179,7 +198,7 @@ function LedgerTimeEdit({
     <input
       aria-label={label}
       autoFocus
-      className={inputFieldClassName({ className: "h-8 w-28 px-2" })}
+      className={inputFieldClassName({ className: "h-8 w-full min-w-0 px-1 [&::-webkit-calendar-picker-indicator]:hidden" })}
       defaultValue={value}
       onBlur={(event) => finish(event.currentTarget.value)}
       onKeyDown={(event) => {
@@ -208,6 +227,7 @@ function CallLedgerLine({
   dayStart,
   hidden,
   isLocked,
+  onClose,
   onOpen,
   onPartyOutcome,
   onSelectRelated,
@@ -229,6 +249,8 @@ function CallLedgerLine({
   dayStart: string;
   hidden: boolean;
   isLocked: boolean;
+  /** 열린 편집 패널을 닫는다. 골라 둔 줄을 다시 누르면 닫힌다(2026-10-23 고객 요청). */
+  onClose: () => void;
   onOpen: OpenCall;
   /** 일행 동작을 받아 저장한 결과를 머리 줄에 알린다(실패한 손님과 이유를 머리 줄이 보인다). */
   onPartyOutcome: (callId: string, outcome: PartyCommandOutcome) => void;
@@ -482,13 +504,15 @@ function CallLedgerLine({
     options.bookingChannels,
     customers
   );
-  // 고객 칸 둘째 줄: 이은 고객의 전화번호, 없으면 예약 경로 이름.
-  const contact = (draft.customerId ? customers.find((customer) => customer.id === draft.customerId)?.phone : null) || who.channel;
+  // 고객 칸 둘째 줄(고객 시안 111.png): 메신저 예약자 ID(2026-10-23), 없으면 이은 고객의 전화번호, 그것도 없으면 예약 경로 이름.
+  const contact =
+    draft.bookerHandle?.trim() || (draft.customerId ? customers.find((customer) => customer.id === draft.customerId)?.phone : null) || who.channel;
   const roomText = roomLabel ?? t("calls.placeholder.roomUnassigned");
   const paid = Boolean(draft.paymentMethodCode);
   const paymentLabel = paid ? t("calls.line.paid") : t("calls.line.unpaid");
   const paymentMethodLabel = draft.paymentMethodCode ? optionLabel(options.paymentMethods, draft.paymentMethodCode) : null;
-  const paymentBadge = <StatusIndicator label={paymentLabel} size="sm" tone={paid ? "success" : "warning"} />;
+  // 칩은 머리("결제") 아래라 짧게 쓴다(2026-10-23). 다 쓴 말은 칸의 title과 목록 항목에 남는다.
+  const paymentBadge = <StatusIndicator label={paid ? paymentLabel : t("calls.line.unpaidShort")} size="sm" tone={paid ? "success" : "warning"} />;
   const discountText = draft.discountTypeCode ? optionLabel(options.discountTypes, draft.discountTypeCode) || draft.discountTypeCode : t("calls.line.noDiscount");
   const statusChip = statusKey ? (
     <CallStatusChip label={statusLabel} size="sm" status={statusKey} />
@@ -496,12 +520,14 @@ function CallLedgerLine({
     <StatusIndicator label={statusLabel} size="sm" tone="neutral" />
   );
   const timeEditClass = "text-base font-semibold";
+  // 줄(과 예약시간 버튼)을 누르면 편집 패널이 열리고, 열린 줄을 다시 누르면 닫힌다(2026-10-23 고객 요청).
+  const toggle = () => (selected ? onClose() : onOpen(row.id));
 
   return (
     // 편집 패널이 열린 줄은 선택된 줄 모양이다(design.md 6.6). 버튼이 아닌 자리를 눌러도 패널이 열린다.
     // 원장 폭이 넓으면 시안(111.png)처럼 한 줄 11칸, 좁으면 두 줄, 휴대폰 폭이면 여러 줄로 같은 칸을 접는다(ledgerLineAreas).
     <li
-      className={`grid cursor-pointer items-center gap-x-2 gap-y-1.5 border-b border-border px-3 py-2.5 transition-colors hover:bg-readonly data-[selected=true]:bg-readonly ${ledgerLineAreas} ${party ? `${partyBarClass} ${selectedPartyBarClass}` : selectedBarClass}`}
+      className={`grid cursor-pointer items-center gap-x-2 gap-y-1.5 border-b border-border px-3 py-2.5 transition-colors hover:bg-readonly data-[selected=true]:bg-readonly @[81rem]:py-0 ${ledgerWideSpacing} ${ledgerLineAreas} ${party ? `${partyBarClass} ${selectedPartyBarClass}` : selectedBarClass}`}
       data-ledger-line=""
       data-ledger-party-member={party ? (row.partyId ?? undefined) : undefined}
       data-selected={selected}
@@ -512,21 +538,22 @@ function CallLedgerLine({
         // 칸 안 목록은 body에 그리지만 React 이벤트는 이 줄까지 올라온다. 줄 안에서 누른 것만 패널을 연다.
         if (!event.currentTarget.contains(event.target as Node)) return;
         if ((event.target as HTMLElement).closest("button, a, input")) return;
-        onOpen(row.id);
+        toggle();
       }}
     >
-      <span className="[grid-area:time]" data-line-cell="time">
+      <span className={`flex items-center [grid-area:time] ${wideCellClass}`} data-line-cell="time">
         <button
           aria-label={t("calls.detail.rowAria", { time })}
           className="min-h-11 rounded-sm px-1 text-lg font-semibold text-foreground [font-variant-numeric:tabular-nums] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-secondary"
+          aria-expanded={selected}
           data-call-open={row.id}
-          onClick={() => onOpen(row.id)}
+          onClick={toggle}
           type="button"
         >
           {time}
         </button>
       </span>
-      <span className="flex min-w-0 flex-wrap items-center gap-1 [grid-area:status]" data-line-cell="status">
+      <span className={`flex min-w-0 flex-wrap content-center items-center gap-1 [grid-area:status] ${lineCellClass}`} data-line-cell="status">
         {readOnly ? (
           statusChip
         ) : (
@@ -564,7 +591,7 @@ function CallLedgerLine({
           {saveStatus === "saving" || isSaveHeld(saveStatus) ? <SaveStatus locale={locale} state={saveStatus === "saving" ? "saving" : saveStatus} /> : null}
         </span>
       </span>
-      <span className="flex w-full min-w-0 items-center gap-2.5 [grid-area:who]" data-line-cell="who" data-line-who="">
+      <span className={`flex w-full min-w-0 items-center gap-2.5 [grid-area:who] ${lineCellClass}`} data-line-cell="who" data-line-who="">
         <BookingChannelIcon channel={draft.bookingChannelCode ?? who.channel ?? ""} className="h-9 w-9 shrink-0" />
         <span className="grid min-w-0">
           <span className="flex min-w-0 items-baseline gap-1.5">
@@ -580,7 +607,7 @@ function CallLedgerLine({
           ) : null}
         </span>
       </span>
-      <span className="grid w-full min-w-0 [grid-area:course]" data-line-cell="course" title={courseLabel}>
+      <span className={`grid w-full min-w-0 content-center [grid-area:course] ${lineCellClass}`} data-line-cell="course" title={courseLabel}>
         <span className="truncate text-sm font-semibold text-foreground">
           {courseMinutes ? t("calls.line.courseMinutes", { code: courseCode, minutes: courseMinutes }) : courseCode}
         </span>
@@ -598,7 +625,7 @@ function CallLedgerLine({
       ) : (
         <>
           {/* 두 번째 Therapist가 있으면 시안처럼 두 칸을 나란히 둔다. */}
-          <span className="flex w-full min-w-0 gap-1 [grid-area:therapist]" data-line-cell="therapist">
+          <span className={`flex w-full min-w-0 items-center gap-1 [grid-area:therapist] ${lineCellClass}`} data-line-cell="therapist">
             <LedgerCellPicker
               className={therapist2Text ? `${pickerFieldClass} px-2` : pickerFieldClass}
               disabled={isLocked}
@@ -634,7 +661,7 @@ function CallLedgerLine({
               </LedgerCellPicker>
             ) : null}
           </span>
-          <span className="flex w-full min-w-0 [grid-area:room]" data-line-cell="room">
+          <span className={`flex w-full min-w-0 items-center [grid-area:room] ${lineCellClass}`} data-line-cell="room">
             <LedgerCellPicker
               className={pickerFieldClass}
               disabled={isLocked}
@@ -652,7 +679,11 @@ function CallLedgerLine({
           </span>
         </>
       )}
-      <span className="grid min-w-0 text-sm text-foreground [font-variant-numeric:tabular-nums] [grid-area:entry]" data-line-cell="entry" data-line-clock={end.kind}>
+      <span
+        className={`grid min-w-0 content-center justify-items-start text-sm text-foreground [font-variant-numeric:tabular-nums] [grid-area:entry] ${lineCellClass}`}
+        data-line-cell="entry"
+        data-line-clock={end.kind}
+      >
         {end.kind === "notEntered" ? (
           <span className="w-fit whitespace-nowrap rounded-full bg-danger-soft px-2.5 py-1 text-xs font-semibold text-danger">{t("calls.line.notEntered")}</span>
         ) : draft.actualEntryTime ? (
@@ -668,13 +699,17 @@ function CallLedgerLine({
         ) : (
           <span className="text-muted">-</span>
         )}
-        {late ? <StatusIndicator label={t("calls.line.late", { minutes: late })} size="sm" tone="warning" /> : null}
+        {/* 늦음 칩("Trễ 30 phút")은 입장 칸이 최소 폭(5.5rem)일 때 한 줄로 두면 종료 칸을 덮어서, 칸 안에서 줄을 바꾼다. */}
+        {late ? (
+          <StatusIndicator className="max-w-full whitespace-normal leading-tight" label={t("calls.line.late", { minutes: late })} size="sm" tone="warning" />
+        ) : null}
       </span>
-      <span className="min-w-0 text-sm text-foreground [font-variant-numeric:tabular-nums] [grid-area:end]" data-line-cell="end">
+      <span className={`flex min-w-0 items-center text-sm text-foreground [font-variant-numeric:tabular-nums] [grid-area:end] ${lineCellClass}`} data-line-cell="end">
         {end.kind === "notEntered" ? (
           <span className="text-muted">-</span>
         ) : end.kind === "expected" ? (
-          <span className="whitespace-nowrap text-faint">{t("calls.line.expectedEnd", { time: end.time })}</span>
+          // 베트남어 "Dự kiến 13:00"은 5.5rem 칸을 넘을 수 있어 옆 칸을 덮지 않고 두 줄로 접는다.
+          <span className="text-faint">{t("calls.line.expectedEnd", { time: end.time })}</span>
         ) : (
           <LedgerTimeEdit
             disabled={isLocked}
@@ -687,7 +722,11 @@ function CallLedgerLine({
           </LedgerTimeEdit>
         )}
       </span>
-      <span className="grid min-w-0 justify-items-start [grid-area:pay]" data-line-cell="pay" title={paymentMethodLabel ? `${paymentLabel} · ${paymentMethodLabel}` : paymentLabel}>
+      <span
+        className={`grid min-w-0 content-center justify-items-start [grid-area:pay] ${lineCellClass}`}
+        data-line-cell="pay"
+        title={paymentMethodLabel ? `${paymentLabel} · ${paymentMethodLabel}` : paymentLabel}
+      >
         {readOnly ? (
           paymentBadge
         ) : (
@@ -707,9 +746,9 @@ function CallLedgerLine({
             {paymentBadge}
           </LedgerCellPicker>
         )}
-        {paymentMethodLabel ? <span className="px-1 text-xs text-muted">{paymentMethodLabel}</span> : null}
+        {paymentMethodLabel ? <span className="max-w-full truncate px-1 text-xs text-muted">{paymentMethodLabel}</span> : null}
       </span>
-      <span className="flex w-full min-w-0 [grid-area:discount]" data-line-cell="discount">
+      <span className={`flex w-full min-w-0 items-center [grid-area:discount] ${lineCellClass}`} data-line-cell="discount">
         {readOnly ? (
           <span className="min-w-0 truncate text-sm" title={discountText}>
             {discountText}
@@ -731,7 +770,7 @@ function CallLedgerLine({
           </LedgerCellPicker>
         )}
       </span>
-      <span className="flex w-full min-w-0 justify-end [grid-area:action]" data-line-cell="action">
+      <span className={`flex w-full min-w-0 items-center justify-end [grid-area:action] ${lineCellClass}`} data-line-cell="action">
         {/* 휴대폰 폭은 읽기 전용이라(티켓 26) 주 버튼을 두지 않는다. */}
         {readOnly || !action ? null : action === "enter" ? (
           <Button
@@ -1091,6 +1130,7 @@ export function CallLedgerList({
   clock: clockOverride,
   customers = [],
   isLocked,
+  onClose = () => {},
   onOpen = () => {},
   onSelectRelated = () => {},
   options,
@@ -1108,6 +1148,8 @@ export function CallLedgerList({
   phoneWidth?: boolean;
   customers?: CustomerDto[];
   isLocked: boolean;
+  /** 열린 편집 패널을 닫는다(고른 줄을 다시 누를 때). */
+  onClose?: () => void;
   onOpen?: OpenCall;
   /** 패널의 관련 콜로 옮길 때. 그 줄이 보이게 스크롤한다. */
   onSelectRelated?: (callId: string) => void;
@@ -1168,6 +1210,7 @@ export function CallLedgerList({
       hidden={hidden || filteredOut(row)}
       isLocked={isLocked}
       key={row.id}
+      onClose={onClose}
       onOpen={onOpen}
       onPartyOutcome={reportPartyOutcome}
       onSelectRelated={onSelectRelated}
@@ -1217,6 +1260,7 @@ export function CallLedgerList({
                 customerMemo: lead.customerMemo,
                 bookingChannelCode: lead.bookingChannelCode,
                 bookerName: lead.bookerName,
+                bookerHandle: lead.bookerHandle,
                 size
               })
             }
@@ -1297,11 +1341,13 @@ export function CallLedgerList({
       {rows.length > 0 ? (
         <div
           aria-hidden="true"
-          className={`hidden gap-x-2 border-b border-border bg-readonly px-3 py-2 text-xs font-semibold text-muted @7xl:grid ${ledgerWideColumns}`}
+          className={`hidden border-b border-border bg-readonly text-xs font-semibold text-muted @[81rem]:grid ${ledgerWideColumns} ${ledgerWideSpacing}`}
           data-ledger-head=""
         >
-          {LEDGER_HEAD_KEYS.map((key) => (
-            <span key={key}>{t(key)}</span>
+          {LEDGER_HEAD_KEYS.map((key, index) => (
+            <span className={index === 0 ? "py-2" : `py-2 ${wideDividerClass}`} key={key}>
+              {t(key)}
+            </span>
           ))}
         </div>
       ) : null}

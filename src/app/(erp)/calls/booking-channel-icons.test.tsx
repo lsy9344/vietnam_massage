@@ -132,6 +132,13 @@ describe("BookingChannelIcon and customer info symbols", () => {
     assert.equal(parsedWalkin.channel, "워크인");
   });
 
+  it("recognizes 微信 (Chinese for WeChat) like wechat/위챗(2026-10-23 고객 요청)", () => {
+    const html = renderToStaticMarkup(<BookingChannelIcon channel="微信" className="w-7 h-7" />);
+    assert.match(html, /<title>위챗<\/title>/);
+    const parsed = parseCustomerCallInfo({ customerMemo: "微信 Zhang @zhang_spa" });
+    assert.equal(parsed.channel, "위챗");
+  });
+
   it("parseCustomerCallInfo handles bullet separator format like HH · 텔레 HH", () => {
     const parsed = parseCustomerCallInfo({ customerMemo: "HH · 텔레 HH" });
     assert.equal(parsed.channel, "텔레그램");

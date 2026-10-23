@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { StatusIndicator, type StatusTone } from "@/components/ui/status-indicator";
+import { tableCellClassName, tableShrinkClassName } from "@/components/ui/table";
 import { t } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
 import { formatDateTime, formatNumber } from "@/lib/i18n/format";
@@ -9,7 +10,7 @@ import { cn } from "@/lib/utils";
  * 기준정보 화면들의 같은 모양(design.md 6.6 표, 6.8 상태 칩). 서버 페이지와 클라이언트 작업면 양쪽에서 쓴다.
  */
 
-export const masterCellClassName = "border-b border-border px-3 py-2 align-middle";
+export const masterCellClassName = cn(tableCellClassName, "align-middle");
 
 export function masterDateTime(locale: Locale, value: string) {
   return formatDateTime(locale, value, { dateStyle: "short", timeStyle: "short" });
@@ -41,16 +42,21 @@ export function MasterTable({
 }
 
 // 머리글은 줄을 바꾸지 않는다. 좁으면 표 상자만 가로로 스크롤한다(베트남어 머리글이 서너 줄로 꺾이지 않게).
-export function HeadCell({ numeric, children }: { numeric?: boolean; children: ReactNode }) {
+// numeric·shrink 칸은 폭을 내용에 맞춰 줄인다. 남는 폭은 줄이지 않은 글자 열들이 나눠 갖는다(design.md 6.6).
+export function HeadCell({ numeric, shrink, children }: { numeric?: boolean; shrink?: boolean; children: ReactNode }) {
   return (
-    <th className={cn(masterCellClassName, "whitespace-nowrap", numeric && "text-right")} scope="col">
+    <th className={cn(masterCellClassName, "whitespace-nowrap", (numeric || shrink) && tableShrinkClassName, numeric && "text-right")} scope="col">
       {children}
     </th>
   );
 }
 
 export function Cell({ numeric, muted, nowrap, children }: { numeric?: boolean; muted?: boolean; nowrap?: boolean; children: ReactNode }) {
-  return <td className={cn(masterCellClassName, numeric && "text-right", muted && "text-muted", nowrap && "whitespace-nowrap")}>{children}</td>;
+  return (
+    <td className={cn(masterCellClassName, numeric && "whitespace-nowrap text-right tabular-nums", muted && "text-muted", nowrap && "whitespace-nowrap")}>
+      {children}
+    </td>
+  );
 }
 
 /** 구역 제목 한 줄: 제목, 건수, 오른쪽 끝의 보조 행동(예: 코드 추가). */

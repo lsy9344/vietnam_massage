@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  bookingChannelTakesHandle,
   guestFieldErrors,
   initialQuickBookingState,
   quickBookingGuestFieldKey,
@@ -47,9 +48,25 @@ describe("quick booking: two steps (1018 스펙 D19)", () => {
     assert.equal(quickBookingStepOfField(quickBookingGuestFieldKey(2, "therapist2Id")), "conditions");
     assert.equal(quickBookingStepOfField("guests"), "conditions");
     assert.equal(quickBookingStepOfField("bookerName"), "customer");
+    assert.equal(quickBookingStepOfField("bookerHandle"), "customer");
     assert.equal(quickBookingStepOfField("bookingChannelCode"), "customer");
     assert.equal(quickBookingStepOfField("visitRequest"), "customer");
     assert.equal(quickBookingStepOfField("newCustomer"), "customer");
+  });
+});
+
+describe("quick booking: which booking channels take a messenger ID (2026-10-23 고객 요청)", () => {
+  it("takes an ID for every messenger channel, including a custom one added later", () => {
+    for (const code of ["TELEGRAM", "KAKAOTALK", "WHATSAPP", "ZALO", "WECHAT", "OTHER", "LINE"]) {
+      assert.equal(bookingChannelTakesHandle(code), true, code);
+    }
+  });
+
+  it("does not take an ID for phone, walk-in, or no channel at all", () => {
+    assert.equal(bookingChannelTakesHandle("PHONE"), false);
+    assert.equal(bookingChannelTakesHandle("WALK_IN"), false);
+    assert.equal(bookingChannelTakesHandle(null), false);
+    assert.equal(bookingChannelTakesHandle(undefined), false);
   });
 });
 
@@ -169,6 +186,28 @@ describe("quick booking: saving (1018 스펙 D21–D22)", () => {
     assert.equal(request.visitRequest, "창가 자리");
   });
 
+  it("sends the messenger ID only when the booking channel takes one, trimmed", () => {
+    const state = run(
+      fresh(),
+      { type: "edit", changes: { bookingChannelCode: "ZALO", bookerName: "Nguyen", bookerHandle: " @nguyen88 " } },
+      { type: "addGuest", guest: c90 },
+      { type: "submit" }
+    );
+    assert.equal(state.save.inFlight!.bookerHandle, "@nguyen88");
+  });
+
+  it("sends a null messenger ID for phone, walk-in, and no channel, even if an ID was typed before switching away", () => {
+    for (const bookingChannelCode of ["PHONE", "WALK_IN", null]) {
+      const state = run(
+        fresh(),
+        { type: "edit", changes: { bookingChannelCode, bookerName: "손님", bookerHandle: "@stale" } },
+        { type: "addGuest", guest: c90 },
+        { type: "submit" }
+      );
+      assert.equal(state.save.inFlight!.bookerHandle, null, String(bookingChannelCode));
+    }
+  });
+
   it("creates a new customer named after the booker when no existing customer was chosen", () => {
     const state = run(fresh(), { type: "edit", changes: { bookerName: "홍길동" } }, { type: "addGuest", guest: c90 }, { type: "submit" });
     assert.deepEqual(state.save.inFlight!.newCustomer, { name: "홍길동", phone: null, memo: null, preferenceNote: null });
@@ -261,6 +300,7 @@ describe("quick booking: one more guest for a party (스펙 D14, 티켓 04)", ()
     customerMemo: "정 대표 일행",
     bookingChannelCode: null,
     bookerName: null,
+    bookerHandle: null,
     size: 3
   };
 
@@ -294,16 +334,20 @@ describe("quick booking: one more guest for a party (스펙 D14, 티켓 04)", ()
   });
 
   describe("only at the party's time (1018 스펙 D29)", () => {
-    const telegram = { ...join, bookingChannelCode: "TELEGRAM", bookerName: "정 대표" };
+    const telegram = { ...join, bookingChannelCode: "TELEGRAM", bookerName: "정 대표", bookerHandle: "@jungdp" };
 
-    it("carries the party's channel and booker name, and joins the party at the party's time", () => {
+    it("carries the party's channel, booker name, and messenger ID, and joins the party at the party's time", () => {
       const joined = run(fresh(), { type: "joinParty", join: telegram, nextRequestId: "request-2" });
-      assert.deepEqual([joined.save.draft.bookingChannelCode, joined.save.draft.bookerName], ["TELEGRAM", "정 대표"]);
+      assert.deepEqual(
+        [joined.save.draft.bookingChannelCode, joined.save.draft.bookerName, joined.save.draft.bookerHandle],
+        ["TELEGRAM", "정 대표", "@jungdp"]
+      );
       const submitted = run(joined, { type: "addGuest", guest: c90 }, { type: "submit" });
       assert.equal(submitted.save.inFlight!.partyId, "party-jung");
+      assert.equal(submitted.save.inFlight!.bookerHandle, "@jungdp");
     });
 
-    it("saves a guest moved to another time as a separate booking that keeps only the channel and booker name", () => {
+    it("saves a guest moved to another time as a separate booking that keeps only the channel, booker name, and messenger ID", () => {
       const moved = run(
         fresh(),
         { type: "joinParty", join: telegram, nextRequestId: "request-2" },
@@ -311,10 +355,10 @@ describe("quick booking: one more guest for a party (스펙 D14, 티켓 04)", ()
         { type: "addGuest", guest: c90 },
         { type: "submit" }
       );
-      const { partyId, startTime, bookingChannelCode, bookerName, customerMemo } = moved.save.inFlight!;
+      const { partyId, startTime, bookingChannelCode, bookerName, bookerHandle, customerMemo } = moved.save.inFlight!;
       assert.deepEqual(
-        { partyId: partyId ?? null, startTime, bookingChannelCode, bookerName, customerMemo },
-        { partyId: null, startTime: "12:00", bookingChannelCode: "TELEGRAM", bookerName: "정 대표", customerMemo: "정 대표" }
+        { partyId: partyId ?? null, startTime, bookingChannelCode, bookerName, bookerHandle, customerMemo },
+        { partyId: null, startTime: "12:00", bookingChannelCode: "TELEGRAM", bookerName: "정 대표", bookerHandle: "@jungdp", customerMemo: "정 대표" }
       );
     });
 

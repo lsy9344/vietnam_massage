@@ -68,6 +68,7 @@ function ledgerRow(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDt
     visitRequest: null,
     bookingChannelCode: null,
     bookerName: null,
+    bookerHandle: null,
     confirmationCode: null,
     partyId: null,
     partyPosition: null,
@@ -281,10 +282,40 @@ describe("two-line ledger (1018 ticket 02)", () => {
     for (const part of ["텔레그램", "홍길동", "누루60", "Therapist 1", "101 호실", "결제완료", "현금", "없음"]) assert.ok(inUse.includes(part), part);
     assert.match(cell(line(html, "in-use-13"), "who"), /<svg[^>]*aria-label="텔레그램"/);
     assert.doesNotMatch(inUse, /옛 메모/);
-    assert.match(text(cell(line(html, "reserved-12"), "who", "pay")), /예약 손님[\s\S]*결제 미확인/);
+    assert.match(text(cell(line(html, "reserved-12"), "who", "pay")), /예약 손님[\s\S]*미확인/);
     const unassigned = text(cell(line(html, "reserved-15"), "therapist", "room"));
     assert.match(unassigned, /미지명/);
     assert.match(unassigned, /미배정/);
+  });
+
+  // 2026-10-23: 메신저로 받은 예약은 고객 칸 둘째 줄에 그 메신저 ID를 보인다(고객 시안 111.png의 @jihoon123). ID가 없으면 전과 같이 경로 이름이다.
+  it("shows the booker's messenger ID on the customer cell's second line, else the channel name", () => {
+    const html = renderList([
+      ledgerRow({ id: "with-id", startTime: "12:00", bookingChannelCode: "TELEGRAM", bookerName: "지훈", bookerHandle: "@jihoon123" }),
+      ledgerRow({ id: "without-id", startTime: "13:00", bookingChannelCode: "TELEGRAM", bookerName: "민수" })
+    ]);
+    // 앞의 "텔레그램"은 경로 기호의 이름(title)이다. 둘째 줄은 이름 뒤에 온다.
+    assert.match(text(cell(line(html, "with-id"), "who")), /지훈@jihoon123$/);
+    assert.match(text(cell(line(html, "without-id"), "who")), /민수텔레그램$/);
+  });
+
+  // 2026-10-23: 결제 칸에 "결제 미확인"·"Chưa xác nhận thanh toán"을 다 쓰면 칸 밖으로 넘치거나 잘렸다. 머리가 이미 "결제"라
+  // 칩은 짧게 쓰고(고객 시안 111.png의 "미확인"·"결제완료"), 다 쓴 말은 칸의 title로 남긴다.
+  it("writes the payment chip short under the 결제 head, keeping the full words in the cell's title", () => {
+    // 보이는 글자만(▲·●·▾ 기호 빼고).
+    const words = (markup: string) => text(markup).replace(/[^\p{L}\p{N} ]/gu, "").trim();
+    const ko = renderList(rows);
+    const unpaid = cell(line(ko, "reserved-12"), "pay");
+    assert.equal(words(unpaid), "미확인");
+    assert.match(unpaid, /title="결제 미확인"/);
+    const paid = cell(line(ko, "in-use-13"), "pay");
+    assert.equal(words(paid), "결제완료현금");
+    assert.match(paid, /title="결제완료 · 현금"/);
+
+    const vi = renderList(rows, { locale: "vi" });
+    const unpaidVi = cell(line(vi, "reserved-12"), "pay");
+    assert.equal(words(unpaidVi), "Chưa xác nhận");
+    assert.match(unpaidVi, /title="Chưa xác nhận thanh toán"/);
   });
 
   it("opens the status, therapist, room and payment lists in place, and locks them in a locked month (1018 spec D6·D12)", () => {
@@ -376,7 +407,7 @@ describe("two-line ledger (1018 ticket 02)", () => {
     assert.match(html, /Hoàn tất · Hủy · Không đến 1 ca/);
     assert.match(line(html, "reserved-12"), />Vào phòng</);
     assert.match(line(html, "in-use-13"), />Kết thúc</);
-    for (const part of ["Chưa vào", "Dự kiến 14:10", "Bây giờ 12:30", "Trễ 30 phút", "Chưa chỉ định", "Đã thanh toán", "Chưa xác nhận thanh toán"]) {
+    for (const part of ["Chưa vào", "Dự kiến 14:10", "Bây giờ 12:30", "Trễ 30 phút", "Chưa chỉ định", "Đã thanh toán", "Chưa xác nhận"]) {
       assert.ok(text(html).includes(part), part);
     }
   });
@@ -528,6 +559,20 @@ describe("call edit panel (ticket 03)", () => {
       "visitRequest",
       "confirmationCode"
     ]);
+  });
+
+  // 2026-10-23: 빠른 예약에서 적은 메신저 ID는 콜 상세에서 고친다(오타가 원장 고객 칸 둘째 줄에 그대로 남지 않게).
+  it("lets the booker's messenger ID be corrected in the booking group, only for a messenger booking or one that has an ID", () => {
+    const wechat = renderPanel(ledgerRow({ bookingChannelCode: "WECHAT", bookerName: "민수", bookerHandle: "minsu88" }));
+    const booking = wechat.slice(wechat.indexOf('aria-label="예약"'), wechat.indexOf('aria-label="입장"'));
+    assert.match(booking, /<input[^>]*data-call-field="bookerHandle"[^>]*value="minsu88"/);
+    assert.match(booking, /예약자 ID/);
+    // 메신저로 바꿔 아직 ID가 없어도 칸이 있다.
+    assert.match(renderPanel(ledgerRow({ bookingChannelCode: "TELEGRAM" })), /data-call-field="bookerHandle"/);
+    // 전화·워크인·경로 없음은 ID 칸이 없다.
+    for (const bookingChannelCode of ["PHONE", "WALK_IN", null]) {
+      assert.doesNotMatch(renderPanel(ledgerRow({ bookingChannelCode })), /data-call-field="bookerHandle"/);
+    }
   });
 
   // 1018 스펙 D12: 결제는 결제수단만 고르고 상태는 바꾸지 않는다. "결제 완료 → 방문완료" 버튼은 없다.

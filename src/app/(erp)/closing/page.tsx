@@ -7,6 +7,8 @@ import { formatBusinessDateTime, formatCurrencyVnd, formatNumber } from "@/lib/i
 import { operatingMonthStatusLabel } from "@/lib/i18n/codes";
 import { resolveDomainErrorMessage, resolveKoreanMessage } from "@/lib/i18n/errors";
 import { settlementBasisText } from "@/lib/i18n/settlement-basis";
+import { tableCellClassName, tableNumberCellClassName, tableShrinkClassName } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import type { Locale } from "@/lib/i18n/config";
 import type { Translator } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n/types";
@@ -348,32 +350,34 @@ function TherapistTable({ locale, t, result }: { locale: Locale; t: Translator; 
       <table className="min-w-[1320px] w-full border-collapse text-sm">
         <thead className="bg-readonly text-left text-xs font-semibold uppercase text-muted">
           <tr>
-            <th className="border-b border-border px-3 py-2">{t("closing.therapist.column.therapist")}</th>
-            <th className="border-b border-border px-3 py-2 text-right">{t("closing.therapist.column.monthlyTotalCalls")}</th>
-            <th className="border-b border-border px-3 py-2 text-right">{t("closing.therapist.column.monthlySettlement")}</th>
-            <th className="border-b border-border px-3 py-2 text-right">{t("closing.therapist.column.fullAttendanceDays")}</th>
-            <th className="border-b border-border px-3 py-2 text-right">{t("closing.therapist.column.fullAttendanceAllowance")}</th>
-            <th className="border-b border-border px-3 py-2">{t("closing.therapist.column.countKing")}</th>
-            <th className="border-b border-border px-3 py-2 text-right">{t("closing.therapist.column.countKingBonus")}</th>
-            <th className="border-b border-border px-3 py-2 text-right">{t("closing.therapist.column.finalPayout")}</th>
-            <th className="border-b border-border px-3 py-2">{t("closing.therapist.column.basis")}</th>
+            <th className={tableCellClassName}>{t("closing.therapist.column.therapist")}</th>
+            <th className={cn(tableCellClassName, tableShrinkClassName, "text-right")}>{t("closing.therapist.column.monthlyTotalCalls")}</th>
+            <th className={cn(tableCellClassName, tableShrinkClassName, "text-right")}>{t("closing.therapist.column.monthlySettlement")}</th>
+            <th className={cn(tableCellClassName, tableShrinkClassName, "text-right")}>{t("closing.therapist.column.fullAttendanceDays")}</th>
+            <th className={cn(tableCellClassName, tableShrinkClassName, "text-right")}>{t("closing.therapist.column.fullAttendanceAllowance")}</th>
+            {/* 바로 앞 열(만근수당)이 오른쪽 정렬 금액이라 붙어 보이지 않게 띈다. */}
+            <th className={cn(tableCellClassName, tableShrinkClassName, "pl-8")}>{t("closing.therapist.column.countKing")}</th>
+            <th className={cn(tableCellClassName, tableShrinkClassName, "text-right")}>{t("closing.therapist.column.countKingBonus")}</th>
+            <th className={cn(tableCellClassName, tableShrinkClassName, "text-right")}>{t("closing.therapist.column.finalPayout")}</th>
+            {/* 바로 앞 열(최종 지급액)이 오른쪽 정렬 금액이라 붙어 보이지 않게 띈다. */}
+            <th className={cn(tableCellClassName, "pl-8")}>{t("closing.therapist.column.basis")}</th>
           </tr>
         </thead>
         <tbody>
           {result.therapists.rows.map((row) => (
             <tr key={row.employeeId} className="border-b border-border last:border-b-0">
-              <td className="px-3 py-2">
+              <td className={tableCellClassName}>
                 <div className="font-semibold text-foreground">{row.displayName}</div>
                 <div className="text-xs text-muted">{row.staffCode}</div>
               </td>
-              <td className="px-3 py-2 text-right tabular-nums">{row.totalCallCount}{t("settlements.countSuffix")}</td>
-              <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(locale, t, row.monthlySettlementAmount)}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{row.fullAttendanceDays === null ? t("closing.therapist.noSource") : `${row.fullAttendanceDays}${t("settlements.daySuffix")}`}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{formatVnd(locale, t, row.fullAttendanceAllowanceAmount)}</td>
-              <td className="px-3 py-2 text-muted">{row.countKingRank ? t("closing.therapist.rank", { rank: row.countKingRank }) : t("closing.therapist.noRank")}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{formatVnd(locale, t, row.countKingBonusAmount)}</td>
-              <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(locale, t, row.finalPayoutAmount)}</td>
-              <td className="px-3 py-2 text-muted">
+              <td className={tableNumberCellClassName}>{row.totalCallCount}{t("settlements.countSuffix")}</td>
+              <td className={cn(tableNumberCellClassName, "font-semibold")}>{formatVnd(locale, t, row.monthlySettlementAmount)}</td>
+              <td className={tableNumberCellClassName}>{row.fullAttendanceDays === null ? t("closing.therapist.noSource") : `${row.fullAttendanceDays}${t("settlements.daySuffix")}`}</td>
+              <td className={tableNumberCellClassName}>{formatVnd(locale, t, row.fullAttendanceAllowanceAmount)}</td>
+              <td className={cn(tableCellClassName, "whitespace-nowrap pl-8 text-muted")}>{row.countKingRank ? t("closing.therapist.rank", { rank: row.countKingRank }) : t("closing.therapist.noRank")}</td>
+              <td className={tableNumberCellClassName}>{formatVnd(locale, t, row.countKingBonusAmount)}</td>
+              <td className={cn(tableNumberCellClassName, "font-semibold")}>{formatVnd(locale, t, row.finalPayoutAmount)}</td>
+              <td className={cn(tableCellClassName, "pl-8 text-muted")}>
                 <div>{fullAttendanceBasisText(locale, t, row)}</div>
                 <div>{countKingBasisText(locale, t, row)}</div>
                 <div>{therapistEvidenceText(t, row)}</div>
@@ -401,26 +405,27 @@ function OperationsTable({ locale, t, result }: { locale: Locale; t: Translator;
       <table className="min-w-[980px] w-full border-collapse text-sm">
         <thead className="bg-readonly text-left text-xs font-semibold uppercase text-muted">
           <tr>
-            <th className="border-b border-border px-3 py-2">{t("closing.operations.column.opsStaff")}</th>
-            <th className="border-b border-border px-3 py-2">{t("closing.operations.column.position")}</th>
-            <th className="border-b border-border px-3 py-2 text-right">{t("closing.operations.column.dailyIncentive")}</th>
-            <th className="border-b border-border px-3 py-2 text-right">{t("closing.operations.column.monthlyIncentive")}</th>
-            <th className="border-b border-border px-3 py-2 text-right">{t("closing.operations.column.opsTotal")}</th>
-            <th className="border-b border-border px-3 py-2">{t("closing.operations.column.basis")}</th>
+            <th className={tableCellClassName}>{t("closing.operations.column.opsStaff")}</th>
+            <th className={cn(tableCellClassName, tableShrinkClassName)}>{t("closing.operations.column.position")}</th>
+            <th className={cn(tableCellClassName, tableShrinkClassName, "text-right")}>{t("closing.operations.column.dailyIncentive")}</th>
+            <th className={cn(tableCellClassName, tableShrinkClassName, "text-right")}>{t("closing.operations.column.monthlyIncentive")}</th>
+            <th className={cn(tableCellClassName, tableShrinkClassName, "text-right")}>{t("closing.operations.column.opsTotal")}</th>
+            {/* 바로 앞 열(운영팀 합계)이 오른쪽 정렬 금액이라 붙어 보이지 않게 띈다. */}
+            <th className={cn(tableCellClassName, "pl-8")}>{t("closing.operations.column.basis")}</th>
           </tr>
         </thead>
         <tbody>
           {result.operations.rows.map((row) => (
             <tr key={row.employeeId} className="border-b border-border last:border-b-0">
-              <td className="px-3 py-2">
+              <td className={tableCellClassName}>
                 <div className="font-semibold text-foreground">{row.displayName}</div>
                 <div className="text-xs text-muted">{row.staffCode}</div>
               </td>
-              <td className="px-3 py-2">{row.position}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{formatVnd(locale, t, row.dailyIncentiveAmount)}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{formatVnd(locale, t, row.monthlyIncentiveAmount)}</td>
-              <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatVnd(locale, t, row.totalOpsPayoutAmount)}</td>
-              <td className="px-3 py-2 text-muted">
+              <td className={cn(tableCellClassName, "whitespace-nowrap")}>{row.position}</td>
+              <td className={tableNumberCellClassName}>{formatVnd(locale, t, row.dailyIncentiveAmount)}</td>
+              <td className={tableNumberCellClassName}>{formatVnd(locale, t, row.monthlyIncentiveAmount)}</td>
+              <td className={cn(tableNumberCellClassName, "font-semibold")}>{formatVnd(locale, t, row.totalOpsPayoutAmount)}</td>
+              <td className={cn(tableCellClassName, "pl-8 text-muted")}>
                 {t("closing.operations.dailyEvidence", { count: row.dailyEvidenceCount })}
                 {row.monthlyCalculationBasis ? ` / ${settlementBasisText(locale, row.monthlyCalculationBasis)}` : ""}
               </td>

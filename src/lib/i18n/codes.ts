@@ -46,6 +46,7 @@ const SYSTEM_CODE_LABELS: Record<CodeType, Record<string, Record<Locale, string>
     KAKAOTALK: { ko: "카카오톡", vi: "KakaoTalk" },
     WHATSAPP: { ko: "왓츠앱", vi: "WhatsApp" },
     ZALO: { ko: "잘로", vi: "Zalo" },
+    WECHAT: { ko: "위챗", vi: "WeChat" },
     PHONE: { ko: "전화", vi: "Điện thoại" },
     WALK_IN: { ko: "워크인", vi: "Khách vãng lai" },
     OTHER: { ko: "기타", vi: "Khác" }

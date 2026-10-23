@@ -102,7 +102,8 @@ describe("therapist settlement view", () => {
     assert.match(html, /<table aria-label="마사지사별 당일정산"/);
     assert.match(html, /10:00–20:00/);
     assert.match(html, /만근 인정 \(600분\)/);
-    assert.match(html, /<td class="[^"]*text-right"><span class="font-semibold">700,000 VND<\/span><\/td>/);
+    // 숫자 칸은 오른쪽 정렬에 줄바꿈 없이 자릿수가 흔들리지 않는다(design.md 6.6, src/components/ui/table.ts).
+    assert.match(html, /<td class="[^"]*text-right tabular-nums"><span class="font-semibold">700,000 VND<\/span><\/td>/);
     // Thu는 그날 방문완료 담당 콜이 없다: 0 VND가 아니라 근거 없음.
     assert.match(html, /Thu[\s\S]*0건[\s\S]*근거 없음/);
     assert.doesNotMatch(html, /Thu[\s\S]*0 VND/);

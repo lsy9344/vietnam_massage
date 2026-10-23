@@ -55,6 +55,7 @@ function blankDraft(ledger: { operatingMonthId: string; serviceDate: string }): 
     visitRequest: null,
     bookingChannelCode: null,
     bookerName: null,
+    bookerHandle: null,
     confirmationCode: null,
     newCustomer: null
   };

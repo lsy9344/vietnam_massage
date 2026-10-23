@@ -198,7 +198,8 @@ test.describe("Story 2.6 keyboard-first call ledger type-ahead", () => {
     // 보일 때까지 먼저 기다린다.
     const firstRow = page.locator("[data-ledger-line]").first();
     await expect(firstRow).toBeVisible();
-    await firstRow.click();
+    // 줄 가운데는 칸 배치에 따라 ▾ 선택 칸 위일 수 있다(2026-10-23 열 재배치). 버튼이 아닌 코스 칸을 눌러 패널을 연다.
+    await firstRow.locator('[data-line-cell="course"]').click();
     const edit = panel(page);
     await expect(edit).toBeVisible();
 
@@ -230,7 +231,8 @@ test.describe("Story 2.6 keyboard-first call ledger type-ahead", () => {
     // 보일 때까지 먼저 기다린다.
     const firstRow = page.locator("[data-ledger-line]").first();
     await expect(firstRow).toBeVisible();
-    await firstRow.click();
+    // 줄 가운데는 칸 배치에 따라 ▾ 선택 칸 위일 수 있다(2026-10-23 열 재배치). 버튼이 아닌 코스 칸을 눌러 패널을 연다.
+    await firstRow.locator('[data-line-cell="course"]').click();
     const edit = panel(page);
     await expect(edit).toBeVisible();
 

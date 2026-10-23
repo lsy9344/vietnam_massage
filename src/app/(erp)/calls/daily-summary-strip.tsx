@@ -4,6 +4,8 @@ import { t } from "@/lib/i18n";
 import { formatNumber } from "@/lib/i18n/format";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { SummaryCard, SummaryCards } from "@/components/ui/summary-card";
+import { tableCellClassName, tableNumberCellClassName, tableShrinkClassName } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import { calculationErrorMessageKey } from "@/app/(erp)/calls/calculation-status-message";
 import { ledgerCallHref } from "@/lib/ledger-address";
 import type { CalculationWarningCallDto, DailyCallLedgerSummaryDto, TillBalanceDto } from "@/modules/calls/service-call-service";
@@ -11,7 +13,11 @@ import type { CalculationWarningCallDto, DailyCallLedgerSummaryDto, TillBalanceD
 const cardClassName = "rounded-lg border border-border bg-surface p-4";
 const cardTitleClassName = "text-[0.9375rem] font-semibold text-foreground";
 const tableHeadClassName = "bg-readonly text-xs font-semibold text-muted";
-const cellClassName = "border-b border-border px-3 py-2";
+const cellClassName = tableCellClassName;
+/** 숫자 칸: 오른쪽 정렬, 폭을 내용에 맞춰 줄인다. */
+const numberCellClassName = tableNumberCellClassName;
+/** 짧고 고정된 칸(시각·상태): 폭을 내용에 맞춰 줄인다. */
+const shrinkCellClassName = cn(cellClassName, tableShrinkClassName);
 
 // 현금이 모자라면 "부족"을 앞에 붙이고, 계좌는 음수 부호로 둔다. 단위(VND)는 부르는 쪽이 붙인다.
 function balanceAmount(locale: Locale, value: number, kind: "cash" | "bank") {
@@ -125,20 +131,20 @@ export function DailySummaryStrip({
             <thead className={tableHeadClassName}>
               <tr>
                 <th className={cellClassName} scope="col">{t(locale, "calls.summary.course.code")}</th>
-                <th className={`${cellClassName} text-right`} scope="col">{t(locale, "calls.summary.course.completed")}</th>
-                <th className={`${cellClassName} text-right`} scope="col">{t(locale, "calls.summary.course.discountCount")}</th>
+                <th className={numberCellClassName} scope="col">{t(locale, "calls.summary.course.completed")}</th>
+                <th className={numberCellClassName} scope="col">{t(locale, "calls.summary.course.discountCount")}</th>
                 {showTherapistAssignmentCount ? (
-                  <th className={`${cellClassName} text-right`} scope="col">{t(locale, "calls.summary.course.therapistAssignmentCount")}</th>
+                  <th className={numberCellClassName} scope="col">{t(locale, "calls.summary.course.therapistAssignmentCount")}</th>
                 ) : null}
               </tr>
             </thead>
             <tbody>
               {summary.courseSummaries.map((course) => (
                 <tr className="hover:bg-readonly" key={course.courseCode}>
-                  <th className={`${cellClassName} font-semibold text-foreground`} scope="row">{course.courseCode}</th>
-                  <td className={`${cellClassName} text-right`}>{course.completedCount}</td>
-                  <td className={`${cellClassName} text-right`}>{course.discountCount}</td>
-                  {showTherapistAssignmentCount ? <td className={`${cellClassName} text-right`}>{course.therapistAssignmentCount}</td> : null}
+                  <th className={cn(cellClassName, "font-semibold text-foreground")} scope="row">{course.courseCode}</th>
+                  <td className={numberCellClassName}>{course.completedCount}</td>
+                  <td className={numberCellClassName}>{course.discountCount}</td>
+                  {showTherapistAssignmentCount ? <td className={numberCellClassName}>{course.therapistAssignmentCount}</td> : null}
                 </tr>
               ))}
             </tbody>
@@ -162,15 +168,15 @@ function TillTable({ day, locale }: { day: TillBalanceDto; locale: Locale }) {
         <thead className={tableHeadClassName}>
           <tr>
             <th className={cellClassName} scope="col">{t(locale, "calls.cashbook.till.kind")}</th>
-            <th className={`${cellClassName} text-right`} scope="col">{t(locale, "calls.cashbook.till.receipts")}</th>
-            <th className={`${cellClassName} text-right`} scope="col">{t(locale, "calls.cashbook.till.expenses")}</th>
-            <th className={`${cellClassName} text-right`} scope="col">{t(locale, "calls.cashbook.till.balance")}</th>
+            <th className={numberCellClassName} scope="col">{t(locale, "calls.cashbook.till.receipts")}</th>
+            <th className={numberCellClassName} scope="col">{t(locale, "calls.cashbook.till.expenses")}</th>
+            <th className={numberCellClassName} scope="col">{t(locale, "calls.cashbook.till.balance")}</th>
           </tr>
         </thead>
         {periods.map((period) => (
           <tbody key={period.key}>
             <tr>
-              <th className={`${cellClassName} text-xs font-semibold text-muted`} colSpan={4} scope="rowgroup">
+              <th className={cn(cellClassName, "text-xs font-semibold text-muted")} colSpan={4} scope="rowgroup">
                 {period.label}
               </th>
             </tr>
@@ -180,12 +186,12 @@ function TillTable({ day, locale }: { day: TillBalanceDto; locale: Locale }) {
               const value = kind === "cash" ? period.till.cashBalance : period.till.bankBalance;
               return (
                 <tr className="hover:bg-readonly" key={kind}>
-                  <th className={`${cellClassName} font-medium text-foreground`} scope="row">
+                  <th className={cn(cellClassName, "font-medium text-foreground")} scope="row">
                     {t(locale, kind === "cash" ? "calls.summary.cash" : "calls.summary.bank")}
                   </th>
-                  <td className={`${cellClassName} text-right`}>{formatVnd(receipts)}</td>
-                  <td className={`${cellClassName} text-right`}>{formatVnd(expenses)}</td>
-                  <td className={`${cellClassName} text-right font-semibold ${value < 0 ? "text-danger" : "text-foreground"}`}>
+                  <td className={numberCellClassName}>{formatVnd(receipts)}</td>
+                  <td className={numberCellClassName}>{formatVnd(expenses)}</td>
+                  <td className={cn(numberCellClassName, "font-semibold", value < 0 ? "text-danger" : "text-foreground")}>
                     {formatBalance(value, kind)}
                   </td>
                 </tr>
@@ -221,10 +227,10 @@ function CalculationWarnings({
         <table aria-label={t(locale, "calls.cashbook.warnings.listAria")} className="w-full min-w-[36rem] border-collapse text-left text-sm">
           <thead className={tableHeadClassName}>
             <tr>
-              <th className={cellClassName} scope="col">{t(locale, "calls.search.column.time")}</th>
+              <th className={shrinkCellClassName} scope="col">{t(locale, "calls.search.column.time")}</th>
               <th className={cellClassName} scope="col">{t(locale, "calls.column.customerMemo")}</th>
-              <th className={cellClassName} scope="col">{t(locale, "calls.cashbook.warnings.column.status")}</th>
-              <th className={cellClassName} scope="col">
+              <th className={shrinkCellClassName} scope="col">{t(locale, "calls.cashbook.warnings.column.status")}</th>
+              <th className={cn(shrinkCellClassName, "text-right")} scope="col">
                 <span className="sr-only">{t(locale, "calls.cashbook.warnings.open")}</span>
               </th>
             </tr>
@@ -232,10 +238,10 @@ function CalculationWarnings({
           <tbody>
             {warningCalls.map((call) => (
               <tr className="hover:bg-readonly" key={call.serviceCallId}>
-                <td className={cellClassName}>{call.startTime}</td>
+                <td className={shrinkCellClassName}>{call.startTime}</td>
                 <td className={cellClassName}>{call.customerMemo || "—"}</td>
-                <td className={`${cellClassName} text-danger`}>{t(locale, calculationErrorMessageKey(call.calculationStatus))}</td>
-                <td className={`${cellClassName} text-right`}>
+                <td className={cn(shrinkCellClassName, "text-danger")}>{t(locale, calculationErrorMessageKey(call.calculationStatus))}</td>
+                <td className={cn(shrinkCellClassName, "text-right")}>
                   {/* 주소의 call 매개변수로 원장 표의 그 행이 선택되고 콜 상세 패널이 열린다. */}
                   <a className="screen-step" href={ledgerCallHref(call)}>
                     {t(locale, "calls.cashbook.warnings.open")}

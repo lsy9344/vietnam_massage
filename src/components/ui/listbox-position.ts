@@ -3,7 +3,7 @@
  *
  * 목록은 body에 portal로 그린다(모달·패널 안에서 잘리지 않게). 그래서 기준 앵커의 화면 좌표를
  * 직접 잰다. 아래 자리가 모자라면 위로 뒤집고, 높이는 보이는 만큼만 준다.
- * 원장 줄의 칸 안 목록(`ledger-cell-picker.tsx`)도 같은 자리 재기를 쓴다(아래 두 번째 절 참고).
+ * 원장 줄의 칸 안 목록(`ledger-cell-picker.tsx`)도 같은 자리 재기를 쓴다(내용 높이·폭까지 같이 준다).
  */
 
 export type ListboxPosition = {
@@ -47,9 +47,9 @@ export function measureScrollbarWidth(): number {
  *
  * `contentHeight`는 목록이 실제로 그려질 높이(내용 높이)다. 이를 주면 **그려질 높이**로 아래 자리가
  * 충분한지 판단한다(목록은 어차피 240px에서 잘린다). 짧은 목록이 위로 뜨면 위의 내용을 가려 읽기
- * 어렵기 때문이다. 0을 주면(내용을 모름) 자리의 비율로 정한다 — 원장 칸 목록은 이 경로로 돈다.
+ * 어렵기 때문이다. 0을 주면(내용을 모름) 자리의 비율로 정한다 — 목록을 아직 그리지 않은 첫 자리 재기가 이 경로다.
  *
- * `content`를 주면 폭도 내용에 맞춘다(아래 본문). 주지 않으면 폭은 기준 칸 폭 그대로다 — 원장 칸 목록은 이 경로다.
+ * `content`를 주면 폭도 내용에 맞춘다(아래 본문). 주지 않으면 폭은 기준 칸 폭 그대로다.
  */
 export function measureListboxPosition(anchor: HTMLElement, contentHeight = 0, content?: ListboxContent): ListboxPosition {
   const rect = anchor.getBoundingClientRect();

@@ -178,6 +178,7 @@ type ServiceCallRecord = {
   visitRequest: string | null;
   bookingChannelCode?: string | null;
   bookerName?: string | null;
+  bookerHandle?: string | null;
   confirmationCode: string | null;
   partyId?: string | null;
   partyPosition?: number | null;
@@ -341,6 +342,8 @@ export type ServiceCallRowDto = {
   /** 예약 경로(BOOKING_CHANNEL 코드)와 메신저의 예약자명(1018 스펙 D1). */
   bookingChannelCode: string | null;
   bookerName: string | null;
+  /** 예약 경로가 메신저일 때 그 메신저의 예약자 ID(2026-10-23 고객 요청). 전화·워크인은 null이다. */
+  bookerHandle: string | null;
   confirmationCode: string | null;
   /** 일행(스펙 D13, 티켓 02·04). 일행이 아닌 콜은 둘 다 null이다. */
   partyId: string | null;
@@ -946,6 +949,7 @@ async function toRowDto(
     visitRequest: record.visitRequest,
     bookingChannelCode: record.bookingChannelCode ?? null,
     bookerName: record.bookerName ?? null,
+    bookerHandle: record.bookerHandle ?? null,
     confirmationCode: record.confirmationCode,
     partyId: record.partyId ?? null,
     partyPosition: record.partyId ? (record.partyPosition ?? null) : null,
@@ -1195,6 +1199,7 @@ function toAuditSnapshot(record: ServiceCallRecord): AuditJsonSnapshot {
     visitRequest: record.visitRequest,
     bookingChannelCode: record.bookingChannelCode ?? null,
     bookerName: record.bookerName ?? null,
+    bookerHandle: record.bookerHandle ?? null,
     confirmationCode: record.confirmationCode,
     assignments: {
       therapist1Id: assignmentEmployeeId(record, "THERAPIST_1"),
@@ -2470,6 +2475,7 @@ async function writeServiceCallRow(
     visitRequest: input.visitRequest ?? null,
     bookingChannelCode: keptWhenOmitted(input.bookingChannelCode, beforeLinked?.bookingChannelCode),
     bookerName: keptWhenOmitted(input.bookerName, beforeLinked?.bookerName),
+    bookerHandle: keptWhenOmitted(input.bookerHandle, beforeLinked?.bookerHandle),
     confirmationCode: input.confirmationCode ?? null
   };
 
@@ -2582,6 +2588,7 @@ export async function autosaveServiceCallRow(
       visitRequest: parsed.data.visitRequest ?? null,
       bookingChannelCode: keptWhenOmitted(parsed.data.bookingChannelCode, before.bookingChannelCode),
       bookerName: keptWhenOmitted(parsed.data.bookerName, before.bookerName),
+      bookerHandle: keptWhenOmitted(parsed.data.bookerHandle, before.bookerHandle),
       confirmationCode: parsed.data.confirmationCode ?? null
     };
 

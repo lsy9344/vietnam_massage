@@ -57,6 +57,7 @@ function row(overrides: Partial<ServiceCallRowDto> = {}): ServiceCallRowDto {
     visitRequest: null,
     bookingChannelCode: null,
     bookerName: null,
+    bookerHandle: null,
     confirmationCode: null,
     partyId: null,
     partyPosition: null,

@@ -44,6 +44,8 @@ export const defaultCodeItems: DefaultCodeItem[] = [
   { codeType: "BOOKING_CHANNEL", code: "KAKAOTALK", displayName: "카카오톡", sortOrder: 20 },
   { codeType: "BOOKING_CHANNEL", code: "WHATSAPP", displayName: "왓츠앱", sortOrder: 30 },
   { codeType: "BOOKING_CHANNEL", code: "ZALO", displayName: "잘로", sortOrder: 40 },
+  // 위챗(2026-10-23 고객 요청). 기존 DB에는 마이그레이션 20261023120100이 같은 값과 감사를 넣는다.
+  { codeType: "BOOKING_CHANNEL", code: "WECHAT", displayName: "위챗", sortOrder: 45 },
   { codeType: "BOOKING_CHANNEL", code: "PHONE", displayName: "전화", sortOrder: 50 },
   { codeType: "BOOKING_CHANNEL", code: "WALK_IN", displayName: "워크인", sortOrder: 60 },
   { codeType: "BOOKING_CHANNEL", code: "OTHER", displayName: "기타", sortOrder: 70 }

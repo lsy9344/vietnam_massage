@@ -61,6 +61,7 @@ export function draftFromRow(row: ServiceCallRowDto): CallRowDraft {
     visitRequest: row.visitRequest ?? null,
     bookingChannelCode: row.bookingChannelCode ?? null,
     bookerName: row.bookerName ?? null,
+    bookerHandle: row.bookerHandle ?? null,
     confirmationCode: row.confirmationCode ?? null
   };
 }

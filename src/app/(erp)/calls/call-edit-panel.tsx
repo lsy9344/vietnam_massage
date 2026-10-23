@@ -15,6 +15,7 @@ import { ActualEntryField, ClockTimeField, firstFieldError, nullableValue, optio
 import { isSaveHeld, type CallRowDraft, type CallRowSave } from "@/app/(erp)/calls/call-row-save";
 import { CallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
 import { callWarningLabel } from "@/app/(erp)/calls/call-warning-label";
+import { bookingChannelTakesHandle } from "@/app/(erp)/calls/quick-booking-draft";
 import { timeOptionsWith } from "@/app/(erp)/calls/quick-booking-now-slot";
 
 /** 패널을 열며 옮길 자리. 목록의 Enter는 첫 칸이다. token이 바뀔 때마다 다시 옮긴다. */
@@ -199,8 +200,10 @@ export function CallEditPanel({
   return (
     // 칸 안의 Esc는 그 입력을 되돌린 뒤 원장 키보드가 그 줄로 포커스를 옮긴다(스펙 D21). 칸을 떠나며 저장해도
     // 되돌린 초안은 저장된 값과 같아 아무것도 보내지 않는다. 열린 선택 목록의 Esc는 목록만 닫는다(preventDefault).
+    // 코스·Therapist 두 칸 나란히는 패널 폭(컨테이너 쿼리)이 512px 이상일 때만이다. 화면 폭이 아니라 패널 폭을 따르는 건
+    // 원장 옆 패널이 화면의 3분의 1이라, 1280~1600px 화면에서는 한 칸이 164~229px뿐이라 값이 끝까지 안 보였기 때문이다.
     <div
-      className="grid gap-6"
+      className="@container grid gap-6"
       data-call-panel={row.id}
       onKeyDown={(event) => {
         if (event.key === "Escape" && !event.defaultPrevented && (event.target as HTMLElement).closest("[data-call-field]")) onCancel();
@@ -214,12 +217,16 @@ export function CallEditPanel({
       ) : null}
 
       <PanelSection title={t("calls.panel.section.booking")}>
-        <div className="grid gap-3 min-[480px]:grid-cols-2">
+        <div className="grid gap-3 @lg:grid-cols-2">
           <SelectField {...selectProps("startTime", false)} label={t("calls.column.time")} options={timeOptionsWith(options.timeSlots, draft.startTime)} required />
           <SelectField {...selectProps("courseId", false)} label={t("calls.column.course")} options={options.courses} required />
         </div>
         <TextField {...textProps("customerMemo")} label={t("calls.column.customerMemo")} />
-        <div className="grid gap-3 min-[480px]:grid-cols-2">
+        {/* 빠른 예약에서 적은 메신저 ID를 여기서 고친다(2026-10-23 고객 요청). 메신저 예약이거나 이미 ID가 있을 때만 보인다. */}
+        {bookingChannelTakesHandle(draft.bookingChannelCode) || draft.bookerHandle ? (
+          <TextField {...textProps("bookerHandle")} label={t("calls.column.bookerHandle")} />
+        ) : null}
+        <div className="grid gap-3 @lg:grid-cols-2">
           <SelectField {...selectProps("therapist1Id")} label={t("calls.column.therapist1")} options={options.therapists} />
           <SelectField
             {...selectProps("therapist2Id")}

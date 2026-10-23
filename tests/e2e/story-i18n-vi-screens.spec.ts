@@ -130,7 +130,7 @@ test.describe("i18n 업무 화면 베트남어(vi)", () => {
     // 1018 티켓 02: 원장은 예약 하나 = 두 줄 행의 목록이다. 목록 이름, 결제 배지, 칸 안 목록 버튼이 vi.
     const list = page.getByRole("list", { name: "Danh sách sổ cuộc gọi" });
     await expect(list).toBeVisible();
-    await expect(list.locator("[data-ledger-line]").first()).toContainText("thanh toán");
+    await expect(list.locator("[data-ledger-line]").first()).toContainText("Chưa xác nhận");
     await expect(list.getByRole("button", { name: /^Chọn phòng cho cuộc gọi / }).first()).toBeVisible();
     // 표 아래 "새 콜 행 추가"는 없어졌다(새 콜은 빠른 예약으로만 만든다).
     await expect(page.getByRole("button", { name: "Thêm dòng cuộc gọi mới" })).toHaveCount(0);

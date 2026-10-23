@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { inputFieldClassName } from "@/components/ui/input-field";
 import { ListboxSelect } from "@/components/ui/listbox-select";
 import { ModalPanel } from "@/components/ui/panel";
+import { tableCellClassName, tableNumberCellClassName, tableShrinkClassName } from "@/components/ui/table";
 import { useLocale, useT } from "@/lib/i18n/client";
 import { formatNumber } from "@/lib/i18n/format";
+import { cn } from "@/lib/utils";
 import type { DailyExpenseDto, ExpenseMethod, ServiceCallOption } from "@/modules/calls/service-call-service";
 import {
   createDailyExpenseAction,
@@ -144,7 +146,7 @@ function ExpenseRow({
 
   return (
     <tr className="align-top hover:bg-readonly">
-      <td className="border-b border-border px-3 py-2">
+      <td className={tableCellClassName}>
         <form action={updateAction} className="flex min-w-[760px] flex-wrap items-start gap-2" noValidate>
           <input name="dailyExpenseId" type="hidden" value={expense.id} />
           <input name="operatingMonthId" type="hidden" value={operatingMonthId} />
@@ -196,9 +198,10 @@ function ExpenseRow({
           </div>
         </form>
       </td>
-      <td className="border-b border-border px-3 py-2 text-right text-sm font-semibold">{formatNumber(locale, expense.amount)} {t("calls.summary.vndSuffix")}</td>
-      <td className="border-b border-border px-3 py-2 text-sm text-muted">{expense.handledByEmployee.displayName}</td>
-      <td className="border-b border-border px-3 py-2">
+      <td className={cn(tableNumberCellClassName, "font-semibold")}>{formatNumber(locale, expense.amount)} {t("calls.summary.vndSuffix")}</td>
+      {/* 바로 앞 열(표시 금액)이 오른쪽 정렬 숫자라, 담당자 이름이 그 숫자에 붙어 보이지 않게 띈다. */}
+      <td className={cn(tableCellClassName, "pl-8 text-sm text-muted")}>{expense.handledByEmployee.displayName}</td>
+      <td className={tableCellClassName}>
         <form action={deactivateAction} className="grid justify-items-end gap-1">
           <input name="dailyExpenseId" type="hidden" value={expense.id} />
           <Button disabled={disabled} type="submit" variant="secondary">
@@ -340,10 +343,10 @@ export function DailyExpensePanel({
           <table className="w-full min-w-[980px] border-collapse text-left text-sm">
             <thead className="bg-readonly text-xs font-semibold text-muted">
               <tr>
-                <th className="border-b border-border px-3 py-2">{t("calls.expense.column.input")}</th>
-                <th className="border-b border-border px-3 py-2 text-right">{t("calls.expense.column.displayAmount")}</th>
-                <th className="border-b border-border px-3 py-2">{t("calls.expense.column.handler")}</th>
-                <th className="border-b border-border px-3 py-2 text-right">{t("calls.expense.column.actions")}</th>
+                <th className={tableCellClassName}>{t("calls.expense.column.input")}</th>
+                <th className={cn(tableCellClassName, tableShrinkClassName, "text-right")}>{t("calls.expense.column.displayAmount")}</th>
+                <th className={cn(tableCellClassName, "pl-8")}>{t("calls.expense.column.handler")}</th>
+                <th className={cn(tableCellClassName, tableShrinkClassName, "text-right")}>{t("calls.expense.column.actions")}</th>
               </tr>
             </thead>
             <tbody>

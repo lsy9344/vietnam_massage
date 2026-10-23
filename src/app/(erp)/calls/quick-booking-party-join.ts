@@ -51,6 +51,22 @@ export function onQuickBookingOpen(handler: () => void) {
 }
 
 /**
+ * 패널이 보이는 동안 머리 버튼을 다시 누르면 닫는다(2026-10-23 고객 요청: 같은 버튼으로 열고 닫기). 쓰던 입력이 있으면
+ * 패널의 닫기와 같은 안내를 먼저 묻는다.
+ */
+const CLOSE_EVENT = "calls:quick-booking-close";
+
+export function requestQuickBookingClose() {
+  window.dispatchEvent(new CustomEvent(CLOSE_EVENT));
+}
+
+/** 패널이 "빠른 예약 닫기" 요청을 받는다. 돌려준 함수로 그만 받는다. */
+export function onQuickBookingClose(handler: () => void) {
+  window.addEventListener(CLOSE_EVENT, handler);
+  return () => window.removeEventListener(CLOSE_EVENT, handler);
+}
+
+/**
  * 패널이 지금 보이는지. 화면의 주 버튼은 하나라(design.md), 패널이 보이는 동안 머리 버튼은 테두리 버튼이 되고 주 버튼은
  * 패널의 "다음"·"예약 저장"이다. 콜을 열어 편집 패널이 그 자리를 쓰면 빠른 예약은 숨으므로 보이지 않는 것으로 본다.
  * 머리 버튼이 `useSyncExternalStore`로 읽는다.

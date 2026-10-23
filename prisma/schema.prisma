@@ -270,6 +270,8 @@ model ServiceCall {
   // 예약 경로(BOOKING_CHANNEL 코드)와 메신저의 예약자명(1018 스펙 D1). 둘 다 비어도 된다.
   bookingChannelCode String?                   @map("booking_channel_code")
   bookerName        String?                    @map("booker_name")
+  // 예약 경로가 메신저일 때 그 메신저의 예약자 ID(예: @jihoon123). 전화·워크인은 쓰지 않는다.
+  bookerHandle      String?                    @map("booker_handle")
   confirmationCode  String?                    @map("confirmation_code")
   requestId         String?                    @unique @map("request_id")
   // 빠른 예약 일행(스펙 D13, ADR 0007). 일행이 아닌 콜은 둘 다 비어 있다. 순번은 1부터이고 1번이 대표 콜이다.

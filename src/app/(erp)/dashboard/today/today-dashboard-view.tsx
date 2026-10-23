@@ -56,13 +56,13 @@ function TherapistSummaryCard({ summary, locale }: { summary: TherapistSummary; 
                   <th className={headCellClassName} scope="col">
                     {t("dashboard.today.therapist.column.therapist")}
                   </th>
-                  <th className={cn(headCellClassName, "text-right")} scope="col">
+                  <th className={cn(headCellClassName, "whitespace-nowrap text-right")} scope="col">
                     {t("dashboard.today.therapist.column.assignedCalls")}
                   </th>
-                  <th className={cn(headCellClassName, "text-right")} scope="col">
+                  <th className={cn(headCellClassName, "whitespace-nowrap text-right")} scope="col">
                     {t("dashboard.today.therapist.column.settlementTotal")}
                   </th>
-                  <th className={headCellClassName} scope="col">
+                  <th className={cn(headCellClassName, "whitespace-nowrap pl-8")} scope="col">
                     {t("dashboard.today.therapist.column.warning")}
                   </th>
                 </tr>
@@ -77,7 +77,7 @@ function TherapistSummaryCard({ summary, locale }: { summary: TherapistSummary; 
                       {t("dashboard.today.therapist.assignedCount", { count: count(therapist.totalAssignedCallCount) })}
                     </td>
                     <td className={numberCellClassName}>{vnd(therapist.totalCommissionAmount)}</td>
-                    <td className={cellClassName}>
+                    <td className={cn(cellClassName, "whitespace-nowrap pl-8")}>
                       <TherapistWarning locale={locale} t={t} warningCounts={therapist.warningCounts} />
                     </td>
                   </tr>

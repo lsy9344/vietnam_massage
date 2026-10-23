@@ -61,6 +61,7 @@ const discountedCallRow: ServiceCallRowDto = {
   visitRequest: null,
   bookingChannelCode: null,
   bookerName: null,
+  bookerHandle: null,
   confirmationCode: "Y",
   partyId: null,
   partyPosition: null,

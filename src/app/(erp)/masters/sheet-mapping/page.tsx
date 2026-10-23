@@ -190,11 +190,11 @@ function VerificationTable({
         head={
           <>
             <HeadCell>{t("masters.sheetMapping.table.sourceSheet")}</HeadCell>
-            <HeadCell>{t("masters.sheetMapping.table.visibility")}</HeadCell>
+            <HeadCell shrink>{t("masters.sheetMapping.table.visibility")}</HeadCell>
             <HeadCell>{t("masters.sheetMapping.table.related")}</HeadCell>
-            <HeadCell>{t("masters.sheetMapping.table.mappingStatus")}</HeadCell>
-            <HeadCell>{t("masters.sheetMapping.table.calculationStatus")}</HeadCell>
-            <HeadCell>{t("masters.sheetMapping.table.issueStatus")}</HeadCell>
+            <HeadCell shrink>{t("masters.sheetMapping.table.mappingStatus")}</HeadCell>
+            <HeadCell shrink>{t("masters.sheetMapping.table.calculationStatus")}</HeadCell>
+            <HeadCell shrink>{t("masters.sheetMapping.table.issueStatus")}</HeadCell>
             <HeadCell>{t("masters.sheetMapping.table.lastNoteChangedAt")}</HeadCell>
           </>
         }
@@ -267,7 +267,7 @@ function CalculationDetails({ rows, t }: { rows: MigrationVerificationCalculatio
           <>
             <HeadCell>{t("masters.sheetMapping.calcDetails.area")}</HeadCell>
             <HeadCell>{t("masters.sheetMapping.calcDetails.fixture")}</HeadCell>
-            <HeadCell>{t("masters.sheetMapping.calcDetails.status")}</HeadCell>
+            <HeadCell shrink>{t("masters.sheetMapping.calcDetails.status")}</HeadCell>
             <HeadCell>{t("masters.sheetMapping.calcDetails.expected")}</HeadCell>
             <HeadCell>{t("masters.sheetMapping.calcDetails.erpActual")}</HeadCell>
             <HeadCell>{t("masters.sheetMapping.calcDetails.source")}</HeadCell>

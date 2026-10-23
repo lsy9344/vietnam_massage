@@ -210,7 +210,9 @@ test.describe("티켓 03 콜 원장 화면 분리", () => {
     await expect(page.getByRole("button", { name: "고객 등록" })).toHaveCount(0);
     await expect(page.getByLabel("고객 검색")).toHaveCount(0);
 
-    await page.getByRole("link", { name: "고객 화면" }).click();
+    // 원장 머리의 고객 화면 링크는 뺐다(2026-10-23 고객 요청). 고객 화면은 도크의 고객 구역으로 간다.
+    await expect(page.getByRole("link", { name: "고객 화면" })).toHaveCount(0);
+    await page.getByRole("navigation", { name: "업무 이동" }).getByRole("link", { name: "고객", exact: true }).click();
     await expect(page).toHaveURL(/\/customers$/);
     await expect(page.getByRole("heading", { name: "고객", level: 1 })).toBeVisible();
   });

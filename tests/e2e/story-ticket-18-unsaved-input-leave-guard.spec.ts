@@ -218,8 +218,8 @@ test.describe("티켓 18 떠나기 전 안내", () => {
     await expect(page).toHaveURL(panelUrl);
     await expect(line(page, callId).getByText("저장 실패")).toBeVisible();
 
-    // 앱의 다른 화면(고객 화면)으로 이동: 안내가 나오고, 이번에는 나가기를 고른다.
-    await page.getByRole("link", { name: "고객 화면" }).click();
+    // 앱의 다른 화면(도크의 고객 구역)으로 이동: 안내가 나오고, 이번에는 나가기를 고른다.
+    await page.getByRole("navigation", { name: "업무 이동" }).getByRole("link", { name: "고객", exact: true }).click();
     await expect(leaveGuardDialog(page)).toBeVisible();
     await leaveGuardDialog(page).getByRole("button", { name: "나가기" }).click();
     await expect(page).toHaveURL(/\/customers/);

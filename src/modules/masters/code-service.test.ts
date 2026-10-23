@@ -150,9 +150,9 @@ describe("code/time slot service", () => {
     const created = await ensureDefaultCodeItems({ actorId: "admin-1", prismaClient });
     const secondRun = await ensureDefaultCodeItems({ actorId: "admin-1", prismaClient });
 
-    assert.equal(created.length, 27);
+    assert.equal(created.length, 28);
     assert.equal(secondRun.length, 0);
-    assert.equal(prismaClient.auditEvents.length, 27);
+    assert.equal(prismaClient.auditEvents.length, 28);
     assert.deepEqual((await listCodeItems({ codeType: "SERVICE_STATUS", prismaClient })).map((item) => item.displayName), [
       "예약",
       "사용중",
@@ -180,12 +180,13 @@ describe("code/time slot service", () => {
       "결근"
     ]);
     assert.deepEqual((await listCodeItems({ codeType: "CONFIRMATION", prismaClient })).map((item) => item.displayName), ["Y", "N"]);
-    // 예약 경로(1018 스펙 D1). 메신저 넷이 먼저다.
+    // 예약 경로(1018 스펙 D1). 메신저 다섯이 먼저다(위챗은 2026-10-23 고객 요청).
     assert.deepEqual((await listCodeItems({ codeType: "BOOKING_CHANNEL", prismaClient })).map((item) => item.displayName), [
       "텔레그램",
       "카카오톡",
       "왓츠앱",
       "잘로",
+      "위챗",
       "전화",
       "워크인",
       "기타"

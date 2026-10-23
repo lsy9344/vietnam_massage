@@ -1,5 +1,7 @@
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { ScreenState } from "@/components/ui/screen-state";
+import { tableCellClassName } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import type { Translator } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n/config";
 import { therapistAttendanceMethodLabel } from "@/lib/i18n/codes";
@@ -14,7 +16,9 @@ import type {
  * 그려지는 읽기 전용 화면이라 클라이언트 상태가 없다("use client" 없음).
  */
 
-const cellClassName = "border-b border-border px-3 py-2 align-middle";
+const cellClassName = cn(tableCellClassName, "align-middle");
+// 오늘·월간 표는 이름 말고는 모두 짧은 칸이라 줄이지 않는다. 줄이면 남는 폭이 다 이름 열로 가 칸들이 오른쪽 끝에 몰린다.
+const numberCellClassName = cn(cellClassName, "whitespace-nowrap text-right tabular-nums");
 
 function TherapistNameCell({ staffCode, displayName }: { staffCode: string; displayName: string }) {
   return (
@@ -176,8 +180,8 @@ export function TherapistOverviewMonthlySection({ t, overview }: { t: Translator
         <thead className="bg-readonly text-xs font-semibold text-muted">
           <tr>
             {columns.map((label, index) => (
-              <th className={cellClassName} key={label} scope="col">
-                <span className={index === 0 ? "" : "block text-right"}>{label}</span>
+              <th className={index === 0 ? cellClassName : numberCellClassName} key={label} scope="col">
+                <span className={index === 0 ? "" : "block"}>{label}</span>
               </th>
             ))}
           </tr>
@@ -188,28 +192,22 @@ export function TherapistOverviewMonthlySection({ t, overview }: { t: Translator
               <th className={cellClassName} scope="row">
                 <TherapistNameCell displayName={row.displayName} staffCode={row.staffCode} />
               </th>
-              <td className={`${cellClassName} text-right tabular-nums`}>
+              <td className={numberCellClassName}>
                 {row.lateCount > 0
                   ? t("settlements.therapistOverview.monthly.late.value", { count: row.lateCount, minutes: row.lateMinutesTotal })
                   : t("settlements.therapistOverview.monthly.count.value", { count: 0 })}
               </td>
-              <td className={`${cellClassName} text-right tabular-nums`}>
-                {t("settlements.therapistOverview.monthly.count.value", { count: row.absentCount })}
-              </td>
-              <td className={`${cellClassName} text-right tabular-nums`}>
-                {t("settlements.therapistOverview.monthly.count.value", { count: row.clockOutMissingCount })}
-              </td>
-              <td className={`${cellClassName} text-right tabular-nums`}>
+              <td className={numberCellClassName}>{t("settlements.therapistOverview.monthly.count.value", { count: row.absentCount })}</td>
+              <td className={numberCellClassName}>{t("settlements.therapistOverview.monthly.count.value", { count: row.clockOutMissingCount })}</td>
+              <td className={numberCellClassName}>
                 {t("settlements.therapistOverview.monthly.count.value", { count: row.unscheduledAttendanceCount })}
               </td>
-              <td className={`${cellClassName} text-right tabular-nums`}>
-                {t("settlements.therapistOverview.monthly.count.value", { count: row.proxyInputCount })}
-              </td>
-              <td className={`${cellClassName} text-right tabular-nums`}>
+              <td className={numberCellClassName}>{t("settlements.therapistOverview.monthly.count.value", { count: row.proxyInputCount })}</td>
+              <td className={numberCellClassName}>
                 {row.totalCallCount}
                 {t("settlements.callSuffix")}
               </td>
-              <td className={`${cellClassName} text-right font-semibold tabular-nums`}>
+              <td className={cn(numberCellClassName, "font-semibold")}>
                 {t("settlements.therapistOverview.monthly.rank.value", { rank: row.rank })}
               </td>
             </tr>

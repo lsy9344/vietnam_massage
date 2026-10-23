@@ -7,6 +7,7 @@ import { AUDIT_LOG_PARAM, type AuditChangeSummary, type AuditFieldChange } from 
 import { DetailRow } from "@/components/ui/detail-row";
 import { SidePanel } from "@/components/ui/panel";
 import { StatusIndicator } from "@/components/ui/status-indicator";
+import { tableCellClassName, tableShrinkClassName } from "@/components/ui/table";
 import { useT } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 
@@ -29,7 +30,7 @@ export type AuditEntryView = {
   sourceHref: string | null;
 };
 
-const cellClassName = "border-b border-border px-3 py-2 align-top";
+const cellClassName = cn(tableCellClassName, "align-top");
 
 function shorten(text: string, max = 40) {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
@@ -138,7 +139,7 @@ function AuditDetail({ entry }: { entry: AuditEntryView }) {
           <table className="w-full border-collapse text-left text-sm">
             <thead className="bg-readonly text-xs font-semibold text-muted">
               <tr>
-                <th className={cn(cellClassName, "whitespace-nowrap")} scope="col">
+                <th className={cn(cellClassName, tableShrinkClassName)} scope="col">
                   {t("audit.column.field")}
                 </th>
                 <th className={cn(cellClassName, "whitespace-nowrap")} scope="col">
@@ -226,8 +227,8 @@ export function AuditWorkspace({
               <thead className="bg-readonly text-xs font-semibold text-muted">
                 <tr>
                   {[t("audit.column.time"), t("audit.column.actor"), t("audit.column.target"), t("audit.column.change"), t("audit.column.reason")].map(
-                    (label) => (
-                      <th className={cn(cellClassName, "whitespace-nowrap")} key={label} scope="col">
+                    (label, index) => (
+                      <th className={cn(cellClassName, "whitespace-nowrap", index === 0 && "w-px")} key={label} scope="col">
                         {label}
                       </th>
                     )

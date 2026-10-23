@@ -33,6 +33,7 @@ import {
 } from "@/app/(erp)/calls/quick-booking-conditions";
 import {
   QUICK_BOOKING_STEPS,
+  bookingChannelTakesHandle,
   guestFieldErrors,
   initialQuickBookingState,
   isQuickBookingLocked,
@@ -52,9 +53,11 @@ import { TherapistCallCount } from "@/app/(erp)/calls/therapist-call-counts";
 import {
   announceQuickBookingShown,
   isQuickBookingShown,
+  onQuickBookingClose,
   onQuickBookingJoinParty,
   onQuickBookingOpen,
   onQuickBookingWithTherapist,
+  requestQuickBookingClose,
   requestQuickBookingOpen,
   subscribeQuickBookingShown
 } from "@/app/(erp)/calls/quick-booking-party-join";
@@ -147,7 +150,8 @@ function Field({ label, children, error }: { label: string; children: ReactNode;
 
 /**
  * 원장 탭 머리의 주요 버튼(명세 F08). 패널은 원장 옆에 열린다(1018 스펙 D19). 휴대폰 폭에서는 제공하지 않는다(티켓 20).
- * 원장 목록의 N 단축키(티켓 03)가 data-quick-booking-trigger로 이 버튼을 찾아 누른다.
+ * 패널이 보이는 동안 다시 누르면 닫는다(2026-10-23 고객 요청). 원장 목록의 N 단축키(티켓 03)는 data-quick-booking-trigger로
+ * 이 버튼이 쓸 수 있는지만 보고 열기만 한다(call-ledger-workspace.tsx).
  */
 export function QuickBookingTrigger({ isLocked, large = false }: { isLocked: boolean; /** 원장 상태 카드 줄 오른쪽의 큰 버튼(2026-10-22 고객 요청). */ large?: boolean }) {
   const t = useT();
@@ -160,7 +164,7 @@ export function QuickBookingTrigger({ isLocked, large = false }: { isLocked: boo
       className={cn("hidden min-[600px]:inline-flex", large && "h-14 px-8")}
       data-quick-booking-trigger=""
       disabled={isLocked}
-      onClick={requestQuickBookingOpen}
+      onClick={shown ? requestQuickBookingClose : requestQuickBookingOpen}
       type="button"
       variant={shown ? "secondary" : "default"}
     >
@@ -840,6 +844,20 @@ export function CustomerStep({
           value={draft.bookerName ?? ""}
         />
       </Field>
+      {bookingChannelTakesHandle(draft.bookingChannelCode) ? (
+        <Field error={fieldErrors.bookerHandle?.[0] ?? null} label={t("calls.quickBooking.bookerHandle")}>
+          <input
+            autoComplete="off"
+            className={inputFieldClassName({ className: "w-full", invalid: Boolean(fieldErrors.bookerHandle?.[0]) })}
+            disabled={disabled}
+            maxLength={500}
+            onChange={(event) => onEdit("bookerHandle", event.target.value === "" ? null : event.target.value)}
+            placeholder={t("calls.quickBooking.bookerHandlePlaceholder")}
+            type="text"
+            value={draft.bookerHandle ?? ""}
+          />
+        </Field>
+      ) : null}
       {!joining && !linked && bookerCandidates.length > 0 ? (
         <ul aria-label={t("calls.quickBooking.sameNameCustomers")} className="grid gap-1.5">
           {bookerCandidates.map((candidate) => (
@@ -1174,6 +1192,8 @@ export function QuickBookingPanel({
   touchedRef.current = touched;
   const onOpenChangeRef = useRef(onOpenChange);
   onOpenChangeRef.current = onOpenChange;
+  const requestCloseRef = useRef(requestClose);
+  requestCloseRef.current = requestClose;
   useEffect(() => {
     const request = (next: PendingStart | null) => {
       if (isLocked) return;
@@ -1182,10 +1202,12 @@ export function QuickBookingPanel({
       else onOpenChangeRef.current(true);
     };
     const stopOpen = onQuickBookingOpen(() => request(null));
+    const stopClose = onQuickBookingClose(() => requestCloseRef.current());
     const stopJoin = onQuickBookingJoinParty((join) => request({ kind: "join", join }));
     const stopTherapist = onQuickBookingWithTherapist((therapistId) => request({ kind: "therapist", therapistId }));
     return () => {
       stopOpen();
+      stopClose();
       stopJoin();
       stopTherapist();
     };

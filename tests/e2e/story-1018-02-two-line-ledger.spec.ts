@@ -201,7 +201,9 @@ test.describe("1018 티켓 02 두 줄 원장", () => {
     await expect(inUse.locator('[data-line-cell="who"]')).toContainText("T1018 사용 손님");
     await expect(inUse.locator('[data-line-cell="therapist"]')).toContainText("T1018 바쁜 사람");
     await expect(inUse.locator('[data-line-cell="room"]')).toContainText("T1018 사용 객실");
-    await expect(inUse.locator('[data-line-cell="pay"]')).toContainText("결제 미확인");
+    // 결제 칩은 머리("결제") 아래라 짧게 쓴다(2026-10-23). 다 쓴 말은 칸의 title이다.
+    await expect(inUse.locator('[data-line-cell="pay"]')).toContainText("미확인");
+    await expect(inUse.locator('[data-line-cell="pay"]')).toHaveAttribute("title", "결제 미확인");
 
     await expect(line(page, callId).locator('[data-line-cell="entry"]')).toContainText("미입장");
     // 예약자명이 없는 옛 콜은 연결된 고객 이름을 보인다(스펙 D10).
