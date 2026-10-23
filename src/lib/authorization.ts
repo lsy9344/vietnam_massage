@@ -29,11 +29,14 @@ export type SensitivePermission =
   | "audit:read"
   | "migration:write"
   // 티켓 01: 공지·Therapist 현황·내부 메모(10, 11, 12)가 쓰는 관리자 전용 권한(스펙 M18).
-  | "therapist:manage";
+  | "therapist:manage"
+  // 카운터 휴무 등록(2026-10-23 고객 요청): Therapist 휴무·소중한날 휴가를 기간으로 등록·취소한다(카운터·관리자).
+  // 근무표 칸을 휴무로 바꾸지만 payout:write(출퇴근·정산 수정)는 주지 않는다.
+  | "dayoff:write";
 
 const rolePermissions: Record<Role, SensitivePermission[]> = {
-  administrator: ["call:write", "payout:write", "closing:write", "closing:reopen", "employee:write", "audit:read", "migration:write", "therapist:manage"],
-  counter: ["call:write"],
+  administrator: ["call:write", "payout:write", "closing:write", "closing:reopen", "employee:write", "audit:read", "migration:write", "therapist:manage", "dayoff:write"],
+  counter: ["call:write", "dayoff:write"],
   settlement_manager: ["payout:write", "closing:write"],
   waiter: [],
   read_only_viewer: [],

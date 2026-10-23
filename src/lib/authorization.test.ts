@@ -52,6 +52,14 @@ describe("authorization TV board route access", () => {
     assert.equal(canPerform("counter", "closing:write"), false);
     assert.equal(canPerform("counter", "employee:write"), false);
   });
+
+  it("lets the counter register Therapist day-offs (dayoff:write) without payout:write (2026-10-23)", () => {
+    assert.equal(canPerform("counter", "dayoff:write"), true);
+    assert.equal(canPerform("administrator", "dayoff:write"), true);
+    for (const role of ["waiter", "settlement_manager", "read_only_viewer", "therapist"] as const) {
+      assert.equal(canPerform(role, "dayoff:write"), false);
+    }
+  });
 });
 
 describe("authorization ticket 01 therapist role and therapist:manage permission", () => {

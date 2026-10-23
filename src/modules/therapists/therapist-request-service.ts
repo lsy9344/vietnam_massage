@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { businessTodayServiceDate } from "@/lib/operating-date";
 import { listAuditActors, recordAuditEvent } from "@/modules/audit/audit-service";
 import type { AuditJsonSnapshot } from "@/modules/audit/audit-event";
-import { listAssignedServiceCallsForEmployeeOnDate } from "@/modules/calls/service-call-service";
+import { listAssignedServiceCallsForEmployeeOnDate, type AssignedServiceCallSummaryDto } from "@/modules/calls/service-call-service";
 import { isOperatingMonthPayoutLocked } from "@/modules/closing/month-lock-guard";
 import { toIsoDateOnly } from "@/modules/masters/operating-month-service";
 import { assertValidParsedDate, isoDateFieldSchema, listPlannedWorkingDayStatusesForDate } from "@/modules/masters/planned-working-day-query";
@@ -39,7 +39,7 @@ function fromDbKind(kind: string): TherapistRequestKind {
 
 type RequestStatusValue = NonNullable<TherapistAttendanceDayRequestStatus>["status"];
 
-export type TherapistRequestErrorField = "date" | "reason" | "kind";
+export type TherapistRequestErrorField = "date" | "reason" | "kind" | "employeeId" | "startDate" | "endDate";
 
 export class TherapistRequestDomainError extends Error {
   constructor(message: string, public readonly code: string, public readonly field?: TherapistRequestErrorField) {
@@ -750,4 +750,280 @@ export async function rejectTherapistRequest(input: {
   });
 
   return toResolvedAdminListItemDto(client, after, todayServiceDate, input.actorId);
+}
+
+/*
+ * 카운터 휴무 등록(2026-10-23 고객 요청). Therapist가 신청하고 승인함에서 승인하던 휴무(보통 휴무,
+ * 소중한날 휴가)를, 카운터가 텔레그램으로 사유를 확인한 뒤 기간(시작일~종료일)으로 한 번에 등록한다.
+ * 새 표를 만들지 않고 같은 표(TherapistRequest)에 처음부터 "승인" 상태로 날짜마다 한 줄씩 쓴다 —
+ * 그래야 근태 달력·Therapist 현황의 소중한날 휴가 표시(listApprovedSpecialDayOffs)와 근무표 휴무가
+ * 지금 경로 그대로 이어진다. 한 번에 등록한 줄들은 같은 resolvedAt·resolvedByAccountId를 가져 한
+ * 등록으로 묶어 읽는다(listTherapistDayOffRegistrations). 승인함의 정정 요청은 그대로 둔다.
+ */
+
+/** 한 번에 등록할 수 있는 가장 긴 기간(일). 소중한날 휴가는 보통 3–5일이다. */
+export const MAX_DAY_OFF_PERIOD_DAYS = 31;
+
+/** 휴무 등록 목록이 지난 등록을 얼마나 거슬러 보이는지(일). 끝난 지 이보다 오래된 등록은 근무표·감사에서 본다. */
+const DAY_OFF_REGISTRATION_HISTORY_DAYS = 31;
+
+type DayOffKind = Exclude<TherapistRequestKind, "correction">;
+
+export type TherapistDayOffRegistrationDto = {
+  /** 이 등록을 이루는 날짜별 신청 줄. 취소는 이 id들을 한꺼번에 받는다. */
+  requestIds: string[];
+  employeeId: string;
+  displayName: string;
+  staffCode: string;
+  kind: DayOffKind;
+  startDate: string;
+  endDate: string;
+  dayCount: number;
+  reason: string | null;
+  registeredByName: string | null;
+  registeredAt: string | null;
+};
+
+export type TherapistDayOffRegistrationResultDto = {
+  registration: TherapistDayOffRegistrationDto;
+  /** 등록한 날짜들에 그 Therapist가 배정된 콜(노쇼·취소 제외). 등록을 막지 않는 안내용이다(근무표 휴무와 같은 규칙). */
+  impactedCalls: AssignedServiceCallSummaryDto[];
+};
+
+export type TherapistDayOffEmployeeOptionDto = { employeeId: string; displayName: string; staffCode: string };
+
+function addDaysIso(isoDate: string, days: number) {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+function datesBetween(startDate: string, endDate: string) {
+  const dates: string[] = [];
+  for (let current = startDate; current <= endDate && dates.length <= MAX_DAY_OFF_PERIOD_DAYS; current = addDaysIso(current, 1)) {
+    dates.push(current);
+  }
+  return dates;
+}
+
+/** 휴무 등록 화면의 Therapist 고르기 목록. 재직 중인 Therapist 직군만, 근무표와 같은 순서다. */
+export async function listTherapistDayOffEmployeeOptions(options: { prismaClient?: TherapistRequestPrismaClient } = {}): Promise<TherapistDayOffEmployeeOptionDto[]> {
+  const employees = await getClient(options.prismaClient).employee.findMany({
+    where: { isActive: true, employeeGroup: "THERAPIST" },
+    orderBy: [{ sortOrder: "asc" }, { staffCode: "asc" }, { id: "asc" }]
+  });
+  return employees
+    .filter((employee) => employee.isActive && employee.employeeGroup === "THERAPIST")
+    .map((employee) => ({ employeeId: employee.id, displayName: employee.displayName, staffCode: employee.staffCode }));
+}
+
+const registerDayOffPeriodSchema = z.object({
+  employeeId: z.string().trim().min(1, "Therapist를 선택하세요."),
+  kind: z.enum(["day_off", "special_day_off"], { error: "휴가 종류가 올바르지 않습니다." }),
+  startDate: isoDateFieldSchema,
+  endDate: isoDateFieldSchema,
+  reason: z.string().trim().max(500, "사유는 500자 이내로 적어주세요.").nullish()
+});
+
+function toRegistrationDto(rows: RequestRecord[], resolvedByNames: Map<string, { name: string }>): TherapistDayOffRegistrationDto {
+  const sorted = [...rows].sort((a, b) => a.targetDate.getTime() - b.targetDate.getTime());
+  const first = sorted[0];
+  return {
+    requestIds: sorted.map((row) => row.id),
+    employeeId: first.employeeId,
+    displayName: first.employee?.displayName ?? "-",
+    staffCode: first.employee?.staffCode ?? "-",
+    kind: fromDbKind(first.kind) === "special_day_off" ? "special_day_off" : "day_off",
+    startDate: toIsoDateOnly(first.targetDate),
+    endDate: toIsoDateOnly(sorted[sorted.length - 1].targetDate),
+    dayCount: sorted.length,
+    reason: first.reason,
+    registeredByName: first.resolvedByAccountId ? resolvedByNames.get(first.resolvedByAccountId)?.name ?? first.resolvedByAccountId : null,
+    registeredAt: first.resolvedAt ? first.resolvedAt.toISOString() : null
+  };
+}
+
+/**
+ * 카운터가 Therapist 휴무를 기간으로 한 번에 등록한다. 날짜마다 근무표 서비스(setPlannedWorkingDay)로
+ * 그날을 휴무로 저장하고, 신청 표에 "승인" 줄을 남기고, 감사(therapist_request.registered)를 남긴다 —
+ * 모두 한 트랜잭션이다. 근무표처럼 지난 날짜도 받는다(늦게 알게 된 휴가를 기록할 수 있게). 같은
+ * Therapist의 이미 등록된(승인된) 휴무와 날짜가 겹치면 거절한다. 그날 배정된 예약이 있어도 막지 않고
+ * 그 콜들을 돌려줄 뿐이다(근무표 휴무와 같은 규칙).
+ */
+export async function registerTherapistDayOffPeriod(input: {
+  employeeId: string;
+  kind: string;
+  startDate: string;
+  endDate: string;
+  reason?: string | null;
+  actorId: string;
+  now?: Date;
+  prismaClient?: TherapistRequestPrismaClient;
+}): Promise<TherapistDayOffRegistrationResultDto> {
+  const parsed = registerDayOffPeriodSchema.safeParse({
+    employeeId: input.employeeId,
+    kind: input.kind,
+    startDate: input.startDate,
+    endDate: input.endDate,
+    reason: input.reason ?? null
+  });
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const path = issue?.path[0];
+    const field: TherapistRequestErrorField =
+      path === "employeeId" || path === "kind" || path === "reason" || path === "endDate" ? path : "startDate";
+    throw new TherapistRequestDomainError(issue?.message ?? "입력값을 확인하세요.", "INVALID_THERAPIST_REQUEST_INPUT", field);
+  }
+  assertValidParsedDate(parsed.data.startDate);
+  assertValidParsedDate(parsed.data.endDate);
+  const { employeeId, kind, startDate, endDate } = parsed.data;
+  if (endDate < startDate) {
+    throw new TherapistRequestDomainError("종료일은 시작일과 같거나 뒤여야 합니다.", "THERAPIST_DAY_OFF_PERIOD_INVALID", "endDate");
+  }
+  const dates = datesBetween(startDate, endDate);
+  if (dates.length > MAX_DAY_OFF_PERIOD_DAYS) {
+    throw new TherapistRequestDomainError(`한 번에 ${MAX_DAY_OFF_PERIOD_DAYS}일까지 등록할 수 있습니다.`, "THERAPIST_DAY_OFF_PERIOD_TOO_LONG", "endDate");
+  }
+
+  const client = getClient(input.prismaClient);
+  const now = input.now ?? new Date();
+  const employee = await client.employee.findUnique({ where: { id: employeeId } });
+  if (!employee || !employee.isActive || employee.employeeGroup !== "THERAPIST") {
+    throw new TherapistRequestDomainError("재직 중인 Therapist를 찾을 수 없습니다.", "THERAPIST_DAY_OFF_EMPLOYEE_NOT_FOUND", "employeeId");
+  }
+
+  const reason = parsed.data.reason?.trim() || null;
+
+  const { rows, impactedCalls } = await runInTransaction(client, async (tx) => {
+    // 겹침 검사는 트랜잭션 안에서 한다: 두 카운터가 같은 기간을 거의 동시에 등록해도 한쪽만 남게.
+    const existing = await tx.therapistRequest.findMany({
+      where: { employeeId, status: "승인", targetDate: { gte: toDate(startDate), lte: toDate(endDate) } }
+    });
+    const overlapping = existing.filter((row) => isDayOffFamilyKind(row.kind)).map((row) => toIsoDateOnly(row.targetDate)).sort();
+    if (overlapping.length > 0) {
+      throw new TherapistRequestDomainError(
+        `이미 휴무가 등록된 날이 있습니다: ${overlapping.map((date) => date.slice(5)).join(", ")}`,
+        "THERAPIST_DAY_OFF_PERIOD_OVERLAP",
+        "startDate"
+      );
+    }
+
+    const created: RequestRecord[] = [];
+    const calls: AssignedServiceCallSummaryDto[] = [];
+    for (const date of dates) {
+      // setPlannedWorkingDay는 이미 트랜잭션 안의 tx를 받으면 새로 열지 않는다(approveTherapistDayOffRequest와 같다).
+      const cell = await setPlannedWorkingDay({ employeeId, date, status: "휴무", actorId: input.actorId, prismaClient: tx });
+      calls.push(...cell.impactedCalls);
+      const row = await tx.therapistRequest.create({
+        data: {
+          employeeId,
+          kind: toDbKind(kind),
+          targetDate: toDate(date),
+          reason,
+          status: "승인",
+          resolvedByAccountId: input.actorId,
+          resolvedAt: now,
+          createdAt: now
+        },
+        include: requestWithEmployeeInclude
+      });
+      await recordAuditEvent(
+        { actorId: input.actorId, action: "therapist_request.registered", targetType: "therapist_request", targetId: row.id, beforeValue: null, afterValue: requestSnapshot(row) },
+        { prismaClient: tx as any }
+      );
+      created.push(row);
+    }
+    return { rows: created, impactedCalls: calls };
+  });
+
+  const resolvedByNames = await listAuditActors([input.actorId], { prismaClient: client });
+  return { registration: toRegistrationDto(rows, resolvedByNames), impactedCalls };
+}
+
+/**
+ * 휴무 등록 목록. 승인된 휴무 계열 줄을 등록 단위(같은 Therapist·종류·등록 시각·등록자)로 묶는다.
+ * Therapist가 신청해 승인함에서 승인된 지난 줄도 하루짜리 등록으로 함께 보인다. 끝난 지
+ * DAY_OFF_REGISTRATION_HISTORY_DAYS일이 지난 등록은 읽지 않는다. 진행 중·예정이 위에(시작일 순),
+ * 끝난 등록이 아래에(최근 것 먼저) 온다.
+ */
+export async function listTherapistDayOffRegistrations(options: {
+  now?: Date;
+  prismaClient?: TherapistRequestPrismaClient;
+} = {}): Promise<{ upcoming: TherapistDayOffRegistrationDto[]; past: TherapistDayOffRegistrationDto[] }> {
+  const client = getClient(options.prismaClient);
+  const todayServiceDate = businessTodayServiceDate(options.now ?? new Date());
+  const rows = await client.therapistRequest.findMany({
+    where: { status: "승인", targetDate: { gte: toDate(addDaysIso(todayServiceDate, -DAY_OFF_REGISTRATION_HISTORY_DAYS)) } },
+    include: requestWithEmployeeInclude
+  });
+  const dayOffRows = rows.filter((row) => isDayOffFamilyKind(row.kind));
+
+  const groups = new Map<string, RequestRecord[]>();
+  for (const row of dayOffRows) {
+    const key = [row.employeeId, row.kind, row.resolvedAt?.toISOString() ?? row.id, row.resolvedByAccountId ?? ""].join("|");
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+
+  const resolvedByNames = await listAuditActors(
+    dayOffRows.map((row) => row.resolvedByAccountId).filter((id): id is string => id !== null),
+    { prismaClient: client }
+  );
+  const registrations = [...groups.values()].map((group) => toRegistrationDto(group, resolvedByNames));
+
+  return {
+    upcoming: registrations.filter((item) => item.endDate >= todayServiceDate).sort((a, b) => a.startDate.localeCompare(b.startDate)),
+    past: registrations.filter((item) => item.endDate < todayServiceDate).sort((a, b) => b.endDate.localeCompare(a.endDate))
+  };
+}
+
+/**
+ * 휴무 등록 취소. 등록을 이루는 줄을 모두 "취소"로 바꾸고, 그날 근무표가 아직 휴무면 미입력으로
+ * 되돌린다(그사이 근무표에서 근무 예정으로 바꾼 날은 그대로 둔다). 지난 날짜의 등록도 취소할 수 있다
+ * (잘못 등록한 것을 바로잡을 수 있게). 감사는 줄마다 therapist_request.canceled로 남긴다.
+ */
+export async function cancelTherapistDayOffRegistration(input: {
+  requestIds: string[];
+  actorId: string;
+  now?: Date;
+  prismaClient?: TherapistRequestPrismaClient;
+}): Promise<{ canceledCount: number }> {
+  const requestIds = [...new Set(input.requestIds.map((id) => id.trim()).filter(Boolean))];
+  if (requestIds.length === 0 || requestIds.length > MAX_DAY_OFF_PERIOD_DAYS) {
+    throw new TherapistRequestDomainError("휴무 등록을 찾을 수 없습니다.", "THERAPIST_DAY_OFF_REGISTRATION_NOT_FOUND");
+  }
+  const client = getClient(input.prismaClient);
+  const now = input.now ?? new Date();
+
+  const canceledCount = await runInTransaction(client, async (tx) => {
+    const rows: RequestRecord[] = [];
+    for (const id of requestIds) {
+      const row = await tx.therapistRequest.findUnique({ where: { id }, include: requestWithEmployeeInclude });
+      if (!row || !isDayOffFamilyKind(row.kind) || row.employeeId !== (rows[0]?.employeeId ?? row.employeeId)) {
+        throw new TherapistRequestDomainError("휴무 등록을 찾을 수 없습니다.", "THERAPIST_DAY_OFF_REGISTRATION_NOT_FOUND");
+      }
+      if (row.status !== "승인") {
+        throw new TherapistRequestDomainError("이미 취소된 휴무 등록입니다.", "THERAPIST_DAY_OFF_REGISTRATION_ALREADY_CANCELED");
+      }
+      rows.push(row);
+    }
+
+    for (const row of rows) {
+      const updated = await tx.therapistRequest.update({
+        where: { id: row.id },
+        data: { status: "취소", resolvedByAccountId: input.actorId, resolvedAt: now },
+        include: requestWithEmployeeInclude
+      });
+      const date = toIsoDateOnly(row.targetDate);
+      const cell = await tx.plannedWorkingDay.findUnique({ where: { employeeId_workDate: { employeeId: row.employeeId, workDate: row.targetDate } } });
+      if (cell?.planStatus === "휴무") {
+        await setPlannedWorkingDay({ employeeId: row.employeeId, date, status: "미입력", actorId: input.actorId, prismaClient: tx });
+      }
+      await recordAuditEvent(
+        { actorId: input.actorId, action: "therapist_request.canceled", targetType: "therapist_request", targetId: row.id, beforeValue: requestSnapshot(row), afterValue: requestSnapshot(updated) },
+        { prismaClient: tx as any }
+      );
+    }
+    return rows.length;
+  });
+
+  return { canceledCount };
 }

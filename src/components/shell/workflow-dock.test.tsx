@@ -92,7 +92,8 @@ describe("WorkflowDockView", () => {
     ]);
     assert.deepEqual(zoneMenu(html, "현장"), [
       { href: "/rooms?operatingMonthId=m-2026-10&serviceDate=2026-10-14", label: "객실", current: false },
-      { href: "/live?operatingMonthId=m-2026-10&serviceDate=2026-10-14", label: "실시간", current: false }
+      { href: "/live?operatingMonthId=m-2026-10&serviceDate=2026-10-14", label: "실시간", current: false },
+      { href: "/day-offs", label: "휴무 등록", current: false }
     ]);
     assert.deepEqual(
       zoneMenu(html, "보고").map((item) => item.label),

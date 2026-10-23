@@ -1,11 +1,8 @@
 "use client";
 
-import { useActionState, useId, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
 import { DateCapsule } from "@/components/ui/date-capsule";
 import { DetailRow } from "@/components/ui/detail-row";
-import { inputFieldClassName } from "@/components/ui/input-field";
-import { ListboxSelect } from "@/components/ui/listbox-select";
 import { ModalPanel } from "@/components/ui/panel";
 import { ScreenState } from "@/components/ui/screen-state";
 import { StatusIndicator, statusGlyphChar, toneTextClassName, type StatusTone } from "@/components/ui/status-indicator";
@@ -14,8 +11,7 @@ import { useT } from "@/lib/i18n/client";
 import type { Locale } from "@/lib/i18n/config";
 import { intlLocale } from "@/lib/i18n/format";
 import { cn } from "@/lib/utils";
-import { cancelTherapistRequestAction, requestTherapistDayOffAction, type TherapistRequestActionState } from "@/app/therapist/attendance/actions";
-import type { TherapistAttendanceCalendarDayDto, TherapistAttendanceDayRequestStatus } from "@/modules/therapists/therapist-attendance-calendar-service";
+import type { TherapistAttendanceCalendarDayDto } from "@/modules/therapists/therapist-attendance-calendar-service";
 
 type AttendanceBadge = { label: string; tone: StatusTone };
 
@@ -70,116 +66,15 @@ const REQUEST_STATUS_TONE: Record<"pending" | "approved" | "rejected" | "cancele
   expired: "neutral"
 };
 
-// 휴무 계열(보통 휴무, 소중한날 휴가)만 이 조작의 "대기 중" 취소 UI를 받는다(D22, R1·R2). 서비스
-// 쪽의 isDayOffFamilyKind(therapist-request-service.ts)와 같은 구분이다.
-type TherapistRequestKindOfDay = NonNullable<TherapistAttendanceDayRequestStatus>["kind"];
-function isDayOffFamilyRequestKind(kind: TherapistRequestKindOfDay) {
-  return kind === "day_off" || kind === "special_day_off";
-}
-
 /**
- * 휴무 신청·취소(스펙 D22, 티켓 08). 근태 달력(06)의 requestStatus 자리는 날짜만 알므로
- * (TherapistAttendanceDayRequestStatus에 신청 id가 없다) 취소는 날짜로 찾아 처리한다
- * (cancelTherapistDayOffRequestForDate). 정정 요청(09)은 다른 화면(정정 요청 만들기)에서 만든다.
- *
- * R1: 그날 대기 중인 신청이 정정이면(종류를 안 보고 status만 보면 생기던 버그) 이 휴무 취소 UI를
- * 보이지 않는다 — "신청 보냄" 줄은 위 dl의 requestLabel이 이미 종류와 함께 보여준다. R3(사용자
- * 이야기 98)로 같은 날 다른 종류의 대기 중인 신청이 있으면 새 휴무 신청도 서버가 막으므로, 그 사이에는
- * "신청" 버튼도 보이지 않는다.
+ * 휴무 안내(2026-10-23 고객 요청). 휴무·소중한날 휴가는 Therapist가 여기서 신청하지 않고, 텔레그램으로
+ * 카운터에 알리면 카운터가 휴무 등록 화면(/day-offs)에서 기간으로 등록한다. 이미 휴무인
+ * 날에는 보이지 않는다.
  */
-export function DayOffRequestControls({ day }: { day: TherapistAttendanceCalendarDayDto }) {
+export function DayOffCounterNotice({ day }: { day: TherapistAttendanceCalendarDayDto }) {
   const t = useT();
-  const [requestState, requestAction, requestPending] = useActionState<TherapistRequestActionState, FormData>(requestTherapistDayOffAction, null);
-  const [cancelState, cancelAction, cancelPending] = useActionState<TherapistRequestActionState, FormData>(cancelTherapistRequestAction, null);
-  const [formOpen, setFormOpen] = useState(false);
-  const reasonId = useId();
-  const kindId = useId();
-
-  const requestFormError = requestState && !requestState.ok ? requestState.formError : undefined;
-  const cancelFormError = cancelState && !cancelState.ok ? cancelState.formError : undefined;
-
-  const pendingOtherKind = day.requestStatus?.status === "pending" && !isDayOffFamilyRequestKind(day.requestStatus.kind);
-  // 서버가 다시 읽기 전까지는 이 자리에서 지금 한 행동(신청/취소)의 결과를 먼저 보인다. 서버 값은
-  // revalidatePath로 곧 뒤따라온다 — 둘이 어긋나는 사이에도 이 화면만은 맞는 쪽을 보인다.
-  const effectivelyPending =
-    cancelState?.ok ? false : requestState?.ok ? true : day.requestStatus?.status === "pending" && isDayOffFamilyRequestKind(day.requestStatus.kind);
-  // 승인되면 서버가 planStatus를 "휴무"로 바꾸므로, 이 칸은 더는 신청·취소 어느 쪽도 보이지 않는다.
-  const alreadyDayOff = day.planStatus === "휴무";
-
-  if (alreadyDayOff || pendingOtherKind) {
-    return null;
-  }
-
-  if (effectivelyPending) {
-    return (
-      <form action={cancelAction} className="grid gap-2">
-        <input name="date" type="hidden" value={day.date} />
-        <div className="flex items-center justify-between gap-3">
-          <StatusIndicator label={t("therapist.attendance.dayOff.sentNotice")} size="sm" tone="info" />
-          <Button disabled={cancelPending} type="submit" variant="secondary">
-            {cancelPending ? t("therapist.attendance.dayOff.canceling") : t("therapist.attendance.dayOff.cancelButton")}
-          </Button>
-        </div>
-        {cancelFormError ? (
-          <span className="text-sm text-danger" role="alert">
-            {cancelFormError}
-          </span>
-        ) : null}
-      </form>
-    );
-  }
-
-  if (!formOpen) {
-    return (
-      <div>
-        <Button onClick={() => setFormOpen(true)} type="button" variant="secondary">
-          {t("therapist.attendance.dayOff.requestButton")}
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <form action={requestAction} className="grid gap-2 rounded-md border border-border bg-background p-3">
-      <input name="date" type="hidden" value={day.date} />
-      <label className="grid gap-1.5 text-sm font-semibold text-foreground" htmlFor={kindId}>
-        {t("therapist.attendance.dayOff.kindLabel")}
-        <ListboxSelect
-          defaultValue="day_off"
-          disabled={requestPending}
-          id={kindId}
-          name="kind"
-          options={[
-            { value: "day_off", label: t("therapistRequestKind.day_off") },
-            { value: "special_day_off", label: t("therapistRequestKind.special_day_off") }
-          ]}
-        />
-      </label>
-      <label className="grid gap-1.5 text-sm font-semibold text-foreground" htmlFor={reasonId}>
-        {t("therapist.attendance.dayOff.reasonLabel")}
-        <textarea
-          className={inputFieldClassName({ className: "h-auto min-h-20 py-2" })}
-          disabled={requestPending}
-          id={reasonId}
-          name="reason"
-          placeholder={t("therapist.attendance.dayOff.reasonPlaceholder")}
-        />
-      </label>
-      {requestFormError ? (
-        <span className="text-sm text-danger" role="alert">
-          {requestFormError}
-        </span>
-      ) : null}
-      <div className="flex items-center gap-2">
-        <Button disabled={requestPending} type="submit">
-          {requestPending ? t("therapist.attendance.dayOff.submitting") : t("therapist.attendance.dayOff.submit")}
-        </Button>
-        <Button disabled={requestPending} onClick={() => setFormOpen(false)} type="button" variant="ghost">
-          {t("therapist.attendance.dayOff.dismiss")}
-        </Button>
-      </div>
-    </form>
-  );
+  if (day.planStatus === "휴무") return null;
+  return <p className="rounded-md bg-background px-3 py-2.5 text-sm text-muted">{t("therapist.attendance.dayOff.counterNotice")}</p>;
 }
 
 function AttendanceDayDetail({ locale, day, todayServiceDate }: { locale: Locale; day: TherapistAttendanceCalendarDayDto; todayServiceDate: string }) {
@@ -246,8 +141,8 @@ function AttendanceDayDetail({ locale, day, todayServiceDate }: { locale: Locale
           }
         />
       </dl>
-      {/* 정정 요청(09)은 다른 흐름(퇴근 미입력 안내)에서 들어온다. 휴무 신청은 앞으로의 날짜에서만 연다. */}
-      {isFuture ? <DayOffRequestControls day={day} /> : null}
+      {/* 정정 요청(09)은 다른 흐름(퇴근 미입력 안내)에서 들어온다. 휴무는 카운터가 등록한다(앞으로의 날짜에만 안내). */}
+      {isFuture ? <DayOffCounterNotice day={day} /> : null}
     </div>
   );
 }

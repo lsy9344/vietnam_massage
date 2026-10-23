@@ -314,8 +314,20 @@ describe("zone tabs", () => {
   });
 
   it("keeps the TV board out of the floor tabs because it opens from the toolbar", () => {
-    assert.deepEqual(tabPaths("counter", "floor"), ["/rooms", "/live"]);
+    assert.deepEqual(tabPaths("counter", "floor"), ["/rooms", "/live", "/day-offs"]);
     assert.deepEqual(tabPaths("read_only_viewer", "floor"), ["/rooms"]);
+  });
+
+  // 2026-10-23 고객 요청: 카운터가 Therapist 휴무를 직접 등록한다. 카운터가 매일 쓰는 현장 구역에 두어
+  // 카운터 도크의 구역 수는 그대로이고, 정산 담당·웨이터는 들어가지 못한다.
+  it("lets the counter and administrator open day-off registration from the floor zone", () => {
+    assert.equal(zoneForPath("/day-offs"), "floor");
+    assert.equal(canAccessRoute("counter", "/day-offs"), true);
+    assert.equal(canAccessRoute("administrator", "/day-offs"), true);
+    assert.equal(canAccessRoute("settlement_manager", "/day-offs"), false);
+    assert.equal(canAccessRoute("waiter", "/day-offs"), false);
+    assert.equal(canAccessRoute("therapist", "/day-offs"), false);
+    assert.deepEqual(getDockZones("counter"), ["ledger", "floor", "customers", "reports"]);
   });
 
   it("finds the zone of a screen path", () => {

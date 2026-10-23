@@ -55,6 +55,9 @@ export const screenRoutes: readonly ScreenRoute[] = [
   { path: "/calls", labelKey: "shell.tab.calls", zone: "ledger", roles: ["administrator", "counter"], dateContext: "serviceDate", views: ledgerViews },
   { path: "/rooms", labelKey: "shell.tab.rooms", zone: "floor", roles: ["administrator", "counter", "waiter", "read_only_viewer"], dateContext: "serviceDate" },
   { path: "/live", labelKey: "shell.tab.live", zone: "floor", roles: ["administrator", "counter"], dateContext: "serviceDate" },
+  // 휴무 등록(2026-10-23 고객 요청, dayoff:write). 카운터가 텔레그램으로 받은 휴무·소중한날 휴가를 기간으로
+  // 직접 등록한다. 카운터가 매일 쓰는 현장 구역에 둔다(정산 구역이면 카운터 도크에 구역이 하나 늘어난다).
+  { path: "/day-offs", labelKey: "shell.tab.dayOffs", zone: "floor", roles: ["administrator", "counter"] },
   { path: "/tv", labelKey: "shell.tab.tv", zone: "floor", roles: ["administrator", "counter", "read_only_viewer"], dateContext: "serviceDate", notATab: true },
   // 출근 코드 크게 띄우기(티켓 05, 스펙 D13). 날짜 맥락이 없다 — 지금 시각으로만 코드를 계산한다.
   // TV와 같은 이유로 구역 안 탭에는 두지 않는다(/rooms의 "출근 코드" 버튼으로 연다).

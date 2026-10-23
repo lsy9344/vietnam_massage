@@ -4,6 +4,10 @@ import { TherapistAttendanceDomainError } from "@/modules/settlements/therapist-
 import {
   TherapistRequestDomainError,
   approveTherapistCorrectionRequest,
+  cancelTherapistDayOffRegistration,
+  listTherapistDayOffEmployeeOptions,
+  listTherapistDayOffRegistrations,
+  registerTherapistDayOffPeriod,
   approveTherapistDayOffRequest,
   cancelTherapistDayOffRequestForDate,
   cancelTherapistRequest,
@@ -1146,5 +1150,222 @@ describe("소중한날 휴가", () => {
     const client = createMemoryPrisma();
     await assert.rejects(() => requestTherapistDayOff({ employeeId: "emp-1", date: "2042-08-15", kind: "correction", now, prismaClient: client }), { code: "INVALID_THERAPIST_REQUEST_INPUT" });
     assert.equal(client.requests.size, 0);
+  });
+});
+
+// 2026-10-23 고객 요청: 카운터가 휴무·소중한날 휴가를 기간으로 직접 등록한다.
+describe("registerTherapistDayOffPeriod", () => {
+  it("registers every day of the period as approved, sets each day to day off, and audits each row", async () => {
+    const client = createMemoryPrisma();
+
+    const result = await registerTherapistDayOffPeriod({
+      employeeId: "emp-1",
+      kind: "special_day_off",
+      startDate: "2042-08-15",
+      endDate: "2042-08-19",
+      reason: "  텔레그램으로 확인  ",
+      actorId: "acct-admin",
+      now,
+      prismaClient: client
+    });
+
+    assert.equal(result.registration.kind, "special_day_off");
+    assert.equal(result.registration.startDate, "2042-08-15");
+    assert.equal(result.registration.endDate, "2042-08-19");
+    assert.equal(result.registration.dayCount, 5);
+    assert.equal(result.registration.reason, "텔레그램으로 확인");
+    assert.equal(result.registration.registeredByName, "박관리");
+
+    const rows = [...client.requests.values()];
+    assert.equal(rows.length, 5);
+    for (const row of rows) {
+      assert.equal(row.kind, "소중한날 휴가");
+      assert.equal(row.status, "승인");
+      assert.equal(row.resolvedByAccountId, "acct-admin");
+      assert.equal(row.resolvedAt.getTime(), now.getTime());
+    }
+    for (const date of ["2042-08-15", "2042-08-16", "2042-08-17", "2042-08-18", "2042-08-19"]) {
+      assert.equal(client.plannedWorkingDays.get(`emp-1::${date}`)?.planStatus, "휴무");
+    }
+
+    const actions = client.auditEvents.map((event: any) => event.action);
+    assert.equal(actions.filter((action: string) => action === "therapist_request.registered").length, 5);
+    assert.equal(actions.filter((action: string) => action === "planned_working_day.created").length, 5);
+
+    // 근태 달력·Therapist 현황의 붉은 표시는 같은 경로(listApprovedSpecialDayOffs)로 읽힌다.
+    const specialDays = await listApprovedSpecialDayOffs({ employeeIds: ["emp-1"], startDate: "2042-08-01", endDate: "2042-08-31", prismaClient: client });
+    assert.deepEqual(specialDays.map((item) => item.date).sort(), ["2042-08-15", "2042-08-16", "2042-08-17", "2042-08-18", "2042-08-19"]);
+  });
+
+  it("registers a single ordinary day off when start and end are the same day", async () => {
+    const client = createMemoryPrisma();
+    const result = await registerTherapistDayOffPeriod({ employeeId: "emp-1", kind: "day_off", startDate: "2042-08-15", endDate: "2042-08-15", actorId: "acct-admin", now, prismaClient: client });
+    assert.equal(result.registration.dayCount, 1);
+    assert.equal([...client.requests.values()][0].kind, "휴무");
+    assert.equal(client.plannedWorkingDays.get("emp-1::2042-08-15")?.planStatus, "휴무");
+  });
+
+  it("also accepts a past date (like the schedule, a leave learned late can still be recorded)", async () => {
+    const client = createMemoryPrisma();
+    const result = await registerTherapistDayOffPeriod({ employeeId: "emp-1", kind: "special_day_off", startDate: "2042-08-08", endDate: "2042-08-10", actorId: "acct-admin", now, prismaClient: client });
+    assert.equal(result.registration.dayCount, 3);
+  });
+
+  it("rejects an end date before the start date", async () => {
+    const client = createMemoryPrisma();
+    await assert.rejects(
+      () => registerTherapistDayOffPeriod({ employeeId: "emp-1", kind: "day_off", startDate: "2042-08-15", endDate: "2042-08-14", actorId: "acct-admin", now, prismaClient: client }),
+      { code: "THERAPIST_DAY_OFF_PERIOD_INVALID", field: "endDate" }
+    );
+    assert.equal(client.requests.size, 0);
+  });
+
+  it("rejects a period longer than 31 days", async () => {
+    const client = createMemoryPrisma();
+    await assert.rejects(
+      () => registerTherapistDayOffPeriod({ employeeId: "emp-1", kind: "day_off", startDate: "2042-08-01", endDate: "2042-09-01", actorId: "acct-admin", now, prismaClient: client }),
+      { code: "THERAPIST_DAY_OFF_PERIOD_TOO_LONG" }
+    );
+  });
+
+  it("rejects a missing Therapist or an unknown kind with the field to point at", async () => {
+    const client = createMemoryPrisma();
+    await assert.rejects(
+      () => registerTherapistDayOffPeriod({ employeeId: "", kind: "day_off", startDate: "2042-08-15", endDate: "2042-08-15", actorId: "acct-admin", now, prismaClient: client }),
+      { code: "INVALID_THERAPIST_REQUEST_INPUT", field: "employeeId" }
+    );
+    await assert.rejects(
+      () => registerTherapistDayOffPeriod({ employeeId: "emp-1", kind: "correction", startDate: "2042-08-15", endDate: "2042-08-15", actorId: "acct-admin", now, prismaClient: client }),
+      { code: "INVALID_THERAPIST_REQUEST_INPUT", field: "kind" }
+    );
+    await assert.rejects(
+      () => registerTherapistDayOffPeriod({ employeeId: "emp-unknown", kind: "day_off", startDate: "2042-08-15", endDate: "2042-08-15", actorId: "acct-admin", now, prismaClient: client }),
+      { code: "THERAPIST_DAY_OFF_EMPLOYEE_NOT_FOUND", field: "employeeId" }
+    );
+  });
+
+  it("rejects a period that overlaps an already registered day off and writes nothing", async () => {
+    const client = createMemoryPrisma({
+      seedRequests: [{ id: "req-old", employeeId: "emp-1", kind: "휴무", targetDate: "2042-08-17", status: "승인", resolvedByAccountId: "acct-admin", resolvedAt: now }],
+      seedPlannedWorkingDays: [{ employeeId: "emp-1", workDate: "2042-08-17", planStatus: "휴무" }]
+    });
+    await assert.rejects(
+      () => registerTherapistDayOffPeriod({ employeeId: "emp-1", kind: "special_day_off", startDate: "2042-08-15", endDate: "2042-08-19", actorId: "acct-admin", now, prismaClient: client }),
+      (error: unknown) => {
+        assert.ok(error instanceof TherapistRequestDomainError);
+        assert.equal(error.code, "THERAPIST_DAY_OFF_PERIOD_OVERLAP");
+        assert.match(error.message, /08-17/);
+        return true;
+      }
+    );
+    assert.equal(client.requests.size, 1);
+    assert.equal(client.plannedWorkingDays.has("emp-1::2042-08-15"), false);
+  });
+
+  it("does not count a canceled registration as an overlap", async () => {
+    const client = createMemoryPrisma({
+      seedRequests: [{ id: "req-old", employeeId: "emp-1", kind: "휴무", targetDate: "2042-08-17", status: "취소", resolvedByAccountId: "acct-admin", resolvedAt: now }]
+    });
+    const result = await registerTherapistDayOffPeriod({ employeeId: "emp-1", kind: "day_off", startDate: "2042-08-17", endDate: "2042-08-17", actorId: "acct-admin", now, prismaClient: client });
+    assert.equal(result.registration.dayCount, 1);
+  });
+
+  it("returns the calls already assigned on those days without blocking the registration", async () => {
+    const client = createMemoryPrisma({ seedServiceCalls: [{ id: "call-1", serviceDate: "2042-08-16", employeeId: "emp-1" }] });
+    const result = await registerTherapistDayOffPeriod({ employeeId: "emp-1", kind: "special_day_off", startDate: "2042-08-15", endDate: "2042-08-17", actorId: "acct-admin", now, prismaClient: client });
+    assert.deepEqual(result.impactedCalls.map((call) => call.serviceCallId), ["call-1"]);
+    assert.equal(client.requests.size, 3);
+  });
+});
+
+describe("listTherapistDayOffRegistrations", () => {
+  it("groups one registration's rows into one period, keeps an inbox-approved day separate, and splits upcoming from past", async () => {
+    const earlier = new Date("2042-08-01T03:00:00.000Z");
+    const client = createMemoryPrisma({
+      seedRequests: [
+        // 승인함에서 승인된 지난 Therapist 신청 하나(하루짜리 등록으로 보인다).
+        { id: "req-inbox", employeeId: "emp-1", kind: "휴무", targetDate: "2042-08-25", status: "승인", resolvedByAccountId: "acct-admin", resolvedAt: earlier },
+        // 끝난 등록(최근 31일 안).
+        { id: "req-past-1", employeeId: "emp-1", kind: "소중한날 휴가", targetDate: "2042-08-02", status: "승인", resolvedByAccountId: "acct-admin", resolvedAt: earlier },
+        { id: "req-past-2", employeeId: "emp-1", kind: "소중한날 휴가", targetDate: "2042-08-03", status: "승인", resolvedByAccountId: "acct-admin", resolvedAt: earlier },
+        // 취소된 줄과 정정 요청은 목록에 없다.
+        { id: "req-canceled", employeeId: "emp-1", kind: "휴무", targetDate: "2042-08-28", status: "취소", resolvedByAccountId: "acct-admin", resolvedAt: earlier },
+        { id: "req-correction", employeeId: "emp-1", kind: "정정", targetDate: "2042-08-09", status: "승인", resolvedByAccountId: "acct-admin", resolvedAt: earlier, requestedCheckInTime: "11:00" }
+      ]
+    });
+    await registerTherapistDayOffPeriod({ employeeId: "emp-1", kind: "special_day_off", startDate: "2042-08-10", endDate: "2042-08-13", actorId: "acct-admin", now, prismaClient: client });
+
+    const { upcoming, past } = await listTherapistDayOffRegistrations({ now, prismaClient: client });
+
+    assert.deepEqual(
+      upcoming.map((item) => [item.startDate, item.endDate, item.dayCount, item.kind]),
+      [
+        ["2042-08-10", "2042-08-13", 4, "special_day_off"],
+        ["2042-08-25", "2042-08-25", 1, "day_off"]
+      ]
+    );
+    assert.equal(upcoming[0].requestIds.length, 4);
+    assert.equal(upcoming[0].displayName, "민호");
+    assert.deepEqual(
+      past.map((item) => [item.startDate, item.endDate, item.dayCount]),
+      [["2042-08-02", "2042-08-03", 2]]
+    );
+  });
+});
+
+describe("cancelTherapistDayOffRegistration", () => {
+  it("cancels every row of the registration, clears the day-off cells, and removes the special-day mark", async () => {
+    const client = createMemoryPrisma();
+    const { registration } = await registerTherapistDayOffPeriod({ employeeId: "emp-1", kind: "special_day_off", startDate: "2042-08-15", endDate: "2042-08-17", actorId: "acct-admin", now, prismaClient: client });
+
+    // 그사이 근무표에서 근무 예정으로 바꾼 날은 그대로 둔다.
+    client.plannedWorkingDays.get("emp-1::2042-08-16").planStatus = "근무 예정";
+
+    const result = await cancelTherapistDayOffRegistration({ requestIds: registration.requestIds, actorId: "acct-admin", now, prismaClient: client });
+
+    assert.equal(result.canceledCount, 3);
+    for (const id of registration.requestIds) assert.equal(client.requests.get(id).status, "취소");
+    assert.equal(client.plannedWorkingDays.has("emp-1::2042-08-15"), false);
+    assert.equal(client.plannedWorkingDays.get("emp-1::2042-08-16")?.planStatus, "근무 예정");
+    assert.equal(client.plannedWorkingDays.has("emp-1::2042-08-17"), false);
+    assert.equal(client.auditEvents.filter((event: any) => event.action === "therapist_request.canceled").length, 3);
+
+    const specialDays = await listApprovedSpecialDayOffs({ employeeIds: ["emp-1"], startDate: "2042-08-01", endDate: "2042-08-31", prismaClient: client });
+    assert.deepEqual(specialDays, []);
+    const { upcoming } = await listTherapistDayOffRegistrations({ now, prismaClient: client });
+    assert.deepEqual(upcoming, []);
+  });
+
+  it("rejects canceling an already canceled registration without touching anything", async () => {
+    const client = createMemoryPrisma();
+    const { registration } = await registerTherapistDayOffPeriod({ employeeId: "emp-1", kind: "day_off", startDate: "2042-08-15", endDate: "2042-08-16", actorId: "acct-admin", now, prismaClient: client });
+    await cancelTherapistDayOffRegistration({ requestIds: registration.requestIds, actorId: "acct-admin", now, prismaClient: client });
+    await assert.rejects(
+      () => cancelTherapistDayOffRegistration({ requestIds: registration.requestIds, actorId: "acct-admin", now, prismaClient: client }),
+      { code: "THERAPIST_DAY_OFF_REGISTRATION_ALREADY_CANCELED" }
+    );
+  });
+
+  it("does not cancel a correction request or an unknown id through this path", async () => {
+    const client = createMemoryPrisma({
+      seedRequests: [{ id: "req-correction", employeeId: "emp-1", kind: "정정", targetDate: "2042-08-09", status: "승인", requestedCheckInTime: "11:00" }]
+    });
+    await assert.rejects(() => cancelTherapistDayOffRegistration({ requestIds: ["req-correction"], actorId: "acct-admin", now, prismaClient: client }), {
+      code: "THERAPIST_DAY_OFF_REGISTRATION_NOT_FOUND"
+    });
+    await assert.rejects(() => cancelTherapistDayOffRegistration({ requestIds: ["nope"], actorId: "acct-admin", now, prismaClient: client }), {
+      code: "THERAPIST_DAY_OFF_REGISTRATION_NOT_FOUND"
+    });
+    await assert.rejects(() => cancelTherapistDayOffRegistration({ requestIds: [], actorId: "acct-admin", now, prismaClient: client }), {
+      code: "THERAPIST_DAY_OFF_REGISTRATION_NOT_FOUND"
+    });
+    assert.equal(client.requests.get("req-correction").status, "승인");
+  });
+});
+
+describe("listTherapistDayOffEmployeeOptions", () => {
+  it("lists active Therapists for the registration picker", async () => {
+    const client = createMemoryPrisma();
+    assert.deepEqual(await listTherapistDayOffEmployeeOptions({ prismaClient: client }), [{ employeeId: "emp-1", displayName: "민호", staffCode: "THR-901" }]);
   });
 });
