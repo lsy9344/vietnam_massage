@@ -12,7 +12,8 @@ import { CallStatusChip, callStatusKeyOf } from "@/components/domain/call-status
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { CustomerDto, ServiceCallFormOptions, ServiceCallRowDto, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
-import { autosaveServiceCallRowAction, loadTherapistAvailabilityAction, reloadServiceCallRowAction } from "@/app/(erp)/calls/actions";
+import { loadTherapistAvailability } from "./call-queries";
+import { autosaveServiceCallRowAction, reloadServiceCallRowAction } from "@/app/(erp)/calls/actions";
 import { useLedgerClock, type LedgerClock } from "@/app/(erp)/calls/ledger-clock";
 import { businessClockString } from "@/lib/operating-date";
 import { ledgerCallAnchorId } from "@/lib/ledger-address";
@@ -260,7 +261,7 @@ function CallLedgerLine({
   /** 일행 동작을 받아 저장한 결과를 머리 줄에 알린다(실패한 손님과 이유를 머리 줄이 보인다). */
   onPartyOutcome: (callId: string, outcome: PartyCommandOutcome) => void;
   /** 저장이 받아들여졌다. 저장 응답은 이 줄만 돌려주므로 작업면이 나머지 화면을 새로 고친다. */
-  onSaved: () => void;
+  onSaved: (row: ServiceCallRowDto) => void;
   onSelectRelated: (callId: string) => void;
   options: ServiceCallFormOptions;
   panelFocus: CallPanelFocusRequest | null;
@@ -302,7 +303,7 @@ function CallLedgerLine({
           const result = await autosaveServiceCallRowAction(request);
           if (result.ok) {
             dispatch({ type: "saved", row: result.data });
-            onSaved();
+            onSaved(result.data);
           } else if ("currentRow" in result) {
             dispatch({ type: "stale", row: result.currentRow, message: result.formError });
             // 충돌 확인 필요가 되면 편집 패널에 비교 화면이 열린다(스펙 B07, 티켓 17).
@@ -422,18 +423,24 @@ function CallLedgerLine({
     commit({ status, ...times });
   }
 
+  const therapistChoicesController = useRef<AbortController | null>(null);
+  useEffect(() => () => therapistChoicesController.current?.abort(), [row.serviceDate, draft.startTime]);
   async function loadTherapistChoices() {
+    therapistChoicesController.current?.abort();
+    const controller = new AbortController();
+    therapistChoicesController.current = controller;
     setTherapistChoices(null);
     setTherapistChoicesFailed(false);
     try {
-      const { rows } = await loadTherapistAvailabilityAction({
+      const { rows } = await loadTherapistAvailability({
         operatingMonthId: row.operatingMonthId,
         serviceDate: row.serviceDate,
         time: draft.startTime,
         excludeCallId: row.id
-      });
-      setTherapistChoices(rows);
+      }, controller.signal);
+      if (!controller.signal.aborted) setTherapistChoices(rows);
     } catch {
+      if (controller.signal.aborted) return;
       setTherapistChoices([]);
       setTherapistChoicesFailed(true);
     }
@@ -1168,7 +1175,7 @@ export function CallLedgerList({
   onClose?: () => void;
   onOpen?: OpenCall;
   /** 한 줄의 저장이 받아들여졌을 때. 현황 줄 같은 나머지 화면을 새로 고치는 데 쓴다. */
-  onRowSaved?: () => void;
+  onRowSaved?: (row: ServiceCallRowDto) => void;
   /** 패널의 관련 콜로 옮길 때. 그 줄이 보이게 스크롤한다. */
   onSelectRelated?: (callId: string) => void;
   options: ServiceCallFormOptions;

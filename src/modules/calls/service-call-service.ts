@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { callSaveByDay, callSaveById, readCallSaveRecords, type CallSaveReadClient } from "./service-call-save-query";
 import { QuickBookingGuestError, ServiceCallDomainError } from "./service-call-domain-error";
 export { QuickBookingGuestError, ServiceCallDomainError } from "./service-call-domain-error";
 export { listAssignedServiceCallsForEmployeeFromDate } from "./assigned-service-call-query";
@@ -187,7 +188,7 @@ type ServiceCallRecord = {
   assignments?: ServiceCallAssignmentRecord[];
 };
 
-type ServiceCallPrismaClient = {
+type ServiceCallPrismaClient = CallSaveReadClient & {
   operatingMonth: {
     findMany(args?: unknown): Promise<OperatingMonthRecord[]>;
     findUnique(args: unknown): Promise<OperatingMonthRecord | null>;
@@ -1099,13 +1100,10 @@ async function assertActiveExpenseHandler(tx: ServiceCallPrismaClient, employeeI
 
 async function writeAssignment(
   tx: ServiceCallPrismaClient,
-  input: { serviceCallId: string; assignmentRole: ServiceCallAssignmentRole; employeeId: string | null | undefined }
+  input: { serviceCallId: string; assignmentRole: ServiceCallAssignmentRole; employeeId: string | null | undefined },
+  knownAssignments: ServiceCallAssignmentRecord[]
 ) {
-  const existing = (
-    await tx.serviceCallAssignment.findMany({
-      where: { serviceCallId: input.serviceCallId, assignmentRole: input.assignmentRole }
-    })
-  )[0];
+  const existing = knownAssignments.find((assignment) => assignment.assignmentRole === input.assignmentRole);
 
   if (!input.employeeId) {
     if (existing && existing.isActive !== false) {
@@ -1118,6 +1116,7 @@ async function writeAssignment(
   }
 
   if (existing) {
+    if (existing.isActive !== false && existing.employeeId === input.employeeId) return;
     await tx.serviceCallAssignment.updateMany({
       where: { id: existing.id },
       data: { employeeId: input.employeeId, isActive: true }
@@ -1136,15 +1135,17 @@ async function writeAssignment(
 }
 
 async function findServiceCallWithRelations(tx: ServiceCallPrismaClient, id: string) {
-  const record = await tx.serviceCall.findUnique({
-    where: { id },
-    include: {
-      operatingMonth: true,
-      room: true,
-      course: { include: { policies: true } },
-      assignments: { include: { employee: true } }
-    }
-  });
+  const record = tx.$queryRaw
+    ? (await readCallSaveRecords(tx, callSaveById(id)))[0] as ServiceCallRecord | undefined
+    : await tx.serviceCall.findUnique({
+        where: { id },
+        include: {
+          operatingMonth: true,
+          room: true,
+          course: { include: { policies: true } },
+          assignments: { include: { employee: true } }
+        }
+      });
 
   if (!record) {
     throw new ServiceCallDomainError("콜 원장 행을 찾을 수 없습니다.", "SERVICE_CALL_NOT_FOUND");
@@ -1754,6 +1755,11 @@ export async function autoFinishOverdueCalls(input: {
 }
 
 async function displayEndContextFor(tx: ServiceCallPrismaClient, record: ServiceCallRecord): Promise<DisplayEndContext> {
+  if (tx.$queryRaw) {
+    const dayCalls = await readCallSaveRecords(tx, callSaveByDay(record.operatingMonthId, record.serviceDate)) as ServiceCallRecord[];
+    const slots = await tx.timeSlot.findMany({});
+    return { dayCalls, dayStart: dayStartFromSlots(slots) };
+  }
   return loadDisplayEndContext(tx, {
     operatingMonthId: record.operatingMonthId,
     serviceDate: record.serviceDate
@@ -2320,6 +2326,7 @@ async function assertQuickBookingGuest(
       );
     }
   }
+  return policy;
 }
 
 async function findPartyByRequestId(client: ServiceCallPrismaClient, requestId: string) {
@@ -2330,10 +2337,8 @@ async function findPartyByRequestId(client: ServiceCallPrismaClient, requestId: 
         (a, b) => (a.partyPosition ?? 0) - (b.partyPosition ?? 0)
       )
     : [record];
-  const rows: ServiceCallRowDto[] = [];
-  for (const member of members) {
-    rows.push(await toRowDto(client, await findServiceCallWithRelations(client, member.id)));
-  }
+  const records = await Promise.all(members.map((member) => findServiceCallWithRelations(client, member.id)));
+  const rows = await savedRows(client, records);
   return { partyId: record.partyId ?? null, rows };
 }
 
@@ -2362,34 +2367,38 @@ export async function createQuickBookingParty(
       }
 
       // 일행이 함께 쓰는 값은 손님에 앞서 한 번 본다. 여기서 걸린 오류는 특정 손님의 것이 아니다.
-      const { month } = await assertWritableDate(tx, { operatingMonthId: shared.operatingMonthId, serviceDate: shared.serviceDate });
+      const { month, serviceDate } = await assertWritableDate(tx, { operatingMonthId: shared.operatingMonthId, serviceDate: shared.serviceDate });
       await Promise.all([
         assertActiveTimeSlot(tx, shared.startTime),
         assertActiveCode(tx, { codeType: "SERVICE_STATUS", code: shared.status, required: true }),
         assertActiveCode(tx, { codeType: "DISCOUNT_TYPE", code: shared.discountTypeCode }),
         assertActiveCode(tx, { codeType: "PAYMENT_METHOD", code: shared.paymentMethodCode }),
-        assertActiveCode(tx, { codeType: "CONFIRMATION", code: shared.confirmationCode })
+        assertActiveCode(tx, { codeType: "CONFIRMATION", code: shared.confirmationCode }),
+        assertActiveCode(tx, { codeType: "BOOKING_CHANNEL", code: shared.bookingChannelCode })
       ]);
       const earlierTherapistIds = new Set<string>();
+      const policies: CoursePolicyRecord[] = [];
       for (const [index, guest] of guests.entries()) {
-        await assertQuickBookingGuest(tx, guest, index + 1, { monthKey: month.monthKey, status: shared.status, earlierTherapistIds });
+        policies.push(await assertQuickBookingGuest(tx, guest, index + 1, { monthKey: month.monthKey, status: shared.status, earlierTherapistIds }));
         for (const therapistId of [guest.therapist1Id, guest.therapist2Id]) {
           if (therapistId) earlierTherapistIds.add(therapistId);
         }
       }
 
       const customerId = newCustomer ? (await createCustomerRecord(tx, newCustomer, requireActor(input.actorId))).id : shared.customerId;
+      const linkedId = await resolveLinkedCustomerId(tx, customerId, undefined);
       const partyId = randomUUID();
+      const records: ServiceCallRecord[] = [];
       for (const [index, guest] of guests.entries()) {
-        await writeServiceCallRow(
+        records.push(await writeServiceCallRecord(
           tx,
-          { ...shared, ...guest, customerId: index === 0 ? customerId : null },
-          { actorId: input.actorId, requestId: index === 0 ? requestId : undefined, party: { partyId, partyPosition: index + 1 } }
-        );
+          { ...shared, ...guest, customerId: index === 0 ? linkedId : null },
+          { actorId: input.actorId, requestId: index === 0 ? requestId : undefined, party: { partyId, partyPosition: index + 1 },
+            validated: { month, serviceDate, coursePolicy: policies[index] } }
+        ));
       }
-      // 앞 손님의 행은 뒤 손님이 생기기 전에 읽혀 객실 겹침 같은 경고가 빠져 있다. 일행 전체를 다시 읽어 돌려준다.
-      const saved = await findPartyByRequestId(tx, requestId);
-      return { partyId, rows: saved?.rows ?? [], alreadySaved: false };
+      // All guests now exist: one day context includes overlaps with later guests too.
+      return { partyId, rows: await savedRows(tx, records), alreadySaved: false };
     });
   } catch (error) {
     // 같은 요청 id의 일행 저장이 동시에 들어와 1번 콜의 요청 id 유일성 위반으로 이쪽이 실패했다(트랜잭션은
@@ -2429,18 +2438,38 @@ async function assertCustomerLinkUnchanged(
  * 콜 한 줄을 검사하고 쓴다. serviceCallId가 있으면 화면이 읽은 버전일 때만 고치고, 없으면 새로 만든다.
  * 새로 만들 때 요청 id가 있으면 함께 적는다.
  */
-async function writeServiceCallRow(
+type CallWriteOptions = {
+  actorId?: string;
+  requestId?: string;
+  party?: { partyId: string; partyPosition: number };
+  /** Validation performed by the party writer in this same transaction, before any guest writes. */
+  validated?: { month: OperatingMonthRecord; serviceDate: Date; coursePolicy: CoursePolicyRecord };
+};
+
+async function savedRows(tx: ServiceCallPrismaClient, records: ServiceCallRecord[]) {
+  if (records.length === 0) return [];
+  const context = await displayEndContextFor(tx, records[0]);
+  const sources = await prefetchCalculationSources(tx, records);
+  const now = new Date();
+  return Promise.all(records.map((record) => toRowDto(tx, record, sources, context, now)));
+}
+
+async function writeServiceCallRow(tx: ServiceCallPrismaClient, input: ServiceCallInput, options: CallWriteOptions) {
+  return toRowDto(tx, await writeServiceCallRecord(tx, input, options));
+}
+
+async function writeServiceCallRecord(
   tx: ServiceCallPrismaClient,
   input: ServiceCallInput,
-  options: { actorId?: string; requestId?: string; party?: { partyId: string; partyPosition: number } }
+  options: CallWriteOptions
 ) {
   assertRoomRequiredForStatus({ roomId: input.roomId, status: input.status });
-  const { month, serviceDate } = await assertWritableDate(tx, {
+  const { month, serviceDate } = options.validated ?? await assertWritableDate(tx, {
     operatingMonthId: input.operatingMonthId,
     serviceDate: input.serviceDate
   });
 
-  const [, , coursePolicy] = await Promise.all([
+  const coursePolicy = options.validated?.coursePolicy ?? (await Promise.all([
     assertActiveTimeSlot(tx, input.startTime),
     assertActiveRoom(tx, input.roomId),
     assertActiveCourse(tx, { courseId: input.courseId, monthKey: month.monthKey }),
@@ -2451,15 +2480,12 @@ async function writeServiceCallRow(
     assertActiveCode(tx, { codeType: "BOOKING_CHANNEL", code: input.bookingChannelCode }),
     assertActiveEmployee(tx, { role: "THERAPIST_1", employeeId: input.therapist1Id }),
     assertActiveEmployee(tx, { role: "THERAPIST_2", employeeId: input.therapist2Id })
-  ]);
+  ]))[2];
   assertSecondTherapistRequirement({ policy: coursePolicy, therapist1Id: input.therapist1Id, therapist2Id: input.therapist2Id });
 
-  const beforeRecord = input.serviceCallId
-    ? await tx.serviceCall.findUnique({ where: { id: input.serviceCallId } })
-    : null;
-  const beforeLinked = beforeRecord ? await findServiceCallWithRelations(tx, beforeRecord.id) : null;
+  const beforeLinked = input.serviceCallId ? await findServiceCallWithRelations(tx, input.serviceCallId) : null;
   if (beforeLinked) await assertCustomerLinkUnchanged(tx, beforeLinked, input.customerId, input.expectedUpdatedAt);
-  const customerId = await resolveLinkedCustomerId(tx, input.customerId, beforeLinked?.customerId);
+  const customerId = options.validated ? input.customerId ?? null : await resolveLinkedCustomerId(tx, input.customerId, beforeLinked?.customerId);
   const linkChanged = linkedCustomerId(beforeLinked ?? {}) !== customerId;
   // 일행 콜은 고객 연결이 없어도 콜마다 생성 감사를 남긴다(티켓 02). 그 감사에 일행 id가 담긴다.
   const audited = linkChanged || Boolean(options.party);
@@ -2497,7 +2523,7 @@ async function writeServiceCallRow(
       },
       data
     );
-    serviceCall = await findServiceCallWithRelations(tx, input.serviceCallId);
+    serviceCall = beforeLinked!;
   } else {
     serviceCall = await tx.serviceCall.create({
       data: {
@@ -2513,12 +2539,12 @@ async function writeServiceCallRow(
       serviceCallId: serviceCall.id,
       assignmentRole: "THERAPIST_1",
       employeeId: input.therapist1Id
-    }),
+    }, beforeLinked?.assignments ?? []),
     writeAssignment(tx, {
       serviceCallId: serviceCall.id,
       assignmentRole: "THERAPIST_2",
       employeeId: input.therapist2Id
-    })
+    }, beforeLinked?.assignments ?? [])
   ]);
 
   const after = await findServiceCallWithRelations(tx, serviceCall.id);
@@ -2536,7 +2562,7 @@ async function writeServiceCallRow(
     );
   }
 
-  return toRowDto(tx, after);
+  return after;
 }
 
 export async function autosaveServiceCallRow(
@@ -2606,12 +2632,12 @@ export async function autosaveServiceCallRow(
         serviceCallId: parsed.data.serviceCallId,
         assignmentRole: "THERAPIST_1",
         employeeId: parsed.data.therapist1Id
-      }),
+      }, before.assignments ?? []),
       writeAssignment(tx, {
         serviceCallId: parsed.data.serviceCallId,
         assignmentRole: "THERAPIST_2",
         employeeId: parsed.data.therapist2Id
-      })
+      }, before.assignments ?? [])
     ]);
 
     const after = await findServiceCallWithRelations(tx, parsed.data.serviceCallId);

@@ -372,7 +372,7 @@ function createMemoryPrisma() {
         policies: [...coursePolicies.values()].filter((policy) => policy.courseId === call.courseId)
       },
       assignments: [...assignments.values()]
-        .filter((assignment) => assignment.serviceCallId === call.id && assignment.isActive !== false)
+        .filter((assignment) => assignment.serviceCallId === call.id)
         .map((assignment) => ({ ...assignment, employee: employees.get(assignment.employeeId) }))
     };
   }
@@ -695,6 +695,38 @@ function createMemoryPrisma() {
 }
 
 describe("service call service", () => {
+  it("does not reread or rewrite unchanged assignments on a payment save", async () => {
+    const prismaClient = createMemoryPrisma();
+    const input = { operatingMonthId: "month-2026-06", serviceDate: "2026-06-10", startTime: "11:00", roomId: "room-101", courseId: "course-a", therapist1Id: "therapist-1", status: "예약" };
+    const row = await saveBasicServiceCallRow({ ...input, prismaClient });
+    let assignmentQueries = 0;
+    for (const method of ["findMany", "updateMany", "create"] as const) {
+      const original = prismaClient.serviceCallAssignment[method].bind(prismaClient.serviceCallAssignment);
+      prismaClient.serviceCallAssignment[method] = (async (...args: any[]) => {
+        assignmentQueries += 1;
+        return (original as any)(...args);
+      }) as any;
+    }
+    const saved = await autosaveServiceCallRow({ ...input, serviceCallId: row.id, expectedUpdatedAt: row.updatedAt, paymentMethodCode: "현금", actorId: "counter-account", prismaClient });
+    assert.equal(saved.paymentAmount, 1500000);
+    assert.equal(saved.therapist1?.id, "therapist-1");
+    assert.equal(assignmentQueries, 0);
+  });
+
+  it("reactivates the existing second assignment after clearing it, and audits each change", async () => {
+    const prismaClient = createMemoryPrisma();
+    const input = { operatingMonthId: "month-2026-06", serviceDate: "2026-06-10", startTime: "11:00", roomId: "room-101", courseId: "course-a", therapist1Id: "therapist-1", therapist2Id: "therapist-2", status: "예약" };
+    const row = await saveBasicServiceCallRow({ ...input, prismaClient });
+    const savedAssignmentId = [...prismaClient.assignments.values()].find((assignment) => assignment.assignmentRole === "THERAPIST_2")!.id;
+    const cleared = await autosaveServiceCallRow({ ...input, therapist2Id: null, serviceCallId: row.id, expectedUpdatedAt: row.updatedAt, actorId: "counter-account", prismaClient });
+    assert.equal(cleared.therapist2, null);
+    const restored = await autosaveServiceCallRow({ ...input, serviceCallId: row.id, expectedUpdatedAt: cleared.updatedAt, actorId: "counter-account", prismaClient });
+    assert.equal(restored.therapist2?.id, "therapist-2");
+    assert.equal(prismaClient.assignments.size, 2);
+    assert.equal(prismaClient.assignments.get(savedAssignmentId)?.isActive, true);
+    assert.equal(prismaClient.auditEvents.filter((event: { action: string }) => event.action === "service_call.row_changed").length, 2);
+  });
+
   it("returns an explicit empty result for a date with no call ledger rows", async () => {
     const prismaClient = createMemoryPrisma();
 
@@ -6193,6 +6225,24 @@ describe("quick booking party (스펙 D10–D13, 티켓 02)", () => {
   function callsOnDate(prismaClient: ReturnType<typeof createMemoryPrisma>) {
     return listServiceCallsForDate({ operatingMonthId: "month-2026-06", serviceDate: "2026-06-10", prismaClient });
   }
+
+  it("validates the party month once and constructs day warnings once after every guest is written", async () => {
+    const prismaClient = partyClient();
+    let monthReads = 0;
+    let dayReads = 0;
+    const monthRead = prismaClient.operatingMonth.findUnique;
+    const callsRead = prismaClient.serviceCall.findMany;
+    prismaClient.operatingMonth.findUnique = async (args: any) => { monthReads += 1; return monthRead(args); };
+    prismaClient.serviceCall.findMany = async (args: any) => { dayReads += 1; return callsRead(args); };
+    const result = await party(prismaClient, "party-read-budget", { guests: [
+      { courseId: "course-a", therapist1Id: "therapist-1", roomId: "room-101" },
+      { courseId: "course-a", therapist1Id: "therapist-2", roomId: "room-101" }
+    ] });
+    assert.equal(result.rows.length, 2);
+    assert.ok(result.rows.every((row) => row.warnings.some((warning) => warning.code === "room_overlap")));
+    assert.equal(monthReads, 1);
+    assert.equal(dayReads, 1);
+  });
 
   it("makes one call per guest at the shared time and memo, each with the guest's own course, therapist and room", async () => {
     const prismaClient = partyClient();

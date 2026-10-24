@@ -7,6 +7,8 @@ import { useT } from "@/lib/i18n/client";
 import { CallLedgerList } from "@/app/(erp)/calls/call-ledger-list";
 import { firstVisible } from "@/app/(erp)/calls/first-visible";
 import type { CallPanelFocusRequest } from "@/app/(erp)/calls/call-edit-panel";
+import { mergeConfirmedRows } from "./confirmed-rows";
+import { startTimeOrder } from "@/modules/calls/start-time-order";
 import { ledgerListKey } from "@/app/(erp)/calls/ledger-flow";
 import { usePhoneWidth } from "@/app/(erp)/calls/phone-width";
 import { QuickBookingPanel } from "@/app/(erp)/calls/quick-booking-panel";
@@ -105,7 +107,7 @@ export function CallLedgerWorkspace({
   isLocked,
   options,
   quickBooking,
-  rows,
+  rows: serverRows,
   showSettlementColumns
 }: {
   customers?: CustomerDto[];
@@ -117,8 +119,22 @@ export function CallLedgerWorkspace({
   showSettlementColumns: boolean;
 }) {
   const t = useT();
+  const [confirmed, setConfirmed] = useState<ServiceCallRowDto[]>([]);
+  const order = startTimeOrder(options.timeSlots.map((slot, sortOrder) => ({ ...slot, sortOrder })));
+  const scope = quickBooking ?? serverRows[0];
+  const rows = mergeConfirmedRows(serverRows, confirmed, order).filter(
+    (row) => !scope || (row.operatingMonthId === scope.operatingMonthId && row.serviceDate === scope.serviceDate)
+  );
   const { selected, select } = useCallSelection();
   const refreshAfterSave = useRefreshAfterSave();
+  function acceptSaved(saved: ServiceCallRowDto[]) {
+    setConfirmed((previous) => mergeConfirmedRows(previous, saved, order));
+    refreshAfterSave();
+  }
+  useEffect(() => {
+    window.addEventListener("calls:refresh", refreshAfterSave);
+    return () => window.removeEventListener("calls:refresh", refreshAfterSave);
+  }, [refreshAfterSave]);
   const selectedRow = selected ? (rows.find((row) => row.id === selected) ?? null) : null;
   // 현황 줄 카드의 "콜만" 버튼(1018 스펙 D17)이 주소에 남긴 Therapist. 목록은 그 Therapist가 맡은 콜과 열린 콜만 보인다.
   const therapistFilter = useSearchParams()?.get(THERAPIST_FILTER_PARAM) ?? null;
@@ -242,7 +258,7 @@ export function CallLedgerWorkspace({
           isLocked={isLocked}
           onClose={() => select(null)}
           onOpen={open}
-          onRowSaved={refreshAfterSave}
+          onRowSaved={(row) => acceptSaved([row])}
           onSelectRelated={(id) => {
             select(id, { scrollToRow: true });
             setPanelFocus(null);
@@ -269,6 +285,7 @@ export function CallLedgerWorkspace({
               if (next && selected) select(null, { restoreFocus: false });
               setQuickBookingOpen(next);
             }}
+            onRowsSaved={acceptSaved}
             open={quickBookingOpen}
             options={options}
           />

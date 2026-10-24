@@ -58,6 +58,15 @@ function play(events: CallRowSaveEvent[], start: CallRowSave = initialCallRowSav
 }
 
 describe("call row save order", () => {
+  it("refreshes day-derived warnings at the same row version without discarding an unsaved cell", () => {
+    const edited = play([{ type: "edit", changes: { note: "unsaved note" } }]);
+    const refreshed = savedRow({ warnings: [{ code: "room_overlap", relatedTime: null, relatedCallIds: ["other-call"] }] });
+    const next = callRowSaveReducer(edited, { type: "refreshed", row: refreshed });
+    assert.deepEqual(next.savedRow.warnings, refreshed.warnings);
+    assert.equal(next.draft.note, "unsaved note");
+    assert.equal(next.inFlight, null);
+  });
+
   it("sends a changed row with the updatedAt it last received, and sends nothing for a row nobody changed", () => {
     const untouched = play([{ type: "commit" }]);
     assert.equal(untouched.inFlight, null);

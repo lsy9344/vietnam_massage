@@ -153,6 +153,113 @@ test.describe("티켓 20 빠른 예약 패널 기본 흐름", () => {
     await prisma.$disconnect();
   });
 
+  test("조회 API는 인증을 요구하고 자동 청소 중 가능 판정의 교차 출처 쓰기를 거절한다", async ({ page, baseURL }) => {
+    const anonymous = await page.request.get("/api/calls/query?kind=customers&query=sample");
+    expect(anonymous.status()).toBe(401);
+    await login(page, account.accountId, account.password);
+    const crossOrigin = await page.request.post("/api/calls/query", {
+      headers: { origin: "https://example.invalid" },
+      data: { operatingMonthId: monthId, serviceDate: today, time: "11:00" }
+    });
+    expect(crossOrigin.status()).toBe(403);
+    const malformed = await page.request.post("/api/calls/query", { headers: { origin: baseURL! }, data: { serviceDate: "bad-date" } });
+    expect(malformed.status()).toBe(400);
+    const getAvailability = await page.request.get("/api/calls/query?kind=availability");
+    expect(getAvailability.status()).toBe(400);
+  });
+
+  test("저장 확정은 고객 조회와 후속 원장 재조회를 기다리지 않고 새 행·선택을 반영한다", async ({ page }) => {
+    test.setTimeout(90_000);
+    await login(page, account.accountId, account.password);
+    await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${today}`);
+    const panel = await openQuickBooking(page);
+    await chooseConditions(panel, { time: "16:00" });
+    await pickGuest(page, panel, { therapistId: null, courseId });
+    await goToCustomerStep(panel);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let queries = 0;
+    await page.route("**/api/calls/query?kind=customers&**", async (route) => {
+      queries += 1;
+      await held;
+      await route.continue().catch(() => undefined);
+    });
+    // A background refresh may finish after a save. Hold it to require immediate response-row insertion.
+    await page.route((url) => url.pathname === "/calls", async (route) => {
+      if (route.request().method() === "GET" && route.request().headers().rsc === "1") await held;
+      await route.continue().catch(() => undefined);
+    });
+    try {
+      const name = `T20 latency ${Date.now().toString(36)}`;
+      await fillBooking(panel, { channel: "전화", bookerName: name });
+      await expect.poll(() => queries).toBeGreaterThan(0);
+      await panel.getByRole("button", { name: "예약 저장" }).click();
+      await expect(panel).toBeHidden({ timeout: 10_000 });
+      const created = await prisma.serviceCall.findFirstOrThrow({ where: { customerMemo: name } });
+      const row = page.locator(`[data-ledger-line][data-service-call-id="${created.id}"]`);
+      await expect(row).toBeVisible({ timeout: 2000 });
+      await expect(row).toHaveAttribute("data-selected", "true", { timeout: 2000 });
+      await expect(page).toHaveURL(new RegExp(`call=${created.id}$`));
+      await expect(row.locator(`[data-call-open="${created.id}"]`)).toBeFocused();
+      await page.screenshot({ path: `${process.env.CALL_SAVE_EVIDENCE_DIR ?? "test-results"}/confirmed-row.png` });
+    } finally {
+      release();
+    }
+  });
+
+  test("다른 날짜의 빠른 예약은 저장한 날짜의 원장으로 이동해 새 행을 선택한다", async ({ page }) => {
+    test.setTimeout(60_000);
+    const date = today.endsWith("-01") ? `${monthKey}-02` : `${monthKey}-01`;
+    const name = `T20 other day ${Date.now().toString(36)}`;
+    await login(page, account.accountId, account.password);
+    await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${today}`);
+    const panel = await openQuickBooking(page);
+    await panel.getByLabel("조회날짜").fill(date);
+    await chooseConditions(panel, { time: "11:00" });
+    await pickGuest(page, panel, { therapistId: null, courseId });
+    await goToCustomerStep(panel);
+    await fillBooking(panel, { channel: "전화", bookerName: name });
+    await panel.getByRole("button", { name: "예약 저장" }).click();
+    await expect.poll(async () => (await prisma.serviceCall.findFirst({ where: { customerMemo: name } }))?.id).toBeTruthy();
+    const row = await prisma.serviceCall.findFirstOrThrow({ where: { customerMemo: name } });
+    await expect(page).toHaveURL(new RegExp(`serviceDate=${date}.*call=${row.id}`));
+    await expect(page.locator(`[data-ledger-line][data-service-call-id="${row.id}"]`)).toBeVisible();
+  });
+
+  test("다른 행의 저장 실패 초안은 빠른예약 추가와 후속 새로고침 뒤에도 남는다", async ({ page }) => {
+    test.setTimeout(60_000);
+    const original = await prisma.serviceCall.create({ data: {
+      operatingMonthId: monthId, serviceDate: new Date(`${today}T00:00:00Z`), startTime: "17:00", courseId,
+      customerMemo: "T20 original draft row", status: "RESERVED"
+    } });
+    await login(page, account.accountId, account.password);
+    await page.goto(`/calls?operatingMonthId=${monthId}&serviceDate=${today}`);
+    const oldLine = page.locator(`[data-ledger-line][data-service-call-id="${original.id}"]`);
+    await oldLine.locator("[data-call-open]").click();
+    const failedDraft = `T20 retained draft ${Date.now().toString(36)}`;
+    await page.route((url) => url.pathname === "/calls", async (route) => {
+      if (route.request().method() === "POST" && route.request().postData()?.includes(failedDraft)) {
+        await route.abort("failed");
+      } else await route.continue();
+    });
+    const edit = page.getByRole("complementary").filter({ has: page.getByLabel("고객/메모", { exact: true }) });
+    await edit.getByLabel("고객/메모", { exact: true }).fill(failedDraft);
+    await edit.getByLabel("고객/메모", { exact: true }).blur();
+    await expect(oldLine.locator("[data-line-save-state]")).toHaveAttribute("data-line-save-state", "failed");
+    const panel = await openQuickBooking(page);
+    await chooseConditions(panel, { time: "18:00" });
+    await pickGuest(page, panel, { therapistId: null, courseId });
+    await goToCustomerStep(panel);
+    await fillBooking(panel, { channel: "전화", bookerName: `T20 added ${Date.now().toString(36)}` });
+    const refreshed = page.waitForResponse((response) => response.request().method() === "GET" && new URL(response.url()).pathname === "/calls" && response.request().headers().rsc === "1");
+    await saveQuickBooking(page, panel);
+    await refreshed;
+    await expect(oldLine).toContainText(failedDraft);
+    await oldLine.locator("[data-call-open]").click();
+    await expect(edit.getByLabel("고객/메모", { exact: true })).toHaveValue(failedDraft);
+    expect((await prisma.serviceCall.findUniqueOrThrow({ where: { id: original.id } })).customerMemo).toBe("T20 original draft row");
+  });
+
   test("PC 폭: ①에서 미지명·Therapist 줄의 코스 칩으로 손님을 담거나 빼고, 인원만큼 담아야 다음이 켜진다. 미지명으로 저장하면 Therapist 배정 없이 콜이 생기고 그 줄이 선택된다", async ({ page }) => {
     // 이 워크트리는 여러 작업자가 동시에 쓴다. 저장 뒤 자동 새로고침이 다른 작업자의 부하로 늦을 때를 대비해 넉넉히 둔다.
     test.setTimeout(90_000);

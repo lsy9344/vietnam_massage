@@ -11,9 +11,9 @@ import type { CustomerDto, CustomerVisitCandidateDto, ServiceCallRowDto } from "
 import {
   correctServiceCallCustomerLinkAction,
   reloadServiceCallRowAction,
-  searchCustomerLinkCandidatesAction,
   type ServiceCallCustomerLinkCorrectionActionState
 } from "@/app/(erp)/calls/actions";
+import { searchCustomerLinkCandidates } from "./call-queries";
 import { CUSTOMER_SEARCH_DEBOUNCE_MS, customerScreenHref, moveCandidateIndex } from "@/app/(erp)/customers/customer-search";
 
 /**
@@ -83,12 +83,15 @@ export function CallCustomerLinkCorrection({
       return;
     }
     const requestId = ++searchRequestId.current;
+    const controller = new AbortController();
     searchTimer.current = window.setTimeout(() => {
-      searchCustomerLinkCandidatesAction(trimmed).then((result) => {
+      searchCustomerLinkCandidates(trimmed, controller.signal).then((result) => {
         if (searchRequestId.current === requestId) setCandidates(result);
-      });
+      }).catch(() => { if (!controller.signal.aborted) setCandidates([]); });
     }, CUSTOMER_SEARCH_DEBOUNCE_MS);
     return () => {
+      searchRequestId.current += 1;
+      controller.abort();
       if (searchTimer.current !== null) window.clearTimeout(searchTimer.current);
     };
   }, [query]);

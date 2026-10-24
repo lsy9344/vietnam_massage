@@ -151,7 +151,11 @@ export function callRowSaveReducer(state: CallRowSave, event: CallRowSaveEvent):
       // 원장이 이 콜의 더 새 행을 받았다(자동 청소 중, 다른 화면의 저장). 이 줄에 보내지 않은 수정이 없을 때만 따라간다.
       // 저장 중·실패·충돌이거나 고치는 중이면 그대로 두고, 그 저장이 지금처럼 버전 검사를 받는다.
       if (state.inFlight || isSaveHeld(state.status)) return state;
-      if (event.row.updatedAt <= state.savedRow.updatedAt) return state;
+      if (event.row === state.savedRow) return state;
+      if (event.row.updatedAt < state.savedRow.updatedAt) return state;
+      // Another call can change this row's day warnings without changing this row's version.
+      // Keep any cell draft while accepting those server-derived values.
+      if (event.row.updatedAt === state.savedRow.updatedAt) return { ...state, savedRow: event.row };
       if (!sameDraft(state.draft, draftFromRow(state.savedRow))) return state;
       return { ...state, savedRow: event.row, draft: draftFromRow(event.row) };
     case "reapply": {

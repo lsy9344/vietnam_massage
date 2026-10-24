@@ -13,11 +13,9 @@ import { CustomerCandidateCompare } from "@/components/domain/customer-candidate
 import { CustomerVisitCounts } from "@/components/domain/customer-visit-counts";
 import {
   createQuickBookingPartyAction,
-  createQuickBookingServiceCallAction,
-  loadCustomerVisitSummaryAction,
-  loadTherapistAvailabilityAction,
-  searchCustomerLinkCandidatesAction
+  createQuickBookingServiceCallAction
 } from "@/app/(erp)/calls/actions";
+import { loadCustomerVisitSummary, loadTherapistAvailability, searchCustomerLinkCandidates } from "./call-queries";
 import { firstVisible } from "@/app/(erp)/calls/first-visible";
 import type { NewRowSaveStatus } from "@/app/(erp)/calls/call-new-row-save";
 import { newRequestId } from "@/app/(erp)/calls/call-request-id";
@@ -62,7 +60,7 @@ import {
   subscribeQuickBookingShown
 } from "@/app/(erp)/calls/quick-booking-party-join";
 import { useUnsavedGuard } from "@/app/(erp)/calls/unsaved-guard";
-import { CALL_PARAM } from "@/lib/ledger-address";
+import { CALL_PARAM, ledgerCallHref, replaceAddressParam } from "@/lib/ledger-address";
 import { CUSTOMER_SEARCH_DEBOUNCE_MS } from "@/app/(erp)/customers/customer-search";
 import { useLocale, useT } from "@/lib/i18n/client";
 import { formatNumber } from "@/lib/i18n/format";
@@ -78,6 +76,7 @@ import type {
   CustomerVisitHistoryRowDto,
   SeatPointDto,
   ServiceCallFormOptions,
+  ServiceCallRowDto,
   ServiceCallOption,
   TherapistAvailabilityRowDto
 } from "@/modules/calls/service-call-service";
@@ -989,13 +988,15 @@ function useCustomerSearch(query: string, enabled = true) {
       return;
     }
     let active = true;
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void searchCustomerLinkCandidatesAction(trimmed).then((results) => {
+      void searchCustomerLinkCandidates(trimmed, controller.signal).then((results) => {
         if (active) setCandidates(results.filter((candidate) => candidate.kind === "customer"));
-      });
+      }).catch(() => { if (active) setCandidates([]); });
     }, CUSTOMER_SEARCH_DEBOUNCE_MS);
     return () => {
       active = false;
+      controller.abort();
       window.clearTimeout(timer);
     };
   }, [query, enabled]);
@@ -1016,6 +1017,7 @@ export function QuickBookingPanel({
   monthEndDate,
   monthStartDate,
   onOpenChange,
+  onRowsSaved = () => {},
   open,
   operatingMonthId,
   options,
@@ -1029,6 +1031,7 @@ export function QuickBookingPanel({
   monthEndDate: string;
   monthStartDate: string;
   onOpenChange: (open: boolean) => void;
+  onRowsSaved?: (rows: ServiceCallRowDto[]) => void;
   open: boolean;
   operatingMonthId: string;
   options: ServiceCallFormOptions;
@@ -1056,20 +1059,29 @@ export function QuickBookingPanel({
   const [availabilityPending, setAvailabilityPending] = useState(false);
   const [availabilityFailed, setAvailabilityFailed] = useState(false);
   const availabilityRequestId = useRef(0);
+  const availabilityController = useRef<AbortController | null>(null);
+  useEffect(() => () => {
+    availabilityRequestId.current += 1;
+    availabilityController.current?.abort();
+  }, []);
 
   async function loadAvailability(date: string, time: string) {
     // 열 때마다 다시 읽는다. 앞서 저장한 예약이 가능 판정에 바로 들어가야 한다.
     const id = ++availabilityRequestId.current;
+    availabilityController.current?.abort();
+    const controller = new AbortController();
+    availabilityController.current = controller;
     setAvailabilityFailed(false);
     // 다른 시각의 남은 자리로 경고하지 않게 새로 받을 때까지 비운다.
     setSeats([]);
     if (!time) {
       setAvailabilityRows([]);
+      setAvailabilityPending(false);
       return;
     }
     setAvailabilityPending(true);
     try {
-      const result = await loadTherapistAvailabilityAction({ operatingMonthId, serviceDate: date, time });
+      const result = await loadTherapistAvailability({ operatingMonthId, serviceDate: date, time }, controller.signal);
       if (availabilityRequestId.current === id) {
         setAvailabilityRows(result.rows);
         setSeats(result.seats);
@@ -1109,11 +1121,14 @@ export function QuickBookingPanel({
       return;
     }
     let active = true;
-    void loadCustomerVisitSummaryAction(customerId).then((summary) => {
+    const controller = new AbortController();
+    setVisitSummary(null);
+    void loadCustomerVisitSummary(customerId, controller.signal).then((summary) => {
       if (active) setVisitSummary(summary);
-    });
+    }).catch(() => { if (active) setVisitSummary(null); });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [draft.customerId]);
 
@@ -1143,13 +1158,12 @@ export function QuickBookingPanel({
             setSavedNotice(result.notice ?? null);
             dispatch({ type: "saved", request, notice: result.notice ?? null, nextRequestId: newRequestId() });
             onOpenChange(false);
-            // 저장한 뒤에는 새 행이 골라진다(1018 스펙 D19). 서버 액션 뒤 원장이 저절로 다시 그려지지 않을 때가 있어
-            // (router.refresh도 결과가 화면에 붙지 않는 때가 있었다), 새 콜을 고른 주소로 옮겨 원장을 다시 받는다.
-            // 주소의 call 매개변수가 그 줄의 편집 패널을 연다.
-            if (createdId) {
-              const address = new URL(window.location.href);
-              address.searchParams.set(CALL_PARAM, createdId);
-              router.replace(`${address.pathname}${address.search}`, { scroll: false });
+            onRowsSaved(Array.isArray(result.data) ? result.data : [result.data]);
+            const createdRow = Array.isArray(result.data) ? result.data[0] : result.data;
+            if (createdRow && (createdRow.operatingMonthId !== operatingMonthId || createdRow.serviceDate !== serviceDate)) {
+              router.replace(ledgerCallHref({ ...createdRow, serviceCallId: createdRow.id }), { scroll: false });
+            } else if (createdId) {
+              replaceAddressParam(CALL_PARAM, createdId);
             }
             const token = ++createdRowFocus.current;
             if (createdId) focusCreatedRow(createdId, () => createdRowFocus.current === token);
