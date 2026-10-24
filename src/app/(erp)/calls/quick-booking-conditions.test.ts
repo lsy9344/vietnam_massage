@@ -3,10 +3,12 @@ import { describe, it } from "node:test";
 import {
   quickBookingCourseColumns,
   quickBookingFreeTime,
+  quickBookingSeatLimitedRows,
   quickBookingSeatShortage,
   quickBookingSummary,
   quickBookingTherapistGroups
 } from "@/app/(erp)/calls/quick-booking-conditions";
+import { seatTimeline, type SeatCall } from "@/modules/calls/seat-capacity";
 import type { SeatPointDto, TherapistAvailabilityRowDto } from "@/modules/calls/service-call-service";
 
 function row(therapistId: string, changes: Partial<TherapistAvailabilityRowDto> = {}): TherapistAvailabilityRowDto {
@@ -165,5 +167,92 @@ describe("quick booking seat shortage (1018 스펙 D25·D26)", () => {
 
   it("finds no shortage before the seats are loaded", () => {
     assert.equal(quickBookingSeatShortage([], columns, [guest("course-d"), guest("course-d")]), null);
+  });
+});
+
+describe("quick booking named lines against the seats left (2026-10-24 고객 제보)", () => {
+  // 고객 제보(qr-1024-3·4): 출근 12·17·21. 18:30 A60(12는 18:39 입장이라 19:39까지, 17은 19:30까지), 19:30 D90(17+21)과
+  // 미지명 C90, 21:00 A60 둘(12·17). 영업일 분이고 하루 시작은 11:00이다.
+  const minute = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+  const clock = (value: number) => `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+  const call = (start: string, end: string, therapistIds: string[], requiresSecondTherapist = false): SeatCall => ({
+    start: minute(start),
+    end: minute(end),
+    therapistIds,
+    requiresSecondTherapist
+  });
+  const reported = [
+    call("18:30", "19:39", ["t12"]),
+    call("18:30", "19:30", ["t17"]),
+    call("19:30", "21:00", ["t17", "t21"], true),
+    call("19:30", "21:00", []),
+    call("21:00", "22:00", ["t12"]),
+    call("21:00", "22:00", ["t17"])
+  ];
+  const seatsAt = (time: string, calls: SeatCall[] = reported): SeatPointDto[] =>
+    seatTimeline(
+      { therapists: ["t12", "t17", "t21"].map((therapistId) => ({ therapistId, from: null, until: null })), calls },
+      minute(time),
+      90
+    ).map((point) => ({ ...point, time: clock(minute(time) + point.offsetMinutes) }));
+  const course = (courseId: string, durationMinutes: number, verdict: "possible" | "time_short", requiresSecondTherapist = false) => ({
+    courseId,
+    courseCode: courseId,
+    courseName: courseId,
+    durationMinutes,
+    verdict,
+    requiresSecondTherapist
+  });
+  const verdicts = (candidate: TherapistAvailabilityRowDto) => candidate.courses.map((entry) => `${entry.courseId}:${entry.verdict}`);
+  // 개인 예약만 보면 20:00의 12번은 21:00까지 60분이 빈다.
+  const free12 = row("t12", {
+    nextReservationTime: "21:00",
+    freeMinutes: 60,
+    courses: [course("A", 60, "possible"), course("C", 90, "time_short"), course("D", 90, "time_short", true)]
+  });
+
+  it("counts the seats the customer expected: the D course takes two, the unassigned call one", () => {
+    assert.deepEqual(
+      seatsAt("19:30").map((point) => `${point.time} ${point.remaining}/${point.capacity}`),
+      ["19:30 -1/3", "19:39 0/3"]
+    );
+    assert.deepEqual(
+      seatsAt("20:00").map((point) => `${point.time} ${point.remaining}/${point.capacity}`),
+      ["20:00 0/3", "21:00 1/3"]
+    );
+  });
+
+  it("folds away a Therapist who looks free but whose seat the unassigned call already holds", () => {
+    for (const time of ["19:40", "19:50", "20:00"]) {
+      const [limited] = quickBookingSeatLimitedRows([free12], seatsAt(time));
+      assert.equal(limited.available, false, time);
+      assert.equal(limited.freeFrom, null, time);
+      assert.deepEqual(verdicts(limited), ["A:time_short", "C:time_short", "D:time_short"], time);
+      assert.deepEqual(ids(quickBookingTherapistGroups([limited], { showBeforeCheckIn: false, presetTherapistId: null }).listed), []);
+    }
+  });
+
+  it("shows when a seat opens again while the Therapist is still free", () => {
+    const shortUnassigned = reported.map((entry) => (entry.therapistIds.length === 0 ? { ...entry, end: minute("20:30") } : entry));
+    const [limited] = quickBookingSeatLimitedRows([free12], seatsAt("20:00", shortUnassigned));
+    assert.equal(limited.available, false);
+    assert.equal(limited.freeFrom, "20:30");
+    assert.deepEqual(quickBookingFreeTime(limited), { kind: "from", time: "20:30" });
+  });
+
+  it("keeps the line when a seat is left, and marks only the chips that would take more seats than are left", () => {
+    const withoutUnassigned = reported.filter((entry) => entry.therapistIds.length > 0);
+    const [limited] = quickBookingSeatLimitedRows([free12], seatsAt("20:00", withoutUnassigned));
+    assert.equal(limited.available, true);
+    assert.deepEqual(verdicts(limited), ["A:possible", "C:time_short", "D:time_short"]);
+    // 1자리가 남아도 D코스(2자리)는 넘친다.
+    const freeAllEvening = { ...free12, courses: [course("A", 60, "possible"), course("D", 90, "possible", true)] };
+    assert.deepEqual(verdicts(quickBookingSeatLimitedRows([freeAllEvening], seatsAt("20:00", withoutUnassigned))[0]), ["A:possible", "D:time_short"]);
+  });
+
+  it("leaves a Therapist who is not working (no seat of their own) and the rows before the seats are loaded as they were", () => {
+    const offDuty = { ...free12, therapistId: "t-off" };
+    assert.deepEqual(quickBookingSeatLimitedRows([offDuty], seatsAt("20:00")), [offDuty]);
+    assert.deepEqual(quickBookingSeatLimitedRows([free12], []), [free12]);
   });
 });

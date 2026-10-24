@@ -3,7 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { measureListboxPosition } from "@/app/(erp)/calls/call-ledger-fields";
-import { measureScrollbarWidth } from "@/components/ui/listbox-position";
+import { measureScrollbarWidth, type ListboxContent } from "@/components/ui/listbox-position";
 import { cn } from "@/lib/utils";
 
 export type LedgerPickOption = {
@@ -29,12 +29,12 @@ function naturalWidth(list: HTMLElement) {
 // 위아래 자리와 폭은 공용 선택 칸과 같이 잰다(measureListboxPosition, design.md 6.4): 폭은 칸 폭 이상이고 가장 긴 항목에
 // 맞춰 넓어지며(최대 24rem) 화면 가장자리 안쪽으로 밀어 넣는다. 예전에는 256px로 고정해 "301 호실"·"없음" 같은 짧은 목록의
 // 오른쪽이 비었다(2026-10-23 "드롭다운 여백"). 목록이 아직 없으면(처음 열 때) 폭을 주지 않아 내용만큼 펴진 뒤 다시 잰다.
-// contentWidth는 그렇게 잰 안쪽 폭이다. 스크롤·화면 크기에 따라 다시 잴 때는 잰 값을 그대로 써 레이아웃을 매번 다시 계산하지 않는다.
-function measure(anchor: HTMLElement, list: HTMLElement | null, contentWidth?: number): Position {
+// content는 그렇게 잰 안쪽 폭과 스크롤바 두께다. 스크롤·화면 크기에 따라 다시 잴 때는 잰 값을 그대로 써 레이아웃을 매번 다시 계산하지 않는다.
+function measure(anchor: HTMLElement, list: HTMLElement | null, content?: ListboxContent): Position {
   const { left, top, width, maxHeight, placement } = measureListboxPosition(
     anchor,
     list?.scrollHeight ?? 0,
-    list ? { width: contentWidth ?? naturalWidth(list), scrollbar: measureScrollbarWidth() } : undefined
+    list ? (content ?? { width: naturalWidth(list), scrollbar: measureScrollbarWidth() }) : undefined
   );
   const across = list ? { left, width } : { left };
   return placement === "above" ? { ...across, bottom: window.innerHeight - top, maxHeight } : { ...across, top, maxHeight };
@@ -90,8 +90,8 @@ export function LedgerCellPicker({
     if (!open || !triggerRef.current) return;
     const anchor = triggerRef.current;
     const list = listRef.current;
-    const contentWidth = list ? naturalWidth(list) : undefined;
-    const update = () => setPosition(measure(anchor, list, contentWidth));
+    const content = list ? { width: naturalWidth(list), scrollbar: measureScrollbarWidth() } : undefined;
+    const update = () => setPosition(measure(anchor, list, content));
     update();
     window.addEventListener("scroll", update, true);
     window.addEventListener("resize", update);

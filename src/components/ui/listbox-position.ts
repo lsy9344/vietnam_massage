@@ -29,17 +29,17 @@ export type ListboxContent = {
   scrollbar?: number;
 };
 
-let cachedScrollbarWidth: number | null = null;
-
-/** 이 브라우저의 세로 스크롤바 두께(px). 겹쳐 보이는 스크롤바(macOS 등)는 0이다. */
+/**
+ * 이 브라우저의 세로 스크롤바 두께(px). 겹쳐 보이는 스크롤바(macOS 등)는 0이다. 브라우저 배율을 바꾸면 CSS px로 잰 두께도
+ * 바뀌므로(100%에서 15px, 80%에서 19px) 담아 두지 않고 목록을 열 때마다 잰다.
+ */
 export function measureScrollbarWidth(): number {
-  if (cachedScrollbarWidth !== null) return cachedScrollbarWidth;
   const probe = document.createElement("div");
   probe.style.cssText = "position:absolute;top:-9999px;width:100px;height:100px;overflow:scroll;visibility:hidden";
   document.body.appendChild(probe);
-  cachedScrollbarWidth = probe.offsetWidth - probe.clientWidth;
+  const width = probe.offsetWidth - probe.clientWidth;
   probe.remove();
-  return cachedScrollbarWidth;
+  return width;
 }
 
 /**

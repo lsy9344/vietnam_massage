@@ -25,6 +25,7 @@ import { NewCallRowSaveStatus } from "@/app/(erp)/calls/call-row-save-status";
 import {
   quickBookingCourseColumns,
   quickBookingFreeTime,
+  quickBookingSeatLimitedRows,
   quickBookingSeatShortage,
   quickBookingSummary,
   quickBookingTherapistGroups,
@@ -451,7 +452,9 @@ export function ConditionsStep({
   const t = useT();
   const locale = useLocale();
   const [pendingPick, setPendingPick] = useState<PendingPick | null>(null);
-  const { rows, seats, pending, failed } = availability;
+  const { seats, pending, failed } = availability;
+  // 미지명 콜이 쓴 자리까지 넣어 지명 줄을 본다(2026-10-24 고객 제보).
+  const rows = quickBookingSeatLimitedRows(availability.rows, seats);
   const columns = quickBookingCourseColumns(rows);
   const groups = quickBookingTherapistGroups(rows, { presetTherapistId, showBeforeCheckIn });
   const taken = takenTherapistIds(guests);

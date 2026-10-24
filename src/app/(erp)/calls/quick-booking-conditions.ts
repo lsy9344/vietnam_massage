@@ -40,7 +40,30 @@ export function quickBookingTherapistGroups(
   };
 }
 
-/** Therapist 줄의 비는 시간: `~19:00 120분`, `마감까지`, `18:30부터`. 서비스가 정한 판정을 그대로 읽는다. */
+/**
+ * 남은 자리로 지명 줄을 다시 본다(2026-10-24 고객 제보, 스펙 D26 변경). 미지명 콜은 Therapist가 없어서 개인 가능 판정에는 안
+ * 잡히지만 남은 자리를 쓴다. 그래서 출근 3명 중 2명이 D코스, 1자리가 미지명 C90이면 비어 보이는 1명도 실은 그 미지명 손님 몫이다.
+ * 담은 손님 넘침 경고(quickBookingSeatShortage)와 같은 규칙으로, 그 Therapist로 그 코스를 담으면 남은 자리를 넘는 칩은 불가로
+ * 바꾼다(경고를 확인하면 그래도 담긴다). 고른 시각에 남은 자리가 없으면 그 줄을 "안 되는 N명"으로 접고, 이 사람이 비어 있는 동안
+ * 자리가 다시 나는 시각을 `HH:MM부터`로 보인다. 자리 점을 아직 받지 못했으면 그대로 둔다.
+ */
+export function quickBookingSeatLimitedRows(rows: TherapistAvailabilityRowDto[], seats: SeatPointDto[]): TherapistAvailabilityRowDto[] {
+  const now = seats[0];
+  if (!now) return rows;
+  return rows.map((row) => {
+    if (!row.available) return row;
+    const short = (minutes: number, requiresSecondTherapist: boolean) =>
+      seatShortage(seats, [{ minutes, therapistIds: [row.therapistId], requiresSecondTherapist }]) !== null;
+    const courses = row.courses.map((course) =>
+      course.verdict === "possible" && short(course.durationMinutes, course.requiresSecondTherapist) ? { ...course, verdict: "time_short" as const } : course
+    );
+    if (!now.freeTherapistIds.includes(row.therapistId) || now.remaining > 0) return { ...row, courses };
+    const reopen = seats.find((point) => point.remaining > 0 && point.freeTherapistIds.includes(row.therapistId));
+    return { ...row, courses, available: false, freeFrom: reopen?.time ?? null };
+  });
+}
+
+/** Therapist 줄의 비는 시간:`~19:00 120분`, `마감까지`, `18:30부터`. 서비스가 정한 판정을 그대로 읽는다. */
 export type QuickBookingFreeTime =
   | { kind: "until"; time: string; minutes: number | null }
   | { kind: "untilClose" }
